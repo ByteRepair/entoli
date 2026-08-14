@@ -242,8 +242,9 @@ void main() {
     await waitIdle(id);
 
     expect(app.backend.resets, hasLength(1));
-    expect(app.backend.resets.single, contains("first"));
-    expect(app.backend.resets.single, isNot(contains("second")));
+    final seeded = app.backend.resets.single.map((m) => m.plainText);
+    expect(seeded, contains("first"));
+    expect(seeded, isNot(contains("second")));
   });
 
   test("the truncated conversation is persisted, not just held in memory", () async {

@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 
 import "../fakes.dart";
@@ -13,14 +14,19 @@ void main() {
   late Directory tmp;
   late FakeBackend backend;
 
-  ChatRepository repoWith(AppSettings settings) {
-    final config = AppConfig.forDirectory(tmp);
-    Directory(config.chatsDir.path).createSync(recursive: true);
-    return ChatRepository(LocalChatStore(config), backend, settings);
-  }
+  late AppConfig config;
+
+  ChatRepository repoWith(AppSettings settings) =>
+      ChatRepository(LocalChatStore(config), backend, () => settings);
+
+  /// What the chat settings page would have written.
+  void pinChatModel(String chatId, {String? provider, String? model}) =>
+      ChatMeta(provider: provider, model: model).saveTo(config.metaFile(chatId));
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_repo_test_");
+    config = AppConfig.forDirectory(tmp);
+    Directory(config.chatsDir.path).createSync(recursive: true);
     backend = FakeBackend();
   });
 
@@ -42,9 +48,9 @@ void main() {
     final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
     final chat = await repo.createChat();
 
-    await repo
-        .sendPrompt(chat.state.id, "hi", model: "qwen-2.5", provider: "ollama-cloud")
-        .toList();
+    pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
+
+    await repo.sendPrompt(chat.state.id, "hi").toList();
 
     expect(backend.prompts.single.provider, "ollama-cloud");
     expect(backend.prompts.single.model, "qwen-2.5");
@@ -54,7 +60,9 @@ void main() {
     final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
     final chat = await repo.createChat();
 
-    await repo.sendPrompt(chat.state.id, "hi", model: "qwen-2.5").toList();
+    pinChatModel(chat.state.id, model: "qwen-2.5");
+
+    await repo.sendPrompt(chat.state.id, "hi").toList();
 
     expect(backend.prompts.single.model, "qwen-2.5");
     expect(backend.prompts.single.provider, isNull);

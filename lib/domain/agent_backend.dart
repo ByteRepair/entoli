@@ -55,8 +55,9 @@ abstract class AgentBackend {
       {List<Attachment> attachments, String? model, String? provider});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
-  /// optionally seeded with [transcript]. Used when resending a message.
-  Future<void> resetSession(String chatId, {String? transcript});
+  /// seeded with [history] — how that conversation is worded for the agent is
+  /// the backend's business.
+  Future<void> resetSession(String chatId, {List<Message> history = const []});
 
   /// Release every process and connection this backend owns. Called when the
   /// app exits; without it spawned servers outlive it.

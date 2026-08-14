@@ -101,11 +101,8 @@ class RealOpencodeTransport implements OpencodeTransport {
   }
 
   @override
-  Future<void> disposeAll() async {
-    for (final chatId in _servers.keys.toList()) {
-      await dispose(chatId);
-    }
-  }
+  Future<void> disposeAll() =>
+      Future.wait(_servers.keys.toList().map(dispose));
 }
 
 class _ChatServer {
