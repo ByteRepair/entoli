@@ -47,16 +47,60 @@ class ChatController extends Notifier<ChatViewState> {
   final _uuid = const Uuid();
   StreamSubscription<AgentEvent>? _sub;
   Timer? _stall;
-  final Map<String, Message> _assistantBuf = {};
+
+  /// Deltas arrive per token; the UI only needs them per frame.
+  final StringBuffer _pending = StringBuffer();
+  Timer? _flush;
 
   @override
   ChatViewState build() {
     ref.onDispose(() {
       _sub?.cancel();
       _stall?.cancel();
+      _flush?.cancel();
     });
     _load();
     return ChatViewState();
+  }
+
+  /// The reply being written. It is always the last message of a running turn.
+  Message? get _reply {
+    final messages = state.chat?.messages;
+    return messages == null || messages.isEmpty ? null : messages.last;
+  }
+
+  void _writeReply(List<MessagePart> parts) {
+    final chat = state.chat;
+    final reply = _reply;
+    if (chat == null || reply == null) return;
+    final messages = List<Message>.from(chat.messages);
+    messages[messages.length - 1] = reply.copyWith(parts: parts);
+    state = state.copyWith(chat: chat.copyWith(messages: messages));
+  }
+
+  void _bufferDelta(String text) {
+    _pending.write(text);
+    _flush ??= Timer(const Duration(milliseconds: 16), _flushDeltas);
+  }
+
+  /// Fold everything buffered into the reply's trailing text part. Must run
+  /// before anything else is appended, so parts keep their arrival order.
+  void _flushDeltas() {
+    _flush?.cancel();
+    _flush = null;
+    if (_pending.isEmpty) return;
+    final text = _pending.toString();
+    _pending.clear();
+
+    final reply = _reply;
+    if (reply == null) return;
+    final parts = List<MessagePart>.from(reply.parts);
+    if (parts.lastOrNull case TextPart(text: final head)) {
+      parts[parts.length - 1] = TextPart(text: "$head$text");
+    } else {
+      parts.add(MessagePart.text(text: text));
+    }
+    _writeReply(parts);
   }
 
   /// (Re)start the clock on a turn that is producing nothing.
@@ -80,16 +124,10 @@ class ChatController extends Notifier<ChatViewState> {
   }
 
   void _appendError(String message) {
-    final chat = state.chat;
-    final assistant = _assistantBuf[chatId];
-    if (chat == null || assistant == null || chat.messages.isEmpty) return;
-    final updated = assistant.copyWith(
-      parts: [...assistant.parts, MessagePart.error(message: message)],
-    );
-    _assistantBuf[chatId] = updated;
-    final msgs = List<Message>.from(chat.messages);
-    msgs[msgs.length - 1] = updated;
-    state = state.copyWith(chat: chat.copyWith(messages: msgs));
+    final reply = _reply;
+    if (reply == null) return;
+    _flushDeltas();
+    _writeReply([...?_reply?.parts, MessagePart.error(message: message)]);
   }
 
   /// Retitle in place. Reloading instead would dispose a running turn.
@@ -123,7 +161,6 @@ class ChatController extends Notifier<ChatViewState> {
       createdAt: DateTime.now(),
       parts: [],
     );
-    _assistantBuf[chatId] = assistantMsg;
 
     final updatedChat = Chat(
       state: chat.state.copyWith(updatedAt: DateTime.now()),
@@ -132,9 +169,7 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: updatedChat, isRunning: true, clearRetry: true);
     await repo.save(updatedChat);
 
-    final meta = await repo.loadMeta(chatId);
-    final stream =
-        repo.sendPrompt(chatId, text, model: meta.model, provider: meta.provider);
+    final stream = repo.sendPrompt(chatId, text);
     _watchForStall();
     _sub?.cancel();
     _sub = stream.listen(
@@ -147,29 +182,10 @@ class ChatController extends Notifier<ChatViewState> {
   /// The user message that produced [messageId] — itself when it is one,
   /// otherwise the closest one above it.
   Message? _promptFor(Chat chat, String messageId) {
-    final index = chat.messages.indexWhere((m) => m.id == messageId);
-    if (index < 0) return null;
-    for (var i = index; i >= 0; i--) {
-      if (chat.messages[i].role == MessageRole.user) return chat.messages[i];
-    }
-    return null;
-  }
-
-  String _textOf(Message message) =>
-      message.parts.whereType<TextPart>().map((p) => p.text).join("\n");
-
-  /// What the agent is told before a resent turn. The live session saw the
-  /// discarded exchange, so the retry runs on a fresh one seeded with this.
-  String _transcript(List<Message> messages) {
-    final buffer = StringBuffer();
-    for (final m in messages) {
-      final text = _textOf(m).trim();
-      if (text.isEmpty) continue;
-      buffer.writeln("${m.role.name}: $text");
-      buffer.writeln();
-    }
-    final body = buffer.toString().trim();
-    return body.isEmpty ? "" : "Earlier in this conversation:\n\n$body";
+    final from = chat.messages.indexWhere((m) => m.id == messageId);
+    if (from < 0) return null;
+    final at = chat.messages.lastIndexWhere((m) => m.role == MessageRole.user, from);
+    return at < 0 ? null : chat.messages[at];
   }
 
   /// Drop the turn starting at [prompt] and run it again with [text].
@@ -179,13 +195,9 @@ class ChatController extends Notifier<ChatViewState> {
     final index = chat.messages.indexOf(prompt);
     if (index < 0) return;
 
-    final kept = chat.messages.sublist(0, index);
-    final truncated = chat.copyWith(messages: kept);
-    state = state.copyWith(chat: truncated);
-
-    final repo = ref.read(chatRepositoryProvider);
-    await repo.save(truncated);
-    await repo.resetSession(chatId, transcript: _transcript(kept));
+    state = state.copyWith(
+      chat: await ref.read(chatRepositoryProvider).rewind(chat, index),
+    );
     await send(text);
   }
 
@@ -202,55 +214,42 @@ class ChatController extends Notifier<ChatViewState> {
     final chat = state.chat;
     if (chat == null) return;
     final prompt = _promptFor(chat, messageId);
-    if (prompt != null) await _resend(prompt, _textOf(prompt));
+    if (prompt != null) await _resend(prompt, prompt.plainText);
   }
 
   void _onEvent(AgentEvent event) {
-    final chat = state.chat;
-    if (chat == null) return;
-    final assistant = _assistantBuf[chatId];
-    if (assistant == null) return;
+    if (_reply == null) return;
 
-    final parts = List<MessagePart>.from(assistant.parts);
-    switch (event) {
-      // Output means the turn is alive; a retry notice means the opposite, so
-      // it deliberately does not reset the clock.
-      case TextDelta() || ToolCallEvent() || ToolResultEvent():
-        _watchForStall();
-      default:
-    }
+    // Output means the turn is alive; a retry notice means the opposite, so it
+    // deliberately does not reset the clock.
     switch (event) {
       case TextDelta(:final text):
-        if (parts.isNotEmpty && parts.last is TextPart) {
-          final last = parts.last as TextPart;
-          parts[parts.length - 1] = TextPart(text: "${last.text}$text");
-        } else {
-          parts.add(MessagePart.text(text: text));
-        }
+        _watchForStall();
+        _bufferDelta(text);
       case ToolCallEvent(:final call):
-        parts.add(MessagePart.toolCall(toolCall: call));
+        _watchForStall();
+        _appendPart(MessagePart.toolCall(toolCall: call));
       case ToolResultEvent(:final result):
-        parts.add(MessagePart.toolResult(result: result));
+        _watchForStall();
+        _appendPart(MessagePart.toolResult(result: result));
+      case ErrorEvent(:final message):
+        _appendError(message);
       case ApprovalRequestEvent(:final approval):
         state = state.copyWith(approvals: [...state.approvals, approval]);
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
-        return;
       case DoneEvent():
         _finishTurn();
-        return;
-      case ErrorEvent(:final message):
-        parts.add(MessagePart.error(message: message));
     }
+  }
 
-    final updatedAssistant = assistant.copyWith(parts: parts);
-    _assistantBuf[chatId] = updatedAssistant;
-    final msgs = List<Message>.from(chat.messages);
-    msgs[msgs.length - 1] = updatedAssistant;
-    state = state.copyWith(chat: chat.copyWith(messages: msgs));
+  void _appendPart(MessagePart part) {
+    _flushDeltas();
+    _writeReply([...?_reply?.parts, part]);
   }
 
   void _finishTurn() {
+    _flushDeltas();
     _stall?.cancel();
     _stall = null;
     _sub?.cancel();

@@ -12,18 +12,17 @@ class ChatRepository {
 
   final ChatStore _store;
   final AgentBackend _backend;
-  final AppSettings _settings;
-  final Map<String, Stream<AgentEvent>> _active = {};
+
+  /// Read on use, not captured: the app default changes while this lives.
+  final AppSettings Function() _settings;
 
   Future<List<ChatSummary>> listChats() => _store.list();
 
-  Future<Chat> createChat({String? title, String? model, String? provider}) async {
-    final effectiveModel = model ?? _settings.defaultModelId;
-    final effectiveProvider = provider ?? _settings.defaultProviderId;
+  Future<Chat> createChat({String? title}) async {
     final chat = await _backend.createChat(
       title: title,
-      model: effectiveModel,
-      provider: effectiveProvider,
+      model: _settings().defaultModelId,
+      provider: _settings().defaultProviderId,
     );
     await _store.save(chat);
     return chat;
@@ -38,26 +37,28 @@ class ChatRepository {
   Future<void> saveMeta(String chatId, ChatMeta meta) => _store.saveMeta(chatId, meta);
 
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const [], String? model, String? provider}) {
-    // Fall back as a pair: a chat's model under the app default's provider
-    // would be an invalid combination.
-    final effectiveModel = model ?? _settings.defaultModelId;
-    final effectiveProvider = model != null ? provider : _settings.defaultProviderId;
-    // The turn's messages are persisted by the controller once it settles;
-    // nothing to add here.
-    final stream = _backend.sendPrompt(chatId, text,
-        attachments: attachments, model: effectiveModel, provider: effectiveProvider);
-    _active[chatId] = stream;
-    return stream;
+      {List<Attachment> attachments = const []}) async* {
+    final meta = await _store.loadMeta(chatId);
+    // The chat's own choice wins, else the app default, else whatever the
+    // backend picks. Never mix halves: a chat's model under the app default's
+    // provider is not a combination anyone asked for.
+    final model = meta.model ?? _settings().defaultModelId;
+    final provider = meta.model != null ? meta.provider : _settings().defaultProviderId;
+    yield* _backend.sendPrompt(chatId, text,
+        attachments: attachments, model: model, provider: provider);
   }
 
-  Future<void> resetSession(String chatId, {String? transcript}) =>
-      _backend.resetSession(chatId, transcript: transcript);
-
-  Future<void> abort(String chatId) async {
-    await _backend.abort(chatId);
-    _active.remove(chatId);
+  /// Forget the message at [index] and everything after it, then give the
+  /// backend a session that never saw them.
+  Future<Chat> rewind(Chat chat, int index) async {
+    final kept = chat.messages.sublist(0, index);
+    final truncated = chat.copyWith(messages: kept);
+    await _store.save(truncated);
+    await _backend.resetSession(chat.state.id, history: kept);
+    return truncated;
   }
+
+  Future<void> abort(String chatId) => _backend.abort(chatId);
 
   Future<void> deleteChat(String id) async {
     await _backend.disposeChat(id);
@@ -65,9 +66,8 @@ class ChatRepository {
   }
 
   Future<void> deleteAllChats() async {
-    for (final chat in await listChats()) {
-      await deleteChat(chat.id);
-    }
+    final chats = await listChats();
+    await Future.wait(chats.map((c) => deleteChat(c.id)));
   }
 
   Future<void> renameChat(String id, String title) async {
@@ -81,6 +81,4 @@ class ChatRepository {
       _backend.respondApproval(chatId, approvalId, r);
 
   Future<List<ToolApproval>> pendingApprovals(String chatId) => _backend.pendingApprovals(chatId);
-
-  Future<List<ModelOption>> availableModels() => _backend.availableModels();
 }

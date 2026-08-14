@@ -40,31 +40,27 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     super.dispose();
   }
 
+  /// Streaming fires this every frame, so it jumps rather than starting a new
+  /// 100ms animation each time — and only while the reader is already at the
+  /// bottom, so scrolling back through a turn is not fought.
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
-        _scroll.animateTo(
-          _scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 100),
-          curve: Curves.easeOut,
-        );
-      }
+      if (!_scroll.hasClients) return;
+      final position = _scroll.position;
+      if (position.maxScrollExtent - position.pixels > 200) return;
+      _scroll.jumpTo(position.maxScrollExtent);
     });
   }
 
-  Future<void> _send(String text) async {
-    final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
-    await notifier.send(text);
-    _scrollToBottom();
-  }
+  Future<void> _send(String text) =>
+      ref.read(chatControllerProvider(widget.chatId).notifier).send(text);
 
-  Future<void> _abort() async {
-    await ref.read(chatControllerProvider(widget.chatId).notifier).abort();
-  }
+  Future<void> _abort() => ref.read(chatControllerProvider(widget.chatId).notifier).abort();
 
   @override
   Widget build(BuildContext context) {
     final view = ref.watch(chatControllerProvider(widget.chatId));
+    final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
     ref.listen(chatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
     final chat = view.chat;
     if (chat == null) {
@@ -87,7 +83,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(chat.state.title.isEmpty ? "(untitled)" : chat.state.title),
+                child: Text(chat.state.title.orUntitled),
               ),
             ),
           ),
@@ -114,8 +110,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     itemCount: chat.messages.length,
                     itemBuilder: (context, i) {
                       final m = chat.messages[i];
-                      final notifier =
-                          ref.read(chatControllerProvider(widget.chatId).notifier);
                       return MessageBubble(
                         message: m,
                         isWaiting: view.isRunning && i == chat.messages.length - 1,
@@ -131,12 +125,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           for (final a in view.approvals)
             ApprovalBanner(
               approval: a,
-              onAllow: () => ref
-                  .read(chatControllerProvider(widget.chatId).notifier)
-                  .respondApproval(a.id, ApprovalResponse.allow),
-              onDeny: () => ref
-                  .read(chatControllerProvider(widget.chatId).notifier)
-                  .respondApproval(a.id, ApprovalResponse.deny),
+              onAllow: () => notifier.respondApproval(a.id, ApprovalResponse.allow),
+              onDeny: () => notifier.respondApproval(a.id, ApprovalResponse.deny),
             ),
           Composer(
             controller: _controller,

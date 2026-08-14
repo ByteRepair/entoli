@@ -51,11 +51,11 @@ class FakeBackend implements AgentBackend {
     if (hold != null) await hold!.future;
   }
 
-  final List<String?> resets = [];
+  final List<List<Message>> resets = [];
 
   @override
-  Future<void> resetSession(String chatId, {String? transcript}) async {
-    resets.add(transcript);
+  Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
+    resets.add(history);
   }
 
   var didShutdown = false;

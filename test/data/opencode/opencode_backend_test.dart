@@ -496,13 +496,17 @@ void main() {
     final sid = "ses_${chat.state.id}_123";
     await runTurn(chat.state.id, "hello", [_idleEvent(sid)]);
 
-    await backend.resetSession(chat.state.id, transcript: "user: hello");
+    await backend.resetSession(chat.state.id, history: [
+      Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026), parts: [
+        const MessagePart.text(text: "hello"),
+      ]),
+    ]);
     expect(transport.deletedSessions, [sid]);
 
     await runTurn(chat.state.id, "hello again", [_idleEvent(sid)]);
 
     expect(transport.createSessionCalls, hasLength(2));
-    expect(transport.injectedContext.single.text, "user: hello");
+    expect(transport.injectedContext.single.text, contains("user: hello"));
   });
 
   test("a session created without a reset is not seeded", () async {

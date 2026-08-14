@@ -61,17 +61,13 @@ class MessageBubble extends StatelessWidget {
       final edited = await promptForText(
         context,
         title: "Edit message",
-        initial: _plainText(),
+        initial: message.plainText,
         confirmLabel: "Send",
         maxLines: 8,
       );
       if (edited != null) onEdit!(edited);
     }
   }
-
-  String _plainText() => message.parts.whereType<TextPart>().map((p) => p.text).join("\n");
-
-  bool get _hasText => message.parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);
 
   bool get _hasError => message.parts.whereType<ErrorPart>().isNotEmpty;
 
@@ -129,7 +125,7 @@ class MessageBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ...message.parts.map((p) => _renderPart(p, theme)),
-                  if (isWaiting && !_hasText)
+                  if (isWaiting && !message.hasText)
                     _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: waitingNotice),
                   // A failed turn is a dead end without this; the same action
                   // is on the context menu, but it should not have to be found.

@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/models.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../settings/settings_page.dart";
@@ -34,6 +35,7 @@ class Sidebar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(chatListProvider);
+    final selectedId = ref.watch(selectedChatIdProvider);
     // Material, not Scaffold: the shell's Scaffold owns the drawer, and an
     // inner one would shadow it.
     return Material(
@@ -64,10 +66,10 @@ class Sidebar extends ConsumerWidget {
                 itemCount: chats.length,
                 itemBuilder: (context, i) {
                   final c = chats[i];
-                  final selected = ref.watch(selectedChatIdProvider) == c.id;
+                  final selected = selectedId == c.id;
                   return ListTile(
                     selected: selected,
-                    title: Text(c.title.isEmpty ? "(untitled)" : c.title),
+                    title: Text(c.title.orUntitled),
                     subtitle: Text(_formatTimestamp(c.updatedAt)),
                     onTap: () => _open(context, ref, c.id),
                     trailing: PopupMenuButton<String>(
@@ -90,8 +92,7 @@ class Sidebar extends ConsumerWidget {
                             final confirmed = await confirm(
                               context,
                               title: "Delete chat?",
-                              message:
-                                  "Delete \"${c.title.isEmpty ? "(untitled)" : c.title}\"? This cannot be undone.",
+                              message: "Delete \"${c.title.orUntitled}\"? This cannot be undone.",
                               confirmLabel: "Delete",
                               destructive: true,
                             );

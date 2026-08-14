@@ -138,3 +138,14 @@ abstract class ModelOption with _$ModelOption {
 
   factory ModelOption.fromJson(Map<String, dynamic> json) => _$ModelOptionFromJson(json);
 }
+
+/// Text is scattered across parts; almost every caller wants it joined.
+extension MessageText on Message {
+  String get plainText => parts.whereType<TextPart>().map((p) => p.text).join("\n");
+
+  bool get hasText => parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);
+}
+
+extension ChatTitle on String {
+  String get orUntitled => isEmpty ? "(untitled)" : this;
+}

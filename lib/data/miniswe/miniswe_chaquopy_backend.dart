@@ -42,7 +42,7 @@ class MinisweChaquopyBackend implements AgentBackend {
   }
 
   @override
-  Future<void> resetSession(String chatId, {String? transcript}) async {}
+  Future<void> resetSession(String chatId, {List<Message> history = const []}) async {}
 
   @override
   Future<void> shutdown() async {}

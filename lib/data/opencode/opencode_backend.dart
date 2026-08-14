@@ -24,6 +24,8 @@ class OpencodeBackend implements AgentBackend {
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, StreamSubscription<OcEvent>> _eventSubs = {};
   final Map<String, List<ToolApproval>> _approvals = {};
+  final Map<String, Set<String>> _seenTools = {};
+  final Map<String, String> _pendingContext = {};
 
   @override
   BackendKind get kind => BackendKind.opencode;
@@ -50,13 +52,22 @@ class OpencodeBackend implements AgentBackend {
 
   @override
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const [], String? model, String? provider}) async* {
+      {List<Attachment> attachments = const [], String? model, String? provider}) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
+    // Returned rather than yielded, so the caller is listening before the turn
+    // starts. Closing a controller nobody listens to never completes.
+    unawaited(_runTurn(chatId, text, controller, model: model, provider: provider));
+    return controller.stream;
+  }
 
-    final outController = StreamController<AgentEvent>();
-    controller.stream.listen(outController.add, onError: outController.addError, onDone: outController.close);
-
+  Future<void> _runTurn(
+    String chatId,
+    String text,
+    StreamController<AgentEvent> controller, {
+    String? model,
+    String? provider,
+  }) async {
     try {
       await transport.ensureServer(chatId, config.workspaceDir(chatId).path);
 
@@ -94,8 +105,6 @@ class OpencodeBackend implements AgentBackend {
         await controller.close();
       }
     }
-
-    yield* outController.stream;
   }
 
   Future<void> _handleEvent(
@@ -144,17 +153,23 @@ class OpencodeBackend implements AgentBackend {
       case "session.error":
         final text = _errorText(props["error"]);
         if (text != null) controller.add(ErrorEvent(text));
-        controller.add(const DoneEvent());
-        await controller.close();
+        await _endTurn(chatId, controller);
 
       case "session.idle":
-        controller.add(const DoneEvent());
-        await controller.close();
+        await _endTurn(chatId, controller);
 
       case "session.next.text.delta":
         // Legacy event type — some versions still emit this.
         controller.add(TextDelta(props["delta"] as String? ?? ""));
     }
+  }
+
+  /// The turn is over: stop decoding events nobody is listening to. A new
+  /// turn opens a fresh subscription.
+  Future<void> _endTurn(String chatId, StreamController<AgentEvent> controller) async {
+    controller.add(const DoneEvent());
+    await controller.close();
+    await _eventSubs.remove(chatId)?.cancel();
   }
 
   /// Every error variant opencode sends carries `name` plus `data.message`
@@ -187,14 +202,13 @@ class OpencodeBackend implements AgentBackend {
         switch (status) {
           case "pending":
           case "running":
-            if (!_toolSeen(chatId, callId)) {
+            if (_seenTools.putIfAbsent(chatId, () => <String>{}).add(callId)) {
               controller.add(ToolCallEvent(ToolCall(
                 id: callId,
                 name: toolName,
                 argumentsJson: input != null ? jsonEncode(input) : null,
                 argumentsText: input is Map<String, dynamic> ? _inputToText(input) : null,
               )));
-              _markToolSeen(chatId, callId);
             }
           case "completed":
             controller.add(ToolResultEvent(ToolResult(
@@ -210,12 +224,6 @@ class OpencodeBackend implements AgentBackend {
               exceptionInfo: state["error"] as String?,
             )));
         }
-
-      case "text":
-        // Full text snapshot — only emit if we haven't been streaming deltas.
-        // The controller accumulates; a snapshot is useful as a fallback.
-        // We skip these since deltas provide the streaming experience.
-        break;
     }
   }
 
@@ -223,15 +231,6 @@ class OpencodeBackend implements AgentBackend {
     if (input["command"] is String) return input["command"] as String;
     if (input["filePath"] is String) return input["filePath"] as String;
     return jsonEncode(input);
-  }
-
-  final Map<String, Set<String>> _seenTools = {};
-
-  bool _toolSeen(String chatId, String callId) =>
-      _seenTools[chatId]?.contains(callId) ?? false;
-
-  void _markToolSeen(String chatId, String callId) {
-    _seenTools.putIfAbsent(chatId, () => <String>{}).add(callId);
   }
 
   @override
@@ -252,13 +251,11 @@ class OpencodeBackend implements AgentBackend {
     _controllers.remove(chatId);
   }
 
-  final Map<String, String> _pendingContext = {};
+
 
   @override
   Future<void> shutdown() async {
-    for (final sub in _eventSubs.values) {
-      await sub.cancel();
-    }
+    await Future.wait(_eventSubs.values.map((sub) => sub.cancel()));
     _eventSubs.clear();
     for (final controller in _controllers.values) {
       if (!controller.isClosed) await controller.close();
@@ -269,7 +266,7 @@ class OpencodeBackend implements AgentBackend {
   }
 
   @override
-  Future<void> resetSession(String chatId, {String? transcript}) async {
+  Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
     final sessionId = _chatToSession.remove(chatId);
     if (sessionId != null) {
       try {
@@ -277,7 +274,21 @@ class OpencodeBackend implements AgentBackend {
       } catch (_) {}
     }
     _seenTools.remove(chatId);
-    if (transcript != null && transcript.isNotEmpty) _pendingContext[chatId] = transcript;
+    final transcript = _transcript(history);
+    if (transcript.isNotEmpty) _pendingContext[chatId] = transcript;
+  }
+
+  /// What the fresh session is told about the conversation it missed.
+  String _transcript(List<Message> history) {
+    final buffer = StringBuffer();
+    for (final message in history) {
+      final text = message.plainText.trim();
+      if (text.isEmpty) continue;
+      buffer.writeln("${message.role.name}: $text");
+      buffer.writeln();
+    }
+    final body = buffer.toString().trim();
+    return body.isEmpty ? "" : "Earlier in this conversation:\n\n$body";
   }
 
   @override

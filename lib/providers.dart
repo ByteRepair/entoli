@@ -37,10 +37,14 @@ final appSettingsProvider =
     NotifierProvider<AppSettingsNotifier, AppSettings>(AppSettingsNotifier.new);
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
-  final store = ref.watch(chatStoreProvider);
-  final backend = ref.watch(agentBackendProvider);
-  final settings = ref.watch(appSettingsProvider);
-  return ChatRepository(store, backend, settings);
+  // Deliberately not watching appSettingsProvider: the repository reads the
+  // settings when it uses them, so changing a default does not rebuild the
+  // repository and re-scan every chat off disk.
+  return ChatRepository(
+    ref.watch(chatStoreProvider),
+    ref.watch(agentBackendProvider),
+    () => ref.read(appSettingsProvider),
+  );
 });
 
 /// How long a turn may go without progress before we give up on it. opencode
