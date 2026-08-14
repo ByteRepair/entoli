@@ -1,81 +1,27 @@
-import "dart:io";
-
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
-import "../fakes.dart";
-
-ProviderContainer _buildContainer(Directory tmpDir) {
-  final config = AppConfig.forDirectory(tmpDir);
-  Directory(config.chatsDir.path).createSync(recursive: true);
-  final store = LocalChatStore(config);
-  final backend = FakeBackend();
-  return ProviderContainer(
-    overrides: [
-      chatStoreProvider.overrideWithValue(store),
-      agentBackendProvider.overrideWithValue(backend),
-      appConfigProvider.overrideWithValue(config),
-    ],
-  );
-}
+import "../harness.dart";
 
 void main() {
-  late Directory tmp;
-  late ProviderContainer container;
+  late TestApp app;
 
   // Providers are listed alphabetically, so "anthropic" is the one preselected
   // when nothing is persisted.
   const firstProvider = "anthropic";
   const otherProvider = "ollama-cloud";
 
-  void seedSettings(String providerId, String modelId) {
-    AppConfig.forDirectory(tmp).settingsFile.writeAsStringSync(
-          '{"defaultProviderId":"$providerId","defaultModelId":"$modelId"}',
-        );
-  }
+  setUp(() => app = TestApp.create());
+  tearDown(() => app.dispose());
 
-  setUp(() {
-    tmp = Directory.systemTemp.createTempSync("settings_test_");
-  });
+  void seedSettings(String providerId, String modelId) =>
+      app.seedGlobalDefault(providerId: providerId, modelId: modelId);
 
-  tearDown(() {
-    container.dispose();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
-  });
-
-  Future<void> pumpSettings(WidgetTester tester) async {
-    container = _buildContainer(tmp);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: SettingsPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-  }
-
-  // Item labels of the open dropdown popup, which renders in its own ListView
-  // above the page's.
-  List<String?> popupLabels(WidgetTester tester) => tester
-      .widgetList<Text>(find.descendant(
-        of: find.byType(ListView).last,
-        matching: find.byType(Text),
-      ))
-      .map((t) => t.data)
-      .toList();
-
-  Future<void> openDropdown(WidgetTester tester, {required bool model}) async {
-    final dropdowns = find.byType(DropdownButtonFormField<String?>);
-    await tester.tap(model ? dropdowns.last : dropdowns.first);
-    await tester.pumpAndSettle();
-  }
+  Future<void> pumpSettings(WidgetTester tester) => app.pump(tester, const SettingsPage());
 
   testWidgets("renders default backend and OpenCode section", (tester) async {
     await pumpSettings(tester);
@@ -110,11 +56,11 @@ void main() {
     await tester.tap(find.text("Claude Sonnet 4"));
     await tester.pumpAndSettle();
 
-    final settings = container.read(appSettingsProvider);
+    final settings = app.container.read(appSettingsProvider);
     expect(settings.defaultProviderId, firstProvider);
     expect(settings.defaultModelId, "claude-sonnet-4");
     expect(
-      AppConfig.forDirectory(tmp).settingsFile.readAsStringSync(),
+      app.config.settingsFile.readAsStringSync(),
       contains("claude-sonnet-4"),
     );
   });
@@ -161,7 +107,7 @@ void main() {
 
   testWidgets("delete all chats asks first and then clears them", (tester) async {
     await pumpSettings(tester);
-    final repo = container.read(chatRepositoryProvider);
+    final repo = app.repo;
     await repo.createChat(title: "one");
     await repo.createChat(title: "two");
 
@@ -177,7 +123,7 @@ void main() {
 
   testWidgets("cancelling the confirmation keeps the chats", (tester) async {
     await pumpSettings(tester);
-    final repo = container.read(chatRepositoryProvider);
+    final repo = app.repo;
     await repo.createChat(title: "one");
 
     await tester.tap(find.text("Delete all chats"));
@@ -219,7 +165,7 @@ void main() {
     await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
     await tester.pumpAndSettle();
 
-    expect(container.read(appSettingsProvider).defaultModelId, isNull);
+    expect(app.container.read(appSettingsProvider).defaultModelId, isNull);
     expect(find.text("Qwen 2.5"), findsNothing);
   });
 }

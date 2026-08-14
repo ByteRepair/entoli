@@ -17,6 +17,7 @@ class FakeOpencodeTransport implements OpencodeTransport {
   final List<({String chatId, String? title})> createSessionCalls = [];
   final List<({String sessionId, String text})> injectedContext = [];
   final List<String> deletedSessions = [];
+  final List<({String permissionId, String response})> permissionReplies = [];
   final List<({String chatId, String sessionId, String text, String? model, String? provider})>
       promptAsyncCalls = [];
   final List<({String chatId, String sessionId})> abortCalls = [];
@@ -62,10 +63,13 @@ class FakeOpencodeTransport implements OpencodeTransport {
   }
 
   @override
-  Future<void> respondPermission(String chatId, String sessionId, String permissionId, String response) async {}
+  Future<void> respondPermission(
+      String chatId, String sessionId, String permissionId, String response) async {
+    permissionReplies.add((permissionId: permissionId, response: response));
+  }
 
   @override
-  Stream<OcEvent> subscribe(String chatId) => _channel(chatId).stream;
+  Future<Stream<OcEvent>> subscribe(String chatId) async => _channel(chatId).stream;
 
   /// A turn ends by closing the channel, so a second turn needs a fresh one.
   StreamController<OcEvent> _channel(String chatId) {
@@ -78,10 +82,18 @@ class FakeOpencodeTransport implements OpencodeTransport {
   Future<List<Map<String, dynamic>>> providers(String chatId) async => [];
 
   @override
+  Future<void> disposeAll() async {
+    for (final chatId in _controllers.keys.toList()) {
+      await dispose(chatId);
+    }
+  }
+
+  @override
   Future<void> dispose(String chatId) async {
     disposeCalls.add(chatId);
-    await _controllers[chatId]?.close();
-    _controllers.remove(chatId);
+    // Not awaited: closing a controller nobody ever listened to never
+    // completes, and a server can be disposed without a turn having run.
+    unawaited(_controllers.remove(chatId)?.close() ?? Future<void>.value());
   }
 
   void emit(String chatId, OcEvent event) {
@@ -127,9 +139,9 @@ OcEvent _toolUpdatedEvent(
           "tool": tool,
           "state": {
             "status": status,
-            if (input != null) "input": input,
-            if (output != null) "output": output,
-            if (error != null) "error": error,
+            "input": ?input,
+            "output": ?output,
+            "error": ?error,
           },
         },
       },
@@ -333,6 +345,67 @@ void main() {
     expect(events.last, isA<DoneEvent>());
   });
 
+  test("a permission request reaches the UI and can be answered", () async {
+    final chat = await backend.createChat();
+    final sid = "ses_${chat.state.id}_123";
+
+    final events = await runTurn(chat.state.id, "delete everything", [
+      OcEvent(type: "permission.asked", properties: {
+        "sessionID": sid,
+        "id": "per_1",
+        "permission": "bash",
+        "tool": {"name": "bash"},
+        "metadata": {"command": "rm -rf /"},
+      }),
+      _idleEvent(sid),
+    ]);
+
+    final approval = events.whereType<ApprovalRequestEvent>().single.approval;
+    expect(approval.id, "per_1");
+    expect(approval.toolName, "bash");
+    expect(approval.argumentsJson, contains("rm -rf /"));
+    expect(await backend.pendingApprovals(chat.state.id), hasLength(1));
+
+    await backend.respondApproval(chat.state.id, "per_1", ApprovalResponse.allow);
+    // The endpoint's vocabulary is once/always/reject, not allow/deny.
+    expect(transport.permissionReplies.single.response, "once");
+    expect(await backend.pendingApprovals(chat.state.id), isEmpty);
+  });
+
+  test("denying a permission says reject", () async {
+    final chat = await backend.createChat();
+    await runTurn(chat.state.id, "hi", [_idleEvent("ses_${chat.state.id}_123")]);
+
+    await backend.respondApproval(chat.state.id, "per_1", ApprovalResponse.deny);
+
+    expect(transport.permissionReplies.single.response, "reject");
+  });
+
+  test("a permission answered elsewhere stops being pending", () async {
+    final chat = await backend.createChat();
+    final sid = "ses_${chat.state.id}_123";
+
+    await runTurn(chat.state.id, "hi", [
+      OcEvent(type: "permission.asked", properties: {
+        "sessionID": sid,
+        "id": "per_1",
+        "permission": "bash",
+      }),
+      OcEvent(type: "permission.replied", properties: {"sessionID": sid, "id": "per_1"}),
+      _idleEvent(sid),
+    ]);
+
+    expect(await backend.pendingApprovals(chat.state.id), isEmpty);
+  });
+
+  test("listModelsStandalone leaves no chat directory behind", () async {
+    final before = Directory(config.chatsDir.path).listSync().length;
+
+    await backend.listModelsStandalone();
+
+    expect(Directory(config.chatsDir.path).listSync(), hasLength(before));
+  });
+
   test("a retry status surfaces before the retries are exhausted", () async {
     // opencode reports each failed attempt on session.status; the terminal
     // session.error only lands ~70s later, once it gives up.
@@ -481,7 +554,10 @@ class _FailingTransport implements OpencodeTransport {
   Future<void> respondPermission(String chatId, String sessionId, String permissionId, String response) async {}
 
   @override
-  Stream<OcEvent> subscribe(String chatId) => const Stream.empty();
+  Future<Stream<OcEvent>> subscribe(String chatId) async => const Stream.empty();
+
+  @override
+  Future<void> disposeAll() async {}
 
   @override
   Future<List<Map<String, dynamic>>> providers(String chatId) async => [];

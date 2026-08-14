@@ -45,6 +45,9 @@ class MiniswePyodideBackend implements AgentBackend {
   Future<void> resetSession(String chatId, {String? transcript}) async {}
 
   @override
+  Future<void> shutdown() async {}
+
+  @override
   Future<void> abort(String chatId) => throw UnimplementedError();
 
   @override

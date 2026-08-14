@@ -1,3 +1,5 @@
+import "dart:ui" show AppExitResponse;
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -22,12 +24,40 @@ void main() async {
   container.read(availableModelsProvider);
   runApp(UncontrolledProviderScope(
     container: container,
-    child: const AgentChatApp(),
+    child: AgentChatApp(onExit: backend.shutdown),
   ));
 }
 
-class AgentChatApp extends StatelessWidget {
-  const AgentChatApp({super.key});
+class AgentChatApp extends StatefulWidget {
+  const AgentChatApp({super.key, required this.onExit});
+
+  /// Spawned servers are not our process's children to lose track of: without
+  /// this they outlive the app.
+  final Future<void> Function() onExit;
+
+  @override
+  State<AgentChatApp> createState() => _AgentChatAppState();
+}
+
+class _AgentChatAppState extends State<AgentChatApp> {
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onExitRequested: () async {
+        await widget.onExit();
+        return AppExitResponse.exit;
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

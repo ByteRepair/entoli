@@ -2,6 +2,7 @@ import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
+import "../../widgets/dialogs.dart";
 
 /// Renders a single message as a chat bubble. Text parts are concatenated;
 /// tool calls and results render as monospace chips.
@@ -57,7 +58,13 @@ class MessageBubble extends StatelessWidget {
     if (selected == "regenerate") {
       onRegenerate!();
     } else if (selected == "edit" && context.mounted) {
-      final edited = await _promptForEdit(context, _plainText());
+      final edited = await promptForText(
+        context,
+        title: "Edit message",
+        initial: _plainText(),
+        confirmLabel: "Send",
+        maxLines: 8,
+      );
       if (edited != null) onEdit!(edited);
     }
   }
@@ -67,33 +74,6 @@ class MessageBubble extends StatelessWidget {
   bool get _hasText => message.parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);
 
   bool get _hasError => message.parts.whereType<ErrorPart>().isNotEmpty;
-
-  Future<String?> _promptForEdit(BuildContext context, String current) {
-    final controller = TextEditingController(text: current);
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Edit message"),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 8,
-          minLines: 1,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          FilledButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              Navigator.pop(context, text.isEmpty ? null : text);
-            },
-            child: const Text("Send"),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {

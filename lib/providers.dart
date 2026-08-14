@@ -20,13 +20,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     return AppSettings.load(_config);
   }
 
-  Future<void> setDefaultModel(String providerId, String modelId) async {
-    state = AppSettings(defaultProviderId: providerId, defaultModelId: modelId);
-    await state.save(_config);
-  }
+  Future<void> setDefaultModel(String providerId, String modelId) =>
+      _store(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
 
-  Future<void> clearDefaultModel() async {
-    state = AppSettings();
+  /// Keep a provider without pinning a model, or clear both with null.
+  Future<void> setDefaultProvider(String? providerId) =>
+      _store(AppSettings(defaultProviderId: providerId));
+
+  Future<void> _store(AppSettings settings) async {
+    state = settings;
     await state.save(_config);
   }
 }

@@ -31,13 +31,16 @@ abstract class OpencodeTransport {
   /// Respond to a permission request.
   Future<void> respondPermission(String chatId, String sessionId, String permissionId, String response);
 
-  /// Subscribe to the SSE event stream for [chatId]. The stream emits
-  /// events until the turn completes or the subscription is cancelled.
-  Stream<OcEvent> subscribe(String chatId);
+  /// Subscribe to the SSE event stream for [chatId]. Completes once the
+  /// stream is attached, so callers can prompt without racing the events.
+  Future<Stream<OcEvent>> subscribe(String chatId);
 
   /// List available providers/models.
   Future<List<Map<String, dynamic>>> providers(String chatId);
 
   /// Stop the server for [chatId] and release resources.
   Future<void> dispose(String chatId);
+
+  /// Stop every server this transport started.
+  Future<void> disposeAll();
 }

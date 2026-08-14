@@ -66,15 +66,15 @@ class OpencodeClient {
   }
 
   Future<void> deleteSession(String id) async {
-    await _client.delete(baseUrl.resolve("/session/$id"), headers: _headers);
+    _expectOk(await _client.delete(baseUrl.resolve("/session/$id"), headers: _headers));
   }
 
   Future<void> abortSession(String id) async {
-    await _client.post(
+    _expectOk(await _client.post(
       baseUrl.resolve("/session/$id/abort"),
       headers: _headers,
       body: "{}",
-    );
+    ));
   }
 
   // --- messages ---
@@ -108,16 +108,16 @@ class OpencodeClient {
     if (model != null && provider != null) {
       body["model"] = {"providerID": provider, "modelID": model};
     }
-    await _client.post(
+    _expectOk(await _client.post(
       baseUrl.resolve("/session/$sessionId/prompt_async"),
       headers: _headers,
       body: jsonEncode(body),
-    );
+    ));
   }
 
   /// Inject context without triggering an AI response.
   Future<void> injectContext(String sessionId, String text) async {
-    await _client.post(
+    _expectOk(await _client.post(
       baseUrl.resolve("/session/$sessionId/message"),
       headers: _headers,
       body: jsonEncode({
@@ -126,17 +126,17 @@ class OpencodeClient {
           {"type": "text", "text": text},
         ],
       }),
-    );
+    ));
   }
 
   // --- permissions ---
 
   Future<void> respondPermission(String sessionId, String permissionId, String response) async {
-    await _client.post(
+    _expectOk(await _client.post(
       baseUrl.resolve("/session/$sessionId/permissions/$permissionId"),
       headers: _headers,
       body: jsonEncode({"response": response}),
-    );
+    ));
   }
 
   // --- providers / models ---
@@ -154,7 +154,10 @@ class OpencodeClient {
   // --- SSE event stream ---
 
   /// Connects to `/event` and yields parsed events until the stream closes.
-  Stream<OcEvent> events() async* {
+  /// Opens `/event` and completes once the server has accepted the stream.
+  /// Callers must await this before prompting: opencode never replays events,
+  /// so anything emitted before the stream is attached is lost for good.
+  Future<Stream<OcEvent>> connectEvents() async {
     final request = http.Request("GET", baseUrl.resolve("/event"));
     if (password != null) {
       request.headers["Authorization"] = _basicAuthValue(username ?? "opencode", password!);
@@ -163,19 +166,20 @@ class OpencodeClient {
     if (response.statusCode != 200) {
       throw http.ClientException("SSE connection failed: ${response.statusCode}");
     }
-    final lines = response.stream
-        .transform(utf8.decoder)
-        .transform(const LineSplitter());
-    try {
-      await for (final event in parseSseEvents(lines)) {
-        yield event;
-      }
-    } on http.ClientException catch (_) {
-      // Connection closed (expected during dispose).
-    }
+    final lines = response.stream.transform(utf8.decoder).transform(const LineSplitter());
+    // A closed connection is how a stream ends on dispose, not an error.
+    return parseSseEvents(lines).handleError((_) {}, test: (e) => e is http.ClientException);
   }
 
   // --- helpers ---
+
+  /// Throws on a failed write. Without this a rejected prompt (say, a model
+  /// the provider no longer offers) looks exactly like a silent stall.
+  void _expectOk(http.Response r) {
+    if (r.statusCode >= 400) {
+      throw http.ClientException("HTTP ${r.statusCode}: ${r.body}");
+    }
+  }
 
   dynamic _decode(http.Response r) {
     if (r.statusCode >= 400) {

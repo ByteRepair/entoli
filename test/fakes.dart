@@ -58,6 +58,11 @@ class FakeBackend implements AgentBackend {
     resets.add(transcript);
   }
 
+  var didShutdown = false;
+
+  @override
+  Future<void> shutdown() async => didShutdown = true;
+
   final List<String> aborted = [];
 
   @override

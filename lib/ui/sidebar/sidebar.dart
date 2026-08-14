@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../settings/settings_page.dart";
+import "../widgets/dialogs.dart";
 
 final chatListProvider = FutureProvider((ref) async {
   final repo = ref.watch(chatRepositoryProvider);
@@ -74,14 +75,27 @@ class Sidebar extends ConsumerWidget {
                       onSelected: (value) async {
                         switch (value) {
                           case "rename":
-                            final title = await _showRenameDialog(context, c.title);
-                            if (title == null || title.trim().isEmpty) return;
-                            await ref.read(chatRepositoryProvider).renameChat(c.id, title.trim());
-                            ref.invalidate(chatControllerProvider(c.id));
+                            final title = await promptForText(
+                              context,
+                              title: "Rename chat",
+                              initial: c.title,
+                              hint: "Chat title",
+                              confirmLabel: "Rename",
+                            );
+                            if (title == null) return;
+                            await ref.read(chatRepositoryProvider).renameChat(c.id, title);
+                            ref.read(chatControllerProvider(c.id).notifier).applyTitle(title);
                             ref.invalidate(chatListProvider);
                           case "delete":
-                            final confirmed = await _showDeleteDialog(context, c.title);
-                            if (confirmed != true) return;
+                            final confirmed = await confirm(
+                              context,
+                              title: "Delete chat?",
+                              message:
+                                  "Delete \"${c.title.isEmpty ? "(untitled)" : c.title}\"? This cannot be undone.",
+                              confirmLabel: "Delete",
+                              destructive: true,
+                            );
+                            if (!confirmed) return;
                             if (selected) ref.read(selectedChatIdProvider.notifier).select(null);
                             await ref.read(chatRepositoryProvider).deleteChat(c.id);
                             ref.invalidate(chatListProvider);
@@ -121,45 +135,5 @@ class Sidebar extends ConsumerWidget {
     final l = t.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
     return '${_months[l.month - 1]} ${l.day}, ${two(l.hour)}:${two(l.minute)}';
-  }
-
-  Future<String?> _showRenameDialog(BuildContext context, String current) {
-    final controller = TextEditingController(text: current);
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Rename chat"),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: "Chat title"),
-          onSubmitted: (v) => Navigator.pop(context, v),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text("Rename"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<bool?> _showDeleteDialog(BuildContext context, String title) {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete chat?"),
-        content: Text("Delete \"${title.isEmpty ? "(untitled)" : title}\"? This cannot be undone."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Delete"),
-          ),
-        ],
-      ),
-    );
   }
 }

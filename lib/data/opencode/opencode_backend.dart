@@ -3,6 +3,7 @@
 // POST /session/:id/prompt_async; events stream via SSE /event.
 import "dart:async";
 import "dart:convert";
+import "dart:io";
 
 import "package:uuid/uuid.dart";
 
@@ -67,9 +68,13 @@ class OpencodeBackend implements AgentBackend {
         if (seed != null) await transport.injectContext(chatId, sessionId, seed);
       }
 
-      _eventSubs[chatId]?.cancel();
-      _eventSubs[chatId] = transport.subscribe(chatId).listen(
-        (event) => _handleEvent(event, chatId),
+      // Attach before prompting, and hand each subscription its own
+      // controller: a straggling event from the previous turn must not close
+      // this one.
+      await _eventSubs[chatId]?.cancel();
+      final events = await transport.subscribe(chatId);
+      _eventSubs[chatId] = events.listen(
+        (event) => _handleEvent(event, chatId, controller),
         onError: (e) {
           if (!controller.isClosed) controller.add(ErrorEvent(e.toString()));
         },
@@ -93,9 +98,12 @@ class OpencodeBackend implements AgentBackend {
     yield* outController.stream;
   }
 
-  Future<void> _handleEvent(OcEvent event, String chatId) async {
-    final controller = _controllers[chatId];
-    if (controller == null || controller.isClosed) return;
+  Future<void> _handleEvent(
+    OcEvent event,
+    String chatId,
+    StreamController<AgentEvent> controller,
+  ) async {
+    if (controller.isClosed) return;
 
     final props = event.properties;
     final sessionId = props["sessionID"] as String?;
@@ -117,6 +125,21 @@ class OpencodeBackend implements AgentBackend {
             message: status["message"] as String? ?? "",
           ));
         }
+
+      case "permission.asked":
+        final approval = ToolApproval(
+          id: props["id"] as String? ?? "",
+          toolName: (props["tool"] as Map<String, dynamic>?)?["name"] as String? ??
+              props["permission"] as String? ??
+              "unknown",
+          argumentsJson: props["metadata"] == null ? null : jsonEncode(props["metadata"]),
+        );
+        _approvals.putIfAbsent(chatId, () => []).add(approval);
+        controller.add(ApprovalRequestEvent(approval));
+
+      case "permission.replied":
+        final id = props["id"] as String?;
+        _approvals[chatId]?.removeWhere((a) => a.id == id);
 
       case "session.error":
         final text = _errorText(props["error"]);
@@ -232,6 +255,20 @@ class OpencodeBackend implements AgentBackend {
   final Map<String, String> _pendingContext = {};
 
   @override
+  Future<void> shutdown() async {
+    for (final sub in _eventSubs.values) {
+      await sub.cancel();
+    }
+    _eventSubs.clear();
+    for (final controller in _controllers.values) {
+      if (!controller.isClosed) await controller.close();
+    }
+    _controllers.clear();
+    _chatToSession.clear();
+    await transport.disposeAll();
+  }
+
+  @override
   Future<void> resetSession(String chatId, {String? transcript}) async {
     final sessionId = _chatToSession.remove(chatId);
     if (sessionId != null) {
@@ -254,7 +291,7 @@ class OpencodeBackend implements AgentBackend {
       chatId,
       sessionId,
       approvalId,
-      response == ApprovalResponse.allow ? "allow" : "deny",
+      response == ApprovalResponse.allow ? "once" : "reject",
     );
     _approvals[chatId]?.removeWhere((a) => a.id == approvalId);
   }
@@ -286,15 +323,19 @@ class OpencodeBackend implements AgentBackend {
   @override
   Future<List<ModelOption>> listModelsStandalone() async {
     if (_chatToSession.isNotEmpty) return availableModels();
+    // Deliberately not a chat directory: this server is thrown away, and
+    // `chats/` is scanned for real chats.
+    final scratch = Directory.systemTemp.createTempSync("agent-chat-models-");
     final chatId = const Uuid().v4();
     try {
-      await transport.ensureServer(chatId, config.workspaceDir(chatId).path);
+      await transport.ensureServer(chatId, scratch.path);
       final providers = await transport.providers(chatId);
       return _flattenModels(providers);
     } catch (_) {
       return [];
     } finally {
       await transport.dispose(chatId);
+      if (scratch.existsSync()) scratch.deleteSync(recursive: true);
     }
   }
 

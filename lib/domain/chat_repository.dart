@@ -43,16 +43,10 @@ class ChatRepository {
     // would be an invalid combination.
     final effectiveModel = model ?? _settings.defaultModelId;
     final effectiveProvider = model != null ? provider : _settings.defaultProviderId;
-    final stream = _backend
-        .sendPrompt(chatId, text,
-            attachments: attachments, model: effectiveModel, provider: effectiveProvider)
-        .asyncExpand((event) async* {
-      yield event;
-      if (event is DoneEvent) {
-        final chat = await _store.load(chatId);
-        await _store.save(chat);
-      }
-    });
+    // The turn's messages are persisted by the controller once it settles;
+    // nothing to add here.
+    final stream = _backend.sendPrompt(chatId, text,
+        attachments: attachments, model: effectiveModel, provider: effectiveProvider);
     _active[chatId] = stream;
     return stream;
   }

@@ -58,6 +58,10 @@ abstract class AgentBackend {
   /// optionally seeded with [transcript]. Used when resending a message.
   Future<void> resetSession(String chatId, {String? transcript});
 
+  /// Release every process and connection this backend owns. Called when the
+  /// app exits; without it spawned servers outlive it.
+  Future<void> shutdown();
+
   /// Abort the running turn.
   Future<void> abort(String chatId);
 
