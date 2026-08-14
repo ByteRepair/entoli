@@ -22,8 +22,9 @@ chat's workspace as the process working directory. `POST /session` creates
 a dir-bound session (inherits server cwd). All messages use
 `POST /session/:id/prompt_async` (fire-and-forget, returns 204). Events
 stream via SSE `/event`: `message.part.delta` (text), `message.part.updated`
-(tool status changes), `session.idle` (turn done). Server stops when
-switching chats or disposing.
+(tool status changes), `session.idle` (turn done). A server outlives a chat
+switch — a turn keeps running while you read another chat — and is stopped by
+deleting the chat or exiting the app.
 
 SSE only emits events for sessions created via `POST /session` on that
 server — `opencode run --dir` sessions do NOT get SSE events (verified
