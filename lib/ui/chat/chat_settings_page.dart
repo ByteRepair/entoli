@@ -5,6 +5,7 @@ import "../../domain/app_settings.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
+import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
 
 const _reasoningEfforts = ["minimal", "low", "medium", "high"];
@@ -125,7 +126,7 @@ class _LlmField extends ConsumerWidget {
   }
 }
 
-class _LlmDropdowns extends StatefulWidget {
+class _LlmDropdowns extends StatelessWidget {
   const _LlmDropdowns({
     required this.models,
     required this.meta,
@@ -139,123 +140,26 @@ class _LlmDropdowns extends StatefulWidget {
   final ValueChanged<ChatMeta> onChanged;
 
   @override
-  State<_LlmDropdowns> createState() => _LlmDropdownsState();
-}
-
-class _LlmDropdownsState extends State<_LlmDropdowns> {
-  /// null means [defaultOptionLabel]: the chat inherits the app-level default.
-  String? _provider;
-
-  @override
-  void initState() {
-    super.initState();
-    final ids = widget.models.map((m) => m.providerId).toSet();
-    if (ids.contains(widget.meta.provider)) {
-      _provider = widget.meta.provider;
-      return;
-    }
-    // meta.json may name a model without its provider; recover it from the
-    // model so the saved choice still shows up.
-    final owning = widget.models.where((m) => m.modelId == widget.meta.model);
-    if (owning.isNotEmpty) _provider = owning.first.providerId;
-  }
-
-  void _selectProvider(String? provider) {
-    setState(() => _provider = provider);
-    final keepsModel = widget.models
-        .any((m) => m.providerId == provider && m.modelId == widget.meta.model);
-    widget.onChanged(widget.meta
-      ..provider = provider
-      ..model = keepsModel ? widget.meta.model : null);
-  }
-
-  /// Pinning a model pins the provider it came from with it.
-  void _selectModel(String? modelId, String listedUnder) {
-    if (modelId == null) {
-      widget.onChanged(widget.meta..model = null);
-      return;
-    }
-    setState(() => _provider = listedUnder);
-    widget.onChanged(widget.meta
-      ..model = modelId
-      ..provider = listedUnder);
-  }
-
-  String? _labelOf(String? modelId) {
-    final match = widget.models.where((m) => m.modelId == modelId);
-    return match.isEmpty ? modelId : (match.first.label ?? match.first.modelId);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (widget.models.isEmpty) {
-      return const Text("No models available. Start a chat to load models.");
-    }
-
-    final providerIds = widget.models.map((m) => m.providerId).toSet().toList()..sort();
-
-    // On Default, list the models of whatever provider the chat will actually
-    // use, so the list is never empty.
-    final listedProvider =
-        _provider ?? widget.defaults.defaultProviderId ?? providerIds.first;
-    final modelsForProvider = widget.models
-        .where((m) => m.providerId == listedProvider)
-        .toList()
-      ..sort((a, b) {
-        final la = (a.label ?? a.modelId).toLowerCase();
-        final lb = (b.label ?? b.modelId).toLowerCase();
-        return la.compareTo(lb);
-      });
-
-    final currentModel =
-        modelsForProvider.any((m) => m.modelId == widget.meta.model) ? widget.meta.model : null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ResettableField(
-          isDefault: _provider == null,
-          onReset: () => _selectProvider(null),
-          child: DropdownButtonFormField<String?>(
-            decoration: InputDecoration(
-              labelText: "Provider",
-              border: const OutlineInputBorder(),
-              helperText: _provider == null
-                  ? "Using ${widget.defaults.defaultProviderId ?? "the backend default"}"
-                  : null,
-            ),
-            initialValue: _provider,
-            items: [
-              defaultMenuItem(),
-              ...providerIds.map((p) => DropdownMenuItem<String?>(value: p, child: Text(p))),
-            ],
-            onChanged: _selectProvider,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ResettableField(
-          isDefault: widget.meta.model == null,
-          onReset: () => _selectModel(null, listedProvider),
-          child: DropdownButtonFormField<String?>(
-            decoration: InputDecoration(
-              labelText: "Model",
-              border: const OutlineInputBorder(),
-              helperText: widget.meta.model == null
-                  ? "Using ${_labelOf(widget.defaults.defaultModelId) ?? "the backend default"}"
-                  : null,
-            ),
-            initialValue: currentModel,
-            items: [
-              defaultMenuItem(),
-              ...modelsForProvider.map((m) {
-                return DropdownMenuItem<String?>(value: m.modelId, child: Text(m.label ?? m.modelId));
-              }),
-            ],
-            onChanged: (v) => _selectModel(v, listedProvider),
-          ),
-        ),
-      ],
+    return ProviderModelSelector(
+      models: models,
+      choice: (providerId: _pinnedProvider, modelId: meta.model),
+      inherited: (
+        providerId: defaults.defaultProviderId,
+        modelId: defaults.defaultModelId,
+      ),
+      onChanged: (choice) => onChanged(meta
+        ..provider = choice.providerId
+        ..model = choice.modelId),
     );
+  }
+
+  /// meta.json may name a model without its provider; recover it from the
+  /// model so the saved choice still shows up.
+  String? get _pinnedProvider {
+    if (meta.provider != null) return meta.provider;
+    final owning = models.where((m) => m.modelId == meta.model);
+    return owning.isEmpty ? null : owning.first.providerId;
   }
 }
 

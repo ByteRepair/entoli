@@ -54,9 +54,24 @@ path and prints timestamped events. It is not a `_test.dart` file, so
 `flutter test` skips it; run it by name when the question is what opencode
 actually emits.
 
+`transport.subscribe` is awaited before prompting and returns only once
+`/event` is attached — opencode never replays, so an event emitted before the
+stream is open is gone. Each subscription also captures its own turn's
+controller, so a straggling event from the previous turn cannot close the new
+one.
+
 `OpencodeTransport` abstracts the server lifecycle and HTTP/SSE so tests
 can inject a fake. Real impl: `RealOpencodeTransport`. Test fake:
 `FakeOpencodeTransport` in `opencode_backend_test.dart`.
+
+Servers are per chat and live until the app exits, when `AgentBackend.shutdown`
+(wired to `AppLifecycleListener.onExitRequested` in `main.dart`) stops them.
+They are not our process's children in any way the OS cleans up, so without
+that they outlive the app.
+
+Every write endpoint in `OpencodeClient` checks its status code. A rejected
+prompt is otherwise indistinguishable from a stall: no events ever arrive and
+the turn dies on the timeout with nothing to show.
 
 ### Resending a message
 
@@ -74,6 +89,20 @@ own. Each level stores `null` to mean "inherit", shown in the UI as the
 `Default` option — always first in its list, with a reset button beside the
 field. Pinning a model pins its provider too: the two are only ever sent as a
 matched pair.
+
+Both settings pages render the same `ProviderModelSelector`; it owns those
+rules, and each page only says where the values come from and where they go.
+`meta.json`'s `temperature` and `reasoningEffort` are saved but not yet sent:
+`prompt_async` has no field for them (verified against `GET /doc`, opencode
+1.18.18), so they would need per-session config to take effect.
+
+### Shared UI
+
+`lib/ui/widgets/` holds what more than one page needs: `ProviderModelSelector`,
+the `Default`-plus-reset pairing (`resettable_field.dart`), and the
+`promptForText` / `confirm` dialogs. Tests share `test/harness.dart` (`TestApp`
+plus the dropdown finders) and `test/fakes.dart` (`FakeBackend`, whose
+`scriptedEvents` and `hold` drive a turn).
 
 ### AgentBackend abstraction
 

@@ -92,6 +92,13 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: chat.copyWith(messages: msgs));
   }
 
+  /// Retitle in place. Reloading instead would dispose a running turn.
+  void applyTitle(String title) {
+    final chat = state.chat;
+    if (chat == null) return;
+    state = state.copyWith(chat: chat.copyWith(state: chat.state.copyWith(title: title)));
+  }
+
   Future<void> _load() async {
     final repo = ref.read(chatRepositoryProvider);
     final chat = await repo.openChat(chatId);

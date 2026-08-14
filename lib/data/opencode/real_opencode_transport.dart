@@ -81,9 +81,9 @@ class RealOpencodeTransport implements OpencodeTransport {
   }
 
   @override
-  Stream<OcEvent> subscribe(String chatId) {
+  Future<Stream<OcEvent>> subscribe(String chatId) {
     final s = _ensure(chatId);
-    return s.client.events();
+    return s.client.connectEvents();
   }
 
   @override
@@ -98,6 +98,13 @@ class RealOpencodeTransport implements OpencodeTransport {
     if (s == null) return;
     await s.client.close();
     await s.process.stop();
+  }
+
+  @override
+  Future<void> disposeAll() async {
+    for (final chatId in _servers.keys.toList()) {
+      await dispose(chatId);
+    }
   }
 }
 

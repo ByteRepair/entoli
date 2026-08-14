@@ -1,92 +1,45 @@
-import "dart:convert";
-import "dart:io";
-
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/local_chat_store.dart";
-import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
-import "../fakes.dart";
+import "../harness.dart";
 
 const _chatId = "chat-1";
 
 void main() {
-  late Directory tmp;
-  late AppConfig config;
-  late ProviderContainer container;
+  late TestApp app;
 
-  setUp(() {
-    tmp = Directory.systemTemp.createTempSync("chat_settings_test_");
-    config = AppConfig.forDirectory(tmp);
-    Directory(config.chatDir(_chatId).path).createSync(recursive: true);
-    container = ProviderContainer(
-      overrides: [
-        chatStoreProvider.overrideWithValue(LocalChatStore(config)),
-        agentBackendProvider.overrideWithValue(FakeBackend()),
-        appConfigProvider.overrideWithValue(config),
-      ],
-    );
-  });
+  setUp(() => app = TestApp.create());
+  tearDown(() => app.dispose());
 
-  tearDown(() {
-    container.dispose();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
-  });
-
-  void seedMeta(Map<String, dynamic> json) =>
-      config.metaFile(_chatId).writeAsStringSync(jsonEncode(json));
+  void seedMeta(Map<String, dynamic> json) => app.seedChatMeta(_chatId, json);
 
   void seedGlobalDefault(String providerId, String modelId) =>
-      config.settingsFile.writeAsStringSync(
-          jsonEncode({"defaultProviderId": providerId, "defaultModelId": modelId}));
-
-  Map<String, dynamic> savedMeta() =>
-      jsonDecode(config.metaFile(_chatId).readAsStringSync()) as Map<String, dynamic>;
+      app.seedGlobalDefault(providerId: providerId, modelId: modelId);
 
   // Pushes the page on a route so the save button's pop() has somewhere to go,
   // and so a second tap re-creates the page the way reopening it does.
   Future<void> openPage(WidgetTester tester) async {
     if (!tester.any(find.text("open"))) {
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Builder(
-                builder: (context) => TextButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ChatSettingsPage(chatId: _chatId),
-                    ),
-                  ),
-                  child: const Text("open"),
+      await app.pump(
+        tester,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ChatSettingsPage(chatId: _chatId),
                 ),
               ),
+              child: const Text("open"),
             ),
           ),
         ),
       );
     }
     await tester.tap(find.text("open"));
-    await tester.pumpAndSettle();
-  }
-
-  List<String?> popupLabels(WidgetTester tester) => tester
-      .widgetList<Text>(find.descendant(
-        of: find.byType(ListView).last,
-        matching: find.byType(Text),
-      ))
-      .map((t) => t.data)
-      .toList();
-
-  Future<void> openDropdown(WidgetTester tester, {required bool model}) async {
-    final dropdowns = find.byType(DropdownButtonFormField<String?>);
-    await tester.tap(model ? dropdowns.last : dropdowns.first);
     await tester.pumpAndSettle();
   }
 
@@ -115,7 +68,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await save(tester);
-    expect(savedMeta(), {"provider": "ollama-cloud", "model": "qwen-2.5"});
+    expect(app.savedMeta(_chatId).provider, "ollama-cloud");
+    expect(app.savedMeta(_chatId).model, "qwen-2.5");
 
     await openPage(tester);
     expect(find.text("ollama-cloud"), findsOneWidget);
@@ -130,8 +84,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await save(tester);
-    expect(savedMeta()["provider"], "anthropic");
-    expect(savedMeta()["model"], "claude-sonnet-4");
+    expect(app.savedMeta(_chatId).provider, "anthropic");
+    expect(app.savedMeta(_chatId).model, "claude-sonnet-4");
   });
 
   testWidgets("switching provider drops a model that is no longer offered", (tester) async {
@@ -146,7 +100,7 @@ void main() {
     expect(find.text("Qwen 2.5"), findsNothing);
 
     await save(tester);
-    expect(savedMeta()["model"], isNull);
+    expect(app.savedMeta(_chatId).model, isNull);
   });
 
   testWidgets("a model saved without its provider is still preselected", (tester) async {
@@ -203,8 +157,8 @@ void main() {
 
     expect(find.text("Qwen 2.5"), findsNothing);
     await save(tester);
-    expect(savedMeta()["model"], isNull);
-    expect(savedMeta()["provider"], "ollama-cloud");
+    expect(app.savedMeta(_chatId).model, isNull);
+    expect(app.savedMeta(_chatId).provider, "ollama-cloud");
   });
 
   testWidgets("selecting Default in the list is the same as resetting", (tester) async {
@@ -216,7 +170,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await save(tester);
-    expect(savedMeta()["model"], isNull);
+    expect(app.savedMeta(_chatId).model, isNull);
   });
 
   testWidgets("a chat's own model wins over the global default", (tester) async {
@@ -237,7 +191,7 @@ void main() {
     expect(find.text("high"), findsOneWidget);
 
     await save(tester);
-    expect(savedMeta()["temperature"], 0.4);
-    expect(savedMeta()["reasoningEffort"], "high");
+    expect(app.savedMeta(_chatId).temperature, 0.4);
+    expect(app.savedMeta(_chatId).reasoningEffort, "high");
   });
 }

@@ -2,6 +2,7 @@
 // Started lazily with the chat's workspace as working directory so that
 // sessions created via POST /session inherit that cwd. Stopped on dispose.
 import "dart:async";
+import "dart:convert";
 import "dart:io";
 
 class OpencodeProcess {
@@ -24,8 +25,25 @@ class OpencodeProcess {
     ProcessFactory? processFactory,
   }) async {
     final bin = binary ?? Platform.environment["OPENCODE_BINARY"] ?? "opencode";
-    final port = await _pickFreePort();
+    // The port is probed, released, then claimed by the server, so another
+    // process can take it in between. Losing that race looks like a health
+    // timeout, so try again on a different port rather than failing the chat.
+    for (var attempt = 0;; attempt++) {
+      try {
+        return await _startOn(await _pickFreePort(), bin, password, workingDirectory, processFactory);
+      } on TimeoutException {
+        if (attempt >= 2) rethrow;
+      }
+    }
+  }
 
+  static Future<OpencodeProcess> _startOn(
+    int port,
+    String bin,
+    String? password,
+    String workingDirectory,
+    ProcessFactory? processFactory,
+  ) async {
     final args = <String>[
       "serve",
       "--port",
@@ -46,7 +64,12 @@ class OpencodeProcess {
     );
 
     final url = Uri.parse("http://127.0.0.1:$port");
-    await _waitForHealth(url, password);
+    try {
+      await _waitForHealth(url, password);
+    } catch (_) {
+      process.kill(ProcessSignal.sigkill);
+      rethrow;
+    }
 
     return OpencodeProcess._(
       url: url,
@@ -74,16 +97,19 @@ class OpencodeProcess {
   static Future<void> _waitForHealth(Uri url, String? password) async {
     final deadline = DateTime.now().add(const Duration(seconds: 15));
     while (DateTime.now().isBefore(deadline)) {
+      final client = HttpClient();
       try {
-        final client = HttpClient();
         final req = await client.getUrl(url.resolve("/global/health"));
-        final resp = await req.close().timeout(const Duration(seconds: 2));
-        if (resp.statusCode == 200) {
-          client.close();
-          return;
+        if (password != null) {
+          final credentials = base64Encode(utf8.encode("opencode:$password"));
+          req.headers.set(HttpHeaders.authorizationHeader, "Basic $credentials");
         }
+        final resp = await req.close().timeout(const Duration(seconds: 2));
+        if (resp.statusCode == 200) return;
+      } catch (_) {
+      } finally {
         client.close();
-      } catch (_) {}
+      }
       await Future.delayed(const Duration(milliseconds: 200));
     }
     throw TimeoutException("opencode server did not become healthy within 15s");
