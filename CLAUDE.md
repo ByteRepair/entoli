@@ -91,6 +91,12 @@ own. Each level stores `null` to mean "inherit", shown in the UI as the
 field. Pinning a model pins its provider too: the two are only ever sent as a
 matched pair.
 
+`Default` is a live reference, not a snapshot: a chat that pins nothing uses
+whatever the global default currently is, and retargeting the global retargets
+every such chat. With nothing to inherit, the model list stays empty rather
+than falling back to a provider — a guessed default would mean something that
+shifts as providers come and go.
+
 Both settings pages render the same `ProviderModelSelector`; it owns those
 rules, and each page only says where the values come from and where they go.
 `meta.json`'s `temperature` and `reasoningEffort` are saved but not yet sent:

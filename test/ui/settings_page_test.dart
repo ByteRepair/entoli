@@ -36,23 +36,36 @@ void main() {
     expect(find.text("Model"), findsOneWidget);
   });
 
-  testWidgets("nothing persisted means Default, and models are still listed", (tester) async {
+  testWidgets("with nothing persisted, Default offers no models to guess from", (tester) async {
     await pumpSettings(tester);
     expect(find.byType(DropdownButtonFormField<String?>), findsNWidgets(2));
     expect(find.text(defaultOptionLabel), findsNWidgets(2));
 
     await openDropdown(tester, model: true);
 
-    expect(find.text("Claude Haiku 3"), findsOneWidget);
-    expect(find.text("Claude Sonnet 4"), findsOneWidget);
-    expect(find.text("Llama 3"), findsNothing);
-    expect(find.text("Qwen 2.5"), findsNothing);
+    // Default means the backend decides; picking a provider is what populates
+    // this list, rather than an arbitrary first one.
+    expect(popupLabels(tester), [defaultOptionLabel]);
+  });
+
+  testWidgets("choosing a provider populates the models", (tester) async {
+    await pumpSettings(tester);
+
+    await openDropdown(tester, model: false);
+    await tester.tap(find.text(firstProvider).last);
+    await tester.pumpAndSettle();
+
+    await openDropdown(tester, model: true);
+    expect(popupLabels(tester), [defaultOptionLabel, "Claude Haiku 3", "Claude Sonnet 4"]);
   });
 
   testWidgets("selecting a model persists default in settings", (tester) async {
     await pumpSettings(tester);
-    await openDropdown(tester, model: true);
+    await openDropdown(tester, model: false);
+    await tester.tap(find.text(firstProvider).last);
+    await tester.pumpAndSettle();
 
+    await openDropdown(tester, model: true);
     await tester.tap(find.text("Claude Sonnet 4"));
     await tester.pumpAndSettle();
 

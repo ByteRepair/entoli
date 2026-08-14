@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -78,6 +79,10 @@ void main() {
 
   testWidgets("picking a model records the provider it belongs to", (tester) async {
     await openPage(tester);
+
+    await openDropdown(tester, model: false);
+    await tester.tap(find.text("anthropic").last);
+    await tester.pumpAndSettle();
 
     await openDropdown(tester, model: true);
     await tester.tap(find.text("Claude Sonnet 4"));
@@ -170,6 +175,27 @@ void main() {
     await tester.pumpAndSettle();
 
     await save(tester);
+    expect(app.savedMeta(_chatId).model, isNull);
+  });
+
+  testWidgets("with no global default there is nothing for Default to point at", (tester) async {
+    await openPage(tester);
+
+    await openDropdown(tester, model: true);
+    expect(popupLabels(tester), [defaultOptionLabel]);
+  });
+
+  testWidgets("Default follows the global default as it changes", (tester) async {
+    app.seedGlobalDefault(providerId: "ollama-cloud", modelId: "qwen-2.5");
+    await openPage(tester);
+    expect(find.text("Using Qwen 2.5"), findsOneWidget);
+
+    // Nothing is pinned on the chat, so retargeting the global retargets it.
+    app.container.read(appSettingsProvider.notifier).setDefaultModel("anthropic", "claude-haiku-3");
+    await tester.pumpAndSettle();
+
+    expect(find.text("Using anthropic"), findsOneWidget);
+    expect(find.text("Using Claude Haiku 3"), findsOneWidget);
     expect(app.savedMeta(_chatId).model, isNull);
   });
 

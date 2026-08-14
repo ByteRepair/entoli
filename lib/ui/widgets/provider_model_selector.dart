@@ -40,9 +40,10 @@ class ProviderModelSelector extends StatelessWidget {
     }
 
     final providerIds = models.map((m) => m.providerId).toSet().toList()..sort();
-    // On Default, list the models of whatever provider will actually be used,
-    // so the second dropdown is never empty.
-    final listed = choice.providerId ?? inherited?.providerId ?? providerIds.first;
+    // On Default, list the models of the provider that will actually be used.
+    // With nothing to inherit there is no such provider, and guessing one
+    // would make Default mean something that shifts as providers come and go.
+    final listed = choice.providerId ?? inherited?.providerId;
     final forProvider = models.where((m) => m.providerId == listed).toList()
       ..sort((a, b) => _label(a).toLowerCase().compareTo(_label(b).toLowerCase()));
 
