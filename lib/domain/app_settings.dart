@@ -58,10 +58,10 @@ class AppSettings {
   AppIcon appIcon;
 
   static AppSettings load(AppConfig config) {
-    final file = config.settingsFile;
-    if (!file.existsSync()) return AppSettings();
+    final text = AppConfig.readText(config.settingsFile);
+    if (text == null) return AppSettings();
     try {
-      final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      final json = jsonDecode(text) as Map<String, dynamic>;
       return AppSettings(
         defaultModelId: _orNull(json["defaultModelId"] as String?),
         defaultProviderId: _orNull(json["defaultProviderId"] as String?),
@@ -127,7 +127,7 @@ class AppSettings {
       );
 
   Future<void> save(AppConfig config) async {
-    config.settingsFile.writeAsStringSync(jsonEncode({
+    AppConfig.writeText(config.settingsFile, jsonEncode({
       if (defaultModelId != null) "defaultModelId": defaultModelId,
       if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
       if (titleModelId != null) "titleModelId": titleModelId,

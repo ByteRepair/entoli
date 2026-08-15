@@ -3,7 +3,6 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:path/path.dart" as p;
-import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../domain/chat_meta.dart";
@@ -173,10 +172,7 @@ class LocalChatStore implements ChatStore {
   Future<String> saveResource(String chatId, String filename, Uint8List bytes) async {
     final project = _projectOf(chatId);
     config.ensureChatDirs(chatId, project: project);
-    var safeName = filename.replaceAll(RegExp(r"[^A-Za-z0-9._-]"), "_");
-    safeName = safeName.replaceAll(RegExp(r"\.{2,}"), ".");
-    if (safeName.startsWith(".")) safeName = safeName.substring(1);
-    final resource = "${const Uuid().v4()}-$safeName";
+    final resource = resourceName(filename);
     // Async, unlike the small JSON files above: an attachment is big enough
     // that reading or writing it would be felt as a dropped frame.
     await File(p.join(config.resourcesDir(chatId, project: project).path, resource))

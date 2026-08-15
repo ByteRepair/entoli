@@ -20,14 +20,6 @@ void main() {
     store = LocalChatStore(config);
   });
 
-  ChatState makeState(String id, {String? project}) => ChatState(
-        id: id,
-        title: "Test chat $id",
-        createdAt: DateTime.utc(2026, 1, 1),
-        updatedAt: DateTime.utc(2026, 1, 2),
-        project: project,
-      );
-
   test("save writes state.json and conv.json", () async {
     final state = makeState("c1");
     final messages = [

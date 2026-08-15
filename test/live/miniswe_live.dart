@@ -15,6 +15,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/miniswe/duckduckgo_search.dart";
 import "package:agent_chat/data/miniswe/llm/llm_registry.dart";
 import "package:agent_chat/data/miniswe/local_shell.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
@@ -57,6 +58,7 @@ void main() {
         config: config,
         library: library,
         shell: LocalShell(environment: () => const {}),
+        webSearch: DuckDuckGoSearch(),
         // Live means live: it runs what the model asks for.
         options: const MinisweOptions(stepLimit: 12),
         registry: LlmRegistry(
