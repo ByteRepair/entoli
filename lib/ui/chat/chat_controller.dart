@@ -15,6 +15,7 @@ class ChatViewState {
     this.isRunning = false,
     this.approvals = const [],
     this.questions = const [],
+    this.runningSubAgents = const [],
     this.retry,
   });
   final Chat? chat;
@@ -25,18 +26,21 @@ class ChatViewState {
   /// call and the answers are what the conversation keeps.
   final List<AskRequest> questions;
 
+  /// Sub-agents spawned by `task` calls that are still running. Turn-scoped
+  /// view state like [approvals]: the call/result pair is what persists, and
+  /// these exist only to drive the activity strip.
+  final List<SubAgentStartEvent> runningSubAgents;
+
   /// Set while the backend is retrying a failed attempt. Transient: it belongs
   /// to the running turn, not to the conversation, so it is never persisted.
   final String? retry;
-
-  /// True while a person, not the model, is what the turn is waiting on.
-  bool get isAsking => approvals.isNotEmpty || questions.isNotEmpty;
 
   ChatViewState copyWith({
     Chat? chat,
     bool? isRunning,
     List<ToolApproval>? approvals,
     List<AskRequest>? questions,
+    List<SubAgentStartEvent>? runningSubAgents,
     String? retry,
     bool clearRetry = false,
   }) =>
@@ -45,6 +49,7 @@ class ChatViewState {
         isRunning: isRunning ?? this.isRunning,
         approvals: approvals ?? this.approvals,
         questions: questions ?? this.questions,
+        runningSubAgents: runningSubAgents ?? this.runningSubAgents,
         retry: clearRetry ? null : (retry ?? this.retry),
       );
 }
@@ -57,7 +62,6 @@ class ChatController extends Notifier<ChatViewState> {
   final String chatId;
   final _uuid = const Uuid();
   StreamSubscription<AgentEvent>? _sub;
-  Timer? _stall;
 
   /// Deltas arrive per token; the UI only needs them per frame.
   final StringBuffer _pending = StringBuffer();
@@ -68,7 +72,6 @@ class ChatController extends Notifier<ChatViewState> {
   ChatViewState build() {
     ref.onDispose(() {
       _sub?.cancel();
-      _stall?.cancel();
       _flush?.cancel();
     });
     _load();
@@ -151,27 +154,6 @@ class ChatController extends Notifier<ChatViewState> {
     _writeReply(parts);
   }
 
-  /// (Re)start the clock on a turn that is producing nothing. How long that is
-  /// allowed to go on is the backend's to say.
-  void _watchForStall() {
-    final timeout = ref.read(chatRepositoryProvider).stallTimeout;
-    _stall?.cancel();
-    _stall = Timer(timeout, () => _giveUp(timeout));
-  }
-
-  /// End a stalled turn on our terms: keep whatever the backend last told us
-  /// about the trouble, stop the backend, and leave the user a retry.
-  Future<void> _giveUp(Duration waited) async {
-    if (!state.isRunning) return;
-    final blame = state.retry;
-    _appendError(
-      blame == null
-          ? "No response after ${waited.inSeconds}s. Stopped waiting."
-          : "Gave up after ${waited.inSeconds}s. $blame",
-    );
-    await abort();
-  }
-
   void _appendError(String message) {
     final reply = _reply;
     if (reply == null) return;
@@ -238,7 +220,6 @@ class ChatController extends Notifier<ChatViewState> {
     }
 
     final stream = repo.sendPrompt(chatId, text, attachments: attachments);
-    _watchForStall();
     _sub?.cancel();
     _sub = stream.listen(
       (event) => _onEvent(event),
@@ -289,38 +270,33 @@ class ChatController extends Notifier<ChatViewState> {
   void _onEvent(AgentEvent event) {
     if (_reply == null) return;
 
-    // Output means the turn is alive; a retry notice means the opposite, so it
-    // deliberately does not reset the clock.
     switch (event) {
       case TextDelta(:final text):
-        _watchForStall();
         _bufferDelta(text);
       case ReasoningDelta(:final text):
-        _watchForStall();
         _bufferDelta(text, reasoning: true);
       case ReasoningEnd(:final text, :final duration):
-        _watchForStall();
         _endReasoning(text, duration);
       case ToolCallEvent(:final call):
-        _watchForStall();
         _appendPart(MessagePart.toolCall(toolCall: call));
       case ToolResultEvent(:final result):
-        _watchForStall();
         _appendPart(MessagePart.toolResult(result: result));
       case ErrorEvent(:final message):
         _appendError(message);
       case ApprovalRequestEvent(:final approval):
-        // A turn waiting on a person is not a stalled turn, whatever the
-        // budget. The clock restarts when they answer.
-        _stall?.cancel();
-        _stall = null;
         state = state.copyWith(approvals: [...state.approvals, approval]);
       case QuestionRequestEvent(:final request):
-        _stall?.cancel();
-        _stall = null;
         state = state.copyWith(questions: [...state.questions, request]);
+      case SubAgentStartEvent():
+        state = state.copyWith(runningSubAgents: [...state.runningSubAgents, event]);
+      case SubAgentEndEvent(:final id):
+        state = state.copyWith(
+            runningSubAgents:
+                state.runningSubAgents.where((s) => s.id != id).toList());
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
+      case InfoEvent():
+        break;
       case DoneEvent():
         _finishTurn();
     }
@@ -333,8 +309,6 @@ class ChatController extends Notifier<ChatViewState> {
 
   void _finishTurn() {
     _flushDeltas();
-    _stall?.cancel();
-    _stall = null;
     _sub?.cancel();
     _sub = null;
     final chat = state.chat;
@@ -348,6 +322,7 @@ class ChatController extends Notifier<ChatViewState> {
       isRunning: false,
       approvals: const [],
       questions: const [],
+      runningSubAgents: const [],
       clearRetry: true,
     );
   }
@@ -368,7 +343,6 @@ class ChatController extends Notifier<ChatViewState> {
     await repo.respondApproval(chatId, approvalId, r);
     state = state.copyWith(
         approvals: state.approvals.where((a) => a.id != approvalId).toList());
-    _resumeWaiting();
   }
 
   /// Answer a request the panel was showing. One entry per question it held,
@@ -378,13 +352,6 @@ class ChatController extends Notifier<ChatViewState> {
     await repo.respondQuestions(chatId, requestId, answers);
     state = state.copyWith(
         questions: state.questions.where((r) => r.id != requestId).toList());
-    _resumeWaiting();
-  }
-
-  /// The clock stopped while a person was being waited on; it starts again
-  /// once nothing on screen is holding the turn up.
-  void _resumeWaiting() {
-    if (!state.isAsking && state.isRunning) _watchForStall();
   }
 }
 

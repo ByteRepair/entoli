@@ -124,7 +124,7 @@ class ChatRepository {
         model: model,
         provider: provider,
         project: await projectOf(chatId),
-        approveCommands: meta.approveCommands ?? _settings().approveCommands);
+        approveMode: meta.approveMode ?? _settings().approveMode);
   }
 
   /// Which project a chat's files are in. A draft is not on disk to be found,
@@ -173,10 +173,6 @@ class ChatRepository {
   }
 
   Future<void> abort(String chatId) => _backend.abort(chatId);
-
-  /// How long a turn may say nothing before it is written off. See
-  /// `AgentBackend.stallTimeout`.
-  Duration get stallTimeout => _backend.stallTimeout;
 
   Future<void> deleteChat(String id) async {
     await _dropSession(id);

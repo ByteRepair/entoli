@@ -3,7 +3,9 @@ import "dart:convert";
 
 import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/domain/ask.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
+import "package:agent_chat/domain/web_search.dart";
 
 /// A model that says whatever the test scripted, one list of chunks per call.
 class FakeLlmClient implements LlmClient {
@@ -138,4 +140,111 @@ LlmCompletion saidOnly(String text, {String? finishReason}) => LlmCompletion(
       message: LlmMessage(role: LlmRole.assistant, text: text),
     );
 
+/// One assistant turn that spawns a sub-agent via the `task` tool.
+LlmCompletion taskCall(String agent, String prompt, {String id = "task-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "task",
+            argumentsJson: jsonEncode({"agent": agent, "prompt": prompt}),
+          ),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `websearch`.
+LlmCompletion searchCall(String query, {String id = "search-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "websearch",
+            argumentsJson: jsonEncode({"query": query}),
+          ),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `webfetch`.
+LlmCompletion fetchCall(String url, {String id = "fetch-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "webfetch",
+            argumentsJson: jsonEncode({"url": url}),
+          ),
+        ],
+      ),
+    );
+
+/// A web search that answers from a table instead of reaching the network.
+class FakeWebSearch extends WebSearch {
+  FakeWebSearch({
+    this.searchResult,
+    this.fetchResult,
+    this.available = true,
+  });
+
+  /// What `search` returns. Defaults to a generic success.
+  ShellResult Function(String query)? searchResult;
+
+  /// What `fetch` returns. Defaults to a generic success.
+  ShellResult Function(String url)? fetchResult;
+
+  @override
+  final bool available;
+
+  final List<String> searched = [];
+  final List<String> fetched = [];
+
+  @override
+  Future<ShellResult> search(String query) async {
+    searched.add(query);
+    return searchResult?.call(query) ??
+        const ShellResult(returnCode: 0, output: "No results.");
+  }
+
+  @override
+  Future<ShellResult> fetch(String url) async {
+    fetched.add(url);
+    return fetchResult?.call(url) ??
+        const ShellResult(returnCode: 0, output: "Page content.");
+  }
+}
+
 ShellResult ok(String output) => ShellResult(returnCode: 0, output: output);
+
+/// A classifier that answers from a table instead of reaching a model.
+class FakeClassifier implements PermissionClassifier {
+  FakeClassifier({this.decision = PermissionDecision.allow});
+
+  /// What every call returns. Tests that need per-command decisions swap this
+  /// out between turns.
+  PermissionDecision Function(String toolName, String arguments)? decide;
+
+  /// The default decision when [decide] is not set.
+  PermissionDecision decision;
+
+  final List<({String tool, String args})> classified = [];
+
+  @override
+  Future<PermissionDecision> classify(
+    String toolName,
+    String argumentsJson, {
+    required String workspace,
+  }) async {
+    classified.add((tool: toolName, args: argumentsJson));
+    return decide?.call(toolName, argumentsJson) ?? decision;
+  }
+}

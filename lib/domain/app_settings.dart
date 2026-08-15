@@ -2,6 +2,7 @@ import "dart:convert";
 
 import "../core/config.dart";
 import "llm_provider.dart";
+import "permission.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
@@ -10,8 +11,10 @@ class AppSettings {
     this.defaultProviderId,
     this.titleModelId,
     this.titleProviderId,
+    this.classifierModelId,
+    this.classifierProviderId,
     this.environment = const {},
-    this.approveCommands = true,
+    this.approveMode = ApproveMode.ask,
     this.llmProviders = const [],
   });
 
@@ -24,13 +27,19 @@ class AppSettings {
   String? titleModelId;
   String? titleProviderId;
 
+  /// What classifies a command as safe enough to run without asking, when
+  /// [approveMode] is [ApproveMode.auto]. Both halves or neither: with nothing
+  /// here auto mode falls back to asking for every command.
+  String? classifierModelId;
+  String? classifierProviderId;
+
   /// Environment variables the agent's commands run under, and that a provider
   /// may name instead of holding its key. Held here rather than in the shell
   /// because the settings page edits them.
   Map<String, String> environment;
 
-  /// Whether the agent asks before running a command. A chat can override it.
-  bool approveCommands;
+  /// How the agent handles a command before it runs. A chat can override it.
+  ApproveMode approveMode;
 
   /// The endpoints the agent can call. Empty until the user adds one, which is
   /// why the first thing settings offers is a list of presets.
@@ -46,17 +55,38 @@ class AppSettings {
         defaultProviderId: _orNull(json["defaultProviderId"] as String?),
         titleModelId: _orNull(json["titleModelId"] as String?),
         titleProviderId: _orNull(json["titleProviderId"] as String?),
+        classifierModelId: _orNull(json["classifierModelId"] as String?),
+        classifierProviderId: _orNull(json["classifierProviderId"] as String?),
         // `opencodeEnv` is what this was called when a second backend spawned
         // servers. Read-only: `save` writes `environment`, so a file migrates
         // itself the first time anything is changed, and the fallback can go
         // once no unwritten files are left.
         environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
-        approveCommands: json["approveCommands"] as bool? ?? true,
+        approveMode: _approveMode(json),
         llmProviders: _providers(json["llmProviders"]),
       );
     } catch (_) {
       return AppSettings();
     }
+  }
+
+  /// `approveMode` is the current key. An older file has `approveCommands` as a
+  /// bool: `true` → [ApproveMode.ask], `false` → [ApproveMode.never]. A file
+  /// with neither is the default, [ApproveMode.auto].
+  static ApproveMode _approveMode(Map<String, dynamic> json) {
+    final mode = json["approveMode"] as String?;
+    if (mode != null) {
+      return ApproveMode.values.firstWhere(
+        (m) => m.name == mode,
+        orElse: () => ApproveMode.ask,
+      );
+    }
+    final legacy = json["approveCommands"] as bool?;
+    return switch (legacy) {
+      true => ApproveMode.ask,
+      false => ApproveMode.never,
+      null => ApproveMode.ask,
+    };
   }
 
   // Builds before the /provider flattening fix wrote empty ids here.
@@ -86,8 +116,10 @@ class AppSettings {
         defaultProviderId: defaultProviderId,
         titleModelId: titleModelId,
         titleProviderId: titleProviderId,
+        classifierModelId: classifierModelId,
+        classifierProviderId: classifierProviderId,
         environment: environment,
-        approveCommands: approveCommands,
+        approveMode: approveMode,
         llmProviders: llmProviders,
       );
 
@@ -97,8 +129,10 @@ class AppSettings {
       if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
       if (titleModelId != null) "titleModelId": titleModelId,
       if (titleProviderId != null) "titleProviderId": titleProviderId,
+      if (classifierModelId != null) "classifierModelId": classifierModelId,
+      if (classifierProviderId != null) "classifierProviderId": classifierProviderId,
       if (environment.isNotEmpty) "environment": environment,
-      if (!approveCommands) "approveCommands": approveCommands,
+      "approveMode": approveMode.name,
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
     }));

@@ -70,6 +70,7 @@ class InheritableDropdown<T> extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.inherited,
+    this.disabled = const {},
   });
 
   final String label;
@@ -79,6 +80,10 @@ class InheritableDropdown<T> extends StatelessWidget {
   /// In the order they should be offered; the `Default` entry leads them.
   final Map<T, String> options;
   final ValueChanged<T?> onChanged;
+
+  /// Options that cannot be selected. The entry is still shown, but greyed
+  /// out, so the user knows it exists and what they need to enable it.
+  final Set<T> disabled;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +103,11 @@ class InheritableDropdown<T> extends StatelessWidget {
                   : "$defaultOptionLabel ($inherited)"),
             ),
             for (final entry in options.entries)
-              DropdownMenuItem<T?>(value: entry.key, child: Text(entry.value)),
+              DropdownMenuItem<T?>(
+                value: entry.key,
+                enabled: !disabled.contains(entry.key),
+                child: Text(entry.value),
+              ),
           ],
           onChanged: onChanged,
         ),

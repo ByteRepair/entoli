@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 
@@ -152,27 +153,59 @@ void main() {
     });
   });
 
-  group("asking before running", () {
-    testWidgets("is on until it is turned off", (tester) async {
+  group("running commands", () {
+    Future<void> openModeDropdown(WidgetTester tester) async {
       await pumpSettings(tester);
-      await scrollTo(tester, find.text("Ask before running commands"));
-
-      expect(app.container.read(appSettingsProvider).approveCommands, isTrue);
-
-      await tester.tap(find.byType(SwitchListTile));
+      final field = find.byType(DropdownButtonFormField<ApproveMode>);
+      await scrollTo(tester, field);
+      await tester.tap(field);
       await tester.pumpAndSettle();
+    }
 
-      expect(app.container.read(appSettingsProvider).approveCommands, isFalse);
-      expect(AppSettings.load(app.config).approveCommands, isFalse);
+    testWidgets("defaults to ask, the safe mode", (tester) async {
+      await pumpSettings(tester);
+      await scrollTo(tester, find.text("Running commands"));
+
+      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
     });
 
-    testWidgets("turning it off does not disturb the providers", (tester) async {
+    testWidgets("can be switched to ask", (tester) async {
+      await openModeDropdown(tester);
+      await tester.tap(find.text("Ask every time").last);
+      await tester.pumpAndSettle();
+
+      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
+      expect(AppSettings.load(app.config).approveMode, ApproveMode.ask);
+    });
+
+    testWidgets("can be switched to run without asking", (tester) async {
+      await openModeDropdown(tester);
+      await tester.tap(find.textContaining("Run without asking").last);
+      await tester.pumpAndSettle();
+
+      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.never);
+      expect(AppSettings.load(app.config).approveMode, ApproveMode.never);
+    });
+
+    testWidgets("auto is disabled when no classifier model is set", (tester) async {
+      await openModeDropdown(tester);
+
+      // The item is there but greyed out — tapping it does nothing.
+      final autoItem = find.text("Auto (classifier)");
+      expect(autoItem, findsOneWidget);
+      await tester.tap(autoItem);
+      await tester.pumpAndSettle();
+
+      expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
+    });
+
+    testWidgets("changing the mode does not disturb the providers", (tester) async {
       await pumpSettings(tester);
       await addProvider(tester, "OpenAI");
       await saveDialog(tester);
 
-      await scrollTo(tester, find.byType(SwitchListTile));
-      await tester.tap(find.byType(SwitchListTile));
+      await openModeDropdown(tester);
+      await tester.tap(find.textContaining("Run without asking").last);
       await tester.pumpAndSettle();
 
       expect(saved().map((p) => p.id), ["openai"]);

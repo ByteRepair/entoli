@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
+import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
@@ -62,8 +63,8 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                 ),
                 const Divider(),
                 _ApprovalField(
-                  value: _meta!.approveCommands,
-                  onChanged: (v) => setState(() => _meta!.approveCommands = v),
+                  value: _meta!.approveMode,
+                  onChanged: (v) => setState(() => _meta!.approveMode = v),
                 ),
               ],
             ),
@@ -100,17 +101,20 @@ class _LlmField extends ConsumerWidget {
 class _ApprovalField extends ConsumerWidget {
   const _ApprovalField({required this.value, required this.onChanged});
 
-  final bool? value;
-  final ValueChanged<bool?> onChanged;
-
-  static const _labels = {true: "Ask every time", false: "Run without asking"};
+  final ApproveMode? value;
+  final ValueChanged<ApproveMode?> onChanged;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => InheritableDropdown<bool>(
-        label: "Running commands",
-        value: value,
-        inherited: _labels[ref.watch(appSettingsProvider).approveCommands],
-        options: _labels,
-        onChanged: onChanged,
-      );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final noClassifier = settings.classifierProviderId == null;
+    return InheritableDropdown<ApproveMode>(
+      label: "Running commands",
+      value: value,
+      inherited: approveModeLabels[settings.approveMode],
+      options: approveModeLabels,
+      disabled: {if (noClassifier) ApproveMode.auto},
+      onChanged: onChanged,
+    );
+  }
 }

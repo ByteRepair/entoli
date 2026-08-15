@@ -22,12 +22,10 @@ class TestApp {
   TestApp._(this.config, this.backend, this.picker, this.container);
 
   factory TestApp.create({
-    Duration? stallTimeout,
     PromptLibrary? library,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
-    if (stallTimeout != null) backend.stallTimeout = stallTimeout;
     final picker = FakeAttachmentPicker();
     return TestApp._(
       config,

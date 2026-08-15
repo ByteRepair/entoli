@@ -23,7 +23,8 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
 `<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
-title model, `approveCommands`, `environment`, and `llmProviders`.
+title model, the classifier model, `approveMode`, `environment`, and
+`llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android). The web build compiles and the UI runs, but
 storage is `dart:io`-backed, so a browser has no chats of its own yet.
@@ -104,8 +105,8 @@ prefix, an explanation on the next line, thirty words instead of twenty.
 ### The agent loop
 
 `MinisweAgent` is mini-swe-agent's control flow in Dart: render the system and
-task prompts, ask the model, run the one command it asked for, show it the
-result, repeat. It exits when a command's first line is
+task prompts, ask the model, run the tool calls it made, show it the results,
+repeat. It exits when a command's first line is
 `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` and it succeeded — upstream's marker,
 kept verbatim so a model that has seen the original recognises it.
 
@@ -168,12 +169,9 @@ Failures are reported as they happen: a rejected key or a bad request reaches
 that never opened) emits `RetryEvent` the instant it fails. Four attempts with
 1s/2s/4s backoff means a persistent rate limit is reported after ~7s.
 
-Because nothing is hidden, silence only ever means work, and `stallTimeout` is
-`commandTimeout + 60s` — long enough that a legitimate slow build is not killed.
-A test shortens it by setting `FakeBackend.stallTimeout`. A `RetryEvent` is
-turn-scoped view state, never a message part, so it is not persisted, and it
-deliberately does **not** reset the stall clock: it is a sign of trouble, not of
-progress.
+Because nothing is hidden, silence only ever means work, and the UI never
+gives up on a turn on its own — the user cancels. A `RetryEvent` is
+turn-scoped view state, never a message part, so it is not persisted.
 
 #### Running the commands
 
@@ -198,25 +196,37 @@ Whether `setsid` is there is learned by trying it, not by probing first.
 
 #### Approvals
 
-`approveCommands` (`meta.json` over `settings.json`) is resolved once in
+`approveMode` (`meta.json` over `settings.json`) is resolved once in
 `ChatRepository` and arrives with the prompt, so it is a `MinisweAgent`
 parameter beside `approve` rather than part of `MinisweOptions`, which holds
-only what is genuinely per-agent.
+only what is genuinely per-agent. Three modes: `ask` (every command waits for
+the banner), `auto` (a classifier model decides allow/ask/deny per command),
+`never` (run everything). An older file's `approveCommands` bool migrates:
+`true` → `ask`, `false` → `never`.
+
+In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
+`NoClassifier` when no classifier model is configured) is asked before each
+`bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
+message, `ask` escalates to the same banner `ask` mode uses. A circuit
+breaker pauses auto mode after 3 consecutive or 20 total escalations in one
+turn, falling back to `ask` for the rest — emitted as an `InfoEvent` so the
+UI can say "auto mode paused." `NoClassifier` always asks, which is why the
+default mode is `ask` and `auto` is disabled in the settings UI until a
+classifier model is picked. `never` is labeled "(DANGEROUS)" in the dropdown.
 
 The `ApprovalRequestEvent` is emitted *before* the agent waits on it, because
 the banner is where the answer comes from. The completer is therefore created
 when the event is forwarded, not when it is awaited, and an answer completes it
 in place rather than removing it — a user who clicks faster than the loop asks
 would otherwise leave it waiting on a completer nobody holds. A turn that ends
-with one outstanding denies it, and `ChatController` stops its stall clock while
-one is on screen — nobody answers a banner inside a stall budget.
+with one outstanding denies it.
 
 #### Questions
 
-`ask_user` is the second tool, and the only one that runs nothing: the model
-puts questions to the user and the turn waits. Offered with or without a shell —
-a browser cannot run a command, but it can still ask — which is why `_tools`
-exists and `unknownTool` is told what was on offer rather than assuming `bash`.
+`ask_user` is the one tool that runs nothing: the model puts questions to the
+user and the turn waits. Offered with or without a shell — a browser cannot
+run a command, but it can still ask — which is why `_tools` exists and
+`unknownTool` is told what was on offer rather than assuming `bash`.
 
 The call and its answers are an ordinary call/result pair, so `conv.json` keeps
 them with no new part type in it, a rewind carries them like anything else, and
@@ -246,8 +256,52 @@ stop button, which is why `Skip` is on the panel: it answers with nothing so the
 turn can carry on, and it is the only way out. The rest mirrors approvals
 exactly: turn-scoped view state, `_clearQuestions` beside `_clearApprovals` so an
 abandoned turn answers its own questions, the completer created when the event is
-forwarded rather than when it is awaited, and the stall clock stopped while a
-person is what is being waited on.
+forwarded rather than when it is awaited.
+
+#### Sub-agents (the `task` tool)
+
+`task` spawns a sub-agent with its own session under the named `@agent`'s
+prompt, runs it to completion headless, and returns its final text as the tool
+result. The sub-agent shares the parent's model, shell, and workspace, but
+sees nothing of the parent's conversation — the prompt is its whole task. It
+has no `task` (sub-agents do not fan out), no `ask_user` (nobody answers), and
+runs under `ApproveMode.never`: a fan-out of 75 voters is not usable if each
+one stops on a banner.
+
+`SubAgentRunner` holds the running agents so `cancel` reaches them — a turn
+aborted while sub-agents are running kills every one, not just the parent's
+loop. The parent's `_executeTasks` runs the calls concurrently, capped by
+`MinisweOptions.maxConcurrentSubAgents` (8 by default — deep-research can fan
+out to 75, and 8 concurrent keeps provider rate limits in view). Events
+stream out as each sub-agent resolves, but the session messages are answered
+in the calls' original order, so the tool results pair up with the calls.
+
+Non-`task` calls in the same message run first, in order, so a command before
+the fan-out is done before it starts and one after waits for it. The
+alternative — interleaving a sub-agent with a command it might depend on —
+would race the two.
+
+`SubAgentStartEvent` / `SubAgentEndEvent` are turn-scoped view state (like
+approvals and questions), so `conv.json` keeps the call/result pair and
+nothing more; a reloaded chat draws a `TaskLabel` from the call's arguments
+alone. `SubAgentStrip` shows the running ones as chips above the composer.
+
+#### Web search (the `websearch` / `webfetch` tools)
+
+`websearch` queries DuckDuckGo Lite — no API key — and returns titles, URLs,
+and snippets. `webfetch` is a plain GET with markup stripped to text. Both
+are read-only, so they run without an approval banner in every mode — the
+classifier gates `webfetch` (it reaches a URL the model chose) but not
+`websearch` (it reads a search engine's answer to a query).
+
+`WebSearch` is the interface, like `Shell` for commands: `DuckDuckGoSearch`
+on desktop and Android, `UnavailableWebSearch` on the web platform (CORS
+blocks cross-origin requests from a browser). `Shell.canRunCommands` gates
+`bash`; `WebSearch.available` gates `websearch`/`webfetch` the same way —
+offered where there is something to reach, dropped where there is not. The
+search page is HTML, not JSON, so results are parsed out of the table it
+renders. Both return a `ShellResult`, so the agent words a search's outcome
+the same way it words a command's — the model reads one shape, whatever ran.
 
 #### Live test
 
@@ -359,7 +413,9 @@ rules, and each page only says where the values come from and where they go.
 
 The title model is the exception: nothing inherits from it, so it is a pair or
 it is off, and `OptionalModelPicker` offers every configured model in one list
-with `Off` at the top rather than a provider field and a model field.
+with `Off` at the top rather than a provider field and a model field. The
+classifier model is the same pattern: a separate optional pair, used only by
+auto mode, and off by default.
 
 `settings.json`'s `environment` is what every command runs under, and where a
 provider that names its key rather than holding it looks. It is read off disk
@@ -370,8 +426,8 @@ exported is found without having to be pasted in. Old files with the former
 next save.
 
 The settings page is three sections plus deleting everything: **New chats**
-(default model, title model), **Agent** (ask-before-running, providers),
-**Environment**.
+(default model, title model), **Agent** (command approval mode, classifier
+model, providers), **Environment**.
 
 ### Shared UI
 

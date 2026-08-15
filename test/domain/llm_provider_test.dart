@@ -6,6 +6,7 @@ import "package:agent_chat/data/miniswe/llm/llm_registry.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/permission.dart";
 
 import "../data/miniswe/miniswe_fakes.dart";
 import "../harness.dart";
@@ -126,14 +127,14 @@ void main() {
             apiKey: "sk-1",
           ),
         ],
-        approveCommands: false,
+        approveMode: ApproveMode.never,
       ).save(config);
 
       final loaded = AppSettings.load(config);
 
       expect(loaded.llmProviders.single.id, "ollama-cloud");
       expect(loaded.llmProviders.single.apiKey, "sk-1");
-      expect(loaded.approveCommands, isFalse);
+      expect(loaded.approveMode, ApproveMode.never);
       expect(loaded.defaultModelId, "kimi");
     });
 
@@ -145,8 +146,8 @@ void main() {
 
       expect(loaded.defaultModelId, "gpt-x");
       expect(loaded.llmProviders, isEmpty);
-      // Asking is the safer default, so that is what an old file inherits.
-      expect(loaded.approveCommands, isTrue);
+      // The default for a fresh file is ask.
+      expect(loaded.approveMode, ApproveMode.ask);
     });
 
     test("an environment under its old name is still found, and is rewritten", () async {

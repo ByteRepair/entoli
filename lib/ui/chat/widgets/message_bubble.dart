@@ -165,9 +165,13 @@ class MessageBubble extends StatelessWidget {
           ));
         case ToolCallPart(:final toolCall):
           closeBubble();
-          rows.add(toolCall.name == askToolName
-              ? AskLabel(call: toolCall, result: results[toolCall.id])
-              : ToolLabel(call: toolCall, result: results[toolCall.id]));
+          rows.add(switch (toolCall.name) {
+            askToolName => AskLabel(call: toolCall, result: results[toolCall.id]),
+            "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
+            "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
+            "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
+            _ => ToolLabel(call: toolCall, result: results[toolCall.id]),
+          });
         case ToolResultPart(:final result):
           // Already drawn by the call it answers, unless the call is gone.
           if (calls.contains(result.callId)) continue;

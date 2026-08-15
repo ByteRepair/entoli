@@ -4,10 +4,16 @@ import "dart:convert";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
+import "../../domain/permission.dart";
 import "../../domain/shell.dart";
+import "../../domain/tool_arg.dart";
+import "../../domain/web_search.dart";
 import "ask_tool.dart";
 import "llm/llm_client.dart";
+import "sub_agent.dart";
+import "task_tool.dart";
 import "templates.dart";
+import "websearch_tool.dart";
 
 /// The only tool mini-swe-agent gives a model. Everything else — reading a
 /// file, editing it, running the tests — is a command.
@@ -30,6 +36,7 @@ class MinisweOptions {
     this.maxConsecutiveFormatErrors = 3,
     this.maxAttempts = 4,
     this.retryBackoff = const Duration(seconds: 1),
+    this.maxConcurrentSubAgents = 8,
   });
 
   /// How many model calls one turn may make. Upstream defaults to no limit and
@@ -46,6 +53,11 @@ class MinisweOptions {
   /// out.
   final int maxAttempts;
   final Duration retryBackoff;
+
+  /// How many `task` calls in one message run at once. A deep-research turn
+  /// can fan out to 75 sub-agents; 8 concurrent keeps provider rate limits
+  /// in reach without serializing the whole batch.
+  final int maxConcurrentSubAgents;
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a
@@ -85,9 +97,14 @@ class MinisweAgent {
     required this.approve,
     required this.answer,
     this.options = const MinisweOptions(),
-    this.requireApproval = true,
+    this.approveMode = ApproveMode.ask,
+    this.classifier,
     this.temperature,
     this.reasoningEffort,
+    this.subAgentRunner,
+    this.offerTaskTool = true,
+    this.offerAskTool = true,
+    this.webSearch,
   });
 
   final MinisweSession session;
@@ -106,24 +123,66 @@ class MinisweAgent {
   final double? temperature;
   final String? reasoningEffort;
 
-  /// Whether to ask before running anything. Per turn rather than part of
-  /// [options]: it is the chat's own setting, and it arrives with the prompt.
-  final bool requireApproval;
+  /// How the agent handles a command before it runs. Per turn rather than part
+  /// of [options]: it is the chat's own setting, and it arrives with the
+  /// prompt.
+  final ApproveMode approveMode;
 
-  /// Asks the user whether a command may run. Only called when
-  /// [requireApproval] is set.
+  /// Classifies a command as safe enough to run without asking, when
+  /// [approveMode] is [ApproveMode.auto]. Null falls back to asking for every
+  /// command — [NoClassifier] does the same, so the backend passes that when no
+  /// classifier model is configured.
+  final PermissionClassifier? classifier;
+
+  /// Asks the user whether a command may run. Called in [ApproveMode.ask], and
+  /// in [ApproveMode.auto] when the classifier says [PermissionDecision.ask].
   final Future<ApprovalResponse> Function(ToolApproval approval) approve;
 
   /// Puts the model's own questions to the user. One answer per question, null
   /// where they answered nothing.
   final Future<List<String?>> Function(AskRequest request) answer;
 
+  /// Spawns sub-agents for `task` calls. Null where the agent is itself a
+  /// sub-agent: sub-agents do not spawn their own sub-agents.
+  final SubAgentRunner? subAgentRunner;
+
+  /// Whether to offer the `task` tool. Sub-agents run headless and do not
+  /// fan out themselves, so they pass `false`.
+  final bool offerTaskTool;
+
+  /// Whether to offer the `ask_user` tool. Sub-agents run unattended, so they
+  /// pass `false`.
+  final bool offerAskTool;
+
+  /// Web search and fetch. Null where neither is reachable — a browser sees
+  /// `UnavailableWebSearch` and the tools are dropped the way `bash` is when
+  /// there is no shell.
+  final WebSearch? webSearch;
+
   /// What the model may call. `bash` is dropped where nothing can run it —
   /// offering a tool we could only ever answer with a failure invites one.
-  List<LlmTool> get _tools => [if (shell.canRunCommands) bashTool, askTool];
+  /// `task` is dropped where there is no [subAgentRunner] (a sub-agent) or
+  /// where the shell is unavailable. `ask_user` is dropped for sub-agents.
+  /// `websearch`/`webfetch` are dropped where there is no [webSearch] or it is
+  /// unavailable (a browser).
+  List<LlmTool> get _tools => [
+        if (shell.canRunCommands) bashTool,
+        if (offerAskTool) askTool,
+        if (offerTaskTool && subAgentRunner != null && shell.canRunCommands) taskTool,
+        if (webSearch != null && webSearch!.available) ...[
+          websearchTool,
+          webfetchTool,
+        ],
+      ];
 
   bool _cancelled = false;
   ShellRun? _running;
+
+  /// Circuit breaker for auto mode: too many escalations means the classifier
+  /// is not confident enough to be useful, so the turn falls back to asking.
+  int _consecutiveAsks = 0;
+  int _totalAsks = 0;
+  bool _autoPaused = false;
 
   /// One step's scratch: what the model call produced, and whether a command
   /// ended the turn. Fields rather than out-parameters because an `async*`
@@ -131,12 +190,14 @@ class MinisweAgent {
   LlmCompletion? _completion;
   Object? _queryError;
   bool _submitted = false;
+  ShellResult? _commandResult;
 
   /// Stop the turn. Kills whatever is running: an aborted turn that leaves a
-  /// build going is not aborted.
+  /// build going is not aborted, and a fan-out of sub-agents is not either.
   Future<void> cancel() async {
     _cancelled = true;
     await _running?.kill();
+    await subAgentRunner?.cancel();
   }
 
   Stream<AgentEvent> run(
@@ -224,15 +285,47 @@ class MinisweAgent {
 
   /// Every call the model made gets an answer, including the ones we never ran:
   /// a provider that sees a tool call with no result rejects the next turn.
+  ///
+  /// `task` calls run concurrently — the deep-research prompt fans out up to
+  /// 75 at once — capped by [MinisweOptions.maxConcurrentSubAgents]. Every
+  /// other call runs in order, so a `bash` before a `task` is done first and
+  /// a `bash` after waits for the fan-out. The session messages are answered
+  /// in the calls' original order regardless, so the tool results pair up.
   Stream<AgentEvent> _executeAll(List<LlmToolCall> calls) async* {
+    if (calls.isEmpty) return;
+
+    final taskCalls = calls
+        .where((c) => c.name == taskToolName && subAgentRunner != null && shell.canRunCommands)
+        .toList();
+
+    // Run every non-`task` call in order first. A command before a fan-out
+    // has to be done before the fan-out starts, and one after has to wait for
+    // it — the alternative, interleaving, would race a sub-agent against a
+    // command it might depend on.
     for (final call in calls) {
       if (_submitted || _cancelled) {
-        _answerRun(call, const ShellResult.failed("This command was not executed."));
+        // Task calls are answered at the end; a task call that was never
+        // collected (no sub-agent runner) is answered here instead.
+        if (call.name != taskToolName || taskCalls.isEmpty) {
+          _answerRun(call, const ShellResult.failed("This command was not executed."));
+        }
         continue;
       }
 
+      if (call.name == taskToolName) continue;
+
       if (call.name == askToolName) {
         yield* _ask(call);
+        continue;
+      }
+
+      if (call.name == websearchToolName) {
+        yield* _webSearch(call);
+        continue;
+      }
+
+      if (call.name == webfetchToolName) {
+        yield* _webFetch(call);
         continue;
       }
 
@@ -257,23 +350,9 @@ class MinisweAgent {
         argumentsText: command,
       ));
 
-      final ShellResult result;
-      if (requireApproval) {
-        final approval = ToolApproval(
-          id: call.id,
-          toolName: "bash",
-          argumentsJson: jsonEncode({"command": command}),
-        );
-        // Emitted before it is awaited: the banner is what the answer comes
-        // from, so waiting first would wait forever.
-        yield ApprovalRequestEvent(approval);
-        result = await approve(approval) == ApprovalResponse.deny
-            ? const ShellResult.failed("The user denied this command. Ask them what to do "
-                "instead, or try something else.")
-            : await _execute(command);
-      } else {
-        result = await _execute(command);
-      }
+      yield* _runGated(call, call.argumentsJson, "bash",
+          () => _execute(command));
+      final result = _commandResult!;
 
       yield ToolResultEvent(ToolResult(
         callId: call.id,
@@ -290,6 +369,132 @@ class MinisweAgent {
 
       _answerRun(call, result);
     }
+
+    if (taskCalls.isEmpty || _submitted || _cancelled) {
+      // Answer the task calls that never ran, so the next turn is not rejected
+      // for missing results.
+      for (final call in taskCalls) {
+        yield* _reject(call, _submitted
+            ? "This sub-agent was not started: the turn finished before it ran."
+            : "This sub-agent was not started.");
+      }
+      return;
+    }
+
+    yield* _executeTasks(taskCalls);
+  }
+
+  /// Run a batch of `task` calls concurrently, capped to
+  /// [MinisweOptions.maxConcurrentSubAgents]. Events stream as each sub-agent
+  /// resolves; session messages are answered in the calls' original order so
+  /// the tool results pair up with the calls.
+  Stream<AgentEvent> _executeTasks(List<LlmToolCall> calls) async* {
+    final results = List<ShellResult?>.filled(calls.length, null);
+    final controller = StreamController<AgentEvent>();
+
+    Future<void> runOne(int index) async {
+      if (_submitted || _cancelled) {
+        results[index] = const ShellResult.failed("This sub-agent was not started.");
+        return;
+      }
+      final call = calls[index];
+      final parsed = _taskArgsOf(call);
+      if (parsed == null) {
+        controller.add(ToolCallEvent(
+            ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson)));
+        controller.add(ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: 'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.')));
+        results[index] = const ShellResult.failed(
+            'The task tool takes {"agent": "...", "prompt": "..."}.');
+        return;
+      }
+      final (:agent, :prompt) = parsed;
+      controller.add(SubAgentStartEvent(
+          id: call.id, agent: agent, prompt: _truncate(prompt, 80)));
+      final result = await subAgentRunner!.run(agent, prompt);
+      results[index] = result;
+      controller.add(SubAgentEndEvent(id: call.id, failed: result.returnCode != 0));
+      controller.add(ToolCallEvent(ToolCall(
+          id: call.id,
+          name: call.name,
+          argumentsJson: call.argumentsJson,
+          argumentsText: "@$agent: ${_truncate(prompt, 200)}")));
+      controller.add(ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: result.returnCode,
+          output: result.output,
+          exceptionInfo: result.exceptionInfo)));
+    }
+
+    // A bounded fan-out: run maxConcurrentSubAgents at a time, starting the
+    // next as each finishes. A simple slot pool rather than a package dep.
+    final slots = <Completer<void>>[];
+    Future<void> acquire() async {
+      if (slots.length >= options.maxConcurrentSubAgents) {
+        final done = Completer<void>();
+        slots.add(done);
+        await done.future;
+      }
+    }
+
+    void release() {
+      if (slots.isNotEmpty) {
+        slots.removeAt(0).complete();
+      }
+    }
+
+    final futures = <Future<void>>[];
+    for (var i = 0; i < calls.length; i++) {
+      futures.add(() async {
+        await acquire();
+        if (_cancelled) {
+          results[i] = const ShellResult.failed("The turn was stopped.");
+          return;
+        }
+        try {
+          await runOne(i);
+        } finally {
+          release();
+        }
+      }());
+    }
+
+    // Close the controller once every sub-agent has finished, so the
+    // `await for` below unblocks and the loop continues.
+    final allDone = Future.wait(futures).whenComplete(controller.close);
+
+    // Stream the concurrent sub-agent events out as they resolve.
+    await for (final event in controller.stream) {
+      yield event;
+    }
+    await allDone;
+
+    // Answer each in the original order, so the session messages pair up.
+    for (var i = 0; i < calls.length; i++) {
+      final result = results[i];
+      if (result == null) {
+        _answerRun(calls[i], const ShellResult.failed("This sub-agent was not started."));
+      } else {
+        _answerRun(calls[i], result);
+      }
+    }
+  }
+
+  /// Pull `agent` and `prompt` out of a `task` call's arguments, or null when
+  /// the JSON is not what the tool takes.
+  ({String agent, String prompt})? _taskArgsOf(LlmToolCall call) {
+    final agent = stringArg(call.argumentsJson, "agent");
+    final prompt = stringArg(call.argumentsJson, "prompt");
+    if (agent == null || prompt == null) return null;
+    return (agent: agent, prompt: prompt);
+  }
+
+  String _truncate(String text, int max) {
+    final t = text.trim().replaceAll("\n", " ");
+    return t.length <= max ? t : "${t.substring(0, max - 1)}…";
   }
 
   /// Answer a call the model made. Every one gets exactly this, whether it ran
@@ -330,6 +535,57 @@ class MinisweAgent {
     _answer(call, answers);
   }
 
+  /// Search the web. Read-only, so no approval — the result is worded the same
+  /// way a command's is.
+  Stream<AgentEvent> _webSearch(LlmToolCall call) async* {
+    final query = stringArg(call.argumentsJson, "query");
+    if (query == null) {
+      yield* _reject(call,
+          'The $websearchToolName tool takes {"query": "..."}.');
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: query,
+    ));
+    final result = await webSearch!.search(query);
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: result.returnCode,
+      output: result.output,
+      exceptionInfo: result.exceptionInfo,
+    ));
+    _answerRun(call, result);
+  }
+
+  /// Fetch a URL. Read-only, so no approval.
+  Stream<AgentEvent> _webFetch(LlmToolCall call) async* {
+    final url = stringArg(call.argumentsJson, "url");
+    if (url == null) {
+      yield* _reject(call,
+          'The $webfetchToolName tool takes {"url": "..."}.');
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: url,
+    ));
+    yield* _runGated(call, call.argumentsJson, webfetchToolName,
+        () => webSearch!.fetch(url));
+    final result = _commandResult!;
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: result.returnCode,
+      output: result.output,
+      exceptionInfo: result.exceptionInfo,
+    ));
+    _answerRun(call, result);
+  }
+
   /// A call that could not be run at all: the UI still sees the pair, and the
   /// model still gets told why.
   Stream<AgentEvent> _reject(LlmToolCall call, String problem) async* {
@@ -338,6 +594,83 @@ class MinisweAgent {
     yield ToolResultEvent(
         ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
     _answerRun(call, ShellResult.failed(problem));
+  }
+
+  /// Run [run] gated by [approveMode]: ask the user, classify then maybe ask,
+  /// or run directly. Emits the approval banner and circuit-breaker info as
+  /// needed, and sets [_commandResult] to the outcome.
+  Stream<AgentEvent> _runGated(
+    LlmToolCall call,
+    String arguments,
+    String toolName,
+    Future<ShellResult> Function() run,
+  ) async* {
+    switch (approveMode) {
+      case ApproveMode.ask:
+        yield* _askAndExecute(call, arguments, toolName, run);
+      case ApproveMode.auto:
+        yield* _autoClassifyAndExecute(call, arguments, toolName, run);
+      case ApproveMode.never:
+        _commandResult = await run();
+    }
+  }
+
+  /// Emit the approval banner, wait for the user, and run [run] if allowed.
+  /// Sets [_commandResult] to the outcome.
+  Stream<AgentEvent> _askAndExecute(
+    LlmToolCall call,
+    String arguments,
+    String toolName,
+    Future<ShellResult> Function() run,
+  ) async* {
+    final approval = ToolApproval(
+      id: call.id,
+      toolName: toolName,
+      argumentsJson: arguments,
+    );
+    yield ApprovalRequestEvent(approval);
+    final allowed = await approve(approval) == ApprovalResponse.allow;
+    _commandResult = allowed
+        ? await run()
+        : const ShellResult.failed("The user denied this command. Ask them what to do "
+            "instead, or try something else.");
+  }
+
+  /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
+  /// the banner). Sets [_commandResult] to the outcome.
+  Stream<AgentEvent> _autoClassifyAndExecute(
+    LlmToolCall call,
+    String arguments,
+    String toolName,
+    Future<ShellResult> Function() run,
+  ) async* {
+    if (_autoPaused) {
+      yield* _askAndExecute(call, arguments, toolName, run);
+      return;
+    }
+
+    final decision = await (classifier ?? const NoClassifier())
+        .classify(toolName, arguments, workspace: workspace);
+
+    switch (decision) {
+      case PermissionDecision.allow:
+        _consecutiveAsks = 0;
+        _commandResult = await run();
+      case PermissionDecision.deny:
+        _consecutiveAsks = 0;
+        _commandResult = const ShellResult.failed(
+            "Denied by auto mode. The classifier flagged this as dangerous. "
+            "Ask the user what to do instead.");
+      case PermissionDecision.ask:
+        _consecutiveAsks++;
+        _totalAsks++;
+        if (_consecutiveAsks >= 3 || _totalAsks >= 20) {
+          _autoPaused = true;
+          yield InfoEvent("Auto mode paused: too many uncertain commands. "
+              "Asking for every command for the rest of this turn.");
+        }
+        yield* _askAndExecute(call, arguments, toolName, run);
+    }
   }
 
   Future<ShellResult> _execute(String command) async {
@@ -428,14 +761,5 @@ class MinisweAgent {
     return lines.skip(1).join("\n").trim();
   }
 
-  String? _commandOf(LlmToolCall call) {
-    try {
-      final args = jsonDecode(call.argumentsJson.isEmpty ? "{}" : call.argumentsJson);
-      if (args is! Map) return null;
-      final command = args["command"];
-      return command is String && command.isNotEmpty ? command : null;
-    } catch (_) {
-      return null;
-    }
-  }
+  String? _commandOf(LlmToolCall call) => stringArg(call.argumentsJson, "command");
 }

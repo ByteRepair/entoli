@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../../domain/ask.dart";
+import "task_tool.dart";
 
 /// The line that ends a turn. Upstream mini-swe-agent's marker, kept verbatim
 /// so a model that has seen the original recognises it.
@@ -73,8 +74,9 @@ have to be in it.
 ## How you act
 
 1. You write reasoning text saying what you are doing and why.
-2. You call a tool at least once: `bash` to run a command, or `$askToolName` to
-   put a question to the user.
+2. You call a tool at least once: `bash` to run a command, `$taskToolName` to
+   delegate a task to a sub-agent, `$askToolName` to put a question to the
+   user, `websearch` to search the web, or `webfetch` to read a page.
 3. The system runs the command and shows you the result.
 4. You continue, or you finish the turn.
 
@@ -87,6 +89,21 @@ write what you need to a file and read it back.
 
 Your reasoning text is what the user reads as your reply, so write it for
 them: say what you found and what you did, not just what you are about to run.
+
+## Delegating to sub-agents
+
+The `$taskToolName` tool spawns a sub-agent with its own conversation and
+returns its final output when it finishes. Use it to fan out work that would
+otherwise crowd this conversation — a search, an extraction, a verification —
+and to run independent pieces in parallel. Several `$taskToolName` calls in
+one message run concurrently, so a fan-out of N is one step, not N.
+
+## Searching the web
+
+`websearch` queries DuckDuckGo and returns titles, URLs, and snippets.
+`webfetch` retrieves a URL and returns its text content with markup stripped.
+Use them together: `websearch` to find sources, then `webfetch` to read the
+ones that look relevant. Both are read-only, so they run without asking.
 
 ## Finishing a turn
 

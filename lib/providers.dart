@@ -10,6 +10,7 @@ import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
 import "domain/llm_provider.dart";
 import "domain/models.dart";
+import "domain/permission.dart";
 import "domain/prompt_library.dart";
 import "ui/widgets/provider_model_selector.dart";
 
@@ -47,8 +48,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setEnvironment(Map<String, String> env) =>
       _update((s) => s.environment = Map.unmodifiable(env));
 
-  Future<void> setApproveCommands(bool value) =>
-      _update((s) => s.approveCommands = value);
+  Future<void> setApproveMode(ApproveMode value) =>
+      _update((s) => s.approveMode = value);
+
+  /// What classifies commands when auto mode is on, or nothing at all.
+  Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
+    ..classifierProviderId = choice.providerId
+    ..classifierModelId = choice.providerId == null ? null : choice.modelId);
 
   /// The endpoints the agent can call. The model list is rebuilt from them, so
   /// it is invalidated here rather than left showing the old one.
