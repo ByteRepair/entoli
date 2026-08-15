@@ -19,18 +19,21 @@ import "fakes.dart";
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
-  TestApp._(this.config, this.backend, this.picker, this.container);
+  TestApp._(this.config, this.backend, this.picker, this.launcher, this.container);
 
   factory TestApp.create({
     PromptLibrary? library,
+    bool launcherIcons = true,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
     final picker = FakeAttachmentPicker();
+    final launcher = FakeLauncherIcons(available: launcherIcons);
     return TestApp._(
       config,
       backend,
       picker,
+      launcher,
       ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(LocalChatStore(config)),
@@ -38,6 +41,7 @@ class TestApp {
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
+          launcherIconsProvider.overrideWithValue(launcher),
         ],
       ),
     );
@@ -46,6 +50,7 @@ class TestApp {
   final AppConfig config;
   final FakeBackend backend;
   final FakeAttachmentPicker picker;
+  final FakeLauncherIcons launcher;
   final ProviderContainer container;
 
   ChatRepository get repo => container.read(chatRepositoryProvider);

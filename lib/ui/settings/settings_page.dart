@@ -1,10 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/app_icon.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
+import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
@@ -20,6 +22,8 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         children: const [
           _DefaultsSection(),
+          Divider(),
+          _AppearanceSection(),
           Divider(),
           _AgentSection(),
           Divider(),
@@ -60,6 +64,89 @@ class _SectionHeader extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _AppearanceSection extends ConsumerWidget {
+  const _AppearanceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(appSettingsProvider).appIcon;
+    final switchesLauncher = ref.watch(launcherIconsProvider).available;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(
+          "Appearance",
+          description: switchesLauncher
+              ? "The app icon, here and on the home screen."
+              : "The app icon. The launcher's own icon is set when the app is "
+                  "installed, so it does not follow this.",
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Row(
+            spacing: 12,
+            children: [
+              for (final icon in AppIcon.values)
+                _IconChoice(
+                  icon: icon,
+                  selected: icon == selected,
+                  onTap: () =>
+                      ref.read(appSettingsProvider.notifier).setAppIcon(icon),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IconChoice extends StatelessWidget {
+  const _IconChoice({
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppIcon icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Tooltip(
+        message: icon.description,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: 104,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: selected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Column(
+              children: [
+                AppIconImage(icon, size: 48),
+                const SizedBox(height: 10),
+                Text(icon.label, style: theme.textTheme.labelLarge),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -122,7 +209,7 @@ class _AgentSection extends ConsumerWidget {
       children: [
         const _SectionHeader(
           "Agent",
-          description: "mini-swe-agent, running inside agent-chat. It calls the model "
+          description: "mini-swe-agent, running inside Entoli. It calls the model "
               "itself and runs its commands in the chat's workspace.",
         ),
         LabelledField(

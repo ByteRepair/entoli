@@ -1,6 +1,6 @@
 import "models.dart";
 
-/// One command or agent, exactly as agent-chat stores it: YAML frontmatter,
+/// One command or agent, exactly as Entoli stores it: YAML frontmatter,
 /// then the template a command expands to or the system prompt an agent runs
 /// under.
 class PromptDocument {
@@ -69,7 +69,7 @@ abstract class PromptSource {
 
 /// Every command and agent the app offers, whichever backend is running the
 /// chat. This is the whole of what the composer's `/` and `@` menus show:
-/// agent-chat owns the list, rather than asking a backend what it knows.
+/// Entoli owns the list, rather than asking a backend what it knows.
 class PromptLibrary {
   /// [documents] are in precedence order, lowest first — a later one replaces
   /// an earlier one of the same kind and name. That is how a file in

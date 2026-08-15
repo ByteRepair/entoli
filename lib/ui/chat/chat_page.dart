@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
 import "../sidebar/sidebar.dart";
+import "../widgets/app_mark.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "widgets/composer.dart";
@@ -17,7 +18,18 @@ class ChatPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
     if (chatId == null) {
-      return const Scaffold(body: Center(child: Text("Select or create a chat")));
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppMark(size: 64),
+              SizedBox(height: 16),
+              Text("Select or create a chat"),
+            ],
+          ),
+        ),
+      );
     }
     return _ChatBody(chatId: chatId);
   }

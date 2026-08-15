@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
+import "core/platform/app_icon.dart";
 import "core/platform/backend.dart" as backend_factory;
 import "data/local/file_selector_picker.dart";
 import "data/local/local_chat_store.dart";
@@ -30,6 +31,7 @@ void main() async {
       appConfigProvider.overrideWithValue(config),
       attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
       promptLibraryProvider.overrideWithValue(library),
+      launcherIconsProvider.overrideWithValue(const LauncherAliases()),
     ],
   );
   container.read(availableModelsProvider);
@@ -72,7 +74,7 @@ class _AgentChatAppState extends State<AgentChatApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: "agent-chat",
+      title: "Entoli",
       theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo)),
       home: const AppShell(),
     );
