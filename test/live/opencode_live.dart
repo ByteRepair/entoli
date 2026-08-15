@@ -30,6 +30,8 @@ void main() {
     )) {
       log(switch (event) {
         TextDelta(:final text) => "TextDelta ${text.length} chars",
+        ReasoningDelta(:final text) => "ReasoningDelta ${text.length} chars",
+        ReasoningEnd(:final duration) => "ReasoningEnd after $duration",
         ErrorEvent(:final message) => "ErrorEvent: $message",
         RetryEvent(:final attempt, :final message) => "Retry #$attempt: $message",
         ToolCallEvent(:final call) => "ToolCall ${call.name}",

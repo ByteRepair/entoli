@@ -871,6 +871,10 @@ MessagePart _$MessagePartFromJson(
           return TextPart.fromJson(
             json
           );
+                case 'reasoning':
+          return ReasoningPart.fromJson(
+            json
+          );
                 case 'toolCall':
           return ToolCallPart.fromJson(
             json
@@ -945,11 +949,12 @@ extension MessagePartPatterns on MessagePart {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( TextPart value)?  text,TResult Function( ToolCallPart value)?  toolCall,TResult Function( ToolResultPart value)?  toolResult,TResult Function( FilePart value)?  file,TResult Function( ErrorPart value)?  error,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( TextPart value)?  text,TResult Function( ReasoningPart value)?  reasoning,TResult Function( ToolCallPart value)?  toolCall,TResult Function( ToolResultPart value)?  toolResult,TResult Function( FilePart value)?  file,TResult Function( ErrorPart value)?  error,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case TextPart() when text != null:
-return text(_that);case ToolCallPart() when toolCall != null:
+return text(_that);case ReasoningPart() when reasoning != null:
+return reasoning(_that);case ToolCallPart() when toolCall != null:
 return toolCall(_that);case ToolResultPart() when toolResult != null:
 return toolResult(_that);case FilePart() when file != null:
 return file(_that);case ErrorPart() when error != null:
@@ -971,11 +976,12 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( TextPart value)  text,required TResult Function( ToolCallPart value)  toolCall,required TResult Function( ToolResultPart value)  toolResult,required TResult Function( FilePart value)  file,required TResult Function( ErrorPart value)  error,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( TextPart value)  text,required TResult Function( ReasoningPart value)  reasoning,required TResult Function( ToolCallPart value)  toolCall,required TResult Function( ToolResultPart value)  toolResult,required TResult Function( FilePart value)  file,required TResult Function( ErrorPart value)  error,}){
 final _that = this;
 switch (_that) {
 case TextPart():
-return text(_that);case ToolCallPart():
+return text(_that);case ReasoningPart():
+return reasoning(_that);case ToolCallPart():
 return toolCall(_that);case ToolResultPart():
 return toolResult(_that);case FilePart():
 return file(_that);case ErrorPart():
@@ -993,11 +999,12 @@ return error(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( TextPart value)?  text,TResult? Function( ToolCallPart value)?  toolCall,TResult? Function( ToolResultPart value)?  toolResult,TResult? Function( FilePart value)?  file,TResult? Function( ErrorPart value)?  error,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( TextPart value)?  text,TResult? Function( ReasoningPart value)?  reasoning,TResult? Function( ToolCallPart value)?  toolCall,TResult? Function( ToolResultPart value)?  toolResult,TResult? Function( FilePart value)?  file,TResult? Function( ErrorPart value)?  error,}){
 final _that = this;
 switch (_that) {
 case TextPart() when text != null:
-return text(_that);case ToolCallPart() when toolCall != null:
+return text(_that);case ReasoningPart() when reasoning != null:
+return reasoning(_that);case ToolCallPart() when toolCall != null:
 return toolCall(_that);case ToolResultPart() when toolResult != null:
 return toolResult(_that);case FilePart() when file != null:
 return file(_that);case ErrorPart() when error != null:
@@ -1018,10 +1025,11 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text)?  text,TResult Function( ToolCall toolCall)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String resource,  String filename,  String mimeType)?  file,TResult Function( String message)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text)?  text,TResult Function( String text,  int? durationMs)?  reasoning,TResult Function( ToolCall toolCall)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String resource,  String filename,  String mimeType)?  file,TResult Function( String message)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
-return text(_that.text);case ToolCallPart() when toolCall != null:
+return text(_that.text);case ReasoningPart() when reasoning != null:
+return reasoning(_that.text,_that.durationMs);case ToolCallPart() when toolCall != null:
 return toolCall(_that.toolCall);case ToolResultPart() when toolResult != null:
 return toolResult(_that.result);case FilePart() when file != null:
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
@@ -1043,10 +1051,11 @@ return error(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text)  text,required TResult Function( ToolCall toolCall)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String resource,  String filename,  String mimeType)  file,required TResult Function( String message)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text)  text,required TResult Function( String text,  int? durationMs)  reasoning,required TResult Function( ToolCall toolCall)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String resource,  String filename,  String mimeType)  file,required TResult Function( String message)  error,}) {final _that = this;
 switch (_that) {
 case TextPart():
-return text(_that.text);case ToolCallPart():
+return text(_that.text);case ReasoningPart():
+return reasoning(_that.text,_that.durationMs);case ToolCallPart():
 return toolCall(_that.toolCall);case ToolResultPart():
 return toolResult(_that.result);case FilePart():
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart():
@@ -1064,10 +1073,11 @@ return error(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text)?  text,TResult? Function( ToolCall toolCall)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String resource,  String filename,  String mimeType)?  file,TResult? Function( String message)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text)?  text,TResult? Function( String text,  int? durationMs)?  reasoning,TResult? Function( ToolCall toolCall)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String resource,  String filename,  String mimeType)?  file,TResult? Function( String message)?  error,}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
-return text(_that.text);case ToolCallPart() when toolCall != null:
+return text(_that.text);case ReasoningPart() when reasoning != null:
+return reasoning(_that.text,_that.durationMs);case ToolCallPart() when toolCall != null:
 return toolCall(_that.toolCall);case ToolResultPart() when toolResult != null:
 return toolResult(_that.result);case FilePart() when file != null:
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
@@ -1146,6 +1156,81 @@ class _$TextPartCopyWithImpl<$Res>
   return _then(TextPart(
 text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class ReasoningPart implements MessagePart {
+  const ReasoningPart({required this.text, this.durationMs, final  String? $type}): $type = $type ?? 'reasoning';
+  factory ReasoningPart.fromJson(Map<String, dynamic> json) => _$ReasoningPartFromJson(json);
+
+ final  String text;
+ final  int? durationMs;
+
+@JsonKey(name: 'runtimeType')
+final String $type;
+
+
+/// Create a copy of MessagePart
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ReasoningPartCopyWith<ReasoningPart> get copyWith => _$ReasoningPartCopyWithImpl<ReasoningPart>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$ReasoningPartToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReasoningPart&&(identical(other.text, text) || other.text == text)&&(identical(other.durationMs, durationMs) || other.durationMs == durationMs));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,text,durationMs);
+
+@override
+String toString() {
+  return 'MessagePart.reasoning(text: $text, durationMs: $durationMs)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ReasoningPartCopyWith<$Res> implements $MessagePartCopyWith<$Res> {
+  factory $ReasoningPartCopyWith(ReasoningPart value, $Res Function(ReasoningPart) _then) = _$ReasoningPartCopyWithImpl;
+@useResult
+$Res call({
+ String text, int? durationMs
+});
+
+
+
+
+}
+/// @nodoc
+class _$ReasoningPartCopyWithImpl<$Res>
+    implements $ReasoningPartCopyWith<$Res> {
+  _$ReasoningPartCopyWithImpl(this._self, this._then);
+
+  final ReasoningPart _self;
+  final $Res Function(ReasoningPart) _then;
+
+/// Create a copy of MessagePart
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? text = null,Object? durationMs = freezed,}) {
+  return _then(ReasoningPart(
+text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
+as String,durationMs: freezed == durationMs ? _self.durationMs : durationMs // ignore: cast_nullable_to_non_nullable
+as int?,
   ));
 }
 

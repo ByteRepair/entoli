@@ -4,9 +4,10 @@ import "package:flutter/material.dart";
 import "../../../domain/models.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
+import "activity_label.dart";
 
-/// Renders a single message as a chat bubble. Text parts are concatenated;
-/// tool calls and results render as monospace chips.
+/// Renders a single message. The bubble holds what the model said; thinking
+/// and tool runs sit above it as labels, in the order they happened.
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
@@ -81,7 +82,6 @@ class MessageBubble extends StatelessWidget {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final files = message.files.toList();
     final (name, bg) = switch (message.role) {
       MessageRole.user => ("You", theme.colorScheme.primaryContainer),
       MessageRole.assistant => ("Assistant", theme.colorScheme.surfaceContainerHighest),
@@ -106,75 +106,138 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          Listener(
-            // A raw pointer listener sidesteps the gesture arena, which
-            // SelectableText would otherwise win.
-            onPointerDown: (event) {
-              if (event.buttons == kSecondaryMouseButton) _showMenu(context, event.position);
-            },
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
-              ),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (files.isNotEmpty)
-                    AttachmentStrip(
-                      children: [
-                        for (final f in files) AttachmentChip.sent(f, chatId: chatId),
-                      ],
-                    ),
-                  for (final part in message.parts)
-                    if (part is! FilePart) _renderPart(part, theme),
-                  if (isWaiting && !message.hasText)
-                    _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: waitingNotice),
-                  // A failed turn is a dead end without this; the same action
-                  // is on the context menu, but it should not have to be found.
-                  if (_hasError && !isWaiting && onRegenerate != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: onRegenerate,
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: const Text("Retry"),
-                        style: TextButton.styleFrom(
-                          foregroundColor: theme.colorScheme.error,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+          ..._rows(context, theme, bg),
         ],
       ),
     );
   }
 
-  Widget _renderPart(MessagePart part, ThemeData theme) {
-    return switch (part) {
-      TextPart(:final text) => Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: SelectableText(text, style: theme.textTheme.bodyMedium),
-        ),
-      ToolCallPart(:final toolCall) => _ToolChip(toolCall: toolCall),
-      ToolResultPart(:final result) => _ResultChip(result: result),
-      FilePart() => const SizedBox.shrink(),
-      ErrorPart(:final message) => Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: SelectableText(
-            "Error: $message",
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+  /// The message split the way it reads: everything the model did on labels of
+  /// its own, everything it said in a bubble, in the order it happened.
+  List<Widget> _rows(BuildContext context, ThemeData theme, Color bg) {
+    final rows = <Widget>[];
+    final spoken = <MessagePart>[];
+    final files = message.files.toList();
+    var filesShown = false;
+
+    final results = {
+      for (final part in message.parts.whereType<ToolResultPart>()) part.result.callId: part.result,
+    };
+    final claimed = <String>{};
+
+    // Trailing state, not parts: they belong under the last thing said.
+    final extras = <Widget>[
+      if (isWaiting && !message.hasText)
+        _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: waitingNotice),
+      // A failed turn is a dead end without this; the same action is on the
+      // context menu, but it should not have to be found.
+      if (_hasError && !isWaiting && onRegenerate != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: onRegenerate,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text("Retry"),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ),
+    ];
+
+    void closeBubble({List<Widget> trailing = const []}) {
+      final showFiles = files.isNotEmpty && !filesShown;
+      if (spoken.isEmpty && trailing.isEmpty && !showFiles) return;
+      rows.add(_bubble(
+        context,
+        theme,
+        bg,
+        parts: spoken.toList(),
+        files: showFiles ? files : const [],
+        trailing: trailing,
+      ));
+      filesShown = true;
+      spoken.clear();
+    }
+
+    for (var i = 0; i < message.parts.length; i++) {
+      final part = message.parts[i];
+      switch (part) {
+        case ReasoningPart():
+          closeBubble();
+          rows.add(ThinkingLabel(
+            part: part,
+            isLive: isWaiting && part.durationMs == null && i == message.parts.length - 1,
+          ));
+        case ToolCallPart(:final toolCall):
+          closeBubble();
+          claimed.add(toolCall.id);
+          rows.add(ToolLabel(call: toolCall, result: results[toolCall.id]));
+        case ToolResultPart(:final result):
+          // Already drawn by the call it answers, unless the call is gone.
+          if (claimed.contains(result.callId)) continue;
+          closeBubble();
+          rows.add(ToolLabel(result: result));
+        case FilePart():
+          continue;
+        case TextPart() || ErrorPart():
+          spoken.add(part);
+      }
+    }
+    closeBubble(trailing: extras);
+    return rows;
+  }
+
+  Widget _bubble(
+    BuildContext context,
+    ThemeData theme,
+    Color bg, {
+    required List<MessagePart> parts,
+    required List<FilePart> files,
+    required List<Widget> trailing,
+  }) {
+    return Listener(
+      // A raw pointer listener sidesteps the gesture arena, which
+      // SelectableText would otherwise win.
+      onPointerDown: (event) {
+        if (event.buttons == kSecondaryMouseButton) _showMenu(context, event.position);
+      },
+      child: Container(
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (files.isNotEmpty)
+              AttachmentStrip(
+                children: [
+                  for (final f in files) AttachmentChip.sent(f, chatId: chatId),
+                ],
+              ),
+            for (final part in parts) _renderPart(part, theme),
+            ...trailing,
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Only what the message says reaches here; the rest is drawn as a label.
+  Widget _renderPart(MessagePart part, ThemeData theme) {
+    final (text, style) = switch (part) {
+      TextPart(:final text) => (text, theme.textTheme.bodyMedium),
+      ErrorPart(:final message) => (
+          "Error: $message",
+          theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
+        ),
+      _ => ("", theme.textTheme.bodyMedium),
     };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: SelectableText(text, style: style),
+    );
   }
 }
 
@@ -207,112 +270,6 @@ class _Spinner extends StatelessWidget {
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ToolChip extends StatelessWidget {
-  const _ToolChip({required this.toolCall});
-  final ToolCall toolCall;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.terminal, size: 14, color: theme.colorScheme.onSecondaryContainer),
-              const SizedBox(width: 4),
-              Text(
-                toolCall.name,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSecondaryContainer,
-                ),
-              ),
-            ],
-          ),
-          if (toolCall.argumentsText != null || toolCall.argumentsJson != null)
-            SelectableText(
-              toolCall.argumentsText ?? toolCall.argumentsJson ?? "",
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontFamily: "monospace",
-                color: theme.colorScheme.onSecondaryContainer,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultChip extends StatelessWidget {
-  const _ResultChip({required this.result});
-  final ToolResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isError = result.returnCode != 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isError ? theme.colorScheme.errorContainer : theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isError ? theme.colorScheme.error : theme.colorScheme.outlineVariant,
-          width: 0.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isError ? Icons.error_outline : Icons.check_circle_outline,
-                size: 14,
-                color: isError ? theme.colorScheme.onErrorContainer : theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                "rc=${result.returnCode}",
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontFamily: "monospace",
-                  color: isError ? theme.colorScheme.onErrorContainer : theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          if (result.output.isNotEmpty)
-            SelectableText(
-              result.output,
-              style: theme.textTheme.bodySmall?.copyWith(fontFamily: "monospace"),
-              maxLines: 8,
-            ),
-          if (result.exceptionInfo != null)
-            SelectableText(
-              result.exceptionInfo!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontFamily: "monospace",
-                color: theme.colorScheme.error,
-              ),
-              maxLines: 4,
-            ),
         ],
       ),
     );

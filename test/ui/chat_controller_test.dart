@@ -57,6 +57,91 @@ void main() {
     expect(app.backend.prompts.single.text, "hello");
   });
 
+  test("thinking is kept out of the reply", () async {
+    app.backend.scriptedEvents = const [
+      ReasoningDelta("let me"),
+      ReasoningDelta(" work it out"),
+      ReasoningEnd(text: "let me work it out", duration: Duration(seconds: 3)),
+      TextDelta("391"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("17*23?");
+
+    final reply = messagesOf(id).last;
+    expect(textOf(reply), "391");
+    final thinking = reply.parts.whereType<ReasoningPart>().single;
+    expect(thinking.text, "let me work it out");
+    expect(thinking.durationMs, 3000);
+  });
+
+  test("a block the backend only reports whole still lands", () async {
+    // A provider that streams no reasoning deltas: the closing event carries
+    // the lot.
+    app.backend.scriptedEvents = const [
+      ReasoningEnd(text: "thought about it", duration: Duration(seconds: 1)),
+      TextDelta("done"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    expect(messagesOf(id).last.parts.whereType<ReasoningPart>().single.text, "thought about it");
+  });
+
+  test("thinking either side of a tool call stays in two blocks", () async {
+    app.backend.scriptedEvents = const [
+      ReasoningDelta("first"),
+      ReasoningEnd(text: "first", duration: Duration(seconds: 1)),
+      ToolCallEvent(ToolCall(id: "c1", name: "bash")),
+      ToolResultEvent(ToolResult(callId: "c1", returnCode: 0, output: "ok")),
+      ReasoningDelta("second"),
+      ReasoningEnd(text: "second", duration: Duration(seconds: 2)),
+      TextDelta("all done"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    final parts = messagesOf(id).last.parts;
+    expect(parts.whereType<ReasoningPart>().map((p) => p.text), ["first", "second"]);
+    expect(parts.map((p) => p.runtimeType.toString()), [
+      "ReasoningPart",
+      "ToolCallPart",
+      "ToolResultPart",
+      "ReasoningPart",
+      "TextPart",
+    ]);
+  });
+
+  test("thinking is persisted with the conversation", () async {
+    app.backend.scriptedEvents = const [
+      ReasoningDelta("hmm"),
+      ReasoningEnd(text: "hmm", duration: Duration(seconds: 2)),
+      TextDelta("hi"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts.whereType<ReasoningPart>().single.durationMs, 2000);
+  });
+
+  test("thinking is not resent as context on a rewind", () async {
+    app.backend.scriptedEvents = const [
+      ReasoningEnd(text: "my private notes", duration: Duration(seconds: 1)),
+      TextDelta("first answer"),
+      DoneEvent(),
+    ];
+    final (id, controller) = await chatWithOneTurn("first");
+    await controller.send("second");
+    await waitIdle(id);
+
+    await controller.regenerate(messagesOf(id)[2].id);
+    await waitIdle(id);
+
+    final seeded = app.backend.resets.single.map((m) => m.plainText).join("\n");
+    expect(seeded, contains("first answer"));
+    expect(seeded, isNot(contains("my private notes")));
+  });
+
   test("a backend error becomes an error part on the reply", () async {
     app.backend.scriptedEvents = const [ErrorEvent("APIError (HTTP 429): usage limit"), DoneEvent()];
     final (id, _) = await chatWithOneTurn("hello");

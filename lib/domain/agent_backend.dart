@@ -38,6 +38,22 @@ class TextDelta extends AgentEvent {
   final String text;
 }
 
+/// A chunk of the model's thinking. Apart from [TextDelta] because it is not
+/// the reply — it belongs behind the turn's "Thought for..." label.
+class ReasoningDelta extends AgentEvent {
+  const ReasoningDelta(this.text);
+  final String text;
+}
+
+/// The thinking block is closed. [text] is the whole of it: a provider that
+/// streams no deltas still sends it here, so it is what the block ends up
+/// holding.
+class ReasoningEnd extends AgentEvent {
+  const ReasoningEnd({this.text, this.duration});
+  final String? text;
+  final Duration? duration;
+}
+
 class ToolCallEvent extends AgentEvent {
   const ToolCallEvent(this.call);
   final ToolCall call;

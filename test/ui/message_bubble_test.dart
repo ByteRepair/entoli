@@ -156,6 +156,149 @@ void main() {
     expect(find.text("Retry"), findsNothing);
   });
 
+  testWidgets("thinking reads as a label, and stays out of the bubble", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "17*23 = 391", durationMs: 12000),
+        TextPart(text: "391"),
+      ]),
+    );
+
+    expect(find.text("Thought for 12 seconds"), findsOneWidget);
+    expect(find.text("391"), findsOneWidget);
+    expect(find.text("17*23 = 391"), findsNothing);
+  });
+
+  testWidgets("the label opens the thinking in a drawer", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "17*23 = 391", durationMs: 12000),
+        TextPart(text: "391"),
+      ]),
+    );
+
+    await tester.tap(find.text("Thought for 12 seconds"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("17*23 = 391"), findsOneWidget);
+  });
+
+  testWidgets("a long think is counted in minutes", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [ReasoningPart(text: "...", durationMs: 125000)]),
+    );
+
+    expect(find.text("Thought for 2 minutes 5 seconds"), findsOneWidget);
+  });
+
+  testWidgets("thinking still being written says so", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [ReasoningPart(text: "hmm")]),
+      isWaiting: true,
+    );
+
+    expect(find.text("Thinking…"), findsOneWidget);
+  });
+
+  // Nothing timed it: an older conversation, or a turn that was aborted.
+  testWidgets("an untimed block is still worth opening", (tester) async {
+    await pump(tester, _message(MessageRole.assistant, const [ReasoningPart(text: "hmm")]));
+
+    expect(find.text("View thinking"), findsOneWidget);
+  });
+
+  testWidgets("a tool run is one label, with the detail behind it", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "pwd")),
+        ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "/workspace")),
+        TextPart(text: "you are in /workspace"),
+      ]),
+    );
+
+    expect(find.text("Used tool: bash"), findsOneWidget);
+    expect(find.text("/workspace"), findsNothing);
+
+    await tester.tap(find.text("Used tool: bash"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("pwd"), findsOneWidget);
+    expect(find.text("/workspace"), findsOneWidget);
+  });
+
+  testWidgets("a tool still running says so", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "sleep 60")),
+      ]),
+      isWaiting: true,
+    );
+
+    expect(find.text("Using tool: bash"), findsOneWidget);
+  });
+
+  testWidgets("a failed tool run is drawn in the error colour", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "nope")),
+        ToolResultPart(
+          result: ToolResult(callId: "c1", returnCode: 1, output: "", exceptionInfo: "not found"),
+        ),
+      ]),
+    );
+
+    final context = tester.element(find.byType(MessageBubble));
+    final label = tester.widget<TextButton>(find.widgetWithText(TextButton, "Used tool: bash"));
+    expect(
+      label.style?.foregroundColor?.resolve({}),
+      Theme.of(context).colorScheme.error,
+    );
+  });
+
+  // The turn as it happened: thinking, a tool, thinking again, then the reply.
+  testWidgets("labels stack above the bubble in the order they happened", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "how do I check?", durationMs: 4000),
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "pwd")),
+        ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "/workspace")),
+        ReasoningPart(text: "that is the answer", durationMs: 2000),
+        TextPart(text: "you are in /workspace"),
+      ]),
+    );
+
+    double y(String text) => tester.getTopLeft(find.text(text)).dy;
+
+    expect(y("Thought for 4 seconds"), lessThan(y("Used tool: bash")));
+    expect(y("Used tool: bash"), lessThan(y("Thought for 2 seconds")));
+    expect(y("Thought for 2 seconds"), lessThan(y("you are in /workspace")));
+  });
+
+  testWidgets("text before a tool call keeps its own bubble", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        TextPart(text: "let me look"),
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "pwd")),
+        ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "/workspace")),
+        TextPart(text: "found it"),
+      ]),
+    );
+
+    double y(String text) => tester.getTopLeft(find.text(text)).dy;
+
+    expect(y("let me look"), lessThan(y("Used tool: bash")));
+    expect(y("Used tool: bash"), lessThan(y("found it")));
+  });
+
   testWidgets("a user message offers both Edit and Regenerate", (tester) async {
     await pump(
       tester,

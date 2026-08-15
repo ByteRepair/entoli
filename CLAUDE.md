@@ -39,6 +39,35 @@ why we use `POST /session` + `prompt_async` instead of `opencode run`.
 the whole request. Provider and model therefore travel together the whole way
 down; when only one is known we send neither and let the server choose.
 
+### Thinking and tool runs
+
+A turn is not just a reply: the model thinks, runs tools, thinks again. Each of
+those is a part of the assistant message and the chat draws it as a frameless
+label above the bubble, in the order it happened, with the detail behind a
+bottom drawer. The bubble holds only what the model said.
+
+Thinking streams as `message.part.delta` on a part opencode announced as
+`{type: "reasoning", time: {start}}`; the same part is announced again with
+`time.end` and the whole text once the block closes. Nothing on the delta says
+which kind of part it belongs to, so `OpencodeBackend` tracks the open
+reasoning part IDs per chat and routes deltas to `ReasoningDelta` or
+`TextDelta` accordingly — without that, thinking lands in the reply as text
+(verified 2026-08-15, opencode 1.18.18, against nemotron-3-ultra). The closing
+`ReasoningEnd` carries the whole text as well as the duration, so a provider
+that streams no deltas at all still fills the block.
+
+`durationMs` is what the label reads ("Thought for 12 seconds") and is null
+while the block is still being written, which is also how the UI knows to say
+"Thinking…". A block that was never timed — an older conversation, an aborted
+turn — is still worth opening, so it reads "View thinking".
+
+`ReasoningPart` is not a `TextPart`, so `plainText` leaves it out: a rewound
+session is seeded with what was said, never with what was thought.
+
+A tool call and the result answering it are one label. The parts stay separate
+in `conv.json` (they arrive at different times) and the UI pairs them by
+`callID`; a result whose call is gone draws its own.
+
 ### Commands and agents
 
 `CompletionKind` names the two of them and carries the trigger character, so
@@ -180,7 +209,12 @@ and `hold` drive a turn, plus `FakeAttachmentPicker`).
 
 Streamed deltas are coalesced into one state update per frame: per-token
 updates made the reply's text quadratic and rebuilt every visible bubble
-thousands of times per turn.
+thousands of times per turn. One buffer carries both kinds of delta, so
+switching between thinking and reply flushes what it held — otherwise the two
+would fold into each other's part.
+
+`activity_label.dart` owns the labels and the drawer behind them; the bubble
+walks the parts and decides which of the two each one is.
 
 `Composer` opens a menu above the field when the caret sits in a `/` or `@`
 token. `completionsProvider` is watched only while that menu is open, so a

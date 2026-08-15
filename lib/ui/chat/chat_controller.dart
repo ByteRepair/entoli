@@ -51,6 +51,7 @@ class ChatController extends Notifier<ChatViewState> {
   /// Deltas arrive per token; the UI only needs them per frame.
   final StringBuffer _pending = StringBuffer();
   Timer? _flush;
+  bool _pendingIsReasoning = false;
 
   @override
   ChatViewState build() {
@@ -78,13 +79,17 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: chat.copyWith(messages: messages));
   }
 
-  void _bufferDelta(String text) {
+  void _bufferDelta(String text, {bool reasoning = false}) {
+    // One buffer, two kinds of text: switching kind closes what it held.
+    if (reasoning != _pendingIsReasoning) _flushDeltas();
+    _pendingIsReasoning = reasoning;
     _pending.write(text);
     _flush ??= Timer(const Duration(milliseconds: 16), _flushDeltas);
   }
 
-  /// Fold everything buffered into the reply's trailing text part. Must run
-  /// before anything else is appended, so parts keep their arrival order.
+  /// Fold everything buffered into the reply's trailing part of the same kind.
+  /// Must run before anything else is appended, so parts keep their arrival
+  /// order.
   void _flushDeltas() {
     _flush?.cancel();
     _flush = null;
@@ -95,10 +100,37 @@ class ChatController extends Notifier<ChatViewState> {
     final reply = _reply;
     if (reply == null) return;
     final parts = List<MessagePart>.from(reply.parts);
-    if (parts.lastOrNull case TextPart(text: final head)) {
-      parts[parts.length - 1] = TextPart(text: "$head$text");
+    final last = parts.lastOrNull;
+    // A block that has been timed is finished; more thinking starts a new one.
+    if (_pendingIsReasoning) {
+      if (last is ReasoningPart && last.durationMs == null) {
+        parts[parts.length - 1] = ReasoningPart(text: "${last.text}$text");
+      } else {
+        parts.add(MessagePart.reasoning(text: text));
+      }
+    } else if (last is TextPart) {
+      parts[parts.length - 1] = TextPart(text: "${last.text}$text");
     } else {
       parts.add(MessagePart.text(text: text));
+    }
+    _writeReply(parts);
+  }
+
+  /// Close the thinking block being written. The backend's text wins over what
+  /// streamed: a provider that sends no deltas still reports the whole of it.
+  void _endReasoning(String? text, Duration? duration) {
+    _flushDeltas();
+    final parts = List<MessagePart>.from(_reply?.parts ?? const []);
+    final open = parts.lastOrNull;
+    final live = open is ReasoningPart && open.durationMs == null;
+    final body = text != null && text.isNotEmpty ? text : (live ? open.text : "");
+    if (body.isEmpty && !live) return;
+
+    final sealed = MessagePart.reasoning(text: body, durationMs: duration?.inMilliseconds);
+    if (live) {
+      parts[parts.length - 1] = sealed;
+    } else {
+      parts.add(sealed);
     }
     _writeReply(parts);
   }
@@ -228,6 +260,12 @@ class ChatController extends Notifier<ChatViewState> {
       case TextDelta(:final text):
         _watchForStall();
         _bufferDelta(text);
+      case ReasoningDelta(:final text):
+        _watchForStall();
+        _bufferDelta(text, reasoning: true);
+      case ReasoningEnd(:final text, :final duration):
+        _watchForStall();
+        _endReasoning(text, duration);
       case ToolCallEvent(:final call):
         _watchForStall();
         _appendPart(MessagePart.toolCall(toolCall: call));

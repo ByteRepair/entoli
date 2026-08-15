@@ -83,6 +83,20 @@ Map<String, dynamic> _$TextPartToJson(TextPart instance) => <String, dynamic>{
   'runtimeType': instance.$type,
 };
 
+ReasoningPart _$ReasoningPartFromJson(Map<String, dynamic> json) =>
+    ReasoningPart(
+      text: json['text'] as String,
+      durationMs: (json['durationMs'] as num?)?.toInt(),
+      $type: json['runtimeType'] as String?,
+    );
+
+Map<String, dynamic> _$ReasoningPartToJson(ReasoningPart instance) =>
+    <String, dynamic>{
+      'text': instance.text,
+      'durationMs': instance.durationMs,
+      'runtimeType': instance.$type,
+    };
+
 ToolCallPart _$ToolCallPartFromJson(Map<String, dynamic> json) => ToolCallPart(
   toolCall: ToolCall.fromJson(json['toolCall'] as Map<String, dynamic>),
   $type: json['runtimeType'] as String?,
