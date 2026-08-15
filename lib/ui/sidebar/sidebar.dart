@@ -7,11 +7,6 @@ import "../chat/chat_controller.dart";
 import "../settings/settings_page.dart";
 import "../widgets/dialogs.dart";
 
-final chatListProvider = FutureProvider((ref) async {
-  final repo = ref.watch(chatRepositoryProvider);
-  return repo.listChats();
-});
-
 class SelectedChatId extends Notifier<String?> {
   @override
   String? build() => null;
@@ -50,10 +45,10 @@ class Sidebar extends ConsumerWidget {
                 IconButton(
                   icon: const Icon(Icons.add),
                   tooltip: "New chat",
+                  // Nothing is listed here yet: an empty chat is not on disk,
+                  // and joins the list when its first message is saved.
                   onPressed: () async {
-                    final repo = ref.read(chatRepositoryProvider);
-                    final chat = await repo.createChat();
-                    ref.invalidate(chatListProvider);
+                    final chat = await ref.read(chatRepositoryProvider).createChat();
                     if (context.mounted) _open(context, ref, chat.state.id);
                   },
                 ),
@@ -85,7 +80,7 @@ class Sidebar extends ConsumerWidget {
                               confirmLabel: "Rename",
                             );
                             if (title == null) return;
-                            await ref.read(chatRepositoryProvider).renameChat(c.id, title);
+                            await ref.read(chatRepositoryProvider).retitle(c, title);
                             ref.read(chatControllerProvider(c.id).notifier).applyTitle(title);
                             ref.invalidate(chatListProvider);
                           case "delete":

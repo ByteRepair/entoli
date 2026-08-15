@@ -54,10 +54,11 @@ class MinisweBackend implements AgentBackend {
   /// address is not a mention.
   static final _mention = RegExp(r"(?<=^|\s)@([\w.-]+)");
 
+  /// No directories yet: a chat nobody says anything in is never saved, and an
+  /// empty `chats/<uuid>/` for each one would outlive it.
   @override
   Future<Chat> createChat({String? title}) async {
     final chatId = const Uuid().v4();
-    config.ensureChatDirs(chatId);
     final now = DateTime.now();
     return Chat(
       state: ChatState(
@@ -151,6 +152,27 @@ class MinisweBackend implements AgentBackend {
     if (controller.isClosed) return;
     controller.add(ErrorEvent(message));
     controller.add(const DoneEvent());
+  }
+
+  /// Asked outside every chat's session, so this is never part of the
+  /// conversation the agent is holding. The timeout is on the stream rather
+  /// than the future it collects: a timed-out future leaves the response being
+  /// read to nobody.
+  @override
+  Future<String?> ask(String prompt,
+      {required String model, required String provider}) async {
+    final target = _resolveModel(model, provider);
+    if (target == null) return null;
+    try {
+      final chunks = await target.client
+          .stream([LlmMessage(role: LlmRole.user, text: prompt)], model: target.modelId)
+          .timeout(const Duration(seconds: 60))
+          .toList();
+      final answer = chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim();
+      return answer == null || answer.isEmpty ? null : answer;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// The config is read once and reused: going back through the registry by id

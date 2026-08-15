@@ -37,6 +37,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..defaultProviderId = choice.providerId
     ..defaultModelId = choice.providerId == null ? null : choice.modelId);
 
+  /// What names a new chat, or nothing at all. Stored as it comes: the field
+  /// offers a whole model or none, never half of one.
+  Future<void> setTitleModel(ModelChoice choice) => _update((s) => s
+    ..titleProviderId = choice.providerId
+    ..titleModelId = choice.modelId);
+
   /// Read when a command runs, so an edit reaches the next one.
   Future<void> setEnvironment(Map<String, String> env) =>
       _update((s) => s.environment = Map.unmodifiable(env));
@@ -73,6 +79,13 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     ref.watch(agentBackendProvider),
     () => ref.read(appSettingsProvider),
   );
+});
+
+/// The sidebar's list: the chats on disk, which a new one joins when its first
+/// message is saved. Invalidated by whoever changes what it shows.
+final chatListProvider = FutureProvider((ref) async {
+  final repo = ref.watch(chatRepositoryProvider);
+  return repo.listChats();
 });
 
 final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {

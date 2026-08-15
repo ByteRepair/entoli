@@ -8,6 +8,8 @@ class AppSettings {
   AppSettings({
     this.defaultModelId,
     this.defaultProviderId,
+    this.titleModelId,
+    this.titleProviderId,
     this.environment = const {},
     this.approveCommands = true,
     this.llmProviders = const [],
@@ -15,6 +17,12 @@ class AppSettings {
 
   String? defaultModelId;
   String? defaultProviderId;
+
+  /// What names a chat after its first message. Both halves or neither: with
+  /// nothing here the feature is off and a chat keeps the name it was made
+  /// with.
+  String? titleModelId;
+  String? titleProviderId;
 
   /// Environment variables the agent's commands run under, and that a provider
   /// may name instead of holding its key. Held here rather than in the shell
@@ -36,6 +44,8 @@ class AppSettings {
       return AppSettings(
         defaultModelId: _orNull(json["defaultModelId"] as String?),
         defaultProviderId: _orNull(json["defaultProviderId"] as String?),
+        titleModelId: _orNull(json["titleModelId"] as String?),
+        titleProviderId: _orNull(json["titleProviderId"] as String?),
         // `opencodeEnv` is what this was called when a second backend spawned
         // servers. Read-only: `save` writes `environment`, so a file migrates
         // itself the first time anything is changed, and the fallback can go
@@ -74,6 +84,8 @@ class AppSettings {
   AppSettings copy() => AppSettings(
         defaultModelId: defaultModelId,
         defaultProviderId: defaultProviderId,
+        titleModelId: titleModelId,
+        titleProviderId: titleProviderId,
         environment: environment,
         approveCommands: approveCommands,
         llmProviders: llmProviders,
@@ -83,6 +95,8 @@ class AppSettings {
     config.settingsFile.writeAsStringSync(jsonEncode({
       if (defaultModelId != null) "defaultModelId": defaultModelId,
       if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
+      if (titleModelId != null) "titleModelId": titleModelId,
+      if (titleProviderId != null) "titleProviderId": titleProviderId,
       if (environment.isNotEmpty) "environment": environment,
       if (!approveCommands) "approveCommands": approveCommands,
       if (llmProviders.isNotEmpty)

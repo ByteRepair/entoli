@@ -50,14 +50,18 @@ class LocalChatStore implements ChatStore {
 
   @override
   Future<void> save(Chat chat) async {
-    final id = chat.state.id;
-    config.ensureChatDirs(id);
-    // Synchronous on purpose: callers (and their tests) treat a returned save
-    // as durable, and these are small local files.
-    config.stateFile(id).writeAsStringSync(jsonEncode(chat.state.toJson()));
-    config.convFile(id).writeAsStringSync(jsonEncode({
+    await saveState(chat.state);
+    config.convFile(chat.state.id).writeAsStringSync(jsonEncode({
       "messages": chat.messages.map((m) => m.toJson()).toList(),
     }));
+  }
+
+  @override
+  Future<void> saveState(ChatState state) async {
+    config.ensureChatDirs(state.id);
+    // Synchronous on purpose: callers (and their tests) treat a returned save
+    // as durable, and these are small local files.
+    config.stateFile(state.id).writeAsStringSync(jsonEncode(state.toJson()));
   }
 
   @override

@@ -8,7 +8,7 @@ import "resettable_field.dart";
 
 /// [ProviderModelSelector] over the backend's model list, with the waiting and
 /// failure states both pages would otherwise spell out themselves.
-class ModelPicker extends ConsumerWidget {
+class ModelPicker extends StatelessWidget {
   const ModelPicker({
     super.key,
     required this.choice,
@@ -21,25 +21,88 @@ class ModelPicker extends ConsumerWidget {
   final ModelChoice? inherited;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ref.watch(availableModelsProvider).when(
-          data: (models) => ProviderModelSelector(
-            models: models,
-            choice: choice,
-            onChanged: onChanged,
-            inherited: inherited,
-          ),
-          loading: () => const Row(
-            children: [
-              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-              SizedBox(width: 12),
-              Text("Loading models..."),
-            ],
-          ),
-          error: (e, _) => Text("Failed to load models: $e"),
-        );
-  }
+  Widget build(BuildContext context) => _Models((models) => ProviderModelSelector(
+        models: models,
+        choice: choice,
+        onChanged: onChanged,
+        inherited: inherited,
+      ));
 }
+
+/// One model out of all of them, or none at all. Unlike [ProviderModelSelector]
+/// there is no level below to inherit the other half, so a provider and a model
+/// are picked together as one entry.
+class OptionalModelPicker extends StatelessWidget {
+  const OptionalModelPicker({
+    super.key,
+    required this.choice,
+    required this.onChanged,
+    required this.offLabel,
+    this.helperText,
+  });
+
+  final ModelChoice choice;
+  final ValueChanged<ModelChoice> onChanged;
+
+  /// What the entry storing nothing is called — this is off, not inherited.
+  final String offLabel;
+  final String? helperText;
+
+  @override
+  Widget build(BuildContext context) => _Models((models) {
+        if (models.isEmpty) return const Text(_noModelsLabel);
+        final sorted = _byLabel(models);
+        // Matched against the list rather than rebuilt, so a stored pair the
+        // backend no longer offers reads as off instead of tripping the
+        // dropdown's "exactly one item" assert.
+        final selected = sorted.firstWhereOrNull(
+            (m) => m.providerId == choice.providerId && m.modelId == choice.modelId);
+        return DropdownButtonFormField<ModelOption?>(
+          initialValue: selected,
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            helperText: helperText,
+          ),
+          items: [
+            DropdownMenuItem<ModelOption?>(value: null, child: Text(offLabel)),
+            for (final m in sorted)
+              DropdownMenuItem<ModelOption?>(value: m, child: Text(_label(m))),
+          ],
+          onChanged: (m) => onChanged((providerId: m?.providerId, modelId: m?.modelId)),
+        );
+      });
+}
+
+/// The configured models, once they are known. Every picker here needs the
+/// same two answers to "not yet" and "that failed".
+class _Models extends ConsumerWidget {
+  const _Models(this.builder);
+
+  final Widget Function(List<ModelOption> models) builder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      ref.watch(availableModelsProvider).when(
+            data: builder,
+            loading: () => const Row(
+              children: [
+                SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 12),
+                Text("Loading models..."),
+              ],
+            ),
+            error: (e, _) => Text("Failed to load models: $e"),
+          );
+}
+
+const _noModelsLabel = "No models available.";
+
+/// What a model is called in a list, and the order they are listed in. Every
+/// field here shows the same models, so they cannot disagree on either.
+String _label(ModelOption m) => m.label ?? m.modelId;
+
+List<ModelOption> _byLabel(Iterable<ModelOption> models) => [...models]
+  ..sort((a, b) => _label(a).toLowerCase().compareTo(_label(b).toLowerCase()));
 
 /// The provider + model pair, as picked in the UI. Either half being null
 /// means [defaultOptionLabel]: inherit from the level above.
@@ -74,7 +137,7 @@ class ProviderModelSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (models.isEmpty) {
-      return const Text("No models available.");
+      return const Text(_noModelsLabel);
     }
 
     final providerIds = models.map((m) => m.providerId).toSet().toList()..sort();
@@ -84,8 +147,7 @@ class ProviderModelSelector extends StatelessWidget {
     // With nothing to inherit there is no such provider, and guessing one
     // would make Default mean something that shifts as providers come and go.
     final listed = providerId ?? inherited?.providerId;
-    final forProvider = models.where((m) => m.providerId == listed).toList()
-      ..sort((a, b) => _label(a).toLowerCase().compareTo(_label(b).toLowerCase()));
+    final forProvider = _byLabel(models.where((m) => m.providerId == listed));
 
     final modelId = forProvider.any((m) => m.modelId == choice.modelId) ? choice.modelId : null;
 
@@ -141,8 +203,6 @@ class ProviderModelSelector extends StatelessWidget {
       ],
     );
   }
-
-  static String _label(ModelOption m) => m.label ?? m.modelId;
 
   String? _helper(String? current, String? inheritedValue) =>
       current != null ? null : "Using ${inheritedValue ?? "the backend default"}";

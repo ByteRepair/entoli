@@ -21,10 +21,40 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
 `<dataDir>/chats/<chat-id>/` with `state.json`, `conv.json`, `meta.json`,
 `resources/`, `workspace/`. `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md`
 are the user's own prompt files, beside `settings.json` — which holds the
-app-level model default, `approveCommands`, `environment`, and `llmProviders`.
+app-level model default, the title model, `approveCommands`, `environment`, and
+`llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android). The web build compiles and the UI runs, but
 storage is `dart:io`-backed, so a browser has no chats of its own yet.
+
+### Starting a chat, and naming it
+
+`createChat` writes nothing. The chat is held in `ChatRepository` as its one
+draft — with whatever `meta.json` would have held, since writing that would
+create the directory a draft does without — and reaches the store the first
+time `save` is called, which is the first message. The sidebar lists what the
+store holds, so a chat nobody said anything in leaves nothing behind.
+`ChatController` invalidates `chatListProvider` after that first save and after
+a rename, which are the only two things that change what the sidebar shows;
+refreshing it on every message would re-read every chat off disk to draw the
+same list.
+
+A chat is created as "New chat" and stays that way unless a **title LLM** is
+configured. When one is, `ChatRepository` sends the first message to it through
+`AgentBackend.ask` — one call, no tools, no session, not the agent — and
+`cleanTitle` cuts the answer down to a title. Nothing waits on it: it is asked
+while the turn runs, and it lands through `retitle`, which writes `state.json`
+alone because the turn is still adding to `conv.json`. A model that cannot
+answer names nothing and the chat keeps the name it has; there is no turn to
+report that on.
+
+`ask` is the capability, not the feature: the backend is the only route to a
+provider, so a one-shot question belongs on it, while the prompt and the
+clean-up are `lib/domain/chat_title.dart` and the repository composes them.
+
+`cleanTitle` exists because the reply names the chat verbatim. Every rule in it
+is one of the prompt's instructions being ignored — a quoted title, a `Title:`
+prefix, an explanation on the next line, thirty words instead of twenty.
 
 ### The agent loop
 
@@ -244,6 +274,10 @@ as providers come and go.
 Both settings pages render the same `ProviderModelSelector`; it owns those
 rules, and each page only says where the values come from and where they go.
 
+The title model is the exception: nothing inherits from it, so it is a pair or
+it is off, and `OptionalModelPicker` offers every configured model in one list
+with `Off` at the top rather than a provider field and a model field.
+
 `settings.json`'s `environment` is what every command runs under, and where a
 provider that names its key rather than holding it looks. It is read off disk
 when used rather than captured at startup, so an edit applies to the next
@@ -253,22 +287,26 @@ exported is found without having to be pasted in. Old files with the former
 next save.
 
 The settings page is three sections plus deleting everything: **New chats**
-(default model), **Agent** (ask-before-running, providers), **Environment**.
+(default model, title model), **Agent** (ask-before-running, providers),
+**Environment**.
 
 ### Shared UI
 
-`lib/ui/widgets/` holds what more than one page needs: `ModelPicker` (the
-selector plus its loading and failure states) over `ProviderModelSelector`
-(which owns every rule about the pair, and is tested directly in
-`provider_model_selector_test.dart` rather than through both pages), the
+`lib/ui/widgets/` holds what more than one page needs: `ModelPicker` and
+`OptionalModelPicker` (each a field over the model list, sharing the loading and
+failure states every page would otherwise spell out) over
+`ProviderModelSelector` (which owns every rule about the pair, and is tested
+directly in `provider_model_selector_test.dart` rather than through both pages),
+the
 `Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` dialogs,
 and `AttachmentChip` /
 `AttachmentStrip`. Tests share `test/harness.dart` (`TestApp`, `tempConfig`,
-`pumpUntil`, the dropdown finders) and `test/fakes.dart` (`FakeBackend`, whose
-`scriptedEvents` and `hold` drive a turn, plus `FakeAttachmentPicker` and
-`testLibrary`).
+`pumpUntil`, `seedChat` for a chat that is actually listed, the dropdown
+finders) and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents` and `hold`
+drive a turn and whose `scriptedTitle` names a chat, plus `FakeAttachmentPicker`
+and `testLibrary`).
 
 Streamed deltas are coalesced into one state update per frame: per-token updates
 made the reply's text quadratic and rebuilt every visible bubble thousands of

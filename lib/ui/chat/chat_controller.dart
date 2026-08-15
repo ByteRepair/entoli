@@ -175,6 +175,17 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: chat.copyWith(state: chat.state.copyWith(title: title)));
   }
 
+  /// Name the chat after what started it. Nothing waits on this: it is a model
+  /// call of its own, and the turn it belongs to is already under way.
+  Future<void> _nameChat(String prompt) async {
+    final title = await ref.read(chatRepositoryProvider).suggestTitle(prompt);
+    final chat = state.chat;
+    if (title == null || chat == null || !ref.mounted) return;
+    applyTitle(title);
+    await ref.read(chatRepositoryProvider).retitle(chat.state, title);
+    ref.invalidate(chatListProvider);
+  }
+
   Future<void> _load() async {
     final repo = ref.read(chatRepositoryProvider);
     final chat = await repo.openChat(chatId);
@@ -205,8 +216,15 @@ class ChatController extends Notifier<ChatViewState> {
       state: chat.state.copyWith(updatedAt: DateTime.now()),
       messages: [...chat.messages, userMsg, assistantMsg],
     );
+    final isFirst = chat.messages.isEmpty;
     state = state.copyWith(chat: updatedChat, isRunning: true, clearRetry: true);
     await repo.save(updatedChat);
+    // Only the first: a later message changes nothing the sidebar shows, and
+    // refreshing it re-reads every chat off disk.
+    if (isFirst) {
+      ref.invalidate(chatListProvider);
+      unawaited(_nameChat(text));
+    }
 
     final stream = repo.sendPrompt(chatId, text, attachments: attachments);
     _watchForStall();

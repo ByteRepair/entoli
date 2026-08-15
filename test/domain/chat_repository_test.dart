@@ -20,9 +20,18 @@ void main() {
   ChatRepository repoWith(AppSettings settings) =>
       ChatRepository(LocalChatStore(config), backend, () => settings);
 
+  /// A chat that is on disk, the way one is by the time a prompt is sent.
+  Future<Chat> savedChat(ChatRepository repo) async {
+    final chat = await repo.createChat();
+    await repo.save(chat);
+    return chat;
+  }
+
   /// What the chat settings page would have written.
-  void pinChatModel(String chatId, {String? provider, String? model}) =>
-      ChatMeta(provider: provider, model: model).saveTo(config.metaFile(chatId));
+  void pinChatModel(String chatId, {String? provider, String? model}) {
+    config.ensureChatDirs(chatId);
+    ChatMeta(provider: provider, model: model).saveTo(config.metaFile(chatId));
+  }
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_repo_test_");
@@ -47,7 +56,7 @@ void main() {
 
   test("a chat's own model wins over the app default", () async {
     final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
-    final chat = await repo.createChat();
+    final chat = await savedChat(repo);
 
     pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
 
@@ -59,7 +68,7 @@ void main() {
 
   test("a chat's model is never paired with the app default's provider", () async {
     final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
-    final chat = await repo.createChat();
+    final chat = await savedChat(repo);
 
     pinChatModel(chat.state.id, model: "qwen-2.5");
 
@@ -67,6 +76,86 @@ void main() {
 
     expect(backend.prompts.single.model, "qwen-2.5");
     expect(backend.prompts.single.provider, isNull);
+  });
+
+  group("a draft chat", () {
+    test("is nowhere on disk until it is saved", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat();
+
+      expect(config.chatDir(chat.state.id).existsSync(), isFalse);
+      expect(await repo.listChats(), isEmpty);
+      expect((await repo.openChat(chat.state.id)).state.id, chat.state.id);
+    });
+
+    // Writing meta.json would create the directory a draft exists to do
+    // without, and leave it there whether or not the chat is ever used.
+    test("what is pinned on it is held, and written with the first save", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat();
+
+      await repo.saveMeta(chat.state.id, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
+      expect(config.chatDir(chat.state.id).existsSync(), isFalse);
+      expect((await repo.loadMeta(chat.state.id)).model, "qwen-2.5");
+
+      await repo.save(chat);
+      expect(ChatMeta.fromFile(config.metaFile(chat.state.id)).model, "qwen-2.5");
+    });
+
+    test("renaming one keeps it a draft", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat();
+
+      await repo.retitle(chat.state, "Named early");
+
+      expect(await repo.listChats(), isEmpty);
+      expect((await repo.openChat(chat.state.id)).state.title, "Named early");
+    });
+  });
+
+  // A rename that wrote the whole chat would put back the conversation it read.
+  test("renaming writes the title without touching the conversation", () async {
+    final repo = repoWith(AppSettings());
+    final chat = await repo.createChat();
+    await repo.save(chat);
+    await repo.save(chat.copyWith(messages: [
+      Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026)),
+    ]));
+
+    await repo.retitle(chat.state, "Named");
+
+    final loaded = await repo.openChat(chat.state.id);
+    expect(loaded.state.title, "Named");
+    expect(loaded.messages, hasLength(1));
+  });
+
+  group("naming a chat", () {
+    ChatRepository repoWithTitleModel() => repoWith(
+        AppSettings(titleProviderId: "anthropic", titleModelId: "claude-haiku-3"));
+
+    test("with no title model configured, nothing is asked", () async {
+      final repo = repoWith(AppSettings());
+
+      expect(await repo.suggestTitle("hello"), isNull);
+      expect(backend.questions, isEmpty);
+    });
+
+    test("the title model is asked about the message, and cleaned up after", () async {
+      final repo = repoWithTitleModel();
+      backend.scriptedAnswer = '"Fixing the parser."';
+
+      expect(await repo.suggestTitle("the parser is broken"), "Fixing the parser");
+      expect(backend.questions.single.prompt, contains("the parser is broken"));
+      expect(backend.questions.single.provider, "anthropic");
+      expect(backend.questions.single.model, "claude-haiku-3");
+    });
+
+    test("a message with nothing in it is not worth a call", () async {
+      final repo = repoWithTitleModel();
+
+      expect(await repo.suggestTitle("   "), isNull);
+      expect(backend.questions, isEmpty);
+    });
   });
 
   test("an attachment saved as a part reads back with its bytes", () async {

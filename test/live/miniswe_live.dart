@@ -85,6 +85,9 @@ void main() {
     }
     final (backend, config) = await liveBackend();
     final chat = await backend.createChat();
+    // A chat gets its directories when it is first saved or first sent to;
+    // this drives the backend directly, so it asks for them itself.
+    config.ensureChatDirs(chat.state.id);
     File("${config.workspaceDir(chat.state.id).path}/hello.txt")
         .writeAsStringSync("the answer is 42\n");
 

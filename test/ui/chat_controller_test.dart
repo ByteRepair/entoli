@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
@@ -15,15 +16,20 @@ void main() {
   setUp(() => app = TestApp.create(stallTimeout: const Duration(milliseconds: 80)));
   tearDown(() => app.dispose());
 
-  /// send() returns once the prompt is dispatched; the turn ends later, on the
-  /// stream's DoneEvent.
-  Future<void> waitIdle(String id) async {
+  /// Give whatever is still in flight a chance to land.
+  Future<void> waitFor(bool Function() done, {String what = "it"}) async {
     for (var i = 0; i < 200; i++) {
-      if (!app.container.read(chatControllerProvider(id)).isRunning) return;
+      if (done()) return;
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
-    fail("turn never finished");
+    fail("$what never happened");
   }
+
+  /// send() returns once the prompt is dispatched; the turn ends later, on the
+  /// stream's DoneEvent.
+  Future<void> waitIdle(String id) => waitFor(
+      () => !app.container.read(chatControllerProvider(id)).isRunning,
+      what: "the turn");
 
   /// A chat with a turn under way. The delay lets the controller's initial
   /// load settle before it is driven.
@@ -51,6 +57,8 @@ void main() {
 
   List<Message> messagesOf(String id) => app.container.read(chatControllerProvider(id)).chat!.messages;
 
+  String titleOf(String id) => app.container.read(chatControllerProvider(id)).chat!.state.title;
+
   String textOf(Message m) => m.parts.whereType<TextPart>().map((p) => p.text).join();
 
   test("send appends the user message and an assistant reply", () async {
@@ -61,6 +69,59 @@ void main() {
     expect(messages.first.role, MessageRole.user);
     expect(textOf(messages.first), "hello");
     expect(app.backend.prompts.single.text, "hello");
+  });
+
+  group("a new chat", () {
+    test("is not on disk until its first message is sent", () async {
+      final chat = await app.repo.createChat();
+      expect(app.config.stateFile(chat.state.id).existsSync(), isFalse);
+      expect(await app.repo.listChats(), isEmpty);
+
+      final controller = app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await Future<void>.delayed(Duration.zero);
+      await controller.send("hello");
+      await waitIdle(chat.state.id);
+
+      expect(await app.repo.listChats(), hasLength(1));
+    });
+
+    test("keeps the name it was made with when no title model is set", () async {
+      app.backend.scriptedAnswer = "A better name";
+      final (id, _) = await chatWithOneTurn("hello");
+
+      expect(app.backend.questions, isEmpty);
+      expect((await app.repo.openChat(id)).state.title, "New chat");
+    });
+
+    test("is named by the title model from its first message", () async {
+      app.seedSettings(_withTitleModel);
+      app.backend.scriptedAnswer = "Sorting a list of records";
+      final (id, _) = await chatWithOneTurn("how do I sort a list?");
+      await waitFor(() => titleOf(id) != "New chat", what: "the title");
+
+      expect(app.backend.questions.single.prompt, contains("how do I sort a list?"));
+      expect((await app.repo.openChat(id)).state.title, "Sorting a list of records");
+    });
+
+    test("is named once, not again on every message", () async {
+      app.seedSettings(_withTitleModel);
+      app.backend.scriptedAnswer = "The first thing asked";
+      final (id, controller) = await chatWithOneTurn("first");
+      await controller.send("second");
+      await waitIdle(id);
+
+      expect(app.backend.questions, hasLength(1));
+    });
+
+    test("a title model that answers nothing leaves the name alone", () async {
+      app.seedSettings(_withTitleModel);
+      app.backend.scriptedAnswer = null;
+      final (id, _) = await chatWithOneTurn("hello");
+      await waitFor(() => app.backend.questions.isNotEmpty, what: "the title call");
+
+      expect(titleOf(id), "New chat");
+      expect((await app.repo.openChat(id)).state.title, "New chat");
+    });
   });
 
   test("thinking is kept out of the reply", () async {
@@ -396,3 +457,8 @@ void main() {
     expect(textOf(stored.messages.first), "goodbye");
   });
 }
+
+/// Settings with chat naming turned on. A getter, not a constant: settings are
+/// mutable and each test writes its own copy.
+AppSettings get _withTitleModel =>
+    AppSettings(titleProviderId: "anthropic", titleModelId: "claude-haiku-3");

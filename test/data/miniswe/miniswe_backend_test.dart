@@ -347,6 +347,49 @@ void main() {
     });
   });
 
+  group("asking one question", () {
+    test("is one call, with the prompt as the whole of it", () async {
+      final backend = backendOver([
+        [saidOnly("Sorting a list of records")],
+      ]);
+
+      final answer =
+          await backend.ask("name this", model: "fake-model", provider: "fake");
+
+      expect(answer, "Sorting a list of records");
+      expect(client.sent.single, hasLength(1));
+      expect(client.sent.single.single.text, "name this");
+    });
+
+    test("a provider that is gone answers nothing rather than failing", () async {
+      final backend = backendOver([]);
+
+      expect(await backend.ask("hi", model: "m", provider: "ghost"), isNull);
+    });
+
+    test("a request that fails answers nothing either", () async {
+      final backend = backendOver([]);
+      client.failures[0] = const LlmException("no", statusCode: 500);
+
+      expect(await backend.ask("hi", model: "fake-model", provider: "fake"), isNull);
+    });
+
+    // The session is the conversation the agent holds; a question asked
+    // outside it must not become part of it.
+    test("the turn that follows has not heard of it", () async {
+      final backend = backendOver([
+        [saidOnly("An answer")],
+        [finish],
+      ]);
+      await backend.ask("a question", model: "fake-model", provider: "fake");
+
+      await send(backend, "hello there");
+
+      expect(client.sent.last.map((m) => m.text).join(), isNot(contains("An answer")));
+      expect(client.sent.last.map((m) => m.text).join(), isNot(contains("a question")));
+    });
+  });
+
   group("what the app asks it", () {
     test("its patience outlasts the longest command it would allow", () async {
       final backend = backendOver([],

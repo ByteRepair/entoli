@@ -58,11 +58,19 @@ class ErrorEvent extends AgentEvent {
   final String message;
 }
 
-/// What runs a turn. `MinisweBackend` is the implementation; this exists as a
-/// seam so the UI and the repository can be tested without one.
+/// What runs a turn, and the app's one route to a provider. `MinisweBackend`
+/// is the implementation; this exists as a seam so the UI and the repository
+/// can be tested without one.
 abstract class AgentBackend {
-  /// Create a new chat with a fresh workspace and agent session.
+  /// A chat with an id and nothing else: its directories and its session are
+  /// made when it is first used, so one that is never used costs nothing.
   Future<Chat> createChat({String? title});
+
+  /// One question, answered in one call to [model]: no tools, no session,
+  /// nothing kept. Null when the provider is not configured or says nothing —
+  /// the caller wants a convenience, and there is no turn to report a failure
+  /// on.
+  Future<String?> ask(String prompt, {required String model, required String provider});
 
   /// Send a user prompt; stream events until the turn completes.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
