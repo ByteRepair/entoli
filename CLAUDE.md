@@ -39,6 +39,33 @@ why we use `POST /session` + `prompt_async` instead of `opencode run`.
 the whole request. Provider and model therefore travel together the whole way
 down; when only one is known we send neither and let the server choose.
 
+### Commands and agents
+
+`CompletionKind` names the two of them and carries the trigger character, so
+one `completions(chatId, kind)` runs the whole chain — backend, transport,
+client, provider — rather than a parallel pair per layer. `GET /command` and
+`GET /agent` list what the workspace offers; both come from the chat's own
+server, so asking for them starts it if the chat has not sent anything yet.
+Entries with `hidden: true` are opencode's own machinery (compaction, titling)
+and are filtered out.
+
+The syntax is parsed in `OpencodeBackend`, not in the repository or the UI:
+`/` and `@` are opencode's, and `conv.json` stores the message as typed, so a
+regenerated turn re-parses to the same thing. The dispatch patterns are looser
+than the names opencode actually uses — a command name is any run without a
+slash — because anything the composer's menu can offer has to dispatch.
+
+A message that is nothing but `/name` plus arguments runs
+`POST /session/:id/command` instead of `prompt_async`. That endpoint types
+`model` as one `"provider/model"` string — not `prompt_async`'s pair — and its
+response only arrives once the turn is over, so it is awaited last, after the
+event stream is attached. Everything else about the turn is identical: the
+same SSE events, in the same order (verified 2026-08-15, opencode 1.18.18).
+
+`@name` mentions ride along as `{"type": "agent", "name": ...}` parts ahead of
+the text part. The server accepts any name without checking it — an unknown
+agent is a 204 like any other.
+
 `session.error` carries `{name, data.message}` (APIError adds `statusCode`)
 and ends the turn — we turn it into an `ErrorEvent`, which the chat renders as
 red text in place of the reply. `MessageAbortedError` is our own abort, not a
@@ -70,7 +97,10 @@ can inject a fake. Real impl: `RealOpencodeTransport`. Test fake:
 Servers are per chat and live until the app exits, when `AgentBackend.shutdown`
 (wired to `AppLifecycleListener.onExitRequested` in `main.dart`) stops them.
 They are not our process's children in any way the OS cleans up, so without
-that they outlive the app.
+that they outlive the app. `RealOpencodeTransport` therefore keys its map on
+the spawn in flight rather than the server it produces: opening the composer's
+menu and sending a message both call `ensureServer`, and the loser of that
+race would never reach the map to be stopped.
 
 Every write endpoint in `OpencodeClient` checks its status code. A rejected
 prompt is otherwise indistinguishable from a stall: no events ever arrive and
@@ -119,6 +149,14 @@ turn).
 Streamed deltas are coalesced into one state update per frame: per-token
 updates made the reply's text quadratic and rebuilt every visible bubble
 thousands of times per turn.
+
+`Composer` opens a menu above the field when the caret sits in a `/` or `@`
+token. `completionsProvider` is watched only while that menu is open, so a
+chat that never uses one never starts a server for it.
+Enter, Tab and the arrows are bound only while the menu has a match — the rest
+of the time they have to keep doing what they do in a text box. The `+` button
+left of the field is a second way in: it types the trigger character rather
+than opening its own list, so both routes share one code path.
 
 ### AgentBackend abstraction
 

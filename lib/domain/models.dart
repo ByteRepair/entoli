@@ -122,6 +122,29 @@ abstract class ModelOption with _$ModelOption {
   factory ModelOption.fromJson(Map<String, dynamic> json) => _$ModelOptionFromJson(json);
 }
 
+/// What a message can address, and the character that starts one.
+enum CompletionKind {
+  command("/", "Commands"),
+  agent("@", "Agents");
+
+  const CompletionKind(this.trigger, this.label);
+  final String trigger;
+  final String label;
+}
+
+/// An entry in the composer's `/` or `@` menu — a command the backend can run,
+/// or an agent a message can address.
+@freezed
+abstract class CompletionOption with _$CompletionOption {
+  const factory CompletionOption({
+    required String name,
+    String? description,
+  }) = _CompletionOption;
+
+  factory CompletionOption.fromJson(Map<String, dynamic> json) =>
+      _$CompletionOptionFromJson(json);
+}
+
 /// Text is scattered across parts; almost every caller wants it joined.
 extension MessageText on Message {
   String get plainText => parts.whereType<TextPart>().map((p) => p.text).join("\n");

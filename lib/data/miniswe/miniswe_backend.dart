@@ -43,4 +43,7 @@ abstract class MinisweBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() async => [];
+
+  @override
+  Future<List<CompletionOption>> completions(String chatId, CompletionKind kind) async => [];
 }

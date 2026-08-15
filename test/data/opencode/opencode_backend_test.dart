@@ -19,8 +19,16 @@ class FakeOpencodeTransport implements OpencodeTransport {
   final List<({String sessionId, String text})> injectedContext = [];
   final List<String> deletedSessions = [];
   final List<({String permissionId, String response})> permissionReplies = [];
-  final List<({String chatId, String sessionId, String text, String? model, String? provider})>
-      promptAsyncCalls = [];
+  final List<
+      ({
+        String chatId,
+        String sessionId,
+        String text,
+        String? model,
+        String? provider,
+        List<String> agents
+      })> promptAsyncCalls = [];
+  final List<({String name, String arguments, String? model, String? provider})> commandCalls = [];
   final List<({String chatId, String sessionId})> abortCalls = [];
   final List<String> disposeCalls = [];
 
@@ -42,10 +50,29 @@ class FakeOpencodeTransport implements OpencodeTransport {
 
   @override
   Future<void> promptAsync(String chatId, String sessionId,
-      {required String text, String? model, String? provider}) async {
-    promptAsyncCalls.add(
-        (chatId: chatId, sessionId: sessionId, text: text, model: model, provider: provider));
+      {required String text,
+      String? model,
+      String? provider,
+      List<String> agents = const []}) async {
+    promptAsyncCalls.add((
+      chatId: chatId,
+      sessionId: sessionId,
+      text: text,
+      model: model,
+      provider: provider,
+      agents: agents,
+    ));
     _promptCompleters[chatId]?.complete();
+  }
+
+  @override
+  Future<void> runCommand(String chatId, String sessionId,
+      {required String name, required String arguments, String? model, String? provider}) async {
+    commandCalls.add((name: name, arguments: arguments, model: model, provider: provider));
+    _promptCompleters[chatId]?.complete();
+    // Like the real endpoint, which holds its response until the turn is over.
+    // Awaiting this before the events are streaming would deadlock the turn.
+    await _channel(chatId).done;
   }
 
   @override
@@ -82,6 +109,12 @@ class FakeOpencodeTransport implements OpencodeTransport {
   @override
   Future<List<Map<String, dynamic>>> providers(String chatId) async => [];
 
+  Map<CompletionKind, List<Map<String, dynamic>>> scriptedCompletions = {};
+
+  @override
+  Future<List<Map<String, dynamic>>> completions(String chatId, CompletionKind kind) async =>
+      scriptedCompletions[kind] ?? const [];
+
   @override
   Future<void> disposeAll() async {
     for (final chatId in _controllers.keys.toList()) {
@@ -107,7 +140,7 @@ class FakeOpencodeTransport implements OpencodeTransport {
 
   Completer<void> waitForPrompt(String chatId) {
     final c = Completer<void>();
-    if (promptAsyncCalls.isNotEmpty) {
+    if (promptAsyncCalls.isNotEmpty || commandCalls.isNotEmpty) {
       c.complete();
     } else {
       _promptCompleters[chatId] = c;
@@ -521,6 +554,67 @@ void main() {
 
     expect(events.whereType<ErrorEvent>(), hasLength(1));
     expect(events.whereType<DoneEvent>(), hasLength(1));
+  });
+
+  test("a message that is only a command runs it, arguments and all", () async {
+    final chat = await backend.createChat();
+    await runTurn(chat.state.id, "/review the last commit", [_idleEvent("ses_${chat.state.id}_123")]);
+
+    expect(transport.promptAsyncCalls, isEmpty);
+    expect(transport.commandCalls.single.name, "review");
+    expect(transport.commandCalls.single.arguments, "the last commit");
+  });
+
+  test("a bare command runs with empty arguments", () async {
+    final chat = await backend.createChat();
+    await runTurn(chat.state.id, "/init", [_idleEvent("ses_${chat.state.id}_123")]);
+
+    expect(transport.commandCalls.single.name, "init");
+    expect(transport.commandCalls.single.arguments, "");
+  });
+
+  test("a leading path is prose, not a command", () async {
+    final chat = await backend.createChat();
+    await runTurn(chat.state.id, "/usr/bin/env is missing", [_idleEvent("ses_${chat.state.id}_123")]);
+
+    expect(transport.commandCalls, isEmpty);
+    expect(transport.promptAsyncCalls.single.text, "/usr/bin/env is missing");
+  });
+
+  test("@names in a message are sent as agent mentions", () async {
+    final chat = await backend.createChat();
+    await runTurn(chat.state.id, "@explore find it, then @general fix it",
+        [_idleEvent("ses_${chat.state.id}_123")]);
+
+    expect(transport.promptAsyncCalls.single.agents, ["explore", "general"]);
+  });
+
+  test("an address mid-word is not a mention", () async {
+    final chat = await backend.createChat();
+    await runTurn(chat.state.id, "mail me at a@b.com", [_idleEvent("ses_${chat.state.id}_123")]);
+
+    expect(transport.promptAsyncCalls.single.agents, isEmpty);
+  });
+
+  test("completions come from the chat's own server, minus the hidden ones", () async {
+    final chat = await backend.createChat();
+    transport.scriptedCompletions = {
+      CompletionKind.command: [
+        {"name": "review", "description": "review changes"},
+      ],
+      CompletionKind.agent: [
+        {"name": "explore", "description": "search"},
+        {"name": "title", "hidden": true},
+      ],
+    };
+
+    expect(await backend.completions(chat.state.id, CompletionKind.command), [
+      const CompletionOption(name: "review", description: "review changes"),
+    ]);
+    expect(await backend.completions(chat.state.id, CompletionKind.agent), [
+      const CompletionOption(name: "explore", description: "search"),
+    ]);
+    expect(transport.ensureServerCalls, isNotEmpty);
   });
 }
 

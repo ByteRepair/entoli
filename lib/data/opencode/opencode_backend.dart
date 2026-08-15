@@ -26,6 +26,15 @@ class OpencodeBackend implements AgentBackend {
   final Map<String, Set<String>> _seenTools = {};
   final Map<String, String> _pendingContext = {};
 
+  /// A message that is nothing but `/name` plus arguments runs that command.
+  /// The name may not contain a slash, so `/usr/bin/foo is broken` is prose.
+  /// Anything else the composer's menu can offer has to dispatch here.
+  static final _command = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+
+  /// `@name` addresses an agent, but only where a word starts — an email
+  /// address or a `user@host` is not a mention.
+  static final _mention = RegExp(r"(?<=^|\s)@([\w.-]+)");
+
   @override
   BackendKind get kind => BackendKind.opencode;
 
@@ -80,7 +89,21 @@ class OpencodeBackend implements AgentBackend {
         },
       );
 
-      await transport.promptAsync(chatId, sessionId, text: text, model: model, provider: provider);
+      final command = _command.firstMatch(text.trim());
+      if (command != null) {
+        // Awaited last: this one only returns when the turn is already over.
+        await transport.runCommand(chatId, sessionId,
+            name: command.group(1)!,
+            arguments: command.group(2) ?? "",
+            model: model,
+            provider: provider);
+      } else {
+        await transport.promptAsync(chatId, sessionId,
+            text: text,
+            model: model,
+            provider: provider,
+            agents: _mention.allMatches(text).map((m) => m.group(1)!).toList());
+      }
     } catch (e) {
       if (!controller.isClosed) {
         controller.add(ErrorEvent(e.toString()));
@@ -320,6 +343,16 @@ class OpencodeBackend implements AgentBackend {
       await transport.dispose(chatId);
       if (scratch.existsSync()) scratch.deleteSync(recursive: true);
     }
+  }
+
+  @override
+  Future<List<CompletionOption>> completions(String chatId, CompletionKind kind) async {
+    await transport.ensureServer(chatId, config.workspaceDir(chatId).path);
+    // Hidden entries are opencode's own machinery: compaction, titling.
+    return (await transport.completions(chatId, kind))
+        .where((o) => o["hidden"] != true)
+        .map(CompletionOption.fromJson)
+        .toList();
   }
 
   Future<List<ModelOption>> _providersFrom(String chatId) async {

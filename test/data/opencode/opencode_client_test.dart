@@ -41,4 +41,31 @@ void main() {
       {"type": "text", "text": "hi"}
     ]);
   });
+
+  test("mentions travel as agent parts ahead of the text", () async {
+    await client().promptAsync("ses_1", text: "@explore find it", agents: ["explore"]);
+
+    expect(bodies.single["parts"], [
+      {"type": "agent", "name": "explore"},
+      {"type": "text", "text": "@explore find it"},
+    ]);
+  });
+
+  // Unlike prompt_async, this endpoint types `model` as one string.
+  test("runCommand sends model as one provider/model string", () async {
+    await client().runCommand("ses_1",
+        name: "review", arguments: "HEAD", model: "qwen-2.5", provider: "ollama-cloud");
+
+    expect(bodies.single, {
+      "command": "review",
+      "arguments": "HEAD",
+      "model": "ollama-cloud/qwen-2.5",
+    });
+  });
+
+  test("runCommand still sends arguments when there are none", () async {
+    await client().runCommand("ses_1", name: "init", arguments: "");
+
+    expect(bodies.single, {"command": "init", "arguments": ""});
+  });
 }

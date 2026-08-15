@@ -3,6 +3,7 @@
 // inject a fake that yields canned events.
 import "dart:async";
 
+import "../../domain/models.dart";
 import "opencode_models.dart";
 
 abstract class OpencodeTransport {
@@ -13,9 +14,17 @@ abstract class OpencodeTransport {
   Future<String> createSession(String chatId, {String? title});
 
   /// Send a prompt asynchronously (fire-and-forget). Events arrive via
-  /// [subscribe].
+  /// [subscribe]. [agents] are the `@` mentions the message carries.
   Future<void> promptAsync(String chatId, String sessionId,
-      {required String text, String? model, String? provider});
+      {required String text,
+      String? model,
+      String? provider,
+      List<String> agents = const []});
+
+  /// Run a named command. Returns only when the turn it starts is over, so it
+  /// must not be awaited before [subscribe] is attached.
+  Future<void> runCommand(String chatId, String sessionId,
+      {required String name, required String arguments, String? model, String? provider});
 
   Future<void> abort(String chatId, String sessionId);
 
@@ -33,6 +42,8 @@ abstract class OpencodeTransport {
   Future<Stream<OcEvent>> subscribe(String chatId);
 
   Future<List<Map<String, dynamic>>> providers(String chatId);
+
+  Future<List<Map<String, dynamic>>> completions(String chatId, CompletionKind kind);
 
   Future<void> dispose(String chatId);
 

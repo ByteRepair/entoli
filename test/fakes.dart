@@ -12,6 +12,18 @@ const testModels = [
   ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
 ];
 
+/// Two names sharing a prefix, so tests can assert the menu filters.
+const testCommands = [
+  CompletionOption(name: "init", description: "guided AGENTS.md setup"),
+  CompletionOption(name: "review", description: "review changes"),
+  CompletionOption(name: "revert", description: "undo the last turn"),
+];
+
+const testAgents = [
+  CompletionOption(name: "build", description: "the default agent"),
+  CompletionOption(name: "explore", description: "fast codebase search"),
+];
+
 class FakeBackend implements AgentBackend {
   @override
   BackendKind get kind => BackendKind.opencode;
@@ -81,4 +93,18 @@ class FakeBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() async => testModels;
+
+  Map<CompletionKind, List<CompletionOption>> scriptedCompletions = {
+    CompletionKind.command: testCommands,
+    CompletionKind.agent: testAgents,
+  };
+
+  /// Held open, the menu is left in its loading state.
+  Completer<void>? holdCompletions;
+
+  @override
+  Future<List<CompletionOption>> completions(String chatId, CompletionKind kind) async {
+    await holdCompletions?.future;
+    return scriptedCompletions[kind] ?? const [];
+  }
 }
