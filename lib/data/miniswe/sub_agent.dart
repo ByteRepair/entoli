@@ -7,6 +7,7 @@ import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/web_search.dart";
 import "llm/llm_client.dart";
+import "llm/rate_limit_gate.dart";
 import "miniswe_agent.dart";
 
 /// Spawns sub-agents for `task` tool calls. Each sub-agent gets a fresh
@@ -23,10 +24,11 @@ class SubAgentRunner {
     required this.projectWorkspace,
     required this.model,
     required this.library,
-    this.options = const MinisweOptions(stepLimit: 15),
+    this.options = const MinisweOptions(),
     this.temperature,
     this.reasoningEffort,
     this.webSearch,
+    this.rateLimitGate,
   });
 
   final LlmClient client;
@@ -39,6 +41,11 @@ class SubAgentRunner {
   final double? temperature;
   final String? reasoningEffort;
   final WebSearch? webSearch;
+
+  /// Shared with the parent agent and every sibling sub-agent, so the fan-out
+  /// bounds in-flight requests and coordinates 429 backoff as one. Null where
+  /// the runner is built directly against a raw client (tests).
+  final RateLimitGate? rateLimitGate;
 
   final Set<MinisweAgent> _active = {};
 
@@ -71,6 +78,7 @@ class SubAgentRunner {
       offerTaskTool: false,
       offerAskTool: false,
       webSearch: webSearch,
+      rateLimitGate: rateLimitGate,
     );
     _active.add(agent);
     try {

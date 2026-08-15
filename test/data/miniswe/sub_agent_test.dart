@@ -2,7 +2,9 @@ import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/miniswe/llm/gated_client.dart";
 import "package:agent_chat/data/miniswe/llm/llm_client.dart";
+import "package:agent_chat/data/miniswe/llm/rate_limit_gate.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
 import "package:agent_chat/data/miniswe/sub_agent.dart";
 import "package:agent_chat/data/miniswe/templates.dart";
@@ -352,6 +354,231 @@ void main() {
 
       // The turn ended without finishing normally.
       expect(events.last, isA<DoneEvent>());
+    });
+  });
+
+  group("RateLimitGate with sub-agents", () {
+    final finish = bashCall("echo $submitMarker", id: "done");
+
+    /// A parent + sub-agent pair sharing one gate, both talking through
+    /// [ConcurrentFakeLlmClient] so the test can assert the in-flight cap.
+    ({MinisweAgent agent, ConcurrentFakeLlmClient parentTrack, ConcurrentFakeLlmClient subTrack, RateLimitGate gate})
+        gatedAgent(
+      FakeLlmClient parentClient,
+      FakeLlmClient subClient, {
+      int maxConcurrent = 2,
+      Duration initialBackoff = const Duration(seconds: 1),
+      Duration maxRetryBudget = const Duration(minutes: 5),
+      MinisweOptions options = const MinisweOptions(),
+      ShellResult Function(String)? respond,
+    }) {
+      shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: true);
+      final gate = RateLimitGate(
+        maxConcurrent: maxConcurrent,
+        initialBackoff: initialBackoff,
+        maxRetryBudget: maxRetryBudget,
+      );
+      final parentTrack = ConcurrentFakeLlmClient(parentClient);
+      final subTrack = ConcurrentFakeLlmClient(subClient);
+      final gatedParent = GatedLlmClient(parentTrack, gate);
+      final gatedSub = GatedLlmClient(subTrack, gate);
+      final runner = SubAgentRunner(
+        client: gatedSub,
+        shell: shell,
+        workspace: "/tmp/workspace",
+        projectWorkspace: "/tmp/project",
+        model: "fake-model",
+        library: libraryWithGeneral(),
+        options: options,
+        rateLimitGate: gate,
+      );
+      final agent = MinisweAgent(
+        session: session,
+        client: gatedParent,
+        shell: shell,
+        workspace: "/tmp/workspace",
+        projectWorkspace: "/tmp/project",
+        model: "fake-model",
+        options: options,
+        approveMode: ApproveMode.never,
+        approve: (_) async => ApprovalResponse.allow,
+        answer: (request) async => request.unanswered,
+        subAgentRunner: runner,
+        rateLimitGate: gate,
+      );
+      return (agent: agent, parentTrack: parentTrack, subTrack: subTrack, gate: gate);
+    }
+
+    test("a 5-sub-agent fan-out with maxConcurrent 2 never exceeds 2 in flight",
+        () async {
+      final parent = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                for (var i = 0; i < 5; i++)
+                  LlmToolCall(id: "t$i", name: "task",
+                      argumentsJson: jsonEncode({"agent": "general", "prompt": "task $i"})),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      // Each sub-agent makes one model call then finishes.
+      final sub = FakeLlmClient([
+        for (var i = 0; i < 5; i++) [bashCall("echo $submitMarker", text: "result $i")],
+      ]);
+      final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
+          maxConcurrent: 2,
+          options: const MinisweOptions(maxConcurrentSubAgents: 5));
+
+      await agent.run("fan out").toList();
+
+      // The sub-agents' model calls never exceeded 2 in flight.
+      expect(subTrack.maxConcurrent, lessThanOrEqualTo(2));
+      expect(subTrack.maxConcurrent, greaterThan(0));
+    });
+
+    test("429 on a sub-agent pauses all siblings and resumes after the cooldown",
+        () async {
+      // 3 sub-agents. The first sub-agent call gets a 429, then succeeds on
+      // retry; the other two succeed on the first try. With maxConcurrent 1,
+      // the 429's cooldown gates the others — they wait, then run.
+      final parent = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                for (var i = 0; i < 3; i++)
+                  LlmToolCall(id: "t$i", name: "task",
+                      argumentsJson: jsonEncode({"agent": "general", "prompt": "task $i"})),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      // Sub-agent turns: call 0 → 429 then success; calls 1, 2 → success.
+      // FakeLlmClient uses one entry per call, in order, and _at is global
+      // across the three concurrent sub-agents — but with maxConcurrent 1
+      // they serialize, so the order is deterministic.
+      final sub = FakeLlmClient([
+        [bashCall("echo $submitMarker", text: "first")],   // at=0: 429
+        [bashCall("echo $submitMarker", text: "first")],   // at=1: retry succeeds
+        [bashCall("echo $submitMarker", text: "second")],  // at=2: sub-agent 1
+        [bashCall("echo $submitMarker", text: "third")],   // at=3: sub-agent 2
+      ])
+        ..failures[0] = const LlmException("rate limited", statusCode: 429, retryable: true);
+      final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
+          maxConcurrent: 1,
+          initialBackoff: const Duration(milliseconds: 50),
+          options: const MinisweOptions(maxConcurrentSubAgents: 3),
+          respond: submitted);
+
+      final events = await agent.run("fan out").toList();
+
+      // All three sub-agents finished despite the first's 429.
+      final ends = events.whereType<SubAgentEndEvent>().toList();
+      expect(ends, hasLength(3));
+      // The first sub-agent recovered (the 429 was retried through the gate).
+      expect(ends.every((e) => !e.failed), isTrue);
+    });
+
+    test("429 retry budget exhaustion reports an error instead of looping", () async {
+      // A sub-agent whose every call 429s. The gate's budget is tiny so the
+      // agent gives up quickly.
+      final parent = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                LlmToolCall(id: "t0", name: "task",
+                    argumentsJson: jsonEncode({"agent": "general", "prompt": "task 0"})),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      // Every sub-agent call 429s.
+      final sub = FakeLlmClient([
+        for (var i = 0; i < 20; i++) [bashCall("echo $submitMarker", text: "never")],
+      ]);
+      for (var i = 0; i < 20; i++) {
+        sub.failures[i] = const LlmException("rate limited", statusCode: 429, retryable: true);
+      }
+      final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
+          maxConcurrent: 1,
+          initialBackoff: const Duration(milliseconds: 10),
+          maxRetryBudget: const Duration(milliseconds: 200),
+          respond: submitted);
+
+      final events = await agent.run("fan out").toList();
+
+      // The sub-agent failed — its result carries the 429.
+      final result = events.whereType<ToolResultEvent>().firstWhere((e) => e.result.callId == "t0").result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("429"));
+    });
+
+    test("429 with no gate falls back to maxAttempts", () async {
+      // The original per-agent path: no rateLimitGate, no GatedLlmClient.
+      // A sub-agent call 429s 4 times then the agent gives up.
+      final parent = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                LlmToolCall(id: "t0", name: "task",
+                    argumentsJson: jsonEncode({"agent": "general", "prompt": "task 0"})),
+              ],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      final sub = FakeLlmClient([
+        for (var i = 0; i < 10; i++) [bashCall("echo $submitMarker")],
+      ]);
+      for (var i = 0; i < 10; i++) {
+        sub.failures[i] = const LlmException("rate limited", statusCode: 429, retryable: true);
+      }
+      shell = FakeShell(submitted, canRunCommands: true);
+      // No gate, no GatedLlmClient — raw clients.
+      final runner = SubAgentRunner(
+        client: sub,
+        shell: shell,
+        workspace: "/tmp/workspace",
+        projectWorkspace: "/tmp/project",
+        model: "fake-model",
+        library: libraryWithGeneral(),
+      );
+      final agent = MinisweAgent(
+        session: session,
+        client: parent,
+        shell: shell,
+        workspace: "/tmp/workspace",
+        projectWorkspace: "/tmp/project",
+        model: "fake-model",
+        approveMode: ApproveMode.never,
+        approve: (_) async => ApprovalResponse.allow,
+        answer: (request) async => request.unanswered,
+        subAgentRunner: runner,
+      );
+
+      final events = await agent.run("fan out").toList();
+
+      // The sub-agent gave up after maxAttempts 429s.
+      final result = events.whereType<ToolResultEvent>().firstWhere((e) => e.result.callId == "t0").result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("429"));
+      // Only 4 attempts were made (the fake's _at advanced 4 times).
+      expect(sub.calls, hasLength(4));
     });
   });
 }

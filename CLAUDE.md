@@ -162,12 +162,31 @@ client per provider and rebuilds it when the URL or key changes; a provider that
 lists no models is asked, and one that cannot answer contributes nothing rather
 than failing the whole list.
 
+A `RateLimitGate` is built per turn in `MinisweBackend.sendPrompt` and shared by
+the parent `MinisweAgent` and every sub-agent it spawns: it bounds in-flight
+`LlmClient.stream` calls to `MinisweOptions.maxConcurrentLlmRequests` (4
+default) through a `GatedLlmClient` wrapper, and coordinates 429 backoff so a
+75-vote fan-out doesn't each-retry-into the same rate limit. When any one
+request gets a 429, the gate sets a shared cooldown that every other in-flight
+or queued request honours; backoff grows exponentially across successive 429
+episodes (1s → 2s → 4s → … → 60s cap) and resets on any successful request. The
+gate is distinct from `maxConcurrentSubAgents` (8), which bounds long-lived
+agent parallelism — one sub-agent makes up to `stepLimit` calls. Null for agents
+built against a raw client (tests), where the per-agent retry path governs.
+
 #### Errors, and how long the UI waits
 
 Failures are reported as they happen: a rejected key or a bad request reaches
 `ErrorEvent` on the first attempt, and a retryable one (429, 5xx, a connection
 that never opened) emits `RetryEvent` the instant it fails. Four attempts with
-1s/2s/4s backoff means a persistent rate limit is reported after ~7s.
+1s/2s/4s backoff means a persistent 5xx or connection error is reported after
+~7s. A 429 takes a different path: a `RateLimitGate` shared across the parent
+and every sub-agent coordinates backoff so a fan-out pauses as one rather than
+each-retry-into the same limit (see "Reaching a provider"). 429 retries
+continue for `MinisweOptions.rateLimitRetryBudget` (5 min default) with
+exponential backoff capped at 60s; other retryables keep the per-agent
+`maxAttempts` budget. Where no gate is present (tests against a raw
+`FakeLlmClient`), 429s fall back to the per-agent path.
 
 Because nothing is hidden, silence only ever means work, and the UI never
 gives up on a turn on its own — the user cancels. A `RetryEvent` is

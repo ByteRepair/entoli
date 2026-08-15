@@ -11,6 +11,7 @@ import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "ask_tool.dart";
 import "llm/llm_client.dart";
+import "llm/rate_limit_gate.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
 import "templates.dart";
@@ -38,6 +39,8 @@ class MinisweOptions {
     this.maxAttempts = 4,
     this.retryBackoff = const Duration(seconds: 1),
     this.maxConcurrentSubAgents = 8,
+    this.maxConcurrentLlmRequests = 4,
+    this.rateLimitRetryBudget = const Duration(minutes: 5),
   });
 
   /// How many model calls one turn may make. Upstream defaults to no limit and
@@ -51,14 +54,28 @@ class MinisweOptions {
   /// and the first wait between two — it doubles after that, so the defaults
   /// spend 7s waiting in total. Deliberately short: the UI cannot show what it
   /// has not been told, so trouble is reported long before its patience runs
-  /// out.
+  /// out. Applies to retryables other than 429; a 429 is governed by the
+  /// shared [RateLimitGate] and [rateLimitRetryBudget].
   final int maxAttempts;
   final Duration retryBackoff;
 
   /// How many `task` calls in one message run at once. A deep-research turn
   /// can fan out to 75 sub-agents; 8 concurrent keeps provider rate limits
-  /// in reach without serializing the whole batch.
+  /// in reach without serializing the whole batch. Bounds long-lived agent
+  /// parallelism, distinct from [maxConcurrentLlmRequests] which bounds the
+  /// in-flight request count — one sub-agent makes up to [stepLimit] calls.
   final int maxConcurrentSubAgents;
+
+  /// How many [LlmClient.stream] calls may be in flight at once across the
+  /// parent agent and every sub-agent it spawns. A [RateLimitGate] enforces
+  /// it per turn; the gate also coordinates 429 backoff so a fan-out doesn't
+  /// each-retry-into the same rate limit.
+  final int maxConcurrentLlmRequests;
+
+  /// How long 429 retries continue through the shared cooldown before the
+  /// agent gives up. Other retryables (503, connection drops) keep
+  /// [maxAttempts].
+  final Duration rateLimitRetryBudget;
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a
@@ -103,6 +120,7 @@ class MinisweAgent {
     this.temperature,
     this.reasoningEffort,
     this.subAgentRunner,
+    this.rateLimitGate,
     this.offerTaskTool = true,
     this.offerAskTool = true,
     this.webSearch,
@@ -147,6 +165,12 @@ class MinisweAgent {
   /// Spawns sub-agents for `task` calls. Null where the agent is itself a
   /// sub-agent: sub-agents do not spawn their own sub-agents.
   final SubAgentRunner? subAgentRunner;
+
+  /// Bounds in-flight `LlmClient.stream` calls across the parent and its
+  /// sub-agents and coordinates 429 backoff. Null where the agent is built
+  /// directly against a raw [LlmClient] (tests); the per-agent
+  /// [MinisweOptions.maxAttempts] path then governs 429s too.
+  final RateLimitGate? rateLimitGate;
 
   /// Whether to offer the `task` tool. Sub-agents run headless and do not
   /// fan out themselves, so they pass `false`.
@@ -699,8 +723,16 @@ class MinisweAgent {
   ///
   /// A request that fails before it produced anything is tried again; one that
   /// fails halfway is reported, because retrying it would write the reply twice.
+  ///
+  /// A 429 takes a different path when a [rateLimitGate] is present: instead of
+  /// the per-agent backoff below, every 429 advances the shared cooldown and
+  /// every retry waits it out together — so a fan-out of sub-agents pauses as
+  /// one rather than each-retry-into the same limit. 429 retries are bounded by
+  /// the gate's wall-clock budget, not [MinisweOptions.maxAttempts]; other
+  /// retryables (503, connection drops) keep the per-agent path.
   Stream<AgentEvent> _query() async* {
-    for (var attempt = 1; attempt <= options.maxAttempts; attempt++) {
+    var attempt = 1;
+    while (true) {
       var produced = false;
       DateTime? thinkingSince;
 
@@ -736,6 +768,7 @@ class MinisweAgent {
                 // fills the block.
                 yield ReasoningEnd(text: chunk.message.reasoning);
               }
+              rateLimitGate?.onSuccess();
               _completion = chunk;
               return;
           }
@@ -746,12 +779,43 @@ class MinisweAgent {
         throw const LlmException("The provider closed the stream without a reply.",
             retryable: true);
       } on LlmException catch (e) {
-        if (!e.retryable || produced || attempt == options.maxAttempts) {
+        // A request that produced chunks is not retried — the reply would be
+        // written twice. Report it; the provider did serve it, so the gate
+        // resets.
+        if (produced) {
+          rateLimitGate?.onSuccess();
+          _queryError = e;
+          return;
+        }
+        if (!e.retryable) {
+          _queryError = e;
+          return;
+        }
+
+        // 429 — coordinated cooldown. One gate across the parent and every
+        // sub-agent: every 429 advances it, every retry waits it out.
+        if (e.statusCode == 429 && rateLimitGate != null) {
+          final gate = rateLimitGate!;
+          if (gate.retryBudgetExhausted()) {
+            _queryError = e;
+            return;
+          }
+          gate.onRateLimited();
+          yield RetryEvent(attempt: attempt, message: e.toString());
+          await gate.awaitReady();
+          // The wall-clock budget governs 429s; don't burn maxAttempts on them.
+          attempt++;
+          continue;
+        }
+
+        // Other retryables — per-agent backoff, maxAttempts unchanged.
+        if (attempt >= options.maxAttempts) {
           _queryError = e;
           return;
         }
         yield RetryEvent(attempt: attempt, message: e.toString());
         await Future<void>.delayed(options.retryBackoff * (1 << (attempt - 1)));
+        attempt++;
       } catch (e) {
         _queryError = e;
         return;

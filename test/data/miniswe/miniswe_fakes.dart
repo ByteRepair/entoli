@@ -61,6 +61,48 @@ class FakeLlmClient implements LlmClient {
   void close() => closed = true;
 }
 
+/// Wraps a [FakeLlmClient] to track how many [stream] calls were in flight at
+/// once, for asserting the [RateLimitGate]'s concurrency cap. Each call
+/// increments a counter on entry and decrements it on stream close (normal,
+/// thrown, or cancelled), recording the high-water mark in [maxConcurrent].
+class ConcurrentFakeLlmClient implements LlmClient {
+  ConcurrentFakeLlmClient(this.inner);
+
+  final FakeLlmClient inner;
+
+  int _inFlight = 0;
+  int maxConcurrent = 0;
+
+  @override
+  Stream<LlmChunk> stream(
+    List<LlmMessage> messages, {
+    required String model,
+    List<LlmTool> tools = const [],
+    double? temperature,
+    String? reasoningEffort,
+  }) async* {
+    _inFlight++;
+    if (_inFlight > maxConcurrent) maxConcurrent = _inFlight;
+    try {
+      yield* inner.stream(
+        messages,
+        model: model,
+        tools: tools,
+        temperature: temperature,
+        reasoningEffort: reasoningEffort,
+      );
+    } finally {
+      _inFlight--;
+    }
+  }
+
+  @override
+  Future<List<String>> listModels() => inner.listModels();
+
+  @override
+  void close() => inner.close();
+}
+
 /// A shell that answers from a table instead of running anything.
 class FakeShell extends Shell {
   FakeShell(this.respond, {this.canRunCommands = true});

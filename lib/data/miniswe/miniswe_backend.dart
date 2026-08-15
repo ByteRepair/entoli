@@ -13,8 +13,10 @@ import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/web_search.dart";
 import "duckduckgo_search.dart";
+import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/llm_registry.dart";
+import "llm/rate_limit_gate.dart";
 import "miniswe_agent.dart";
 import "permission_classifier.dart";
 import "sub_agent.dart";
@@ -143,8 +145,16 @@ class MinisweBackend implements AgentBackend {
       config.ensureProjectDirs(project: project);
       final workspace = config.workspaceDir(chatId, project: project).path;
       final projectWorkspace = config.projectWorkspaceDir(project: project).path;
+      // One gate per turn, shared by the parent and every sub-agent it spawns:
+      // bounds in-flight stream() calls and coordinates 429 backoff so a
+      // fan-out doesn't each-retry-into the same rate limit.
+      final rateLimitGate = RateLimitGate(
+        maxConcurrent: options.maxConcurrentLlmRequests,
+        maxRetryBudget: options.rateLimitRetryBudget,
+      );
+      final gatedClient = GatedLlmClient(target.client, rateLimitGate);
       final subAgentRunner = SubAgentRunner(
-        client: target.client,
+        client: gatedClient,
         shell: shell,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
@@ -152,11 +162,12 @@ class MinisweBackend implements AgentBackend {
         library: library,
         options: options,
         webSearch: webSearch,
+        rateLimitGate: rateLimitGate,
       );
       final classifier = _resolveClassifier(classifierProvider, classifierModel);
       final agent = MinisweAgent(
         session: _sessions.putIfAbsent(chatId, MinisweSession.new),
-        client: target.client,
+        client: gatedClient,
         shell: shell,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
@@ -169,6 +180,7 @@ class MinisweBackend implements AgentBackend {
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
         profile: profile,
+        rateLimitGate: rateLimitGate,
       );
       _running[chatId] = agent;
 
