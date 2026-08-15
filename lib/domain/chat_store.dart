@@ -6,7 +6,7 @@ import "../domain/models.dart";
 /// Persistent on-disk store for chats. Implements `state.json` + `conv.json`
 /// layout under the data directory.
 abstract class ChatStore {
-  Future<List<ChatSummary>> list();
+  Future<List<ChatState>> list();
 
   Future<Chat> load(String id);
 

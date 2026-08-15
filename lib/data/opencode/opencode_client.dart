@@ -129,7 +129,6 @@ class OpencodeClient {
   // --- SSE event stream ---
 
   /// Connects to `/event` and yields parsed events until the stream closes.
-  /// Opens `/event` and completes once the server has accepted the stream.
   /// Callers must await this before prompting: opencode never replays events,
   /// so anything emitted before the stream is attached is lost for good.
   Future<Stream<OcEvent>> connectEvents() async {

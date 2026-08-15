@@ -91,22 +91,17 @@ abstract class AgentBackend {
   /// app exits; without it spawned servers outlive it.
   Future<void> shutdown();
 
-  /// Abort the running turn.
   Future<void> abort(String chatId);
 
-  /// Pending tool approvals for a chat.
   Future<List<ToolApproval>> pendingApprovals(String chatId);
 
-  /// Respond to a tool approval.
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response);
 
   /// Release resources for a chat (keeps on-disk data).
   Future<void> disposeChat(String chatId);
 
 
-  /// Every model this backend can reach.
   Future<List<ModelOption>> models();
 
-  /// Kind of this backend.
   BackendKind get kind;
 }

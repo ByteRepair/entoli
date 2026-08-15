@@ -14,10 +14,6 @@ _ChatState _$ChatStateFromJson(Map<String, dynamic> json) => _ChatState(
   backend: $enumDecode(_$BackendKindEnumMap, json['backend']),
   model: json['model'] as String?,
   provider: json['provider'] as String?,
-  backendSessionId: json['backendSessionId'] as String?,
-  tags:
-      (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-      const [],
 );
 
 Map<String, dynamic> _$ChatStateToJson(_ChatState instance) =>
@@ -29,8 +25,6 @@ Map<String, dynamic> _$ChatStateToJson(_ChatState instance) =>
       'backend': _$BackendKindEnumMap[instance.backend]!,
       'model': instance.model,
       'provider': instance.provider,
-      'backendSessionId': instance.backendSessionId,
-      'tags': instance.tags,
     };
 
 const _$BackendKindEnumMap = {
@@ -51,25 +45,6 @@ Map<String, dynamic> _$ChatToJson(_Chat instance) => <String, dynamic>{
   'state': instance.state,
   'messages': instance.messages,
 };
-
-_ChatSummary _$ChatSummaryFromJson(Map<String, dynamic> json) => _ChatSummary(
-  id: json['id'] as String,
-  title: json['title'] as String,
-  createdAt: DateTime.parse(json['createdAt'] as String),
-  updatedAt: DateTime.parse(json['updatedAt'] as String),
-  backend: $enumDecode(_$BackendKindEnumMap, json['backend']),
-  model: json['model'] as String?,
-);
-
-Map<String, dynamic> _$ChatSummaryToJson(_ChatSummary instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'title': instance.title,
-      'createdAt': instance.createdAt.toIso8601String(),
-      'updatedAt': instance.updatedAt.toIso8601String(),
-      'backend': _$BackendKindEnumMap[instance.backend]!,
-      'model': instance.model,
-    };
 
 _Message _$MessageFromJson(Map<String, dynamic> json) => _Message(
   id: json['id'] as String,

@@ -10,7 +10,6 @@ abstract class OpencodeTransport {
   /// Returns the base URL of the server.
   Future<Uri> ensureServer(String chatId, String workspacePath);
 
-  /// Create a new session. Returns the session ID.
   Future<String> createSession(String chatId, {String? title});
 
   /// Send a prompt asynchronously (fire-and-forget). Events arrive via
@@ -18,10 +17,8 @@ abstract class OpencodeTransport {
   Future<void> promptAsync(String chatId, String sessionId,
       {required String text, String? model, String? provider});
 
-  /// Abort the running turn for a session.
   Future<void> abort(String chatId, String sessionId);
 
-  /// Delete a session.
   Future<void> deleteSession(String chatId, String sessionId);
 
   /// Add a message to the session without triggering a reply. Used to seed
@@ -35,12 +32,9 @@ abstract class OpencodeTransport {
   /// stream is attached, so callers can prompt without racing the events.
   Future<Stream<OcEvent>> subscribe(String chatId);
 
-  /// List available providers/models.
   Future<List<Map<String, dynamic>>> providers(String chatId);
 
-  /// Stop the server for [chatId] and release resources.
   Future<void> dispose(String chatId);
 
-  /// Stop every server this transport started.
   Future<void> disposeAll();
 }
