@@ -19,7 +19,9 @@ android {
         applicationId = "io.github.yiannis128.agent_chat"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // 26, not flutter.minSdkVersion (24): adaptive icons start here, and
+        // below it every icon needs a second set of rasters.
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

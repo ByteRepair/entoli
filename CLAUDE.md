@@ -437,9 +437,17 @@ Two icons, `AppIcon.prompt` (the default) and `AppIcon.cookie`. Each exists
 several times over, because each platform wants its own form and they are
 checked in rather than built: `assets/icons/*.svg` is what the app draws,
 `drawable/ic_<name>_{foreground,monochrome}` over the shared
-`ic_icon_background` are the Android adaptive layers, `mipmap-*/ic_<name>.png`
-is the pre-API-26 raster, and `web/icons/` is the PWA set. They carry the same
-path data, so editing one means editing all of them — there is no generator.
+`ic_icon_background` are the Android adaptive layers named by
+`mipmap-anydpi-v26/ic_<name>.xml`, and `web/icons/` is the PWA set. Android
+reads no SVG, so its copies are the same path data as a vector drawable, and
+editing one means editing all of them — there is no generator.
+
+`minSdk` is pinned to 26 rather than following `flutter.minSdkVersion`, which
+is 24. Adaptive icons start at 26; below it every icon needs a full set of
+rasters at five densities as well, which was ten files existing only for
+Android 7.x. Pinning it is also what let the pre-Lollipop
+`drawable/launch_background.xml` go — the `-v21` one it shadowed reads the
+theme background instead of hardcoding white, so the splash follows dark mode.
 
 The monochrome layer is not decoration: a themed icon is the silhouette tinted
 from the wallpaper, so an icon whose meaning lives in its colour has none there.
