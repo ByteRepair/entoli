@@ -13,6 +13,12 @@ abstract class ChatState with _$ChatState {
     required String title,
     required DateTime createdAt,
     required DateTime updatedAt,
+
+    /// Which project's `chats/` this lives in. Null is the default project —
+    /// the data directory itself, where every chat was before there were any.
+    /// The directory a chat is found in wins over this: a chat moved by hand
+    /// is in the project it was moved to.
+    String? project,
   }) = _ChatState;
 
   factory ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);

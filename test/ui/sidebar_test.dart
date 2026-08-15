@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 
@@ -120,5 +121,114 @@ void main() {
 
     expect(app.container.read(selectedChatIdProvider), isNotNull);
     expect(find.byType(Sidebar), findsOneWidget);
+  });
+
+  group("projects", () {
+    /// Open the switcher at the top of the sidebar, whatever it currently says.
+    Future<void> openProjectMenu(WidgetTester tester) async {
+      await tester.tap(find.text(projectLabel(app.container.read(selectedProjectProvider))));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> switchTo(WidgetTester tester, String label) async {
+      await openProjectMenu(tester);
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("the sidebar opens in the default project", (tester) async {
+      await pumpBeside(tester);
+
+      expect(app.container.read(selectedProjectProvider), isNull);
+      expect(find.text("Default"), findsOneWidget);
+    });
+
+    testWidgets("only the chats of the project shown are listed", (tester) async {
+      await app.seedChat(title: "at home");
+      await app.seedChat(title: "at work", project: "work");
+      await pumpBeside(tester);
+
+      expect(find.text("at home"), findsOneWidget);
+      expect(find.text("at work"), findsNothing);
+
+      await switchTo(tester, "work");
+
+      expect(find.text("at work"), findsOneWidget);
+      expect(find.text("at home"), findsNothing);
+    });
+
+    // A chat of the project just left is not in the list any more.
+    testWidgets("switching projects deselects the chat that was open", (tester) async {
+      await app.seedChat(title: "at home");
+      await app.repo.createProject("work");
+      await pumpBeside(tester);
+
+      await tester.tap(find.text("at home"));
+      await tester.pumpAndSettle();
+      expect(app.container.read(selectedChatIdProvider), isNotNull);
+
+      await switchTo(tester, "work");
+
+      expect(app.container.read(selectedChatIdProvider), isNull);
+    });
+
+    testWidgets("a new chat is created in the project being shown", (tester) async {
+      await app.repo.createProject("work");
+      await pumpBeside(tester);
+      await switchTo(tester, "work");
+
+      await tester.tap(find.byTooltip("New chat"));
+      await tester.pumpAndSettle();
+
+      final id = app.container.read(selectedChatIdProvider)!;
+      expect(await app.repo.projectOf(id), "work");
+    });
+
+    testWidgets("creating one names it, lays it down and switches to it", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text("New project…"));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), "My Side Project");
+      await tester.tap(find.text("Create"));
+      await tester.pumpAndSettle();
+
+      expect(app.container.read(selectedProjectProvider), "My-Side-Project");
+      expect(app.config.projectWorkspaceDir(project: "My-Side-Project").existsSync(), isTrue);
+    });
+
+    testWidgets("deleting one takes its chats and goes back to the default", (tester) async {
+      await app.seedChat(title: "at work", project: "work");
+      await pumpBeside(tester);
+      await switchTo(tester, "work");
+
+      await openProjectMenu(tester);
+      await tester.tap(find.text("Delete project…"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Delete"));
+      await tester.pumpAndSettle();
+
+      expect(app.container.read(selectedProjectProvider), isNull);
+      expect(await app.repo.listChats(), isEmpty);
+      expect(app.config.projectDir(project: "work").existsSync(), isFalse);
+    });
+
+    testWidgets("moving a chat follows it into the project it went to", (tester) async {
+      final chat = await app.seedChat(title: "at home");
+      await app.repo.createProject("work");
+      await pumpBeside(tester);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Move to project…"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("work"));
+      await tester.pumpAndSettle();
+
+      expect(await app.repo.projectOf(chat.state.id), "work");
+      expect(app.container.read(selectedProjectProvider), "work");
+      expect(find.text("at home"), findsOneWidget);
+    });
   });
 }

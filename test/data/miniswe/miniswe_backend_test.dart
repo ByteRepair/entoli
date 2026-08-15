@@ -124,6 +124,34 @@ void main() {
       expect(config.workspaceDir(chatId).existsSync(), isTrue);
       expect(client.sent.first.first.text, contains(config.workspaceDir(chatId).path));
     });
+
+    test("the model is told about the project workspace it shares", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "hi");
+
+      expect(config.projectWorkspaceDir().existsSync(), isTrue);
+      expect(client.sent.first.first.text, contains(config.projectWorkspaceDir().path));
+    });
+
+    test("a chat in a project works in that project's directories", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await backend
+          .sendPrompt(chatId, "hi",
+              model: "fake-model",
+              provider: "fake",
+              project: "work",
+              approveCommands: false)
+          .toList();
+
+      final system = client.sent.first.first.text;
+      expect(system, contains(config.workspaceDir(chatId, project: "work").path));
+      expect(system, contains(config.projectWorkspaceDir(project: "work").path));
+      expect(config.projectWorkspaceDir(project: "work").existsSync(), isTrue);
+    });
   });
 
   group("commands and agents", () {

@@ -19,13 +19,58 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
 ### On-disk layout
 
 `<dataDir>/chats/<chat-id>/` with `state.json`, `conv.json`, `meta.json`,
-`resources/`, `workspace/`. `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md`
-are the user's own prompt files, beside `settings.json` — which holds the
-app-level model default, the title model, `approveCommands`, `environment`, and
-`llmProviders`.
+`resources/`, `workspace/`, and `<dataDir>/workspace/` beside them.
+`<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
+`<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
+files, beside `settings.json` — which holds the app-level model default, the
+title model, `approveCommands`, `environment`, and `llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android). The web build compiles and the UI runs, but
 storage is `dart:io`-backed, so a browser has no chats of its own yet.
+
+### Projects
+
+A project is a directory holding its own chats and one workspace they share.
+The default project is `null`, and it **is** the data directory — so every chat
+written before there were projects is already in it, and nothing had to be
+moved. `AppConfig`'s path helpers all take `{String? project}` for that reason:
+passing nothing means the default project and the layout that was there before.
+
+Two workspaces reach a turn, and they answer different questions. The chat's own
+(`chats/<id>/workspace/`) is the working directory of every command and is not
+shared with anything. The project's (`<project>/workspace/`) is named in the
+system prompt as where work another conversation should find goes. The agent
+writes to it by path; it is deliberately not the cwd, because a turn's scratch
+files would then be everyone's.
+
+`ChatStore` is addressed by chat id alone, so `LocalChatStore` is what knows
+where a chat is: `_locate` answers from a cache that `list` fills, and falls
+back to looking for the id under each project. It returns a record rather than a
+name because "in the default project" and "nowhere yet" are both `null` and mean
+opposite things to a save. Where a chat already is wins over what its
+`ChatState.project` says — a UI copy held from before a move must not write the
+chat back where it used to be — and the field only decides where a chat that is
+nowhere yet goes. Reading is the same rule: `list` and `load` stamp each chat
+with the directory it came out of, so one moved by hand is in the project it was
+moved to.
+
+`ChatRepository.sendPrompt` resolves the project the way it resolves the model,
+and it travels to the backend as a `sendPrompt` parameter. A draft answers for
+itself: it is not on disk to be found, and its first turn can be sent before
+anything has written it.
+
+The sidebar shows one project at a time. `chatListProvider` holds every chat, in
+every project — the store reads them all in one pass — and the sidebar filters
+on `selectedProjectProvider`, which is also where a new chat goes. Switching
+projects clears the selected chat, since it is no longer in the list.
+
+A project name is a directory name, so `projectNameFrom` makes what was typed
+safe to be one — the model writes paths into it — and `AppConfig.projectDir`
+refuses anything that is not one segment under `projects/`, since every
+project-scoped path is built through it. `isProjectName` is the same rule read
+the other way: a directory that could not have been created as a project is not
+listed as one, so a stray `.git` beside them is not a project with no chats in
+it.
 
 ### Starting a chat, and naming it
 
@@ -338,8 +383,8 @@ directly in `provider_model_selector_test.dart` rather than through both pages),
 the
 `Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
-null resolves to), the `promptForText` / `promptForPair` / `confirm` dialogs,
-and `AttachmentChip` /
+null resolves to), the `promptForText` / `promptForPair` / `confirm` /
+`pickProject` dialogs, and `AttachmentChip` /
 `AttachmentStrip`. Tests share `test/harness.dart` (`TestApp`, `tempConfig`,
 `pumpUntil`, `seedChat` for a chat that is actually listed, the dropdown
 finders) and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents` and `hold`

@@ -90,6 +90,7 @@ class FakeBackend implements AgentBackend {
         String text,
         String? model,
         String? provider,
+        String? project,
         List<Attachment> attachments,
         bool approveCommands
       })> prompts = [];
@@ -106,11 +107,13 @@ class FakeBackend implements AgentBackend {
       {List<Attachment> attachments = const [],
       String? model,
       String? provider,
+      String? project,
       bool approveCommands = true}) async* {
     prompts.add((
       text: text,
       model: model,
       provider: provider,
+      project: project,
       attachments: attachments,
       approveCommands: approveCommands,
     ));
@@ -152,8 +155,10 @@ class FakeBackend implements AgentBackend {
     answered.add((requestId: requestId, answers: answers));
   }
 
+  final List<String> disposed = [];
+
   @override
-  Future<void> disposeChat(String chatId) async {}
+  Future<void> disposeChat(String chatId) async => disposed.add(chatId);
 
   List<ModelOption> modelList = testModels;
 

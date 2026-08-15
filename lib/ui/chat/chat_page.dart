@@ -85,7 +85,21 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(chat.state.title.orUntitled),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(chat.state.title.orUntitled),
+                    // Only where there is something to say: every chat is in a
+                    // project, and naming the default one on every chat is noise.
+                    if (chat.state.project != null)
+                      Text(
+                        chat.state.project!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

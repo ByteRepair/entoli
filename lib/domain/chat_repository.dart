@@ -37,13 +37,34 @@ class ChatRepository {
   Future<List<ChatState>> listChats() => _store.list();
 
   /// The model is deliberately not pinned here: a chat with nothing in its
-  /// `meta.json` follows the app default wherever it moves.
-  Future<Chat> createChat({String? title}) async {
+  /// `meta.json` follows the app default wherever it moves. [project] is,
+  /// because it is where the chat's files go — null is the default project.
+  Future<Chat> createChat({String? title, String? project}) async {
     final chat = await _backend.createChat(title: title);
-    _draft = chat;
+    _draft = chat.copyWith(state: chat.state.copyWith(project: project));
     _draftMeta = null;
-    return chat;
+    return _draft!;
   }
+
+  Future<List<String>> listProjects() => _store.listProjects();
+
+  Future<void> createProject(String name) => _store.createProject(name);
+
+  /// The chats go with it, so their sessions are dropped the way deleting one
+  /// at a time would drop them. A draft belonging to it goes too: it is not in
+  /// the list, and the project it was to be written to is about to be gone.
+  Future<void> deleteProject(String name) async {
+    for (final chat in await listChats()) {
+      if (chat.project == name) await _dropSession(chat.id);
+    }
+    if (_draft?.state.project == name) await _dropSession(_draft!.state.id);
+    await _store.deleteProject(name);
+  }
+
+  /// File a chat under another project. Its own workspace travels with it; the
+  /// shared one it can reach is the new project's from the next turn on.
+  Future<void> moveChat(String chatId, String? project) =>
+      _store.moveChat(chatId, project);
 
   Future<Chat> openChat(String id) async => _isDraft(id) ? _draft! : await _store.load(id);
 
@@ -102,8 +123,14 @@ class ChatRepository {
         attachments: attachments,
         model: model,
         provider: provider,
+        project: await projectOf(chatId),
         approveCommands: meta.approveCommands ?? _settings().approveCommands);
   }
+
+  /// Which project a chat's files are in. A draft is not on disk to be found,
+  /// so it answers for itself.
+  Future<String?> projectOf(String chatId) async =>
+      _isDraft(chatId) ? _draft!.state.project : await _store.projectOf(chatId);
 
   /// Save what the user attached and describe it as the parts that outlive the
   /// turn. One already on disk stays where it is, so resending a message does
@@ -152,9 +179,15 @@ class ChatRepository {
   Duration get stallTimeout => _backend.stallTimeout;
 
   Future<void> deleteChat(String id) async {
+    await _dropSession(id);
+    await _store.delete(id);
+  }
+
+  /// Everything a chat holds outside the store: the draft it may still be, and
+  /// the live session the backend is keeping for it.
+  Future<void> _dropSession(String id) async {
     _forgetDraft(id);
     await _backend.disposeChat(id);
-    await _store.delete(id);
   }
 
   Future<void> deleteAllChats() async {

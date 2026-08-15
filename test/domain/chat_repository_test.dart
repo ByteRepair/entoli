@@ -36,7 +36,7 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_repo_test_");
     config = AppConfig.forDirectory(tmp);
-    Directory(config.chatsDir.path).createSync(recursive: true);
+    config.ensureProjectDirs();
     backend = FakeBackend();
   });
 
@@ -110,6 +110,62 @@ void main() {
 
       expect(await repo.listChats(), isEmpty);
       expect((await repo.openChat(chat.state.id)).state.title, "Named early");
+    });
+  });
+
+  group("projects", () {
+    test("a chat created in one is written under it when it is saved", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "work");
+
+      expect(config.chatDir(chat.state.id, project: "work").existsSync(), isFalse);
+      await repo.save(chat);
+
+      expect(config.stateFile(chat.state.id, project: "work").existsSync(), isTrue);
+      expect((await repo.listChats()).single.project, "work");
+    });
+
+    test("the turn is told which project's files it works in", () async {
+      final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
+      final chat = await repo.createChat(project: "work");
+      await repo.save(chat);
+
+      await repo.sendPrompt(chat.state.id, "hi").toList();
+
+      expect(backend.prompts.single.project, "work");
+    });
+
+    // A draft is not on disk to be looked up, and its first turn is sent
+    // before anything else has written it.
+    test("a draft in a project says so before it is saved", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "work");
+
+      expect(await repo.projectOf(chat.state.id), "work");
+    });
+
+    test("deleting a project drops the sessions of the chats in it", () async {
+      final repo = repoWith(AppSettings());
+      final kept = await repo.createChat();
+      await repo.save(kept);
+      final gone = await repo.createChat(project: "work");
+      await repo.save(gone);
+
+      await repo.deleteProject("work");
+
+      expect((await repo.listChats()).single.id, kept.state.id);
+      expect(backend.disposed, [gone.state.id]);
+    });
+
+    test("a moved chat's next turn runs in its new project", () async {
+      final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
+      final chat = await repo.createChat();
+      await repo.save(chat);
+
+      await repo.moveChat(chat.state.id, "work");
+      await repo.sendPrompt(chat.state.id, "hi").toList();
+
+      expect(backend.prompts.single.project, "work");
     });
   });
 

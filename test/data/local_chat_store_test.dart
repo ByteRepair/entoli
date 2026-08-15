@@ -20,11 +20,12 @@ void main() {
     store = LocalChatStore(config);
   });
 
-  ChatState makeState(String id) => ChatState(
+  ChatState makeState(String id, {String? project}) => ChatState(
         id: id,
         title: "Test chat $id",
         createdAt: DateTime.utc(2026, 1, 1),
         updatedAt: DateTime.utc(2026, 1, 2),
+        project: project,
       );
 
   test("save writes state.json and conv.json", () async {
@@ -107,7 +108,7 @@ void main() {
   });
 
   test("list skips dirs without state.json", () async {
-    Directory(p.join(config.chatsDir.path, "junk")).createSync();
+    Directory(p.join(config.chatsDir().path, "junk")).createSync();
     await store.save(Chat(state: makeState("real"), messages: const []));
 
     final summaries = await store.list();
@@ -162,6 +163,126 @@ void main() {
     await store.save(Chat(state: makeState("c5c"), messages: const []));
 
     expect(await store.readResource("c5c", "missing.png"), isNull);
+  });
+
+  group("projects", () {
+    test("a chat in one is written under it, not at the top level", () async {
+      await store.save(Chat(state: makeState("p1", project: "work")));
+
+      expect(config.stateFile("p1", project: "work").existsSync(), isTrue);
+      expect(config.workspaceDir("p1", project: "work").existsSync(), isTrue);
+      expect(config.stateFile("p1").existsSync(), isFalse);
+    });
+
+    test("creating one lays down its chats and its shared workspace", () async {
+      await store.createProject("work");
+
+      expect(config.chatsDir(project: "work").existsSync(), isTrue);
+      expect(config.projectWorkspaceDir(project: "work").existsSync(), isTrue);
+      expect(await store.listProjects(), ["work"]);
+    });
+
+    test("list returns every project's chats, each saying which it is in", () async {
+      await store.save(Chat(state: makeState("here")));
+      await store.save(Chat(state: makeState("there", project: "work")));
+
+      final all = await store.list();
+      expect(all.map((c) => c.id), containsAll(["here", "there"]));
+      expect(all.firstWhere((c) => c.id == "here").project, isNull);
+      expect(all.firstWhere((c) => c.id == "there").project, "work");
+    });
+
+    // A chat is addressed by its id alone, so a store that has not listed
+    // anything yet still has to find one that is not in the default project.
+    test("a chat in one is found by id by a store that has never listed", () async {
+      await store.save(Chat(state: makeState("p2", project: "work")));
+
+      final fresh = LocalChatStore(config);
+      expect((await fresh.load("p2")).state.project, "work");
+      expect(await fresh.projectOf("p2"), "work");
+    });
+
+    test("deleting one takes its chats and its workspace with it", () async {
+      await store.save(Chat(state: makeState("p3", project: "work")));
+
+      await store.deleteProject("work");
+
+      expect(config.projectDir(project: "work").existsSync(), isFalse);
+      expect(await store.list(), isEmpty);
+      expect(await store.listProjects(), isEmpty);
+    });
+
+    test("moving a chat takes its files and its own workspace", () async {
+      await store.save(Chat(
+        state: makeState("p4"),
+        messages: [
+          Message(
+            id: "m1",
+            role: MessageRole.user,
+            createdAt: DateTime.utc(2026, 1, 1),
+            parts: [const MessagePart.text(text: "hi")],
+          ),
+        ],
+      ));
+      final resource = await store.saveResource("p4", "note.txt", Uint8List.fromList([7]));
+
+      await store.moveChat("p4", "work");
+
+      expect(config.chatDir("p4").existsSync(), isFalse);
+      expect(config.workspaceDir("p4", project: "work").existsSync(), isTrue);
+      final moved = await store.load("p4");
+      expect(moved.state.project, "work");
+      expect(moved.messages, hasLength(1));
+      expect(await store.readResource("p4", resource), [7]);
+    });
+
+    test("a moved chat says so in its state.json", () async {
+      await store.save(Chat(state: makeState("p5")));
+      await store.moveChat("p5", "work");
+
+      final json = jsonDecode(config.stateFile("p5", project: "work").readAsStringSync())
+          as Map<String, dynamic>;
+      expect(json["project"], "work");
+    });
+
+    // The UI can be holding a copy from before the move; saving it must not
+    // write the chat back where it used to be.
+    test("saving a stale copy does not put the chat back", () async {
+      await store.save(Chat(state: makeState("p6")));
+      await store.moveChat("p6", "work");
+
+      await store.save(Chat(state: makeState("p6"), messages: const []));
+
+      expect(config.chatDir("p6").existsSync(), isFalse);
+      expect((await store.load("p6")).state.project, "work");
+    });
+
+    // Deleting one deletes a directory, so a name that climbs out of
+    // `projects/` would delete something that is not a project. The check is
+    // `AppConfig.projectDir`'s, which every project path goes through.
+    test("a name that is not one directory under projects/ is refused", () {
+      expect(() => store.createProject("../elsewhere"), throwsArgumentError);
+      expect(() => store.deleteProject(".."), throwsArgumentError);
+      expect(() => store.moveChat("p8", "a/b"), throwsArgumentError);
+    });
+
+    test("a stray directory under projects/ is not offered as one", () async {
+      Directory(p.join(config.projectsDir.path, ".git")).createSync(recursive: true);
+      await store.createProject("work");
+
+      expect(await store.listProjects(), ["work"]);
+      expect(await store.list(), isEmpty);
+    });
+
+    // The directory a chat is in is what it is in, whatever the file says.
+    test("a chat moved by hand is listed under where it ended up", () async {
+      await store.save(Chat(state: makeState("p7")));
+      config.ensureProjectDirs(project: "work");
+      config.chatDir("p7").renameSync(config.chatDir("p7", project: "work").path);
+
+      final fresh = LocalChatStore(config);
+      expect((await fresh.list()).single.project, "work");
+    });
   });
 
   test("round-trips tool call and tool result parts", () async {

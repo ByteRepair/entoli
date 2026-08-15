@@ -82,6 +82,7 @@ class MinisweBackend implements AgentBackend {
     List<Attachment> attachments = const [],
     String? model,
     String? provider,
+    String? project,
     bool approveCommands = true,
   }) {
     final controller = StreamController<AgentEvent>();
@@ -91,6 +92,7 @@ class MinisweBackend implements AgentBackend {
     unawaited(_runTurn(chatId, text, controller,
         model: model,
         provider: provider,
+        project: project,
         attachments: attachments,
         approveCommands: approveCommands));
     return controller.stream;
@@ -102,6 +104,7 @@ class MinisweBackend implements AgentBackend {
     StreamController<AgentEvent> controller, {
     String? model,
     String? provider,
+    String? project,
     List<Attachment> attachments = const [],
     bool approveCommands = true,
   }) async {
@@ -116,12 +119,14 @@ class MinisweBackend implements AgentBackend {
         return;
       }
 
-      config.ensureChatDirs(chatId);
+      config.ensureChatDirs(chatId, project: project);
+      config.ensureProjectDirs(project: project);
       final agent = MinisweAgent(
         session: _sessions.putIfAbsent(chatId, MinisweSession.new),
         client: target.client,
         shell: shell,
-        workspace: config.workspaceDir(chatId).path,
+        workspace: config.workspaceDir(chatId, project: project).path,
+        projectWorkspace: config.projectWorkspaceDir(project: project).path,
         model: target.modelId,
         options: options,
         requireApproval: approveCommands,

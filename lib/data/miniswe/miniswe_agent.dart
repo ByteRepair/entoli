@@ -80,6 +80,7 @@ class MinisweAgent {
     required this.client,
     required this.shell,
     required this.workspace,
+    required this.projectWorkspace,
     required this.model,
     required this.approve,
     required this.answer,
@@ -92,7 +93,14 @@ class MinisweAgent {
   final MinisweSession session;
   final LlmClient client;
   final Shell shell;
+
+  /// The chat's own directory, and where every command runs.
   final String workspace;
+
+  /// The one every chat in the project shares. Not the working directory:
+  /// what a turn puts there is what it means other chats to find.
+  final String projectWorkspace;
+
   final String model;
   final MinisweOptions options;
   final double? temperature;
@@ -194,6 +202,7 @@ class MinisweAgent {
       role: LlmRole.system,
       text: systemPrompt(
         workspace: workspace,
+        projectWorkspace: projectWorkspace,
         platform: shell.platformDescription,
         agentPrompt: agentPrompt,
         canRunCommands: shell.canRunCommands,

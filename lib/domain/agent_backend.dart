@@ -80,11 +80,13 @@ abstract class AgentBackend {
   /// on.
   Future<String?> ask(String prompt, {required String model, required String provider});
 
-  /// Send a user prompt; stream events until the turn completes.
+  /// Send a user prompt; stream events until the turn completes. [project] is
+  /// which project's files the turn works in — null is the default one.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments,
       String? model,
       String? provider,
+      String? project,
       bool approveCommands});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
