@@ -6,7 +6,7 @@ import "package:path_provider/path_provider.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
 
-/// Resolves platform-specific paths for the agent-chat data directory and
+/// Resolves platform-specific paths for the Entoli data directory and
 /// provides helpers for constructing chat paths.
 ///
 /// Layout:

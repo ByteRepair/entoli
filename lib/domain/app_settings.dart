@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../core/config.dart";
+import "app_icon.dart";
 import "llm_provider.dart";
 import "permission.dart";
 import "profile.dart";
@@ -18,6 +19,7 @@ class AppSettings {
     this.approveMode = ApproveMode.ask,
     this.llmProviders = const [],
     this.profile,
+    this.appIcon = AppIcon.prompt,
   });
 
   String? defaultModelId;
@@ -51,6 +53,10 @@ class AppSettings {
   /// default; a project can override it. Null means nothing is injected.
   Profile? profile;
 
+  /// Which icon the app wears, in the app and on the Android home screen.
+  /// App-level only: an icon is the app's, not a chat's.
+  AppIcon appIcon;
+
   static AppSettings load(AppConfig config) {
     final file = config.settingsFile;
     if (!file.existsSync()) return AppSettings();
@@ -71,6 +77,7 @@ class AppSettings {
         approveMode: _approveMode(json),
         llmProviders: _providers(json["llmProviders"]),
         profile: Profile.fromJson(json["profile"]),
+        appIcon: AppIcon.fromName(json["appIcon"] as String?),
       );
     } catch (_) {
       return AppSettings();
@@ -116,6 +123,7 @@ class AppSettings {
         approveMode: approveMode,
         llmProviders: llmProviders,
         profile: profile,
+        appIcon: appIcon,
       );
 
   Future<void> save(AppConfig config) async {
@@ -131,6 +139,7 @@ class AppSettings {
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
+      "appIcon": appIcon.name,
     }));
   }
 }

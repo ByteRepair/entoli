@@ -1,7 +1,22 @@
-# agent-chat
+# Entoli
 
 Flutter (Linux/Web/Android) ChatGPT-style UI over a coding agent. Client-side:
 it calls the user's own LLM endpoints and runs commands on their machine.
+
+The app is named Entoli; most of the identifiers are not, and deliberately.
+The data directory is still `~/.config/agent-chat`, the env var is still
+`AGENT_CHAT_CONFIG`, and the Dart package is still `agent_chat`. Renaming any
+of those would leave the chats already written where nothing reads them, for a
+string nobody sees.
+
+The one identifier that did move is the application id, from the placeholder
+`com.agentchat.agent_chat` to `io.github.yiannis128.agent_chat` — the first was
+a reverse-DNS name for a domain nobody here owns. Android and GTK both refuse a
+hyphen in an id, so the last segment is `agent_chat` rather than `agent-chat`.
+It is the Android `applicationId` and `namespace` and the Linux
+`APPLICATION_ID`, all one string. Changing it makes this a different app to
+Android, which is only free before a release; it is why the Kotlin package
+moved with it.
 
 ## Architecture
 
@@ -13,7 +28,7 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
   events into it as they arrive; `ChatRepository` resolves which model runs and
   owns rewinding. Context is re-injected only when a turn is resent — otherwise
   the agent's own session carries it.
-- The agent runs **on top of** agent-chat. Commands and agents are agent-chat's,
+- The agent runs **on top of** Entoli. Commands and agents are Entoli's,
   expanded before the agent sees them.
 
 ### On-disk layout
@@ -23,7 +38,7 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
 `<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
-title model, the classifier model, `approveMode`, `environment`, and
+title model, the classifier model, `approveMode`, `environment`, `appIcon`, and
 `llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android). The web build compiles and the UI runs, but
@@ -416,6 +431,54 @@ small enough to write on the UI thread, an attachment is not. A widget test's
 clock is fake and never advances real I/O, which is what `pumpUntil` in
 `test/harness.dart` is for.
 
+### The app icon
+
+Two icons, `AppIcon.prompt` (the default) and `AppIcon.cookie`. Each exists
+several times over, because each platform wants its own form and they are
+checked in rather than built: `assets/icons/*.svg` is what the app draws,
+`drawable/ic_<name>_{foreground,monochrome}` over the shared
+`ic_icon_background` are the Android adaptive layers, `mipmap-*/ic_<name>.png`
+is the pre-API-26 raster, and `web/icons/` is the PWA set. They carry the same
+path data, so editing one means editing all of them — there is no generator.
+
+The monochrome layer is not decoration: a themed icon is the silhouette tinted
+from the wallpaper, so an icon whose meaning lives in its colour has none there.
+The background is one file for both icons rather than one each, since both sit
+on the same flat indigo.
+
+`<application android:icon>` points at `@mipmap/ic_prompt`, the default icon's
+own resource, rather than a copy under a name of its own — the app-info icon
+then gets the adaptive form too, and there is one fewer image to keep in step.
+
+`appIcon` is app-level and has no per-chat override — an icon is the app's, not
+a conversation's.
+
+Changing it is two writes, and only one of them is the app's. `setAppIcon`
+saves the setting first and then tells the launcher, because the setting is what
+`AppMark` draws from: a launcher that refuses still leaves the app showing what
+was picked. Android is the only platform where the launcher can be told
+anything at all; everywhere else `LauncherIcons.available` is false, the
+settings page says the home screen will not follow, and the setting is in-app
+only.
+
+Android switches icons by having every icon be an `activity-alias` carrying the
+`LAUNCHER` filter and enabling exactly one. `MainActivity` therefore has no
+`LAUNCHER` filter of its own — with one it would appear on the home screen
+twice — and `MainActivity.kt` enables the wanted alias *before* disabling the
+others, because an instant with none enabled is one a launcher can read, and it
+drops the app off the home screen for good.
+
+The alias is written `.PromptIcon` in the manifest, which Gradle expands against
+the **namespace**, not the application id. They are the same string today, so
+`MainActivity.kt` derives the class name from its own package rather than from
+`packageName`: the two are free to diverge, and if they ever do, a launcher
+switch built on `packageName` would name a component that does not exist.
+
+Not behind a conditional import the way `Shell` is: a `MethodChannel` compiles
+everywhere and a platform with nothing answering it throws, which is the same
+no-op `available` being false gives. So the app still has exactly one
+conditional import.
+
 ### Setting overrides
 
 A chat's `meta.json` overrides the app default in `settings.json`. Each level
@@ -447,9 +510,9 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is three sections plus deleting everything: **New chats**
-(default model, title model), **Agent** (command approval mode, classifier
-model, providers), **Environment**.
+The settings page is four sections plus deleting everything: **New chats**
+(default model, title model), **Appearance** (app icon), **Agent** (command
+approval mode, classifier model, providers), **Environment**.
 
 ### Shared UI
 

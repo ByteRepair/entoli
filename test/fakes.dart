@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
 import "package:agent_chat/domain/models.dart";
@@ -44,6 +45,20 @@ Attachment testAttachment(
   List<int> bytes = const [104, 105],
 }) =>
     Attachment(filename: filename, mimeType: mimeType, bytes: Uint8List.fromList(bytes));
+
+/// The launcher, which a test has none of. Records what it was told so a test
+/// can assert the home screen was asked to change, not just the settings file.
+class FakeLauncherIcons implements LauncherIcons {
+  FakeLauncherIcons({this.available = true});
+
+  @override
+  final bool available;
+
+  final List<AppIcon> used = [];
+
+  @override
+  Future<void> use(AppIcon icon) async => used.add(icon);
+}
 
 /// Stands in for the platform's file chooser, which no test can drive.
 class FakeAttachmentPicker implements AttachmentPicker {

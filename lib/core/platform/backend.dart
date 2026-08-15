@@ -7,7 +7,7 @@ import "../config.dart";
 import "io/shell.dart" if (dart.library.js_interop) "web/shell.dart";
 
 /// The agent, wired to this platform's shell and to whatever the settings page
-/// last wrote. [library] is agent-chat's commands and agents, which the agent
+/// last wrote. [library] is Entoli's commands and agents, which the agent
 /// expands itself.
 ///
 /// Where the commands run is the only thing that varies by platform, which is
