@@ -2,7 +2,6 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
-import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
@@ -45,11 +44,8 @@ void main() {
     );
   }
 
-  /// The one command that ends a turn, so a test only has to script the steps
-  /// it cares about.
-  final finish = bashCall("echo $submitMarker", id: "done");
-  ShellResult submitted(String command) =>
-      command.contains(submitMarker) ? ok("$submitMarker\n") : ok("");
+  /// A reply with no tool calls ends the turn — the native termination signal.
+  final finish = saidOnly("done");
 
   group("the loop", () {
     test("runs the command the model asked for, in the workspace", () async {
@@ -57,9 +53,9 @@ void main() {
         [bashCall("ls -la")],
         [finish],
       ]);
-      await agentOver(client, respond: submitted).run("what is here?").toList();
+      await agentOver(client).run("what is here?").toList();
 
-      expect(shell.ran, ["ls -la", "echo $submitMarker"]);
+      expect(shell.ran, ["ls -la"]);
     });
 
     test("shows the model what the command produced", () async {
@@ -69,7 +65,7 @@ void main() {
       ]);
       await agentOver(client, respond: (c) {
         if (c.startsWith("cat")) return ShellResult(returnCode: 2, output: "no such file");
-        return submitted(c);
+        return ok("");
       }).run("read it").toList();
 
       final observation = client.sent[1].last;
@@ -83,7 +79,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client, respond: submitted).run("fix the bug").toList();
+      await agentOver(client).run("fix the bug").toList();
 
       expect(client.sent.first.first.role, LlmRole.system);
       expect(client.sent.first.first.text, contains("/tmp/workspace"));
@@ -96,7 +92,7 @@ void main() {
         [finish],
         [finish],
       ]);
-      final agent = agentOver(client, respond: submitted);
+      final agent = agentOver(client);
       await agent.run("first").toList();
       await agent.run("second").toList();
 
@@ -110,7 +106,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client, respond: submitted)
+      await agentOver(client)
           .run("look at it", agentPrompt: "You only read; you never edit.")
           .toList();
 
@@ -119,53 +115,36 @@ void main() {
   });
 
   group("finishing", () {
-    test("the marker on a successful command ends the turn", () async {
+    test("a reply with no tool calls ends the turn", () async {
       final client = FakeLlmClient([
         [finish],
       ]);
-      final events = await agentOver(client, respond: submitted).run("hi").toList();
+      final events = await agentOver(client).run("hi").toList();
 
       expect(events.last, isA<DoneEvent>());
       expect(events.whereType<ErrorEvent>(), isEmpty);
       expect(client.sent, hasLength(1));
     });
 
-    test("what follows the marker becomes the reply", () async {
+    test("the reply text is what the user sees", () async {
       final client = FakeLlmClient([
-        [bashCall("cat <<EOF\n$submitMarker\nIt was a typo.\nEOF")],
+        [saidOnly("The answer is 42.")],
       ]);
-      final events = await agentOver(client,
-              respond: (_) => ok("$submitMarker\nIt was a typo.\n"))
-          .run("what broke?")
-          .toList();
+      final events = await agentOver(client).run("what is the answer?").toList();
 
-      expect(events.whereType<TextDelta>().map((e) => e.text), ["It was a typo."]);
+      expect(events.whereType<TextDelta>().map((e) => e.text), ["The answer is 42."]);
+      expect(events.last, isA<DoneEvent>());
     });
 
-    test("the marker does not count when the command failed", () async {
+    test("a command followed by a text reply runs both", () async {
       final client = FakeLlmClient([
-        [bashCall("false")],
-        [finish],
+        [bashCall("ls")],
+        [saidOnly("Found three files.")],
       ]);
-      await agentOver(client, respond: (c) {
-        if (c == "false") return ShellResult(returnCode: 1, output: "$submitMarker\n");
-        return submitted(c);
-      }).run("hi").toList();
+      final events = await agentOver(client, respond: (c) => ok("a b c")).run("hi").toList();
 
-      expect(shell.ran, hasLength(2));
-    });
-
-    test("a command that only mentions the marker further down keeps going", () async {
-      final client = FakeLlmClient([
-        [bashCall("grep -r marker .")],
-        [finish],
-      ]);
-      await agentOver(client, respond: (c) {
-        if (c.startsWith("grep")) return ok("notes.md: $submitMarker\n");
-        return submitted(c);
-      }).run("hi").toList();
-
-      expect(shell.ran, hasLength(2));
+      expect(shell.ran, ["ls"]);
+      expect(events.whereType<TextDelta>().map((e) => e.text), ["Found three files."]);
     });
   });
 
@@ -175,10 +154,10 @@ void main() {
         [
           const LlmReasoningChunk("weighing it up"),
           const LlmTextChunk("Looking now."),
-          finish,
+          saidOnly("Looking now."),
         ],
       ]);
-      final events = await agentOver(client, respond: submitted).run("hi").toList();
+      final events = await agentOver(client).run("hi").toList();
 
       expect(events.whereType<ReasoningDelta>().map((e) => e.text), ["weighing it up"]);
       expect(events.whereType<TextDelta>().map((e) => e.text), ["Looking now."]);
@@ -194,12 +173,12 @@ void main() {
             message: LlmMessage(
               role: LlmRole.assistant,
               reasoning: "all of it at once",
-              toolCalls: finish.message.toolCalls,
+              text: "done",
             ),
           ),
         ],
       ]);
-      final events = await agentOver(client, respond: submitted).run("hi").toList();
+      final events = await agentOver(client).run("hi").toList();
 
       expect(events.whereType<ReasoningEnd>().single.text, "all of it at once");
     });
@@ -211,7 +190,7 @@ void main() {
       ]);
       final events = await agentOver(client, respond: (c) {
         if (c == "pwd") return ok("/tmp/workspace\n");
-        return submitted(c);
+        return ok("");
       }).run("hi").toList();
 
       final call = events.whereType<ToolCallEvent>().first.call;
@@ -223,35 +202,16 @@ void main() {
     });
   });
 
-  group("a model that will not call the tool", () {
-    test("is nudged and carries on", () async {
+  group("a model that answers in text", () {
+    test("ends the turn without calling any tool", () async {
       final client = FakeLlmClient([
         [saidOnly("Here is my answer.")],
-        [finish],
       ]);
-      final events = await agentOver(client, respond: submitted).run("hi").toList();
-
-      expect(events.whereType<ErrorEvent>(), isEmpty);
-      expect(client.sent[1].last.text, contains("must call the `bash` tool"));
-    });
-
-    test("gives up after three tries in a row", () async {
-      final client = FakeLlmClient(List.filled(4, [saidOnly("no tool")]));
       final events = await agentOver(client).run("hi").toList();
 
-      expect(client.sent, hasLength(3));
-      expect(events.whereType<ErrorEvent>().single.message, contains("stopped calling"));
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      expect(client.sent, hasLength(1));
       expect(events.last, isA<DoneEvent>());
-    });
-
-    test("a reply cut off by the token limit is blamed on the limit", () async {
-      final client = FakeLlmClient([
-        [saidOnly("I was going to run", finishReason: "length")],
-        [finish],
-      ]);
-      await agentOver(client, respond: submitted).run("hi").toList();
-
-      expect(client.sent[1].last.text, contains("output limit"));
     });
   });
 
@@ -262,7 +222,6 @@ void main() {
         [finish],
       ]);
       final events = await agentOver(client,
-              respond: submitted,
               approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
           .run("clean up")
@@ -278,7 +237,6 @@ void main() {
         [finish],
       ]);
       await agentOver(client,
-              respond: submitted,
               approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.deny, ApprovalResponse.allow])
           .run("clean up")
@@ -292,7 +250,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      final events = await agentOver(client, respond: submitted).run("hi").toList();
+      final events = await agentOver(client).run("hi").toList();
 
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     });
@@ -316,7 +274,7 @@ void main() {
         [askCall(oneQuestion)],
         [finish],
       ]);
-      final events = await agentOver(client, respond: submitted, answers: ["Postgres"])
+      final events = await agentOver(client, answers: ["Postgres"])
           .run("set up storage")
           .toList();
 
@@ -335,7 +293,7 @@ void main() {
         [askCall(oneQuestion)],
         [finish],
       ]);
-      final events = await agentOver(client, respond: submitted, answers: ["SQLite"])
+      final events = await agentOver(client, answers: ["SQLite"])
           .run("set up storage")
           .toList();
 
@@ -351,7 +309,7 @@ void main() {
         [askCall(oneQuestion)],
         [finish],
       ]);
-      await agentOver(client, respond: submitted).run("set up storage").toList();
+      await agentOver(client).run("set up storage").toList();
 
       final answer = client.sent[1].firstWhere((m) => m.toolCallId == "ask-1");
       expect(answer.text, contains("Which database?"));
@@ -363,7 +321,7 @@ void main() {
         [askCall({"question": "Which one?"})],
         [finish],
       ]);
-      final events = await agentOver(client, respond: submitted).run("hi").toList();
+      final events = await agentOver(client).run("hi").toList();
 
       expect(events.whereType<QuestionRequestEvent>(), isEmpty);
       expect(session.messages.firstWhere((m) => m.toolCallId == "ask-1").text,
@@ -399,7 +357,6 @@ void main() {
         [finish],
       ])..failures[0] = const LlmException("rate limited", statusCode: 429, retryable: true);
       final events = await agentOver(client,
-              respond: submitted,
               options: const MinisweOptions(retryBackoff: Duration.zero))
           .run("hi")
           .toList();
@@ -435,28 +392,6 @@ void main() {
   });
 
   group("every call is answered", () {
-    test("even the ones after the model submitted", () async {
-      final client = FakeLlmClient([
-        [
-          LlmCompletion(
-            message: LlmMessage(
-              role: LlmRole.assistant,
-              toolCalls: [
-                ...finish.message.toolCalls,
-                const LlmToolCall(
-                    id: "after", name: "bash", argumentsJson: '{"command": "ls"}'),
-              ],
-            ),
-          ),
-        ],
-      ]);
-      await agentOver(client, respond: submitted).run("hi").toList();
-
-      final answered = session.messages.where((m) => m.role == LlmRole.tool);
-      expect(answered.map((m) => m.toolCallId), ["done", "after"]);
-      expect(answered.last.text, contains("not executed"));
-    });
-
     test("a tool that does not exist", () async {
       final client = FakeLlmClient([
         [
@@ -469,9 +404,8 @@ void main() {
         ],
         [finish],
       ]);
-      final events = await agentOver(client, respond: submitted).run("hi").toList();
+      final events = await agentOver(client).run("hi").toList();
 
-      expect(shell.ran, ["echo $submitMarker"]);
       expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
           contains("no tool called 'python'"));
       expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
@@ -490,9 +424,8 @@ void main() {
         ],
         [finish],
       ]);
-      await agentOver(client, respond: submitted).run("hi").toList();
+      await agentOver(client).run("hi").toList();
 
-      expect(shell.ran, ["echo $submitMarker"]);
       expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
           contains("was missing"));
     });
@@ -504,7 +437,7 @@ void main() {
         [bashCall("npm install")],
         [finish],
       ]);
-      final agent = agentOver(client, respond: submitted);
+      final agent = agentOver(client);
       shell.hang.add("npm install");
       final events = <AgentEvent>[];
       final done = agent.run("hi").forEach(events.add);
@@ -527,7 +460,6 @@ void main() {
       await agentOver(client, canRunCommands: false).run("hi").toList();
 
       expect(client.sent.first.first.text, contains("no shell"));
-      expect(client.sent.first.first.text, isNot(contains(submitMarker)));
     });
 
     test("a reply with no command in it is the answer, not a mistake", () async {
@@ -536,8 +468,6 @@ void main() {
       ]);
       final events = await agentOver(client, canRunCommands: false).run("2+2?").toList();
 
-      // Submitting is itself a command, so demanding one would make finishing
-      // impossible; the turn ends when the model stops.
       expect(client.sent, hasLength(1));
       expect(events.whereType<ErrorEvent>(), isEmpty);
       expect(events.last, isA<DoneEvent>());
@@ -550,7 +480,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client, respond: submitted).run("and 3+3?").toList();
+      await agentOver(client).run("and 3+3?").toList();
 
       expect(client.sent.first.first.role, LlmRole.system);
       expect(client.sent.first.map((m) => m.text).join(), contains("what is 2+2?"));

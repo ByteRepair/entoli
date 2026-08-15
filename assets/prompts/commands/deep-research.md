@@ -67,6 +67,8 @@ Return strict JSON only:
 
 Wait for all 5. Collect all results.
 
+If fewer than 3 of 5 searchers return results, stop and report: "Infrastructure failure — too few searchers returned results. Try again." Do not proceed to fetch or synthesize.
+
 Log per angle: "<label>: N results"
 
 ## Phase 1b — URL dedup + fetch budget

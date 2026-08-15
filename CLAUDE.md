@@ -106,9 +106,15 @@ prefix, an explanation on the next line, thirty words instead of twenty.
 
 `MinisweAgent` is mini-swe-agent's control flow in Dart: render the system and
 task prompts, ask the model, run the tool calls it made, show it the results,
-repeat. It exits when a command's first line is
-`COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` and it succeeded — upstream's marker,
-kept verbatim so a model that has seen the original recognises it.
+repeat. It exits when the model replies with no tool calls — the reply text is
+the answer — or when it hits the step limit. This is the native API contract
+models are trained on (text-only message = finished answer, tool calls =
+continue), which works reliably across model sizes. The codebase previously
+used mini-swe-agent's `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` marker as the
+termination signal, but that protocol was a forcing function for weak models on
+SWE-bench and failed on exactly the small models this app targets: they called
+the marker without writing answer text, leaving the sub-agent runner with an
+empty buffer.
 
 Ported rather than embedded because none of the ways of running the real Python
 meet "no external setup": `flutter_python_bridge` shells out to the system
@@ -120,18 +126,16 @@ clients are the large half of the work.
 The prompts live in `templates.dart`, adapted from upstream's `mini.yaml` for a
 conversation: upstream runs one task and exits, this is asked something else
 once the turn is over. A turn's prose streams into the bubble as `TextDelta`,
-its commands become tool labels, and the submission's body — everything after
-the marker line — is appended as text when a model puts one there.
+its commands become tool labels, and a no-tool-call reply ends the turn.
 
-Two things the prompt has to say explicitly, both learned from watching a real
-model fail: that a command only runs when the `bash` tool is called (a model
-shown a fenced ```` ```echo MARKER``` ```` will imitate the fence and write the
-line as prose, which does nothing), and that it should finish the moment it has
-the answer (otherwise it keeps running `pwd`, `date`, `whoami` until the step
-limit).
+One thing the prompt has to say explicitly, learned from watching a real model
+fail: that a command only runs when the `bash` tool is called (a model shown a
+fenced ```` ```echo foo``` ```` will imitate the fence and write the line as
+prose, which does nothing). Finishing is native — the model just replies with
+text and no tool call — so no marker instruction is needed.
 
-Every tool call gets an answer, including the ones never run — after a submit,
-after an abort, for a tool that does not exist. A provider that sees a
+Every tool call gets an answer, including the ones never run — after an abort,
+for a tool that does not exist. A provider that sees a
 `tool_use` with no matching result rejects the *next* turn, so padding them with
 "this command was not executed" is what keeps the session usable.
 
@@ -200,11 +204,10 @@ and Android, `UnavailableShell` in a browser — which is why
 (`io/shell.dart` or `web/shell.dart`) and is otherwise plain wiring.
 
 `Shell.canRunCommands` is what a browser actually changes, and it is not one
-failing command — it is the whole loop. Submitting is itself a command, so with
-no shell a turn could never finish: the agent would nudge the model three times
-and end on a red error. False therefore drops `bashTool` from the request, uses
-a system prompt with no submission protocol in it, and treats a reply with no
-tool call as the finished answer rather than a format error.
+failing command — it is the whole loop. With no shell there is nothing to run,
+so `bashTool` is dropped from the request and a system prompt with no tool
+instructions is used; the turn ends when the model replies with text and no
+tool call, the same termination signal the shell path uses.
 
 `LocalShell` prepends `exec 2>&1` to the script rather than merging two Dart
 streams — a compiler's errors interleaved with its progress is the whole value
