@@ -75,18 +75,12 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
-    final isAssistant = message.role == MessageRole.assistant;
-    final bg = isUser
-        ? theme.colorScheme.primaryContainer
-        : isAssistant
-            ? theme.colorScheme.surfaceContainerHighest
-            : theme.colorScheme.tertiaryContainer;
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final name = switch (message.role) {
-      MessageRole.user => "You",
-      MessageRole.assistant => "Assistant",
-      MessageRole.tool => "Tool",
-      MessageRole.system => "System",
+    final (name, bg) = switch (message.role) {
+      MessageRole.user => ("You", theme.colorScheme.primaryContainer),
+      MessageRole.assistant => ("Assistant", theme.colorScheme.surfaceContainerHighest),
+      MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
+      MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
 
     return Padding(

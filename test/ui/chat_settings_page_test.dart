@@ -191,7 +191,9 @@ void main() {
     expect(find.text("Using Qwen 2.5"), findsOneWidget);
 
     // Nothing is pinned on the chat, so retargeting the global retargets it.
-    app.container.read(appSettingsProvider.notifier).setDefaultModel("anthropic", "claude-haiku-3");
+    app.container
+        .read(appSettingsProvider.notifier)
+        .setDefault((providerId: "anthropic", modelId: "claude-haiku-3"));
     await tester.pumpAndSettle();
 
     expect(find.text("Using anthropic"), findsOneWidget);

@@ -1,7 +1,45 @@
+import "package:collection/collection.dart";
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
+import "../../providers.dart";
 import "resettable_field.dart";
+
+/// [ProviderModelSelector] over the backend's model list, with the waiting and
+/// failure states both pages would otherwise spell out themselves.
+class ModelPicker extends ConsumerWidget {
+  const ModelPicker({
+    super.key,
+    required this.choice,
+    required this.onChanged,
+    this.inherited,
+  });
+
+  final ModelChoice choice;
+  final ValueChanged<ModelChoice> onChanged;
+  final ModelChoice? inherited;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref.watch(availableModelsProvider).when(
+          data: (models) => ProviderModelSelector(
+            models: models,
+            choice: choice,
+            onChanged: onChanged,
+            inherited: inherited,
+          ),
+          loading: () => const Row(
+            children: [
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(width: 12),
+              Text("Loading models..."),
+            ],
+          ),
+          error: (e, _) => Text("Failed to load models: $e"),
+        );
+  }
+}
 
 /// The provider + model pair, as picked in the UI. Either half being null
 /// means [defaultOptionLabel]: inherit from the level above.
@@ -36,14 +74,16 @@ class ProviderModelSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (models.isEmpty) {
-      return const Text("No models available. Start a chat to load models.");
+      return const Text("No models available.");
     }
 
     final providerIds = models.map((m) => m.providerId).toSet().toList()..sort();
+    // A stored model without its provider still names one: whoever offers it.
+    final providerId = choice.providerId ?? optionFor(models, choice.modelId)?.providerId;
     // On Default, list the models of the provider that will actually be used.
     // With nothing to inherit there is no such provider, and guessing one
     // would make Default mean something that shifts as providers come and go.
-    final listed = choice.providerId ?? inherited?.providerId;
+    final listed = providerId ?? inherited?.providerId;
     final forProvider = models.where((m) => m.providerId == listed).toList()
       ..sort((a, b) => _label(a).toLowerCase().compareTo(_label(b).toLowerCase()));
 
@@ -53,15 +93,15 @@ class ProviderModelSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ResettableField(
-          isDefault: choice.providerId == null,
+          isDefault: providerId == null,
           onReset: () => onChanged((providerId: null, modelId: null)),
           child: DropdownButtonFormField<String?>(
             decoration: InputDecoration(
               labelText: "Provider",
               border: const OutlineInputBorder(),
-              helperText: _helper(choice.providerId, inherited?.providerId),
+              helperText: _helper(providerId, inherited?.providerId),
             ),
-            initialValue: choice.providerId,
+            initialValue: providerId,
             items: [
               defaultMenuItem(),
               ...providerIds.map((p) => DropdownMenuItem<String?>(value: p, child: Text(p))),
@@ -76,7 +116,7 @@ class ProviderModelSelector extends StatelessWidget {
         const SizedBox(height: 12),
         ResettableField(
           isDefault: choice.modelId == null,
-          onReset: () => onChanged((providerId: choice.providerId, modelId: null)),
+          onReset: () => onChanged((providerId: providerId, modelId: null)),
           child: DropdownButtonFormField<String?>(
             decoration: InputDecoration(
               labelText: "Model",
@@ -93,7 +133,7 @@ class ProviderModelSelector extends StatelessWidget {
             // Pinning a model pins the provider it came from with it.
             onChanged: (value) => onChanged(
               value == null
-                  ? (providerId: choice.providerId, modelId: null)
+                  ? (providerId: providerId, modelId: null)
                   : (providerId: listed, modelId: value),
             ),
           ),
@@ -107,10 +147,12 @@ class ProviderModelSelector extends StatelessWidget {
   String? _helper(String? current, String? inheritedValue) =>
       current != null ? null : "Using ${inheritedValue ?? "the backend default"}";
 
+  static ModelOption? optionFor(List<ModelOption> models, String? modelId) =>
+      modelId == null ? null : models.firstWhereOrNull((m) => m.modelId == modelId);
+
   /// The display name of [modelId], or the id itself if it is unknown.
   static String? labelFor(List<ModelOption> models, String? modelId) {
-    if (modelId == null) return null;
-    final match = models.where((m) => m.modelId == modelId);
-    return match.isEmpty ? modelId : _label(match.first);
+    final option = optionFor(models, modelId);
+    return option == null ? modelId : _label(option);
   }
 }
