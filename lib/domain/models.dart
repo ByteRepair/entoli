@@ -56,6 +56,14 @@ abstract class Message with _$Message {
 @freezed
 sealed class MessagePart with _$MessagePart {
   const factory MessagePart.text({required String text}) = TextPart;
+
+  /// The model thinking out loud. Kept out of [TextPart] because it is not the
+  /// reply: the UI files it under a label and a transcript leaves it out.
+  /// [durationMs] is null while it is still being written.
+  const factory MessagePart.reasoning({
+    required String text,
+    int? durationMs,
+  }) = ReasoningPart;
   const factory MessagePart.toolCall({required ToolCall toolCall}) = ToolCallPart;
   const factory MessagePart.toolResult({required ToolResult result}) = ToolResultPart;
   const factory MessagePart.file({

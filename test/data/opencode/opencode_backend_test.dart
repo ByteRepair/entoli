@@ -170,9 +170,31 @@ class FakeOpencodeTransport implements OpencodeTransport {
   }
 }
 
-OcEvent _deltaEvent(String sessionId, String delta) => OcEvent(
+OcEvent _deltaEvent(String sessionId, String delta, {String? partId}) => OcEvent(
       type: "message.part.delta",
-      properties: {"sessionID": sessionId, "delta": delta},
+      properties: {"sessionID": sessionId, "delta": delta, "partID": ?partId},
+    );
+
+/// A reasoning part: announced with a start time, announced again with an end
+/// time and the whole text once the model is done thinking.
+OcEvent _reasoningEvent(
+  String sessionId,
+  String partId, {
+  required int start,
+  int? end,
+  String text = "",
+}) =>
+    OcEvent(
+      type: "message.part.updated",
+      properties: {
+        "sessionID": sessionId,
+        "part": {
+          "id": partId,
+          "type": "reasoning",
+          "text": text,
+          "time": {"start": start, "end": ?end},
+        },
+      },
     );
 
 OcEvent _toolUpdatedEvent(
@@ -274,6 +296,50 @@ void main() {
     expect(textDeltas[0].text, "Hello");
     expect(textDeltas[1].text, " world");
     expect(events.last, isA<DoneEvent>());
+  });
+
+  // Verbatim shape from opencode 1.18.18: thinking and the reply both stream
+  // as message.part.delta, told apart only by the part they belong to.
+  test("thinking streams apart from the reply", () async {
+    final chat = await backend.createChat();
+    final sid = "ses_${chat.state.id}_123";
+
+    final events = await runTurn(chat.state.id, "17*23?", [
+      _reasoningEvent(sid, "prt_r1", start: 1000),
+      _deltaEvent(sid, "17*23", partId: "prt_r1"),
+      _deltaEvent(sid, " = 391", partId: "prt_r1"),
+      _reasoningEvent(sid, "prt_r1", start: 1000, end: 3500, text: "17*23 = 391"),
+      _deltaEvent(sid, "391", partId: "prt_t1"),
+      _idleEvent(sid),
+    ]);
+
+    expect(events.whereType<ReasoningDelta>().map((e) => e.text), ["17*23", " = 391"]);
+    expect(events.whereType<TextDelta>().map((e) => e.text), ["391"]);
+
+    final ended = events.whereType<ReasoningEnd>().single;
+    expect(ended.duration, const Duration(milliseconds: 2500));
+    expect(ended.text, "17*23 = 391");
+  });
+
+  test("a second thinking block is timed on its own", () async {
+    final chat = await backend.createChat();
+    final sid = "ses_${chat.state.id}_123";
+
+    final events = await runTurn(chat.state.id, "hi", [
+      _reasoningEvent(sid, "prt_r1", start: 1000),
+      _reasoningEvent(sid, "prt_r1", start: 1000, end: 2000, text: "first"),
+      _reasoningEvent(sid, "prt_r2", start: 5000),
+      _deltaEvent(sid, "still here", partId: "prt_r2"),
+      _reasoningEvent(sid, "prt_r2", start: 5000, end: 5500, text: "second"),
+      _idleEvent(sid),
+    ]);
+
+    expect(
+      events.whereType<ReasoningEnd>().map((e) => (e.text, e.duration)),
+      [("first", const Duration(seconds: 1)), ("second", const Duration(milliseconds: 500))],
+    );
+    // The first block is closed, so its partID no longer claims a delta.
+    expect(events.whereType<ReasoningDelta>().single.text, "still here");
   });
 
   test("sendPrompt streams tool call and result events", () async {

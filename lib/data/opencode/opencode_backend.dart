@@ -24,6 +24,7 @@ class OpencodeBackend implements AgentBackend {
   final Map<String, StreamSubscription<OcEvent>> _eventSubs = {};
   final Map<String, List<ToolApproval>> _approvals = {};
   final Map<String, Set<String>> _seenTools = {};
+  final Map<String, Set<String>> _reasoningParts = {};
   final Map<String, String> _pendingContext = {};
 
   /// A message that is nothing but `/name` plus arguments runs that command.
@@ -130,8 +131,12 @@ class OpencodeBackend implements AgentBackend {
 
     switch (event.type) {
       case "message.part.delta":
+        // Thinking streams as deltas of a reasoning part, told apart from the
+        // reply only by the part they belong to.
         final delta = props["delta"] as String? ?? "";
-        if (delta.isNotEmpty) controller.add(TextDelta(delta));
+        if (delta.isEmpty) return;
+        final reasoning = _reasoningParts[chatId]?.contains(props["partID"]) ?? false;
+        controller.add(reasoning ? ReasoningDelta(delta) : TextDelta(delta));
 
       case "message.part.updated":
         _handlePartUpdated(props, controller, chatId);
@@ -202,6 +207,23 @@ class OpencodeBackend implements AgentBackend {
 
     final partType = part["type"] as String? ?? "";
     switch (partType) {
+      case "reasoning":
+        // Announced with a start time, its deltas follow, and it is announced
+        // again with an end time and the whole text once the model is done.
+        final id = part["id"] as String? ?? "";
+        final time = part["time"] as Map<String, dynamic>? ?? const {};
+        final end = (time["end"] as num?)?.toInt();
+        if (end == null) {
+          _reasoningParts.putIfAbsent(chatId, () => <String>{}).add(id);
+          return;
+        }
+        _reasoningParts[chatId]?.remove(id);
+        final start = (time["start"] as num?)?.toInt();
+        controller.add(ReasoningEnd(
+          text: part["text"] as String?,
+          duration: start == null ? null : Duration(milliseconds: end - start),
+        ));
+
       case "tool":
         final toolName = part["tool"] as String? ?? "unknown";
         final callId = part["callID"] as String? ?? "";
@@ -284,6 +306,7 @@ class OpencodeBackend implements AgentBackend {
       } catch (_) {}
     }
     _seenTools.remove(chatId);
+    _reasoningParts.remove(chatId);
     final transcript = _transcript(history);
     if (transcript.isNotEmpty) _pendingContext[chatId] = transcript;
   }
@@ -328,6 +351,7 @@ class OpencodeBackend implements AgentBackend {
     _controllers.remove(chatId);
     _approvals.remove(chatId);
     _seenTools.remove(chatId);
+    _reasoningParts.remove(chatId);
     _chatToSession.remove(chatId);
     await sub?.cancel();
     await transport.dispose(chatId);
