@@ -8,6 +8,7 @@ import "chat_controller.dart";
 import "widgets/composer.dart";
 import "widgets/message_bubble.dart";
 import "widgets/question_panel.dart";
+import "widgets/sub_agent_strip.dart";
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -139,6 +140,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     },
                   ),
           ),
+          SubAgentStrip(agents: view.runningSubAgents),
           for (final a in view.approvals)
             ApprovalBanner(
               approval: a,

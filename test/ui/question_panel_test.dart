@@ -53,8 +53,7 @@ void main() {
   }
 
   /// Let the held turn finish — the composer goes back to offering `send` when
-  /// it has. Answering restarts the stall clock, and a test that walks off
-  /// leaving one ticking fails on the pending timer.
+  /// it has.
   Future<void> endTurn(WidgetTester tester) async {
     app.backend.hold?.complete();
     app.backend.hold = null;

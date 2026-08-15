@@ -18,7 +18,7 @@ void main() {
   late AppConfig config;
 
   ChatRepository repoWith(AppSettings settings) =>
-      ChatRepository(LocalChatStore(config), backend, () => settings);
+      ChatRepository(LocalChatStore(config), backend, () => settings, config);
 
   /// A chat that is on disk, the way one is by the time a prompt is sent.
   Future<Chat> savedChat(ChatRepository repo) async {

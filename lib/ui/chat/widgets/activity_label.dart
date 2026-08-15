@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
+import "../../../domain/tool_arg.dart";
 
 /// What the model did before it answered, on a line of its own above the
 /// reply: thinking, and tool runs. Frameless, so it reads as a label until it
@@ -133,6 +134,105 @@ class _AskLabelState extends State<AskLabel> {
               body: _answers.elementAtOrNull(i) ?? "Not answered",
               isError: false,
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A `task` call, once it is history: the sub-agent that ran and the text it
+/// returned. Reads the agent name and prompt out of the call's arguments.
+class TaskLabel extends StatelessWidget {
+  const TaskLabel({super.key, required this.call, this.result});
+
+  final ToolCall call;
+
+  /// Null while the sub-agent is still running.
+  final ToolResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final (agent, prompt) = _parse(call.argumentsJson);
+    final failed = (result?.returnCode ?? 0) != 0;
+    return _Label(
+      icon: failed ? Icons.error_outline : Icons.account_tree_outlined,
+      text: result == null
+          ? "Running sub-agent @$agent"
+          : "Sub-agent @$agent ${failed ? "failed" : "finished"}",
+      isError: failed,
+      onTap: () => showActivitySheet(
+        context,
+        title: "Sub-agent @$agent",
+        sections: [
+          (label: "Prompt", body: prompt, isError: false),
+          (label: "Output", body: result?.output, isError: false),
+          (label: "Error", body: result?.exceptionInfo, isError: true),
+        ],
+      ),
+    );
+  }
+
+  (String, String) _parse(String? json) {
+    final agent = stringArg(json, "agent") ?? "task";
+    final prompt = stringArg(json, "prompt") ?? "";
+    return (agent, prompt);
+  }
+}
+
+/// A `websearch` call, once it is history. Reads the query out of the call's
+/// arguments and shows the results behind the drawer.
+class WebSearchLabel extends StatelessWidget {
+  const WebSearchLabel({super.key, required this.call, this.result});
+
+  final ToolCall call;
+  final ToolResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = stringArg(call.argumentsJson, "query") ?? "";
+    final failed = (result?.returnCode ?? 0) != 0;
+    return _Label(
+      icon: failed ? Icons.error_outline : Icons.travel_explore_outlined,
+      text: result == null ? "Searching: $query" : "Searched: $query",
+      isError: failed,
+      onTap: () => showActivitySheet(
+        context,
+        title: "Web search",
+        mono: true,
+        sections: [
+          (label: "Query", body: query, isError: false),
+          (label: "Results", body: result?.output, isError: false),
+          (label: "Error", body: result?.exceptionInfo, isError: true),
+        ],
+      ),
+    );
+  }
+}
+
+/// A `webfetch` call, once it is history. Reads the URL out of the call's
+/// arguments and shows the fetched content behind the drawer.
+class WebFetchLabel extends StatelessWidget {
+  const WebFetchLabel({super.key, required this.call, this.result});
+
+  final ToolCall call;
+  final ToolResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = stringArg(call.argumentsJson, "url") ?? "";
+    final failed = (result?.returnCode ?? 0) != 0;
+    return _Label(
+      icon: failed ? Icons.error_outline : Icons.language_outlined,
+      text: result == null ? "Fetching: $url" : "Fetched: $url",
+      isError: failed,
+      onTap: () => showActivitySheet(
+        context,
+        title: "Web fetch",
+        mono: true,
+        sections: [
+          (label: "URL", body: url, isError: false),
+          (label: "Content", body: result?.output, isError: false),
+          (label: "Error", body: result?.exceptionInfo, isError: true),
         ],
       ),
     );

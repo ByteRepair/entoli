@@ -1,5 +1,7 @@
 import "../domain/ask.dart";
 import "../domain/models.dart";
+import "../domain/permission.dart";
+import "../domain/profile.dart";
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
@@ -53,6 +55,23 @@ class DoneEvent extends AgentEvent {
   const DoneEvent();
 }
 
+/// A sub-agent started running a delegated `task` call. Turn-scoped view
+/// state like [RetryEvent]: the call/result pair is what persists in
+/// `conv.json`, and this exists only to drive the sub-agent activity strip.
+class SubAgentStartEvent extends AgentEvent {
+  const SubAgentStartEvent({required this.id, required this.agent, required this.prompt});
+  final String id;
+  final String agent;
+  final String prompt;
+}
+
+/// A sub-agent finished. Pairs with [SubAgentStartEvent] by [id].
+class SubAgentEndEvent extends AgentEvent {
+  const SubAgentEndEvent({required this.id, this.failed = false});
+  final String id;
+  final bool failed;
+}
+
 /// An attempt failed and is being retried. The turn is still alive, so this is
 /// a status, not an outcome — but it is the first sign of trouble.
 class RetryEvent extends AgentEvent {
@@ -63,6 +82,14 @@ class RetryEvent extends AgentEvent {
 
 class ErrorEvent extends AgentEvent {
   const ErrorEvent(this.message);
+  final String message;
+}
+
+/// A non-error notice the turn wants the UI to show — auto mode pausing, for
+/// instance. Turn-scoped like [RetryEvent]: it is view state, not a message
+/// part, so it is not persisted.
+class InfoEvent extends AgentEvent {
+  const InfoEvent(this.message);
   final String message;
 }
 
@@ -82,12 +109,17 @@ abstract class AgentBackend {
 
   /// Send a user prompt; stream events until the turn completes. [project] is
   /// which project's files the turn works in — null is the default one.
+  /// [classifierProvider]/[classifierModel] name the model that classifies
+  /// commands in auto mode; null means auto mode falls back to asking.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments,
       String? model,
       String? provider,
       String? project,
-      bool approveCommands});
+      ApproveMode approveMode = ApproveMode.ask,
+      String? classifierProvider,
+      String? classifierModel,
+      Profile? profile});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history].
@@ -97,11 +129,6 @@ abstract class AgentBackend {
   Future<void> shutdown();
 
   Future<void> abort(String chatId);
-
-  /// How long a turn may produce nothing before the UI gives up on it. Every
-  /// failure is reported as it happens, so silence only ever means work — the
-  /// budget has to cover the longest command a turn may run.
-  Duration get stallTimeout;
 
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response);
 

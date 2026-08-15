@@ -5,8 +5,10 @@ import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
+import "../profile/profile_page.dart";
 import "../settings/settings_page.dart";
 import "../widgets/dialogs.dart";
+import "project_settings_page.dart";
 
 class SelectedChatId extends Notifier<String?> {
   @override
@@ -55,6 +57,16 @@ class Sidebar extends ConsumerWidget {
             child: Row(
               children: [
                 const Expanded(child: _ProjectMenu()),
+                if (project != null)
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    tooltip: "Project settings",
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ProjectSettingsPage(project: project),
+                      ),
+                    ),
+                  ),
                 IconButton(
                   icon: const Icon(Icons.add),
                   tooltip: "New chat",
@@ -133,6 +145,13 @@ class Sidebar extends ConsumerWidget {
           ),
           const Divider(height: 1),
           ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text("Profile"),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
+            ),
+          ),
+          ListTile(
             leading: const Icon(Icons.settings),
             title: const Text("Settings"),
             onTap: () => Navigator.of(context).push(
@@ -200,26 +219,8 @@ class _ProjectMenu extends ConsumerWidget {
     _select(ref, name);
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, String project) async {
-    // The list the sidebar is drawing, rather than a fresh read: it holds every
-    // chat in every project, which is the only thing this needs to count.
-    final count = (ref.read(chatListProvider).value ?? const [])
-        .where((c) => c.project == project)
-        .length;
-    final confirmed = await confirm(
-      context,
-      title: "Delete project?",
-      message: "Delete \"$project\", its $count ${count == 1 ? "chat" : "chats"} "
-          "and its shared workspace? This cannot be undone.",
-      confirmLabel: "Delete",
-      destructive: true,
-    );
-    if (!confirmed) return;
-    await ref.read(chatRepositoryProvider).deleteProject(project);
-    _select(ref, null);
-    ref.invalidate(projectListProvider);
-    ref.invalidate(chatListProvider);
-  }
+  Future<void> _delete(BuildContext context, WidgetRef ref, String project) =>
+      deleteProject(context, ref, project);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

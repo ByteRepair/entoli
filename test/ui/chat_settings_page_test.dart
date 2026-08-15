@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/chat_meta.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -183,8 +184,8 @@ void main() {
   group("running commands", () {
     Future<void> openField(WidgetTester tester) async {
       await openPage(tester);
-      await scrollTo(tester, find.byType(DropdownButtonFormField<bool?>));
-      await tester.tap(find.byType(DropdownButtonFormField<bool?>));
+      await scrollTo(tester, find.byType(DropdownButtonFormField<ApproveMode?>));
+      await tester.tap(find.byType(DropdownButtonFormField<ApproveMode?>));
       await tester.pumpAndSettle();
     }
 
@@ -193,37 +194,37 @@ void main() {
       await scrollTo(tester, find.text("Running commands"));
 
       expect(find.text("$defaultOptionLabel (Ask every time)"), findsOneWidget);
-      expect(app.savedMeta(_chatId).approveCommands, isNull);
+      expect(app.savedMeta(_chatId).approveMode, isNull);
     });
 
     testWidgets("Default follows the app setting as it changes", (tester) async {
-      await app.container.read(appSettingsProvider.notifier).setApproveCommands(false);
+      await app.container.read(appSettingsProvider.notifier).setApproveMode(ApproveMode.never);
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
 
-      expect(find.text("$defaultOptionLabel (Run without asking)"), findsOneWidget);
+      expect(find.text("$defaultOptionLabel (Run without asking (DANGEROUS))"), findsOneWidget);
     });
 
     testWidgets("a chat can run without asking, and that survives a save", (tester) async {
       await openField(tester);
-      await tester.tap(find.text("Run without asking").last);
+      await tester.tap(find.textContaining("Run without asking").last);
       await tester.pumpAndSettle();
       await save(tester);
 
-      expect(app.savedMeta(_chatId).approveCommands, isFalse);
+      expect(app.savedMeta(_chatId).approveMode, ApproveMode.never);
     });
 
     testWidgets("resetting puts it back on the app's answer", (tester) async {
-      seedMeta(ChatMeta(approveCommands: false));
+      seedMeta(ChatMeta(approveMode: ApproveMode.never));
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
-      expect(find.text("Run without asking"), findsOneWidget);
+      expect(find.textContaining("Run without asking"), findsOneWidget);
 
       await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
       await tester.pumpAndSettle();
       await save(tester);
 
-      expect(app.savedMeta(_chatId).approveCommands, isNull);
+      expect(app.savedMeta(_chatId).approveMode, isNull);
     });
   });
 }

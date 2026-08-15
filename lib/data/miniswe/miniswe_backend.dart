@@ -7,11 +7,19 @@ import "../../core/config.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
+import "../../domain/permission.dart";
+import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
+import "../../domain/web_search.dart";
+import "duckduckgo_search.dart";
+import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/llm_registry.dart";
+import "llm/rate_limit_gate.dart";
 import "miniswe_agent.dart";
+import "permission_classifier.dart";
+import "sub_agent.dart";
 
 /// mini-swe-agent, running in this process. The loop is [MinisweAgent]; this
 /// is what agent-chat talks to: it holds a session per chat, resolves which
@@ -23,8 +31,9 @@ class MinisweBackend implements AgentBackend {
     required this.registry,
     required this.shell,
     this.library,
+    WebSearch? webSearch,
     this.options = const MinisweOptions(),
-  });
+  }) : webSearch = webSearch ?? DuckDuckGoSearch();
 
   final AppConfig config;
   final LlmRegistry registry;
@@ -33,6 +42,10 @@ class MinisweBackend implements AgentBackend {
   /// agent-chat's own commands and agents, expanded into the task and the
   /// system prompt before the agent sees them.
   final PromptLibrary? library;
+
+  /// Web search and fetch. `DuckDuckGoSearch` on desktop and Android;
+  /// `UnavailableWebSearch` on the web platform.
+  final WebSearch webSearch;
 
   /// Limits and timeouts for every turn.
   final MinisweOptions options;
@@ -83,7 +96,10 @@ class MinisweBackend implements AgentBackend {
     String? model,
     String? provider,
     String? project,
-    bool approveCommands = true,
+    ApproveMode approveMode = ApproveMode.ask,
+    String? classifierProvider,
+    String? classifierModel,
+    Profile? profile,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
@@ -94,7 +110,10 @@ class MinisweBackend implements AgentBackend {
         provider: provider,
         project: project,
         attachments: attachments,
-        approveCommands: approveCommands));
+        approveMode: approveMode,
+        classifierProvider: classifierProvider,
+        classifierModel: classifierModel,
+        profile: profile));
     return controller.stream;
   }
 
@@ -106,7 +125,10 @@ class MinisweBackend implements AgentBackend {
     String? provider,
     String? project,
     List<Attachment> attachments = const [],
-    bool approveCommands = true,
+    ApproveMode approveMode = ApproveMode.ask,
+    String? classifierProvider,
+    String? classifierModel,
+    Profile? profile,
   }) async {
     try {
       final target = _resolveModel(model, provider);
@@ -121,17 +143,44 @@ class MinisweBackend implements AgentBackend {
 
       config.ensureChatDirs(chatId, project: project);
       config.ensureProjectDirs(project: project);
+      final workspace = config.workspaceDir(chatId, project: project).path;
+      final projectWorkspace = config.projectWorkspaceDir(project: project).path;
+      // One gate per turn, shared by the parent and every sub-agent it spawns:
+      // bounds in-flight stream() calls and coordinates 429 backoff so a
+      // fan-out doesn't each-retry-into the same rate limit.
+      final rateLimitGate = RateLimitGate(
+        maxConcurrent: options.maxConcurrentLlmRequests,
+        maxRetryBudget: options.rateLimitRetryBudget,
+      );
+      final gatedClient = GatedLlmClient(target.client, rateLimitGate);
+      final subAgentRunner = SubAgentRunner(
+        client: gatedClient,
+        shell: shell,
+        workspace: workspace,
+        projectWorkspace: projectWorkspace,
+        model: target.modelId,
+        library: library,
+        options: options,
+        webSearch: webSearch,
+        rateLimitGate: rateLimitGate,
+      );
+      final classifier = _resolveClassifier(classifierProvider, classifierModel);
       final agent = MinisweAgent(
         session: _sessions.putIfAbsent(chatId, MinisweSession.new),
-        client: target.client,
+        client: gatedClient,
         shell: shell,
-        workspace: config.workspaceDir(chatId, project: project).path,
-        projectWorkspace: config.projectWorkspaceDir(project: project).path,
+        workspace: workspace,
+        projectWorkspace: projectWorkspace,
         model: target.modelId,
         options: options,
-        requireApproval: approveCommands,
+        approveMode: approveMode,
+        classifier: classifier,
         approve: _awaitApproval,
         answer: _awaitAnswers,
+        subAgentRunner: subAgentRunner,
+        webSearch: webSearch,
+        profile: profile,
+        rateLimitGate: rateLimitGate,
       );
       _running[chatId] = agent;
 
@@ -202,6 +251,15 @@ class MinisweBackend implements AgentBackend {
     final modelId = model ?? config.models.firstOrNull;
     if (modelId == null || modelId.isEmpty) return null;
     return (client: registry.clientOf(config), modelId: modelId);
+  }
+
+  /// The classifier model, resolved the same way the main model is. Null when
+  /// no classifier model is named — auto mode falls back to asking.
+  PermissionClassifier? _resolveClassifier(String? provider, String? model) {
+    if (provider == null || model == null) return null;
+    final target = _resolveModel(model, provider);
+    if (target == null) return null;
+    return LlmClassifier(client: target.client, model: target.modelId);
   }
 
   /// `/name args` is the command's template with the arguments in it. A name
@@ -296,13 +354,6 @@ class MinisweBackend implements AgentBackend {
     if (completer != null && !completer.isCompleted) completer.complete(answers);
   }
 
-  /// Every failure here is reported as it happens, so silence only ever means
-  /// work: a command still running, or a model still thinking. The budget is
-  /// therefore the longest a command may take plus room for the call that
-  /// follows it.
-  @override
-  Duration get stallTimeout => options.commandTimeout + const Duration(seconds: 60);
-
   @override
   Future<void> abort(String chatId) async {
     await _running.remove(chatId)?.cancel();
@@ -334,6 +385,7 @@ class MinisweBackend implements AgentBackend {
     await Future.wait(_running.keys.toList().map(abort));
     _sessions.clear();
     registry.close();
+    webSearch.close();
   }
 
   @override
