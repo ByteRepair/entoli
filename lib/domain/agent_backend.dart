@@ -87,16 +87,22 @@ class ErrorEvent extends AgentEvent {
   final String message;
 }
 
-/// Platform-agnostic agent backend. Each platform provides an implementation:
-/// `OpencodeBackend` (Linux desktop), `MinisweChaquopyBackend` (Android),
-/// `MiniswePyodideBackend` (Web).
+/// Platform-agnostic agent backend. Implementations: `OpencodeBackend`,
+/// `MinisweBackend`, and `RoutingBackend` over both.
 abstract class AgentBackend {
   /// Create a new chat with a fresh workspace and backend session.
   Future<Chat> createChat({String? title, String? model, String? provider});
 
   /// Send a user prompt; stream events until the turn completes.
+  ///
+  /// [approveCommands] is the chat's answer to "ask before running anything".
+  /// A backend that decides for itself — opencode's permission rules are its
+  /// own — ignores it.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments, String? model, String? provider});
+      {List<Attachment> attachments,
+      String? model,
+      String? provider,
+      bool approveCommands});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history] — how that conversation is worded for the agent is
@@ -108,6 +114,17 @@ abstract class AgentBackend {
   Future<void> shutdown();
 
   Future<void> abort(String chatId);
+
+  /// Whether this backend asks before running a command, and so whether
+  /// `approveCommands` means anything to it. Declared rather than documented
+  /// so the UI can hide a control that would do nothing.
+  bool honoursApprovals(String chatId);
+
+  /// How long a turn may produce nothing before the UI gives up on it. The
+  /// backend's to declare, because only it knows what silence means: one that
+  /// hides a failure behind its own retries has to be waited out, one that
+  /// runs a build has a good reason to say nothing for a while.
+  Duration stallTimeout(String chatId);
 
   Future<List<ToolApproval>> pendingApprovals(String chatId);
 

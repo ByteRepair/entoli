@@ -58,8 +58,12 @@ class FakeAttachmentPicker implements AttachmentPicker {
 }
 
 class FakeBackend implements AgentBackend {
+  /// Which backend this one stands in for. Only a test with more than one
+  /// needs to change it.
+  BackendKind kindOverride = BackendKind.opencode;
+
   @override
-  BackendKind get kind => BackendKind.opencode;
+  BackendKind get kind => kindOverride;
 
   var _created = 0;
 
@@ -72,15 +76,21 @@ class FakeBackend implements AgentBackend {
         title: title ?? "New chat",
         createdAt: now,
         updatedAt: now,
-        backend: BackendKind.opencode,
+        backend: kindOverride,
         model: model,
         provider: provider,
       ),
     );
   }
 
-  final List<({String text, String? model, String? provider, List<Attachment> attachments})>
-      prompts = [];
+  final List<
+      ({
+        String text,
+        String? model,
+        String? provider,
+        List<Attachment> attachments,
+        bool approveCommands
+      })> prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
   List<AgentEvent> scriptedEvents = const [DoneEvent()];
@@ -91,8 +101,17 @@ class FakeBackend implements AgentBackend {
 
   @override
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const [], String? model, String? provider}) async* {
-    prompts.add((text: text, model: model, provider: provider, attachments: attachments));
+      {List<Attachment> attachments = const [],
+      String? model,
+      String? provider,
+      bool approveCommands = true}) async* {
+    prompts.add((
+      text: text,
+      model: model,
+      provider: provider,
+      attachments: attachments,
+      approveCommands: approveCommands,
+    ));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;
   }
@@ -108,6 +127,18 @@ class FakeBackend implements AgentBackend {
 
   @override
   Future<void> shutdown() async => didShutdown = true;
+
+  bool honours = true;
+
+  @override
+  bool honoursApprovals(String chatId) => honours;
+
+  /// Long enough that a test only meets it by overriding
+  /// `turnStallTimeoutProvider` on purpose.
+  Duration stall = const Duration(minutes: 5);
+
+  @override
+  Duration stallTimeout(String chatId) => stall;
 
   final List<String> aborted = [];
 
@@ -125,6 +156,8 @@ class FakeBackend implements AgentBackend {
   @override
   Future<void> disposeChat(String chatId) async {}
 
+  List<ModelOption> modelList = testModels;
+
   @override
-  Future<List<ModelOption>> models() async => testModels;
+  Future<List<ModelOption>> models() async => modelList;
 }

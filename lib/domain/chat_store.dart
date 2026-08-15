@@ -10,6 +10,11 @@ abstract class ChatStore {
 
   Future<Chat> load(String id);
 
+  /// Which backend [id] was created with, without reading the conversation.
+  /// Synchronous because it decides where a prompt goes, and that has to be
+  /// settled before the turn can start. Null for a chat not on disk yet.
+  BackendKind? backendKindOf(String id);
+
   Future<void> save(Chat chat);
 
   Future<void> delete(String id);

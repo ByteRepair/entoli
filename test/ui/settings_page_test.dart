@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -24,11 +25,49 @@ void main() {
 
   Future<void> pumpSettings(WidgetTester tester) => app.pump(tester, const SettingsPage());
 
-  testWidgets("renders default backend and OpenCode section", (tester) async {
+  testWidgets("renders a section per thing that can be configured", (tester) async {
     await pumpSettings(tester);
     expect(find.text("Settings"), findsOneWidget);
+    expect(find.text("New chats"), findsOneWidget);
     expect(find.text("Default backend"), findsOneWidget);
-    expect(find.text("OpenCode"), findsOneWidget);
+
+    await scrollTo(tester, find.text("Built-in harness"));
+    expect(find.text("Built-in harness"), findsOneWidget);
+    await scrollTo(tester, find.text("Environment"));
+    expect(find.text("Environment"), findsOneWidget);
+  });
+
+  group("a platform with only the built-in harness", () {
+    setUp(() => app = TestApp.create(backends: const [BackendKind.miniswe]));
+
+    testWidgets("never offers opencode", (tester) async {
+      await pumpSettings(tester);
+
+      expect(find.text("Default backend"), findsNothing);
+      expect(find.byType(DropdownButtonFormField<BackendKind?>), findsNothing);
+      expect(find.text("OpenCode"), findsNothing);
+    });
+
+    testWidgets("does not describe the environment as opencode's", (tester) async {
+      await pumpSettings(tester);
+      await scrollTo(tester, find.text("Environment"));
+
+      expect(find.textContaining("opencode"), findsNothing);
+      expect(find.textContaining("built-in harness"), findsWidgets);
+    });
+  });
+
+  testWidgets("the default backend is the platform's until one is chosen", (tester) async {
+    await pumpSettings(tester);
+    expect(find.text("$defaultOptionLabel (OpenCode)"), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButtonFormField<BackendKind?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Built-in harness").last);
+    await tester.pumpAndSettle();
+
+    expect(app.container.read(appSettingsProvider).defaultBackend, BackendKind.miniswe);
+    expect(AppSettings.load(app.config).defaultBackend, BackendKind.miniswe);
   });
 
   testWidgets("shows both provider and model form fields", (tester) async {
@@ -125,6 +164,7 @@ void main() {
     await repo.createChat(title: "one");
     await repo.createChat(title: "two");
 
+    await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
     await tester.pumpAndSettle();
     expect(find.textContaining("permanently removes 2 chats"), findsOneWidget);
@@ -140,6 +180,7 @@ void main() {
     final repo = app.repo;
     await repo.createChat(title: "one");
 
+    await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
     await tester.pumpAndSettle();
     await tester.tap(find.text("Cancel"));
@@ -151,6 +192,7 @@ void main() {
   testWidgets("with no chats there is nothing to confirm", (tester) async {
     await pumpSettings(tester);
 
+    await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
     await tester.pumpAndSettle();
 
@@ -172,6 +214,7 @@ void main() {
 
   group("environment", () {
     Future<void> addVariable(WidgetTester tester, String name, String value) async {
+      await scrollTo(tester, find.text("Add variable"));
       await tester.tap(find.text("Add variable"));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, name);

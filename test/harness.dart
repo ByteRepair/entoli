@@ -9,8 +9,10 @@ import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/widgets/provider_model_selector.dart";
 
 import "fakes.dart";
 
@@ -19,7 +21,13 @@ import "fakes.dart";
 class TestApp {
   TestApp._(this.tmp, this.config, this.backend, this.picker, this.container);
 
-  factory TestApp.create({Duration? stallTimeout, PromptLibrary? library}) {
+  /// [backends] pretends to be a platform with that much choice — a list of
+  /// one is a phone, where opencode has no binary to spawn.
+  factory TestApp.create({
+    Duration? stallTimeout,
+    PromptLibrary? library,
+    List<BackendKind>? backends,
+  }) {
     final config = tempConfig();
     final tmp = config.dataDir;
     final backend = FakeBackend();
@@ -37,6 +45,7 @@ class TestApp {
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           if (stallTimeout != null) turnStallTimeoutProvider.overrideWithValue(stallTimeout),
+          if (backends != null) availableBackendsProvider.overrideWithValue(backends),
         ],
       ),
     );
@@ -87,9 +96,26 @@ Future<void> pumpUntil(WidgetTester tester, Finder until, {int tries = 50}) asyn
   }
 }
 
-/// Open one of the two provider/model dropdowns.
+/// Bring [target] into view. A page taller than the test window builds only
+/// the part of itself that shows, so the finders cannot see the rest.
+Future<void> scrollTo(WidgetTester tester, Finder target) async {
+  if (target.evaluate().isEmpty) {
+    await tester.dragUntilVisible(target, find.byType(Scrollable).first, const Offset(0, -120));
+    await tester.pumpAndSettle();
+  }
+  // Built is not the same as tappable: the drag stops as soon as the target
+  // exists, which can leave half of it under the edge of the window.
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+}
+
+/// Open one of the two provider/model dropdowns. Scoped to the picker: other
+/// inheritable fields on the same page are dropdowns of the same type.
 Future<void> openDropdown(WidgetTester tester, {required bool model}) async {
-  final dropdowns = find.byType(DropdownButtonFormField<String?>);
+  final dropdowns = find.descendant(
+    of: find.byType(ProviderModelSelector),
+    matching: find.byType(DropdownButtonFormField<String?>),
+  );
   await tester.tap(model ? dropdowns.last : dropdowns.first);
   await tester.pumpAndSettle();
 }

@@ -45,7 +45,11 @@ class OpencodeBackend implements AgentBackend {
 
   @override
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const [], String? model, String? provider}) {
+      {List<Attachment> attachments = const [],
+      String? model,
+      String? provider,
+      // opencode decides for itself what needs a permission.
+      bool approveCommands = true}) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
     // Returned rather than yielded, so the caller is listening before the turn
@@ -266,6 +270,17 @@ class OpencodeBackend implements AgentBackend {
     return jsonEncode(input);
   }
 
+  /// opencode decides for itself what needs a permission, from rules of its
+  /// own, so the chat's setting has nothing to act on.
+  @override
+  bool honoursApprovals(String chatId) => false;
+
+  /// opencode retries a rate limit internally for over a minute before it
+  /// reports one, so a silent turn is as likely to be failing as working. This
+  /// keeps the wait ours to decide rather than the server's.
+  @override
+  Duration stallTimeout(String chatId) => const Duration(seconds: 45);
+
   @override
   Future<void> abort(String chatId) async {
     final sessionId = _chatToSession[chatId];
@@ -330,7 +345,10 @@ class OpencodeBackend implements AgentBackend {
   }
 
   @override
-  Future<List<ToolApproval>> pendingApprovals(String chatId) async => _approvals[chatId] ?? [];
+  /// A copy: answering one removes it, and a caller that walks the list while
+  /// answering each would be mutating what it is reading.
+  Future<List<ToolApproval>> pendingApprovals(String chatId) async =>
+      List.unmodifiable(_approvals[chatId] ?? const []);
 
   @override
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response) async {

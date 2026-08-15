@@ -49,6 +49,21 @@ class LocalChatStore implements ChatStore {
   }
 
   @override
+  BackendKind? backendKindOf(String id) {
+    final file = config.stateFile(id);
+    if (!file.existsSync()) return null;
+    try {
+      // The generated decoder, not a hand-rolled name match: the enum's wire
+      // spelling is its business, and getting it wrong here would silently
+      // route an existing chat to the wrong backend.
+      final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      return ChatState.fromJson(json).backend;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   Future<void> save(Chat chat) async {
     final id = chat.state.id;
     config.ensureChatDirs(id);
