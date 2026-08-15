@@ -9,21 +9,15 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 
+import "../harness.dart";
+
 void main() {
-  late Directory tmp;
   late AppConfig config;
   late LocalChatStore store;
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync("agent_chat_test_");
-    config = AppConfig.forDirectory(tmp);
-    final chats = Directory(p.join(tmp.path, "chats"));
-    chats.createSync(recursive: true);
+    config = tempConfig();
     store = LocalChatStore(config);
-  });
-
-  tearDown(() {
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
   ChatState makeState(String id, {String? model}) => ChatState(

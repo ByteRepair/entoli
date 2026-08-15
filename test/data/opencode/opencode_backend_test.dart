@@ -1,7 +1,6 @@
 import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:path/path.dart" as p;
 import "dart:io";
 
 import "package:agent_chat/core/config.dart";
@@ -10,6 +9,8 @@ import "package:agent_chat/data/opencode/opencode_models.dart";
 import "package:agent_chat/data/opencode/opencode_transport.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
+
+import "../../harness.dart";
 
 /// Fake transport that records calls and feeds canned events.
 class FakeOpencodeTransport implements OpencodeTransport {
@@ -153,22 +154,14 @@ OcEvent _idleEvent(String sessionId) => OcEvent(
     );
 
 void main() {
-  late Directory tmp;
   late AppConfig config;
   late FakeOpencodeTransport transport;
   late OpencodeBackend backend;
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync("opencode_backend_test_");
-    config = AppConfig.forDirectory(tmp);
-    final chats = Directory(p.join(tmp.path, "chats"));
-    chats.createSync(recursive: true);
+    config = tempConfig("opencode_backend_test_");
     transport = FakeOpencodeTransport();
     backend = OpencodeBackend(config: config, transport: transport);
-  });
-
-  tearDown(() async {
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
   /// Start sendPrompt, wait for promptAsync to be called, then emit events.
@@ -316,7 +309,6 @@ void main() {
 
     await runTurn(chat.state.id, "hello", [_deltaEvent(sid, "hi"), _idleEvent(sid)]);
 
-    transport._controllers.remove(chat.state.id);
 
     await runTurn(chat.state.id, "again", [_deltaEvent(sid, "bye"), _idleEvent(sid)]);
 
@@ -532,40 +524,10 @@ void main() {
   });
 }
 
-class _FailingTransport implements OpencodeTransport {
+/// The fake, but the server never comes up.
+class _FailingTransport extends FakeOpencodeTransport {
   @override
   Future<Uri> ensureServer(String chatId, String workspacePath) async {
     throw Exception("server failed to start");
   }
-
-  @override
-  Future<String> createSession(String chatId, {String? title}) async => "ses_1";
-
-  @override
-  Future<void> promptAsync(String chatId, String sessionId,
-      {required String text, String? model, String? provider}) async {}
-
-  @override
-  Future<void> abort(String chatId, String sessionId) async {}
-
-  @override
-  Future<void> injectContext(String chatId, String sessionId, String text) async {}
-
-  @override
-  Future<void> deleteSession(String chatId, String sessionId) async {}
-
-  @override
-  Future<void> respondPermission(String chatId, String sessionId, String permissionId, String response) async {}
-
-  @override
-  Future<Stream<OcEvent>> subscribe(String chatId) async => const Stream.empty();
-
-  @override
-  Future<void> disposeAll() async {}
-
-  @override
-  Future<List<Map<String, dynamic>>> providers(String chatId) async => [];
-
-  @override
-  Future<void> dispose(String chatId) async {}
 }

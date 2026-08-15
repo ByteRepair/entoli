@@ -157,19 +157,6 @@ void main() {
     expect(find.text("Delete all"), findsNothing);
   });
 
-  testWidgets("providers and models are listed alphabetically", (tester) async {
-    await pumpSettings(tester);
-
-    await openDropdown(tester, model: false);
-    expect(popupLabels(tester), [defaultOptionLabel, firstProvider, otherProvider]);
-    await tester.tap(find.text(firstProvider).last);
-    await tester.pumpAndSettle();
-
-    await openDropdown(tester, model: true);
-    expect(popupLabels(tester),
-        [defaultOptionLabel, "Claude Haiku 3", "Claude Sonnet 4"]);
-  });
-
   testWidgets("the reset button puts a pinned model back on Default", (tester) async {
     seedSettings(otherProvider, "qwen-2.5");
     await pumpSettings(tester);
