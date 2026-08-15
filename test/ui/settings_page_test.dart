@@ -2,7 +2,6 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -29,45 +28,11 @@ void main() {
     await pumpSettings(tester);
     expect(find.text("Settings"), findsOneWidget);
     expect(find.text("New chats"), findsOneWidget);
-    expect(find.text("Default backend"), findsOneWidget);
 
-    await scrollTo(tester, find.text("Built-in harness"));
-    expect(find.text("Built-in harness"), findsOneWidget);
+    await scrollTo(tester, find.text("Agent"));
+    expect(find.text("Agent"), findsOneWidget);
     await scrollTo(tester, find.text("Environment"));
     expect(find.text("Environment"), findsOneWidget);
-  });
-
-  group("a platform with only the built-in harness", () {
-    setUp(() => app = TestApp.create(backends: const [BackendKind.miniswe]));
-
-    testWidgets("never offers opencode", (tester) async {
-      await pumpSettings(tester);
-
-      expect(find.text("Default backend"), findsNothing);
-      expect(find.byType(DropdownButtonFormField<BackendKind?>), findsNothing);
-      expect(find.text("OpenCode"), findsNothing);
-    });
-
-    testWidgets("does not describe the environment as opencode's", (tester) async {
-      await pumpSettings(tester);
-      await scrollTo(tester, find.text("Environment"));
-
-      expect(find.textContaining("opencode"), findsNothing);
-      expect(find.textContaining("built-in harness"), findsWidgets);
-    });
-  });
-
-  testWidgets("the default backend is the platform's until one is chosen", (tester) async {
-    await pumpSettings(tester);
-    expect(find.text("$defaultOptionLabel (OpenCode)"), findsOneWidget);
-
-    await tester.tap(find.byType(DropdownButtonFormField<BackendKind?>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text("Built-in harness").last);
-    await tester.pumpAndSettle();
-
-    expect(app.container.read(appSettingsProvider).defaultBackend, BackendKind.miniswe);
-    expect(AppSettings.load(app.config).defaultBackend, BackendKind.miniswe);
   });
 
   testWidgets("shows both provider and model form fields", (tester) async {
@@ -228,8 +193,8 @@ void main() {
 
       await addVariable(tester, "ANTHROPIC_API_KEY", "sk-test");
 
-      expect(app.container.read(appSettingsProvider).opencodeEnv, {"ANTHROPIC_API_KEY": "sk-test"});
-      expect(AppSettings.load(app.config).opencodeEnv, {"ANTHROPIC_API_KEY": "sk-test"});
+      expect(app.container.read(appSettingsProvider).environment, {"ANTHROPIC_API_KEY": "sk-test"});
+      expect(AppSettings.load(app.config).environment, {"ANTHROPIC_API_KEY": "sk-test"});
     });
 
     testWidgets("the value is masked, so settings can be shown to someone", (tester) async {
@@ -250,7 +215,7 @@ void main() {
       await tester.tap(find.text("Save"));
       await tester.pumpAndSettle();
 
-      expect(app.container.read(appSettingsProvider).opencodeEnv, {"NEW_NAME": "value"});
+      expect(app.container.read(appSettingsProvider).environment, {"NEW_NAME": "value"});
     });
 
     testWidgets("removing one leaves the rest", (tester) async {
@@ -261,7 +226,7 @@ void main() {
       await tester.tap(find.byTooltip("Remove DROP"));
       await tester.pumpAndSettle();
 
-      expect(app.container.read(appSettingsProvider).opencodeEnv, {"KEEP": "1"});
+      expect(app.container.read(appSettingsProvider).environment, {"KEEP": "1"});
     });
 
     testWidgets("the model default survives an environment edit", (tester) async {

@@ -2,15 +2,13 @@ import "dart:convert";
 
 import "../core/config.dart";
 import "llm_provider.dart";
-import "models.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
   AppSettings({
     this.defaultModelId,
     this.defaultProviderId,
-    this.opencodeEnv = const {},
-    this.defaultBackend,
+    this.environment = const {},
     this.approveCommands = true,
     this.llmProviders = const [],
   });
@@ -18,22 +16,16 @@ class AppSettings {
   String? defaultModelId;
   String? defaultProviderId;
 
-  /// Environment variables every `opencode serve` is started with, and that
-  /// mini-swe-agent's commands run under — API keys and whatever else a
-  /// provider or a CLI reads out of one. Held here rather than in the process
-  /// code because the settings page edits them.
-  Map<String, String> opencodeEnv;
+  /// Environment variables the agent's commands run under, and that a provider
+  /// may name instead of holding its key. Held here rather than in the shell
+  /// because the settings page edits them.
+  Map<String, String> environment;
 
-  /// Which runtime a new chat gets. Null means the platform's own default,
-  /// which is the only thing that can pick before anything is configured.
-  BackendKind? defaultBackend;
-
-  /// Whether mini-swe-agent asks before running a command. A chat can override
-  /// it; opencode has its own permission rules and ignores it.
+  /// Whether the agent asks before running a command. A chat can override it.
   bool approveCommands;
 
-  /// The endpoints mini-swe-agent can call. Empty until the user adds one,
-  /// which is why the first thing settings offers is a list of presets.
+  /// The endpoints the agent can call. Empty until the user adds one, which is
+  /// why the first thing settings offers is a list of presets.
   List<LlmProviderConfig> llmProviders;
 
   static AppSettings load(AppConfig config) {
@@ -44,8 +36,7 @@ class AppSettings {
       return AppSettings(
         defaultModelId: _orNull(json["defaultModelId"] as String?),
         defaultProviderId: _orNull(json["defaultProviderId"] as String?),
-        opencodeEnv: _stringMap(json["opencodeEnv"]),
-        defaultBackend: _backend(json["defaultBackend"]),
+        environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
         approveCommands: json["approveCommands"] as bool? ?? true,
         llmProviders: _providers(json["llmProviders"]),
       );
@@ -56,9 +47,6 @@ class AppSettings {
 
   // Builds before the /provider flattening fix wrote empty ids here.
   static String? _orNull(String? v) => (v == null || v.isEmpty) ? null : v;
-
-  static BackendKind? _backend(Object? value) =>
-      BackendKind.values.where((kind) => kind.name == value).firstOrNull;
 
   static List<LlmProviderConfig> _providers(Object? value) {
     if (value is! List) return const [];
@@ -82,8 +70,7 @@ class AppSettings {
   AppSettings copy() => AppSettings(
         defaultModelId: defaultModelId,
         defaultProviderId: defaultProviderId,
-        opencodeEnv: opencodeEnv,
-        defaultBackend: defaultBackend,
+        environment: environment,
         approveCommands: approveCommands,
         llmProviders: llmProviders,
       );
@@ -92,8 +79,7 @@ class AppSettings {
     config.settingsFile.writeAsStringSync(jsonEncode({
       if (defaultModelId != null) "defaultModelId": defaultModelId,
       if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
-      if (opencodeEnv.isNotEmpty) "opencodeEnv": opencodeEnv,
-      if (defaultBackend != null) "defaultBackend": defaultBackend!.name,
+      if (environment.isNotEmpty) "environment": environment,
       if (!approveCommands) "approveCommands": approveCommands,
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],

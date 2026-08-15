@@ -1,5 +1,5 @@
 name: agent_chat
-description: "Client-side ChatGPT-style UI with OpenCode/mini-swe-agent backends"
+description: "Client-side ChatGPT-style chat UI with a built-in coding agent"
 publish_to: "none"
 
 version: 1.0.0+1
@@ -14,12 +14,9 @@ dependencies:
 
   # State management
   flutter_riverpod: ^3.4.2
-  riverpod_annotation: ^4.0.6
 
   # Networking
   http: ^1.6.0
-  dio: ^5.11.0
-  web_socket_channel: ^3.0.3
 
   # Serialization
   json_annotation: ^4.12.0
@@ -48,6 +45,5 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/python/
     - assets/prompts/commands/
     - assets/prompts/agents/

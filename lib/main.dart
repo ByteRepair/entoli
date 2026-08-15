@@ -22,7 +22,7 @@ void main() async {
     const BundledPrompts(),
     DirectoryPrompts(config),
   ]);
-  final backend = backend_factory.createBackend(config, library, store);
+  final backend = backend_factory.createBackend(config, library);
   final container = ProviderContainer(
     overrides: [
       chatStoreProvider.overrideWithValue(store),
@@ -42,8 +42,7 @@ void main() async {
 class AgentChatApp extends StatefulWidget {
   const AgentChatApp({super.key, required this.onExit});
 
-  /// Spawned servers are not our process's children to lose track of: without
-  /// this they outlive the app.
+  /// A running turn holds a subprocess; exiting without this leaves it behind.
   final Future<void> Function() onExit;
 
   @override

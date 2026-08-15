@@ -152,6 +152,5 @@ String observation({
 
 const _pretty = JsonEncoder.withIndent("  ");
 
-/// What a fresh session is told about the conversation it missed. Same shape as
-/// the opencode backend's, so a rewound chat reads the same whichever ran it.
+/// What a fresh session is told about the conversation it missed.
 String transcriptPreamble(String body) => "Earlier in this conversation:\n\n$body";

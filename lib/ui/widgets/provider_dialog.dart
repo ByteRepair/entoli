@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 
 import "../../domain/llm_provider.dart";
 
-/// Add or edit one endpoint the built-in harness can call. Returns null if
+/// Add or edit one endpoint the agent can call. Returns null if
 /// dismissed, or if the name or base URL was left blank — either one missing
 /// makes the entry unusable, and a half-written provider fails at the first
 /// prompt rather than here.

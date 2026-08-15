@@ -352,7 +352,7 @@ void main() {
       final backend = backendOver([],
           options: const MinisweOptions(commandTimeout: Duration(seconds: 120)));
 
-      expect(backend.stallTimeout(chatId), greaterThan(const Duration(seconds: 120)));
+      expect(backend.stallTimeout, greaterThan(const Duration(seconds: 120)));
     });
 
     test("the model list is whatever the providers offer", () async {

@@ -9,7 +9,6 @@ class PromptDocument {
     required this.name,
     required this.frontmatter,
     required this.body,
-    required this.source,
   });
 
   final CompletionKind kind;
@@ -17,26 +16,19 @@ class PromptDocument {
   final Map<String, String> frontmatter;
   final String body;
 
-  /// The file verbatim, for a backend that reads these itself rather than
-  /// being handed the parsed pieces.
-  final String source;
-
   String? get description => frontmatter["description"];
 
   CompletionOption get option => CompletionOption(name: name, description: description);
 
-  /// Only the top-level scalars are read, because [description] is all the
-  /// menu shows. Everything else — nested permissions, tool maps — stays in
-  /// [source] for whoever understands it.
+  /// Only the top-level scalars are read, because [description] is all the menu
+  /// shows. Everything else — nested permissions, tool maps — is dropped.
   factory PromptDocument.parse(CompletionKind kind, String name, String source) {
-    final text = source.replaceAll("\r\n", "\n");
-    final (frontmatter, body) = _split(text);
+    final (frontmatter, body) = _split(source.replaceAll("\r\n", "\n"));
     return PromptDocument(
       kind: kind,
       name: name,
       frontmatter: frontmatter,
       body: body,
-      source: text,
     );
   }
 

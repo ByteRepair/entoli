@@ -39,9 +39,9 @@ class MinisweOptions {
 
   /// How many times a failed request is tried again before the turn gives up,
   /// and the first wait between two — it doubles after that, so the defaults
-  /// spend 7s waiting in total. Deliberately short: opencode retries a rate
-  /// limit for over a minute before saying so, and this owns the loop, so it
-  /// can report the trouble long before the UI's own patience runs out.
+  /// spend 7s waiting in total. Deliberately short: the UI cannot show what it
+  /// has not been told, so trouble is reported long before its patience runs
+  /// out.
   final int maxAttempts;
   final Duration retryBackoff;
 }

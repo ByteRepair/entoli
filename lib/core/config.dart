@@ -16,25 +16,19 @@ import "../domain/models.dart";
 ///     conv.json
 ///     resources/
 ///     workspace/
-///
-/// [cacheDir] is what a backend may throw away and rebuild: nothing the user
-/// typed lives there.
 class AppConfig {
-  AppConfig._(this.dataDir, this.cacheDir);
+  AppConfig._(this.dataDir);
 
   /// Test-only constructor using an explicit data directory.
   @visibleForTesting
-  AppConfig.forDirectory(this.dataDir, {Directory? cacheDir})
-      : cacheDir = cacheDir ?? Directory(p.join(dataDir.path, "cache"));
+  AppConfig.forDirectory(this.dataDir);
 
   final Directory dataDir;
-  final Directory cacheDir;
 
   static Future<AppConfig> load() async {
     final override = Platform.environment["AGENT_CHAT_CONFIG"];
     final config = AppConfig._(
       Directory(override ?? p.join(await _resolveBase(), "agent-chat")),
-      Directory(p.join(await _resolveCacheBase(), "agent-chat")),
     );
     config.ensureDirs();
     return config;
@@ -49,14 +43,6 @@ class AppConfig {
       return p.join(_home, ".config");
     }
     final dir = await getApplicationDocumentsDirectory();
-    return dir.path;
-  }
-
-  static Future<String> _resolveCacheBase() async {
-    if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-      return Platform.environment["XDG_CACHE_HOME"] ?? p.join(_home, ".cache");
-    }
-    final dir = await getApplicationCacheDirectory();
     return dir.path;
   }
 
@@ -96,7 +82,6 @@ class AppConfig {
     for (final dir in [
       dataDir,
       chatsDir,
-      cacheDir,
       for (final kind in CompletionKind.values) promptsDir(kind),
     ]) {
       if (!dir.existsSync()) dir.createSync(recursive: true);

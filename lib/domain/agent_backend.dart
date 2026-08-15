@@ -3,11 +3,9 @@ import "package:uuid/uuid.dart";
 import "../core/config.dart";
 import "../domain/models.dart";
 
-/// A brand new chat, with its directories in place. Every backend builds one
-/// the same way; only where the work runs differs.
+/// A brand new chat, with its directories in place.
 Future<Chat> newChat(
   AppConfig? config, {
-  required BackendKind kind,
   String? title,
   String? model,
   String? provider,
@@ -21,7 +19,6 @@ Future<Chat> newChat(
       title: title ?? "New chat",
       createdAt: now,
       updatedAt: now,
-      backend: kind,
       model: model,
       provider: provider,
     ),
@@ -73,9 +70,8 @@ class DoneEvent extends AgentEvent {
   const DoneEvent();
 }
 
-/// An attempt failed and the backend is retrying. The turn is still alive, so
-/// this is a status, not an outcome — but it is the first sign of trouble,
-/// arriving long before the retries are exhausted.
+/// An attempt failed and is being retried. The turn is still alive, so this is
+/// a status, not an outcome — but it is the first sign of trouble.
 class RetryEvent extends AgentEvent {
   const RetryEvent({required this.attempt, required this.message});
   final int attempt;
@@ -87,17 +83,13 @@ class ErrorEvent extends AgentEvent {
   final String message;
 }
 
-/// Platform-agnostic agent backend. Implementations: `OpencodeBackend`,
-/// `MinisweBackend`, and `RoutingBackend` over both.
+/// What runs a turn. `MinisweBackend` is the implementation; this exists as a
+/// seam so the UI and the repository can be tested without one.
 abstract class AgentBackend {
-  /// Create a new chat with a fresh workspace and backend session.
+  /// Create a new chat with a fresh workspace and agent session.
   Future<Chat> createChat({String? title, String? model, String? provider});
 
   /// Send a user prompt; stream events until the turn completes.
-  ///
-  /// [approveCommands] is the chat's answer to "ask before running anything".
-  /// A backend that decides for itself — opencode's permission rules are its
-  /// own — ignores it.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments,
       String? model,
@@ -105,26 +97,18 @@ abstract class AgentBackend {
       bool approveCommands});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
-  /// seeded with [history] — how that conversation is worded for the agent is
-  /// the backend's business.
+  /// seeded with [history].
   Future<void> resetSession(String chatId, {List<Message> history = const []});
 
-  /// Release every process and connection this backend owns. Called when the
-  /// app exits; without it spawned servers outlive it.
+  /// Release everything this backend holds. Called when the app exits.
   Future<void> shutdown();
 
   Future<void> abort(String chatId);
 
-  /// Whether this backend asks before running a command, and so whether
-  /// `approveCommands` means anything to it. Declared rather than documented
-  /// so the UI can hide a control that would do nothing.
-  bool honoursApprovals(String chatId);
-
-  /// How long a turn may produce nothing before the UI gives up on it. The
-  /// backend's to declare, because only it knows what silence means: one that
-  /// hides a failure behind its own retries has to be waited out, one that
-  /// runs a build has a good reason to say nothing for a while.
-  Duration stallTimeout(String chatId);
+  /// How long a turn may produce nothing before the UI gives up on it. Every
+  /// failure is reported as it happens, so silence only ever means work — the
+  /// budget has to cover the longest command a turn may run.
+  Duration get stallTimeout;
 
   Future<List<ToolApproval>> pendingApprovals(String chatId);
 
@@ -133,8 +117,5 @@ abstract class AgentBackend {
   /// Release resources for a chat (keeps on-disk data).
   Future<void> disposeChat(String chatId);
 
-
   Future<List<ModelOption>> models();
-
-  BackendKind get kind;
 }

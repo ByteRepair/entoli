@@ -58,13 +58,6 @@ class FakeAttachmentPicker implements AttachmentPicker {
 }
 
 class FakeBackend implements AgentBackend {
-  /// Which backend this one stands in for. Only a test with more than one
-  /// needs to change it.
-  BackendKind kindOverride = BackendKind.opencode;
-
-  @override
-  BackendKind get kind => kindOverride;
-
   var _created = 0;
 
   @override
@@ -76,7 +69,6 @@ class FakeBackend implements AgentBackend {
         title: title ?? "New chat",
         createdAt: now,
         updatedAt: now,
-        backend: kindOverride,
         model: model,
         provider: provider,
       ),
@@ -128,17 +120,10 @@ class FakeBackend implements AgentBackend {
   @override
   Future<void> shutdown() async => didShutdown = true;
 
-  bool honours = true;
-
-  @override
-  bool honoursApprovals(String chatId) => honours;
-
   /// Long enough that a test only meets it by overriding
   /// `turnStallTimeoutProvider` on purpose.
-  Duration stall = const Duration(minutes: 5);
-
   @override
-  Duration stallTimeout(String chatId) => stall;
+  Duration stallTimeout = const Duration(minutes: 5);
 
   final List<String> aborted = [];
 

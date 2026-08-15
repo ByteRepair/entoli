@@ -1,15 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/platform/default_backend.dart";
 import "../../domain/llm_provider.dart";
-import "../../domain/models.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
-import "../widgets/resettable_field.dart";
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -22,7 +19,7 @@ class SettingsPage extends ConsumerWidget {
         children: const [
           _DefaultsSection(),
           Divider(),
-          _HarnessSection(),
+          _AgentSection(),
           Divider(),
           _EnvironmentSection(),
           Divider(),
@@ -66,31 +63,18 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// What a new chat gets. The backend it runs on is fixed once it is created;
-/// the model is a live reference, so retargeting it retargets every chat that
-/// pinned nothing.
+/// What a new chat gets. A live reference, not a snapshot: retargeting it
+/// retargets every chat that pinned nothing.
 class _DefaultsSection extends ConsumerWidget {
   const _DefaultsSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
-    final available = ref.watch(availableBackendsProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionHeader("New chats"),
-        // A platform with one backend has nothing to ask about, and a picker
-        // with a single option reads as a setting that does not work.
-        if (available.length > 1)
-          InheritableDropdown<BackendKind>(
-            label: "Default backend",
-            value: settings.defaultBackend,
-            inherited: backendLabel(defaultBackendKind()),
-            options: {for (final kind in available) kind: backendLabel(kind)},
-            onChanged: (kind) =>
-                ref.read(appSettingsProvider.notifier).setDefaultBackend(kind),
-          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           // Nothing above the app level to inherit from: Default means
@@ -109,10 +93,9 @@ class _DefaultsSection extends ConsumerWidget {
   }
 }
 
-/// mini-swe-agent, ported into agent-chat and running in this process: the
-/// endpoints it calls and whether it asks before doing anything.
-class _HarnessSection extends ConsumerWidget {
-  const _HarnessSection();
+/// The endpoints the agent calls and whether it asks before doing anything.
+class _AgentSection extends ConsumerWidget {
+  const _AgentSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -121,9 +104,9 @@ class _HarnessSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionHeader(
-          "Built-in harness",
-          description: "mini-swe-agent, running inside agent-chat. Nothing to install: "
-              "it calls the model itself and runs its commands in the chat's workspace.",
+          "Agent",
+          description: "mini-swe-agent, running inside agent-chat. It calls the model "
+              "itself and runs its commands in the chat's workspace.",
         ),
         SwitchListTile(
           value: settings.approveCommands,
@@ -177,7 +160,7 @@ class _ProvidersEditor extends ConsumerWidget {
           "Providers",
           minor: true,
           description: providers.isEmpty
-              ? "None yet. The harness cannot answer until one is added."
+              ? "None yet. The agent cannot answer until one is added."
               : null,
         ),
         for (final provider in providers)
@@ -233,13 +216,13 @@ class _ProvidersEditor extends ConsumerWidget {
   }
 }
 
-/// The environment every opencode server is started with, and that the built-in
-/// harness runs its commands under.
+/// What the agent's commands run under, and where a provider that names its
+/// key rather than holding it looks.
 class _EnvironmentSection extends ConsumerWidget {
   const _EnvironmentSection();
 
   Future<void> _edit(BuildContext context, WidgetRef ref, {String? name}) async {
-    final env = ref.read(appSettingsProvider).opencodeEnv;
+    final env = ref.read(appSettingsProvider).environment;
     final pair = await promptForPair(
       context,
       title: name == null ? "Add variable" : "Edit $name",
@@ -252,30 +235,26 @@ class _EnvironmentSection extends ConsumerWidget {
     // A rename drops the old key rather than leaving both behind.
     final next = {...env}..remove(name);
     next[pair.name] = pair.value;
-    await ref.read(appSettingsProvider.notifier).setOpencodeEnv(next);
+    await ref.read(appSettingsProvider.notifier).setEnvironment(next);
   }
 
   Future<void> _remove(WidgetRef ref, String name) async {
-    final next = {...ref.read(appSettingsProvider).opencodeEnv}..remove(name);
-    await ref.read(appSettingsProvider.notifier).setOpencodeEnv(next);
+    final next = {...ref.read(appSettingsProvider).environment}..remove(name);
+    await ref.read(appSettingsProvider.notifier).setEnvironment(next);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final env = ref.watch(appSettingsProvider).opencodeEnv;
+    final env = ref.watch(appSettingsProvider).environment;
     final names = env.keys.toList()..sort();
-    final hasOpencode = ref.watch(availableBackendsProvider).contains(BackendKind.opencode);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(
+        const _SectionHeader(
           "Environment",
-          description: hasOpencode
-              ? "Passed to every opencode server, and to the commands the built-in "
-                  "harness runs. A chat already running keeps what it started with."
-              : "Passed to the commands the built-in harness runs. A chat already "
-                  "running keeps what it started with.",
+          description: "Passed to every command the agent runs. A command already "
+              "running keeps what it started with.",
         ),
         for (final name in names)
           ListTile(
