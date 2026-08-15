@@ -9,12 +9,17 @@ import "domain/app_settings.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
 import "domain/models.dart";
+import "domain/prompt_library.dart";
 import "ui/widgets/provider_model_selector.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
+
+/// Loaded once, before the app is built, because assets are read
+/// asynchronously and nothing downstream should have to wait on that.
+final promptLibraryProvider = Provider<PromptLibrary>((ref) => PromptLibrary.empty);
 
 class AppSettingsNotifier extends Notifier<AppSettings> {
   late final AppConfig _config;
@@ -67,8 +72,8 @@ final attachmentBytesProvider =
     FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>((ref, key) =>
         ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource));
 
-/// The composer's `/` and `@` menus. Watched only while a menu is open, so a
-/// chat that never uses one never pays for the server these need.
-final completionsProvider =
-    FutureProvider.family<List<CompletionOption>, ({String chatId, CompletionKind kind})>(
-        (ref, key) => ref.watch(agentBackendProvider).completions(key.chatId, key.kind));
+/// The composer's `/` and `@` menus. The same list whichever backend runs the
+/// chat: agent-chat owns its commands and agents, and hands them down to
+/// whatever is executing the turn.
+final completionsProvider = Provider.family<List<CompletionOption>, CompletionKind>(
+    (ref, kind) => ref.watch(promptLibraryProvider).options(kind));

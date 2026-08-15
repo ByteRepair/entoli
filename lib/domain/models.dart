@@ -147,27 +147,28 @@ abstract class ModelOption with _$ModelOption {
   factory ModelOption.fromJson(Map<String, dynamic> json) => _$ModelOptionFromJson(json);
 }
 
-/// What a message can address, and the character that starts one.
+/// What a message can address, the character that starts one, and the
+/// directory the files defining them live in — under `assets/prompts/` when
+/// they ship with the app, under `$AGENT_CHAT_CONFIG/` when the user adds one.
 enum CompletionKind {
-  command("/", "Commands"),
-  agent("@", "Agents");
+  command("/", "Commands", "commands"),
+  agent("@", "Agents", "agents");
 
-  const CompletionKind(this.trigger, this.label);
+  const CompletionKind(this.trigger, this.label, this.folder);
   final String trigger;
   final String label;
+  final String folder;
 }
 
 /// An entry in the composer's `/` or `@` menu — a command the backend can run,
-/// or an agent a message can address.
+/// or an agent a message can address. Built from a `PromptDocument`, never
+/// deserialized: the file on disk is the persisted form.
 @freezed
 abstract class CompletionOption with _$CompletionOption {
   const factory CompletionOption({
     required String name,
     String? description,
   }) = _CompletionOption;
-
-  factory CompletionOption.fromJson(Map<String, dynamic> json) =>
-      _$CompletionOptionFromJson(json);
 }
 
 /// Text and files are scattered across parts; almost every caller wants one

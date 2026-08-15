@@ -196,15 +196,3 @@ Map<String, dynamic> _$ModelOptionToJson(_ModelOption instance) =>
       'modelId': instance.modelId,
       'label': instance.label,
     };
-
-_CompletionOption _$CompletionOptionFromJson(Map<String, dynamic> json) =>
-    _CompletionOption(
-      name: json['name'] as String,
-      description: json['description'] as String?,
-    );
-
-Map<String, dynamic> _$CompletionOptionToJson(_CompletionOption instance) =>
-    <String, dynamic>{
-      'name': instance.name,
-      'description': instance.description,
-    };

@@ -5,6 +5,7 @@ import "dart:typed_data";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 
 /// Two providers, two models each, deliberately not in alphabetical order so
 /// tests can assert the UI sorts them.
@@ -15,17 +16,18 @@ const testModels = [
   ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
 ];
 
-/// Two names sharing a prefix, so tests can assert the menu filters.
-const testCommands = [
-  CompletionOption(name: "init", description: "guided AGENTS.md setup"),
-  CompletionOption(name: "review", description: "review changes"),
-  CompletionOption(name: "revert", description: "undo the last turn"),
-];
+/// A library whose commands include two names sharing a prefix, so tests can
+/// assert the menu filters, and whose entries are deliberately out of order.
+PromptLibrary testLibrary() => PromptLibrary([
+      _doc(CompletionKind.command, "review", "review changes"),
+      _doc(CompletionKind.command, "revert", "undo the last turn"),
+      _doc(CompletionKind.command, "init", "guided AGENTS.md setup"),
+      _doc(CompletionKind.agent, "explore", "fast codebase search"),
+      _doc(CompletionKind.agent, "build", "the default agent"),
+    ]);
 
-const testAgents = [
-  CompletionOption(name: "build", description: "the default agent"),
-  CompletionOption(name: "explore", description: "fast codebase search"),
-];
+PromptDocument _doc(CompletionKind kind, String name, String description) =>
+    PromptDocument.parse(kind, name, "---\ndescription: $description\n---\n\nDo $name.\n");
 
 /// A real 1x1 PNG: the chip decodes what it is given, so a stand-in string of
 /// bytes would fail the codec rather than render.
@@ -125,18 +127,4 @@ class FakeBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() async => testModels;
-
-  Map<CompletionKind, List<CompletionOption>> scriptedCompletions = {
-    CompletionKind.command: testCommands,
-    CompletionKind.agent: testAgents,
-  };
-
-  /// Held open, the menu is left in its loading state.
-  Completer<void>? holdCompletions;
-
-  @override
-  Future<List<CompletionOption>> completions(String chatId, CompletionKind kind) async {
-    await holdCompletions?.future;
-    return scriptedCompletions[kind] ?? const [];
-  }
 }

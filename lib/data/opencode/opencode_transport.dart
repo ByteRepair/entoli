@@ -48,8 +48,6 @@ abstract class OpencodeTransport {
 
   Future<List<Map<String, dynamic>>> providers(String chatId);
 
-  Future<List<Map<String, dynamic>>> completions(String chatId, CompletionKind kind);
-
   Future<void> dispose(String chatId);
 
   Future<void> disposeAll();
