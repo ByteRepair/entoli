@@ -1,4 +1,3 @@
-import "dart:convert";
 import "dart:io";
 
 import "package:flutter/material.dart";
@@ -7,6 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/local_chat_store.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/providers.dart";
@@ -19,9 +19,8 @@ class TestApp {
   TestApp._(this.tmp, this.config, this.backend, this.container);
 
   factory TestApp.create({Duration? stallTimeout}) {
-    final tmp = Directory.systemTemp.createTempSync("agent_chat_test_");
-    final config = AppConfig.forDirectory(tmp);
-    Directory(config.chatsDir.path).createSync(recursive: true);
+    final config = tempConfig();
+    final tmp = config.dataDir;
     final backend = FakeBackend();
     return TestApp._(
       tmp,
@@ -45,17 +44,14 @@ class TestApp {
 
   ChatRepository get repo => container.read(chatRepositoryProvider);
 
-  /// The app-level default, as if a previous run had saved it.
+  /// The app-level default, written the way the app writes it.
   void seedGlobalDefault({String? providerId, String? modelId}) =>
-      config.settingsFile.writeAsStringSync(jsonEncode({
-        "defaultProviderId": ?providerId,
-        "defaultModelId": ?modelId,
-      }));
+      AppSettings(defaultProviderId: providerId, defaultModelId: modelId).save(config);
 
-  /// A chat's own overrides, as if the chat settings page had saved them.
-  void seedChatMeta(String chatId, Map<String, dynamic> json) {
-    Directory(config.chatDir(chatId).path).createSync(recursive: true);
-    config.metaFile(chatId).writeAsStringSync(jsonEncode(json));
+  /// A chat's own overrides, written the way the chat settings page writes them.
+  void seedChatMeta(String chatId, ChatMeta meta) {
+    config.ensureChatDirs(chatId);
+    meta.saveTo(config.metaFile(chatId));
   }
 
   ChatMeta savedMeta(String chatId) => ChatMeta.fromFile(config.metaFile(chatId));
@@ -90,3 +86,15 @@ List<String?> popupLabels(WidgetTester tester) => tester
     ))
     .map((t) => t.data)
     .toList();
+
+/// A data directory that cleans itself up when the test ends. `forDirectory`
+/// deliberately does not create `chats/`, and every caller needs it.
+AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
+  final tmp = Directory.systemTemp.createTempSync(prefix);
+  final config = AppConfig.forDirectory(tmp);
+  Directory(config.chatsDir.path).createSync(recursive: true);
+  addTearDown(() {
+    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+  });
+  return config;
+}

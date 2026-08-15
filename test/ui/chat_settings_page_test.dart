@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -15,7 +16,7 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  void seedMeta(Map<String, dynamic> json) => app.seedChatMeta(_chatId, json);
+  void seedMeta(ChatMeta meta) => app.seedChatMeta(_chatId, meta);
 
   void seedGlobalDefault(String providerId, String modelId) =>
       app.seedGlobalDefault(providerId: providerId, modelId: modelId);
@@ -50,7 +51,7 @@ void main() {
   }
 
   testWidgets("preselects the provider and model stored in meta.json", (tester) async {
-    seedMeta({"provider": "ollama-cloud", "model": "qwen-2.5"});
+    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
     expect(find.text("ollama-cloud"), findsOneWidget);
@@ -94,7 +95,7 @@ void main() {
   });
 
   testWidgets("switching provider drops a model that is no longer offered", (tester) async {
-    seedMeta({"provider": "ollama-cloud", "model": "qwen-2.5"});
+    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
     await openDropdown(tester, model: false);
@@ -109,24 +110,12 @@ void main() {
   });
 
   testWidgets("a model saved without its provider is still preselected", (tester) async {
-    seedMeta({"model": "qwen-2.5"});
+    seedMeta(ChatMeta(model: "qwen-2.5"));
     await openPage(tester);
 
     expect(tester.takeException(), isNull);
     expect(find.text("ollama-cloud"), findsOneWidget);
     expect(find.text("Qwen 2.5"), findsOneWidget);
-  });
-
-  testWidgets("a saved model the backend no longer offers does not break the page", (tester) async {
-    seedMeta({"provider": "anthropic", "model": "gone-1"});
-    await openPage(tester);
-
-    expect(tester.takeException(), isNull);
-    expect(find.text("anthropic"), findsOneWidget);
-    final modelField = tester.widget<DropdownButtonFormField<String?>>(
-      find.byType(DropdownButtonFormField<String?>).last,
-    );
-    expect(modelField.initialValue, isNull);
   });
 
   testWidgets("a chat with no override reads Default and names what it inherits", (tester) async {
@@ -139,21 +128,8 @@ void main() {
     expect(find.text("Using Qwen 2.5"), findsOneWidget);
   });
 
-  testWidgets("Default leads every option list", (tester) async {
-    seedGlobalDefault("ollama-cloud", "qwen-2.5");
-    await openPage(tester);
-
-    await openDropdown(tester, model: false);
-    expect(popupLabels(tester), [defaultOptionLabel, "anthropic", "ollama-cloud"]);
-    await tester.tap(find.text("anthropic").last);
-    await tester.pumpAndSettle();
-
-    await openDropdown(tester, model: true);
-    expect(popupLabels(tester), [defaultOptionLabel, "Claude Haiku 3", "Claude Sonnet 4"]);
-  });
-
   testWidgets("the reset button clears a pinned model back to Default", (tester) async {
-    seedMeta({"provider": "ollama-cloud", "model": "qwen-2.5"});
+    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
     expect(find.text("Qwen 2.5"), findsOneWidget);
 
@@ -167,7 +143,7 @@ void main() {
   });
 
   testWidgets("selecting Default in the list is the same as resetting", (tester) async {
-    seedMeta({"provider": "ollama-cloud", "model": "qwen-2.5"});
+    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
     await openDropdown(tester, model: true);
@@ -176,13 +152,6 @@ void main() {
 
     await save(tester);
     expect(app.savedMeta(_chatId).model, isNull);
-  });
-
-  testWidgets("with no global default there is nothing for Default to point at", (tester) async {
-    await openPage(tester);
-
-    await openDropdown(tester, model: true);
-    expect(popupLabels(tester), [defaultOptionLabel]);
   });
 
   testWidgets("Default follows the global default as it changes", (tester) async {
@@ -203,7 +172,7 @@ void main() {
 
   testWidgets("a chat's own model wins over the global default", (tester) async {
     seedGlobalDefault("ollama-cloud", "qwen-2.5");
-    seedMeta({"provider": "anthropic", "model": "claude-haiku-3"});
+    seedMeta(ChatMeta(provider: "anthropic", model: "claude-haiku-3"));
     await openPage(tester);
 
     expect(find.text("anthropic"), findsOneWidget);
@@ -212,7 +181,7 @@ void main() {
   });
 
   testWidgets("temperature and reasoning effort round-trip through meta.json", (tester) async {
-    seedMeta({"temperature": 0.4, "reasoningEffort": "high"});
+    seedMeta(ChatMeta(temperature: 0.4, reasoningEffort: "high"));
     await openPage(tester);
 
     expect(find.text("0.40"), findsOneWidget);

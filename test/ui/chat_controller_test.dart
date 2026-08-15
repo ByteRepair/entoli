@@ -24,15 +24,20 @@ void main() {
     fail("turn never finished");
   }
 
-  /// A chat holding one finished exchange, plus its controller.
-  Future<(String, ChatController)> chatWithOneTurn(String text) async {
+  /// A chat with a turn under way. The delay lets the controller's initial
+  /// load settle before it is driven.
+  Future<(String, ChatController)> startTurn(String text) async {
     final chat = await app.repo.createChat();
     final id = chat.state.id;
     final controller = app.container.read(chatControllerProvider(id).notifier);
-    await app.repo.save(chat);
-    // Let the controller's initial load settle before driving it.
     await Future<void>.delayed(Duration.zero);
     await controller.send(text);
+    return (id, controller);
+  }
+
+  /// A chat holding one finished exchange, plus its controller.
+  Future<(String, ChatController)> chatWithOneTurn(String text) async {
+    final (id, controller) = await startTurn(text);
     await waitIdle(id);
     return (id, controller);
   }
@@ -66,11 +71,7 @@ void main() {
       RetryEvent(attempt: 2, message: "you have reached your session usage limit"),
     ];
     app.backend.hold = Completer<void>();
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-    await controller.send("hello");
+    final (id, _) = await startTurn("hello");
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
     final view = app.container.read(chatControllerProvider(id));
@@ -109,12 +110,7 @@ void main() {
       RetryEvent(attempt: 3, message: "you have reached your session usage limit"),
     ];
     app.backend.hold = Completer<void>();
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-
-    await controller.send("hello");
+    final (id, _) = await startTurn("hello");
     await waitIdle(id);
 
     final view = app.container.read(chatControllerProvider(id));
@@ -129,12 +125,7 @@ void main() {
   test("giving up says so plainly when nothing explained the stall", () async {
     app.backend.scriptedEvents = const [];
     app.backend.hold = Completer<void>();
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-
-    await controller.send("hello");
+    final (id, _) = await startTurn("hello");
     await waitIdle(id);
 
     final error = app.container
@@ -153,12 +144,7 @@ void main() {
     // Deltas spaced under the timeout: each one buys the turn more time.
     app.backend.scriptedEvents = const [TextDelta("thinking")];
     app.backend.hold = Completer<void>();
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-
-    await controller.send("hello");
+    final (id, _) = await startTurn("hello");
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
     final view = app.container.read(chatControllerProvider(id));
@@ -170,11 +156,7 @@ void main() {
   test("a given-up turn can be retried, and the retry stands alone", () async {
     app.backend.scriptedEvents = const [RetryEvent(attempt: 1, message: "rate limited")];
     app.backend.hold = Completer<void>();
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-    await controller.send("hello");
+    final (id, controller) = await startTurn("hello");
     await waitIdle(id);
 
     app.backend.hold!.complete();
