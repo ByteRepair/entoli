@@ -4,10 +4,6 @@ import "../../domain/ask.dart";
 import "../../domain/profile.dart";
 import "task_tool.dart";
 
-/// The line that ends a turn. Upstream mini-swe-agent's marker, kept verbatim
-/// so a model that has seen the original recognises it.
-const submitMarker = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT";
-
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
 /// and adapted for a conversation: upstream runs one task and exits, this is
 /// asked something else once the turn is over.
@@ -29,9 +25,9 @@ String systemPrompt({
           )
         : _withoutShell(agentPrompt, profile: profile);
 
-/// Where there is no shell, the submission protocol is unsayable — submitting
-/// is itself a command. So the model is told to answer, and the turn ends when
-/// it does.
+/// Where there is no shell, the model cannot run anything. The turn ends when
+/// it replies with text and calls no tool — the same termination signal the
+/// shell path uses.
 String _withoutShell(String? agentPrompt, {Profile? profile}) => """
 You are a helpful assistant.
 
@@ -78,8 +74,8 @@ have to be in it.
 ## How you act
 
 1. You write reasoning text saying what you are doing and why.
-2. You call a tool at least once: `bash` to run a command, `$taskToolName` to
-   delegate a task to a sub-agent, `$askToolName` to put a question to the
+2. You call a tool when you need to: `bash` to run a command, `$taskToolName`
+   to delegate a task to a sub-agent, `$askToolName` to put a question to the
    user, `websearch` to search the web, or `webfetch` to read a page.
 3. The system runs the command and shows you the result.
 4. You continue, or you finish the turn.
@@ -111,16 +107,13 @@ ones that look relevant. Both are read-only, so they run without asking.
 
 ## Finishing a turn
 
-As soon as you have answered the question or completed the task, call the
-`bash` tool one last time with `echo $submitMarker` as the whole command, and
-nothing else in it. That ends the turn and hands your reply to the user.
+When you have the answer, reply with it as text and do not call any tool —
+that ends the turn and hands your reply to the user. A plain text reply is a
+finished answer, not a mistake.
 
 Finish the moment you have the answer. Do not keep running commands to look
 busy, and do not go looking for more to say. If the question needs no commands
 at all, say your answer and finish immediately.
-
-Do not repeat your answer inside that command — the user already sees your
-reasoning text.
 
 $_asking
 
@@ -159,20 +152,8 @@ The user asks:
 $task
 
 Work step by step: look before you change anything, and check that what you
-changed does what you meant. Call `bash` with `echo $submitMarker` as soon as
-you have an answer for them.""";
-
-/// What the model is told when the model returned no command to run.
-String formatError({String? finishReason}) {
-  if (finishReason == "length") {
-    return "Your previous response hit the output limit before you produced a "
-        "tool call, so it was cut off. Be more concise and finish with exactly "
-        "one `bash` tool call.";
-  }
-  return "Every response must call the `bash` tool at least once. Call it with "
-      "your command as the argument, for example {\"command\": \"ls -la\"}. "
-      "If you are done, run `echo $submitMarker` on its own.";
-}
+changed does what you meant. When you have an answer, reply with it as text and
+do not call a tool.""";
 
 String unknownTool(String name, Iterable<String> available) =>
     "There is no tool called '$name'. The tools you have are "

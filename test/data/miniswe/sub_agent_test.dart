@@ -7,7 +7,6 @@ import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/data/miniswe/llm/rate_limit_gate.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
 import "package:agent_chat/data/miniswe/sub_agent.dart";
-import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -21,9 +20,6 @@ void main() {
   late FakeShell shell;
 
   setUp(() => session = MinisweSession());
-
-  ShellResult submitted(String command) =>
-      command.contains(submitMarker) ? ok("$submitMarker\n") : ok("");
 
   PromptLibrary libraryWithGeneral() => PromptLibrary([
         PromptDocument.parse(
@@ -51,21 +47,21 @@ void main() {
     test("returns the sub-agent's final text", () async {
       final subClient = FakeLlmClient([
         [bashCall("echo hello")],
-        [bashCall("echo $submitMarker", text: "The answer is hello.")],
+        [saidOnly("The answer is hello.")],
       ]);
-      final runner = runnerOver(subClient, respond: submitted);
+      final runner = runnerOver(subClient);
       final result = await runner.run("general", "say hello");
 
       expect(result.returnCode, 0);
       expect(result.output, contains("The answer is hello."));
-      expect(shell.ran, ["echo hello", "echo $submitMarker"]);
+      expect(shell.ran, ["echo hello"]);
     });
 
     test("a missing agent name falls back to general", () async {
       final subClient = FakeLlmClient([
-        [bashCall("echo $submitMarker", text: "done")],
+        [saidOnly("done")],
       ]);
-      final runner = runnerOver(subClient, respond: submitted);
+      final runner = runnerOver(subClient);
       final result = await runner.run("nonexistent", "do something");
 
       expect(result.returnCode, 0);
@@ -74,9 +70,10 @@ void main() {
 
     test("an empty result is reported as a failure", () async {
       final subClient = FakeLlmClient([
-        [bashCall("echo $submitMarker")],
+        [bashCall("true")],
+        [saidOnly("")],
       ]);
-      final runner = runnerOver(subClient, respond: submitted);
+      final runner = runnerOver(subClient, respond: (c) => ok(""));
       final result = await runner.run("general", "do something");
 
       expect(result.returnCode, -1);
@@ -85,10 +82,10 @@ void main() {
 
     test("a sub-agent error is reported, not thrown", () async {
       final subClient = FakeLlmClient([
-        [bashCall("echo $submitMarker")],
+        [bashCall("echo hi")],
       ])
         ..failures[0] = const LlmException("bad key", statusCode: 401);
-      final runner = runnerOver(subClient, respond: submitted);
+      final runner = runnerOver(subClient);
       final result = await runner.run("general", "do something");
 
       expect(result.returnCode, -1);
@@ -97,9 +94,9 @@ void main() {
 
     test("sub-agents are not offered the task or ask_user tools", () async {
       final subClient = FakeLlmClient([
-        [bashCall("echo $submitMarker")],
+        [saidOnly("done")],
       ]);
-      final runner = runnerOver(subClient, respond: submitted);
+      final runner = runnerOver(subClient);
       await runner.run("general", "do something");
 
       final tools = subClient.calls.single.tools.map((t) => t.name).toSet();
@@ -110,7 +107,9 @@ void main() {
   });
 
   group("MinisweAgent with task tool", () {
-    final finish = bashCall("echo $submitMarker", id: "done");
+    const done = LlmCompletion(
+      message: LlmMessage(role: LlmRole.assistant, text: "done"),
+    );
 
     /// Parent agent with a [SubAgentRunner] backed by [subClient].
     MinisweAgent agentOver(
@@ -145,12 +144,12 @@ void main() {
     test("a task call spawns a sub-agent and returns its output", () async {
       final parent = FakeLlmClient([
         [taskCall("general", "say hello", id: "t1")],
-        [finish],
+        [done],
       ]);
       final sub = FakeLlmClient([
-        [bashCall("echo $submitMarker", text: "hello from the sub-agent")],
+        [saidOnly("hello from the sub-agent")],
       ]);
-      final agent = agentOver(parent, sub, respond: submitted);
+      final agent = agentOver(parent, sub);
       final events = await agent.run("delegate it").toList();
 
       // The parent received the sub-agent's text as the tool result.
@@ -163,13 +162,12 @@ void main() {
     test("start and end events fire around the sub-agent", () async {
       final parent = FakeLlmClient([
         [taskCall("general", "do it", id: "t1")],
-        [finish],
+        [done],
       ]);
       final sub = FakeLlmClient([
-        [bashCall("echo $submitMarker", text: "done")],
+        [saidOnly("done")],
       ]);
-      final events = await agentOver(parent, sub, respond: submitted)
-          .run("delegate").toList();
+      final events = await agentOver(parent, sub).run("delegate").toList();
 
       final start = events.whereType<SubAgentStartEvent>().single;
       expect(start.id, "t1");
@@ -182,15 +180,15 @@ void main() {
     test("the call and result are persisted in the session", () async {
       final parent = FakeLlmClient([
         [taskCall("general", "do it", id: "t1")],
-        [finish],
+        [done],
       ]);
       final sub = FakeLlmClient([
-        [bashCall("echo $submitMarker")],
+        [saidOnly("done")],
       ]);
-      await agentOver(parent, sub, respond: submitted).run("delegate").toList();
+      await agentOver(parent, sub).run("delegate").toList();
 
       final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
-      expect(toolMessages.map((m) => m.toolCallId), containsAll(["t1", "done"]));
+      expect(toolMessages.map((m) => m.toolCallId), contains("t1"));
     });
 
     test("a task call with bad arguments is rejected", () async {
@@ -205,11 +203,10 @@ void main() {
             ),
           ),
         ],
-        [finish],
+        [done],
       ]);
       final sub = FakeLlmClient([]);
-      final events = await agentOver(parent, sub, respond: submitted)
-          .run("delegate").toList();
+      final events = await agentOver(parent, sub).run("delegate").toList();
 
       final result = events.whereType<ToolResultEvent>().first.result;
       expect(result.callId, "t1");
@@ -220,10 +217,10 @@ void main() {
 
     test("the task tool is offered alongside bash and ask_user", () async {
       final parent = FakeLlmClient([
-        [finish],
+        [done],
       ]);
       final sub = FakeLlmClient([]);
-      await agentOver(parent, sub, respond: submitted).run("hi").toList();
+      await agentOver(parent, sub).run("hi").toList();
 
       final tools = parent.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, containsAll(["bash", "task", "ask_user"]));
@@ -244,15 +241,14 @@ void main() {
             ),
           ),
         ],
-        [finish],
+        [done],
       ]);
-      // Each sub-agent says something then finishes.
+      // Each sub-agent replies with text — that's its output.
       final sub = FakeLlmClient([
-        [bashCall("echo $submitMarker", text: "result A")],
-        [bashCall("echo $submitMarker", text: "result B")],
+        [saidOnly("result A")],
+        [saidOnly("result B")],
       ]);
-      final events = await agentOver(parent, sub, respond: submitted)
-          .run("fan out").toList();
+      final events = await agentOver(parent, sub).run("fan out").toList();
 
       // Both sub-agents started and ended.
       final starts = events.whereType<SubAgentStartEvent>().toList();
@@ -280,12 +276,12 @@ void main() {
             ),
           ),
         ],
-        [finish],
+        [done],
       ]);
       final sub = FakeLlmClient([
-        for (var i = 0; i < 5; i++) [bashCall("echo $submitMarker", text: "result $i")],
+        for (var i = 0; i < 5; i++) [saidOnly("result $i")],
       ]);
-      shell = FakeShell(submitted, canRunCommands: true);
+      shell = FakeShell((_) => ok(""), canRunCommands: true);
       final runner = SubAgentRunner(
         client: sub,
         shell: shell,
@@ -319,11 +315,11 @@ void main() {
       ]);
       final sub = FakeLlmClient([
         [bashCall("sleep 10")],
-        [bashCall("echo $submitMarker", text: "done")],
+        [saidOnly("done")],
       ]);
       shell = FakeShell((c) => c.startsWith("sleep")
           ? ShellResult(returnCode: 0, output: "")
-          : ok("$submitMarker\n"));
+          : ok(""));
       final runner = SubAgentRunner(
         client: sub,
         shell: shell,
@@ -346,11 +342,11 @@ void main() {
       );
 
       final events = <AgentEvent>[];
-      final done = agent.run("delegate").forEach(events.add);
+      final doneFuture = agent.run("delegate").forEach(events.add);
       // Let the sub-agent start.
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await agent.cancel();
-      await done;
+      await doneFuture;
 
       // The turn ended without finishing normally.
       expect(events.last, isA<DoneEvent>());
@@ -358,7 +354,9 @@ void main() {
   });
 
   group("RateLimitGate with sub-agents", () {
-    final finish = bashCall("echo $submitMarker", id: "done");
+    const done = LlmCompletion(
+      message: LlmMessage(role: LlmRole.assistant, text: "done"),
+    );
 
     /// A parent + sub-agent pair sharing one gate, both talking through
     /// [ConcurrentFakeLlmClient] so the test can assert the in-flight cap.
@@ -424,11 +422,11 @@ void main() {
             ),
           ),
         ],
-        [finish],
+        [done],
       ]);
       // Each sub-agent makes one model call then finishes.
       final sub = FakeLlmClient([
-        for (var i = 0; i < 5; i++) [bashCall("echo $submitMarker", text: "result $i")],
+        for (var i = 0; i < 5; i++) [saidOnly("result $i")],
       ]);
       final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
           maxConcurrent: 2,
@@ -459,24 +457,23 @@ void main() {
             ),
           ),
         ],
-        [finish],
+        [done],
       ]);
-      // Sub-agent turns: call 0 → 429 then success; calls 1, 2 → success.
+      // Sub-agent turns: call 0 -> 429 then success; calls 1, 2 -> success.
       // FakeLlmClient uses one entry per call, in order, and _at is global
       // across the three concurrent sub-agents — but with maxConcurrent 1
       // they serialize, so the order is deterministic.
       final sub = FakeLlmClient([
-        [bashCall("echo $submitMarker", text: "first")],   // at=0: 429
-        [bashCall("echo $submitMarker", text: "first")],   // at=1: retry succeeds
-        [bashCall("echo $submitMarker", text: "second")],  // at=2: sub-agent 1
-        [bashCall("echo $submitMarker", text: "third")],   // at=3: sub-agent 2
+        [saidOnly("first")],   // at=0: 429
+        [saidOnly("first")],   // at=1: retry succeeds
+        [saidOnly("second")],  // at=2: sub-agent 1
+        [saidOnly("third")],   // at=3: sub-agent 2
       ])
         ..failures[0] = const LlmException("rate limited", statusCode: 429, retryable: true);
       final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
           maxConcurrent: 1,
           initialBackoff: const Duration(milliseconds: 50),
-          options: const MinisweOptions(maxConcurrentSubAgents: 3),
-          respond: submitted);
+          options: const MinisweOptions(maxConcurrentSubAgents: 3));
 
       final events = await agent.run("fan out").toList();
 
@@ -502,11 +499,11 @@ void main() {
             ),
           ),
         ],
-        [finish],
+        [done],
       ]);
       // Every sub-agent call 429s.
       final sub = FakeLlmClient([
-        for (var i = 0; i < 20; i++) [bashCall("echo $submitMarker", text: "never")],
+        for (var i = 0; i < 20; i++) [saidOnly("never")],
       ]);
       for (var i = 0; i < 20; i++) {
         sub.failures[i] = const LlmException("rate limited", statusCode: 429, retryable: true);
@@ -514,8 +511,7 @@ void main() {
       final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
           maxConcurrent: 1,
           initialBackoff: const Duration(milliseconds: 10),
-          maxRetryBudget: const Duration(milliseconds: 200),
-          respond: submitted);
+          maxRetryBudget: const Duration(milliseconds: 200));
 
       final events = await agent.run("fan out").toList();
 
@@ -540,15 +536,15 @@ void main() {
             ),
           ),
         ],
-        [finish],
+        [done],
       ]);
       final sub = FakeLlmClient([
-        for (var i = 0; i < 10; i++) [bashCall("echo $submitMarker")],
+        for (var i = 0; i < 10; i++) [saidOnly("never")],
       ]);
       for (var i = 0; i < 10; i++) {
         sub.failures[i] = const LlmException("rate limited", statusCode: 429, retryable: true);
       }
-      shell = FakeShell(submitted, canRunCommands: true);
+      shell = FakeShell((_) => ok(""), canRunCommands: true);
       // No gate, no GatedLlmClient — raw clients.
       final runner = SubAgentRunner(
         client: sub,
