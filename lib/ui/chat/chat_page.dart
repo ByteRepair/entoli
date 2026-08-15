@@ -131,7 +131,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               onDeny: () => notifier.respondApproval(a.id, ApprovalResponse.deny),
             ),
           Composer(
-            chatId: widget.chatId,
             controller: _controller,
             isRunning: view.isRunning,
             onSend: _send,

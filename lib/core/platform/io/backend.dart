@@ -3,14 +3,22 @@ import "dart:io";
 import "../../../core/config.dart";
 import "../../../data/miniswe/miniswe_chaquopy_backend.dart";
 import "../../../data/opencode/opencode_backend.dart";
+import "../../../data/opencode/opencode_config_dir.dart";
 import "../../../data/opencode/real_opencode_transport.dart";
 import "../../../domain/agent_backend.dart";
+import "../../../domain/prompt_library.dart";
 
 /// Desktop runs a real `opencode serve`; Android has no such binary to spawn,
 /// so it gets the embedded mini-swe-agent instead.
-AgentBackend createBackend(AppConfig config) {
+AgentBackend createBackend(AppConfig config, PromptLibrary library) {
   if (Platform.isAndroid || Platform.isIOS) {
     return MinisweChaquopyBackend(config: config);
   }
-  return OpencodeBackend(config: config, transport: RealOpencodeTransport());
+  // opencode only reads these off disk, and only when a server starts, so the
+  // whole library is laid down once here rather than per chat.
+  writeOpencodeConfig(library, opencodeConfigDir(config));
+  return OpencodeBackend(
+    config: config,
+    transport: RealOpencodeTransport(environment: () => opencodeEnvironment(config)),
+  );
 }

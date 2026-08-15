@@ -2633,7 +2633,6 @@ as String?,
 
 }
 
-
 /// @nodoc
 mixin _$CompletionOption {
 
@@ -2644,8 +2643,6 @@ mixin _$CompletionOption {
 @pragma('vm:prefer-inline')
 $CompletionOptionCopyWith<CompletionOption> get copyWith => _$CompletionOptionCopyWithImpl<CompletionOption>(this as CompletionOption, _$identity);
 
-  /// Serializes this CompletionOption to a JSON map.
-  Map<String, dynamic> toJson();
 
 
 @override
@@ -2653,7 +2650,7 @@ bool operator ==(Object other) {
   return identical(this, other) || (other.runtimeType == runtimeType&&other is CompletionOption&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description));
 }
 
-@JsonKey(includeFromJson: false, includeToJson: false)
+
 @override
 int get hashCode => Object.hash(runtimeType,name,description);
 
@@ -2829,11 +2826,11 @@ return $default(_that.name,_that.description);case _:
 }
 
 /// @nodoc
-@JsonSerializable()
+
 
 class _CompletionOption implements CompletionOption {
   const _CompletionOption({required this.name, this.description});
-  factory _CompletionOption.fromJson(Map<String, dynamic> json) => _$CompletionOptionFromJson(json);
+  
 
 @override final  String name;
 @override final  String? description;
@@ -2844,17 +2841,14 @@ class _CompletionOption implements CompletionOption {
 @pragma('vm:prefer-inline')
 _$CompletionOptionCopyWith<_CompletionOption> get copyWith => __$CompletionOptionCopyWithImpl<_CompletionOption>(this, _$identity);
 
-@override
-Map<String, dynamic> toJson() {
-  return _$CompletionOptionToJson(this, );
-}
+
 
 @override
 bool operator ==(Object other) {
   return identical(this, other) || (other.runtimeType == runtimeType&&other is _CompletionOption&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description));
 }
 
-@JsonKey(includeFromJson: false, includeToJson: false)
+
 @override
 int get hashCode => Object.hash(runtimeType,name,description);
 

@@ -1,10 +1,9 @@
-import "dart:async";
-
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 
 import "../fakes.dart";
@@ -29,7 +28,6 @@ void main() {
         tester,
         Scaffold(
           body: Composer(
-            chatId: "chat-1",
             controller: controller,
             isRunning: false,
             onSend: (text, attachments) {
@@ -53,18 +51,18 @@ void main() {
       .where((s) => s.startsWith("/") || s.startsWith("@"))
       .toList();
 
-  testWidgets("typing / offers every command", (tester) async {
+  testWidgets("typing / offers every command, in name order", (tester) async {
     await pump(tester);
     await type(tester, "/");
 
-    expect(menuItems(tester), ["/init", "/review", "/revert"]);
+    expect(menuItems(tester), ["/init", "/revert", "/review"]);
   });
 
   testWidgets("typing narrows the menu to what matches", (tester) async {
     await pump(tester);
     await type(tester, "/rev");
 
-    expect(menuItems(tester), ["/review", "/revert"]);
+    expect(menuItems(tester), ["/revert", "/review"]);
   });
 
   testWidgets("a query that matches nothing closes the menu", (tester) async {
@@ -120,7 +118,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
-    expect(controller.text, "/review ");
+    expect(controller.text, "/revert ");
     expect(sent, isEmpty);
   });
 
@@ -132,7 +130,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
-    expect(controller.text, "/revert ");
+    expect(controller.text, "/review ");
   });
 
   testWidgets("escape closes the menu and hands enter back to the field", (tester) async {
@@ -186,7 +184,7 @@ void main() {
     await insertVia(tester, "Commands");
 
     expect(controller.text, "/");
-    expect(menuItems(tester), ["/init", "/review", "/revert"]);
+    expect(menuItems(tester), ["/init", "/revert", "/review"]);
   });
 
   testWidgets("the + button's Agents entry opens the agent menu", (tester) async {
@@ -215,7 +213,7 @@ void main() {
     await insertVia(tester, "Commands");
 
     expect(controller.text, "/");
-    expect(menuItems(tester), ["/init", "/review", "/revert"]);
+    expect(menuItems(tester), ["/init", "/revert", "/review"]);
   });
 
   testWidgets("the + button reopens a menu that was dismissed", (tester) async {
@@ -227,23 +225,12 @@ void main() {
 
     await insertVia(tester, "Commands");
 
-    expect(menuItems(tester), ["/init", "/review", "/revert"]);
+    expect(menuItems(tester), ["/init", "/revert", "/review"]);
   });
 
-  testWidgets("the menu says so while the list is still loading", (tester) async {
-    app.backend.holdCompletions = Completer<void>();
-    await pump(tester);
-    await type(tester, "/");
-
-    expect(find.text("Loading commands..."), findsOneWidget);
-
-    app.backend.holdCompletions!.complete();
-    await tester.pumpAndSettle();
-    expect(menuItems(tester), ["/init", "/review", "/revert"]);
-  });
-
-  testWidgets("a backend with nothing to offer opens no menu", (tester) async {
-    app.backend.scriptedCompletions = const {};
+  testWidgets("an empty library opens no menu", (tester) async {
+    app.dispose();
+    app = TestApp.create(library: PromptLibrary.empty);
     await pump(tester);
     await type(tester, "/");
 

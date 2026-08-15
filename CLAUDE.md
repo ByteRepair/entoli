@@ -11,11 +11,21 @@ LLM connections. Each chat owns a persistent workspace directory.
   events into it as they arrive; `ChatRepository` resolves which model runs and
   owns rewinding. Context is re-injected only when a turn is resent (see
   "Resending a message") — otherwise the agent's own session carries it.
+- The backends run **on top of** agent-chat, not the other way around. Commands
+  and agents are agent-chat's, and a backend is configured to take them; a
+  backend's own global configuration is deliberately kept out.
 
 ### On-disk layout
 
 `<dataDir>/chats/<chat-id>/` with `state.json`, `conv.json`, `resources/`, `workspace/`.
-Data dir: `~/.config/agent-chat` (desktop), app-private storage (Android), OPFS (Web).
+`<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own
+prompt files, beside `settings.json`.
+Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
+app-private storage (Android), OPFS (Web).
+
+`<cacheDir>` is `~/.cache/agent-chat`, and holds only what a backend can be
+told to rebuild — see "Commands and agents". Nothing the user typed lives
+there, so it is safe to delete.
 
 ### OpenCode server model
 
@@ -73,13 +83,49 @@ in `conv.json` (they arrive at different times) and the UI pairs them by
 
 ### Commands and agents
 
-`CompletionKind` names the two of them and carries the trigger character, so
-one `completions(chatId, kind)` runs the whole chain — backend, transport,
-client, provider — rather than a parallel pair per layer. `GET /command` and
-`GET /agent` list what the workspace offers; both come from the chat's own
-server, so asking for them starts it if the chat has not sent anything yet.
-Entries with `hidden: true` are opencode's own machinery (compaction, titling)
-and are filtered out.
+agent-chat owns these, not the backend. `PromptLibrary` is the whole of what
+the composer's `/` and `@` menus offer, and it is built once at startup from
+two `PromptSource`s in precedence order: the presets packaged under
+`assets/prompts/{commands,agents}/`, then `$AGENT_CHAT_CONFIG/{commands,agents}/`.
+A file the user wrote replaces the preset it shares a name with. Entries come
+back sorted by name, so the menu does not reorder when a source does.
+
+A prompt file is opencode-shaped: YAML frontmatter, then the template a command
+expands to or the system prompt an agent runs under. `PromptDocument` reads
+only the top-level scalars out of the frontmatter — `description` is all the
+menu needs — and keeps the file verbatim in `source` for whoever parses YAML
+properly. That is what gets written back out to a backend.
+
+`completions` is therefore **not** on `AgentBackend`: the list is the same
+whichever backend runs the chat, so `completionsProvider` reads the library
+directly and is synchronous. Opening the menu no longer starts a server.
+
+The library is built once, in `main`, and never reloaded. A file added to
+`$AGENT_CHAT_CONFIG` while the app is running does not appear until a restart —
+deliberately, because half of it could not take effect anyway: a server already
+spawned has read its config directory and will not read it again.
+
+#### Handing the library to opencode
+
+opencode discovers commands and agents by globbing `{command,commands}/**/*.md`
+and `{agent,agents}/**/*.md` under every config directory it knows. Its global
+one is `$XDG_CONFIG_HOME/opencode` and is **always** in that list;
+`OPENCODE_CONFIG_DIR` only *appends* a directory, so it cannot isolate anything
+on its own (both verified against opencode 1.18.18: `Global.Path.config`,
+`ConfigPaths.directories`).
+
+So `opencodeEnvironment` starts every server with `XDG_CONFIG_HOME` pointed at
+`<cacheDir>`, which makes opencode's config dir `~/.cache/agent-chat/opencode`,
+and `writeOpencodeConfig` lays the library down there as `command/*.md` and
+`agent/*.md`. Rewritten from scratch on every start: a deleted command has to
+stop being offered. The user's `~/.config/opencode` stops applying — that is
+the point — but opencode's own built-ins (`init`, `review`, `build`, `explore`,
+`general`, `plan`) remain, since they are compiled in rather than read off disk.
+
+`XDG_DATA_HOME` is deliberately left alone: credentials and the session
+database live there and are the user's, not ours. The trade-off of moving
+`XDG_CONFIG_HOME` is that tools opencode spawns inherit it — `gh` in
+particular reads `$XDG_CONFIG_HOME/gh`.
 
 The syntax is parsed in `OpencodeBackend`, not in the repository or the UI:
 `/` and `@` are opencode's, and `conv.json` stores the message as typed, so a
@@ -112,9 +158,10 @@ we surface as a `RetryEvent` (first one lands ~2s in). It is turn-scoped view
 state, never a message part, so it is not persisted.
 
 `test/live/opencode_live.dart` drives a real server through the production
-path and prints timestamped events. It is not a `_test.dart` file, so
-`flutter test` skips it; run it by name when the question is what opencode
-actually emits.
+path and prints timestamped events, and prints what `GET /command` and
+`GET /agent` really return under the isolated config dir. It is not a
+`_test.dart` file, so `flutter test` skips it; run it by name when the question
+is what opencode actually emits.
 
 `transport.subscribe` is awaited before prompting and returns only once
 `/event` is attached — opencode never replays, so an event emitted before the
@@ -208,7 +255,7 @@ selector plus its loading and failure states) over `ProviderModelSelector`
 `AttachmentChip` / `AttachmentStrip`.
 Tests share `test/harness.dart` (`TestApp`, `tempConfig`, `pumpUntil`, the
 dropdown finders) and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents`
-and `hold` drive a turn, plus `FakeAttachmentPicker`).
+and `hold` drive a turn, plus `FakeAttachmentPicker` and `testLibrary`).
 
 Streamed deltas are coalesced into one state update per frame: per-token
 updates made the reply's text quadratic and rebuilt every visible bubble
@@ -220,8 +267,8 @@ would fold into each other's part.
 walks the parts and decides which of the two each one is.
 
 `Composer` opens a menu above the field when the caret sits in a `/` or `@`
-token. `completionsProvider` is watched only while that menu is open, so a
-chat that never uses one never starts a server for it.
+token, over a library that is already loaded — so it takes no chat id, has no
+loading state, and starts nothing.
 Enter, Tab and the arrows are bound only while the menu has a match — the rest
 of the time they have to keep doing what they do in a text box. The `+` button
 left of the field is a second way in: for a command or an agent it types the

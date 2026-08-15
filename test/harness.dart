@@ -9,6 +9,7 @@ import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
 
 import "fakes.dart";
@@ -18,7 +19,7 @@ import "fakes.dart";
 class TestApp {
   TestApp._(this.tmp, this.config, this.backend, this.picker, this.container);
 
-  factory TestApp.create({Duration? stallTimeout}) {
+  factory TestApp.create({Duration? stallTimeout, PromptLibrary? library}) {
     final config = tempConfig();
     final tmp = config.dataDir;
     final backend = FakeBackend();
@@ -34,6 +35,7 @@ class TestApp {
           agentBackendProvider.overrideWithValue(backend),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
+          promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           if (stallTimeout != null) turnStallTimeoutProvider.overrideWithValue(stallTimeout),
         ],
       ),

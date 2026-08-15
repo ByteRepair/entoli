@@ -378,16 +378,6 @@ class OpencodeBackend implements AgentBackend {
     }
   }
 
-  @override
-  Future<List<CompletionOption>> completions(String chatId, CompletionKind kind) async {
-    await transport.ensureServer(chatId, config.workspaceDir(chatId).path);
-    // Hidden entries are opencode's own machinery: compaction, titling.
-    return (await transport.completions(chatId, kind))
-        .where((o) => o["hidden"] != true)
-        .map(CompletionOption.fromJson)
-        .toList();
-  }
-
   Future<List<ModelOption>> _providersFrom(String chatId) async {
     try {
       return _flattenModels(await transport.providers(chatId));

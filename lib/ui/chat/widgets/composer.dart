@@ -55,19 +55,17 @@ typedef SendCallback = void Function(String text, List<Attachment> attachments);
 
 /// Message composer with send/abort toggle. Calls onSend with the typed text
 /// and whatever is attached, then clears both; calls onAbort when a turn is
-/// running. Typing `/` or `@` opens a menu of the backend's commands or agents
+/// running. Typing `/` or `@` opens a menu of the app's commands or agents
 /// above the field, and the `+` button also attaches files.
 class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,
-    required this.chatId,
     required this.controller,
     required this.isRunning,
     required this.onSend,
     required this.onAbort,
   });
 
-  final String chatId;
   final TextEditingController controller;
   final bool isRunning;
   final SendCallback onSend;
@@ -191,10 +189,8 @@ class _ComposerState extends ConsumerState<Composer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final token = _token;
-    final options = token == null
-        ? null
-        : ref.watch(completionsProvider((chatId: widget.chatId, kind: token.kind)));
-    final matches = _matching(options?.value ?? const [], token?.query ?? "");
+    final options = token == null ? const <CompletionOption>[] : ref.watch(completionsProvider(token.kind));
+    final matches = _matching(options, token?.query ?? "");
 
     return Container(
       padding: const EdgeInsets.all(8),
@@ -205,7 +201,7 @@ class _ComposerState extends ConsumerState<Composer> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (token != null) _menu(token.kind, options!, matches),
+          if (token != null) _menu(token.kind, matches),
           if (_attachments.isNotEmpty)
             AttachmentStrip(
               children: [
@@ -327,20 +323,9 @@ class _ComposerState extends ConsumerState<Composer> {
     return options.where((o) => o.name.toLowerCase().contains(needle)).toList();
   }
 
-  Widget _menu(
-    CompletionKind kind,
-    AsyncValue<List<CompletionOption>> options,
-    List<CompletionOption> matches,
-  ) {
+  Widget _menu(CompletionKind kind, List<CompletionOption> matches) {
+    if (matches.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final noun = kind.label.toLowerCase();
-    final body = switch (options) {
-      AsyncError(:final error) => _note("Could not load $noun: $error"),
-      AsyncLoading() when !options.hasValue => _note("Loading $noun..."),
-      _ when matches.isEmpty => null,
-      _ => _list(kind, matches),
-    };
-    if (body == null) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -351,19 +336,9 @@ class _ComposerState extends ConsumerState<Composer> {
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
-      child: body,
+      child: _list(kind, matches),
     );
   }
-
-  Widget _note(String text) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    child: Text(
-      text,
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.bodySmall,
-    ),
-  );
 
   Widget _list(CompletionKind kind, List<CompletionOption> matches) => ListView.builder(
     controller: _scroll,

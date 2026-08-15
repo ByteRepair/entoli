@@ -12,11 +12,16 @@ class RealOpencodeTransport implements OpencodeTransport {
     this.binary,
     this.password,
     this.processFactory,
+    this.environment,
   });
 
   final String? binary;
   final String? password;
   final ProcessFactory? processFactory;
+
+  /// Called at spawn time, not held: the settings page edits these while the
+  /// app runs, and each new server should start under the latest.
+  final Map<String, String> Function()? environment;
 
   /// Keyed on the spawn in flight, not the server it produces. Opening the
   /// composer's menu and sending a message both start one, and a spawn that
@@ -47,6 +52,7 @@ class RealOpencodeTransport implements OpencodeTransport {
       binary: binary,
       password: password,
       processFactory: processFactory,
+      environment: environment?.call() ?? const {},
     );
     return _ChatServer(
       process: proc,
@@ -126,12 +132,6 @@ class RealOpencodeTransport implements OpencodeTransport {
   Future<List<Map<String, dynamic>>> providers(String chatId) async {
     final s = await _ensure(chatId);
     return s.client.providers();
-  }
-
-  @override
-  Future<List<Map<String, dynamic>>> completions(String chatId, CompletionKind kind) async {
-    final s = await _ensure(chatId);
-    return s.client.completions(kind);
   }
 
   @override

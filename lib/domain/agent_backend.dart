@@ -119,9 +119,5 @@ abstract class AgentBackend {
 
   Future<List<ModelOption>> models();
 
-  /// What the composer offers under [kind]'s trigger. Workspace-scoped — a
-  /// chat can define commands and agents of its own — so it takes a chat.
-  Future<List<CompletionOption>> completions(String chatId, CompletionKind kind);
-
   BackendKind get kind;
 }

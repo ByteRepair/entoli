@@ -19,6 +19,7 @@ class OpencodeProcess {
     String? binary,
     String? password,
     ProcessFactory? processFactory,
+    Map<String, String> environment = const {},
   }) async {
     final bin = binary ?? Platform.environment["OPENCODE_BINARY"] ?? "opencode";
     // The port is probed, released, then claimed by the server, so another
@@ -26,7 +27,8 @@ class OpencodeProcess {
     // timeout, so try again on a different port rather than failing the chat.
     for (var attempt = 0;; attempt++) {
       try {
-        return await _startOn(await _pickFreePort(), bin, password, workingDirectory, processFactory);
+        return await _startOn(
+            await _pickFreePort(), bin, password, workingDirectory, processFactory, environment);
       } on TimeoutException {
         if (attempt >= 2) rethrow;
       }
@@ -39,6 +41,7 @@ class OpencodeProcess {
     String? password,
     String workingDirectory,
     ProcessFactory? processFactory,
+    Map<String, String> environment,
   ) async {
     final args = <String>[
       "serve",
@@ -48,15 +51,12 @@ class OpencodeProcess {
       "127.0.0.1",
     ];
 
-    final env = <String, String>{};
-    if (password != null) env["OPENCODE_SERVER_PASSWORD"] = password;
-
     final factory = processFactory ?? _DefaultProcessFactory();
     final process = await factory.start(
       bin,
       args,
       workingDirectory: workingDirectory,
-      environment: env,
+      environment: {...environment, "OPENCODE_SERVER_PASSWORD": ?password},
     );
 
     final url = Uri.parse("http://127.0.0.1:$port");

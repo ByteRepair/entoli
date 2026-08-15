@@ -49,3 +49,5 @@ flutter:
 
   assets:
     - assets/python/
+    - assets/prompts/commands/
+    - assets/prompts/agents/

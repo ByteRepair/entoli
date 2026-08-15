@@ -130,12 +130,6 @@ class FakeOpencodeTransport implements OpencodeTransport {
   @override
   Future<List<Map<String, dynamic>>> providers(String chatId) async => [];
 
-  Map<CompletionKind, List<Map<String, dynamic>>> scriptedCompletions = {};
-
-  @override
-  Future<List<Map<String, dynamic>>> completions(String chatId, CompletionKind kind) async =>
-      scriptedCompletions[kind] ?? const [];
-
   @override
   Future<void> disposeAll() async {
     for (final chatId in _controllers.keys.toList()) {
@@ -720,27 +714,6 @@ void main() {
     await runTurn(chat.state.id, "mail me at a@b.com", [_idleEvent("ses_${chat.state.id}_123")]);
 
     expect(transport.promptAsyncCalls.single.agents, isEmpty);
-  });
-
-  test("completions come from the chat's own server, minus the hidden ones", () async {
-    final chat = await backend.createChat();
-    transport.scriptedCompletions = {
-      CompletionKind.command: [
-        {"name": "review", "description": "review changes"},
-      ],
-      CompletionKind.agent: [
-        {"name": "explore", "description": "search"},
-        {"name": "title", "hidden": true},
-      ],
-    };
-
-    expect(await backend.completions(chat.state.id, CompletionKind.command), [
-      const CompletionOption(name: "review", description: "review changes"),
-    ]);
-    expect(await backend.completions(chat.state.id, CompletionKind.agent), [
-      const CompletionOption(name: "explore", description: "search"),
-    ]);
-    expect(transport.ensureServerCalls, isNotEmpty);
   });
 }
 

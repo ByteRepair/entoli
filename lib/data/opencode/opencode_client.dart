@@ -155,17 +155,6 @@ class OpencodeClient {
     return [];
   }
 
-  // --- commands / agents ---
-
-  Future<List<Map<String, dynamic>>> completions(CompletionKind kind) async {
-    final path = switch (kind) {
-      CompletionKind.command => "/command",
-      CompletionKind.agent => "/agent",
-    };
-    final decoded = _decode(await _client.get(baseUrl.resolve(path), headers: _headers));
-    return decoded is List ? decoded.cast<Map<String, dynamic>>() : [];
-  }
-
   // --- SSE event stream ---
 
   /// Connects to `/event` and yields parsed events until the stream closes.
