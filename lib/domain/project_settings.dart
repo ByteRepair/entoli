@@ -12,7 +12,7 @@ class ProjectSettings {
   Profile? profile;
 
   static ProjectSettings load(AppConfig config, {String? project}) {
-    final text = AppConfig.readText(config.projectSettingsFile(project: project));
+    final text = config.storage.read(config.projectSettingsFile(project: project).path);
     if (text == null) return ProjectSettings();
     try {
       final json = jsonDecode(text) as Map<String, dynamic>;
@@ -23,7 +23,7 @@ class ProjectSettings {
   }
 
   Future<void> save(AppConfig config, {String? project}) async {
-    AppConfig.writeText(config.projectSettingsFile(project: project), jsonEncode({
+    config.storage.write(config.projectSettingsFile(project: project).path, jsonEncode({
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
     }));
   }
