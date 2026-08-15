@@ -27,18 +27,24 @@ void main() {
 
   /// A chat with a turn under way. The delay lets the controller's initial
   /// load settle before it is driven.
-  Future<(String, ChatController)> startTurn(String text) async {
+  Future<(String, ChatController)> startTurn(
+    String text, {
+    List<Attachment> attachments = const [],
+  }) async {
     final chat = await app.repo.createChat();
     final id = chat.state.id;
     final controller = app.container.read(chatControllerProvider(id).notifier);
     await Future<void>.delayed(Duration.zero);
-    await controller.send(text);
+    await controller.send(text, attachments: attachments);
     return (id, controller);
   }
 
   /// A chat holding one finished exchange, plus its controller.
-  Future<(String, ChatController)> chatWithOneTurn(String text) async {
-    final (id, controller) = await startTurn(text);
+  Future<(String, ChatController)> chatWithOneTurn(
+    String text, {
+    List<Attachment> attachments = const [],
+  }) async {
+    final (id, controller) = await startTurn(text, attachments: attachments);
     await waitIdle(id);
     return (id, controller);
   }
@@ -109,6 +115,26 @@ void main() {
       "ReasoningPart",
       "TextPart",
     ]);
+  });
+
+  // A provider that interleaves parts closes the block after the tool it
+  // started. The block is still the one being written, wherever it sits.
+  test("a block interrupted by a tool call is closed, not written twice", () async {
+    app.backend.scriptedEvents = const [
+      ReasoningDelta("I should check"),
+      ToolCallEvent(ToolCall(id: "c1", name: "bash")),
+      ToolResultEvent(ToolResult(callId: "c1", returnCode: 0, output: "ok")),
+      ReasoningEnd(text: "I should check", duration: Duration(seconds: 4)),
+      TextDelta("checked"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    final parts = messagesOf(id).last.parts;
+    final thinking = parts.whereType<ReasoningPart>().single;
+    expect(thinking.text, "I should check");
+    expect(thinking.durationMs, 4000);
+    expect(parts.first, isA<ReasoningPart>());
   });
 
   test("thinking is persisted with the conversation", () async {
@@ -316,13 +342,10 @@ void main() {
   });
 
   test("an attachment is saved, recorded on the message and sent with it", () async {
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-
-    await controller.send("look", attachments: [testAttachment("shot.png", mimeType: "image/png")]);
-    await waitIdle(id);
+    final (id, _) = await chatWithOneTurn(
+      "look",
+      attachments: [testAttachment("shot.png", mimeType: "image/png")],
+    );
 
     final file = (await app.repo.openChat(id)).messages.first.parts.whereType<FilePart>().single;
     expect(file.filename, "shot.png");
@@ -332,12 +355,10 @@ void main() {
   });
 
   test("regenerating sends the attachments again, from disk", () async {
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-    await controller.send("look", attachments: [testAttachment("shot.png", mimeType: "image/png")]);
-    await waitIdle(id);
+    final (id, controller) = await chatWithOneTurn(
+      "look",
+      attachments: [testAttachment("shot.png", mimeType: "image/png")],
+    );
 
     await controller.regenerate(messagesOf(id).first.id);
     await waitIdle(id);
@@ -349,12 +370,10 @@ void main() {
   });
 
   test("editing the text keeps what the message carried", () async {
-    final chat = await app.repo.createChat();
-    final id = chat.state.id;
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
-    await controller.send("look", attachments: [testAttachment("notes.txt")]);
-    await waitIdle(id);
+    final (id, controller) = await chatWithOneTurn(
+      "look",
+      attachments: [testAttachment("notes.txt")],
+    );
 
     await controller.editAndResend(messagesOf(id).first.id, "read this");
     await waitIdle(id);

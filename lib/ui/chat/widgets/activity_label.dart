@@ -28,7 +28,7 @@ class ThinkingLabel extends StatelessWidget {
       onTap: () => showActivitySheet(
         context,
         title: "Thinking",
-        sections: [(label: null, body: part.text, mono: false, isError: false)],
+        sections: [(label: null, body: part.text, isError: false)],
       ),
     );
   }
@@ -57,10 +57,11 @@ class ToolLabel extends StatelessWidget {
       onTap: () => showActivitySheet(
         context,
         title: name ?? "Tool",
+        mono: true,
         sections: [
-          (label: "Arguments", body: arguments, mono: true, isError: false),
-          (label: "Output", body: result?.output, mono: true, isError: false),
-          (label: "Error", body: result?.exceptionInfo, mono: true, isError: true),
+          (label: "Arguments", body: arguments, isError: false),
+          (label: "Output", body: result?.output, isError: false),
+          (label: "Error", body: result?.exceptionInfo, isError: true),
         ],
       ),
     );
@@ -103,7 +104,7 @@ class _Label extends StatelessWidget {
   }
 }
 
-typedef ActivitySection = ({String? label, String? body, bool mono, bool isError});
+typedef ActivitySection = ({String? label, String? body, bool isError});
 
 /// The drawer behind a label. Sections with nothing in them are left out, so
 /// a tool that returned nothing does not show an empty heading.
@@ -111,6 +112,7 @@ Future<void> showActivitySheet(
   BuildContext context, {
   required String title,
   required List<ActivitySection> sections,
+  bool mono = false,
 }) {
   final filled = sections.where((s) => s.body != null && s.body!.trim().isNotEmpty).toList();
   return showModalBottomSheet<void>(
@@ -148,7 +150,7 @@ Future<void> showActivitySheet(
                           SelectableText(
                             section.body!,
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              fontFamily: section.mono ? "monospace" : null,
+                              fontFamily: mono ? "monospace" : null,
                               color: section.isError ? theme.colorScheme.error : null,
                             ),
                           ),

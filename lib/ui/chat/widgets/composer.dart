@@ -218,9 +218,9 @@ class _ComposerState extends ConsumerState<Composer> {
             ),
           Row(
             children: [
-              // Each entry carries what it does. Running it on selection rather
-              // than on tap keeps it after the menu has closed, so `_openMenu`
-              // is not asking for focus the dismissing route is about to take.
+              // Running the entry's action on selection rather than on tap
+              // keeps it until after the menu has closed, so `_openMenu` is not
+              // asking for focus the dismissing route is about to take.
               PopupMenuButton<VoidCallback>(
                 icon: const Icon(Icons.add),
                 tooltip: "Attach or insert",

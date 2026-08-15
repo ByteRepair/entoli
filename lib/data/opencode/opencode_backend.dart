@@ -131,8 +131,6 @@ class OpencodeBackend implements AgentBackend {
 
     switch (event.type) {
       case "message.part.delta":
-        // Thinking streams as deltas of a reasoning part, told apart from the
-        // reply only by the part they belong to.
         final delta = props["delta"] as String? ?? "";
         if (delta.isEmpty) return;
         final reasoning = _reasoningParts[chatId]?.contains(props["partID"]) ?? false;
@@ -184,6 +182,9 @@ class OpencodeBackend implements AgentBackend {
   Future<void> _endTurn(String chatId, StreamController<AgentEvent> controller) async {
     controller.add(const DoneEvent());
     await controller.close();
+    // Part IDs never span turns, and a block left open by a failure would
+    // otherwise sit in the map for the life of the chat.
+    _reasoningParts.remove(chatId);
     await _eventSubs.remove(chatId)?.cancel();
   }
 

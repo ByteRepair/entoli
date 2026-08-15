@@ -106,7 +106,7 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          ..._rows(context, theme, bg),
+          ..._rows(context, bg),
         ],
       ),
     );
@@ -114,16 +114,16 @@ class MessageBubble extends StatelessWidget {
 
   /// The message split the way it reads: everything the model did on labels of
   /// its own, everything it said in a bubble, in the order it happened.
-  List<Widget> _rows(BuildContext context, ThemeData theme, Color bg) {
+  List<Widget> _rows(BuildContext context, Color bg) {
+    final theme = Theme.of(context);
     final rows = <Widget>[];
-    final spoken = <MessagePart>[];
-    final files = message.files.toList();
-    var filesShown = false;
+    final spoken = <({String text, bool isError})>[];
+    var files = message.files.toList();
 
-    final results = {
-      for (final part in message.parts.whereType<ToolResultPart>()) part.result.callId: part.result,
+    final results = message.toolResults;
+    final calls = {
+      for (final part in message.parts.whereType<ToolCallPart>()) part.toolCall.id,
     };
-    final claimed = <String>{};
 
     // Trailing state, not parts: they belong under the last thing said.
     final extras = <Widget>[
@@ -147,17 +147,9 @@ class MessageBubble extends StatelessWidget {
     ];
 
     void closeBubble({List<Widget> trailing = const []}) {
-      final showFiles = files.isNotEmpty && !filesShown;
-      if (spoken.isEmpty && trailing.isEmpty && !showFiles) return;
-      rows.add(_bubble(
-        context,
-        theme,
-        bg,
-        parts: spoken.toList(),
-        files: showFiles ? files : const [],
-        trailing: trailing,
-      ));
-      filesShown = true;
+      if (spoken.isEmpty && trailing.isEmpty && files.isEmpty) return;
+      rows.add(_bubble(context, bg, said: spoken.toList(), files: files, trailing: trailing));
+      files = const [];
       spoken.clear();
     }
 
@@ -172,17 +164,18 @@ class MessageBubble extends StatelessWidget {
           ));
         case ToolCallPart(:final toolCall):
           closeBubble();
-          claimed.add(toolCall.id);
           rows.add(ToolLabel(call: toolCall, result: results[toolCall.id]));
         case ToolResultPart(:final result):
           // Already drawn by the call it answers, unless the call is gone.
-          if (claimed.contains(result.callId)) continue;
+          if (calls.contains(result.callId)) continue;
           closeBubble();
           rows.add(ToolLabel(result: result));
         case FilePart():
           continue;
-        case TextPart() || ErrorPart():
-          spoken.add(part);
+        case TextPart(:final text):
+          spoken.add((text: text, isError: false));
+        case ErrorPart(:final message):
+          spoken.add((text: "Error: $message", isError: true));
       }
     }
     closeBubble(trailing: extras);
@@ -191,12 +184,12 @@ class MessageBubble extends StatelessWidget {
 
   Widget _bubble(
     BuildContext context,
-    ThemeData theme,
     Color bg, {
-    required List<MessagePart> parts,
+    required List<({String text, bool isError})> said,
     required List<FilePart> files,
     required List<Widget> trailing,
   }) {
+    final theme = Theme.of(context);
     return Listener(
       // A raw pointer listener sidesteps the gesture arena, which
       // SelectableText would otherwise win.
@@ -216,27 +209,20 @@ class MessageBubble extends StatelessWidget {
                   for (final f in files) AttachmentChip.sent(f, chatId: chatId),
                 ],
               ),
-            for (final part in parts) _renderPart(part, theme),
+            for (final line in said)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: SelectableText(
+                  line.text,
+                  style: line.isError
+                      ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
+                      : theme.textTheme.bodyMedium,
+                ),
+              ),
             ...trailing,
           ],
         ),
       ),
-    );
-  }
-
-  /// Only what the message says reaches here; the rest is drawn as a label.
-  Widget _renderPart(MessagePart part, ThemeData theme) {
-    final (text, style) = switch (part) {
-      TextPart(:final text) => (text, theme.textTheme.bodyMedium),
-      ErrorPart(:final message) => (
-          "Error: $message",
-          theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error),
-        ),
-      _ => ("", theme.textTheme.bodyMedium),
-    };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: SelectableText(text, style: style),
     );
   }
 }

@@ -80,7 +80,6 @@ class ChatController extends Notifier<ChatViewState> {
   }
 
   void _bufferDelta(String text, {bool reasoning = false}) {
-    // One buffer, two kinds of text: switching kind closes what it held.
     if (reasoning != _pendingIsReasoning) _flushDeltas();
     _pendingIsReasoning = reasoning;
     _pending.write(text);
@@ -101,12 +100,12 @@ class ChatController extends Notifier<ChatViewState> {
     if (reply == null) return;
     final parts = List<MessagePart>.from(reply.parts);
     final last = parts.lastOrNull;
-    // A block that has been timed is finished; more thinking starts a new one.
     if (_pendingIsReasoning) {
-      if (last is ReasoningPart && last.durationMs == null) {
-        parts[parts.length - 1] = ReasoningPart(text: "${last.text}$text");
-      } else {
+      final at = _openReasoningAt(parts);
+      if (at < 0) {
         parts.add(MessagePart.reasoning(text: text));
+      } else {
+        parts[at] = ReasoningPart(text: "${(parts[at] as ReasoningPart).text}$text");
       }
     } else if (last is TextPart) {
       parts[parts.length - 1] = TextPart(text: "${last.text}$text");
@@ -116,21 +115,27 @@ class ChatController extends Notifier<ChatViewState> {
     _writeReply(parts);
   }
 
+  /// A block is timed once it closes, so an untimed one is still being
+  /// written. Searched for rather than assumed last: another part can land
+  /// between a block's deltas and the event that closes it.
+  int _openReasoningAt(List<MessagePart> parts) =>
+      parts.lastIndexWhere((p) => p is ReasoningPart && p.durationMs == null);
+
   /// Close the thinking block being written. The backend's text wins over what
   /// streamed: a provider that sends no deltas still reports the whole of it.
   void _endReasoning(String? text, Duration? duration) {
     _flushDeltas();
     final parts = List<MessagePart>.from(_reply?.parts ?? const []);
-    final open = parts.lastOrNull;
-    final live = open is ReasoningPart && open.durationMs == null;
-    final body = text != null && text.isNotEmpty ? text : (live ? open.text : "");
-    if (body.isEmpty && !live) return;
+    final at = _openReasoningAt(parts);
+    final open = at < 0 ? null : parts[at] as ReasoningPart;
+    final body = text != null && text.isNotEmpty ? text : (open?.text ?? "");
+    if (body.isEmpty && open == null) return;
 
     final sealed = MessagePart.reasoning(text: body, durationMs: duration?.inMilliseconds);
-    if (live) {
-      parts[parts.length - 1] = sealed;
-    } else {
+    if (open == null) {
       parts.add(sealed);
+    } else {
+      parts[at] = sealed;
     }
     _writeReply(parts);
   }

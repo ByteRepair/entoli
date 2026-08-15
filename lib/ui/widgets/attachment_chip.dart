@@ -37,7 +37,10 @@ class AttachmentChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final source = this.source;
-    final data = bytes ?? (source == null ? null : ref.watch(attachmentBytesProvider(source)).value);
+    // Only an image shows its bytes, so only an image is worth reading back.
+    final isImage = mimeType.startsWith("image/");
+    final data = bytes ??
+        (source == null || !isImage ? null : ref.watch(attachmentBytesProvider(source)).value);
 
     return Tooltip(
       message: filename,
@@ -53,7 +56,7 @@ class AttachmentChip extends ConsumerWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: theme.colorScheme.outlineVariant),
             ),
-            child: mimeType.startsWith("image/") && data != null
+            child: isImage && data != null
                 ? Image.memory(
                     data,
                     // Without a decode target a phone photo becomes tens of MB
