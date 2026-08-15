@@ -5,6 +5,7 @@ import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../domain/agent_backend.dart";
+import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
@@ -43,6 +44,10 @@ class MinisweBackend implements AgentBackend {
   /// One per approval on screen, created when the request is forwarded and
   /// completed by whichever comes first: the user's answer, or the turn ending.
   final Map<String, Completer<ApprovalResponse>> _pending = {};
+
+  /// The same two, for the questions the model puts to the user.
+  final Map<String, List<AskRequest>> _questions = {};
+  final Map<String, Completer<List<String?>>> _answers = {};
 
   /// A message that is nothing but `/name` plus arguments runs that command.
   /// The name may not hold a slash, so `/usr/bin/foo is broken` stays prose.
@@ -121,6 +126,7 @@ class MinisweBackend implements AgentBackend {
         options: options,
         requireApproval: approveCommands,
         approve: _awaitApproval,
+        answer: _awaitAnswers,
       );
       _running[chatId] = agent;
 
@@ -137,6 +143,10 @@ class MinisweBackend implements AgentBackend {
           // agent to asking.
           _pending.putIfAbsent(event.approval.id, Completer.new);
         }
+        if (event is QuestionRequestEvent) {
+          _questions.putIfAbsent(chatId, () => []).add(event.request);
+          _answers.putIfAbsent(event.request.id, Completer.new);
+        }
         controller.add(event);
       }
     } catch (e) {
@@ -144,6 +154,7 @@ class MinisweBackend implements AgentBackend {
     } finally {
       _running.remove(chatId);
       _clearApprovals(chatId);
+      _clearQuestions(chatId);
       if (!controller.isClosed) await controller.close();
     }
   }
@@ -223,6 +234,9 @@ class MinisweBackend implements AgentBackend {
   Future<ApprovalResponse> _awaitApproval(ToolApproval approval) =>
       _pending.putIfAbsent(approval.id, Completer.new).future;
 
+  Future<List<String?>> _awaitAnswers(AskRequest request) =>
+      _answers.putIfAbsent(request.id, Completer.new).future;
+
   /// A turn that ended with a question still on screen would leave the banner
   /// there and the next answer with nothing to answer.
   void _clearApprovals(String chatId) {
@@ -230,6 +244,17 @@ class MinisweBackend implements AgentBackend {
       final completer = _pending.remove(approval.id);
       if (completer != null && !completer.isCompleted) {
         completer.complete(ApprovalResponse.deny);
+      }
+    }
+  }
+
+  /// Likewise for the panel: an abandoned turn answers its own questions with
+  /// nothing rather than leaving the agent waiting on a screen that has gone.
+  void _clearQuestions(String chatId) {
+    for (final request in _questions.remove(chatId) ?? const <AskRequest>[]) {
+      final completer = _answers.remove(request.id);
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(List.filled(request.questions.length, null));
       }
     }
   }
@@ -243,6 +268,10 @@ class MinisweBackend implements AgentBackend {
   Future<List<ToolApproval>> pendingApprovals(String chatId) async =>
       List.unmodifiable(_approvals[chatId] ?? const []);
 
+  @visibleForTesting
+  List<AskRequest> pendingQuestions(String chatId) =>
+      List.unmodifiable(_questions[chatId] ?? const []);
+
   @override
   Future<void> respondApproval(
       String chatId, String approvalId, ApprovalResponse response) async {
@@ -252,6 +281,14 @@ class MinisweBackend implements AgentBackend {
     // completer nobody will ever complete. `_clearApprovals` does the removing.
     final completer = _pending[approvalId];
     if (completer != null && !completer.isCompleted) completer.complete(response);
+  }
+
+  @override
+  Future<void> respondQuestions(
+      String chatId, String requestId, List<String?> answers) async {
+    _questions[chatId]?.removeWhere((r) => r.id == requestId);
+    final completer = _answers[requestId];
+    if (completer != null && !completer.isCompleted) completer.complete(answers);
   }
 
   /// Every failure here is reported as it happens, so silence only ever means
@@ -265,6 +302,7 @@ class MinisweBackend implements AgentBackend {
   Future<void> abort(String chatId) async {
     await _running.remove(chatId)?.cancel();
     _clearApprovals(chatId);
+    _clearQuestions(chatId);
     final controller = _controllers.remove(chatId);
     if (controller != null && !controller.isClosed) {
       controller.add(const DoneEvent());

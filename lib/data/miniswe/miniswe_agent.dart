@@ -2,8 +2,10 @@ import "dart:async";
 import "dart:convert";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/shell.dart";
+import "ask_tool.dart";
 import "llm/llm_client.dart";
 import "templates.dart";
 
@@ -80,6 +82,7 @@ class MinisweAgent {
     required this.workspace,
     required this.model,
     required this.approve,
+    required this.answer,
     this.options = const MinisweOptions(),
     this.requireApproval = true,
     this.temperature,
@@ -102,6 +105,14 @@ class MinisweAgent {
   /// Asks the user whether a command may run. Only called when
   /// [requireApproval] is set.
   final Future<ApprovalResponse> Function(ToolApproval approval) approve;
+
+  /// Puts the model's own questions to the user. One answer per question, null
+  /// where they answered nothing.
+  final Future<List<String?>> Function(AskRequest request) answer;
+
+  /// What the model may call. `bash` is dropped where nothing can run it —
+  /// offering a tool we could only ever answer with a failure invites one.
+  List<LlmTool> get _tools => [if (shell.canRunCommands) bashTool, askTool];
 
   bool _cancelled = false;
   ShellRun? _running;
@@ -211,8 +222,13 @@ class MinisweAgent {
         continue;
       }
 
+      if (call.name == askToolName) {
+        yield* _ask(call);
+        continue;
+      }
+
       if (call.name != "bash") {
-        yield* _reject(call, unknownTool(call.name));
+        yield* _reject(call, unknownTool(call.name, _tools.map((t) => t.name)));
         continue;
       }
 
@@ -282,6 +298,30 @@ class MinisweAgent {
     ));
   }
 
+  /// The model asking the user something. The call and its answers are a pair
+  /// like any other, so a finished chat still shows what was asked and picked.
+  Stream<AgentEvent> _ask(LlmToolCall call) async* {
+    final questions = askQuestionsFrom(call.argumentsJson);
+    if (questions.isEmpty) {
+      yield* _reject(call, askFormatError);
+      return;
+    }
+
+    yield ToolCallEvent(
+        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    final request = AskRequest(id: call.id, questions: questions);
+    // Emitted before it is awaited, for the same reason an approval is: the
+    // panel is where the answers come from.
+    yield QuestionRequestEvent(request);
+    final answers = askAnswers(questions, await answer(request));
+
+    yield ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: answers));
+    // Handed over as it stands rather than through [_answer]: it is already the
+    // JSON the model asked for, and an observation would say a command ran.
+    session.messages
+        .add(LlmMessage(role: LlmRole.tool, toolCallId: call.id, text: answers));
+  }
+
   /// A call that could not be run at all: the UI still sees the pair, and the
   /// model still gets told why.
   Stream<AgentEvent> _reject(LlmToolCall call, String problem) async* {
@@ -319,9 +359,7 @@ class MinisweAgent {
         await for (final chunk in client.stream(
           session.messages,
           model: model,
-          // Offering a tool that cannot run would invite a call we could only
-          // answer with a failure.
-          tools: shell.canRunCommands ? const [bashTool] : const [],
+          tools: _tools,
           temperature: temperature,
           reasoningEffort: reasoningEffort,
         )) {

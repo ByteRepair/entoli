@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 
@@ -13,20 +14,29 @@ class ChatViewState {
     this.chat,
     this.isRunning = false,
     this.approvals = const [],
+    this.questions = const [],
     this.retry,
   });
   final Chat? chat;
   final bool isRunning;
   final List<ToolApproval> approvals;
 
+  /// What the agent is waiting to be told. Turn-scoped like [approvals]: the
+  /// call and the answers are what the conversation keeps.
+  final List<AskRequest> questions;
+
   /// Set while the backend is retrying a failed attempt. Transient: it belongs
   /// to the running turn, not to the conversation, so it is never persisted.
   final String? retry;
+
+  /// True while a person, not the model, is what the turn is waiting on.
+  bool get isAsking => approvals.isNotEmpty || questions.isNotEmpty;
 
   ChatViewState copyWith({
     Chat? chat,
     bool? isRunning,
     List<ToolApproval>? approvals,
+    List<AskRequest>? questions,
     String? retry,
     bool clearRetry = false,
   }) =>
@@ -34,6 +44,7 @@ class ChatViewState {
         chat: chat ?? this.chat,
         isRunning: isRunning ?? this.isRunning,
         approvals: approvals ?? this.approvals,
+        questions: questions ?? this.questions,
         retry: clearRetry ? null : (retry ?? this.retry),
       );
 }
@@ -304,6 +315,10 @@ class ChatController extends Notifier<ChatViewState> {
         _stall?.cancel();
         _stall = null;
         state = state.copyWith(approvals: [...state.approvals, approval]);
+      case QuestionRequestEvent(:final request):
+        _stall?.cancel();
+        _stall = null;
+        state = state.copyWith(questions: [...state.questions, request]);
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
       case DoneEvent():
@@ -326,7 +341,15 @@ class ChatController extends Notifier<ChatViewState> {
     if (chat != null) {
       ref.read(chatRepositoryProvider).save(chat);
     }
-    state = state.copyWith(isRunning: false, clearRetry: true);
+    // Nothing is left to answer once the turn is over: the backend has already
+    // answered its own outstanding questions with nothing, so a banner or a
+    // panel still on screen would send its reply into the void.
+    state = state.copyWith(
+      isRunning: false,
+      approvals: const [],
+      questions: const [],
+      clearRetry: true,
+    );
   }
 
   void _onError(Object e) {
@@ -343,9 +366,25 @@ class ChatController extends Notifier<ChatViewState> {
   Future<void> respondApproval(String approvalId, ApprovalResponse r) async {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondApproval(chatId, approvalId, r);
-    final remaining = state.approvals.where((a) => a.id != approvalId).toList();
-    state = state.copyWith(approvals: remaining);
-    if (remaining.isEmpty && state.isRunning) _watchForStall();
+    state = state.copyWith(
+        approvals: state.approvals.where((a) => a.id != approvalId).toList());
+    _resumeWaiting();
+  }
+
+  /// Answer a request the panel was showing. One entry per question it held,
+  /// null where nothing was picked.
+  Future<void> answerQuestions(String requestId, List<String?> answers) async {
+    final repo = ref.read(chatRepositoryProvider);
+    await repo.respondQuestions(chatId, requestId, answers);
+    state = state.copyWith(
+        questions: state.questions.where((r) => r.id != requestId).toList());
+    _resumeWaiting();
+  }
+
+  /// The clock stopped while a person was being waited on; it starts again
+  /// once nothing on screen is holding the turn up.
+  void _resumeWaiting() {
+    if (!state.isAsking && state.isRunning) _watchForStall();
   }
 }
 

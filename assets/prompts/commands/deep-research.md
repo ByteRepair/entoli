@@ -7,7 +7,7 @@ subtask: true
 
 You are running a deep research pipeline. The research question is in $ARGUMENTS.
 
-BEFORE starting: if the question is underspecified (e.g. "what car to buy" without budget/use-case/region), ask 2-3 clarifying questions to narrow scope. Once you have enough, proceed — weaving the answers into the question. If the question is already specific, skip this and go straight to Phase 0.
+BEFORE starting: if the question is underspecified (e.g. "what car to buy" without budget/use-case/region), call the `ask_user` tool with 2-3 clarifying questions to narrow scope, each with the answers to pick from. Once you have enough, proceed — weaving the answers into the question. If the question is already specific, skip this and go straight to Phase 0.
 
 ## Constants
 

@@ -1,7 +1,10 @@
+import "dart:convert";
+
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
@@ -229,6 +232,50 @@ void main() {
 
     expect(find.text("pwd"), findsOneWidget);
     expect(find.text("/workspace"), findsOneWidget);
+  });
+
+  testWidgets("an answered question reads as the question, not as a tool run",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [
+        ToolCallPart(
+          toolCall: ToolCall(
+            id: "a1",
+            name: askToolName,
+            argumentsJson: jsonEncode({
+              "questions": [
+                {
+                  "question": "Which database?",
+                  "options": [
+                    {"label": "Postgres"},
+                  ],
+                },
+              ],
+            }),
+          ),
+        ),
+        ToolResultPart(
+          result: ToolResult(
+            callId: "a1",
+            returnCode: 0,
+            output: jsonEncode({
+              "answers": [
+                {"question": "Which database?", "answer": "Postgres"},
+              ],
+            }),
+          ),
+        ),
+      ]),
+    );
+
+    expect(find.text("Used tool: $askToolName"), findsNothing);
+    expect(find.text("Which database?"), findsOneWidget);
+
+    await tester.tap(find.text("Which database?"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Postgres"), findsOneWidget);
   });
 
   testWidgets("a tool still running says so", (tester) async {

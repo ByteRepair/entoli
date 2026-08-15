@@ -1,5 +1,7 @@
 import "dart:convert";
 
+import "../../domain/ask.dart";
+
 /// The line that ends a turn. Upstream mini-swe-agent's marker, kept verbatim
 /// so a model that has seen the original recognises it.
 const submitMarker = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT";
@@ -27,7 +29,22 @@ You are running in a browser, so you have no shell and no filesystem: you
 cannot run commands, read files, or change anything. Answer from what you know
 and from what the user tells you, and say plainly when something would need a
 machine you do not have.
+
+$_asking
 ${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}""";
+
+/// The one thing both prompts say, because asking is the one thing the agent
+/// can do with or without a machine under it.
+const _asking = """
+## Asking the user
+
+When the answer is theirs to give — which of several directions to take, a
+preference, a detail only they know — call the `$askToolName` tool with the
+question and the answers they can pick from. Their reply comes back to you as
+the tool's result.
+
+Ask only where the answer changes what you do next, and never for something you
+could find out yourself.""";
 
 String _withShell({
   required String workspace,
@@ -44,7 +61,8 @@ It is yours; the files in it survive between turns and between conversations.
 ## How you act
 
 1. You write reasoning text saying what you are doing and why.
-2. You call the `bash` tool at least once.
+2. You call a tool at least once: `bash` to run a command, or `$askToolName` to
+   put a question to the user.
 3. The system runs the command and shows you the result.
 4. You continue, or you finish the turn.
 
@@ -70,6 +88,8 @@ at all, say your answer and finish immediately.
 
 Do not repeat your answer inside that command — the user already sees your
 reasoning text.
+
+$_asking
 
 <system_information>
 $platform
@@ -121,9 +141,9 @@ String formatError({String? finishReason}) {
       "If you are done, run `echo $submitMarker` on its own.";
 }
 
-String unknownTool(String name) =>
-    "There is no tool called '$name'. The only tool is `bash`, called with "
-    "{\"command\": \"...\"}.";
+String unknownTool(String name, Iterable<String> available) =>
+    "There is no tool called '$name'. The tools you have are "
+    "${available.map((t) => "`$t`").join(" and ")}.";
 
 const _fullOutputLimit = 10000;
 const _elidedHalf = 5000;

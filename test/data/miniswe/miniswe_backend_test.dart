@@ -273,6 +273,81 @@ void main() {
     });
   });
 
+  group("questions", () {
+    final askWhich = askCall({
+      "questions": [
+        {
+          "question": "Which database?",
+          "options": [
+            {"label": "Postgres"},
+            {"label": "SQLite"},
+          ],
+        },
+      ],
+    });
+
+    test("one is offered until it is answered, and the answer reaches the model",
+        () async {
+      final backend = backendOver([
+        [askWhich],
+        [finish],
+      ]);
+
+      final events = <AgentEvent>[];
+      final turn = backend
+          .sendPrompt(chatId, "set up storage",
+              model: "fake-model", provider: "fake", approveCommands: false)
+          .forEach(events.add);
+
+      await pumpEvents();
+      final pending = backend.pendingQuestions(chatId).single;
+      expect(pending.questions.single.question, "Which database?");
+
+      await backend.respondQuestions(chatId, pending.id, ["Postgres"]);
+      await turn;
+
+      expect(backend.pendingQuestions(chatId), isEmpty);
+      expect(client.sent[1].firstWhere((m) => m.toolCallId == pending.id).text,
+          contains("Postgres"));
+    });
+
+    test("an answer that beats the agent to it is not lost", () async {
+      final backend = backendOver([
+        [askWhich],
+        [finish],
+      ]);
+
+      await backend
+          .sendPrompt(chatId, "set up storage",
+              model: "fake-model", provider: "fake", approveCommands: false)
+          .listen((event) {
+        if (event is QuestionRequestEvent) {
+          backend.respondQuestions(chatId, event.request.id, ["SQLite"]);
+        }
+      }).asFuture<void>();
+
+      expect(client.sent[1].map((m) => m.text).join(), contains("SQLite"));
+    });
+
+    test("aborting answers what was on screen, so nothing is left waiting", () async {
+      final backend = backendOver([
+        [askWhich],
+      ]);
+
+      final turn = backend
+          .sendPrompt(chatId, "set up storage",
+              model: "fake-model", provider: "fake", approveCommands: false)
+          .toList();
+      await pumpEvents();
+      expect(backend.pendingQuestions(chatId), hasLength(1));
+
+      await backend.abort(chatId);
+      await turn.timeout(const Duration(seconds: 5));
+
+      expect(backend.pendingQuestions(chatId), isEmpty);
+    });
+  });
+
   group("sessions", () {
     test("a second prompt continues the conversation", () async {
       final backend = backendOver([
@@ -381,12 +456,12 @@ void main() {
         [saidOnly("An answer")],
         [finish],
       ]);
-      await backend.ask("a question", model: "fake-model", provider: "fake");
+      await backend.ask("name this chat", model: "fake-model", provider: "fake");
 
       await send(backend, "hello there");
 
       expect(client.sent.last.map((m) => m.text).join(), isNot(contains("An answer")));
-      expect(client.sent.last.map((m) => m.text).join(), isNot(contains("a question")));
+      expect(client.sent.last.map((m) => m.text).join(), isNot(contains("name this chat")));
     });
   });
 
