@@ -57,8 +57,11 @@ reasoning part IDs per chat and routes deltas to `ReasoningDelta` or
 that streams no deltas at all still fills the block.
 
 `durationMs` is what the label reads ("Thought for 12 seconds") and is null
-while the block is still being written, which is also how the UI knows to say
-"Thinking…". A block that was never timed — an older conversation, an aborted
+while the block is still being written — which is also how the UI knows to say
+"Thinking…", and how the controller finds the block a delta or a close belongs
+to. It searches for that open block rather than assuming it is the last part:
+a provider that interleaves parts can start a tool between a block's deltas
+and the event closing it, and assuming the last part wrote the thinking twice. A block that was never timed — an older conversation, an aborted
 turn — is still worth opening, so it reads "View thinking".
 
 `ReasoningPart` is not a `TextPart`, so `plainText` leaves it out: a rewound

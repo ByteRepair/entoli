@@ -178,6 +178,12 @@ extension MessageParts on Message {
   bool get hasText => parts.whereType<TextPart>().any((p) => p.text.trim().isNotEmpty);
 
   Iterable<FilePart> get files => parts.whereType<FilePart>();
+
+  /// Results by the call they answer. They arrive as parts of their own, but
+  /// a call and its result are one thing that happened.
+  Map<String, ToolResult> get toolResults => {
+        for (final part in parts.whereType<ToolResultPart>()) part.result.callId: part.result,
+      };
 }
 
 extension ChatTitle on String {
