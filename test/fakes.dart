@@ -80,8 +80,5 @@ class FakeBackend implements AgentBackend {
   Future<void> disposeChat(String chatId) async {}
 
   @override
-  Future<List<ModelOption>> availableModels() async => testModels;
-
-  @override
-  Future<List<ModelOption>> listModelsStandalone() async => testModels;
+  Future<List<ModelOption>> models() async => testModels;
 }

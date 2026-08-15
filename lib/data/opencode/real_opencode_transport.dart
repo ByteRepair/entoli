@@ -44,9 +44,7 @@ class RealOpencodeTransport implements OpencodeTransport {
   @override
   Future<String> createSession(String chatId, {String? title}) async {
     final s = _ensure(chatId);
-    final session = await s.client.createSession(title: title);
-    s.sessionId = session.id;
-    return session.id;
+    return (await s.client.createSession(title: title)).id;
   }
 
   @override
@@ -109,5 +107,4 @@ class _ChatServer {
   _ChatServer({required this.process, required this.client});
   final OpencodeProcess process;
   final OpencodeClient client;
-  String? sessionId;
 }

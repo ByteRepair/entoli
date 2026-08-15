@@ -58,12 +58,12 @@ class LocalChatStore implements ChatStore {
 
   @override
   Future<void> save(Chat chat) async {
-    final dir = config.chatDir(chat.state.id);
-    if (!dir.existsSync()) dir.createSync(recursive: true);
-    config.resourcesDir(chat.state.id);
-    config.workspaceDir(chat.state.id);
-    config.stateFile(chat.state.id).writeAsStringSync(jsonEncode(chat.state.toJson()));
-    config.convFile(chat.state.id).writeAsStringSync(jsonEncode({
+    final id = chat.state.id;
+    config.ensureChatDirs(id);
+    // Synchronous on purpose: callers (and their tests) treat a returned save
+    // as durable, and these are small local files.
+    config.stateFile(id).writeAsStringSync(jsonEncode(chat.state.toJson()));
+    config.convFile(id).writeAsStringSync(jsonEncode({
       "messages": chat.messages.map((m) => m.toJson()).toList(),
     }));
   }
@@ -86,16 +86,11 @@ class LocalChatStore implements ChatStore {
   }
 
   @override
-  Future<ChatMeta> loadMeta(String chatId) async {
-    final dir = config.chatDir(chatId);
-    if (!dir.existsSync()) dir.createSync(recursive: true);
-    return ChatMeta.fromFile(config.metaFile(chatId));
-  }
+  Future<ChatMeta> loadMeta(String chatId) async => ChatMeta.fromFile(config.metaFile(chatId));
 
   @override
   Future<void> saveMeta(String chatId, ChatMeta meta) async {
-    final dir = config.chatDir(chatId);
-    if (!dir.existsSync()) dir.createSync(recursive: true);
+    config.ensureChatDirs(chatId);
     await meta.saveTo(config.metaFile(chatId));
   }
 }

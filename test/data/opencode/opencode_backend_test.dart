@@ -398,10 +398,10 @@ void main() {
     expect(await backend.pendingApprovals(chat.state.id), isEmpty);
   });
 
-  test("listModelsStandalone leaves no chat directory behind", () async {
+  test("listing models leaves no chat directory behind", () async {
     final before = Directory(config.chatsDir.path).listSync().length;
 
-    await backend.listModelsStandalone();
+    await backend.models();
 
     expect(Directory(config.chatsDir.path).listSync(), hasLength(before));
   });

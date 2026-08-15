@@ -54,5 +54,5 @@ final turnStallTimeoutProvider = Provider<Duration>((ref) => const Duration(seco
 
 final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
   final backend = ref.watch(agentBackendProvider);
-  return backend.listModelsStandalone();
+  return backend.models();
 });
