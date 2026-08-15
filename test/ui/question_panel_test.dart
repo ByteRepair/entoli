@@ -37,7 +37,11 @@ void main() {
 
   /// A chat mid-turn, with [asked] on screen. The turn is held open, the way a
   /// real one is while the agent waits to be told.
-  Future<String> asking(WidgetTester tester, AskRequest asked) async {
+  Future<String> asking(
+    WidgetTester tester,
+    AskRequest asked, {
+    EdgeInsets bars = EdgeInsets.zero,
+  }) async {
     app.backend.scriptedEvents = [QuestionRequestEvent(asked)];
     app.backend.hold = Completer<void>();
     addTearDown(() => app.backend.hold?.complete());
@@ -45,7 +49,7 @@ void main() {
     final chat = await app.repo.createChat();
     final id = chat.state.id;
     app.container.read(selectedChatIdProvider.notifier).state = id;
-    await app.pump(tester, const ChatPage(), settle: false);
+    await app.pump(tester, underSystemBars(bars, const ChatPage()), settle: false);
     await pumpUntil(tester, find.byType(Composer));
     await app.container.read(chatControllerProvider(id).notifier).send("set up storage");
     await pumpUntil(tester, find.byType(QuestionPanel));
@@ -135,5 +139,14 @@ void main() {
 
     expect(app.container.read(chatControllerProvider(id)).questions, isEmpty);
     expect(find.byType(QuestionPanel), findsNothing);
+  });
+
+  testWidgets("the options stay clear of the navigation bar", (tester) async {
+    const bars = EdgeInsets.only(bottom: 48);
+    await asking(tester, request([database]), bars: bars);
+
+    final panel = tester.getRect(find.byType(QuestionPanel));
+    final last = tester.getRect(find.text("SQLite"));
+    expect(panel.bottom - last.bottom, greaterThanOrEqualTo(bars.bottom));
   });
 }

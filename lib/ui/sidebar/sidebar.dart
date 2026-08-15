@@ -50,115 +50,117 @@ class Sidebar extends ConsumerWidget {
     // Material, not Scaffold: the shell's Scaffold owns the drawer, and an
     // inner one would shadow it.
     return Material(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                const Expanded(child: _ProjectMenu()),
-                if (project != null)
-                  IconButton(
-                    icon: const Icon(Icons.settings),
-                    tooltip: "Project settings",
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ProjectSettingsPage(project: project),
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Expanded(child: _ProjectMenu()),
+                  if (project != null)
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      tooltip: "Project settings",
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ProjectSettingsPage(project: project),
+                        ),
                       ),
                     ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: "New chat",
+                    // Nothing is listed here yet: an empty chat is not on disk,
+                    // and joins the list when its first message is saved.
+                    onPressed: () async {
+                      final chat = await ref
+                          .read(chatRepositoryProvider)
+                          .createChat(project: project);
+                      if (context.mounted) _open(context, ref, chat.state.id);
+                    },
                   ),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  tooltip: "New chat",
-                  // Nothing is listed here yet: an empty chat is not on disk,
-                  // and joins the list when its first message is saved.
-                  onPressed: () async {
-                    final chat = await ref
-                        .read(chatRepositoryProvider)
-                        .createChat(project: project);
-                    if (context.mounted) _open(context, ref, chat.state.id);
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: async.when(
-              data: (all) {
-                final chats = all.where((c) => c.project == project).toList();
-                return ListView.builder(
-                  itemCount: chats.length,
-                  itemBuilder: (context, i) {
-                    final c = chats[i];
-                    final selected = selectedId == c.id;
-                    return ListTile(
-                      selected: selected,
-                      title: Text(c.title.orUntitled),
-                      subtitle: Text(_formatTimestamp(c.updatedAt)),
-                      onTap: () => _open(context, ref, c.id),
-                      trailing: PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        onSelected: (value) async {
-                          switch (value) {
-                            case "rename":
-                              final title = await promptForText(
-                                context,
-                                title: "Rename chat",
-                                initial: c.title,
-                                hint: "Chat title",
-                                confirmLabel: "Rename",
-                              );
-                              if (title == null) return;
-                              await ref.read(chatRepositoryProvider).retitle(c, title);
-                              ref.read(chatControllerProvider(c.id).notifier).applyTitle(title);
-                              ref.invalidate(chatListProvider);
-                            case "move":
-                              await _move(context, ref, c);
-                            case "delete":
-                              final confirmed = await confirm(
-                                context,
-                                title: "Delete chat?",
-                                message:
-                                    "Delete \"${c.title.orUntitled}\"? This cannot be undone.",
-                                confirmLabel: "Delete",
-                                destructive: true,
-                              );
-                              if (!confirmed) return;
-                              if (selected) ref.read(selectedChatIdProvider.notifier).select(null);
-                              await ref.read(chatRepositoryProvider).deleteChat(c.id);
-                              ref.invalidate(chatListProvider);
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(value: "rename", child: Text("Rename")),
-                          PopupMenuItem(value: "move", child: Text("Move to project…")),
-                          PopupMenuItem(value: "delete", child: Text("Delete")),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text("Error: $e")),
+            Expanded(
+              child: async.when(
+                data: (all) {
+                  final chats = all.where((c) => c.project == project).toList();
+                  return ListView.builder(
+                    itemCount: chats.length,
+                    itemBuilder: (context, i) {
+                      final c = chats[i];
+                      final selected = selectedId == c.id;
+                      return ListTile(
+                        selected: selected,
+                        title: Text(c.title.orUntitled),
+                        subtitle: Text(_formatTimestamp(c.updatedAt)),
+                        onTap: () => _open(context, ref, c.id),
+                        trailing: PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (value) async {
+                            switch (value) {
+                              case "rename":
+                                final title = await promptForText(
+                                  context,
+                                  title: "Rename chat",
+                                  initial: c.title,
+                                  hint: "Chat title",
+                                  confirmLabel: "Rename",
+                                );
+                                if (title == null) return;
+                                await ref.read(chatRepositoryProvider).retitle(c, title);
+                                ref.read(chatControllerProvider(c.id).notifier).applyTitle(title);
+                                ref.invalidate(chatListProvider);
+                              case "move":
+                                await _move(context, ref, c);
+                              case "delete":
+                                final confirmed = await confirm(
+                                  context,
+                                  title: "Delete chat?",
+                                  message:
+                                      "Delete \"${c.title.orUntitled}\"? This cannot be undone.",
+                                  confirmLabel: "Delete",
+                                  destructive: true,
+                                );
+                                if (!confirmed) return;
+                                if (selected) ref.read(selectedChatIdProvider.notifier).select(null);
+                                await ref.read(chatRepositoryProvider).deleteChat(c.id);
+                                ref.invalidate(chatListProvider);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(value: "rename", child: Text("Rename")),
+                            PopupMenuItem(value: "move", child: Text("Move to project…")),
+                            PopupMenuItem(value: "delete", child: Text("Delete")),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text("Error: $e")),
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: const Text("Profile"),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text("Profile"),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
+              ),
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text("Settings"),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsPage()),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text("Settings"),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsPage()),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

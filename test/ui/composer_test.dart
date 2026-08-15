@@ -24,17 +24,20 @@ void main() {
   tearDown(() => app.dispose());
   tearDownAll(controller.dispose);
 
-  Future<void> pump(WidgetTester tester) => app.pump(
+  Future<void> pump(WidgetTester tester, {EdgeInsets bars = EdgeInsets.zero}) => app.pump(
         tester,
-        Scaffold(
-          body: Composer(
-            controller: controller,
-            isRunning: false,
-            onSend: (text, attachments) {
-              sent.add(text);
-              sentAttachments.add(attachments);
-            },
-            onAbort: () {},
+        underSystemBars(
+          bars,
+          Scaffold(
+            body: Composer(
+              controller: controller,
+              isRunning: false,
+              onSend: (text, attachments) {
+                sent.add(text);
+                sentAttachments.add(attachments);
+              },
+              onAbort: () {},
+            ),
           ),
         ),
       );
@@ -308,5 +311,15 @@ void main() {
     await insertVia(tester, "Image");
 
     expect(find.byIcon(Icons.close), findsNothing);
+  });
+
+  testWidgets("the buttons stay clear of the navigation bar", (tester) async {
+    const bars = EdgeInsets.only(top: 40, bottom: 48);
+    await pump(tester, bars: bars);
+
+    final bar = tester.getRect(find.byType(Composer));
+    final send = tester.getRect(find.byTooltip("Send"));
+    expect(bar.bottom - send.bottom, greaterThanOrEqualTo(bars.bottom));
+    expect(send.top - bar.top, lessThan(bars.top));
   });
 }

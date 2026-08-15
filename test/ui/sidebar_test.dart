@@ -14,21 +14,30 @@ void main() {
   tearDown(() => app.dispose());
 
   /// The wide layout: the sidebar sits beside the chat pane, no drawer.
-  Future<void> pumpBeside(WidgetTester tester) =>
-      app.pump(tester, const Row(children: [SizedBox(width: 280, child: Sidebar())]));
+  Future<void> pumpBeside(WidgetTester tester, {EdgeInsets bars = EdgeInsets.zero}) =>
+      app.pump(
+        tester,
+        underSystemBars(
+          bars,
+          const Row(children: [SizedBox(width: 280, child: Sidebar())]),
+        ),
+      );
 
   /// The narrow layout: the sidebar is a drawer over the chat.
-  Future<void> pumpAsDrawer(WidgetTester tester) async {
+  Future<void> pumpAsDrawer(WidgetTester tester, {EdgeInsets bars = EdgeInsets.zero}) async {
     await app.pump(
       tester,
-      Scaffold(
-        drawer: const Drawer(child: Sidebar()),
-        body: const SizedBox.shrink(),
-        appBar: AppBar(
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => Scaffold.of(context).openDrawer(),
+      underSystemBars(
+        bars,
+        Scaffold(
+          drawer: const Drawer(child: Sidebar()),
+          body: const SizedBox.shrink(),
+          appBar: AppBar(
+            leading: Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
             ),
           ),
         ),
@@ -121,6 +130,29 @@ void main() {
 
     expect(app.container.read(selectedChatIdProvider), isNotNull);
     expect(find.byType(Sidebar), findsOneWidget);
+  });
+
+  const bars = EdgeInsets.only(top: 40, bottom: 48);
+
+  /// Nothing at either end of the sidebar is under a system bar.
+  void expectClearOfBars(WidgetTester tester) {
+    final sidebar = tester.getRect(find.byType(Sidebar));
+    final top = tester.getRect(find.byTooltip("New chat"));
+    final bottom = tester.getRect(find.text("Settings"));
+    expect(top.top - sidebar.top, greaterThanOrEqualTo(bars.top));
+    expect(sidebar.bottom - bottom.bottom, greaterThanOrEqualTo(bars.bottom));
+  }
+
+  testWidgets("beside the chat pane it stays clear of the system bars", (tester) async {
+    await pumpBeside(tester, bars: bars);
+
+    expectClearOfBars(tester);
+  });
+
+  testWidgets("as a drawer it stays clear of them too", (tester) async {
+    await pumpAsDrawer(tester, bars: bars);
+
+    expectClearOfBars(tester);
   });
 
   group("projects", () {

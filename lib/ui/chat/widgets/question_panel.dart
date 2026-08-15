@@ -43,75 +43,78 @@ class _QuestionPanelState extends State<QuestionPanel> {
     final theme = Theme.of(context);
     final question = _questions[_at];
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         border: Border(top: BorderSide(color: theme.dividerColor)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  "Question ${_at + 1} of ${_questions.length}",
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const Spacer(),
+                if (_at > 0)
+                  TextButton.icon(
+                    onPressed: () => setState(() => _at--),
+                    icon: const Icon(Icons.arrow_back, size: 15),
+                    label: const Text("Back"),
+                    style: _compact,
+                  ),
+                TextButton(
+                  onPressed: () => widget.onAnswered(List.of(_answers)),
+                  style: _compact,
+                  child: const Text("Skip"),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: (_at + 1) / _questions.length,
+                minHeight: 3,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(question.question, style: theme.textTheme.titleSmall),
+            if (question.summary != null) ...[
+              const SizedBox(height: 4),
               Text(
-                "Question ${_at + 1} of ${_questions.length}",
-                style: theme.textTheme.labelMedium
+                question.summary!,
+                style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
-              const Spacer(),
-              if (_at > 0)
-                TextButton.icon(
-                  onPressed: () => setState(() => _at--),
-                  icon: const Icon(Icons.arrow_back, size: 15),
-                  label: const Text("Back"),
-                  style: _compact,
-                ),
-              TextButton(
-                onPressed: () => widget.onAnswered(List.of(_answers)),
-                style: _compact,
-                child: const Text("Skip"),
-              ),
             ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: (_at + 1) / _questions.length,
-              minHeight: 3,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(question.question, style: theme.textTheme.titleSmall),
-          if (question.summary != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              question.summary!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 10),
+            // A long list of options must not push the conversation off screen,
+            // so it scrolls inside the panel instead of growing it.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 260),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final option in question.options)
+                      _OptionTile(
+                        option: option,
+                        isPicked: _answers[_at] == option.answer,
+                        onTap: () => _pick(option),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ],
-          const SizedBox(height: 10),
-          // A long list of options must not push the conversation off screen,
-          // so it scrolls inside the panel instead of growing it.
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 260),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final option in question.options)
-                    _OptionTile(
-                      option: option,
-                      isPicked: _answers[_at] == option.answer,
-                      onTap: () => _pick(option),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
