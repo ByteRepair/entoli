@@ -3,6 +3,7 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:path/path.dart" as p;
+import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../domain/chat_meta.dart";
@@ -66,14 +67,22 @@ class LocalChatStore implements ChatStore {
   }
 
   @override
-  Future<String> saveResource(String chatId, String filename, Uint8List bytes, String mimeType) async {
-    final dir = config.resourcesDir(chatId);
+  Future<String> saveResource(String chatId, String filename, Uint8List bytes) async {
+    config.ensureChatDirs(chatId);
     var safeName = filename.replaceAll(RegExp(r"[^A-Za-z0-9._-]"), "_");
     safeName = safeName.replaceAll(RegExp(r"\.{2,}"), ".");
     if (safeName.startsWith(".")) safeName = safeName.substring(1);
-    final file = File(p.join(dir.path, safeName));
-    file.writeAsBytesSync(bytes);
-    return file.path;
+    final resource = "${const Uuid().v4()}-$safeName";
+    // Async, unlike the small JSON files above: an attachment is big enough
+    // that reading or writing it would be felt as a dropped frame.
+    await File(p.join(config.resourcesDir(chatId).path, resource)).writeAsBytes(bytes);
+    return resource;
+  }
+
+  @override
+  Future<Uint8List?> readResource(String chatId, String resource) async {
+    final file = File(p.join(config.resourcesDir(chatId).path, p.basename(resource)));
+    return await file.exists() ? await file.readAsBytes() : null;
   }
 
   @override

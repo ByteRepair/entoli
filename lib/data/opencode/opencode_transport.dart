@@ -19,12 +19,17 @@ abstract class OpencodeTransport {
       {required String text,
       String? model,
       String? provider,
-      List<String> agents = const []});
+      List<String> agents = const [],
+      List<Attachment> attachments = const []});
 
   /// Run a named command. Returns only when the turn it starts is over, so it
   /// must not be awaited before [subscribe] is attached.
   Future<void> runCommand(String chatId, String sessionId,
-      {required String name, required String arguments, String? model, String? provider});
+      {required String name,
+      required String arguments,
+      String? model,
+      String? provider,
+      List<Attachment> attachments = const []});
 
   Future<void> abort(String chatId, String sessionId);
 

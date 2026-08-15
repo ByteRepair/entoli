@@ -49,7 +49,8 @@ class OpencodeBackend implements AgentBackend {
     _controllers[chatId] = controller;
     // Returned rather than yielded, so the caller is listening before the turn
     // starts. Closing a controller nobody listens to never completes.
-    unawaited(_runTurn(chatId, text, controller, model: model, provider: provider));
+    unawaited(_runTurn(chatId, text, controller,
+        model: model, provider: provider, attachments: attachments));
     return controller.stream;
   }
 
@@ -59,6 +60,7 @@ class OpencodeBackend implements AgentBackend {
     StreamController<AgentEvent> controller, {
     String? model,
     String? provider,
+    List<Attachment> attachments = const [],
   }) async {
     try {
       await transport.ensureServer(chatId, config.workspaceDir(chatId).path);
@@ -96,13 +98,15 @@ class OpencodeBackend implements AgentBackend {
             name: command.group(1)!,
             arguments: command.group(2) ?? "",
             model: model,
-            provider: provider);
+            provider: provider,
+            attachments: attachments);
       } else {
         await transport.promptAsync(chatId, sessionId,
             text: text,
             model: model,
             provider: provider,
-            agents: _mention.allMatches(text).map((m) => m.group(1)!).toList());
+            agents: _mention.allMatches(text).map((m) => m.group(1)!).toList(),
+            attachments: attachments);
       }
     } catch (e) {
       if (!controller.isClosed) {
@@ -284,13 +288,17 @@ class OpencodeBackend implements AgentBackend {
     if (transcript.isNotEmpty) _pendingContext[chatId] = transcript;
   }
 
-  /// What the fresh session is told about the conversation it missed.
+  /// What the fresh session is told about the conversation it missed. Files
+  /// are named rather than resent: only the turn being replayed carries its
+  /// attachments back, so the rest are context the agent can ask about.
   String _transcript(List<Message> history) {
     final buffer = StringBuffer();
     for (final message in history) {
       final text = message.plainText.trim();
-      if (text.isEmpty) continue;
+      final files = message.files.map((p) => p.filename).join(", ");
+      if (text.isEmpty && files.isEmpty) continue;
       buffer.writeln("${message.role.name}: $text");
+      if (files.isNotEmpty) buffer.writeln("(attached: $files)");
       buffer.writeln();
     }
     final body = buffer.toString().trim();

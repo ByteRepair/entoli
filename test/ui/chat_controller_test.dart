@@ -6,6 +6,7 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 
 void main() {
@@ -227,6 +228,56 @@ void main() {
     final seeded = app.backend.resets.single.map((m) => m.plainText);
     expect(seeded, contains("first"));
     expect(seeded, isNot(contains("second")));
+  });
+
+  test("an attachment is saved, recorded on the message and sent with it", () async {
+    final chat = await app.repo.createChat();
+    final id = chat.state.id;
+    final controller = app.container.read(chatControllerProvider(id).notifier);
+    await Future<void>.delayed(Duration.zero);
+
+    await controller.send("look", attachments: [testAttachment("shot.png", mimeType: "image/png")]);
+    await waitIdle(id);
+
+    final file = (await app.repo.openChat(id)).messages.first.parts.whereType<FilePart>().single;
+    expect(file.filename, "shot.png");
+    expect(file.mimeType, "image/png");
+    expect(app.config.resourcesDir(id).listSync(), hasLength(1));
+    expect(app.backend.prompts.single.attachments.single.bytes, [104, 105]);
+  });
+
+  test("regenerating sends the attachments again, from disk", () async {
+    final chat = await app.repo.createChat();
+    final id = chat.state.id;
+    final controller = app.container.read(chatControllerProvider(id).notifier);
+    await Future<void>.delayed(Duration.zero);
+    await controller.send("look", attachments: [testAttachment("shot.png", mimeType: "image/png")]);
+    await waitIdle(id);
+
+    await controller.regenerate(messagesOf(id).first.id);
+    await waitIdle(id);
+
+    expect(app.backend.prompts.map((p) => p.attachments.single.filename), ["shot.png", "shot.png"]);
+    expect(messagesOf(id).first.parts.whereType<FilePart>(), hasLength(1));
+    // The same file, not a second copy of it.
+    expect(app.config.resourcesDir(id).listSync(), hasLength(1));
+  });
+
+  test("editing the text keeps what the message carried", () async {
+    final chat = await app.repo.createChat();
+    final id = chat.state.id;
+    final controller = app.container.read(chatControllerProvider(id).notifier);
+    await Future<void>.delayed(Duration.zero);
+    await controller.send("look", attachments: [testAttachment("notes.txt")]);
+    await waitIdle(id);
+
+    await controller.editAndResend(messagesOf(id).first.id, "read this");
+    await waitIdle(id);
+
+    final message = (await app.repo.openChat(id)).messages.first;
+    expect(textOf(message), "read this");
+    expect(message.parts.whereType<FilePart>().single.filename, "notes.txt");
+    expect(app.backend.prompts.last.attachments.single.filename, "notes.txt");
   });
 
   test("the truncated conversation is persisted, not just held in memory", () async {

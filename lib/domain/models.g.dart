@@ -103,14 +103,16 @@ ToolResultPart _$ToolResultPartFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$ToolResultPartToJson(ToolResultPart instance) =>
     <String, dynamic>{'result': instance.result, 'runtimeType': instance.$type};
 
-ImagePart _$ImagePartFromJson(Map<String, dynamic> json) => ImagePart(
-  path: json['path'] as String,
-  mimeType: json['mimeType'] as String?,
+FilePart _$FilePartFromJson(Map<String, dynamic> json) => FilePart(
+  resource: json['resource'] as String,
+  filename: json['filename'] as String,
+  mimeType: json['mimeType'] as String,
   $type: json['runtimeType'] as String?,
 );
 
-Map<String, dynamic> _$ImagePartToJson(ImagePart instance) => <String, dynamic>{
-  'path': instance.path,
+Map<String, dynamic> _$FilePartToJson(FilePart instance) => <String, dynamic>{
+  'resource': instance.resource,
+  'filename': instance.filename,
   'mimeType': instance.mimeType,
   'runtimeType': instance.$type,
 };

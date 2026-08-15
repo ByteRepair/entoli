@@ -144,7 +144,7 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: chat);
   }
 
-  Future<void> send(String text) async {
+  Future<void> send(String text, {List<Attachment> attachments = const []}) async {
     final repo = ref.read(chatRepositoryProvider);
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
@@ -153,7 +153,8 @@ class ChatController extends Notifier<ChatViewState> {
       id: _uuid.v4(),
       role: MessageRole.user,
       createdAt: DateTime.now(),
-      parts: [MessagePart.text(text: text)],
+      // Files first, the order they are sent in and the order a resend rebuilds.
+      parts: [...await repo.saveAttachments(chatId, attachments), MessagePart.text(text: text)],
     );
     final assistantMsg = Message(
       id: _uuid.v4(),
@@ -169,7 +170,7 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: updatedChat, isRunning: true, clearRetry: true);
     await repo.save(updatedChat);
 
-    final stream = repo.sendPrompt(chatId, text);
+    final stream = repo.sendPrompt(chatId, text, attachments: attachments);
     _watchForStall();
     _sub?.cancel();
     _sub = stream.listen(
@@ -188,17 +189,18 @@ class ChatController extends Notifier<ChatViewState> {
     return at < 0 ? null : chat.messages[at];
   }
 
-  /// Drop the turn starting at [prompt] and run it again with [text].
+  /// Drop the turn starting at [prompt] and run it again with [text]. What it
+  /// carried goes with it: rewinding forgets the message, not its resources.
   Future<void> _resend(Message prompt, String text) async {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
     final index = chat.messages.indexOf(prompt);
     if (index < 0) return;
 
-    state = state.copyWith(
-      chat: await ref.read(chatRepositoryProvider).rewind(chat, index),
-    );
-    await send(text);
+    final repo = ref.read(chatRepositoryProvider);
+    final attachments = await repo.loadAttachments(chatId, prompt);
+    state = state.copyWith(chat: await repo.rewind(chat, index));
+    await send(text, attachments: attachments);
   }
 
   /// Resend a message with new text, discarding the replies it drew.

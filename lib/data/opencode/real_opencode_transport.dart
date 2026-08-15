@@ -65,18 +65,31 @@ class RealOpencodeTransport implements OpencodeTransport {
       {required String text,
       String? model,
       String? provider,
-      List<String> agents = const []}) async {
+      List<String> agents = const [],
+      List<Attachment> attachments = const []}) async {
     final s = await _ensure(chatId);
-    await s.client
-        .promptAsync(sessionId, text: text, model: model, provider: provider, agents: agents);
+    await s.client.promptAsync(sessionId,
+        text: text,
+        model: model,
+        provider: provider,
+        agents: agents,
+        attachments: attachments);
   }
 
   @override
   Future<void> runCommand(String chatId, String sessionId,
-      {required String name, required String arguments, String? model, String? provider}) async {
+      {required String name,
+      required String arguments,
+      String? model,
+      String? provider,
+      List<Attachment> attachments = const []}) async {
     final s = await _ensure(chatId);
-    await s.client
-        .runCommand(sessionId, name: name, arguments: arguments, model: model, provider: provider);
+    await s.client.runCommand(sessionId,
+        name: name,
+        arguments: arguments,
+        model: model,
+        provider: provider,
+        attachments: attachments);
   }
 
   @override

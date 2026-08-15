@@ -1,7 +1,10 @@
+import "dart:typed_data";
+
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
 import "domain/agent_backend.dart";
+import "domain/attachment_picker.dart";
 import "domain/app_settings.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
@@ -11,6 +14,7 @@ import "ui/widgets/provider_model_selector.dart";
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
+final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
 
 class AppSettingsNotifier extends Notifier<AppSettings> {
   late final AppConfig _config;
@@ -55,6 +59,13 @@ final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
   final backend = ref.watch(agentBackendProvider);
   return backend.models();
 });
+
+/// An attachment's bytes, read back from the chat's `resources/`, so a message
+/// that has already been sent can still show what it carried. Auto-disposed:
+/// held, a scrolled-past image would keep its megabytes for the whole session.
+final attachmentBytesProvider =
+    FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>((ref, key) =>
+        ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource));
 
 /// The composer's `/` and `@` menus. Watched only while a menu is open, so a
 /// chat that never uses one never pays for the server these need.
