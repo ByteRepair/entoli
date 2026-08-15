@@ -33,7 +33,16 @@ class AppConfig {
 
   final Directory dataDir;
 
+  /// Whether these paths lead anywhere. A browser has no filesystem, and
+  /// `dart:io` compiles for the web — it is the calls that throw — so this is
+  /// asked before any of them is made. Private: what a platform provides is
+  /// answered in `core/platform/`, and only this file's own calls are left.
+  static const bool _hasStorage = !kIsWeb;
+
   static Future<AppConfig> load() async {
+    // Nothing here can be reached in a browser, `Platform.environment`
+    // included. The path is nominal: the helpers below still have to answer.
+    if (!_hasStorage) return AppConfig._(Directory("/agent-chat"));
     final override = Platform.environment["AGENT_CHAT_CONFIG"];
     final config = AppConfig._(
       Directory(override ?? p.join(await _resolveBase(), "agent-chat")),
@@ -129,10 +138,29 @@ class AppConfig {
   }
 
   void _ensure(List<Directory> dirs) {
+    if (!_hasStorage) return;
     for (final dir in dirs) {
       if (!dir.existsSync()) dir.createSync(recursive: true);
     }
   }
+
+  /// What `settings.json` and `project.json` are read and written through.
+  /// Where there is no filesystem they are kept for the life of the page
+  /// instead, so settings made in a browser last until the tab is reloaded.
+  static String? readText(File file) {
+    if (!_hasStorage) return _session[file.path];
+    return file.existsSync() ? file.readAsStringSync() : null;
+  }
+
+  static void writeText(File file, String text) {
+    if (!_hasStorage) {
+      _session[file.path] = text;
+      return;
+    }
+    file.writeAsStringSync(text);
+  }
+
+  static final Map<String, String> _session = {};
 
   File get settingsFile => File(p.join(dataDir.path, "settings.json"));
 

@@ -5,10 +5,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
 import "core/platform/app_icon.dart";
-import "core/platform/backend.dart" as backend_factory;
+import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
-import "data/local/local_chat_store.dart";
-import "data/prompts/prompt_sources.dart";
 import "domain/prompt_library.dart";
 import "providers.dart";
 import "ui/app_shell.dart";
@@ -16,14 +14,9 @@ import "ui/app_shell.dart";
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = await AppConfig.load();
-  final store = LocalChatStore(config);
-  // The user's own come last: a file they wrote replaces the preset it shares
-  // a name with.
-  final library = await PromptLibrary.from([
-    const BundledPrompts(),
-    DirectoryPrompts(config),
-  ]);
-  final backend = backend_factory.createBackend(config, library);
+  final store = platform.createChatStore(config);
+  final library = await PromptLibrary.from(platform.createPromptSources(config));
+  final backend = platform.createBackend(config, library);
   final container = ProviderContainer(
     overrides: [
       chatStoreProvider.overrideWithValue(store),

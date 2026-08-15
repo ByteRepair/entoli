@@ -13,15 +13,16 @@ class ChatMeta {
   String? provider;
   ApproveMode? approveMode;
 
-  factory ChatMeta.fromFile(File file) {
-    if (!file.existsSync()) return ChatMeta();
-    try {
-      final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-      return ChatMeta(
+  factory ChatMeta.fromJson(Map<String, dynamic> json) => ChatMeta(
         model: json["model"] as String?,
         provider: json["provider"] as String?,
         approveMode: _approveMode(json),
       );
+
+  factory ChatMeta.fromFile(File file) {
+    if (!file.existsSync()) return ChatMeta();
+    try {
+      return ChatMeta.fromJson(jsonDecode(file.readAsStringSync()) as Map<String, dynamic>);
     } catch (_) {
       return ChatMeta();
     }

@@ -91,6 +91,16 @@ class TestApp {
   void dispose() => container.dispose();
 }
 
+/// A chat's state as a store test hands it in, dated so [day] orders one
+/// against another.
+ChatState makeState(String id, {String? project, int day = 2}) => ChatState(
+      id: id,
+      title: "Test chat $id",
+      createdAt: DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 1, day),
+      project: project,
+    );
+
 /// Pump until [until] matches, letting real file I/O run in between. A widget
 /// test's clock is fake and never advances it, so anything read off disk needs
 /// real time and a rebuild interleaved by hand.
