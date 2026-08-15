@@ -108,6 +108,83 @@ class _OpencodeSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setDefault(choice),
           ),
         ),
+        const _EnvironmentEditor(),
+      ],
+    );
+  }
+}
+
+/// The environment every `opencode serve` is started with: API keys, and
+/// whatever else a provider reads out of it.
+class _EnvironmentEditor extends ConsumerWidget {
+  const _EnvironmentEditor();
+
+  Future<void> _edit(BuildContext context, WidgetRef ref, {String? name}) async {
+    final env = ref.read(appSettingsProvider).opencodeEnv;
+    final pair = await promptForPair(
+      context,
+      title: name == null ? "Add variable" : "Edit $name",
+      nameLabel: "Name",
+      valueLabel: "Value",
+      name: name ?? "",
+      value: name == null ? "" : env[name] ?? "",
+    );
+    if (pair == null) return;
+    // A rename drops the old key rather than leaving both behind.
+    final next = {...env}..remove(name);
+    next[pair.name] = pair.value;
+    await ref.read(appSettingsProvider.notifier).setOpencodeEnv(next);
+  }
+
+  Future<void> _remove(WidgetRef ref, String name) async {
+    final next = {...ref.read(appSettingsProvider).opencodeEnv}..remove(name);
+    await ref.read(appSettingsProvider.notifier).setOpencodeEnv(next);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final env = ref.watch(appSettingsProvider).opencodeEnv;
+    final names = env.keys.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Text("Environment", style: theme.textTheme.titleSmall),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Text(
+            "Passed to every opencode server. A running chat keeps the "
+            "environment it started with.",
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+        for (final name in names)
+          ListTile(
+            dense: true,
+            title: Text(name),
+            // These are mostly API keys, and settings is a page people show
+            // people.
+            subtitle: Text("•" * env[name]!.length.clamp(0, 24)),
+            onTap: () => _edit(context, ref, name: name),
+            trailing: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: "Remove $name",
+              onPressed: () => _remove(ref, name),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text("Add variable"),
+            onPressed: () => _edit(context, ref),
+          ),
+        ),
       ],
     );
   }

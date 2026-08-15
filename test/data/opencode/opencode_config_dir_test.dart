@@ -63,4 +63,15 @@ void main() {
     expect(p.join(env["XDG_CONFIG_HOME"]!, "opencode"), opencodeConfigDir(config).path);
   });
 
+  test("the user's own variables ride along, but cannot undo the isolation", () {
+    final config = tempConfig();
+
+    final env = opencodeEnvironment(config, extra: {
+      "ANTHROPIC_API_KEY": "sk-test",
+      "XDG_CONFIG_HOME": "/home/someone/.config",
+    });
+
+    expect(env["ANTHROPIC_API_KEY"], "sk-test");
+    expect(env["XDG_CONFIG_HOME"], config.cacheDir.path);
+  });
 }

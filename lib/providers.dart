@@ -36,6 +36,18 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     state = AppSettings(
       defaultProviderId: choice.providerId,
       defaultModelId: choice.providerId == null ? null : choice.modelId,
+      opencodeEnv: state.opencodeEnv,
+    );
+    await state.save(_config);
+  }
+
+  /// Takes effect on the next server a chat starts; one already running keeps
+  /// the environment it was spawned with.
+  Future<void> setOpencodeEnv(Map<String, String> env) async {
+    state = AppSettings(
+      defaultProviderId: state.defaultProviderId,
+      defaultModelId: state.defaultModelId,
+      opencodeEnv: Map.unmodifiable(env),
     );
     await state.save(_config);
   }
