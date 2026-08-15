@@ -1,6 +1,8 @@
 import "dart:convert";
 
 import "../../domain/ask.dart";
+import "../../domain/profile.dart";
+import "task_tool.dart";
 
 /// The line that ends a turn. Upstream mini-swe-agent's marker, kept verbatim
 /// so a model that has seen the original recognises it.
@@ -14,6 +16,7 @@ String systemPrompt({
   required String projectWorkspace,
   required String platform,
   String? agentPrompt,
+  Profile? profile,
   bool canRunCommands = true,
 }) =>
     canRunCommands
@@ -22,13 +25,14 @@ String systemPrompt({
             projectWorkspace: projectWorkspace,
             platform: platform,
             agentPrompt: agentPrompt,
+            profile: profile,
           )
-        : _withoutShell(agentPrompt);
+        : _withoutShell(agentPrompt, profile: profile);
 
 /// Where there is no shell, the submission protocol is unsayable — submitting
 /// is itself a command. So the model is told to answer, and the turn ends when
 /// it does.
-String _withoutShell(String? agentPrompt) => """
+String _withoutShell(String? agentPrompt, {Profile? profile}) => """
 You are a helpful assistant.
 
 You are running in a browser, so you have no shell and no filesystem: you
@@ -37,7 +41,7 @@ and from what the user tells you, and say plainly when something would need a
 machine you do not have.
 
 $_asking
-${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}""";
+${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}${profileSection(profile)}""";
 
 /// The one thing both prompts say, because asking is the one thing the agent
 /// can do with or without a machine under it. Deliberately only what the tool's
@@ -55,6 +59,7 @@ String _withShell({
   required String projectWorkspace,
   required String platform,
   String? agentPrompt,
+  Profile? profile,
 }) =>
     """
 You are a helpful assistant that can interact with a computer to answer the
@@ -73,8 +78,9 @@ have to be in it.
 ## How you act
 
 1. You write reasoning text saying what you are doing and why.
-2. You call a tool at least once: `bash` to run a command, or `$askToolName` to
-   put a question to the user.
+2. You call a tool at least once: `bash` to run a command, `$taskToolName` to
+   delegate a task to a sub-agent, `$askToolName` to put a question to the
+   user, `websearch` to search the web, or `webfetch` to read a page.
 3. The system runs the command and shows you the result.
 4. You continue, or you finish the turn.
 
@@ -87,6 +93,21 @@ write what you need to a file and read it back.
 
 Your reasoning text is what the user reads as your reply, so write it for
 them: say what you found and what you did, not just what you are about to run.
+
+## Delegating to sub-agents
+
+The `$taskToolName` tool spawns a sub-agent with its own conversation and
+returns its final output when it finishes. Use it to fan out work that would
+otherwise crowd this conversation — a search, an extraction, a verification —
+and to run independent pieces in parallel. Several `$taskToolName` calls in
+one message run concurrently, so a fan-out of N is one step, not N.
+
+## Searching the web
+
+`websearch` queries DuckDuckGo and returns titles, URLs, and snippets.
+`webfetch` retrieves a URL and returns its text content with markup stripped.
+Use them together: `websearch` to find sources, then `webfetch` to read the
+ones that look relevant. Both are read-only, so they run without asking.
 
 ## Finishing a turn
 
@@ -128,7 +149,7 @@ Read part of a file with line numbers:
 ```bash
 nl -ba filename.py | sed -n '10,20p'
 ```
-${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}""";
+${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}${profileSection(profile)}""";
 
 /// The first thing the model is asked in a conversation. Upstream calls this
 /// the instance template and puts the task in it.
@@ -186,3 +207,29 @@ const _pretty = JsonEncoder.withIndent("  ");
 
 /// What a fresh session is told about the conversation it missed.
 String transcriptPreamble(String body) => "Earlier in this conversation:\n\n$body";
+
+/// The "About the user" block appended to the system prompt when a profile is
+/// set. Only non-null fields are emitted; an empty profile produces nothing,
+/// so a chat with no profile set gets the same system prompt as before.
+String profileSection(Profile? profile) {
+  if (profile == null || profile.isEmpty) return "";
+  final labelled = <String>[];
+  for (final (label, value) in <(String, String?)>[
+    ("Name", profile.name),
+    ("Date of birth", profile.dateOfBirth),
+    ("Religion", profile.religion),
+    ("Profession", profile.profession),
+  ]) {
+    if (value != null && value.isNotEmpty) labelled.add("$label: $value");
+  }
+  final buf = StringBuffer("\n## About the user\n\n");
+  if (labelled.isNotEmpty) buf.writeln(labelled.join("\n"));
+  final prefs = profile.preferencesPrompt;
+  if (prefs != null && prefs.isNotEmpty) {
+    if (labelled.isNotEmpty) buf.writeln();
+    buf
+      ..writeln("Preferences:")
+      ..writeln(prefs);
+  }
+  return buf.toString();
+}

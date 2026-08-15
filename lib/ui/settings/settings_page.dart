@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/llm_provider.dart";
+import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/dialogs.dart";
@@ -108,13 +109,14 @@ class _DefaultsSection extends ConsumerWidget {
   }
 }
 
-/// The endpoints the agent calls and whether it asks before doing anything.
+/// The endpoints the agent calls and how it gates commands.
 class _AgentSection extends ConsumerWidget {
   const _AgentSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
+    final noClassifier = settings.classifierProviderId == null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -123,12 +125,44 @@ class _AgentSection extends ConsumerWidget {
           description: "mini-swe-agent, running inside agent-chat. It calls the model "
               "itself and runs its commands in the chat's workspace.",
         ),
-        SwitchListTile(
-          value: settings.approveCommands,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setApproveCommands(value),
-          title: const Text("Ask before running commands"),
-          subtitle: const Text("Every command waits for you. A chat can override this."),
+        LabelledField(
+          label: "Running commands",
+          child: DropdownButtonFormField<ApproveMode>(
+            initialValue: settings.approveMode,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              helperText: settings.approveMode == ApproveMode.auto && noClassifier
+                  ? "No classifier model set — auto mode will ask for every command."
+                  : null,
+            ),
+            items: [
+              for (final entry in approveModeLabels.entries)
+                DropdownMenuItem(
+                  value: entry.key,
+                  enabled: entry.key != ApproveMode.auto || !noClassifier,
+                  child: Text(entry.value),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                ref.read(appSettingsProvider.notifier).setApproveMode(value);
+              }
+            },
+          ),
+        ),
+        LabelledField(
+          label: "Classifier LLM",
+          child: OptionalModelPicker(
+            offLabel: "Off",
+            helperText: "Classifies commands as safe, dangerous, or uncertain. "
+                "Off, auto mode asks for every command.",
+            choice: (
+              providerId: settings.classifierProviderId,
+              modelId: settings.classifierModelId,
+            ),
+            onChanged: (choice) =>
+                ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
+          ),
         ),
         const _ProvidersEditor(),
       ],

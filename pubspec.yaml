@@ -17,6 +17,7 @@ dependencies:
 
   # Networking
   http: ^1.6.0
+  html: ^0.15.6
 
   # Serialization
   json_annotation: ^4.12.0

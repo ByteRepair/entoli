@@ -6,6 +6,7 @@ import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 
 import "miniswe_fakes.dart";
@@ -24,7 +25,7 @@ void main() {
     List<ApprovalResponse> approvals = const [],
     List<String?>? answers,
     MinisweOptions options = const MinisweOptions(),
-    bool requireApproval = false,
+    ApproveMode approveMode = ApproveMode.never,
     bool canRunCommands = true,
   }) {
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
@@ -37,7 +38,7 @@ void main() {
       projectWorkspace: "/tmp/project-workspace",
       model: "fake-model",
       options: options,
-      requireApproval: requireApproval,
+      approveMode: approveMode,
       approve: (_) async => allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
       // Nothing picked, unless the test says what was.
       answer: (request) async => answers ?? request.unanswered,
@@ -262,7 +263,7 @@ void main() {
       ]);
       final events = await agentOver(client,
               respond: submitted,
-              requireApproval: true,
+              approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
           .run("clean up")
           .toList();
@@ -278,7 +279,7 @@ void main() {
       ]);
       await agentOver(client,
               respond: submitted,
-              requireApproval: true,
+              approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.deny, ApprovalResponse.allow])
           .run("clean up")
           .toList();

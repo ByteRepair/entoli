@@ -23,6 +23,7 @@ import "package:agent_chat/data/prompts/prompt_sources.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 
 import "../harness.dart";
@@ -102,7 +103,7 @@ void main() {
       model: model,
       provider: _providerId,
       // Nobody is here to answer a banner.
-      approveCommands: false,
+      approveMode: ApproveMode.never,
     )) {
       switch (event) {
         case TextDelta(:final text):
@@ -126,6 +127,12 @@ void main() {
         case QuestionRequestEvent(:final request):
           log("asked ${request.questions.length} question(s), answering nothing");
           await backend.respondQuestions(chat.state.id, request.id, request.unanswered);
+        case SubAgentStartEvent(:final agent):
+          log("sub-agent @$agent started");
+        case SubAgentEndEvent(:final id, :final failed):
+          log("sub-agent $id ${failed ? "failed" : "finished"}");
+        case InfoEvent(:final message):
+          log("info: $message");
         case DoneEvent():
           log("done");
       }

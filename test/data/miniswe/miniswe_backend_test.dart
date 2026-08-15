@@ -9,6 +9,7 @@ import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -69,15 +70,15 @@ void main() {
   }) =>
       backend
           .sendPrompt(chatId, text,
-              model: model, provider: provider, approveCommands: false)
+              model: model, provider: provider, approveMode: ApproveMode.never)
           .toList();
 
   /// A turn left running for the test to answer, whether what it stops on is a
   /// command to approve or a question to pick from.
   Stream<AgentEvent> asking(MinisweBackend backend, String text,
-          {bool approveCommands = true}) =>
+          {ApproveMode approveMode = ApproveMode.ask}) =>
       backend.sendPrompt(chatId, text,
-          model: "fake-model", provider: "fake", approveCommands: approveCommands);
+          model: "fake-model", provider: "fake", approveMode: approveMode);
 
   group("picking where the turn runs", () {
     test("a chat with no provider is told to configure one", () async {
@@ -144,7 +145,7 @@ void main() {
               model: "fake-model",
               provider: "fake",
               project: "work",
-              approveCommands: false)
+              approveMode: ApproveMode.never)
           .toList();
 
       final system = client.sent.first.first.text;
@@ -323,7 +324,7 @@ void main() {
         [finish],
       ]);
 
-      final turn = asking(backend, "set up storage", approveCommands: false).toList();
+      final turn = asking(backend, "set up storage", approveMode: ApproveMode.never).toList();
 
       await pumpEvents();
       final pending = backend.pendingQuestions(chatId).single;
@@ -343,7 +344,7 @@ void main() {
         [finish],
       ]);
 
-      await asking(backend, "set up storage", approveCommands: false).listen((event) {
+      await asking(backend, "set up storage", approveMode: ApproveMode.never).listen((event) {
         if (event is QuestionRequestEvent) {
           backend.respondQuestions(chatId, event.request.id, ["SQLite"]);
         }
@@ -357,7 +358,7 @@ void main() {
         [askWhich],
       ]);
 
-      final turn = asking(backend, "set up storage", approveCommands: false).toList();
+      final turn = asking(backend, "set up storage", approveMode: ApproveMode.never).toList();
       await pumpEvents();
       expect(backend.pendingQuestions(chatId), hasLength(1));
 
@@ -486,13 +487,6 @@ void main() {
   });
 
   group("what the app asks it", () {
-    test("its patience outlasts the longest command it would allow", () async {
-      final backend = backendOver([],
-          options: const MinisweOptions(commandTimeout: Duration(seconds: 120)));
-
-      expect(backend.stallTimeout, greaterThan(const Duration(seconds: 120)));
-    });
-
     test("the model list is whatever the providers offer", () async {
       final backend = backendOver([]);
 

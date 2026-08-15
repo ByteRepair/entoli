@@ -13,7 +13,7 @@ import "../harness.dart";
 void main() {
   late TestApp app;
 
-  setUp(() => app = TestApp.create(stallTimeout: const Duration(milliseconds: 80)));
+  setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
   /// Give whatever is still in flight a chance to land.
@@ -276,72 +276,6 @@ void main() {
 
     final stored = await app.repo.openChat(id);
     expect(stored.messages.last.parts, isEmpty);
-  });
-
-  test("a turn that produces nothing is given up on, blaming the last retry", () async {
-    app.backend.scriptedEvents = const [
-      RetryEvent(attempt: 3, message: "you have reached your session usage limit"),
-    ];
-    app.backend.hold = Completer<void>();
-    final (id, _) = await startTurn("hello");
-    await waitIdle(id);
-
-    final view = app.container.read(chatControllerProvider(id));
-    final error = view.chat!.messages.last.parts.whereType<ErrorPart>().single;
-    expect(error.message, contains("Gave up"));
-    expect(error.message, contains("usage limit"));
-    expect(view.retry, isNull);
-    expect(app.backend.aborted, [id]);
-    app.backend.hold!.complete();
-  });
-
-  test("giving up says so plainly when nothing explained the stall", () async {
-    app.backend.scriptedEvents = const [];
-    app.backend.hold = Completer<void>();
-    final (id, _) = await startTurn("hello");
-    await waitIdle(id);
-
-    final error = app.container
-        .read(chatControllerProvider(id))
-        .chat!
-        .messages
-        .last
-        .parts
-        .whereType<ErrorPart>()
-        .single;
-    expect(error.message, contains("No response after"));
-    app.backend.hold!.complete();
-  });
-
-  test("output keeps a slow but working turn alive", () async {
-    // Deltas spaced under the timeout: each one buys the turn more time.
-    app.backend.scriptedEvents = const [TextDelta("thinking")];
-    app.backend.hold = Completer<void>();
-    final (id, _) = await startTurn("hello");
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-
-    final view = app.container.read(chatControllerProvider(id));
-    expect(view.isRunning, isTrue);
-    expect(view.chat!.messages.last.parts.whereType<ErrorPart>(), isEmpty);
-    app.backend.hold!.complete();
-  });
-
-  test("a given-up turn can be retried, and the retry stands alone", () async {
-    app.backend.scriptedEvents = const [RetryEvent(attempt: 1, message: "rate limited")];
-    app.backend.hold = Completer<void>();
-    final (id, controller) = await startTurn("hello");
-    await waitIdle(id);
-
-    app.backend.hold!.complete();
-    app.backend.hold = null;
-    app.backend.scriptedEvents = const [TextDelta("hi"), DoneEvent()];
-    await controller.regenerate(messagesOf(id).last.id);
-    await waitIdle(id);
-
-    final messages = messagesOf(id);
-    expect(messages, hasLength(2));
-    expect(messages.last.parts.whereType<ErrorPart>(), isEmpty);
-    expect(textOf(messages.last), "hi");
   });
 
   test("an errored reply is persisted with the chat", () async {

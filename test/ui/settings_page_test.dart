@@ -127,8 +127,15 @@ void main() {
 
   group("the title model", () {
     Future<void> openTitleDropdown(WidgetTester tester) async {
-      final field = find.byType(DropdownButtonFormField<ModelOption?>);
-      await scrollTo(tester, field);
+      // The title picker is the first OptionalModelPicker on the page; the
+      // classifier picker is the second. Both are the same type, so scope by
+      // the label that precedes it.
+      final label = find.text("Title LLM");
+      await scrollTo(tester, label);
+      final field = find.descendant(
+        of: find.ancestor(of: label, matching: find.byType(LabelledField)),
+        matching: find.byType(DropdownButtonFormField<ModelOption?>),
+      );
       await tester.tap(field);
       await tester.pumpAndSettle();
     }
@@ -181,7 +188,14 @@ void main() {
       await pumpSettings(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text("Off"), findsOneWidget);
+      // The title LLM reads as off; the classifier LLM is also off, so scope
+      // to the title field.
+      final titleLabel = find.text("Title LLM");
+      final titleField = find.ancestor(
+        of: titleLabel,
+        matching: find.byType(LabelledField),
+      );
+      expect(find.descendant(of: titleField, matching: find.text("Off")), findsOneWidget);
     });
   });
 
