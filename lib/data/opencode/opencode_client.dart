@@ -74,10 +74,12 @@ class OpencodeClient {
     String? model,
     String? provider,
     List<String> agents = const [],
+    List<Attachment> attachments = const [],
   }) async {
     final body = <String, dynamic>{
       "parts": [
         for (final agent in agents) {"type": "agent", "name": agent},
+        ..._fileParts(attachments),
         {"type": "text", "text": text},
       ],
     };
@@ -102,11 +104,14 @@ class OpencodeClient {
     required String arguments,
     String? model,
     String? provider,
+    List<Attachment> attachments = const [],
   }) async {
     final body = <String, dynamic>{"command": name, "arguments": arguments};
     // This endpoint takes one "provider/model" string, not the pair
-    // `prompt_async` insists on.
+    // `prompt_async` insists on, and its `parts` hold files only — the command
+    // itself is the text.
     if (model != null && provider != null) body["model"] = "$provider/$model";
+    if (attachments.isNotEmpty) body["parts"] = _fileParts(attachments);
     _expectOk(await _client.post(
       baseUrl.resolve("/session/$sessionId/command"),
       headers: _headers,
@@ -181,6 +186,18 @@ class OpencodeClient {
   }
 
   // --- helpers ---
+
+  /// An attachment travels as its own bytes in a data URL, not as a `file:`
+  /// path: the server does not always share our filesystem.
+  List<Map<String, dynamic>> _fileParts(List<Attachment> attachments) => [
+        for (final a in attachments)
+          {
+            "type": "file",
+            "mime": a.mimeType,
+            "filename": a.filename,
+            "url": "data:${a.mimeType};base64,${base64Encode(a.bytes)}",
+          },
+      ];
 
   /// Throws on a failed write. Without this a rejected prompt (say, a model
   /// the provider no longer offers) looks exactly like a silent stall.

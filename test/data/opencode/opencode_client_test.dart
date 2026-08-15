@@ -6,6 +6,8 @@ import "package:http/testing.dart";
 
 import "package:agent_chat/data/opencode/opencode_client.dart";
 
+import "../../fakes.dart";
+
 void main() {
   late List<Map<String, dynamic>> bodies;
 
@@ -51,6 +53,22 @@ void main() {
     ]);
   });
 
+  test("an attachment travels as a file part carrying its own bytes", () async {
+    await client().promptAsync("ses_1",
+        text: "look",
+        attachments: [testAttachment("shot.png", mimeType: "image/png", bytes: [1, 2, 3])]);
+
+    expect(bodies.single["parts"], [
+      {
+        "type": "file",
+        "mime": "image/png",
+        "filename": "shot.png",
+        "url": "data:image/png;base64,AQID",
+      },
+      {"type": "text", "text": "look"},
+    ]);
+  });
+
   // Unlike prompt_async, this endpoint types `model` as one string.
   test("runCommand sends model as one provider/model string", () async {
     await client().runCommand("ses_1",
@@ -67,5 +85,19 @@ void main() {
     await client().runCommand("ses_1", name: "init", arguments: "");
 
     expect(bodies.single, {"command": "init", "arguments": ""});
+  });
+
+  test("runCommand puts attachments in parts", () async {
+    await client().runCommand("ses_1",
+        name: "review", arguments: "", attachments: [testAttachment("a.txt")]);
+
+    expect(bodies.single["parts"], [
+      {
+        "type": "file",
+        "mime": "text/plain",
+        "filename": "a.txt",
+        "url": "data:text/plain;base64,aGk=",
+      },
+    ]);
   });
 }

@@ -2,6 +2,7 @@ import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 
 import "../../../domain/models.dart";
+import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
 
 /// Renders a single message as a chat bubble. Text parts are concatenated;
@@ -9,12 +10,16 @@ import "../../widgets/dialogs.dart";
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
+    required this.chatId,
     required this.message,
     this.isWaiting = false,
     this.waitingNotice,
     this.onEdit,
     this.onRegenerate,
   });
+
+  /// Which chat's `resources/` the attachments are read back from.
+  final String chatId;
 
   final Message message;
 
@@ -76,6 +81,7 @@ class MessageBubble extends StatelessWidget {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final files = message.files.toList();
     final (name, bg) = switch (message.role) {
       MessageRole.user => ("You", theme.colorScheme.primaryContainer),
       MessageRole.assistant => ("Assistant", theme.colorScheme.surfaceContainerHighest),
@@ -118,7 +124,14 @@ class MessageBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ...message.parts.map((p) => _renderPart(p, theme)),
+                  if (files.isNotEmpty)
+                    AttachmentStrip(
+                      children: [
+                        for (final f in files) AttachmentChip.sent(f, chatId: chatId),
+                      ],
+                    ),
+                  for (final part in message.parts)
+                    if (part is! FilePart) _renderPart(part, theme),
                   if (isWaiting && !message.hasText)
                     _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: waitingNotice),
                   // A failed turn is a dead end without this; the same action
@@ -153,10 +166,7 @@ class MessageBubble extends StatelessWidget {
         ),
       ToolCallPart(:final toolCall) => _ToolChip(toolCall: toolCall),
       ToolResultPart(:final result) => _ResultChip(result: result),
-      ImagePart(:final path) => Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Text("📷 $path", style: theme.textTheme.bodySmall),
-        ),
+      FilePart() => const SizedBox.shrink(),
       ErrorPart(:final message) => Padding(
           padding: const EdgeInsets.only(bottom: 4),
           child: SelectableText(

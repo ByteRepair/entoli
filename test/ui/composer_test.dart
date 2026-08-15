@@ -4,19 +4,23 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 
 void main() {
   late TestApp app;
   final controller = TextEditingController();
   final sent = <String>[];
+  final sentAttachments = <List<Attachment>>[];
 
   setUp(() {
     app = TestApp.create();
     controller.clear();
     sent.clear();
+    sentAttachments.clear();
   });
   tearDown(() => app.dispose());
   tearDownAll(controller.dispose);
@@ -28,7 +32,10 @@ void main() {
             chatId: "chat-1",
             controller: controller,
             isRunning: false,
-            onSend: sent.add,
+            onSend: (text, attachments) {
+              sent.add(text);
+              sentAttachments.add(attachments);
+            },
             onAbort: () {},
           ),
         ),
@@ -241,5 +248,78 @@ void main() {
     await type(tester, "/");
 
     expect(find.byType(ListView), findsNothing);
+  });
+
+  testWidgets("the + button's Image and File entries open the chooser", (tester) async {
+    await pump(tester);
+
+    await insertVia(tester, "Image");
+    await insertVia(tester, "File");
+
+    expect(app.picker.picks, [AttachmentKind.image, AttachmentKind.file]);
+    expect(controller.text, isEmpty);
+  });
+
+  testWidgets("what was chosen shows above the field and goes out with the message",
+      (tester) async {
+    app.picker.scripted = [testAttachment("notes.txt")];
+    await pump(tester);
+    await insertVia(tester, "File");
+
+    expect(find.text("notes.txt"), findsOneWidget);
+
+    await type(tester, "look");
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pumpAndSettle();
+
+    expect(sent, ["look"]);
+    expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
+    expect(find.text("notes.txt"), findsNothing);
+  });
+
+  testWidgets("an image shows itself rather than its name", (tester) async {
+    app.picker.scripted = [
+      testAttachment("shot.png", mimeType: "image/png", bytes: onePixelPng),
+    ];
+    await pump(tester);
+    await insertVia(tester, "Image");
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text("shot.png"), findsNothing);
+  });
+
+  testWidgets("the X on an attachment drops it", (tester) async {
+    app.picker.scripted = [testAttachment("notes.txt"), testAttachment("other.txt")];
+    await pump(tester);
+    await insertVia(tester, "File");
+
+    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text("notes.txt"), findsNothing);
+    expect(find.text("other.txt"), findsOneWidget);
+  });
+
+  testWidgets("an attachment on its own is worth sending, nothing at all is not", (tester) async {
+    app.picker.scripted = [testAttachment("notes.txt")];
+    await pump(tester);
+
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pumpAndSettle();
+    expect(sent, isEmpty);
+
+    await insertVia(tester, "File");
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pumpAndSettle();
+
+    expect(sent, [""]);
+    expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
+  });
+
+  testWidgets("a cancelled chooser attaches nothing", (tester) async {
+    await pump(tester);
+    await insertVia(tester, "Image");
+
+    expect(find.byIcon(Icons.close), findsNothing);
   });
 }

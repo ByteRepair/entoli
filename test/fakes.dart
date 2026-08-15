@@ -1,6 +1,9 @@
 import "dart:async";
+import "dart:convert";
+import "dart:typed_data";
 
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/attachment_picker.dart";
 import "package:agent_chat/domain/models.dart";
 
 /// Two providers, two models each, deliberately not in alphabetical order so
@@ -24,6 +27,34 @@ const testAgents = [
   CompletionOption(name: "explore", description: "fast codebase search"),
 ];
 
+/// A real 1x1 PNG: the chip decodes what it is given, so a stand-in string of
+/// bytes would fail the codec rather than render.
+final onePixelPng = base64Decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+/// An attachment with recognisable bytes, so a test can follow the same file
+/// from the composer to the backend and back off disk.
+Attachment testAttachment(
+  String filename, {
+  String mimeType = "text/plain",
+  List<int> bytes = const [104, 105],
+}) =>
+    Attachment(filename: filename, mimeType: mimeType, bytes: Uint8List.fromList(bytes));
+
+/// Stands in for the platform's file chooser, which no test can drive.
+class FakeAttachmentPicker implements AttachmentPicker {
+  final List<AttachmentKind> picks = [];
+
+  /// What the next pick returns. Empty is a cancelled dialog.
+  List<Attachment> scripted = const [];
+
+  @override
+  Future<List<Attachment>> pick(AttachmentKind kind) async {
+    picks.add(kind);
+    return scripted;
+  }
+}
+
 class FakeBackend implements AgentBackend {
   @override
   BackendKind get kind => BackendKind.opencode;
@@ -46,7 +77,8 @@ class FakeBackend implements AgentBackend {
     );
   }
 
-  final List<({String text, String? model, String? provider})> prompts = [];
+  final List<({String text, String? model, String? provider, List<Attachment> attachments})>
+      prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
   List<AgentEvent> scriptedEvents = const [DoneEvent()];
@@ -58,7 +90,7 @@ class FakeBackend implements AgentBackend {
   @override
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [], String? model, String? provider}) async* {
-    prompts.add((text: text, model: model, provider: provider));
+    prompts.add((text: text, model: model, provider: provider, attachments: attachments));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;
   }

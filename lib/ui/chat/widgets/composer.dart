@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/models.dart";
 import "../../../providers.dart";
+import "../../widgets/attachment_chip.dart";
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -50,9 +51,12 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
 /// Space, tab, newline — every break a typed message can hold.
 bool _isSpace(int codeUnit) => codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
 
+typedef SendCallback = void Function(String text, List<Attachment> attachments);
+
 /// Message composer with send/abort toggle. Calls onSend with the typed text
-/// and clears the field; calls onAbort when a turn is running. Typing `/` or
-/// `@` opens a menu of the backend's commands or agents above the field.
+/// and whatever is attached, then clears both; calls onAbort when a turn is
+/// running. Typing `/` or `@` opens a menu of the backend's commands or agents
+/// above the field, and the `+` button also attaches files.
 class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,
@@ -66,7 +70,7 @@ class Composer extends ConsumerStatefulWidget {
   final String chatId;
   final TextEditingController controller;
   final bool isRunning;
-  final ValueChanged<String> onSend;
+  final SendCallback onSend;
   final VoidCallback onAbort;
 
   @override
@@ -79,6 +83,7 @@ class _ComposerState extends ConsumerState<Composer> {
 
   final ScrollController _scroll = ScrollController();
   final FocusNode _focus = FocusNode();
+  final List<Attachment> _attachments = [];
   CompletionToken? _token;
   int _highlighted = 0;
 
@@ -167,11 +172,19 @@ class _ComposerState extends ConsumerState<Composer> {
     );
   }
 
+  Future<void> _attach(AttachmentKind kind) async {
+    final picked = await ref.read(attachmentPickerProvider).pick(kind);
+    if (picked.isEmpty || !mounted) return;
+    setState(() => _attachments.addAll(picked));
+    _focus.requestFocus();
+  }
+
   void _submit() {
     final text = widget.controller.text.trim();
-    if (text.isEmpty) return;
-    widget.onSend(text);
+    if (text.isEmpty && _attachments.isEmpty) return;
+    widget.onSend(text, List.of(_attachments));
     widget.controller.clear();
+    setState(_attachments.clear);
   }
 
   @override
@@ -193,16 +206,32 @@ class _ComposerState extends ConsumerState<Composer> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (token != null) _menu(token.kind, options!, matches),
+          if (_attachments.isNotEmpty)
+            AttachmentStrip(
+              children: [
+                for (final (i, attachment) in _attachments.indexed)
+                  AttachmentChip.pending(
+                    attachment,
+                    onRemove: () => setState(() => _attachments.removeAt(i)),
+                  ),
+              ],
+            ),
           Row(
             children: [
-              PopupMenuButton<CompletionKind>(
+              // Each entry carries what it does. Running it on selection rather
+              // than on tap keeps it after the menu has closed, so `_openMenu`
+              // is not asking for focus the dismissing route is about to take.
+              PopupMenuButton<VoidCallback>(
                 icon: const Icon(Icons.add),
-                tooltip: "Insert",
-                onSelected: _openMenu,
+                tooltip: "Attach or insert",
+                onSelected: (action) => action(),
                 itemBuilder: (context) => [
+                  _attachItem(Icons.image_outlined, "Image", AttachmentKind.image),
+                  _attachItem(Icons.attach_file, "File", AttachmentKind.file),
+                  const PopupMenuDivider(),
                   for (final kind in CompletionKind.values)
                     PopupMenuItem(
-                      value: kind,
+                      value: () => _openMenu(kind),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -283,6 +312,14 @@ class _ComposerState extends ConsumerState<Composer> {
       ),
     );
   }
+
+  PopupMenuItem<VoidCallback> _attachItem(IconData icon, String label, AttachmentKind kind) =>
+      PopupMenuItem(
+        value: () => _attach(kind),
+        child: Row(
+          children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)],
+        ),
+      );
 
   List<CompletionOption> _matching(List<CompletionOption> options, String query) {
     if (query.isEmpty) return options;

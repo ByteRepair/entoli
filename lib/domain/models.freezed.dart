@@ -879,8 +879,8 @@ MessagePart _$MessagePartFromJson(
           return ToolResultPart.fromJson(
             json
           );
-                case 'image':
-          return ImagePart.fromJson(
+                case 'file':
+          return FilePart.fromJson(
             json
           );
                 case 'error':
@@ -945,14 +945,14 @@ extension MessagePartPatterns on MessagePart {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( TextPart value)?  text,TResult Function( ToolCallPart value)?  toolCall,TResult Function( ToolResultPart value)?  toolResult,TResult Function( ImagePart value)?  image,TResult Function( ErrorPart value)?  error,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( TextPart value)?  text,TResult Function( ToolCallPart value)?  toolCall,TResult Function( ToolResultPart value)?  toolResult,TResult Function( FilePart value)?  file,TResult Function( ErrorPart value)?  error,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that);case ToolCallPart() when toolCall != null:
 return toolCall(_that);case ToolResultPart() when toolResult != null:
-return toolResult(_that);case ImagePart() when image != null:
-return image(_that);case ErrorPart() when error != null:
+return toolResult(_that);case FilePart() when file != null:
+return file(_that);case ErrorPart() when error != null:
 return error(_that);case _:
   return orElse();
 
@@ -971,14 +971,14 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( TextPart value)  text,required TResult Function( ToolCallPart value)  toolCall,required TResult Function( ToolResultPart value)  toolResult,required TResult Function( ImagePart value)  image,required TResult Function( ErrorPart value)  error,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( TextPart value)  text,required TResult Function( ToolCallPart value)  toolCall,required TResult Function( ToolResultPart value)  toolResult,required TResult Function( FilePart value)  file,required TResult Function( ErrorPart value)  error,}){
 final _that = this;
 switch (_that) {
 case TextPart():
 return text(_that);case ToolCallPart():
 return toolCall(_that);case ToolResultPart():
-return toolResult(_that);case ImagePart():
-return image(_that);case ErrorPart():
+return toolResult(_that);case FilePart():
+return file(_that);case ErrorPart():
 return error(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
@@ -993,14 +993,14 @@ return error(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( TextPart value)?  text,TResult? Function( ToolCallPart value)?  toolCall,TResult? Function( ToolResultPart value)?  toolResult,TResult? Function( ImagePart value)?  image,TResult? Function( ErrorPart value)?  error,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( TextPart value)?  text,TResult? Function( ToolCallPart value)?  toolCall,TResult? Function( ToolResultPart value)?  toolResult,TResult? Function( FilePart value)?  file,TResult? Function( ErrorPart value)?  error,}){
 final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that);case ToolCallPart() when toolCall != null:
 return toolCall(_that);case ToolResultPart() when toolResult != null:
-return toolResult(_that);case ImagePart() when image != null:
-return image(_that);case ErrorPart() when error != null:
+return toolResult(_that);case FilePart() when file != null:
+return file(_that);case ErrorPart() when error != null:
 return error(_that);case _:
   return null;
 
@@ -1018,13 +1018,13 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text)?  text,TResult Function( ToolCall toolCall)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String path,  String? mimeType)?  image,TResult Function( String message)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text)?  text,TResult Function( ToolCall toolCall)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String resource,  String filename,  String mimeType)?  file,TResult Function( String message)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that.text);case ToolCallPart() when toolCall != null:
 return toolCall(_that.toolCall);case ToolResultPart() when toolResult != null:
-return toolResult(_that.result);case ImagePart() when image != null:
-return image(_that.path,_that.mimeType);case ErrorPart() when error != null:
+return toolResult(_that.result);case FilePart() when file != null:
+return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
 return error(_that.message);case _:
   return orElse();
 
@@ -1043,13 +1043,13 @@ return error(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text)  text,required TResult Function( ToolCall toolCall)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String path,  String? mimeType)  image,required TResult Function( String message)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text)  text,required TResult Function( ToolCall toolCall)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String resource,  String filename,  String mimeType)  file,required TResult Function( String message)  error,}) {final _that = this;
 switch (_that) {
 case TextPart():
 return text(_that.text);case ToolCallPart():
 return toolCall(_that.toolCall);case ToolResultPart():
-return toolResult(_that.result);case ImagePart():
-return image(_that.path,_that.mimeType);case ErrorPart():
+return toolResult(_that.result);case FilePart():
+return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart():
 return error(_that.message);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -1064,13 +1064,13 @@ return error(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text)?  text,TResult? Function( ToolCall toolCall)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String path,  String? mimeType)?  image,TResult? Function( String message)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text)?  text,TResult? Function( ToolCall toolCall)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String resource,  String filename,  String mimeType)?  file,TResult? Function( String message)?  error,}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that.text);case ToolCallPart() when toolCall != null:
 return toolCall(_that.toolCall);case ToolResultPart() when toolResult != null:
-return toolResult(_that.result);case ImagePart() when image != null:
-return image(_that.path,_that.mimeType);case ErrorPart() when error != null:
+return toolResult(_that.result);case FilePart() when file != null:
+return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
 return error(_that.message);case _:
   return null;
 
@@ -1319,12 +1319,13 @@ $ToolResultCopyWith<$Res> get result {
 /// @nodoc
 @JsonSerializable()
 
-class ImagePart implements MessagePart {
-  const ImagePart({required this.path, this.mimeType, final  String? $type}): $type = $type ?? 'image';
-  factory ImagePart.fromJson(Map<String, dynamic> json) => _$ImagePartFromJson(json);
+class FilePart implements MessagePart {
+  const FilePart({required this.resource, required this.filename, required this.mimeType, final  String? $type}): $type = $type ?? 'file';
+  factory FilePart.fromJson(Map<String, dynamic> json) => _$FilePartFromJson(json);
 
- final  String path;
- final  String? mimeType;
+ final  String resource;
+ final  String filename;
+ final  String mimeType;
 
 @JsonKey(name: 'runtimeType')
 final String $type;
@@ -1334,36 +1335,36 @@ final String $type;
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-$ImagePartCopyWith<ImagePart> get copyWith => _$ImagePartCopyWithImpl<ImagePart>(this, _$identity);
+$FilePartCopyWith<FilePart> get copyWith => _$FilePartCopyWithImpl<FilePart>(this, _$identity);
 
 @override
 Map<String, dynamic> toJson() {
-  return _$ImagePartToJson(this, );
+  return _$FilePartToJson(this, );
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ImagePart&&(identical(other.path, path) || other.path == path)&&(identical(other.mimeType, mimeType) || other.mimeType == mimeType));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FilePart&&(identical(other.resource, resource) || other.resource == resource)&&(identical(other.filename, filename) || other.filename == filename)&&(identical(other.mimeType, mimeType) || other.mimeType == mimeType));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,path,mimeType);
+int get hashCode => Object.hash(runtimeType,resource,filename,mimeType);
 
 @override
 String toString() {
-  return 'MessagePart.image(path: $path, mimeType: $mimeType)';
+  return 'MessagePart.file(resource: $resource, filename: $filename, mimeType: $mimeType)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class $ImagePartCopyWith<$Res> implements $MessagePartCopyWith<$Res> {
-  factory $ImagePartCopyWith(ImagePart value, $Res Function(ImagePart) _then) = _$ImagePartCopyWithImpl;
+abstract mixin class $FilePartCopyWith<$Res> implements $MessagePartCopyWith<$Res> {
+  factory $FilePartCopyWith(FilePart value, $Res Function(FilePart) _then) = _$FilePartCopyWithImpl;
 @useResult
 $Res call({
- String path, String? mimeType
+ String resource, String filename, String mimeType
 });
 
 
@@ -1371,20 +1372,21 @@ $Res call({
 
 }
 /// @nodoc
-class _$ImagePartCopyWithImpl<$Res>
-    implements $ImagePartCopyWith<$Res> {
-  _$ImagePartCopyWithImpl(this._self, this._then);
+class _$FilePartCopyWithImpl<$Res>
+    implements $FilePartCopyWith<$Res> {
+  _$FilePartCopyWithImpl(this._self, this._then);
 
-  final ImagePart _self;
-  final $Res Function(ImagePart) _then;
+  final FilePart _self;
+  final $Res Function(FilePart) _then;
 
 /// Create a copy of MessagePart
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? path = null,Object? mimeType = freezed,}) {
-  return _then(ImagePart(
-path: null == path ? _self.path : path // ignore: cast_nullable_to_non_nullable
-as String,mimeType: freezed == mimeType ? _self.mimeType : mimeType // ignore: cast_nullable_to_non_nullable
-as String?,
+@pragma('vm:prefer-inline') $Res call({Object? resource = null,Object? filename = null,Object? mimeType = null,}) {
+  return _then(FilePart(
+resource: null == resource ? _self.resource : resource // ignore: cast_nullable_to_non_nullable
+as String,filename: null == filename ? _self.filename : filename // ignore: cast_nullable_to_non_nullable
+as String,mimeType: null == mimeType ? _self.mimeType : mimeType // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 

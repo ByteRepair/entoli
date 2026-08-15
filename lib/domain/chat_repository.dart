@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
 import "../domain/chat_meta.dart";
@@ -47,6 +49,36 @@ class ChatRepository {
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments, model: model, provider: provider);
   }
+
+  /// Save what the user attached and describe it as the parts that outlive the
+  /// turn. One already on disk stays where it is, so resending a message does
+  /// not copy its bytes again.
+  Future<List<MessagePart>> saveAttachments(String chatId, List<Attachment> attachments) =>
+      Future.wait(attachments.map((a) async => MessagePart.file(
+            resource: a.resource ?? await _store.saveResource(chatId, a.filename, a.bytes),
+            filename: a.filename,
+            mimeType: a.mimeType,
+          )));
+
+  /// What [message] carried, bytes and all, so the turn can be sent again. A
+  /// resource that has gone missing is dropped.
+  Future<List<Attachment>> loadAttachments(String chatId, Message message) async {
+    final loaded = await Future.wait(message.files.map((part) async {
+      final bytes = await _store.readResource(chatId, part.resource);
+      return bytes == null
+          ? null
+          : Attachment(
+              filename: part.filename,
+              mimeType: part.mimeType,
+              bytes: bytes,
+              resource: part.resource,
+            );
+    }));
+    return loaded.nonNulls.toList();
+  }
+
+  Future<Uint8List?> readResource(String chatId, String resource) =>
+      _store.readResource(chatId, resource);
 
   /// Forget the message at [index] and everything after it, then give the
   /// backend a session that never saw them.

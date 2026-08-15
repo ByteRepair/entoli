@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
 import "core/platform/backend.dart" as backend_factory;
+import "data/local/file_selector_picker.dart";
 import "data/local/local_chat_store.dart";
 import "providers.dart";
 import "ui/app_shell.dart";
@@ -19,6 +20,7 @@ void main() async {
       chatStoreProvider.overrideWithValue(store),
       agentBackendProvider.overrideWithValue(backend),
       appConfigProvider.overrideWithValue(config),
+      attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
     ],
   );
   container.read(availableModelsProvider);

@@ -52,8 +52,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     });
   }
 
-  Future<void> _send(String text) =>
-      ref.read(chatControllerProvider(widget.chatId).notifier).send(text);
+  Future<void> _send(String text, List<Attachment> attachments) => ref
+      .read(chatControllerProvider(widget.chatId).notifier)
+      .send(text, attachments: attachments);
 
   Future<void> _abort() => ref.read(chatControllerProvider(widget.chatId).notifier).abort();
 
@@ -111,6 +112,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     itemBuilder: (context, i) {
                       final m = chat.messages[i];
                       return MessageBubble(
+                        chatId: widget.chatId,
                         message: m,
                         isWaiting: view.isRunning && i == chat.messages.length - 1,
                         waitingNotice: view.retry,

@@ -10,6 +10,7 @@ import "package:agent_chat/data/opencode/opencode_transport.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 
+import "../../fakes.dart";
 import "../../harness.dart";
 
 /// Fake transport that records calls and feeds canned events.
@@ -26,9 +27,17 @@ class FakeOpencodeTransport implements OpencodeTransport {
         String text,
         String? model,
         String? provider,
-        List<String> agents
+        List<String> agents,
+        List<Attachment> attachments,
       })> promptAsyncCalls = [];
-  final List<({String name, String arguments, String? model, String? provider})> commandCalls = [];
+  final List<
+      ({
+        String name,
+        String arguments,
+        String? model,
+        String? provider,
+        List<Attachment> attachments,
+      })> commandCalls = [];
   final List<({String chatId, String sessionId})> abortCalls = [];
   final List<String> disposeCalls = [];
 
@@ -53,7 +62,8 @@ class FakeOpencodeTransport implements OpencodeTransport {
       {required String text,
       String? model,
       String? provider,
-      List<String> agents = const []}) async {
+      List<String> agents = const [],
+      List<Attachment> attachments = const []}) async {
     promptAsyncCalls.add((
       chatId: chatId,
       sessionId: sessionId,
@@ -61,14 +71,25 @@ class FakeOpencodeTransport implements OpencodeTransport {
       model: model,
       provider: provider,
       agents: agents,
+      attachments: attachments,
     ));
     _promptCompleters[chatId]?.complete();
   }
 
   @override
   Future<void> runCommand(String chatId, String sessionId,
-      {required String name, required String arguments, String? model, String? provider}) async {
-    commandCalls.add((name: name, arguments: arguments, model: model, provider: provider));
+      {required String name,
+      required String arguments,
+      String? model,
+      String? provider,
+      List<Attachment> attachments = const []}) async {
+    commandCalls.add((
+      name: name,
+      arguments: arguments,
+      model: model,
+      provider: provider,
+      attachments: attachments,
+    ));
     _promptCompleters[chatId]?.complete();
     // Like the real endpoint, which holds its response until the turn is over.
     // Awaiting this before the events are streaming would deadlock the turn.
@@ -198,9 +219,10 @@ void main() {
   });
 
   /// Start sendPrompt, wait for promptAsync to be called, then emit events.
-  Future<List<AgentEvent>> runTurn(String chatId, String text, List<OcEvent> events) async {
+  Future<List<AgentEvent>> runTurn(String chatId, String text, List<OcEvent> events,
+      {List<Attachment> attachments = const []}) async {
     final completer = transport.waitForPrompt(chatId);
-    final eventsFuture = backend.sendPrompt(chatId, text).toList();
+    final eventsFuture = backend.sendPrompt(chatId, text, attachments: attachments).toList();
     await completer.future.timeout(const Duration(seconds: 5));
 
     for (final e in events) {
@@ -534,6 +556,24 @@ void main() {
     expect(transport.injectedContext.single.text, contains("user: hello"));
   });
 
+  // The turn being replayed brings its own files; the rest are named so the
+  // fresh session knows they existed.
+  test("a seeded session is told which files the kept messages carried", () async {
+    final chat = await backend.createChat();
+    final sid = "ses_${chat.state.id}_123";
+    await runTurn(chat.state.id, "hello", [_idleEvent(sid)]);
+
+    await backend.resetSession(chat.state.id, history: [
+      Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026), parts: const [
+        MessagePart.file(resource: "r1-shot.png", filename: "shot.png", mimeType: "image/png"),
+        MessagePart.text(text: "what is this"),
+      ]),
+    ]);
+    await runTurn(chat.state.id, "again", [_idleEvent(sid)]);
+
+    expect(transport.injectedContext.single.text, contains("(attached: shot.png)"));
+  });
+
   test("a session created without a reset is not seeded", () async {
     final chat = await backend.createChat();
     await runTurn(chat.state.id, "hello", [_idleEvent("ses_${chat.state.id}_123")]);
@@ -554,6 +594,26 @@ void main() {
 
     expect(events.whereType<ErrorEvent>(), hasLength(1));
     expect(events.whereType<DoneEvent>(), hasLength(1));
+  });
+
+  test("attachments ride along with the prompt", () async {
+    final chat = await backend.createChat();
+    final attachment = testAttachment("shot.png", mimeType: "image/png");
+
+    await runTurn(chat.state.id, "look", [_idleEvent("ses_${chat.state.id}_123")],
+        attachments: [attachment]);
+
+    expect(transport.promptAsyncCalls.single.attachments, [attachment]);
+  });
+
+  test("a command carries its attachments too", () async {
+    final chat = await backend.createChat();
+    final attachment = testAttachment("shot.png", mimeType: "image/png");
+
+    await runTurn(chat.state.id, "/review", [_idleEvent("ses_${chat.state.id}_123")],
+        attachments: [attachment]);
+
+    expect(transport.commandCalls.single.attachments, [attachment]);
   });
 
   test("a message that is only a command runs it, arguments and all", () async {

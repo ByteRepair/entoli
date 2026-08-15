@@ -5,30 +5,41 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
+import "../fakes.dart";
+import "../harness.dart";
+
 Message _message(MessageRole role, List<MessagePart> parts) =>
     Message(id: "m1", role: role, createdAt: DateTime(2026), parts: parts);
 
 void main() {
+  late TestApp app;
+
+  setUp(() => app = TestApp.create());
+  tearDown(() => app.dispose());
+
   Future<void> pump(
     WidgetTester tester,
     Message message, {
+    String chatId = "chat-1",
     bool isWaiting = false,
     String? waitingNotice,
     ValueChanged<String>? onEdit,
     VoidCallback? onRegenerate,
-  }) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: MessageBubble(
-          message: message,
-          isWaiting: isWaiting,
-          waitingNotice: waitingNotice,
-          onEdit: onEdit,
-          onRegenerate: onRegenerate,
+  }) =>
+      app.pump(
+        tester,
+        Scaffold(
+          body: MessageBubble(
+            chatId: chatId,
+            message: message,
+            isWaiting: isWaiting,
+            waitingNotice: waitingNotice,
+            onEdit: onEdit,
+            onRegenerate: onRegenerate,
+          ),
         ),
-      ),
-    ));
-  }
+        settle: !isWaiting,
+      );
 
   /// Right-click, the way the menu is meant to be opened on desktop.
   Future<void> rightClick(WidgetTester tester, Finder target) async {
@@ -243,5 +254,24 @@ void main() {
     await rightClick(tester, find.text("hello"));
 
     expect(find.text("Regenerate"), findsNothing);
+  });
+
+  // A sent message holds only the resource name, so the bytes have to come
+  // back off disk before the bubble can show anything.
+  testWidgets("an attachment on a sent message shows what it carried", (tester) async {
+    final chat = await app.repo.createChat();
+    late List<MessagePart> parts;
+    await tester.runAsync(() async {
+      parts = await app.repo.saveAttachments(chat.state.id, [
+        testAttachment("shot.png", mimeType: "image/png", bytes: onePixelPng),
+        testAttachment("notes.txt"),
+      ]);
+    });
+
+    await pump(tester, _message(MessageRole.user, parts), chatId: chat.state.id);
+    await pumpUntil(tester, find.byType(Image));
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.text("notes.txt"), findsOneWidget);
   });
 }

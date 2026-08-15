@@ -133,23 +133,40 @@ void main() {
     expect(config.chatDir("c3").existsSync(), isFalse);
   });
 
-  test("saveResource writes bytes under resources/", () async {
+  test("saveResource writes bytes under resources/ and reads them back", () async {
     await store.save(Chat(state: makeState("c4"), messages: const []));
 
     final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
-    final path = await store.saveResource("c4", "test.bin", bytes, "application/octet-stream");
-    expect(File(path).existsSync(), isTrue);
-    expect(File(path).readAsBytesSync(), bytes);
-    expect(p.basename(path), "test.bin");
+    final resource = await store.saveResource("c4", "test.bin", bytes);
+    expect(resource, endsWith("test.bin"));
+    expect(File(p.join(config.resourcesDir("c4").path, resource)).readAsBytesSync(), bytes);
+    expect(await store.readResource("c4", resource), bytes);
   });
 
   test("saveResource sanitizes unsafe filename characters", () async {
     await store.save(Chat(state: makeState("c5"), messages: const []));
 
-    final path = await store.saveResource("c5", "../bad name.txt", Uint8List(0), "text/plain");
-    final name = p.basename(path);
-    expect(name, contains("bad_name.txt"));
-    expect(name, isNot(contains("..")));
+    final resource = await store.saveResource("c5", "../bad name.txt", Uint8List(0));
+    expect(resource, contains("bad_name.txt"));
+    expect(resource, isNot(contains("..")));
+  });
+
+  // Two turns attaching the same filename must not overwrite each other.
+  test("saveResource gives each attachment its own name", () async {
+    await store.save(Chat(state: makeState("c5b"), messages: const []));
+
+    final first = await store.saveResource("c5b", "shot.png", Uint8List.fromList([1]));
+    final second = await store.saveResource("c5b", "shot.png", Uint8List.fromList([2]));
+
+    expect(first, isNot(second));
+    expect(await store.readResource("c5b", first), [1]);
+    expect(await store.readResource("c5b", second), [2]);
+  });
+
+  test("readResource is null for a resource that is not there", () async {
+    await store.save(Chat(state: makeState("c5c"), messages: const []));
+
+    expect(await store.readResource("c5c", "missing.png"), isNull);
   });
 
   test("round-trips tool call and tool result parts", () async {

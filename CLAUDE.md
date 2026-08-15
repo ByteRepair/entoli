@@ -115,6 +115,37 @@ kept messages to inject (`noReply`) into the fresh session. This is the one
 place where the "conv.json is the source of truth, re-inject context" rule is
 actually exercised.
 
+### Attachments
+
+The `+` button offers Image and File. Both open the same chooser and differ
+only in its filter, so they share one path: `AttachmentPicker` (a domain
+interface, `file_selector` behind it, faked in tests) hands back `Attachment`s
+of filename, mime type and bytes.
+
+Bytes are saved under the chat's `resources/` and the message keeps a
+`FilePart` naming the resource. That is what makes an edit or a regenerate
+work: the parts are in `conv.json`, so a resend reads the bytes back off disk
+rather than needing the composer to still hold them. `saveAttachments` leaves
+one that already has a resource where it is, so replaying a turn does not copy
+its bytes again.
+
+The store's resource I/O is async where the rest of it is sync: a JSON file is
+small enough to write on the UI thread, an attachment is not. A widget test's
+clock is fake and never advances real I/O, which is what `pumpUntil` in
+`test/harness.dart` is for.
+
+opencode takes the bytes as a data URL in a `{type, mime, filename, url}` file
+part. `file:` is the other scheme it reads, but it only works where the server
+shares our filesystem, which rules out web and Android. It inlines a
+`text/plain` attachment into the prompt and hands the model anything else as a
+blob, which is why the picker prefers `text/plain` over
+`application/octet-stream` for a file nothing can name a type for.
+`POST /session/:id/command` takes files in `parts` as well — there the command
+itself is the text.
+
+A rewound session's transcript names the files the kept messages carried
+instead of resending them: only the turn being replayed carries its own back.
+
 ### Setting overrides
 
 A chat's `meta.json` overrides the app default, which overrides the backend's
@@ -141,10 +172,11 @@ rules, and each page only says where the values come from and where they go.
 selector plus its loading and failure states) over `ProviderModelSelector`
 (which owns every rule about the pair, and is tested directly in
 `provider_model_selector_test.dart` rather than through both pages), the
-`Default`-plus-reset pairing, and the `promptForText` / `confirm` dialogs.
-Tests share `test/harness.dart` (`TestApp`, `tempConfig`, the dropdown finders)
-and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents` and `hold` drive a
-turn).
+`Default`-plus-reset pairing, the `promptForText` / `confirm` dialogs, and
+`AttachmentChip` / `AttachmentStrip`.
+Tests share `test/harness.dart` (`TestApp`, `tempConfig`, `pumpUntil`, the
+dropdown finders) and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents`
+and `hold` drive a turn, plus `FakeAttachmentPicker`).
 
 Streamed deltas are coalesced into one state update per frame: per-token
 updates made the reply's text quadratic and rebuilt every visible bubble
@@ -155,8 +187,9 @@ token. `completionsProvider` is watched only while that menu is open, so a
 chat that never uses one never starts a server for it.
 Enter, Tab and the arrows are bound only while the menu has a match — the rest
 of the time they have to keep doing what they do in a text box. The `+` button
-left of the field is a second way in: it types the trigger character rather
-than opening its own list, so both routes share one code path.
+left of the field is a second way in: for a command or an agent it types the
+trigger character rather than opening its own list, so both routes share one
+code path; for a file it opens the chooser.
 
 ### AgentBackend abstraction
 

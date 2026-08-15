@@ -16,21 +16,24 @@ import "fakes.dart";
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
-  TestApp._(this.tmp, this.config, this.backend, this.container);
+  TestApp._(this.tmp, this.config, this.backend, this.picker, this.container);
 
   factory TestApp.create({Duration? stallTimeout}) {
     final config = tempConfig();
     final tmp = config.dataDir;
     final backend = FakeBackend();
+    final picker = FakeAttachmentPicker();
     return TestApp._(
       tmp,
       config,
       backend,
+      picker,
       ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(LocalChatStore(config)),
           agentBackendProvider.overrideWithValue(backend),
           appConfigProvider.overrideWithValue(config),
+          attachmentPickerProvider.overrideWithValue(picker),
           if (stallTimeout != null) turnStallTimeoutProvider.overrideWithValue(stallTimeout),
         ],
       ),
@@ -40,6 +43,7 @@ class TestApp {
   final Directory tmp;
   final AppConfig config;
   final FakeBackend backend;
+  final FakeAttachmentPicker picker;
   final ProviderContainer container;
 
   ChatRepository get repo => container.read(chatRepositoryProvider);
@@ -56,17 +60,28 @@ class TestApp {
 
   ChatMeta savedMeta(String chatId) => ChatMeta.fromFile(config.metaFile(chatId));
 
-  /// Pump [child] as the whole app.
-  Future<void> pump(WidgetTester tester, Widget child) async {
+  /// Pump [child] as the whole app. [settle] is for a widget that never comes
+  /// to rest — a spinner runs forever, and settling on one times out.
+  Future<void> pump(WidgetTester tester, Widget child, {bool settle = true}) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(container: container, child: MaterialApp(home: child)),
     );
-    await tester.pumpAndSettle();
+    if (settle) await tester.pumpAndSettle();
   }
 
   void dispose() {
     container.dispose();
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+  }
+}
+
+/// Pump until [until] matches, letting real file I/O run in between. A widget
+/// test's clock is fake and never advances it, so anything read off disk needs
+/// real time and a rebuild interleaved by hand.
+Future<void> pumpUntil(WidgetTester tester, Finder until, {int tries = 50}) async {
+  for (var i = 0; i < tries && until.evaluate().isEmpty; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump();
   }
 }
 

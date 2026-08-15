@@ -14,8 +14,12 @@ abstract class ChatStore {
 
   Future<void> delete(String id);
 
-  /// Save an attachment's bytes under `resources/` and return the path.
-  Future<String> saveResource(String chatId, String filename, Uint8List bytes, String mimeType);
+  /// Save an attachment's bytes under `resources/` and return the name they
+  /// were stored under — unique, so two turns can attach the same filename.
+  Future<String> saveResource(String chatId, String filename, Uint8List bytes);
+
+  /// Read back what [saveResource] stored. Null once the file is gone.
+  Future<Uint8List?> readResource(String chatId, String resource);
 
   Future<ChatMeta> loadMeta(String chatId);
 
