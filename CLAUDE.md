@@ -41,24 +41,34 @@ files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`, and
 `llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
-app-private storage (Android).
+app-private storage (Android). A browser has none of this, and `dart:io`
+compiles for the web — it is the calls that throw — so nothing says so at build
+time.
 
-A browser has none of this, and `dart:io` compiles for the web — it is the
-calls that throw — so nothing says so at build time. What the platform provides
-is answered once, in `core/platform/` (see "Running the commands"):
-`platformChatStore` is `MemoryChatStore` there, holding in fields what
-`LocalChatStore` holds in files, and `platformPromptSources` offers the presets
-alone. Neither `LocalChatStore` nor `DirectoryPrompts` is then part of the web
-program at all, which is why neither has to know a browser exists.
+`Storage` is where that is answered: `dataDir`, `ensureDir`, `read`, `write`,
+and two implementations, `DiskStorage` and `MemoryStorage`. `AppConfig` is
+built on one and does no I/O of its own — it composes path names, and whether
+they lead anywhere is the port's business. That is also where the data
+directory is resolved, since "where does this platform keep things" is the same
+question: `MemoryStorage` answers `/agent-chat` and remembers what is written
+there for the life of the page. `AppConfig.load` reading `Platform.environment`
+before there was a port is what left the web build a white screen.
 
-What is left is `AppConfig` itself, and it guards its own calls: `load`
-resolves no directory and creates none — reading `Platform.environment` before
-it was what left the web build a white screen — `ensureDirs` is a no-op, and
-`readText`/`writeText`, what `settings.json` and `project.json` go through,
-keep them in memory. `_hasStorage` is private for that reason: the question is
-this file's, and anything else that needs a different answer per platform has a
-boundary to say so at. So a browser's chats and settings last as long as the
-page, and a reload starts over.
+Chats are not in it. They are a `ChatStore`, a whole store rather than three
+calls, and `MemoryChatStore` holds in fields what `LocalChatStore` holds in
+files. Prompts are the same shape: `platformPromptSources` offers the presets
+alone where there is no directory to have written one in. Both are chosen in
+`core/platform/` (see "Running the commands"), so neither `LocalChatStore` nor
+`DirectoryPrompts` is part of the web program at all, and neither has to know a
+browser exists.
+
+The port is what makes the no-filesystem path testable off a browser:
+`storage_test.dart` runs the settings round trip over a `MemoryStorage` on the
+VM, which is otherwise reachable only by loading the app in a tab.
+`ChatMeta.fromFile` and `LocalChatStore` still use `dart:io` directly, on
+purpose — the disk store is allowed to be the disk store, and listing,
+renaming and recursive delete are not going in a port that exists for four
+calls.
 
 ### Projects
 
@@ -233,9 +243,10 @@ What the app is given by the platform it runs on — a shell or none, the networ
 or CORS, a filesystem or a page's memory — is resolved in
 `lib/core/platform/platform.dart`, which holds the app's single conditional
 import (`io/platform.dart` or `web/platform.dart`) and is otherwise plain
-wiring: `LocalShell`, `DuckDuckGoSearch`, `LocalChatStore` and the user's own
-prompt directory on desktop and Android; `UnavailableShell`,
-`UnavailableWebSearch`, `MemoryChatStore` and the presets alone in a browser.
+wiring: `LocalShell`, `DuckDuckGoSearch`, `DiskStorage`, `LocalChatStore` and
+the user's own prompt directory on desktop and Android; `UnavailableShell`,
+`UnavailableWebSearch`, `MemoryStorage`, `MemoryChatStore` and the presets
+alone in a browser.
 One import site is the point: an implementation a platform cannot use is not
 reachable from its program, so nothing further down has to test for it.
 

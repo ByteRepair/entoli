@@ -4,6 +4,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/storage.dart";
 import "../config.dart";
 import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 
@@ -33,6 +34,10 @@ AgentBackend createBackend(AppConfig config, PromptLibrary library) {
     ),
   );
 }
+
+/// The filesystem, or a page's memory standing in for one. What [AppConfig] is
+/// built on, so it is asked for first.
+Storage createStorage() => platformStorage();
 
 /// Chats on disk, or held for the life of the page where there is no disk.
 ChatStore createChatStore(AppConfig config) => platformChatStore(config);

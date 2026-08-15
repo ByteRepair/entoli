@@ -13,7 +13,7 @@ import "ui/app_shell.dart";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final config = await AppConfig.load();
+  final config = await AppConfig.load(platform.createStorage());
   final store = platform.createChatStore(config);
   final library = await PromptLibrary.from(platform.createPromptSources(config));
   final backend = platform.createBackend(config, library);
