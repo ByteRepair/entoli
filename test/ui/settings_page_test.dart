@@ -29,10 +29,11 @@ void main() {
     expect(find.text("Settings"), findsOneWidget);
     expect(find.text("New chats"), findsOneWidget);
 
+    // scrollTo ends in ensureVisible, which throws unless the finder matches
+    // exactly one widget — reaching each section is the assertion.
     await scrollTo(tester, find.text("Agent"));
-    expect(find.text("Agent"), findsOneWidget);
     await scrollTo(tester, find.text("Environment"));
-    expect(find.text("Environment"), findsOneWidget);
+    await scrollTo(tester, find.text("Delete all chats"));
   });
 
   testWidgets("shows both provider and model form fields", (tester) async {

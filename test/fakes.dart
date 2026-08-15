@@ -61,7 +61,7 @@ class FakeBackend implements AgentBackend {
   var _created = 0;
 
   @override
-  Future<Chat> createChat({String? title, String? model, String? provider}) async {
+  Future<Chat> createChat({String? title}) async {
     final now = DateTime.now();
     return Chat(
       state: ChatState(
@@ -69,8 +69,6 @@ class FakeBackend implements AgentBackend {
         title: title ?? "New chat",
         createdAt: now,
         updatedAt: now,
-        model: model,
-        provider: provider,
       ),
     );
   }
@@ -120,8 +118,7 @@ class FakeBackend implements AgentBackend {
   @override
   Future<void> shutdown() async => didShutdown = true;
 
-  /// Long enough that a test only meets it by overriding
-  /// `turnStallTimeoutProvider` on purpose.
+  /// Long enough that a test only meets it by shortening it on purpose.
   @override
   Duration stallTimeout = const Duration(minutes: 5);
 
@@ -131,9 +128,6 @@ class FakeBackend implements AgentBackend {
   Future<void> abort(String chatId) async {
     aborted.add(chatId);
   }
-
-  @override
-  Future<List<ToolApproval>> pendingApprovals(String chatId) async => [];
 
   @override
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response) async {}

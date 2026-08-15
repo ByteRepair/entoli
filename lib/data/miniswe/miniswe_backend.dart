@@ -1,5 +1,8 @@
 import "dart:async";
 
+import "package:flutter/foundation.dart";
+import "package:uuid/uuid.dart";
+
 import "../../core/config.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/models.dart";
@@ -41,9 +44,30 @@ class MinisweBackend implements AgentBackend {
   /// completed by whichever comes first: the user's answer, or the turn ending.
   final Map<String, Completer<ApprovalResponse>> _pending = {};
 
+  /// A message that is nothing but `/name` plus arguments runs that command.
+  /// The name may not hold a slash, so `/usr/bin/foo is broken` stays prose.
+  /// Matches what `activeCompletionToken` offers in the composer's menu —
+  /// anything it can offer has to dispatch here.
+  static final _command = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+
+  /// `@name` addresses an agent, but only where a word starts, so an email
+  /// address is not a mention.
+  static final _mention = RegExp(r"(?<=^|\s)@([\w.-]+)");
+
   @override
-  Future<Chat> createChat({String? title, String? model, String? provider}) =>
-      newChat(config, title: title, model: model, provider: provider);
+  Future<Chat> createChat({String? title}) async {
+    final chatId = const Uuid().v4();
+    config.ensureChatDirs(chatId);
+    final now = DateTime.now();
+    return Chat(
+      state: ChatState(
+        id: chatId,
+        title: title ?? "New chat",
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
 
   @override
   Stream<AgentEvent> sendPrompt(
@@ -129,22 +153,24 @@ class MinisweBackend implements AgentBackend {
     controller.add(const DoneEvent());
   }
 
+  /// The config is read once and reused: going back through the registry by id
+  /// would re-read and re-parse `settings.json` for each question asked of it.
   ({LlmClient client, String modelId})? _resolveModel(String? model, String? provider) {
     if (provider == null) return null;
-    final client = registry.clientFor(provider);
-    if (client == null) return null;
+    final config = registry.configFor(provider);
+    if (config == null) return null;
     // A provider with one model listed does not need it pinned as well; with
     // none, there is nothing to guess from.
-    final modelId = model ?? registry.configFor(provider)?.models.firstOrNull;
+    final modelId = model ?? config.models.firstOrNull;
     if (modelId == null || modelId.isEmpty) return null;
-    return (client: client, modelId: modelId);
+    return (client: registry.clientOf(config), modelId: modelId);
   }
 
   /// `/name args` is the command's template with the arguments in it. A name
   /// the library does not know is left alone: it is more likely a path than a
   /// command nobody defined.
   String _taskOf(String text) {
-    final match = commandPattern.firstMatch(text.trim());
+    final match = _command.firstMatch(text.trim());
     if (match == null) return text;
     final document = library?.find(CompletionKind.command, match.group(1)!);
     if (document == null) return text;
@@ -159,7 +185,7 @@ class MinisweBackend implements AgentBackend {
   /// Several mentions stack, in the order they were written.
   String? _agentPromptOf(String text) {
     final bodies = <String>[];
-    for (final match in mentionPattern.allMatches(text)) {
+    for (final match in _mention.allMatches(text)) {
       final document = library?.find(CompletionKind.agent, match.group(1)!);
       if (document != null) bodies.add(document.body);
     }
@@ -186,9 +212,12 @@ class MinisweBackend implements AgentBackend {
     }
   }
 
+  /// What is on screen for [chatId]. Not on `AgentBackend` — the UI tracks
+  /// approvals from the event stream; this is for tests of this class.
+  ///
   /// A copy: answering one removes it, and a caller that walks the list while
   /// answering each would be mutating what it is reading.
-  @override
+  @visibleForTesting
   Future<List<ToolApproval>> pendingApprovals(String chatId) async =>
       List.unmodifiable(_approvals[chatId] ?? const []);
 
@@ -233,11 +262,11 @@ class MinisweBackend implements AgentBackend {
     _sessions.remove(chatId);
   }
 
+  /// Concurrently: this runs on the way out, and the app would otherwise wait
+  /// out every live turn's process kill one after another.
   @override
   Future<void> shutdown() async {
-    for (final chatId in _running.keys.toList()) {
-      await abort(chatId);
-    }
+    await Future.wait(_running.keys.toList().map(abort));
     _sessions.clear();
     registry.close();
   }

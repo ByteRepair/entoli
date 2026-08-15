@@ -20,12 +20,10 @@ class ChatRepository {
 
   Future<List<ChatState>> listChats() => _store.list();
 
+  /// The model is deliberately not pinned here: a chat with nothing in its
+  /// `meta.json` follows the app default wherever it moves.
   Future<Chat> createChat({String? title}) async {
-    final chat = await _backend.createChat(
-      title: title,
-      model: _settings().defaultModelId,
-      provider: _settings().defaultProviderId,
-    );
+    final chat = await _backend.createChat(title: title);
     await _store.save(chat);
     return chat;
   }
@@ -118,6 +116,4 @@ class ChatRepository {
 
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse r) =>
       _backend.respondApproval(chatId, approvalId, r);
-
-  Future<List<ToolApproval>> pendingApprovals(String chatId) => _backend.pendingApprovals(chatId);
 }

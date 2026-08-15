@@ -7,6 +7,7 @@ import "../sidebar/sidebar.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
+import "../widgets/resettable_field.dart";
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -75,10 +76,10 @@ class _DefaultsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionHeader("New chats"),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          // Nothing above the app level to inherit from: Default means
-          // whatever the backend picks.
+        // Nothing above the app level to inherit from: Default means whatever
+        // the backend picks.
+        LabelledField(
+          label: "LLM",
           child: ModelPicker(
             choice: (
               providerId: settings.defaultProviderId,
@@ -164,20 +165,15 @@ class _ProvidersEditor extends ConsumerWidget {
               : null,
         ),
         for (final provider in providers)
-          ListTile(
-            dense: true,
-            title: Text(provider.displayName),
-            subtitle: Text(_describe(provider)),
+          _EditableRow(
+            title: provider.displayName,
+            subtitle: _describe(provider),
+            removeLabel: "Remove ${provider.id}",
             onTap: () => _upsert(context, ref,
                 initial: provider, title: "Edit ${provider.displayName}"),
-            trailing: IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: "Remove ${provider.id}",
-              onPressed: () => _remove(ref, provider),
-            ),
+            onRemove: () => _remove(ref, provider),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        _AddButtonRow(
           child: MenuAnchor(
             menuChildren: [
               // One already configured is edited from its row rather than
@@ -257,21 +253,16 @@ class _EnvironmentSection extends ConsumerWidget {
               "running keeps what it started with.",
         ),
         for (final name in names)
-          ListTile(
-            dense: true,
-            title: Text(name),
+          _EditableRow(
+            title: name,
             // These are mostly API keys, and settings is a page people show
             // people.
-            subtitle: Text("•" * env[name]!.length.clamp(0, 24)),
+            subtitle: "•" * env[name]!.length.clamp(0, 24),
+            removeLabel: "Remove $name",
             onTap: () => _edit(context, ref, name: name),
-            trailing: IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: "Remove $name",
-              onPressed: () => _remove(ref, name),
-            ),
+            onRemove: () => _remove(ref, name),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        _AddButtonRow(
           child: OutlinedButton.icon(
             icon: const Icon(Icons.add),
             label: const Text("Add variable"),
@@ -281,6 +272,47 @@ class _EnvironmentSection extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// One entry in an editable list: tap the row to change it, the cross to drop
+/// it. Both list sections here are the same affordance over different data.
+class _EditableRow extends StatelessWidget {
+  const _EditableRow({
+    required this.title,
+    required this.subtitle,
+    required this.removeLabel,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  final String title;
+  final String subtitle;
+  final String removeLabel;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        dense: true,
+        title: Text(title),
+        subtitle: Text(subtitle),
+        onTap: onTap,
+        trailing: IconButton(
+          icon: const Icon(Icons.close),
+          tooltip: removeLabel,
+          onPressed: onRemove,
+        ),
+      );
+}
+
+class _AddButtonRow extends StatelessWidget {
+  const _AddButtonRow({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 8), child: child);
 }
 
 class _DeleteAllChats extends ConsumerWidget {

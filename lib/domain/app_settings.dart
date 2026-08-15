@@ -36,6 +36,10 @@ class AppSettings {
       return AppSettings(
         defaultModelId: _orNull(json["defaultModelId"] as String?),
         defaultProviderId: _orNull(json["defaultProviderId"] as String?),
+        // `opencodeEnv` is what this was called when a second backend spawned
+        // servers. Read-only: `save` writes `environment`, so a file migrates
+        // itself the first time anything is changed, and the fallback can go
+        // once no unwritten files are left.
         environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
         approveCommands: json["approveCommands"] as bool? ?? true,
         llmProviders: _providers(json["llmProviders"]),

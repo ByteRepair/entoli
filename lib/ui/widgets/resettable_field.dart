@@ -37,6 +37,28 @@ class ResettableField extends StatelessWidget {
 DropdownMenuItem<String?> defaultMenuItem() =>
     const DropdownMenuItem<String?>(value: null, child: Text(defaultOptionLabel));
 
+/// A settings field under its caption. Shared so the two settings pages cannot
+/// drift apart on spacing.
+class LabelledField extends StatelessWidget {
+  const LabelledField({super.key, required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12)),
+            const SizedBox(height: 4),
+            child,
+          ],
+        ),
+      );
+}
+
 /// A labelled dropdown whose first entry stores null and means "inherit",
 /// paired with the button that puts it back there. [inherited] names what null
 /// currently resolves to, so `Default` is never a mystery.
@@ -60,33 +82,26 @@ class InheritableDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 12)),
-          const SizedBox(height: 4),
-          ResettableField(
-            isDefault: value == null,
-            onReset: () => onChanged(null),
-            child: DropdownButtonFormField<T?>(
-              initialValue: value,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: [
-                DropdownMenuItem<T?>(
-                  value: null,
-                  child: Text(inherited == null
-                      ? defaultOptionLabel
-                      : "$defaultOptionLabel ($inherited)"),
-                ),
-                for (final entry in options.entries)
-                  DropdownMenuItem<T?>(value: entry.key, child: Text(entry.value)),
-              ],
-              onChanged: onChanged,
+    return LabelledField(
+      label: label,
+      child: ResettableField(
+        isDefault: value == null,
+        onReset: () => onChanged(null),
+        child: DropdownButtonFormField<T?>(
+          initialValue: value,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: [
+            DropdownMenuItem<T?>(
+              value: null,
+              child: Text(inherited == null
+                  ? defaultOptionLabel
+                  : "$defaultOptionLabel ($inherited)"),
             ),
-          ),
-        ],
+            for (final entry in options.entries)
+              DropdownMenuItem<T?>(value: entry.key, child: Text(entry.value)),
+          ],
+          onChanged: onChanged,
+        ),
       ),
     );
   }

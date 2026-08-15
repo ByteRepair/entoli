@@ -1,29 +1,4 @@
-import "package:uuid/uuid.dart";
-
-import "../core/config.dart";
 import "../domain/models.dart";
-
-/// A brand new chat, with its directories in place.
-Future<Chat> newChat(
-  AppConfig? config, {
-  String? title,
-  String? model,
-  String? provider,
-}) async {
-  final chatId = const Uuid().v4();
-  config?.ensureChatDirs(chatId);
-  final now = DateTime.now();
-  return Chat(
-    state: ChatState(
-      id: chatId,
-      title: title ?? "New chat",
-      createdAt: now,
-      updatedAt: now,
-      model: model,
-      provider: provider,
-    ),
-  );
-}
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
@@ -87,7 +62,7 @@ class ErrorEvent extends AgentEvent {
 /// seam so the UI and the repository can be tested without one.
 abstract class AgentBackend {
   /// Create a new chat with a fresh workspace and agent session.
-  Future<Chat> createChat({String? title, String? model, String? provider});
+  Future<Chat> createChat({String? title});
 
   /// Send a user prompt; stream events until the turn completes.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
@@ -109,8 +84,6 @@ abstract class AgentBackend {
   /// failure is reported as it happens, so silence only ever means work — the
   /// budget has to cover the longest command a turn may run.
   Duration get stallTimeout;
-
-  Future<List<ToolApproval>> pendingApprovals(String chatId);
 
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response);
 

@@ -75,11 +75,6 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   );
 });
 
-/// Overrides how long a turn may go without progress before we give up on it.
-/// Null asks the backend, which is where the answer belongs — this exists so a
-/// test does not have to wait out a real one.
-final turnStallTimeoutProvider = Provider<Duration?>((ref) => null);
-
 final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
   final backend = ref.watch(agentBackendProvider);
   return backend.models();

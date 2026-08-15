@@ -18,18 +18,17 @@ import "fakes.dart";
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
-  TestApp._(this.tmp, this.config, this.backend, this.picker, this.container);
+  TestApp._(this.config, this.backend, this.picker, this.container);
 
   factory TestApp.create({
     Duration? stallTimeout,
     PromptLibrary? library,
   }) {
     final config = tempConfig();
-    final tmp = config.dataDir;
     final backend = FakeBackend();
+    if (stallTimeout != null) backend.stallTimeout = stallTimeout;
     final picker = FakeAttachmentPicker();
     return TestApp._(
-      tmp,
       config,
       backend,
       picker,
@@ -40,13 +39,11 @@ class TestApp {
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
-          if (stallTimeout != null) turnStallTimeoutProvider.overrideWithValue(stallTimeout),
         ],
       ),
     );
   }
 
-  final Directory tmp;
   final AppConfig config;
   final FakeBackend backend;
   final FakeAttachmentPicker picker;
@@ -75,10 +72,8 @@ class TestApp {
     if (settle) await tester.pumpAndSettle();
   }
 
-  void dispose() {
-    container.dispose();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
-  }
+  /// `tempConfig` already registers the directory's own teardown.
+  void dispose() => container.dispose();
 }
 
 /// Pump until [until] matches, letting real file I/O run in between. A widget
