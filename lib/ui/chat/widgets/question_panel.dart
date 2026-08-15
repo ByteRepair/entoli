@@ -23,8 +23,7 @@ class QuestionPanel extends StatefulWidget {
 }
 
 class _QuestionPanelState extends State<QuestionPanel> {
-  late final List<String?> _answers =
-      List.filled(widget.request.questions.length, null, growable: false);
+  late final List<String?> _answers = widget.request.unanswered;
   int _at = 0;
 
   List<AskQuestion> get _questions => widget.request.questions;

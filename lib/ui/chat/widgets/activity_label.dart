@@ -72,7 +72,7 @@ class ToolLabel extends StatelessWidget {
 /// A question the model put to the user, once it is history. The panel that
 /// asked it is gone by then, so this reads the question back out of the call
 /// and the answer out of the result that closed it.
-class AskLabel extends StatelessWidget {
+class AskLabel extends StatefulWidget {
   const AskLabel({super.key, required this.call, this.result});
 
   final ToolCall call;
@@ -81,24 +81,56 @@ class AskLabel extends StatelessWidget {
   final ToolResult? result;
 
   @override
+  State<AskLabel> createState() => _AskLabelState();
+}
+
+class _AskLabelState extends State<AskLabel> {
+  late List<AskQuestion> _questions;
+  late List<String?> _answers;
+
+  @override
+  void initState() {
+    super.initState();
+    _read();
+  }
+
+  @override
+  void didUpdateWidget(AskLabel old) {
+    super.didUpdateWidget(old);
+    if (old.call.argumentsJson != widget.call.argumentsJson ||
+        old.result?.output != widget.result?.output) {
+      _read();
+    }
+  }
+
+  /// Parsed once and kept. Every visible message is rebuilt on every streamed
+  /// delta, and the JSON behind an asked question never changes.
+  void _read() {
+    _questions = askQuestionsFrom(widget.call.argumentsJson);
+    _answers = askAnswersFrom(widget.result?.output);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final questions = askQuestionsFrom(call.argumentsJson);
-    final answers = askAnswersFrom(result?.output, questions.length);
+    // Named `ask_user` but with nothing askable in it: the model got the shape
+    // wrong and was told so, which is an ordinary failed tool run and carries
+    // the reason a question label would drop.
+    if (_questions.isEmpty) {
+      return ToolLabel(call: widget.call, result: widget.result);
+    }
     return _Label(
       icon: Icons.help_outline,
-      text: switch (questions.length) {
-        0 => "Asked the user",
-        1 => questions.single.question,
-        final n => "Asked $n questions",
-      },
+      text: _questions.length == 1
+          ? _questions.single.question
+          : "Asked ${_questions.length} questions",
       onTap: () => showActivitySheet(
         context,
         title: "Asked the user",
         sections: [
-          for (var i = 0; i < questions.length; i++)
+          for (var i = 0; i < _questions.length; i++)
             (
-              label: questions[i].question,
-              body: answers[i] ?? "Not answered",
+              label: _questions[i].question,
+              body: _answers.elementAtOrNull(i) ?? "Not answered",
               isError: false,
             ),
         ],

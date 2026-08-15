@@ -254,7 +254,7 @@ class MinisweBackend implements AgentBackend {
     for (final request in _questions.remove(chatId) ?? const <AskRequest>[]) {
       final completer = _answers.remove(request.id);
       if (completer != null && !completer.isCompleted) {
-        completer.complete(List.filled(request.questions.length, null));
+        completer.complete(request.unanswered);
       }
     }
   }

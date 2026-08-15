@@ -118,24 +118,34 @@ void main() {
     });
   });
 
-  group("reading the answers back", () {
-    test("one per question asked, in the order they were asked", () {
-      final answers = askAnswersFrom(
-        jsonEncode({
-          "answers": [
-            {"question": "Which database?", "answer": "Postgres"},
-            {"question": "Migrate?", "answer": null},
-          ],
-        }),
-        2,
-      );
+  group("the answers", () {
+    const asked = [
+      AskQuestion(
+        question: "Which database?",
+        options: [AskOption(label: "Postgres")],
+      ),
+      AskQuestion(question: "Migrate?", options: [AskOption(label: "Yes")]),
+    ];
 
-      expect(answers, ["Postgres", null]);
+    test("survive the round trip, in the order they were asked", () {
+      expect(askAnswersFrom(askAnswers(asked, ["Postgres", null])), ["Postgres", null]);
     });
 
-    test("a result that never arrived leaves every question unanswered", () {
-      expect(askAnswersFrom(null, 2), [null, null]);
-      expect(askAnswersFrom("not json", 1), [null]);
+    test("name every question, so the model sees the one it did not get", () {
+      final written = askAnswers(asked, ["Postgres", null]);
+
+      expect(written, contains("Which database?"));
+      expect(written, contains("Migrate?"));
+      expect(written, isNot(contains("answered nothing")));
+    });
+
+    test("say so plainly when none of them were given", () {
+      expect(askAnswers(asked, [null, null]), contains("answered nothing"));
+    });
+
+    test("a result that never arrived is no answers at all", () {
+      expect(askAnswersFrom(null), isEmpty);
+      expect(askAnswersFrom("not json"), isEmpty);
     });
   });
 }

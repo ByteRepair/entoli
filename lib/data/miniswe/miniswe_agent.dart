@@ -218,7 +218,7 @@ class MinisweAgent {
   Stream<AgentEvent> _executeAll(List<LlmToolCall> calls) async* {
     for (final call in calls) {
       if (_submitted || _cancelled) {
-        _answer(call, const ShellResult.failed("This command was not executed."));
+        _answerRun(call, const ShellResult.failed("This command was not executed."));
         continue;
       }
 
@@ -279,24 +279,26 @@ class MinisweAgent {
         if (submission.isNotEmpty) yield TextDelta(submission);
       }
 
-      _answer(call, result);
+      _answerRun(call, result);
     }
   }
 
   /// Answer a call the model made. Every one gets exactly this, whether it ran
-  /// or not, and always in the same rendering — a provider that sees a tool
-  /// call with no result rejects the next turn.
-  void _answer(LlmToolCall call, ShellResult result) {
-    session.messages.add(LlmMessage(
-      role: LlmRole.tool,
-      toolCallId: call.id,
-      text: observation(
-        returnCode: result.returnCode,
-        output: result.output,
-        exceptionInfo: result.exceptionInfo,
-      ),
-    ));
-  }
+  /// or not — a provider that sees a tool call with no result rejects the next
+  /// turn.
+  void _answer(LlmToolCall call, String text) => session.messages
+      .add(LlmMessage(role: LlmRole.tool, toolCallId: call.id, text: text));
+
+  /// How a command's outcome is worded, which is every call but an `ask_user`:
+  /// one that ran, one that was refused, one that was never reached.
+  void _answerRun(LlmToolCall call, ShellResult result) => _answer(
+        call,
+        observation(
+          returnCode: result.returnCode,
+          output: result.output,
+          exceptionInfo: result.exceptionInfo,
+        ),
+      );
 
   /// The model asking the user something. The call and its answers are a pair
   /// like any other, so a finished chat still shows what was asked and picked.
@@ -316,10 +318,7 @@ class MinisweAgent {
     final answers = askAnswers(questions, await answer(request));
 
     yield ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: answers));
-    // Handed over as it stands rather than through [_answer]: it is already the
-    // JSON the model asked for, and an observation would say a command ran.
-    session.messages
-        .add(LlmMessage(role: LlmRole.tool, toolCallId: call.id, text: answers));
+    _answer(call, answers);
   }
 
   /// A call that could not be run at all: the UI still sees the pair, and the
@@ -329,7 +328,7 @@ class MinisweAgent {
         ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
     yield ToolResultEvent(
         ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
-    _answer(call, ShellResult.failed(problem));
+    _answerRun(call, ShellResult.failed(problem));
   }
 
   Future<ShellResult> _execute(String command) async {

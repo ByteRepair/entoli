@@ -72,10 +72,12 @@ void main() {
               model: model, provider: provider, approveCommands: false)
           .toList();
 
-  /// A turn on a chat that does stop to ask, left running for the test to
-  /// answer.
-  Stream<AgentEvent> asking(MinisweBackend backend, String text) =>
-      backend.sendPrompt(chatId, text, model: "fake-model", provider: "fake");
+  /// A turn left running for the test to answer, whether what it stops on is a
+  /// command to approve or a question to pick from.
+  Stream<AgentEvent> asking(MinisweBackend backend, String text,
+          {bool approveCommands = true}) =>
+      backend.sendPrompt(chatId, text,
+          model: "fake-model", provider: "fake", approveCommands: approveCommands);
 
   group("picking where the turn runs", () {
     test("a chat with no provider is told to configure one", () async {
@@ -293,11 +295,7 @@ void main() {
         [finish],
       ]);
 
-      final events = <AgentEvent>[];
-      final turn = backend
-          .sendPrompt(chatId, "set up storage",
-              model: "fake-model", provider: "fake", approveCommands: false)
-          .forEach(events.add);
+      final turn = asking(backend, "set up storage", approveCommands: false).toList();
 
       await pumpEvents();
       final pending = backend.pendingQuestions(chatId).single;
@@ -317,10 +315,7 @@ void main() {
         [finish],
       ]);
 
-      await backend
-          .sendPrompt(chatId, "set up storage",
-              model: "fake-model", provider: "fake", approveCommands: false)
-          .listen((event) {
+      await asking(backend, "set up storage", approveCommands: false).listen((event) {
         if (event is QuestionRequestEvent) {
           backend.respondQuestions(chatId, event.request.id, ["SQLite"]);
         }
@@ -334,10 +329,7 @@ void main() {
         [askWhich],
       ]);
 
-      final turn = backend
-          .sendPrompt(chatId, "set up storage",
-              model: "fake-model", provider: "fake", approveCommands: false)
-          .toList();
+      final turn = asking(backend, "set up storage", approveCommands: false).toList();
       await pumpEvents();
       expect(backend.pendingQuestions(chatId), hasLength(1));
 

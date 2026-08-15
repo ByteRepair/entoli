@@ -1,5 +1,3 @@
-import "dart:convert";
-
 import "../../domain/ask.dart";
 import "llm/llm_client.dart";
 
@@ -53,21 +51,3 @@ const askFormatError =
     'The $askToolName tool takes {"questions": [{"question": "...", "options": '
     '[{"label": "..."}]}]}. Every question needs at least one option, because '
     "the user answers by clicking one.";
-
-/// The answers as the model reads them. Every question comes back whether or
-/// not it was answered: a model that asked three and got two back has to know
-/// which one it is still missing.
-String askAnswers(List<AskQuestion> questions, List<String?> answers) {
-  final pairs = [
-    for (var i = 0; i < questions.length; i++)
-      {"question": questions[i].question, "answer": answers.elementAtOrNull(i)},
-  ];
-  return _pretty.convert({
-    "answers": pairs,
-    if (pairs.every((pair) => pair["answer"] == null))
-      "note": "The user answered nothing. Carry on with what you already have, "
-          "or say what you still need and finish the turn — do not ask again.",
-  });
-}
-
-const _pretty = JsonEncoder.withIndent("  ");
