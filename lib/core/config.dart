@@ -54,16 +54,16 @@ class AppConfig {
 
   File metaFile(String chatId) => File(p.join(chatDir(chatId).path, "meta.json"));
 
-  Directory resourcesDir(String chatId) {
-    final d = Directory(p.join(chatDir(chatId).path, "resources"));
-    if (!d.existsSync()) d.createSync(recursive: true);
-    return d;
-  }
+  Directory resourcesDir(String chatId) => Directory(p.join(chatDir(chatId).path, "resources"));
 
-  Directory workspaceDir(String chatId) {
-    final d = Directory(p.join(chatDir(chatId).path, "workspace"));
-    if (!d.existsSync()) d.createSync(recursive: true);
-    return d;
+  Directory workspaceDir(String chatId) => Directory(p.join(chatDir(chatId).path, "workspace"));
+
+  /// Create a chat's directories. Reading a path no longer creates it, so the
+  /// few places that need them on disk say so.
+  void ensureChatDirs(String chatId) {
+    for (final dir in [chatDir(chatId), resourcesDir(chatId), workspaceDir(chatId)]) {
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+    }
   }
 
   File get settingsFile => File(p.join(dataDir.path, "settings.json"));

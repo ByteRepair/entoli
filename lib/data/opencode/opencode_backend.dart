@@ -8,7 +8,6 @@ import "dart:io";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
-import "../../core/platform/default_backend.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/models.dart";
 import "opencode_models.dart";
@@ -31,24 +30,8 @@ class OpencodeBackend implements AgentBackend {
   BackendKind get kind => BackendKind.opencode;
 
   @override
-  Future<Chat> createChat({String? title, String? model, String? provider}) async {
-    final chatId = const Uuid().v4();
-    config.workspaceDir(chatId);
-    config.resourcesDir(chatId);
-    final now = DateTime.now();
-    return Chat(
-      state: ChatState(
-        id: chatId,
-        title: title ?? "New chat",
-        createdAt: now,
-        updatedAt: now,
-        backend: defaultBackendKind(),
-        model: model,
-        provider: provider,
-      ),
-      messages: const [],
-    );
-  }
+  Future<Chat> createChat({String? title, String? model, String? provider}) =>
+      newChat(config, kind: kind, title: title, model: model, provider: provider);
 
   @override
   Stream<AgentEvent> sendPrompt(String chatId, String text,
@@ -320,33 +303,30 @@ class OpencodeBackend implements AgentBackend {
   }
 
   @override
-  Future<List<ModelOption>> availableModels() async {
-    if (_chatToSession.isEmpty) return [];
-    final chatId = _chatToSession.keys.first;
-    try {
-      final providers = await transport.providers(chatId);
-      return _flattenModels(providers);
-    } catch (_) {
-      return [];
-    }
-  }
+  Future<List<ModelOption>> models() async {
+    final live = _chatToSession.keys.firstOrNull;
+    if (live != null) return _providersFrom(live);
 
-  @override
-  Future<List<ModelOption>> listModelsStandalone() async {
-    if (_chatToSession.isNotEmpty) return availableModels();
-    // Deliberately not a chat directory: this server is thrown away, and
-    // `chats/` is scanned for real chats.
+    // No chat is running one, so borrow a server. Deliberately not a chat
+    // directory: `chats/` is scanned for real chats.
     final scratch = Directory.systemTemp.createTempSync("agent-chat-models-");
     final chatId = const Uuid().v4();
     try {
       await transport.ensureServer(chatId, scratch.path);
-      final providers = await transport.providers(chatId);
-      return _flattenModels(providers);
+      return await _providersFrom(chatId);
     } catch (_) {
       return [];
     } finally {
       await transport.dispose(chatId);
       if (scratch.existsSync()) scratch.deleteSync(recursive: true);
+    }
+  }
+
+  Future<List<ModelOption>> _providersFrom(String chatId) async {
+    try {
+      return _flattenModels(await transport.providers(chatId));
+    } catch (_) {
+      return [];
     }
   }
 

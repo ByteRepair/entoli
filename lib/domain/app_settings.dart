@@ -9,9 +9,6 @@ class AppSettings {
   String? defaultModelId;
   String? defaultProviderId;
 
-  bool modelIsSet(String providerId, String modelId) =>
-      defaultProviderId == providerId && defaultModelId == modelId;
-
   static AppSettings load(AppConfig config) {
     final file = config.settingsFile;
     if (!file.existsSync()) return AppSettings();

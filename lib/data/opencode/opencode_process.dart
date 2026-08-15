@@ -2,19 +2,15 @@
 // Started lazily with the chat's workspace as working directory so that
 // sessions created via POST /session inherit that cwd. Stopped on dispose.
 import "dart:async";
-import "dart:convert";
 import "dart:io";
 
+import "opencode_client.dart";
+
 class OpencodeProcess {
-  OpencodeProcess._({
-    required this.url,
-    required this.process,
-    required this.workspacePath,
-  });
+  OpencodeProcess._({required this.url, required this.process});
 
   final Uri url;
   final Process process;
-  final String workspacePath;
 
   /// Start a per-chat server with [workingDirectory] as the workspace.
   /// [processFactory] is injectable for tests.
@@ -71,14 +67,9 @@ class OpencodeProcess {
       rethrow;
     }
 
-    return OpencodeProcess._(
-      url: url,
-      process: process,
-      workspacePath: workingDirectory,
-    );
+    return OpencodeProcess._(url: url, process: process);
   }
 
-  /// Stop this server.
   Future<void> stop() async {
     process.kill(ProcessSignal.sigterm);
     await process.exitCode.timeout(const Duration(seconds: 5), onTimeout: () {
@@ -94,23 +85,21 @@ class OpencodeProcess {
     return port;
   }
 
+  /// Poll until the server answers. Uses the same client as everything else,
+  /// so auth stays in one place.
   static Future<void> _waitForHealth(Uri url, String? password) async {
+    final client = OpencodeClient(baseUrl: url, password: password);
     final deadline = DateTime.now().add(const Duration(seconds: 15));
-    while (DateTime.now().isBefore(deadline)) {
-      final client = HttpClient();
-      try {
-        final req = await client.getUrl(url.resolve("/global/health"));
-        if (password != null) {
-          final credentials = base64Encode(utf8.encode("opencode:$password"));
-          req.headers.set(HttpHeaders.authorizationHeader, "Basic $credentials");
-        }
-        final resp = await req.close().timeout(const Duration(seconds: 2));
-        if (resp.statusCode == 200) return;
-      } catch (_) {
-      } finally {
-        client.close();
+    try {
+      while (DateTime.now().isBefore(deadline)) {
+        try {
+          await client.health().timeout(const Duration(seconds: 2));
+          return;
+        } catch (_) {}
+        await Future.delayed(const Duration(milliseconds: 200));
       }
-      await Future.delayed(const Duration(milliseconds: 200));
+    } finally {
+      await client.close();
     }
     throw TimeoutException("opencode server did not become healthy within 15s");
   }

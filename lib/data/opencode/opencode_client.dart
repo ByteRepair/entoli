@@ -54,17 +54,6 @@ class OpencodeClient {
     return OcSession.fromJson(_decode(r));
   }
 
-  Future<OcSession> getSession(String id) async {
-    final r = await _client.get(baseUrl.resolve("/session/$id"), headers: _headers);
-    return OcSession.fromJson(_decode(r));
-  }
-
-  Future<List<OcSession>> listSessions() async {
-    final r = await _client.get(baseUrl.resolve("/session"), headers: _headers);
-    final list = _decode(r) as List;
-    return list.map((j) => OcSession.fromJson(j as Map<String, dynamic>)).toList();
-  }
-
   Future<void> deleteSession(String id) async {
     _expectOk(await _client.delete(baseUrl.resolve("/session/$id"), headers: _headers));
   }
@@ -75,20 +64,6 @@ class OpencodeClient {
       headers: _headers,
       body: "{}",
     ));
-  }
-
-  // --- messages ---
-
-  Future<List<OcMessage>> listMessages(String sessionId) async {
-    final r = await _client.get(baseUrl.resolve("/session/$sessionId/message"), headers: _headers);
-    final decoded = _decode(r);
-    if (decoded is List) {
-      return decoded.map((j) => OcMessage.fromJson(j as Map<String, dynamic>)).toList();
-    }
-    if (decoded is Map && decoded["data"] is List) {
-      return (decoded["data"] as List).map((j) => OcMessage.fromJson(j as Map<String, dynamic>)).toList();
-    }
-    return [];
   }
 
   /// Fire a prompt asynchronously (no wait). Returns immediately.
@@ -182,9 +157,7 @@ class OpencodeClient {
   }
 
   dynamic _decode(http.Response r) {
-    if (r.statusCode >= 400) {
-      throw http.ClientException("HTTP ${r.statusCode}: ${r.body}");
-    }
+    _expectOk(r);
     if (r.body.isEmpty) return null;
     return jsonDecode(r.body);
   }

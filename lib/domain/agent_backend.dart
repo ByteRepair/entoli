@@ -1,4 +1,32 @@
+import "package:uuid/uuid.dart";
+
+import "../core/config.dart";
 import "../domain/models.dart";
+
+/// A brand new chat, with its directories in place. Every backend builds one
+/// the same way; only where the work runs differs.
+Future<Chat> newChat(
+  AppConfig? config, {
+  required BackendKind kind,
+  String? title,
+  String? model,
+  String? provider,
+}) async {
+  final chatId = const Uuid().v4();
+  config?.ensureChatDirs(chatId);
+  final now = DateTime.now();
+  return Chat(
+    state: ChatState(
+      id: chatId,
+      title: title ?? "New chat",
+      createdAt: now,
+      updatedAt: now,
+      backend: kind,
+      model: model,
+      provider: provider,
+    ),
+  );
+}
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
@@ -75,12 +103,9 @@ abstract class AgentBackend {
   /// Release resources for a chat (keeps on-disk data).
   Future<void> disposeChat(String chatId);
 
-  /// Models available to the current backend.
-  Future<List<ModelOption>> availableModels();
 
-  /// List models without an active chat. Starts a temporary server if
-  /// needed. Returns empty if unsupported.
-  Future<List<ModelOption>> listModelsStandalone();
+  /// Every model this backend can reach.
+  Future<List<ModelOption>> models();
 
   /// Kind of this backend.
   BackendKind get kind;

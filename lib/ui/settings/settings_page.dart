@@ -1,7 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/platform/default_backend.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
@@ -15,7 +14,7 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final kind = defaultBackendKind();
+    final kind = ref.watch(agentBackendProvider).kind;
     final settings = ref.watch(appSettingsProvider);
     final modelsAsync = ref.watch(availableModelsProvider);
 
