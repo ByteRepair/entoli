@@ -5,6 +5,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/local/disk_storage.dart";
 import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -159,7 +160,7 @@ List<String?> popupLabels(WidgetTester tester) => tester
 /// directories.
 AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   final tmp = Directory.systemTemp.createTempSync(prefix);
-  final config = AppConfig.forDirectory(tmp);
+  final config = AppConfig.forDirectory(tmp, const DiskStorage());
   config.ensureProjectDirs();
   addTearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);

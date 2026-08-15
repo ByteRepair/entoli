@@ -1,13 +1,13 @@
 import "dart:io";
 import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
-import "package:path_provider/path_provider.dart";
 
 import "../domain/models.dart";
 import "../domain/project.dart";
+import "../domain/storage.dart";
 
-/// Resolves platform-specific paths for the Entoli data directory and
-/// provides helpers for constructing chat paths.
+/// Composes the paths of the Entoli data directory. Where they lead, and
+/// whether anywhere at all, is [storage]: this file builds names.
 ///
 /// Layout:
 ///   `<dataDir>/settings.json`
@@ -25,46 +25,23 @@ import "../domain/project.dart";
 /// project, and it is the data directory itself, so a chat written before
 /// there were projects is already in it.
 class AppConfig {
-  AppConfig._(this.dataDir);
+  AppConfig._(this.dataDir, this.storage);
 
   /// Test-only constructor using an explicit data directory.
   @visibleForTesting
-  AppConfig.forDirectory(this.dataDir);
+  AppConfig.forDirectory(this.dataDir, this.storage);
 
   final Directory dataDir;
 
-  /// Whether these paths lead anywhere. A browser has no filesystem, and
-  /// `dart:io` compiles for the web — it is the calls that throw — so this is
-  /// asked before any of them is made. Private: what a platform provides is
-  /// answered in `core/platform/`, and only this file's own calls are left.
-  static const bool _hasStorage = !kIsWeb;
+  /// What the paths below are read and written through, and what answers where
+  /// the data directory is in the first place.
+  final Storage storage;
 
-  static Future<AppConfig> load() async {
-    // Nothing here can be reached in a browser, `Platform.environment`
-    // included. The path is nominal: the helpers below still have to answer.
-    if (!_hasStorage) return AppConfig._(Directory("/agent-chat"));
-    final override = Platform.environment["AGENT_CHAT_CONFIG"];
-    final config = AppConfig._(
-      Directory(override ?? p.join(await _resolveBase(), "agent-chat")),
-    );
+  static Future<AppConfig> load(Storage storage) async {
+    final config = AppConfig._(Directory(await storage.dataDir()), storage);
     config.ensureDirs();
     return config;
   }
-
-  static Future<String> _resolveBase() async {
-    if (Platform.isAndroid || Platform.isIOS) {
-      final dir = await getApplicationDocumentsDirectory();
-      return dir.path;
-    }
-    if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-      return p.join(_home, ".config");
-    }
-    final dir = await getApplicationDocumentsDirectory();
-    return dir.path;
-  }
-
-  static String get _home =>
-      Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"]!;
 
   Directory get projectsDir => Directory(p.join(dataDir.path, "projects"));
 
@@ -138,29 +115,10 @@ class AppConfig {
   }
 
   void _ensure(List<Directory> dirs) {
-    if (!_hasStorage) return;
     for (final dir in dirs) {
-      if (!dir.existsSync()) dir.createSync(recursive: true);
+      storage.ensureDir(dir.path);
     }
   }
-
-  /// What `settings.json` and `project.json` are read and written through.
-  /// Where there is no filesystem they are kept for the life of the page
-  /// instead, so settings made in a browser last until the tab is reloaded.
-  static String? readText(File file) {
-    if (!_hasStorage) return _session[file.path];
-    return file.existsSync() ? file.readAsStringSync() : null;
-  }
-
-  static void writeText(File file, String text) {
-    if (!_hasStorage) {
-      _session[file.path] = text;
-      return;
-    }
-    file.writeAsStringSync(text);
-  }
-
-  static final Map<String, String> _session = {};
 
   File get settingsFile => File(p.join(dataDir.path, "settings.json"));
 

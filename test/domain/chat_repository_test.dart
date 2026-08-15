@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/local/disk_storage.dart";
 import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -35,7 +36,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_repo_test_");
-    config = AppConfig.forDirectory(tmp);
+    config = AppConfig.forDirectory(tmp, const DiskStorage());
     config.ensureProjectDirs();
     backend = FakeBackend();
   });
