@@ -23,7 +23,8 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
 are the user's own prompt files, beside `settings.json` — which holds the
 app-level model default, `approveCommands`, `environment`, and `llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
-app-private storage (Android), OPFS (Web).
+app-private storage (Android). The web build compiles and the UI runs, but
+storage is `dart:io`-backed, so a browser has no chats of its own yet.
 
 ### The agent loop
 
@@ -94,7 +95,7 @@ that never opened) emits `RetryEvent` the instant it fails. Four attempts with
 
 Because nothing is hidden, silence only ever means work, and `stallTimeout` is
 `commandTimeout + 60s` — long enough that a legitimate slow build is not killed.
-`turnStallTimeoutProvider` only overrides it, for tests. A `RetryEvent` is
+A test shortens it by setting `FakeBackend.stallTimeout`. A `RetryEvent` is
 turn-scoped view state, never a message part, so it is not persisted, and it
 deliberately does **not** reset the stall clock: it is a sign of trouble, not of
 progress.
@@ -103,8 +104,8 @@ progress.
 
 `Shell` is the only platform-varying part of the app — `LocalShell` on desktop
 and Android, `UnavailableShell` in a browser — which is why
-`lib/core/platform/shell.dart` is the single conditional import and
-`createBackend` above it is shared.
+`lib/core/platform/backend.dart` holds the app's single conditional import
+(`io/shell.dart` or `web/shell.dart`) and is otherwise plain wiring.
 
 `Shell.canRunCommands` is what a browser actually changes, and it is not one
 failing command — it is the whole loop. Submitting is itself a command, so with
@@ -133,7 +134,7 @@ when the event is forwarded, not when it is awaited, and an answer completes it
 in place rather than removing it — a user who clicks faster than the loop asks
 would otherwise leave it waiting on a completer nobody holds. A turn that ends
 with one outstanding denies it, and `ChatController` stops its stall clock while
-one is on screen — nobody answers a banner in 45 seconds flat.
+one is on screen — nobody answers a banner inside a stall budget.
 
 #### Live test
 
@@ -177,20 +178,23 @@ built once at startup from two `PromptSource`s in precedence order: the presets
 packaged under `assets/prompts/{commands,agents}/`, then
 `$AGENT_CHAT_CONFIG/{commands,agents}/`. A file the user wrote replaces the
 preset it shares a name with. Entries come back sorted by name, so the menu does
-not reorder when a source does. Never reloaded: a file added while the app runs
-does not appear until a restart.
+not reorder when a source does. Built once because reading assets is async and
+nothing downstream should wait on it; a file added while the app runs therefore
+does not appear until a restart, though nothing would break if it did — the
+agent looks documents up per turn.
 
 A prompt file is YAML frontmatter, then the template a command expands to or the
 system prompt an agent runs under. `PromptDocument` reads only the top-level
 scalars — `description` is all the menu needs.
 
-`commandPattern` and `mentionPattern` live in `lib/domain/models.dart` beside
-`CompletionKind`. The syntax is parsed in `MinisweBackend`, not in the
+The syntax is parsed in `MinisweBackend` (`_command` / `_mention`), not in the
 repository or the UI: `conv.json` stores the message as typed, so a regenerated
-turn re-parses to the same thing. `/name args` expands to the command's body
-with `$ARGUMENTS` substituted (or appended); a name the library does not know is
-left alone, because it is more likely a path. `@name` stacks that agent's prompt
-under the system message.
+turn re-parses to the same thing. `activeCompletionToken` in the composer has to
+agree with those two patterns — anything the menu offers has to dispatch.
+
+`/name args` expands to the command's body with `$ARGUMENTS` substituted (or
+appended); a name the library does not know is left alone, because it is more
+likely a path. `@name` stacks that agent's prompt under the system message.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
 reads the library directly and is synchronous.
@@ -245,7 +249,8 @@ provider that names its key rather than holding it looks. It is read off disk
 when used rather than captured at startup, so an edit applies to the next
 command. Settings wins over the process's own environment, but a key already
 exported is found without having to be pasted in. Old files with the former
-`opencodeEnv` key still load.
+`opencodeEnv` key still load, and rewrite themselves under the new name on the
+next save.
 
 The settings page is three sections plus deleting everything: **New chats**
 (default model), **Agent** (ask-before-running, providers), **Environment**.
@@ -256,9 +261,10 @@ The settings page is three sections plus deleting everything: **New chats**
 selector plus its loading and failure states) over `ProviderModelSelector`
 (which owns every rule about the pair, and is tested directly in
 `provider_model_selector_test.dart` rather than through both pages), the
-`Default`-plus-reset pairing and `InheritableDropdown` over it (the labelled
-field whose first entry stores null and names what null resolves to), the
-`promptForText` / `promptForPair` / `confirm` dialogs, and `AttachmentChip` /
+`Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
+`InheritableDropdown` over both (whose first entry stores null and names what
+null resolves to), the `promptForText` / `promptForPair` / `confirm` dialogs,
+and `AttachmentChip` /
 `AttachmentStrip`. Tests share `test/harness.dart` (`TestApp`, `tempConfig`,
 `pumpUntil`, the dropdown finders) and `test/fakes.dart` (`FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn, plus `FakeAttachmentPicker` and

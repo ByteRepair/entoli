@@ -143,8 +143,7 @@ class ChatController extends Notifier<ChatViewState> {
   /// (Re)start the clock on a turn that is producing nothing. How long that is
   /// allowed to go on is the backend's to say.
   void _watchForStall() {
-    final timeout = ref.read(turnStallTimeoutProvider) ??
-        ref.read(chatRepositoryProvider).stallTimeout;
+    final timeout = ref.read(chatRepositoryProvider).stallTimeout;
     _stall?.cancel();
     _stall = Timer(timeout, () => _giveUp(timeout));
   }
@@ -282,8 +281,8 @@ class ChatController extends Notifier<ChatViewState> {
       case ErrorEvent(:final message):
         _appendError(message);
       case ApprovalRequestEvent(:final approval):
-        // A turn waiting on a person is not a stalled turn, and nobody answers
-        // a banner in 45 seconds flat. The clock restarts when they do.
+        // A turn waiting on a person is not a stalled turn, whatever the
+        // budget. The clock restarts when they answer.
         _stall?.cancel();
         _stall = null;
         state = state.copyWith(approvals: [...state.approvals, approval]);

@@ -20,12 +20,11 @@ void main() {
     store = LocalChatStore(config);
   });
 
-  ChatState makeState(String id, {String? model}) => ChatState(
+  ChatState makeState(String id) => ChatState(
         id: id,
         title: "Test chat $id",
         createdAt: DateTime.utc(2026, 1, 1),
         updatedAt: DateTime.utc(2026, 1, 2),
-        model: model,
       );
 
   test("save writes state.json and conv.json", () async {
@@ -56,7 +55,7 @@ void main() {
   });
 
   test("load reads back a saved chat", () async {
-    final state = makeState("c2", model: "anthropic/claude-sonnet-4-5-20250929");
+    final state = makeState("c2");
     final messages = [
       Message(
         id: "m1",
@@ -75,7 +74,7 @@ void main() {
 
     final loaded = await store.load("c2");
     expect(loaded.state.id, "c2");
-    expect(loaded.state.model, "anthropic/claude-sonnet-4-5-20250929");
+    expect(loaded.state.title, "Test chat c2");
     expect(loaded.messages.length, 2);
     expect(loaded.messages[0].role, MessageRole.user);
     expect(loaded.messages[1].role, MessageRole.assistant);

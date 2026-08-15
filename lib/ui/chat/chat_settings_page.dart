@@ -80,24 +80,17 @@ class _LlmField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final defaults = ref.watch(appSettingsProvider);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("LLM", style: TextStyle(fontSize: 12)),
-          const SizedBox(height: 4),
-          ModelPicker(
-            choice: (providerId: meta.provider, modelId: meta.model),
-            inherited: (
-              providerId: defaults.defaultProviderId,
-              modelId: defaults.defaultModelId,
-            ),
-            onChanged: (choice) => onChanged(meta
-              ..provider = choice.providerId
-              ..model = choice.modelId),
-          ),
-        ],
+    return LabelledField(
+      label: "LLM",
+      child: ModelPicker(
+        choice: (providerId: meta.provider, modelId: meta.model),
+        inherited: (
+          providerId: defaults.defaultProviderId,
+          modelId: defaults.defaultModelId,
+        ),
+        onChanged: (choice) => onChanged(meta
+          ..provider = choice.providerId
+          ..model = choice.modelId),
       ),
     );
   }

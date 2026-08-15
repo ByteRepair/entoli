@@ -13,8 +13,6 @@ abstract class ChatState with _$ChatState {
     required String title,
     required DateTime createdAt,
     required DateTime updatedAt,
-    String? model,
-    String? provider,
   }) = _ChatState;
 
   factory ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
@@ -156,18 +154,6 @@ enum CompletionKind {
   final String folder;
 }
 
-/// How a message addresses a command: nothing but `/name` plus arguments. The
-/// name may not contain a slash, so `/usr/bin/foo is broken` is prose.
-///
-/// Shared by every backend that dispatches: the composer offers one menu, so
-/// loosening this for one runtime and not the other would silently send a
-/// command to the model as plain text.
-final commandPattern = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
-
-/// `@name` addresses an agent, but only where a word starts — an email address
-/// or a `user@host` is not a mention.
-final mentionPattern = RegExp(r"(?<=^|\s)@([\w.-]+)");
-
 /// An entry in the composer's `/` or `@` menu — a command the backend can run,
 /// or an agent a message can address. Built from a `PromptDocument`, never
 /// deserialized: the file on disk is the persisted form.
@@ -202,10 +188,6 @@ extension ChatTitle on String {
 /// The conversation as a session that never saw it is told about it. Files are
 /// named rather than resent: only the turn being replayed carries its
 /// attachments back, so the rest are context the agent can ask about.
-///
-/// Shared so a rewound chat reads the same whichever backend ran it. How it is
-/// introduced is the backend's own business — that part is a preamble each one
-/// adds.
 String transcriptOf(List<Message> history) {
   final buffer = StringBuffer();
   for (final message in history) {

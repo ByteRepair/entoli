@@ -149,6 +149,20 @@ void main() {
       expect(loaded.approveCommands, isTrue);
     });
 
+    test("an environment under its old name is still found, and is rewritten", () async {
+      final config = tempConfig("agent_chat_providers_env_");
+      config.settingsFile.writeAsStringSync(jsonEncode({
+        "opencodeEnv": {"ANTHROPIC_API_KEY": "sk-old"},
+      }));
+
+      final loaded = AppSettings.load(config);
+      expect(loaded.environment, {"ANTHROPIC_API_KEY": "sk-old"});
+
+      await loaded.save(config);
+      expect(config.settingsFile.readAsStringSync(), isNot(contains("opencodeEnv")));
+      expect(AppSettings.load(config).environment, {"ANTHROPIC_API_KEY": "sk-old"});
+    });
+
     test("a provider entry that is broken does not take the rest with it", () {
       final config = tempConfig("agent_chat_providers_bad_");
       config.settingsFile.writeAsStringSync(jsonEncode({

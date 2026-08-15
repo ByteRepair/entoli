@@ -4,11 +4,14 @@ import "../../domain/agent_backend.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/prompt_library.dart";
 import "../config.dart";
-import "shell.dart";
+import "io/shell.dart" if (dart.library.js_interop) "web/shell.dart";
 
 /// The agent, wired to this platform's shell and to whatever the settings page
 /// last wrote. [library] is agent-chat's commands and agents, which the agent
 /// expands itself.
+///
+/// Where the commands run is the only thing that varies by platform, which is
+/// what the conditional import above resolves.
 ///
 /// The settings are read when used rather than captured: they are edited while
 /// the app runs, and the next turn has to see the edit.
