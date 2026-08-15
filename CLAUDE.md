@@ -7,8 +7,10 @@ LLM connections. Each chat owns a persistent workspace directory.
 
 - **Linux desktop**: OpenCode (native `opencode serve` process) over HTTP + SSE.
 - **Web / Android**: mini-swe-agent (pure Python) under Pyodide / Chaquopy.
-- `conv.json` is the source of truth; the agent is a stateless inference engine.
-  Before each turn we re-inject context; the agent's internal session is ephemeral.
+- `conv.json` is the source of truth. `ChatController` accumulates a turn's
+  events into it as they arrive; `ChatRepository` resolves which model runs and
+  owns rewinding. Context is re-injected only when a turn is resent (see
+  "Resending a message") — otherwise the agent's own session carries it.
 
 ### On-disk layout
 
@@ -105,11 +107,18 @@ rules, and each page only says where the values come from and where they go.
 
 ### Shared UI
 
-`lib/ui/widgets/` holds what more than one page needs: `ProviderModelSelector`,
-the `Default`-plus-reset pairing (`resettable_field.dart`), and the
-`promptForText` / `confirm` dialogs. Tests share `test/harness.dart` (`TestApp`
-plus the dropdown finders) and `test/fakes.dart` (`FakeBackend`, whose
-`scriptedEvents` and `hold` drive a turn).
+`lib/ui/widgets/` holds what more than one page needs: `ModelPicker` (the
+selector plus its loading and failure states) over `ProviderModelSelector`
+(which owns every rule about the pair, and is tested directly in
+`provider_model_selector_test.dart` rather than through both pages), the
+`Default`-plus-reset pairing, and the `promptForText` / `confirm` dialogs.
+Tests share `test/harness.dart` (`TestApp`, `tempConfig`, the dropdown finders)
+and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents` and `hold` drive a
+turn).
+
+Streamed deltas are coalesced into one state update per frame: per-token
+updates made the reply's text quadratic and rebuilt every visible bubble
+thousands of times per turn.
 
 ### AgentBackend abstraction
 

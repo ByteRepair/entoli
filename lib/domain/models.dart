@@ -19,8 +19,6 @@ abstract class ChatState with _$ChatState {
     required BackendKind backend,
     String? model,
     String? provider,
-    String? backendSessionId,
-    @Default([]) List<String> tags,
   }) = _ChatState;
 
   factory ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
@@ -38,21 +36,6 @@ abstract class Chat with _$Chat {
 }
 
 enum MessageRole { system, user, assistant, tool }
-
-/// Lightweight chat metadata for list views. Derived from `ChatState`.
-@freezed
-abstract class ChatSummary with _$ChatSummary {
-  const factory ChatSummary({
-    required String id,
-    required String title,
-    required DateTime createdAt,
-    required DateTime updatedAt,
-    required BackendKind backend,
-    String? model,
-  }) = _ChatSummary;
-
-  factory ChatSummary.fromJson(Map<String, dynamic> json) => _$ChatSummaryFromJson(json);
-}
 
 /// A node in the conversation tree. Linear in v1; tree-structured later.
 @freezed

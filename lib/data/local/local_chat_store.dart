@@ -17,29 +17,20 @@ class LocalChatStore implements ChatStore {
   final AppConfig config;
 
   @override
-  Future<List<ChatSummary>> list() async {
+  Future<List<ChatState>> list() async {
     if (!config.chatsDir.existsSync()) return [];
-    final entries = config.chatsDir.listSync().whereType<Directory>();
-    final summaries = <ChatSummary>[];
-    for (final dir in entries) {
-      final id = p.basename(dir.path);
-      final stateFile = config.stateFile(id);
+    final chats = <ChatState>[];
+    for (final dir in config.chatsDir.listSync().whereType<Directory>()) {
+      final stateFile = config.stateFile(p.basename(dir.path));
       if (!stateFile.existsSync()) continue;
       try {
-        final json = jsonDecode(stateFile.readAsStringSync()) as Map<String, dynamic>;
-        final state = ChatState.fromJson(json);
-        summaries.add(ChatSummary(
-          id: state.id,
-          title: state.title,
-          createdAt: state.createdAt,
-          updatedAt: state.updatedAt,
-          backend: state.backend,
-          model: state.model,
+        chats.add(ChatState.fromJson(
+          jsonDecode(stateFile.readAsStringSync()) as Map<String, dynamic>,
         ));
       } catch (_) {}
     }
-    summaries.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return summaries;
+    chats.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return chats;
   }
 
   @override

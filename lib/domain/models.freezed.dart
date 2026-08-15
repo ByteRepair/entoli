@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$ChatState {
 
- String get id; String get title; DateTime get createdAt; DateTime get updatedAt; BackendKind get backend; String? get model; String? get provider; String? get backendSessionId; List<String> get tags;
+ String get id; String get title; DateTime get createdAt; DateTime get updatedAt; BackendKind get backend; String? get model; String? get provider;
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $ChatStateCopyWith<ChatState> get copyWith => _$ChatStateCopyWithImpl<ChatState>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.model, model) || other.model == model)&&(identical(other.provider, provider) || other.provider == provider)&&(identical(other.backendSessionId, backendSessionId) || other.backendSessionId == backendSessionId)&&const DeepCollectionEquality().equals(other.tags, tags));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.model, model) || other.model == model)&&(identical(other.provider, provider) || other.provider == provider));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,backend,model,provider,backendSessionId,const DeepCollectionEquality().hash(tags));
+int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,backend,model,provider);
 
 @override
 String toString() {
-  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, backend: $backend, model: $model, provider: $provider, backendSessionId: $backendSessionId, tags: $tags)';
+  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, backend: $backend, model: $model, provider: $provider)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $ChatStateCopyWith<$Res>  {
   factory $ChatStateCopyWith(ChatState value, $Res Function(ChatState) _then) = _$ChatStateCopyWithImpl;
 @useResult
 $Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, BackendKind backend, String? model, String? provider, String? backendSessionId, List<String> tags
+ String id, String title, DateTime createdAt, DateTime updatedAt, BackendKind backend, String? model, String? provider
 });
 
 
@@ -65,7 +65,7 @@ class _$ChatStateCopyWithImpl<$Res>
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? backend = null,Object? model = freezed,Object? provider = freezed,Object? backendSessionId = freezed,Object? tags = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? backend = null,Object? model = freezed,Object? provider = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -74,9 +74,7 @@ as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore
 as DateTime,backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
 as BackendKind,model: freezed == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
 as String?,provider: freezed == provider ? _self.provider : provider // ignore: cast_nullable_to_non_nullable
-as String?,backendSessionId: freezed == backendSessionId ? _self.backendSessionId : backendSessionId // ignore: cast_nullable_to_non_nullable
-as String?,tags: null == tags ? _self.tags : tags // ignore: cast_nullable_to_non_nullable
-as List<String>,
+as String?,
   ));
 }
 
@@ -161,10 +159,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model,  String? provider,  String? backendSessionId,  List<String> tags)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model,  String? provider)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ChatState() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model,_that.provider,_that.backendSessionId,_that.tags);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model,_that.provider);case _:
   return orElse();
 
 }
@@ -182,10 +180,10 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backe
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model,  String? provider,  String? backendSessionId,  List<String> tags)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model,  String? provider)  $default,) {final _that = this;
 switch (_that) {
 case _ChatState():
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model,_that.provider,_that.backendSessionId,_that.tags);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model,_that.provider);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -202,10 +200,10 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backe
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model,  String? provider,  String? backendSessionId,  List<String> tags)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model,  String? provider)?  $default,) {final _that = this;
 switch (_that) {
 case _ChatState() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model,_that.provider,_that.backendSessionId,_that.tags);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model,_that.provider);case _:
   return null;
 
 }
@@ -217,7 +215,7 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backe
 @JsonSerializable()
 
 class _ChatState implements ChatState {
-  const _ChatState({required this.id, required this.title, required this.createdAt, required this.updatedAt, required this.backend, this.model, this.provider, this.backendSessionId, final  List<String> tags = const []}): _tags = tags;
+  const _ChatState({required this.id, required this.title, required this.createdAt, required this.updatedAt, required this.backend, this.model, this.provider});
   factory _ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
 
 @override final  String id;
@@ -227,14 +225,6 @@ class _ChatState implements ChatState {
 @override final  BackendKind backend;
 @override final  String? model;
 @override final  String? provider;
-@override final  String? backendSessionId;
- final  List<String> _tags;
-@override@JsonKey() List<String> get tags {
-  if (_tags is EqualUnmodifiableListView) return _tags;
-  // ignore: implicit_dynamic_type
-  return EqualUnmodifiableListView(_tags);
-}
-
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
@@ -249,16 +239,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.model, model) || other.model == model)&&(identical(other.provider, provider) || other.provider == provider)&&(identical(other.backendSessionId, backendSessionId) || other.backendSessionId == backendSessionId)&&const DeepCollectionEquality().equals(other._tags, _tags));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.model, model) || other.model == model)&&(identical(other.provider, provider) || other.provider == provider));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,backend,model,provider,backendSessionId,const DeepCollectionEquality().hash(_tags));
+int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,backend,model,provider);
 
 @override
 String toString() {
-  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, backend: $backend, model: $model, provider: $provider, backendSessionId: $backendSessionId, tags: $tags)';
+  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, backend: $backend, model: $model, provider: $provider)';
 }
 
 
@@ -269,7 +259,7 @@ abstract mixin class _$ChatStateCopyWith<$Res> implements $ChatStateCopyWith<$Re
   factory _$ChatStateCopyWith(_ChatState value, $Res Function(_ChatState) _then) = __$ChatStateCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, BackendKind backend, String? model, String? provider, String? backendSessionId, List<String> tags
+ String id, String title, DateTime createdAt, DateTime updatedAt, BackendKind backend, String? model, String? provider
 });
 
 
@@ -286,7 +276,7 @@ class __$ChatStateCopyWithImpl<$Res>
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? backend = null,Object? model = freezed,Object? provider = freezed,Object? backendSessionId = freezed,Object? tags = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? backend = null,Object? model = freezed,Object? provider = freezed,}) {
   return _then(_ChatState(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -295,9 +285,7 @@ as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore
 as DateTime,backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
 as BackendKind,model: freezed == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
 as String?,provider: freezed == provider ? _self.provider : provider // ignore: cast_nullable_to_non_nullable
-as String?,backendSessionId: freezed == backendSessionId ? _self.backendSessionId : backendSessionId // ignore: cast_nullable_to_non_nullable
-as String?,tags: null == tags ? _self._tags : tags // ignore: cast_nullable_to_non_nullable
-as List<String>,
+as String?,
   ));
 }
 
@@ -592,284 +580,6 @@ $ChatStateCopyWith<$Res> get state {
     return _then(_self.copyWith(state: value));
   });
 }
-}
-
-
-/// @nodoc
-mixin _$ChatSummary {
-
- String get id; String get title; DateTime get createdAt; DateTime get updatedAt; BackendKind get backend; String? get model;
-/// Create a copy of ChatSummary
-/// with the given fields replaced by the non-null parameter values.
-@JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-$ChatSummaryCopyWith<ChatSummary> get copyWith => _$ChatSummaryCopyWithImpl<ChatSummary>(this as ChatSummary, _$identity);
-
-  /// Serializes this ChatSummary to a JSON map.
-  Map<String, dynamic> toJson();
-
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChatSummary&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.model, model) || other.model == model));
-}
-
-@JsonKey(includeFromJson: false, includeToJson: false)
-@override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,backend,model);
-
-@override
-String toString() {
-  return 'ChatSummary(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, backend: $backend, model: $model)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class $ChatSummaryCopyWith<$Res>  {
-  factory $ChatSummaryCopyWith(ChatSummary value, $Res Function(ChatSummary) _then) = _$ChatSummaryCopyWithImpl;
-@useResult
-$Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, BackendKind backend, String? model
-});
-
-
-
-
-}
-/// @nodoc
-class _$ChatSummaryCopyWithImpl<$Res>
-    implements $ChatSummaryCopyWith<$Res> {
-  _$ChatSummaryCopyWithImpl(this._self, this._then);
-
-  final ChatSummary _self;
-  final $Res Function(ChatSummary) _then;
-
-/// Create a copy of ChatSummary
-/// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? backend = null,Object? model = freezed,}) {
-  return _then(_self.copyWith(
-id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
-as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
-as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
-as DateTime,backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
-as BackendKind,model: freezed == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
-as String?,
-  ));
-}
-
-}
-
-
-/// Adds pattern-matching-related methods to [ChatSummary].
-extension ChatSummaryPatterns on ChatSummary {
-/// A variant of `map` that fallback to returning `orElse`.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case _:
-///     return orElse();
-/// }
-/// ```
-
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _ChatSummary value)?  $default,{required TResult orElse(),}){
-final _that = this;
-switch (_that) {
-case _ChatSummary() when $default != null:
-return $default(_that);case _:
-  return orElse();
-
-}
-}
-/// A `switch`-like method, using callbacks.
-///
-/// Callbacks receives the raw object, upcasted.
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case final Subclass2 value:
-///     return ...;
-/// }
-/// ```
-
-@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _ChatSummary value)  $default,){
-final _that = this;
-switch (_that) {
-case _ChatSummary():
-return $default(_that);case _:
-  throw StateError('Unexpected subclass');
-
-}
-}
-/// A variant of `map` that fallback to returning `null`.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case final Subclass value:
-///     return ...;
-///   case _:
-///     return null;
-/// }
-/// ```
-
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _ChatSummary value)?  $default,){
-final _that = this;
-switch (_that) {
-case _ChatSummary() when $default != null:
-return $default(_that);case _:
-  return null;
-
-}
-}
-/// A variant of `when` that fallback to an `orElse` callback.
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case _:
-///     return orElse();
-/// }
-/// ```
-
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model)?  $default,{required TResult orElse(),}) {final _that = this;
-switch (_that) {
-case _ChatSummary() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model);case _:
-  return orElse();
-
-}
-}
-/// A `switch`-like method, using callbacks.
-///
-/// As opposed to `map`, this offers destructuring.
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case Subclass2(:final field2):
-///     return ...;
-/// }
-/// ```
-
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model)  $default,) {final _that = this;
-switch (_that) {
-case _ChatSummary():
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model);case _:
-  throw StateError('Unexpected subclass');
-
-}
-}
-/// A variant of `when` that fallback to returning `null`
-///
-/// It is equivalent to doing:
-/// ```dart
-/// switch (sealedClass) {
-///   case Subclass(:final field):
-///     return ...;
-///   case _:
-///     return null;
-/// }
-/// ```
-
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  BackendKind backend,  String? model)?  $default,) {final _that = this;
-switch (_that) {
-case _ChatSummary() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.backend,_that.model);case _:
-  return null;
-
-}
-}
-
-}
-
-/// @nodoc
-@JsonSerializable()
-
-class _ChatSummary implements ChatSummary {
-  const _ChatSummary({required this.id, required this.title, required this.createdAt, required this.updatedAt, required this.backend, this.model});
-  factory _ChatSummary.fromJson(Map<String, dynamic> json) => _$ChatSummaryFromJson(json);
-
-@override final  String id;
-@override final  String title;
-@override final  DateTime createdAt;
-@override final  DateTime updatedAt;
-@override final  BackendKind backend;
-@override final  String? model;
-
-/// Create a copy of ChatSummary
-/// with the given fields replaced by the non-null parameter values.
-@override @JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-_$ChatSummaryCopyWith<_ChatSummary> get copyWith => __$ChatSummaryCopyWithImpl<_ChatSummary>(this, _$identity);
-
-@override
-Map<String, dynamic> toJson() {
-  return _$ChatSummaryToJson(this, );
-}
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChatSummary&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.backend, backend) || other.backend == backend)&&(identical(other.model, model) || other.model == model));
-}
-
-@JsonKey(includeFromJson: false, includeToJson: false)
-@override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,backend,model);
-
-@override
-String toString() {
-  return 'ChatSummary(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, backend: $backend, model: $model)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class _$ChatSummaryCopyWith<$Res> implements $ChatSummaryCopyWith<$Res> {
-  factory _$ChatSummaryCopyWith(_ChatSummary value, $Res Function(_ChatSummary) _then) = __$ChatSummaryCopyWithImpl;
-@override @useResult
-$Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, BackendKind backend, String? model
-});
-
-
-
-
-}
-/// @nodoc
-class __$ChatSummaryCopyWithImpl<$Res>
-    implements _$ChatSummaryCopyWith<$Res> {
-  __$ChatSummaryCopyWithImpl(this._self, this._then);
-
-  final _ChatSummary _self;
-  final $Res Function(_ChatSummary) _then;
-
-/// Create a copy of ChatSummary
-/// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? backend = null,Object? model = freezed,}) {
-  return _then(_ChatSummary(
-id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
-as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
-as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
-as DateTime,backend: null == backend ? _self.backend : backend // ignore: cast_nullable_to_non_nullable
-as BackendKind,model: freezed == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
-as String?,
-  ));
-}
-
-
 }
 
 

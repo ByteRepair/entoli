@@ -4,9 +4,9 @@ import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/models.dart";
 
-/// Owns the mapping between on-disk chats and live agent sessions.
-/// Writes `conv.json` after every turn; reads it on load and re-injects
-/// context into the backend so `conv.json` stays the source of truth.
+/// The UI's door to storage and the agent. Resolves which model a chat runs
+/// on, and owns rewinding a conversation. The turn itself is accumulated and
+/// saved by `ChatController` as events arrive.
 class ChatRepository {
   ChatRepository(this._store, this._backend, this._settings);
 
@@ -16,7 +16,7 @@ class ChatRepository {
   /// Read on use, not captured: the app default changes while this lives.
   final AppSettings Function() _settings;
 
-  Future<List<ChatSummary>> listChats() => _store.list();
+  Future<List<ChatState>> listChats() => _store.list();
 
   Future<Chat> createChat({String? title}) async {
     final chat = await _backend.createChat(
