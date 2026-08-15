@@ -43,6 +43,11 @@ void writeOpencodeConfig(PromptLibrary library, Directory directory) {
 Directory opencodeConfigDir(AppConfig config) =>
     Directory(p.join(config.cacheDir.path, "opencode"));
 
-/// The environment an `opencode serve` runs under.
-Map<String, String> opencodeEnvironment(AppConfig config) =>
-    {"XDG_CONFIG_HOME": config.cacheDir.path};
+/// The environment an `opencode serve` runs under. [extra] is the user's own
+/// (API keys, and whatever else a provider needs); the isolation comes last so
+/// a typo there cannot quietly hand the chat someone else's commands.
+Map<String, String> opencodeEnvironment(
+  AppConfig config, {
+  Map<String, String> extra = const {},
+}) =>
+    {...extra, "XDG_CONFIG_HOME": config.cacheDir.path};

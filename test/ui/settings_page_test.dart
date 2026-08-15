@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -167,5 +168,68 @@ void main() {
 
     expect(app.container.read(appSettingsProvider).defaultModelId, isNull);
     expect(find.text("Qwen 2.5"), findsNothing);
+  });
+
+  group("environment", () {
+    Future<void> addVariable(WidgetTester tester, String name, String value) async {
+      await tester.tap(find.text("Add variable"));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, name);
+      await tester.enterText(find.byType(TextField).last, value);
+      await tester.tap(find.text("Save"));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("a variable added here reaches the next server", (tester) async {
+      await pumpSettings(tester);
+
+      await addVariable(tester, "ANTHROPIC_API_KEY", "sk-test");
+
+      expect(app.container.read(appSettingsProvider).opencodeEnv, {"ANTHROPIC_API_KEY": "sk-test"});
+      expect(AppSettings.load(app.config).opencodeEnv, {"ANTHROPIC_API_KEY": "sk-test"});
+    });
+
+    testWidgets("the value is masked, so settings can be shown to someone", (tester) async {
+      await pumpSettings(tester);
+      await addVariable(tester, "OPENAI_API_KEY", "sk-secret");
+
+      expect(find.text("OPENAI_API_KEY"), findsOneWidget);
+      expect(find.text("sk-secret"), findsNothing);
+    });
+
+    testWidgets("editing a variable's name does not leave the old one behind", (tester) async {
+      await pumpSettings(tester);
+      await addVariable(tester, "OLD_NAME", "value");
+
+      await tester.tap(find.text("OLD_NAME"));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, "NEW_NAME");
+      await tester.tap(find.text("Save"));
+      await tester.pumpAndSettle();
+
+      expect(app.container.read(appSettingsProvider).opencodeEnv, {"NEW_NAME": "value"});
+    });
+
+    testWidgets("removing one leaves the rest", (tester) async {
+      await pumpSettings(tester);
+      await addVariable(tester, "KEEP", "1");
+      await addVariable(tester, "DROP", "2");
+
+      await tester.tap(find.byTooltip("Remove DROP"));
+      await tester.pumpAndSettle();
+
+      expect(app.container.read(appSettingsProvider).opencodeEnv, {"KEEP": "1"});
+    });
+
+    testWidgets("the model default survives an environment edit", (tester) async {
+      seedSettings(otherProvider, "qwen-2.5");
+      await pumpSettings(tester);
+
+      await addVariable(tester, "TOKEN", "abc");
+
+      final settings = app.container.read(appSettingsProvider);
+      expect(settings.defaultProviderId, otherProvider);
+      expect(settings.defaultModelId, "qwen-2.5");
+    });
   });
 }

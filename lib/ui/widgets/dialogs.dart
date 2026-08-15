@@ -38,6 +38,52 @@ Future<String?> promptForText(
   );
 }
 
+/// Ask for a name and its value. Returns null if dismissed or if the name was
+/// left blank — a value without one names nothing.
+Future<({String name, String value})?> promptForPair(
+  BuildContext context, {
+  required String title,
+  required String nameLabel,
+  required String valueLabel,
+  String name = "",
+  String value = "",
+}) {
+  final nameField = TextEditingController(text: name);
+  final valueField = TextEditingController(text: value);
+  ({String name, String value})? submit() {
+    final key = nameField.text.trim();
+    return key.isEmpty ? null : (name: key, value: valueField.text.trim());
+  }
+
+  return showDialog<({String name, String value})>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameField,
+            autofocus: name.isEmpty,
+            decoration: InputDecoration(labelText: nameLabel, border: const OutlineInputBorder()),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: valueField,
+            autofocus: name.isNotEmpty,
+            decoration: InputDecoration(labelText: valueLabel, border: const OutlineInputBorder()),
+            onSubmitted: (_) => Navigator.pop(context, submit()),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        FilledButton(onPressed: () => Navigator.pop(context, submit()), child: const Text("Save")),
+      ],
+    ),
+  );
+}
+
 /// Ask before doing something irreversible. A null [confirmLabel] leaves only
 /// a way out, for when there is nothing to confirm.
 Future<bool> confirm(

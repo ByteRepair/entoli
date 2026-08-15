@@ -125,7 +125,9 @@ the point — but opencode's own built-ins (`init`, `review`, `build`, `explore`
 `XDG_DATA_HOME` is deliberately left alone: credentials and the session
 database live there and are the user's, not ours. The trade-off of moving
 `XDG_CONFIG_HOME` is that tools opencode spawns inherit it — `gh` in
-particular reads `$XDG_CONFIG_HOME/gh`.
+particular reads `$XDG_CONFIG_HOME/gh`. The environment editor in settings is
+the way out (`GH_CONFIG_DIR=...`), and it is why the user's variables are
+applied *under* ours rather than over them.
 
 The syntax is parsed in `OpencodeBackend`, not in the repository or the UI:
 `/` and `@` are opencode's, and `conv.json` stores the message as typed, so a
@@ -245,14 +247,20 @@ rules, and each page only says where the values come from and where they go.
 `prompt_async` has no field for them (verified against `GET /doc`, opencode
 1.18.18), so they would need per-session config to take effect.
 
+`settings.json`'s `opencodeEnv` is the environment every server is spawned
+with — API keys, and whatever else a provider reads out of one. It is read off
+disk at spawn time rather than captured at startup, so an edit applies to the
+next server a chat starts; one already running keeps what it was spawned with,
+and the settings page says so.
+
 ### Shared UI
 
 `lib/ui/widgets/` holds what more than one page needs: `ModelPicker` (the
 selector plus its loading and failure states) over `ProviderModelSelector`
 (which owns every rule about the pair, and is tested directly in
 `provider_model_selector_test.dart` rather than through both pages), the
-`Default`-plus-reset pairing, the `promptForText` / `confirm` dialogs, and
-`AttachmentChip` / `AttachmentStrip`.
+`Default`-plus-reset pairing, the `promptForText` / `promptForPair` / `confirm`
+dialogs, and `AttachmentChip` / `AttachmentStrip`.
 Tests share `test/harness.dart` (`TestApp`, `tempConfig`, `pumpUntil`, the
 dropdown finders) and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents`
 and `hold` drive a turn, plus `FakeAttachmentPicker` and `testLibrary`).
