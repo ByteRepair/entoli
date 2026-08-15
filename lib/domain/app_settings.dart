@@ -3,6 +3,7 @@ import "dart:convert";
 import "../core/config.dart";
 import "llm_provider.dart";
 import "permission.dart";
+import "profile.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
@@ -16,6 +17,7 @@ class AppSettings {
     this.environment = const {},
     this.approveMode = ApproveMode.ask,
     this.llmProviders = const [],
+    this.profile,
   });
 
   String? defaultModelId;
@@ -45,6 +47,10 @@ class AppSettings {
   /// why the first thing settings offers is a list of presets.
   List<LlmProviderConfig> llmProviders;
 
+  /// The user's profile, injected at the end of the system prompt. App-level
+  /// default; a project can override it. Null means nothing is injected.
+  Profile? profile;
+
   static AppSettings load(AppConfig config) {
     final file = config.settingsFile;
     if (!file.existsSync()) return AppSettings();
@@ -64,30 +70,18 @@ class AppSettings {
         environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
         approveMode: _approveMode(json),
         llmProviders: _providers(json["llmProviders"]),
+        profile: Profile.fromJson(json["profile"]),
       );
     } catch (_) {
       return AppSettings();
     }
   }
 
-  /// `approveMode` is the current key. An older file has `approveCommands` as a
-  /// bool: `true` → [ApproveMode.ask], `false` → [ApproveMode.never]. A file
-  /// with neither is the default, [ApproveMode.auto].
-  static ApproveMode _approveMode(Map<String, dynamic> json) {
-    final mode = json["approveMode"] as String?;
-    if (mode != null) {
-      return ApproveMode.values.firstWhere(
-        (m) => m.name == mode,
-        orElse: () => ApproveMode.ask,
-      );
-    }
-    final legacy = json["approveCommands"] as bool?;
-    return switch (legacy) {
-      true => ApproveMode.ask,
-      false => ApproveMode.never,
-      null => ApproveMode.ask,
-    };
-  }
+  /// `approveMode` is the current key. An older file has `approveCommands` as
+  /// a bool, migrated by [approveModeFromJson]. A file with neither is the
+  /// default, [ApproveMode.ask].
+  static ApproveMode _approveMode(Map<String, dynamic> json) =>
+      approveModeFromJson(json) ?? ApproveMode.ask;
 
   // Builds before the /provider flattening fix wrote empty ids here.
   static String? _orNull(String? v) => (v == null || v.isEmpty) ? null : v;
@@ -121,6 +115,7 @@ class AppSettings {
         environment: environment,
         approveMode: approveMode,
         llmProviders: llmProviders,
+        profile: profile,
       );
 
   Future<void> save(AppConfig config) async {
@@ -135,6 +130,7 @@ class AppSettings {
       "approveMode": approveMode.name,
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
+      if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
     }));
   }
 }

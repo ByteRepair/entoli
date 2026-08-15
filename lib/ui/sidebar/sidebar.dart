@@ -5,6 +5,7 @@ import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
+import "../profile/profile_page.dart";
 import "../settings/settings_page.dart";
 import "../widgets/dialogs.dart";
 import "project_settings_page.dart";
@@ -143,6 +144,13 @@ class Sidebar extends ConsumerWidget {
             ),
           ),
           const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text("Profile"),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.settings),
             title: const Text("Settings"),

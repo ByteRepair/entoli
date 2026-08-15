@@ -1,23 +1,28 @@
 import "dart:typed_data";
 
+import "../core/config.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
 import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
+import "../domain/project_settings.dart";
 
 /// The UI's door to storage and the agent. Resolves which model a chat runs
 /// on, and owns rewinding a conversation. The turn itself is accumulated and
 /// saved by `ChatController` as events arrive.
 class ChatRepository {
-  ChatRepository(this._store, this._backend, this._settings);
+  ChatRepository(this._store, this._backend, this._settings, this._config);
 
   final ChatStore _store;
   final AgentBackend _backend;
 
   /// Read on use, not captured: the app default changes while this lives.
   final AppSettings Function() _settings;
+
+  /// Where project settings live. Read on use, like [_settings].
+  final AppConfig _config;
 
   /// A chat that has been started but not written to. It lives here until
   /// [save] puts it on disk, which the first turn does. Its settings come with
@@ -120,15 +125,24 @@ class ChatRepository {
     final settings = _settings();
     final model = meta.model ?? settings.defaultModelId;
     final provider = meta.model != null ? meta.provider : settings.defaultProviderId;
+    final project = await projectOf(chatId);
+    // A project can override the app-level profile; null falls back to it.
+    final profile = (await projectSettingsOf(project)).profile ?? settings.profile;
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
         model: model,
         provider: provider,
-        project: await projectOf(chatId),
+        project: project,
         approveMode: meta.approveMode ?? settings.approveMode,
         classifierProvider: settings.classifierProviderId,
-        classifierModel: settings.classifierModelId);
+        classifierModel: settings.classifierModelId,
+        profile: profile);
   }
+
+  /// A project's settings, read off `project.json` when they exist. The default
+  /// project is null and lives in the data directory.
+  Future<ProjectSettings> projectSettingsOf(String? project) async =>
+      ProjectSettings.load(_config, project: project);
 
   /// Which project a chat's files are in. A draft is not on disk to be found,
   /// so it answers for itself.

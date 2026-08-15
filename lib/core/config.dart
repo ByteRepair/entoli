@@ -135,4 +135,10 @@ class AppConfig {
   }
 
   File get settingsFile => File(p.join(dataDir.path, "settings.json"));
+
+  /// Project-scoped overrides. The default project is null, and it is the data
+  /// directory, so its settings sit beside `settings.json` rather than under
+  /// `projects/`.
+  File projectSettingsFile({String? project}) =>
+      File(p.join(projectDir(project: project).path, "project.json"));
 }

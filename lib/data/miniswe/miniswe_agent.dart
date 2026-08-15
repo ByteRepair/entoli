@@ -5,6 +5,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/profile.dart";
 import "../../domain/shell.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
@@ -105,6 +106,7 @@ class MinisweAgent {
     this.offerTaskTool = true,
     this.offerAskTool = true,
     this.webSearch,
+    this.profile,
   });
 
   final MinisweSession session;
@@ -158,6 +160,11 @@ class MinisweAgent {
   /// `UnavailableWebSearch` and the tools are dropped the way `bash` is when
   /// there is no shell.
   final WebSearch? webSearch;
+
+  /// The user's profile, appended to the system prompt as "About the user".
+  /// Null means nothing is added. Rewritten every turn with the rest of the
+  /// system prompt.
+  final Profile? profile;
 
   /// What the model may call. `bash` is dropped where nothing can run it —
   /// offering a tool we could only ever answer with a failure invites one.
@@ -266,6 +273,7 @@ class MinisweAgent {
         projectWorkspace: projectWorkspace,
         platform: shell.platformDescription,
         agentPrompt: agentPrompt,
+        profile: profile,
         canRunCommands: shell.canRunCommands,
       ),
     );

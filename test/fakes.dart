@@ -6,6 +6,7 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 
 /// Two providers, two models each, deliberately not in alphabetical order so
@@ -95,7 +96,8 @@ class FakeBackend implements AgentBackend {
         List<Attachment> attachments,
         ApproveMode approveMode,
         String? classifierProvider,
-        String? classifierModel
+        String? classifierModel,
+        Profile? profile
       })> prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
@@ -113,7 +115,8 @@ class FakeBackend implements AgentBackend {
       String? project,
       ApproveMode approveMode = ApproveMode.ask,
       String? classifierProvider,
-      String? classifierModel}) async* {
+      String? classifierModel,
+      Profile? profile}) async* {
     prompts.add((
       text: text,
       model: model,
@@ -123,6 +126,7 @@ class FakeBackend implements AgentBackend {
       approveMode: approveMode,
       classifierProvider: classifierProvider,
       classifierModel: classifierModel,
+      profile: profile,
     ));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;

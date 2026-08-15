@@ -1,6 +1,7 @@
 import "../domain/ask.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
+import "../domain/profile.dart";
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
@@ -117,7 +118,8 @@ abstract class AgentBackend {
       String? project,
       ApproveMode approveMode = ApproveMode.ask,
       String? classifierProvider,
-      String? classifierModel});
+      String? classifierModel,
+      Profile? profile});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history].

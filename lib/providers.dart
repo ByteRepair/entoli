@@ -11,6 +11,8 @@ import "domain/chat_store.dart";
 import "domain/llm_provider.dart";
 import "domain/models.dart";
 import "domain/permission.dart";
+import "domain/profile.dart";
+import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
 import "ui/widgets/provider_model_selector.dart";
 
@@ -56,6 +58,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..classifierProviderId = choice.providerId
     ..classifierModelId = choice.providerId == null ? null : choice.modelId);
 
+  /// The user's profile, injected into the system prompt. Null clears it.
+  Future<void> setProfile(Profile? profile) =>
+      _update((s) => s.profile = profile);
+
   /// The endpoints the agent can call. The model list is rebuilt from them, so
   /// it is invalidated here rather than left showing the old one.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
@@ -84,6 +90,7 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     ref.watch(chatStoreProvider),
     ref.watch(agentBackendProvider),
     () => ref.read(appSettingsProvider),
+    ref.watch(appConfigProvider),
   );
 });
 
@@ -118,3 +125,29 @@ final attachmentBytesProvider =
 /// owns its commands and agents, so nothing has to be asked what it knows.
 final completionsProvider = Provider.family<List<CompletionOption>, CompletionKind>(
     (ref, kind) => ref.watch(promptLibraryProvider).options(kind));
+
+/// A project's own settings, loaded off `project.json`. Null is the default
+/// project, which lives in the data directory. The project name is the
+/// constructor argument, the way [ChatController] takes a chat id.
+final projectSettingsProvider =
+    NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
+        ProjectSettingsNotifier.new);
+
+class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
+  ProjectSettingsNotifier(this.project);
+
+  final String? project;
+  late AppConfig _config;
+
+  @override
+  ProjectSettings build() {
+    _config = ref.watch(appConfigProvider);
+    return ProjectSettings.load(_config, project: project);
+  }
+
+  Future<void> setProfile(Profile? profile) async {
+    final next = state.copy()..profile = profile;
+    state = next;
+    await next.save(_config, project: project);
+  }
+}

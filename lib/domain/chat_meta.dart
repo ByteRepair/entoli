@@ -27,23 +27,11 @@ class ChatMeta {
     }
   }
 
-  /// `approveMode` is the current key. An older file has `approveCommands` as a
-  /// bool: `true` → [ApproveMode.ask], `false` → [ApproveMode.never].
-  static ApproveMode? _approveMode(Map<String, dynamic> json) {
-    final mode = json["approveMode"] as String?;
-    if (mode != null) {
-      return ApproveMode.values.firstWhere(
-        (m) => m.name == mode,
-        orElse: () => ApproveMode.ask,
-      );
-    }
-    final legacy = json["approveCommands"] as bool?;
-    return switch (legacy) {
-      true => ApproveMode.ask,
-      false => ApproveMode.never,
-      null => null,
-    };
-  }
+  /// `approveMode` is the current key. An older file has `approveCommands` as
+  /// a bool, migrated by [approveModeFromJson]. Null when neither key is
+  /// present, meaning "inherit the app default".
+  static ApproveMode? _approveMode(Map<String, dynamic> json) =>
+      approveModeFromJson(json);
 
   Map<String, dynamic> toJson() => {
         if (model != null) "model": model,

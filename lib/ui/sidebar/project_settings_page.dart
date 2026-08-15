@@ -3,25 +3,29 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../providers.dart";
+import "../profile/profile_page.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
 import "sidebar.dart";
 
-/// Delete a project, its chats, and its shared workspace. Confirms first,
-/// deselects the project and its chats, and invalidates the lists so the UI
-/// reflects the deletion. Shared by the sidebar's project menu and the
-/// project settings page so the message and the invalidations agree.
+/// Delete a project, its chats, and its shared workspace. Confirms first
+/// (unless [confirm] is false — the settings page's `DestructiveButton` has
+/// already asked), deselects the project and its chats, and invalidates the
+/// lists so the UI reflects the deletion. Shared by the sidebar's project
+/// menu and the project settings page so the invalidations agree.
 Future<void> deleteProject(
   BuildContext context,
   WidgetRef ref,
   String project, {
   bool popToRoot = false,
+  bool confirm = true,
 }) async {
-  final count = (ref.read(chatListProvider).value ?? const [])
-      .where((c) => c.project == project)
-      .length;
-  final confirmed = await _confirmDeleteProject(context, project, count);
-  if (!confirmed) return;
+  if (confirm) {
+    final count = (ref.read(chatListProvider).value ?? const [])
+        .where((c) => c.project == project)
+        .length;
+    if (!await _confirmDeleteProject(context, project, count)) return;
+  }
   await ref.read(chatRepositoryProvider).deleteProject(project);
   ref.read(selectedProjectProvider.notifier).select(null);
   ref.read(selectedChatIdProvider.notifier).select(null);
@@ -48,11 +52,8 @@ class ProjectSettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chats =
-        (ref.watch(chatListProvider).value ?? const [])
-            .where((c) => c.project == project)
-            .toList();
-    final count = chats.length;
+    final chats = ref.watch(chatListProvider).value ?? const [];
+    final count = chats.where((c) => c.project == project).length;
     final path = ref.watch(appConfigProvider).projectDir(project: project).path;
 
     return Scaffold(
@@ -76,6 +77,8 @@ class ProjectSettingsPage extends ConsumerWidget {
             trailing: Text("$count"),
           ),
           const Divider(),
+          _ProfileRow(project: project),
+          const Divider(),
           DestructiveButton(
             icon: Icons.delete,
             label: "Delete project",
@@ -83,7 +86,8 @@ class ProjectSettingsPage extends ConsumerWidget {
             confirmMessage: "Delete \"$project\", its $count "
                 "${count == 1 ? "chat" : "chats"} and its shared workspace? "
                 "This cannot be undone.",
-            onConfirmed: () => deleteProject(context, ref, project, popToRoot: true),
+            onConfirmed: () => deleteProject(context, ref, project,
+                popToRoot: true, confirm: false),
           ),
         ],
       ),
@@ -120,6 +124,29 @@ class _CopyField extends StatelessWidget {
             SnackBar(content: Text(snack)),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Shows whether this project overrides the app-level profile, and opens the
+/// editor. "Default" means the project inherits the app profile.
+class _ProfileRow extends ConsumerWidget {
+  const _ProfileRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    final hasOverride = settings.profile != null && !settings.profile!.isEmpty;
+    return ListTile(
+      leading: const Icon(Icons.person_outline),
+      title: const Text("Profile"),
+      subtitle: Text(hasOverride ? "Customized" : "Default (inherited)"),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ProfilePage(project: project)),
       ),
     );
   }

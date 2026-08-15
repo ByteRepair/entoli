@@ -8,6 +8,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/web_search.dart";
@@ -96,6 +97,7 @@ class MinisweBackend implements AgentBackend {
     ApproveMode approveMode = ApproveMode.ask,
     String? classifierProvider,
     String? classifierModel,
+    Profile? profile,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
@@ -108,7 +110,8 @@ class MinisweBackend implements AgentBackend {
         attachments: attachments,
         approveMode: approveMode,
         classifierProvider: classifierProvider,
-        classifierModel: classifierModel));
+        classifierModel: classifierModel,
+        profile: profile));
     return controller.stream;
   }
 
@@ -123,6 +126,7 @@ class MinisweBackend implements AgentBackend {
     ApproveMode approveMode = ApproveMode.ask,
     String? classifierProvider,
     String? classifierModel,
+    Profile? profile,
   }) async {
     try {
       final target = _resolveModel(model, provider);
@@ -164,6 +168,7 @@ class MinisweBackend implements AgentBackend {
         answer: _awaitAnswers,
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
+        profile: profile,
       );
       _running[chatId] = agent;
 
