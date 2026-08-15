@@ -5,7 +5,6 @@ import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../domain/agent_backend.dart";
-import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
@@ -95,6 +94,8 @@ class MinisweBackend implements AgentBackend {
     String? provider,
     String? project,
     ApproveMode approveMode = ApproveMode.ask,
+    String? classifierProvider,
+    String? classifierModel,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
@@ -105,7 +106,9 @@ class MinisweBackend implements AgentBackend {
         provider: provider,
         project: project,
         attachments: attachments,
-        approveMode: approveMode));
+        approveMode: approveMode,
+        classifierProvider: classifierProvider,
+        classifierModel: classifierModel));
     return controller.stream;
   }
 
@@ -118,6 +121,8 @@ class MinisweBackend implements AgentBackend {
     String? project,
     List<Attachment> attachments = const [],
     ApproveMode approveMode = ApproveMode.ask,
+    String? classifierProvider,
+    String? classifierModel,
   }) async {
     try {
       final target = _resolveModel(model, provider);
@@ -144,7 +149,7 @@ class MinisweBackend implements AgentBackend {
         options: options,
         webSearch: webSearch,
       );
-      final classifier = _resolveClassifier();
+      final classifier = _resolveClassifier(classifierProvider, classifierModel);
       final agent = MinisweAgent(
         session: _sessions.putIfAbsent(chatId, MinisweSession.new),
         client: target.client,
@@ -231,13 +236,9 @@ class MinisweBackend implements AgentBackend {
     return (client: registry.clientOf(config), modelId: modelId);
   }
 
-  /// The classifier model, resolved the same way the main model is. Read from
-  /// `settings.json` on every turn so an edit applies to the next one. Null
-  /// when no classifier model is configured — auto mode falls back to asking.
-  PermissionClassifier? _resolveClassifier() {
-    final settings = AppSettings.load(config);
-    final provider = settings.classifierProviderId;
-    final model = settings.classifierModelId;
+  /// The classifier model, resolved the same way the main model is. Null when
+  /// no classifier model is named — auto mode falls back to asking.
+  PermissionClassifier? _resolveClassifier(String? provider, String? model) {
     if (provider == null || model == null) return null;
     final target = _resolveModel(model, provider);
     if (target == null) return null;

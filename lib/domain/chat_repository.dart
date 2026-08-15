@@ -117,14 +117,17 @@ class ChatRepository {
     // The chat's own choice wins, else the app default, else whatever the
     // backend picks. Never mix halves: a chat's model under the app default's
     // provider is not a combination anyone asked for.
-    final model = meta.model ?? _settings().defaultModelId;
-    final provider = meta.model != null ? meta.provider : _settings().defaultProviderId;
+    final settings = _settings();
+    final model = meta.model ?? settings.defaultModelId;
+    final provider = meta.model != null ? meta.provider : settings.defaultProviderId;
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
         model: model,
         provider: provider,
         project: await projectOf(chatId),
-        approveMode: meta.approveMode ?? _settings().approveMode);
+        approveMode: meta.approveMode ?? settings.approveMode,
+        classifierProvider: settings.classifierProviderId,
+        classifierModel: settings.classifierModelId);
   }
 
   /// Which project a chat's files are in. A draft is not on disk to be found,

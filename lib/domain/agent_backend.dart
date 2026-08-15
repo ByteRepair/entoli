@@ -108,12 +108,16 @@ abstract class AgentBackend {
 
   /// Send a user prompt; stream events until the turn completes. [project] is
   /// which project's files the turn works in — null is the default one.
+  /// [classifierProvider]/[classifierModel] name the model that classifies
+  /// commands in auto mode; null means auto mode falls back to asking.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments,
       String? model,
       String? provider,
       String? project,
-      ApproveMode approveMode = ApproveMode.ask});
+      ApproveMode approveMode = ApproveMode.ask,
+      String? classifierProvider,
+      String? classifierModel});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history].

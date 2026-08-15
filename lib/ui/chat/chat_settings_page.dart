@@ -1,9 +1,12 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
 import "../../domain/permission.dart";
 import "../../providers.dart";
+import "../sidebar/sidebar.dart";
+import "../widgets/destructive_button.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
 
@@ -57,6 +60,8 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
+                _IdField(id: widget.chatId),
+                const Divider(),
                 _LlmField(
                   meta: _meta!,
                   onChanged: (m) => setState(() => _meta = m),
@@ -66,8 +71,68 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                   value: _meta!.approveMode,
                   onChanged: (v) => setState(() => _meta!.approveMode = v),
                 ),
+                const Divider(),
+                _DeleteButton(chatId: widget.chatId),
               ],
             ),
+    );
+  }
+}
+
+class _IdField extends StatelessWidget {
+  const _IdField({required this.id});
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context) {
+    return LabelledField(
+      label: "Chat ID",
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              id,
+              style: const TextStyle(fontFamily: "monospace"),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy),
+            tooltip: "Copy chat ID",
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: id));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Copied chat ID")),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeleteButton extends ConsumerWidget {
+  const _DeleteButton({required this.chatId});
+
+  final String chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return DestructiveButton(
+      icon: Icons.delete,
+      label: "Delete chat",
+      confirmTitle: "Delete chat?",
+      confirmMessage: "Delete this chat and all its files? This cannot be undone.",
+      onConfirmed: () async {
+        if (ref.read(selectedChatIdProvider) == chatId) {
+          ref.read(selectedChatIdProvider.notifier).select(null);
+        }
+        await ref.read(chatRepositoryProvider).deleteChat(chatId);
+        ref.invalidate(chatListProvider);
+        if (context.mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+      },
     );
   }
 }

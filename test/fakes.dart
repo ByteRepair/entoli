@@ -93,7 +93,9 @@ class FakeBackend implements AgentBackend {
         String? provider,
         String? project,
         List<Attachment> attachments,
-        ApproveMode approveMode
+        ApproveMode approveMode,
+        String? classifierProvider,
+        String? classifierModel
       })> prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
@@ -109,7 +111,9 @@ class FakeBackend implements AgentBackend {
       String? model,
       String? provider,
       String? project,
-      ApproveMode approveMode = ApproveMode.ask}) async* {
+      ApproveMode approveMode = ApproveMode.ask,
+      String? classifierProvider,
+      String? classifierModel}) async* {
     prompts.add((
       text: text,
       model: model,
@@ -117,6 +121,8 @@ class FakeBackend implements AgentBackend {
       project: project,
       attachments: attachments,
       approveMode: approveMode,
+      classifierProvider: classifierProvider,
+      classifierModel: classifierModel,
     ));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;
