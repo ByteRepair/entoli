@@ -5,9 +5,6 @@ import "package:freezed_annotation/freezed_annotation.dart";
 part "models.freezed.dart";
 part "models.g.dart";
 
-/// Which agent runtime backs this chat.
-enum BackendKind { opencode, miniswe }
-
 /// Metadata for a chat, persisted to `state.json`.
 @freezed
 abstract class ChatState with _$ChatState {
@@ -16,7 +13,6 @@ abstract class ChatState with _$ChatState {
     required String title,
     required DateTime createdAt,
     required DateTime updatedAt,
-    required BackendKind backend,
     String? model,
     String? provider,
   }) = _ChatState;
@@ -51,8 +47,8 @@ abstract class Message with _$Message {
   factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
 }
 
-/// Polymorphic part of a message. Mirrors OpenCode's Part union plus
-/// mini-swe-agent's action/observation shapes, unified.
+/// Polymorphic part of a message: what the model said, thought, ran, or was
+/// handed.
 @freezed
 sealed class MessagePart with _$MessagePart {
   const factory MessagePart.text({required String text}) = TextPart;

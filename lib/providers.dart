@@ -3,7 +3,6 @@ import "dart:typed_data";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
-import "core/platform/default_backend.dart";
 import "domain/agent_backend.dart";
 import "domain/attachment_picker.dart";
 import "domain/app_settings.dart";
@@ -13,12 +12,6 @@ import "domain/llm_provider.dart";
 import "domain/models.dart";
 import "domain/prompt_library.dart";
 import "ui/widgets/provider_model_selector.dart";
-
-/// Which backends this platform can run at all. Android and the web have no
-/// opencode binary to spawn, so it is never offered there — a provider rather
-/// than a direct call so a test can pretend to be a phone.
-final availableBackendsProvider =
-    Provider<List<BackendKind>>((ref) => availableBackendKinds());
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
@@ -44,21 +37,15 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..defaultProviderId = choice.providerId
     ..defaultModelId = choice.providerId == null ? null : choice.modelId);
 
-  /// Takes effect on the next server a chat starts; one already running keeps
-  /// the environment it was spawned with.
-  Future<void> setOpencodeEnv(Map<String, String> env) =>
-      _update((s) => s.opencodeEnv = Map.unmodifiable(env));
-
-  /// Which runtime a new chat gets. Null puts it back on the platform's own
-  /// default, which is what the picker shows as `Default`.
-  Future<void> setDefaultBackend(BackendKind? kind) =>
-      _update((s) => s.defaultBackend = kind);
+  /// Read when a command runs, so an edit reaches the next one.
+  Future<void> setEnvironment(Map<String, String> env) =>
+      _update((s) => s.environment = Map.unmodifiable(env));
 
   Future<void> setApproveCommands(bool value) =>
       _update((s) => s.approveCommands = value);
 
-  /// The endpoints mini-swe-agent can call. The model list is rebuilt from
-  /// them, so it is invalidated here rather than left showing the old one.
+  /// The endpoints the agent can call. The model list is rebuilt from them, so
+  /// it is invalidated here rather than left showing the old one.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
     await _update((s) => s.llmProviders = List.unmodifiable(providers));
     ref.invalidate(availableModelsProvider);
@@ -89,8 +76,8 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 });
 
 /// Overrides how long a turn may go without progress before we give up on it.
-/// Null asks the backend running the chat, which is where the answer belongs —
-/// this exists so a test does not have to wait out a real one.
+/// Null asks the backend, which is where the answer belongs — this exists so a
+/// test does not have to wait out a real one.
 final turnStallTimeoutProvider = Provider<Duration?>((ref) => null);
 
 final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
@@ -105,8 +92,7 @@ final attachmentBytesProvider =
     FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>((ref, key) =>
         ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource));
 
-/// The composer's `/` and `@` menus. The same list whichever backend runs the
-/// chat: agent-chat owns its commands and agents, and hands them down to
-/// whatever is executing the turn.
+/// The composer's `/` and `@` menus, read straight off the library: agent-chat
+/// owns its commands and agents, so nothing has to be asked what it knows.
 final completionsProvider = Provider.family<List<CompletionOption>, CompletionKind>(
     (ref, kind) => ref.watch(promptLibraryProvider).options(kind));

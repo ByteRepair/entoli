@@ -127,7 +127,6 @@ void main() {
           ),
         ],
         approveCommands: false,
-        defaultBackend: BackendKind.miniswe,
       ).save(config);
 
       final loaded = AppSettings.load(config);
@@ -135,7 +134,6 @@ void main() {
       expect(loaded.llmProviders.single.id, "ollama-cloud");
       expect(loaded.llmProviders.single.apiKey, "sk-1");
       expect(loaded.approveCommands, isFalse);
-      expect(loaded.defaultBackend, BackendKind.miniswe);
       expect(loaded.defaultModelId, "kimi");
     });
 
@@ -149,7 +147,6 @@ void main() {
       expect(loaded.llmProviders, isEmpty);
       // Asking is the safer default, so that is what an old file inherits.
       expect(loaded.approveCommands, isTrue);
-      expect(loaded.defaultBackend, isNull);
     });
 
     test("a provider entry that is broken does not take the rest with it", () {

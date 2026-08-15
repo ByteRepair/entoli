@@ -36,13 +36,12 @@ void main() {
       expect(doc.description, "with: a colon");
     });
 
-    test("nested keys are left to whoever parses YAML properly", () {
+    test("a nested key is skipped rather than half-read", () {
       final doc = PromptDocument.parse(CompletionKind.agent, "locked",
           "---\ndescription: careful\npermission:\n  edit: deny\n  bash: ask\n---\nbody");
 
       expect(doc.frontmatter, {"description": "careful"});
-      // Still whole, because that is what a backend reading the file gets.
-      expect(doc.source, contains("edit: deny"));
+      expect(doc.body, "body");
     });
 
     test("windows line endings parse the same", () {

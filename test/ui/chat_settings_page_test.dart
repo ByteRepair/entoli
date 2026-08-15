@@ -122,8 +122,8 @@ void main() {
     seedGlobalDefault("ollama-cloud", "qwen-2.5");
     await openPage(tester);
 
-    // provider, model, temperature readout, reasoning effort
-    expect(find.text(defaultOptionLabel), findsNWidgets(4));
+    // provider and model; the approval field names what it inherits instead
+    expect(find.text(defaultOptionLabel), findsNWidgets(2));
     expect(find.text("Using ollama-cloud"), findsOneWidget);
     expect(find.text("Using Qwen 2.5"), findsOneWidget);
   });
@@ -180,18 +180,6 @@ void main() {
     expect(find.text("Qwen 2.5"), findsNothing);
   });
 
-  testWidgets("temperature and reasoning effort round-trip through meta.json", (tester) async {
-    seedMeta(ChatMeta(temperature: 0.4, reasoningEffort: "high"));
-    await openPage(tester);
-
-    expect(find.text("0.40"), findsOneWidget);
-    expect(find.text("high"), findsOneWidget);
-
-    await save(tester);
-    expect(app.savedMeta(_chatId).temperature, 0.4);
-    expect(app.savedMeta(_chatId).reasoningEffort, "high");
-  });
-
   group("running commands", () {
     Future<void> openField(WidgetTester tester) async {
       await openPage(tester);
@@ -237,13 +225,5 @@ void main() {
 
       expect(app.savedMeta(_chatId).approveCommands, isNull);
     });
-  });
-
-  testWidgets("the backend a chat runs on is shown, and is not up for changing", (tester) async {
-    final chat = await app.repo.createChat(title: "one");
-    await app.pump(tester, ChatSettingsPage(chatId: chat.state.id));
-    await scrollTo(tester, find.text("Backend"));
-
-    expect(find.text("OpenCode"), findsOneWidget);
   });
 }

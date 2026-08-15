@@ -95,9 +95,9 @@ class ChatRepository {
 
   Future<void> abort(String chatId) => _backend.abort(chatId);
 
-  /// How long this chat's backend may say nothing before the turn is written
-  /// off. See `AgentBackend.stallTimeout`.
-  Duration stallTimeout(String chatId) => _backend.stallTimeout(chatId);
+  /// How long a turn may say nothing before it is written off. See
+  /// `AgentBackend.stallTimeout`.
+  Duration get stallTimeout => _backend.stallTimeout;
 
   Future<void> deleteChat(String id) async {
     await _backend.disposeChat(id);

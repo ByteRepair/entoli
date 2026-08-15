@@ -1,17 +1,28 @@
-import "../../core/config.dart";
+import "../../data/miniswe/llm/llm_registry.dart";
+import "../../data/miniswe/miniswe_backend.dart";
 import "../../domain/agent_backend.dart";
-import "../../domain/chat_store.dart";
+import "../../domain/app_settings.dart";
 import "../../domain/prompt_library.dart";
-import "io/backend.dart"
-    if (dart.library.js_interop) "web/backend.dart"
-    as platform;
+import "../config.dart";
+import "shell.dart";
 
-/// Selects an `AgentBackend` for the current platform. Desktop can run either
-/// opencode or mini-swe-agent and routes per chat; Android and the web only
-/// have mini-swe-agent.
+/// The agent, wired to this platform's shell and to whatever the settings page
+/// last wrote. [library] is agent-chat's commands and agents, which the agent
+/// expands itself.
 ///
-/// [library] is the app's commands and agents: opencode reads them off disk,
-/// mini-swe-agent expands them itself, and this is the only place that knows
-/// which is running. [store] says which backend an existing chat belongs to.
-AgentBackend createBackend(AppConfig config, PromptLibrary library, ChatStore store) =>
-    platform.createBackend(config, library, store);
+/// The settings are read when used rather than captured: they are edited while
+/// the app runs, and the next turn has to see the edit.
+AgentBackend createBackend(AppConfig config, PromptLibrary library) {
+  AppSettings settings() => AppSettings.load(config);
+  return MinisweBackend(
+    config: config,
+    library: library,
+    shell: platformShell(environment: () => settings().environment),
+    registry: LlmRegistry(
+      providers: () => settings().llmProviders,
+      // Settings wins, but a key already exported is found without having to
+      // be pasted in.
+      lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
+    ),
+  );
+}

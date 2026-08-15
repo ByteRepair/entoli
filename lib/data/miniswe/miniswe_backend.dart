@@ -26,8 +26,8 @@ class MinisweBackend implements AgentBackend {
   final LlmRegistry registry;
   final Shell shell;
 
-  /// agent-chat's own commands and agents. mini-swe-agent has no config
-  /// directory to lay them down in, so they are expanded here instead.
+  /// agent-chat's own commands and agents, expanded into the task and the
+  /// system prompt before the agent sees them.
   final PromptLibrary? library;
 
   /// Limits and timeouts for every turn.
@@ -42,11 +42,8 @@ class MinisweBackend implements AgentBackend {
   final Map<String, Completer<ApprovalResponse>> _pending = {};
 
   @override
-  BackendKind get kind => BackendKind.miniswe;
-
-  @override
   Future<Chat> createChat({String? title, String? model, String? provider}) =>
-      newChat(config, kind: kind, title: title, model: model, provider: provider);
+      newChat(config, title: title, model: model, provider: provider);
 
   @override
   Stream<AgentEvent> sendPrompt(
@@ -206,16 +203,12 @@ class MinisweBackend implements AgentBackend {
     if (completer != null && !completer.isCompleted) completer.complete(response);
   }
 
-  @override
-  bool honoursApprovals(String chatId) => true;
-
   /// Every failure here is reported as it happens, so silence only ever means
   /// work: a command still running, or a model still thinking. The budget is
   /// therefore the longest a command may take plus room for the call that
-  /// follows it — never the 45s that opencode's hidden retries need.
+  /// follows it.
   @override
-  Duration stallTimeout(String chatId) =>
-      options.commandTimeout + const Duration(seconds: 60);
+  Duration get stallTimeout => options.commandTimeout + const Duration(seconds: 60);
 
   @override
   Future<void> abort(String chatId) async {

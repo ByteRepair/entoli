@@ -26,8 +26,8 @@ class _DismissIntent extends Intent {
 typedef CompletionToken = ({CompletionKind kind, int start, String query});
 
 /// The word the caret sits in, when it is a trigger token. `/` only counts at
-/// the very start of a message — that is the only place opencode reads one —
-/// while `@` counts wherever a word begins.
+/// the very start of a message, matching `commandPattern`; `@` counts wherever
+/// a word begins.
 CompletionToken? activeCompletionToken(TextEditingValue value) {
   final selection = value.selection;
   if (!selection.isValid || !selection.isCollapsed) return null;

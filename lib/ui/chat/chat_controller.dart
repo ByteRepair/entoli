@@ -141,11 +141,10 @@ class ChatController extends Notifier<ChatViewState> {
   }
 
   /// (Re)start the clock on a turn that is producing nothing. How long that is
-  /// allowed to go on is the backend's to say: silence means something
-  /// different depending on what is running the chat.
+  /// allowed to go on is the backend's to say.
   void _watchForStall() {
     final timeout = ref.read(turnStallTimeoutProvider) ??
-        ref.read(chatRepositoryProvider).stallTimeout(chatId);
+        ref.read(chatRepositoryProvider).stallTimeout;
     _stall?.cancel();
     _stall = Timer(timeout, () => _giveUp(timeout));
   }

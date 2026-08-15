@@ -25,7 +25,6 @@ void main() {
         title: "Test chat $id",
         createdAt: DateTime.utc(2026, 1, 1),
         updatedAt: DateTime.utc(2026, 1, 2),
-        backend: BackendKind.opencode,
         model: model,
       );
 
@@ -49,7 +48,6 @@ void main() {
     final stateJson = jsonDecode(config.stateFile("c1").readAsStringSync()) as Map<String, dynamic>;
     expect(stateJson["id"], "c1");
     expect(stateJson["title"], "Test chat c1");
-    expect(stateJson["backend"], "opencode");
 
     final convJson = jsonDecode(config.convFile("c1").readAsStringSync()) as Map<String, dynamic>;
     final msgs = convJson["messages"] as List;
@@ -93,14 +91,12 @@ void main() {
       title: "Older",
       createdAt: DateTime.utc(2026, 1, 1),
       updatedAt: DateTime.utc(2026, 1, 1),
-      backend: BackendKind.opencode,
     );
     final newer = ChatState(
       id: "newer",
       title: "Newer",
       createdAt: DateTime.utc(2026, 1, 1),
       updatedAt: DateTime.utc(2026, 6, 1),
-      backend: BackendKind.opencode,
     );
     await store.save(Chat(state: older, messages: const []));
     await store.save(Chat(state: newer, messages: const []));
