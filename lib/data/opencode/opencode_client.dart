@@ -7,6 +7,7 @@ import "dart:convert";
 
 import "package:http/http.dart" as http;
 
+import "../../domain/models.dart";
 import "opencode_models.dart";
 
 class OpencodeClient {
@@ -72,9 +73,11 @@ class OpencodeClient {
     required String text,
     String? model,
     String? provider,
+    List<String> agents = const [],
   }) async {
     final body = <String, dynamic>{
       "parts": [
+        for (final agent in agents) {"type": "agent", "name": agent},
         {"type": "text", "text": text},
       ],
     };
@@ -85,6 +88,27 @@ class OpencodeClient {
     }
     _expectOk(await _client.post(
       baseUrl.resolve("/session/$sessionId/prompt_async"),
+      headers: _headers,
+      body: jsonEncode(body),
+    ));
+  }
+
+  /// Run one of the server's commands. The response only arrives once the turn
+  /// it starts is over, so callers must already be streaming events by then —
+  /// unlike [promptAsync], which returns as soon as the prompt is accepted.
+  Future<void> runCommand(
+    String sessionId, {
+    required String name,
+    required String arguments,
+    String? model,
+    String? provider,
+  }) async {
+    final body = <String, dynamic>{"command": name, "arguments": arguments};
+    // This endpoint takes one "provider/model" string, not the pair
+    // `prompt_async` insists on.
+    if (model != null && provider != null) body["model"] = "$provider/$model";
+    _expectOk(await _client.post(
+      baseUrl.resolve("/session/$sessionId/command"),
       headers: _headers,
       body: jsonEncode(body),
     ));
@@ -124,6 +148,17 @@ class OpencodeClient {
       if (all is List) return all.cast<Map<String, dynamic>>();
     }
     return [];
+  }
+
+  // --- commands / agents ---
+
+  Future<List<Map<String, dynamic>>> completions(CompletionKind kind) async {
+    final path = switch (kind) {
+      CompletionKind.command => "/command",
+      CompletionKind.agent => "/agent",
+    };
+    final decoded = _decode(await _client.get(baseUrl.resolve(path), headers: _headers));
+    return decoded is List ? decoded.cast<Map<String, dynamic>>() : [];
   }
 
   // --- SSE event stream ---

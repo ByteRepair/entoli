@@ -5,19 +5,17 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/opencode/opencode_backend.dart";
 import "package:agent_chat/data/opencode/real_opencode_transport.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/models.dart";
+
+import "../harness.dart";
 
 void main() {
   test("a real turn, through the production path", () async {
-    final tmp = Directory.systemTemp.createTempSync("live_");
-    final config = AppConfig.forDirectory(tmp);
-    Directory(config.chatsDir.path).createSync(recursive: true);
-
-    final transport = RealOpencodeTransport();
-    final backend = OpencodeBackend(config: config, transport: transport);
+    final backend =
+        OpencodeBackend(config: tempConfig("live_"), transport: RealOpencodeTransport());
     final chat = await backend.createChat();
 
     final clock = Stopwatch()..start();
@@ -43,6 +41,19 @@ void main() {
     log("stream closed");
 
     await backend.disposeChat(chat.state.id);
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   }, timeout: const Timeout(Duration(minutes: 4)));
+
+  test("what the composer's / and @ menus really get offered", () async {
+    final backend =
+        OpencodeBackend(config: tempConfig("live_"), transport: RealOpencodeTransport());
+    final chat = await backend.createChat();
+
+    for (final kind in CompletionKind.values) {
+      for (final option in await backend.completions(chat.state.id, kind)) {
+        stdout.writeln("${kind.trigger}${option.name} — ${option.description}");
+      }
+    }
+
+    await backend.disposeChat(chat.state.id);
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

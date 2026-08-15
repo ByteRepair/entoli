@@ -55,3 +55,9 @@ final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
   final backend = ref.watch(agentBackendProvider);
   return backend.models();
 });
+
+/// The composer's `/` and `@` menus. Watched only while a menu is open, so a
+/// chat that never uses one never pays for the server these need.
+final completionsProvider =
+    FutureProvider.family<List<CompletionOption>, ({String chatId, CompletionKind kind})>(
+        (ref, key) => ref.watch(agentBackendProvider).completions(key.chatId, key.kind));
