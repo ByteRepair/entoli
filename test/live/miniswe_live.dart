@@ -125,8 +125,7 @@ void main() {
         // one never ends.
         case QuestionRequestEvent(:final request):
           log("asked ${request.questions.length} question(s), answering nothing");
-          await backend.respondQuestions(chat.state.id, request.id,
-              List.filled(request.questions.length, null));
+          await backend.respondQuestions(chat.state.id, request.id, request.unanswered);
         case DoneEvent():
           log("done");
       }

@@ -236,6 +236,12 @@ void main() {
 
   testWidgets("an answered question reads as the question, not as a tool run",
       (tester) async {
+    const asked = [
+      AskQuestion(
+        question: "Which database?",
+        options: [AskOption(label: "Postgres")],
+      ),
+    ];
     await pump(
       tester,
       _message(MessageRole.assistant, [
@@ -259,11 +265,7 @@ void main() {
           result: ToolResult(
             callId: "a1",
             returnCode: 0,
-            output: jsonEncode({
-              "answers": [
-                {"question": "Which database?", "answer": "Postgres"},
-              ],
-            }),
+            output: askAnswers(asked, ["Postgres"]),
           ),
         ),
       ]),
@@ -276,6 +278,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Postgres"), findsOneWidget);
+  });
+
+  // Named ask_user, but the model got the arguments wrong: the label has to be
+  // the failed run it is, not an empty question.
+  testWidgets("a question with nothing askable in it falls back to a tool label",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ToolCallPart(toolCall: ToolCall(id: "a1", name: askToolName, argumentsJson: "{oops")),
+        ToolResultPart(
+          result: ToolResult(
+            callId: "a1",
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "Every question needs at least one option",
+          ),
+        ),
+      ]),
+    );
+
+    expect(find.text("Used tool: $askToolName"), findsOneWidget);
+
+    await tester.tap(find.text("Used tool: $askToolName"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Every question needs at least one option"), findsOneWidget);
   });
 
   testWidgets("a tool still running says so", (tester) async {

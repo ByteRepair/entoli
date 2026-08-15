@@ -7,19 +7,18 @@ const askToolName = "ask_user";
 
 /// One answer the user can pick.
 class AskOption {
-  const AskOption({required this.label, this.value, this.detail});
+  const AskOption({required this.label, String? value, this.detail})
+      : answer = value ?? label;
 
   /// What the user reads on the button.
   final String label;
 
-  /// What the model is told when that is not simply the label — a model that
-  /// gave its options a machine-readable form gets that form back.
-  final String? value;
+  /// What the model is told, which is the label unless it gave its options a
+  /// machine-readable form of their own.
+  final String answer;
 
   /// A line under the label saying why this one.
   final String? detail;
-
-  String get answer => value ?? label;
 }
 
 class AskQuestion {
@@ -42,6 +41,10 @@ class AskRequest {
 
   final String id;
   final List<AskQuestion> questions;
+
+  /// A fresh answer for every question, all of them empty — what the panel
+  /// starts from, and what a turn that ended before anyone answered sends.
+  List<String?> get unanswered => List.filled(questions.length, null);
 }
 
 /// The questions in an `ask_user` call's arguments; empty when there is nothing
@@ -61,15 +64,31 @@ List<AskQuestion> askQuestionsFrom(String? argumentsJson) {
   return one == null ? const [] : [one];
 }
 
-/// What the user picked, read back out of what the tool returned. One entry per
-/// question asked, null where they answered nothing.
-List<String?> askAnswersFrom(String? output, int count) {
+/// The answers as the model reads them, and the one place the shape of them is
+/// written down — [askAnswersFrom] reads this back. Every question comes back
+/// whether or not it was answered: a model that asked three and got two has to
+/// know which one it is still missing.
+String askAnswers(List<AskQuestion> questions, List<String?> answers) {
+  final pairs = [
+    for (var i = 0; i < questions.length; i++)
+      {"question": questions[i].question, "answer": answers.elementAtOrNull(i)},
+  ];
+  return const JsonEncoder.withIndent("  ").convert({
+    "answers": pairs,
+    if (pairs.every((pair) => pair["answer"] == null))
+      "note": "The user answered nothing. Carry on with what you already have, "
+          "or say what you still need and finish the turn — do not ask again.",
+  });
+}
+
+/// What the user picked, read back out of what the tool returned, in the order
+/// the questions were asked. Null where they answered nothing.
+List<String?> askAnswersFrom(String? output) {
   final answers = _decode(output)?["answers"];
+  if (answers is! List) return const [];
   return [
-    for (var i = 0; i < count; i++)
-      answers is List && i < answers.length && answers[i] is Map
-          ? _string(answers[i] as Map, const ["answer"])
-          : null,
+    for (final answer in answers)
+      answer is Map ? _string(answer, const ["answer"]) : null,
   ];
 }
 
@@ -98,10 +117,9 @@ AskOption? _option(Object? raw) {
   if (raw is! Map) return null;
   final label = _string(raw, const ["label", "title", "name", "option", "answer", "value"]);
   if (label == null) return null;
-  final value = _string(raw, const ["value", "query", "answer"]);
   return AskOption(
     label: label,
-    value: value == label ? null : value,
+    value: _string(raw, const ["value", "query", "answer"]),
     detail: _string(raw, const ["detail", "rationale", "description", "reason"]),
   );
 }

@@ -176,17 +176,25 @@ exists and `unknownTool` is told what was on offer rather than assuming `bash`.
 The call and its answers are an ordinary call/result pair, so `conv.json` keeps
 them with no new part type in it, a rewind carries them like anything else, and
 the chat draws an answered question back out of what was persisted. `AskLabel`
-is that: the question on a label, the answers behind the drawer. The tool
-message is the answers as they stand rather than an `observation`, which would
-claim a command ran.
+is that: the question on a label, the answers behind the drawer, parsed once and
+kept — every visible message is rebuilt on every streamed delta. What it draws is
+decided by what parsed, not by the name that got it there: a call named
+`ask_user` with nothing askable in it falls back to `ToolLabel`, which shows the
+rejection the model was sent.
 
-`askQuestionsFrom` is deliberately liberal. The arguments are the model's
-writing, not ours: it may batch under `questions` or write one question out at
-the top level, and it reaches for whichever word its prompt left in its head —
-`angles`, `choices`, `query` for a value. A question with no options is the one
-thing rejected, because the panel answers by clicking and there would be nothing
-to click. Every question comes back to the model whether or not it was answered:
-one that asked three and got two needs to know which one it is still missing.
+Answering is `_answer`, one tool message per call — the invariant that keeps the
+next turn from being rejected. `_answerRun` is that plus the wording a command's
+outcome gets, which is every call but an `ask_user`.
+
+`lib/domain/ask.dart` holds both directions of the format, `askAnswers` beside
+`askAnswersFrom`, so the round trip is one file. `askQuestionsFrom` is
+deliberately liberal: the arguments are the model's writing, not ours, so it may
+batch under `questions` or write one question out at the top level, and it
+reaches for whichever word its prompt left in its head — `angles`, `choices`,
+`query` for a value. A question with no options is the one thing rejected,
+because the panel answers by clicking and there would be nothing to click. Every
+question comes back to the model whether or not it was answered: one that asked
+three and got two needs to know which one it is still missing.
 
 `QuestionPanel` takes the composer's place while a request is up — including its
 stop button, which is why `Skip` is on the panel: it answers with nothing so the

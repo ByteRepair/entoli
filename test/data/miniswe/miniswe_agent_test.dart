@@ -39,8 +39,7 @@ void main() {
       requireApproval: requireApproval,
       approve: (_) async => allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
       // Nothing picked, unless the test says what was.
-      answer: (request) async =>
-          answers ?? List.filled(request.questions.length, null),
+      answer: (request) async => answers ?? request.unanswered,
     );
   }
 
@@ -342,7 +341,7 @@ void main() {
       expect(call.name, askToolName);
       final result = events.whereType<ToolResultEvent>().first.result;
       expect(result.callId, call.id);
-      expect(askAnswersFrom(result.output, 1), ["SQLite"]);
+      expect(askAnswersFrom(result.output), ["SQLite"]);
     });
 
     test("nothing picked is reported rather than left out", () async {

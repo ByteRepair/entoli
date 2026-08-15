@@ -34,17 +34,15 @@ $_asking
 ${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}""";
 
 /// The one thing both prompts say, because asking is the one thing the agent
-/// can do with or without a machine under it.
+/// can do with or without a machine under it. Deliberately only what the tool's
+/// own description does not already carry — it is resent on every model call of
+/// every turn, and the schema says when to reach for it and how.
 const _asking = """
 ## Asking the user
 
-When the answer is theirs to give — which of several directions to take, a
-preference, a detail only they know — call the `$askToolName` tool with the
-question and the answers they can pick from. Their reply comes back to you as
-the tool's result.
-
-Ask only where the answer changes what you do next, and never for something you
-could find out yourself.""";
+Call the `$askToolName` tool when the answer is the user's to give and guessing
+it would waste the turn. Ask only where the answer changes what you do next, and
+never for something you could find out yourself.""";
 
 String _withShell({
   required String workspace,

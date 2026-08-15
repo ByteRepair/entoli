@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
@@ -51,17 +52,13 @@ void main() {
     return id;
   }
 
-  /// Let the held turn finish. Answering restarts the stall clock, and a test
-  /// that walks off leaving one ticking fails on the pending timer.
-  Future<void> endTurn(WidgetTester tester, String id) async {
+  /// Let the held turn finish — the composer goes back to offering `send` when
+  /// it has. Answering restarts the stall clock, and a test that walks off
+  /// leaving one ticking fails on the pending timer.
+  Future<void> endTurn(WidgetTester tester) async {
     app.backend.hold?.complete();
     app.backend.hold = null;
-    for (var i = 0;
-        i < 50 && app.container.read(chatControllerProvider(id)).isRunning;
-        i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
-      await tester.pump();
-    }
+    await pumpUntil(tester, find.byIcon(Icons.send));
   }
 
   testWidgets("the composer gives way to the question", (tester) async {
@@ -104,7 +101,7 @@ void main() {
     expect(app.container.read(chatControllerProvider(id)).questions, isEmpty);
     expect(find.byType(QuestionPanel), findsNothing);
     expect(find.byType(Composer), findsOneWidget);
-    await endTurn(tester, id);
+    await endTurn(tester);
   });
 
   testWidgets("going back re-asks a question that was already answered",
@@ -122,22 +119,20 @@ void main() {
 
   testWidgets("skipping answers nothing rather than leaving the turn stuck",
       (tester) async {
-    final id = await asking(tester, request([database, migrate]));
+    await asking(tester, request([database, migrate]));
 
     await tester.tap(find.text("Skip"));
     await tester.pump();
 
     expect(app.backend.answered.single.answers, [null, null]);
     expect(find.byType(Composer), findsOneWidget);
-    await endTurn(tester, id);
+    await endTurn(tester);
   });
 
   testWidgets("a turn that ends with one on screen takes it away", (tester) async {
     final id = await asking(tester, request([database]));
 
-    app.backend.hold!.complete();
-    app.backend.hold = null;
-    await pumpUntil(tester, find.byType(Composer));
+    await endTurn(tester);
 
     expect(app.container.read(chatControllerProvider(id)).questions, isEmpty);
     expect(find.byType(QuestionPanel), findsNothing);
