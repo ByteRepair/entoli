@@ -5,7 +5,6 @@ import "dart:convert";
 import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
 import "package:agent_chat/data/miniswe/permission_classifier.dart";
-import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -107,16 +106,15 @@ void main() {
       classifier = FakeClassifier();
     });
 
-    final finish = bashCall("echo $submitMarker", id: "done");
-    ShellResult submitted(String command) =>
-        command.contains(submitMarker) ? ok("$submitMarker\n") : ok("");
+    final finish = saidOnly("done");
+    ShellResult okEmpty(String command) => ok("");
 
     MinisweAgent agentWith(
       FakeLlmClient client, {
       List<ApprovalResponse> approvals = const [],
       PermissionDecision Function(String, String)? decide,
     }) {
-      shell = FakeShell(submitted, canRunCommands: true);
+      shell = FakeShell(okEmpty, canRunCommands: true);
       final allowed = [...approvals];
       if (decide != null) classifier.decide = decide;
       return MinisweAgent(
@@ -143,8 +141,9 @@ void main() {
           .run("list").toList();
 
       expect(shell.ran, contains("ls"));
-      // Both the command and the finish go through the classifier.
-      expect(classifier.classified.length, 2);
+      // Only the bash command goes through the classifier — finish is a text
+      // reply with no tool call, so it is not classified.
+      expect(classifier.classified.length, 1);
       expect(classifier.classified.first.tool, "bash");
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     });
@@ -170,10 +169,10 @@ void main() {
       ]);
       final events = await agentWith(client,
               decide: (_, _) => PermissionDecision.ask,
-              approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
+              approvals: [ApprovalResponse.allow])
           .run("push").toList();
 
-      expect(events.whereType<ApprovalRequestEvent>().length, 2);
+      expect(events.whereType<ApprovalRequestEvent>().length, 1);
       expect(shell.ran, contains("git push"));
     });
 
@@ -197,12 +196,13 @@ void main() {
       ]);
       final events = await agentWith(client,
               decide: (_, _) => PermissionDecision.ask,
-              approvals: List.filled(5, ApprovalResponse.allow))
+              approvals: List.filled(4, ApprovalResponse.allow))
           .run("test").toList();
 
       expect(events.whereType<InfoEvent>().single.message, contains("Auto mode paused"));
-      // All four commands plus the finish got approval banners.
-      expect(events.whereType<ApprovalRequestEvent>().length, 5);
+      // All four commands got approval banners. The finish is a text reply
+      // with no tool call, so it is not classified.
+      expect(events.whereType<ApprovalRequestEvent>().length, 4);
     });
 
     test("auto paused info does not appear when all commands are allowed",
@@ -236,7 +236,7 @@ void main() {
         [bashCall("ls")],
         [finish],
       ]);
-      shell = FakeShell(submitted, canRunCommands: true);
+      shell = FakeShell(okEmpty, canRunCommands: true);
       final agent = MinisweAgent(
         session: session,
         client: client,
@@ -251,8 +251,8 @@ void main() {
       );
       final events = await agent.run("list").toList();
 
-      // Both commands ask, since there is no classifier to allow them.
-      expect(events.whereType<ApprovalRequestEvent>().length, 2);
+      // Only the bash command asks — finish is a text reply with no tool call.
+      expect(events.whereType<ApprovalRequestEvent>().length, 1);
     });
 
     test("webfetch goes through the classifier in auto mode", () async {
@@ -262,7 +262,7 @@ void main() {
       ]);
       final web = FakeWebSearch(fetchResult: (_) =>
           const ShellResult(returnCode: 0, output: "page"));
-      shell = FakeShell(submitted, canRunCommands: true);
+      shell = FakeShell(okEmpty, canRunCommands: true);
       classifier.decide = (_, _) => PermissionDecision.deny;
       final agent = MinisweAgent(
         session: session,

@@ -5,7 +5,6 @@ import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/data/miniswe/llm/llm_registry.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
 import "package:agent_chat/data/miniswe/miniswe_backend.dart";
-import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
@@ -23,9 +22,8 @@ void main() {
   late FakeShell shell;
   late List<LlmProviderConfig> providers;
 
-  final finish = bashCall("echo $submitMarker", id: "done");
-  ShellResult submitted(String command) =>
-      command.contains(submitMarker) ? ok("$submitMarker\n") : ok("");
+  final finish = saidOnly("done");
+  ShellResult okEmpty(String command) => ok("");
 
   setUp(() {
     config = tempConfig("agent_chat_miniswe_");
@@ -46,7 +44,7 @@ void main() {
     MinisweOptions options = const MinisweOptions(),
   }) {
     client = FakeLlmClient(turns);
-    shell = FakeShell(respond ?? submitted);
+    shell = FakeShell(respond ?? okEmpty);
     return MinisweBackend(
       config: config,
       library: library,
@@ -239,11 +237,6 @@ void main() {
       expect(pending.single.argumentsJson, contains("rm -rf build"));
 
       await backend.respondApproval(chatId, pending.single.id, ApprovalResponse.allow);
-      // The command that ends the turn is a command too, and asks in its turn.
-      await pumpEvents();
-      for (final next in await backend.pendingApprovals(chatId)) {
-        await backend.respondApproval(chatId, next.id, ApprovalResponse.allow);
-      }
       await turn;
 
       expect(shell.ran, contains("rm -rf build"));
@@ -260,10 +253,6 @@ void main() {
       await pumpEvents();
       final first = (await backend.pendingApprovals(chatId)).single;
       await backend.respondApproval(chatId, first.id, ApprovalResponse.deny);
-      await pumpEvents();
-      for (final pending in await backend.pendingApprovals(chatId)) {
-        await backend.respondApproval(chatId, pending.id, ApprovalResponse.allow);
-      }
       final events = await turn;
 
       expect(shell.ran, isNot(contains("rm -rf /")));
@@ -284,7 +273,7 @@ void main() {
         }
       }).asFuture<void>();
 
-      expect(shell.ran, ["ls", "echo $submitMarker"]);
+      expect(shell.ran, ["ls"]);
     });
 
     test("aborting answers what was still on screen, so nothing is left waiting", () async {

@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:convert";
 
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
@@ -35,7 +34,6 @@ class MinisweOptions {
   const MinisweOptions({
     this.stepLimit = 40,
     this.commandTimeout = const Duration(seconds: 60),
-    this.maxConsecutiveFormatErrors = 3,
     this.maxAttempts = 4,
     this.retryBackoff = const Duration(seconds: 1),
     this.maxConcurrentSubAgents = 8,
@@ -48,7 +46,6 @@ class MinisweOptions {
   /// steps.
   final int stepLimit;
   final Duration commandTimeout;
-  final int maxConsecutiveFormatErrors;
 
   /// How many times a failed request is tried again before the turn gives up,
   /// and the first wait between two — it doubles after that, so the defaults
@@ -215,12 +212,11 @@ class MinisweAgent {
   int _totalAsks = 0;
   bool _autoPaused = false;
 
-  /// One step's scratch: what the model call produced, and whether a command
-  /// ended the turn. Fields rather than out-parameters because an `async*`
-  /// method has no return value of its own, and the turn is single-threaded.
+  /// One step's scratch: what the model call produced. Fields rather than
+  /// out-parameters because an `async*` method has no return value of its own,
+  /// and the turn is single-threaded.
   LlmCompletion? _completion;
   Object? _queryError;
-  bool _submitted = false;
   ShellResult? _commandResult;
 
   /// Stop the turn. Kills whatever is running: an aborted turn that leaves a
@@ -238,7 +234,6 @@ class MinisweAgent {
   }) async* {
     _openTurn(task, attachments, agentPrompt);
 
-    var formatErrors = 0;
     for (var step = 0; step < options.stepLimit; step++) {
       if (_cancelled) break;
 
@@ -255,27 +250,13 @@ class MinisweAgent {
 
       session.messages.add(completion.message);
 
-      if (completion.message.toolCalls.isEmpty) {
-        // With no shell there is nothing to call, so a reply with no command
-        // in it is the whole answer rather than a mistake.
-        if (!shell.canRunCommands) break;
-        formatErrors++;
-        if (formatErrors >= options.maxConsecutiveFormatErrors) {
-          yield ErrorEvent(
-              "The model stopped calling the bash tool after $formatErrors tries.");
-          break;
-        }
-        session.messages.add(LlmMessage(
-          role: LlmRole.user,
-          text: formatError(finishReason: completion.finishReason),
-        ));
-        continue;
-      }
-      formatErrors = 0;
+      // A reply with no tool calls is the finished answer — the text was
+      // already streamed as TextDelta by _query. This is the native API
+      // contract models are trained on, and works with or without a shell.
+      if (completion.message.toolCalls.isEmpty) break;
 
-      _submitted = false;
       yield* _executeAll(completion.message.toolCalls);
-      if (_submitted || _cancelled) break;
+      if (_cancelled) break;
 
       if (step == options.stepLimit - 1) {
         yield ErrorEvent("Stopped after ${options.stepLimit} steps without finishing. "
@@ -335,7 +316,7 @@ class MinisweAgent {
     // it — the alternative, interleaving, would race a sub-agent against a
     // command it might depend on.
     for (final call in calls) {
-      if (_submitted || _cancelled) {
+      if (_cancelled) {
         // Task calls are answered at the end; a task call that was never
         // collected (no sub-agent runner) is answered here instead.
         if (call.name != taskToolName || taskCalls.isEmpty) {
@@ -393,22 +374,14 @@ class MinisweAgent {
         exceptionInfo: result.exceptionInfo,
       ));
 
-      final submission = _submissionOf(result);
-      if (submission != null) {
-        _submitted = true;
-        if (submission.isNotEmpty) yield TextDelta(submission);
-      }
-
       _answerRun(call, result);
     }
 
-    if (taskCalls.isEmpty || _submitted || _cancelled) {
+    if (taskCalls.isEmpty || _cancelled) {
       // Answer the task calls that never ran, so the next turn is not rejected
       // for missing results.
       for (final call in taskCalls) {
-        yield* _reject(call, _submitted
-            ? "This sub-agent was not started: the turn finished before it ran."
-            : "This sub-agent was not started.");
+        yield* _reject(call, "This sub-agent was not started.");
       }
       return;
     }
@@ -425,7 +398,7 @@ class MinisweAgent {
     final controller = StreamController<AgentEvent>();
 
     Future<void> runOne(int index) async {
-      if (_submitted || _cancelled) {
+      if (_cancelled) {
         results[index] = const ShellResult.failed("This sub-agent was not started.");
         return;
       }
@@ -734,6 +707,7 @@ class MinisweAgent {
     var attempt = 1;
     while (true) {
       var produced = false;
+      var textStreamed = false;
       DateTime? thinkingSince;
 
       try {
@@ -753,6 +727,7 @@ class MinisweAgent {
 
             case LlmTextChunk(:final text):
               produced = true;
+              textStreamed = true;
               // Thinking ended when the reply started, not when the call did.
               if (thinkingSince != null) {
                 yield ReasoningEnd(duration: DateTime.now().difference(thinkingSince));
@@ -767,6 +742,13 @@ class MinisweAgent {
                 // A provider that reports thinking only once it is over still
                 // fills the block.
                 yield ReasoningEnd(text: chunk.message.reasoning);
+              }
+              // Text that was in the completion but never streamed as a delta —
+              // the fake client does this, and a provider may too. Without it,
+              // a no-tool-call reply that arrived unstreamed would end the turn
+              // with the bubble showing nothing.
+              if (!textStreamed && chunk.message.text.isNotEmpty) {
+                yield TextDelta(chunk.message.text);
               }
               rateLimitGate?.onSuccess();
               _completion = chunk;
@@ -821,16 +803,6 @@ class MinisweAgent {
         return;
       }
     }
-  }
-
-  /// The command asked to finish: upstream's contract is the marker alone on
-  /// the first line of a command that succeeded, and whatever follows is the
-  /// reply.
-  String? _submissionOf(ShellResult result) {
-    if (result.returnCode != 0) return null;
-    final lines = const LineSplitter().convert(result.output.trimLeft());
-    if (lines.isEmpty || lines.first.trim() != submitMarker) return null;
-    return lines.skip(1).join("\n").trim();
   }
 
   String? _commandOf(LlmToolCall call) => stringArg(call.argumentsJson, "command");

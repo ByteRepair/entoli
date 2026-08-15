@@ -4,7 +4,6 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
-import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -20,8 +19,7 @@ void main() {
 
   setUp(() {
     session = MinisweSession();
-    shell = FakeShell((c) => c.contains(submitMarker) ? ok("$submitMarker\n") : ok(""),
-        canRunCommands: true);
+    shell = FakeShell((_) => ok(""), canRunCommands: true);
     web = FakeWebSearch();
   });
 
@@ -45,7 +43,7 @@ void main() {
       );
 
   group("MinisweAgent with websearch/webfetch", () {
-    final finish = bashCall("echo $submitMarker", id: "done");
+    final finish = saidOnly("done");
 
     test("websearch and webfetch are offered alongside bash", () async {
       final client = FakeLlmClient([[finish]]);
@@ -164,7 +162,7 @@ void main() {
       await agentWith(client).run("search").toList();
 
       final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
-      expect(toolMessages.map((m) => m.toolCallId), containsAll(["s1", "done"]));
+      expect(toolMessages.map((m) => m.toolCallId), contains("s1"));
     });
 
     test("a search error is reported, not thrown", () async {
@@ -208,7 +206,7 @@ void main() {
 
       // The session has both tool messages in order.
       final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
-      expect(toolMessages.map((m) => m.toolCallId).toList(), ["s1", "f1", "done"]);
+      expect(toolMessages.map((m) => m.toolCallId).toList(), ["s1", "f1"]);
     });
 
     test("a fetch error is reported, not thrown", () async {
