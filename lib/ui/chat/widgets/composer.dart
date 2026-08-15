@@ -193,118 +193,121 @@ class _ComposerState extends ConsumerState<Composer> {
     final matches = _matching(options, token?.query ?? "");
 
     return Container(
-      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (token != null) _menu(token.kind, matches),
-          if (_attachments.isNotEmpty)
-            AttachmentStrip(
-              children: [
-                for (final (i, attachment) in _attachments.indexed)
-                  AttachmentChip.pending(
-                    attachment,
-                    onRemove: () => setState(() => _attachments.removeAt(i)),
-                  ),
-              ],
-            ),
-          Row(
-            children: [
-              // Running the entry's action on selection rather than on tap
-              // keeps it until after the menu has closed, so `_openMenu` is not
-              // asking for focus the dismissing route is about to take.
-              PopupMenuButton<VoidCallback>(
-                icon: const Icon(Icons.add),
-                tooltip: "Attach or insert",
-                onSelected: (action) => action(),
-                itemBuilder: (context) => [
-                  _attachItem(Icons.image_outlined, "Image", AttachmentKind.image),
-                  _attachItem(Icons.attach_file, "File", AttachmentKind.file),
-                  const PopupMenuDivider(),
-                  for (final kind in CompletionKind.values)
-                    PopupMenuItem(
-                      value: () => _openMenu(kind),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(kind.label),
-                          const SizedBox(width: 24),
-                          Text(
-                            kind.trigger,
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (token != null) _menu(token.kind, matches),
+            if (_attachments.isNotEmpty)
+              AttachmentStrip(
+                children: [
+                  for (final (i, attachment) in _attachments.indexed)
+                    AttachmentChip.pending(
+                      attachment,
+                      onRemove: () => setState(() => _attachments.removeAt(i)),
                     ),
                 ],
               ),
-              Expanded(
-                child: Shortcuts(
-                  shortcuts: {
-                    const SingleActivator(LogicalKeyboardKey.enter, control: true):
-                        const _SendIntent(),
-                    const SingleActivator(LogicalKeyboardKey.enter, meta: true):
-                        const _SendIntent(),
-                    // Only while the menu has something to pick: otherwise
-                    // these keys have to keep doing what they do in a text box.
-                    if (matches.isNotEmpty) ...{
-                      const SingleActivator(LogicalKeyboardKey.arrowDown): const _MoveIntent(1),
-                      const SingleActivator(LogicalKeyboardKey.arrowUp): const _MoveIntent(-1),
-                      const SingleActivator(LogicalKeyboardKey.enter): const _AcceptIntent(),
-                      const SingleActivator(LogicalKeyboardKey.tab): const _AcceptIntent(),
-                      const SingleActivator(LogicalKeyboardKey.escape): const _DismissIntent(),
+            Row(
+              children: [
+                // Running the entry's action on selection rather than on tap
+                // keeps it until after the menu has closed, so `_openMenu` is not
+                // asking for focus the dismissing route is about to take.
+                PopupMenuButton<VoidCallback>(
+                  icon: const Icon(Icons.add),
+                  tooltip: "Attach or insert",
+                  onSelected: (action) => action(),
+                  itemBuilder: (context) => [
+                    _attachItem(Icons.image_outlined, "Image", AttachmentKind.image),
+                    _attachItem(Icons.attach_file, "File", AttachmentKind.file),
+                    const PopupMenuDivider(),
+                    for (final kind in CompletionKind.values)
+                      PopupMenuItem(
+                        value: () => _openMenu(kind),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(kind.label),
+                            const SizedBox(width: 24),
+                            Text(
+                              kind.trigger,
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                Expanded(
+                  child: Shortcuts(
+                    shortcuts: {
+                      const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                          const _SendIntent(),
+                      const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                          const _SendIntent(),
+                      // Only while the menu has something to pick: otherwise
+                      // these keys have to keep doing what they do in a text box.
+                      if (matches.isNotEmpty) ...{
+                        const SingleActivator(LogicalKeyboardKey.arrowDown): const _MoveIntent(1),
+                        const SingleActivator(LogicalKeyboardKey.arrowUp): const _MoveIntent(-1),
+                        const SingleActivator(LogicalKeyboardKey.enter): const _AcceptIntent(),
+                        const SingleActivator(LogicalKeyboardKey.tab): const _AcceptIntent(),
+                        const SingleActivator(LogicalKeyboardKey.escape): const _DismissIntent(),
+                      },
                     },
-                  },
-                  child: Actions(
-                    actions: {
-                      _SendIntent: CallbackAction<_SendIntent>(onInvoke: (_) => _submit()),
-                      _MoveIntent: CallbackAction<_MoveIntent>(
-                        onInvoke: (i) => _move(i.delta, matches.length),
-                      ),
-                      // `_highlighted` is read here rather than captured at
-                      // build time: an arrow and a return within one frame both
-                      // have to land.
-                      _AcceptIntent: CallbackAction<_AcceptIntent>(
-                        onInvoke: (_) => _accept(matches[_highlighted % matches.length]),
-                      ),
-                      _DismissIntent: CallbackAction<_DismissIntent>(
-                        onInvoke: (_) => setState(() => _token = null),
-                      ),
-                    },
-                    child: TextField(
-                      controller: widget.controller,
-                      focusNode: _focus,
-                      minLines: 1,
-                      maxLines: 6,
-                      decoration: const InputDecoration(
-                        hintText: "Message...",
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Actions(
+                      actions: {
+                        _SendIntent: CallbackAction<_SendIntent>(onInvoke: (_) => _submit()),
+                        _MoveIntent: CallbackAction<_MoveIntent>(
+                          onInvoke: (i) => _move(i.delta, matches.length),
+                        ),
+                        // `_highlighted` is read here rather than captured at
+                        // build time: an arrow and a return within one frame both
+                        // have to land.
+                        _AcceptIntent: CallbackAction<_AcceptIntent>(
+                          onInvoke: (_) => _accept(matches[_highlighted % matches.length]),
+                        ),
+                        _DismissIntent: CallbackAction<_DismissIntent>(
+                          onInvoke: (_) => setState(() => _token = null),
+                        ),
+                      },
+                      child: TextField(
+                        controller: widget.controller,
+                        focusNode: _focus,
+                        minLines: 1,
+                        maxLines: 6,
+                        decoration: const InputDecoration(
+                          hintText: "Message...",
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              widget.isRunning
-                  ? IconButton.filled(
-                      onPressed: widget.onAbort,
-                      icon: const Icon(Icons.stop),
-                      tooltip: "Stop",
-                    )
-                  : IconButton.filled(
-                      onPressed: _submit,
-                      icon: const Icon(Icons.send),
-                      tooltip: "Send",
-                    ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 8),
+                widget.isRunning
+                    ? IconButton.filled(
+                        onPressed: widget.onAbort,
+                        icon: const Icon(Icons.stop),
+                        tooltip: "Stop",
+                      )
+                    : IconButton.filled(
+                        onPressed: _submit,
+                        icon: const Icon(Icons.send),
+                        tooltip: "Send",
+                      ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
