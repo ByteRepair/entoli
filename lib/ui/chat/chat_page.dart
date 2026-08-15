@@ -105,7 +105,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         children: [
           Expanded(
             child: chat.messages.isEmpty
-                ? const Center(child: Text("Say something..."))
+                ? const Center(child: Text("What would you like to discuss?"))
                 : ListView.builder(
                     controller: _scroll,
                     itemCount: chat.messages.length,

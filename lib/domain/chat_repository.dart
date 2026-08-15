@@ -47,7 +47,10 @@ class ChatRepository {
     final model = meta.model ?? _settings().defaultModelId;
     final provider = meta.model != null ? meta.provider : _settings().defaultProviderId;
     yield* _backend.sendPrompt(chatId, text,
-        attachments: attachments, model: model, provider: provider);
+        attachments: attachments,
+        model: model,
+        provider: provider,
+        approveCommands: meta.approveCommands ?? _settings().approveCommands);
   }
 
   /// Save what the user attached and describe it as the parts that outlive the
@@ -91,6 +94,10 @@ class ChatRepository {
   }
 
   Future<void> abort(String chatId) => _backend.abort(chatId);
+
+  /// How long this chat's backend may say nothing before the turn is written
+  /// off. See `AgentBackend.stallTimeout`.
+  Duration stallTimeout(String chatId) => _backend.stallTimeout(chatId);
 
   Future<void> deleteChat(String id) async {
     await _backend.disposeChat(id);

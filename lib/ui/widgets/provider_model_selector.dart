@@ -6,6 +6,12 @@ import "../../domain/models.dart";
 import "../../providers.dart";
 import "resettable_field.dart";
 
+/// What each backend is called wherever the user has to choose or read one.
+String backendLabel(BackendKind kind) => switch (kind) {
+      BackendKind.opencode => "OpenCode",
+      BackendKind.miniswe => "Built-in harness",
+    };
+
 /// [ProviderModelSelector] over the backend's model list, with the waiting and
 /// failure states both pages would otherwise spell out themselves.
 class ModelPicker extends ConsumerWidget {

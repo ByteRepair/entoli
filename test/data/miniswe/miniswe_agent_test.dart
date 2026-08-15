@@ -1,0 +1,476 @@
+import "package:flutter_test/flutter_test.dart";
+
+import "package:agent_chat/data/miniswe/llm/llm_client.dart";
+import "package:agent_chat/data/miniswe/miniswe_agent.dart";
+import "package:agent_chat/data/miniswe/templates.dart";
+import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/shell.dart";
+
+import "miniswe_fakes.dart";
+
+void main() {
+  late MinisweSession session;
+  late FakeShell shell;
+
+  setUp(() => session = MinisweSession());
+
+  /// The agent under test. [approvals] answers each request in order; without
+  /// one, commands run unasked.
+  MinisweAgent agentOver(
+    FakeLlmClient client, {
+    ShellResult Function(String)? respond,
+    List<ApprovalResponse> approvals = const [],
+    MinisweOptions options = const MinisweOptions(),
+    bool requireApproval = false,
+    bool canRunCommands = true,
+  }) {
+    shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
+    final answers = [...approvals];
+    return MinisweAgent(
+      session: session,
+      client: client,
+      shell: shell,
+      workspace: "/tmp/workspace",
+      model: "fake-model",
+      options: options,
+      requireApproval: requireApproval,
+      approve: (_) async => answers.isEmpty ? ApprovalResponse.allow : answers.removeAt(0),
+    );
+  }
+
+  /// The one command that ends a turn, so a test only has to script the steps
+  /// it cares about.
+  final finish = bashCall("echo $submitMarker", id: "done");
+  ShellResult submitted(String command) =>
+      command.contains(submitMarker) ? ok("$submitMarker\n") : ok("");
+
+  group("the loop", () {
+    test("runs the command the model asked for, in the workspace", () async {
+      final client = FakeLlmClient([
+        [bashCall("ls -la")],
+        [finish],
+      ]);
+      await agentOver(client, respond: submitted).run("what is here?").toList();
+
+      expect(shell.ran, ["ls -la", "echo $submitMarker"]);
+    });
+
+    test("shows the model what the command produced", () async {
+      final client = FakeLlmClient([
+        [bashCall("cat notes.txt")],
+        [finish],
+      ]);
+      await agentOver(client, respond: (c) {
+        if (c.startsWith("cat")) return ShellResult(returnCode: 2, output: "no such file");
+        return submitted(c);
+      }).run("read it").toList();
+
+      final observation = client.sent[1].last;
+      expect(observation.role, LlmRole.tool);
+      expect(observation.toolCallId, "call-1");
+      expect(observation.text, contains("\"returncode\": 2"));
+      expect(observation.text, contains("no such file"));
+    });
+
+    test("the first turn is the task under the system prompt", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(client, respond: submitted).run("fix the bug").toList();
+
+      expect(client.sent.first.first.role, LlmRole.system);
+      expect(client.sent.first.first.text, contains("/tmp/workspace"));
+      expect(client.sent.first.first.text, contains("TestOS 1.0 test"));
+      expect(client.sent.first[1].text, contains("fix the bug"));
+    });
+
+    test("a later turn continues the session instead of restarting it", () async {
+      final client = FakeLlmClient([
+        [finish],
+        [finish],
+      ]);
+      final agent = agentOver(client, respond: submitted);
+      await agent.run("first").toList();
+      await agent.run("second").toList();
+
+      expect(client.sent.last.where((m) => m.role == LlmRole.system), hasLength(1));
+      expect(client.sent.last.first.text, contains("/tmp/workspace"));
+      expect(client.sent.last.last.text, "second");
+      expect(client.sent.last.map((m) => m.text).join(), contains("first"));
+    });
+
+    test("an @agent's prompt rides under the system message", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(client, respond: submitted)
+          .run("look at it", agentPrompt: "You only read; you never edit.")
+          .toList();
+
+      expect(client.sent.first.first.text, contains("You only read; you never edit."));
+    });
+  });
+
+  group("finishing", () {
+    test("the marker on a successful command ends the turn", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(events.last, isA<DoneEvent>());
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      expect(client.sent, hasLength(1));
+    });
+
+    test("what follows the marker becomes the reply", () async {
+      final client = FakeLlmClient([
+        [bashCall("cat <<EOF\n$submitMarker\nIt was a typo.\nEOF")],
+      ]);
+      final events = await agentOver(client,
+              respond: (_) => ok("$submitMarker\nIt was a typo.\n"))
+          .run("what broke?")
+          .toList();
+
+      expect(events.whereType<TextDelta>().map((e) => e.text), ["It was a typo."]);
+    });
+
+    test("the marker does not count when the command failed", () async {
+      final client = FakeLlmClient([
+        [bashCall("false")],
+        [finish],
+      ]);
+      await agentOver(client, respond: (c) {
+        if (c == "false") return ShellResult(returnCode: 1, output: "$submitMarker\n");
+        return submitted(c);
+      }).run("hi").toList();
+
+      expect(shell.ran, hasLength(2));
+    });
+
+    test("a command that only mentions the marker further down keeps going", () async {
+      final client = FakeLlmClient([
+        [bashCall("grep -r marker .")],
+        [finish],
+      ]);
+      await agentOver(client, respond: (c) {
+        if (c.startsWith("grep")) return ok("notes.md: $submitMarker\n");
+        return submitted(c);
+      }).run("hi").toList();
+
+      expect(shell.ran, hasLength(2));
+    });
+  });
+
+  group("what the UI is told", () {
+    test("text and thinking arrive as their own events", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmReasoningChunk("weighing it up"),
+          const LlmTextChunk("Looking now."),
+          finish,
+        ],
+      ]);
+      final events = await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(events.whereType<ReasoningDelta>().map((e) => e.text), ["weighing it up"]);
+      expect(events.whereType<TextDelta>().map((e) => e.text), ["Looking now."]);
+      // Closed when the reply started, so the label can say how long it took.
+      expect(events.whereType<ReasoningEnd>(), hasLength(1));
+      expect(events.whereType<ReasoningEnd>().single.duration, isNotNull);
+    });
+
+    test("thinking reported only at the end still fills the block", () async {
+      final client = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              reasoning: "all of it at once",
+              toolCalls: finish.message.toolCalls,
+            ),
+          ),
+        ],
+      ]);
+      final events = await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(events.whereType<ReasoningEnd>().single.text, "all of it at once");
+    });
+
+    test("a call and its result are reported as a pair", () async {
+      final client = FakeLlmClient([
+        [bashCall("pwd")],
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: (c) {
+        if (c == "pwd") return ok("/tmp/workspace\n");
+        return submitted(c);
+      }).run("hi").toList();
+
+      final call = events.whereType<ToolCallEvent>().first.call;
+      expect(call.name, "bash");
+      expect(call.argumentsText, "pwd");
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.callId, call.id);
+      expect(result.output, "/tmp/workspace\n");
+    });
+  });
+
+  group("a model that will not call the tool", () {
+    test("is nudged and carries on", () async {
+      final client = FakeLlmClient([
+        [saidOnly("Here is my answer.")],
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      expect(client.sent[1].last.text, contains("must call the `bash` tool"));
+    });
+
+    test("gives up after three tries in a row", () async {
+      final client = FakeLlmClient(List.filled(4, [saidOnly("no tool")]));
+      final events = await agentOver(client).run("hi").toList();
+
+      expect(client.sent, hasLength(3));
+      expect(events.whereType<ErrorEvent>().single.message, contains("stopped calling"));
+      expect(events.last, isA<DoneEvent>());
+    });
+
+    test("a reply cut off by the token limit is blamed on the limit", () async {
+      final client = FakeLlmClient([
+        [saidOnly("I was going to run", finishReason: "length")],
+        [finish],
+      ]);
+      await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(client.sent[1].last.text, contains("output limit"));
+    });
+  });
+
+  group("approvals", () {
+    test("a command waits for the answer and then runs", () async {
+      final client = FakeLlmClient([
+        [bashCall("rm -rf build")],
+        [finish],
+      ]);
+      final events = await agentOver(client,
+              respond: submitted,
+              requireApproval: true,
+              approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
+          .run("clean up")
+          .toList();
+
+      expect(events.whereType<ApprovalRequestEvent>().first.approval.toolName, "bash");
+      expect(shell.ran, contains("rm -rf build"));
+    });
+
+    test("a denied command is not run, and the model is told why", () async {
+      final client = FakeLlmClient([
+        [bashCall("rm -rf /")],
+        [finish],
+      ]);
+      await agentOver(client,
+              respond: submitted,
+              requireApproval: true,
+              approvals: [ApprovalResponse.deny, ApprovalResponse.allow])
+          .run("clean up")
+          .toList();
+
+      expect(shell.ran, isNot(contains("rm -rf /")));
+      expect(client.sent[1].last.text, contains("denied"));
+    });
+
+    test("nothing is asked when the chat runs without asking", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+  });
+
+  group("limits and failures", () {
+    test("a turn that never finishes stops at the step limit", () async {
+      final client = FakeLlmClient(List.filled(3, [bashCall("sleep 1")]));
+      final events = await agentOver(client,
+              options: const MinisweOptions(stepLimit: 3))
+          .run("hi")
+          .toList();
+
+      expect(client.sent, hasLength(3));
+      expect(events.whereType<ErrorEvent>().single.message, contains("3 steps"));
+    });
+
+    test("a retryable failure is announced and then tried again", () async {
+      final client = FakeLlmClient([
+        [],
+        [finish],
+      ])..failures[0] = const LlmException("rate limited", statusCode: 429, retryable: true);
+      final events = await agentOver(client,
+              respond: submitted,
+              options: const MinisweOptions(retryBackoff: Duration.zero))
+          .run("hi")
+          .toList();
+
+      expect(events.whereType<RetryEvent>().single.attempt, 1);
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+    });
+
+    test("a rejected key is reported rather than retried", () async {
+      final client = FakeLlmClient([[]])
+        ..failures[0] = const LlmException("bad key", statusCode: 401);
+      final events = await agentOver(client).run("hi").toList();
+
+      expect(client.sent, hasLength(1));
+      expect(events.whereType<ErrorEvent>().single.message, contains("bad key"));
+      expect(events.last, isA<DoneEvent>());
+    });
+
+    test("giving up says so once the attempts are used", () async {
+      final client = FakeLlmClient([[], [], []]);
+      for (var i = 0; i < 3; i++) {
+        client.failures[i] = const LlmException("busy", statusCode: 503, retryable: true);
+      }
+      final events = await agentOver(client,
+              options: const MinisweOptions(maxAttempts: 3, retryBackoff: Duration.zero))
+          .run("hi")
+          .toList();
+
+      expect(client.sent, hasLength(3));
+      expect(events.whereType<RetryEvent>(), hasLength(2));
+      expect(events.whereType<ErrorEvent>().single.message, contains("busy"));
+    });
+  });
+
+  group("every call is answered", () {
+    test("even the ones after the model submitted", () async {
+      final client = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [
+                ...finish.message.toolCalls,
+                const LlmToolCall(
+                    id: "after", name: "bash", argumentsJson: '{"command": "ls"}'),
+              ],
+            ),
+          ),
+        ],
+      ]);
+      await agentOver(client, respond: submitted).run("hi").toList();
+
+      final answered = session.messages.where((m) => m.role == LlmRole.tool);
+      expect(answered.map((m) => m.toolCallId), ["done", "after"]);
+      expect(answered.last.text, contains("not executed"));
+    });
+
+    test("a tool that does not exist", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [LlmToolCall(id: "x", name: "python", argumentsJson: "{}")],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(shell.ran, ["echo $submitMarker"]);
+      expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
+          contains("no tool called 'python'"));
+      expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
+          contains("no tool called 'python'"));
+    });
+
+    test("arguments that are not the ones the tool takes", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              toolCalls: [LlmToolCall(id: "x", name: "bash", argumentsJson: "{oops")],
+            ),
+          ),
+        ],
+        [finish],
+      ]);
+      await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(shell.ran, ["echo $submitMarker"]);
+      expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
+          contains("was missing"));
+    });
+  });
+
+  group("stopping", () {
+    test("cancel kills the running command and ends the turn", () async {
+      final client = FakeLlmClient([
+        [bashCall("npm install")],
+        [finish],
+      ]);
+      final agent = agentOver(client, respond: submitted);
+      shell.hang.add("npm install");
+      final events = <AgentEvent>[];
+      final done = agent.run("hi").forEach(events.add);
+
+      await Future<void>.delayed(Duration.zero);
+      await agent.cancel();
+      await done;
+
+      expect(shell.killed, ["npm install"]);
+      expect(client.sent, hasLength(1));
+      expect(events.last, isA<DoneEvent>());
+    });
+  });
+
+  group("with no shell to run anything", () {
+    test("the model is not offered a tool it could never use", () async {
+      final client = FakeLlmClient([
+        [saidOnly("There is nothing I can run here.")],
+      ]);
+      await agentOver(client, canRunCommands: false).run("hi").toList();
+
+      expect(client.sent.first.first.text, contains("no shell"));
+      expect(client.sent.first.first.text, isNot(contains(submitMarker)));
+    });
+
+    test("a reply with no command in it is the answer, not a mistake", () async {
+      final client = FakeLlmClient([
+        [const LlmTextChunk("Two plus two is four."), saidOnly("Two plus two is four.")],
+      ]);
+      final events = await agentOver(client, canRunCommands: false).run("2+2?").toList();
+
+      // Submitting is itself a command, so demanding one would make finishing
+      // impossible; the turn ends when the model stops.
+      expect(client.sent, hasLength(1));
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      expect(events.last, isA<DoneEvent>());
+    });
+  });
+
+  group("a session that missed the conversation", () {
+    test("is seeded with a transcript before the next turn", () async {
+      session.seed("user: what is 2+2?\n\nassistant: four");
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(client, respond: submitted).run("and 3+3?").toList();
+
+      expect(client.sent.first.first.role, LlmRole.system);
+      expect(client.sent.first.map((m) => m.text).join(), contains("what is 2+2?"));
+      expect(client.sent.first.last.text, "and 3+3?");
+    });
+
+    test("seeding nothing leaves a session that starts from the task", () async {
+      session.seed("");
+      expect(session.isFresh, isTrue);
+    });
+  });
+}

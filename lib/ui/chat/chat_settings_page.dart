@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
 import "../../providers.dart";
+import "../../domain/models.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
 
@@ -21,6 +22,11 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   ChatMeta? _meta;
   bool _saving = false;
 
+  /// Read once: it never changes for a chat, and reading it in `build` would
+  /// hit the disk on every rebuild — including every notch of the temperature
+  /// slider.
+  BackendKind? _backend;
+
   @override
   void initState() {
     super.initState();
@@ -30,7 +36,13 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   Future<void> _load() async {
     final repo = ref.read(chatRepositoryProvider);
     final meta = await repo.loadMeta(widget.chatId);
-    if (mounted) setState(() => _meta = meta);
+    final backend = ref.read(chatStoreProvider).backendKindOf(widget.chatId);
+    if (mounted) {
+      setState(() {
+        _meta = meta;
+        _backend = backend;
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -73,6 +85,17 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                   value: _meta!.reasoningEffort,
                   onChanged: (v) => setState(() => _meta!.reasoningEffort = v),
                 ),
+                // Hidden where it would do nothing: opencode decides for
+                // itself what needs a permission.
+                if (ref.watch(agentBackendProvider).honoursApprovals(widget.chatId)) ...[
+                  const Divider(),
+                  _ApprovalField(
+                    value: _meta!.approveCommands,
+                    onChanged: (v) => setState(() => _meta!.approveCommands = v),
+                  ),
+                ],
+                const Divider(),
+                _BackendTile(backend: _backend),
               ],
             ),
     );
@@ -109,6 +132,40 @@ class _LlmField extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Whether this chat's commands wait for the user.
+class _ApprovalField extends ConsumerWidget {
+  const _ApprovalField({required this.value, required this.onChanged});
+
+  final bool? value;
+  final ValueChanged<bool?> onChanged;
+
+  static const _labels = {true: "Ask every time", false: "Run without asking"};
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => InheritableDropdown<bool>(
+        label: "Running commands",
+        value: value,
+        inherited: _labels[ref.watch(appSettingsProvider).approveCommands],
+        options: _labels,
+        onChanged: onChanged,
+      );
+}
+
+/// Which runtime this chat was created with. Fixed: a session belongs to the
+/// backend that has been holding it, and moving it would lose the thread.
+class _BackendTile extends StatelessWidget {
+  const _BackendTile({required this.backend});
+
+  final BackendKind? backend;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        dense: true,
+        title: const Text("Backend"),
+        subtitle: Text(backend == null ? "—" : backendLabel(backend!)),
+      );
 }
 
 class _TemperatureField extends StatelessWidget {
@@ -160,31 +217,10 @@ class _ReasoningEffortField extends StatelessWidget {
   final ValueChanged<String?> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Reasoning effort", style: TextStyle(fontSize: 12)),
-          const SizedBox(height: 4),
-          ResettableField(
-            isDefault: value == null,
-            onReset: () => onChanged(null),
-            child: DropdownButton<String?>(
-              isExpanded: true,
-              value: value,
-              items: [
-                defaultMenuItem(),
-                ..._reasoningEfforts.map((e) {
-                  return DropdownMenuItem<String?>(value: e, child: Text(e));
-                }),
-              ],
-              onChanged: onChanged,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => InheritableDropdown<String>(
+        label: "Reasoning effort",
+        value: value,
+        options: {for (final effort in _reasoningEfforts) effort: effort},
+        onChanged: onChanged,
+      );
 }

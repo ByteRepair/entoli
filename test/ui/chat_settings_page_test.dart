@@ -191,4 +191,59 @@ void main() {
     expect(app.savedMeta(_chatId).temperature, 0.4);
     expect(app.savedMeta(_chatId).reasoningEffort, "high");
   });
+
+  group("running commands", () {
+    Future<void> openField(WidgetTester tester) async {
+      await openPage(tester);
+      await scrollTo(tester, find.byType(DropdownButtonFormField<bool?>));
+      await tester.tap(find.byType(DropdownButtonFormField<bool?>));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("Default names what the app would do", (tester) async {
+      await openPage(tester);
+      await scrollTo(tester, find.text("Running commands"));
+
+      expect(find.text("$defaultOptionLabel (Ask every time)"), findsOneWidget);
+      expect(app.savedMeta(_chatId).approveCommands, isNull);
+    });
+
+    testWidgets("Default follows the app setting as it changes", (tester) async {
+      await app.container.read(appSettingsProvider.notifier).setApproveCommands(false);
+      await openPage(tester);
+      await scrollTo(tester, find.text("Running commands"));
+
+      expect(find.text("$defaultOptionLabel (Run without asking)"), findsOneWidget);
+    });
+
+    testWidgets("a chat can run without asking, and that survives a save", (tester) async {
+      await openField(tester);
+      await tester.tap(find.text("Run without asking").last);
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect(app.savedMeta(_chatId).approveCommands, isFalse);
+    });
+
+    testWidgets("resetting puts it back on the app's answer", (tester) async {
+      seedMeta(ChatMeta(approveCommands: false));
+      await openPage(tester);
+      await scrollTo(tester, find.text("Running commands"));
+      expect(find.text("Run without asking"), findsOneWidget);
+
+      await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect(app.savedMeta(_chatId).approveCommands, isNull);
+    });
+  });
+
+  testWidgets("the backend a chat runs on is shown, and is not up for changing", (tester) async {
+    final chat = await app.repo.createChat(title: "one");
+    await app.pump(tester, ChatSettingsPage(chatId: chat.state.id));
+    await scrollTo(tester, find.text("Backend"));
+
+    expect(find.text("OpenCode"), findsOneWidget);
+  });
 }

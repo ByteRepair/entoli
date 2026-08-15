@@ -140,9 +140,12 @@ class ChatController extends Notifier<ChatViewState> {
     _writeReply(parts);
   }
 
-  /// (Re)start the clock on a turn that is producing nothing.
+  /// (Re)start the clock on a turn that is producing nothing. How long that is
+  /// allowed to go on is the backend's to say: silence means something
+  /// different depending on what is running the chat.
   void _watchForStall() {
-    final timeout = ref.read(turnStallTimeoutProvider);
+    final timeout = ref.read(turnStallTimeoutProvider) ??
+        ref.read(chatRepositoryProvider).stallTimeout(chatId);
     _stall?.cancel();
     _stall = Timer(timeout, () => _giveUp(timeout));
   }
@@ -280,6 +283,10 @@ class ChatController extends Notifier<ChatViewState> {
       case ErrorEvent(:final message):
         _appendError(message);
       case ApprovalRequestEvent(:final approval):
+        // A turn waiting on a person is not a stalled turn, and nobody answers
+        // a banner in 45 seconds flat. The clock restarts when they do.
+        _stall?.cancel();
+        _stall = null;
         state = state.copyWith(approvals: [...state.approvals, approval]);
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
@@ -320,9 +327,9 @@ class ChatController extends Notifier<ChatViewState> {
   Future<void> respondApproval(String approvalId, ApprovalResponse r) async {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondApproval(chatId, approvalId, r);
-    state = state.copyWith(
-      approvals: state.approvals.where((a) => a.id != approvalId).toList(),
-    );
+    final remaining = state.approvals.where((a) => a.id != approvalId).toList();
+    state = state.copyWith(approvals: remaining);
+    if (remaining.isEmpty && state.isRunning) _watchForStall();
   }
 }
 

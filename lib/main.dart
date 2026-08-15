@@ -22,7 +22,7 @@ void main() async {
     const BundledPrompts(),
     DirectoryPrompts(config),
   ]);
-  final backend = backend_factory.createBackend(config, library);
+  final backend = backend_factory.createBackend(config, library, store);
   final container = ProviderContainer(
     overrides: [
       chatStoreProvider.overrideWithValue(store),
