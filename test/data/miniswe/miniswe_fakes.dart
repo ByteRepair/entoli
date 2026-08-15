@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 
 import "package:agent_chat/data/miniswe/llm/llm_client.dart";
+import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/shell.dart";
 
 /// A model that says whatever the test scripted, one list of chunks per call.
@@ -15,7 +16,13 @@ class FakeLlmClient implements LlmClient {
   /// What each call was sent, so a test can assert the observation the model
   /// was shown rather than only the event the UI saw.
   final List<List<LlmMessage>> sent = [];
-  final List<({String model, double? temperature, String? reasoningEffort})> calls = [];
+  final List<
+      ({
+        String model,
+        List<LlmTool> tools,
+        double? temperature,
+        String? reasoningEffort
+      })> calls = [];
 
   int _at = 0;
   bool closed = false;
@@ -33,7 +40,12 @@ class FakeLlmClient implements LlmClient {
   }) async* {
     final at = _at++;
     sent.add(List.of(messages));
-    calls.add((model: model, temperature: temperature, reasoningEffort: reasoningEffort));
+    calls.add((
+      model: model,
+      tools: tools,
+      temperature: temperature,
+      reasoningEffort: reasoningEffort,
+    ));
     final failure = failures[at];
     if (failure != null) throw failure;
     if (at >= turns.length) throw StateError("no scripted turn $at");
@@ -101,6 +113,21 @@ LlmCompletion bashCall(String command, {String id = "call-1", String text = ""})
         text: text,
         toolCalls: [
           LlmToolCall(id: id, name: "bash", argumentsJson: jsonEncode({"command": command})),
+        ],
+      ),
+    );
+
+/// One assistant turn that asks the user something. [arguments] is passed as
+/// the model wrote it, so a test can hand over a shape nobody designed for.
+LlmCompletion askCall(Object arguments, {String id = "ask-1"}) => LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: askToolName,
+            argumentsJson: arguments is String ? arguments : jsonEncode(arguments),
+          ),
         ],
       ),
     );

@@ -164,4 +164,7 @@ class ChatRepository {
 
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse r) =>
       _backend.respondApproval(chatId, approvalId, r);
+
+  Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>
+      _backend.respondQuestions(chatId, requestId, answers);
 }

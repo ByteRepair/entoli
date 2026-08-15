@@ -1,3 +1,4 @@
+import "../domain/ask.dart";
 import "../domain/models.dart";
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
@@ -39,6 +40,13 @@ class ToolResultEvent extends AgentEvent {
 class ApprovalRequestEvent extends AgentEvent {
   const ApprovalRequestEvent(this.approval);
   final ToolApproval approval;
+}
+
+/// The agent has put questions to the user and is waiting on them. The composer
+/// gives way to them until they are answered.
+class QuestionRequestEvent extends AgentEvent {
+  const QuestionRequestEvent(this.request);
+  final AskRequest request;
 }
 
 class DoneEvent extends AgentEvent {
@@ -94,6 +102,10 @@ abstract class AgentBackend {
   Duration get stallTimeout;
 
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response);
+
+  /// Answer the questions of [requestId]: one entry per question, in the order
+  /// they were asked, null where the user answered nothing.
+  Future<void> respondQuestions(String chatId, String requestId, List<String?> answers);
 
   /// Release resources for a chat (keeps on-disk data).
   Future<void> disposeChat(String chatId);

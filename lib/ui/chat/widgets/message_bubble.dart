@@ -1,6 +1,7 @@
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 
+import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
@@ -164,7 +165,9 @@ class MessageBubble extends StatelessWidget {
           ));
         case ToolCallPart(:final toolCall):
           closeBubble();
-          rows.add(ToolLabel(call: toolCall, result: results[toolCall.id]));
+          rows.add(toolCall.name == askToolName
+              ? AskLabel(call: toolCall, result: results[toolCall.id])
+              : ToolLabel(call: toolCall, result: results[toolCall.id]));
         case ToolResultPart(:final result):
           // Already drawn by the call it answers, unless the call is gone.
           if (calls.contains(result.callId)) continue;

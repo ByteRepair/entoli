@@ -4,6 +4,7 @@ import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
 import "package:agent_chat/data/miniswe/templates.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -21,12 +22,13 @@ void main() {
     FakeLlmClient client, {
     ShellResult Function(String)? respond,
     List<ApprovalResponse> approvals = const [],
+    List<String?>? answers,
     MinisweOptions options = const MinisweOptions(),
     bool requireApproval = false,
     bool canRunCommands = true,
   }) {
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
-    final answers = [...approvals];
+    final allowed = [...approvals];
     return MinisweAgent(
       session: session,
       client: client,
@@ -35,7 +37,10 @@ void main() {
       model: "fake-model",
       options: options,
       requireApproval: requireApproval,
-      approve: (_) async => answers.isEmpty ? ApprovalResponse.allow : answers.removeAt(0),
+      approve: (_) async => allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
+      // Nothing picked, unless the test says what was.
+      answer: (request) async =>
+          answers ?? List.filled(request.questions.length, null),
     );
   }
 
@@ -292,6 +297,89 @@ void main() {
     });
   });
 
+  group("asking the user", () {
+    final oneQuestion = {
+      "questions": [
+        {
+          "question": "Which database?",
+          "options": [
+            {"label": "Postgres"},
+            {"label": "SQLite"},
+          ],
+        },
+      ],
+    };
+
+    test("the turn waits for the answer and hands it to the model", () async {
+      final client = FakeLlmClient([
+        [askCall(oneQuestion)],
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: submitted, answers: ["Postgres"])
+          .run("set up storage")
+          .toList();
+
+      final request = events.whereType<QuestionRequestEvent>().single.request;
+      expect(request.id, "ask-1");
+      expect(request.questions.single.options.map((o) => o.label), ["Postgres", "SQLite"]);
+
+      final answer = client.sent[1].firstWhere((m) => m.toolCallId == "ask-1");
+      expect(answer.role, LlmRole.tool);
+      expect(answer.text, contains("Postgres"));
+      expect(answer.text, contains("Which database?"));
+    });
+
+    test("the call and its answer are a pair the conversation keeps", () async {
+      final client = FakeLlmClient([
+        [askCall(oneQuestion)],
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: submitted, answers: ["SQLite"])
+          .run("set up storage")
+          .toList();
+
+      final call = events.whereType<ToolCallEvent>().first.call;
+      expect(call.name, askToolName);
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.callId, call.id);
+      expect(askAnswersFrom(result.output, 1), ["SQLite"]);
+    });
+
+    test("nothing picked is reported rather than left out", () async {
+      final client = FakeLlmClient([
+        [askCall(oneQuestion)],
+        [finish],
+      ]);
+      await agentOver(client, respond: submitted).run("set up storage").toList();
+
+      final answer = client.sent[1].firstWhere((m) => m.toolCallId == "ask-1");
+      expect(answer.text, contains("Which database?"));
+      expect(answer.text, contains("answered nothing"));
+    });
+
+    test("a call with nothing askable in it is rejected, not put on screen", () async {
+      final client = FakeLlmClient([
+        [askCall({"question": "Which one?"})],
+        [finish],
+      ]);
+      final events = await agentOver(client, respond: submitted).run("hi").toList();
+
+      expect(events.whereType<QuestionRequestEvent>(), isEmpty);
+      expect(session.messages.firstWhere((m) => m.toolCallId == "ask-1").text,
+          contains("needs at least one option"));
+    });
+
+    test("asking is offered even where nothing can be run", () async {
+      final client = FakeLlmClient([
+        [saidOnly("nothing to run")],
+      ]);
+      await agentOver(client, canRunCommands: false).run("hi").toList();
+
+      expect(client.calls.single.tools.map((t) => t.name), [askToolName]);
+      expect(client.sent.first.first.text, contains(askToolName));
+    });
+  });
+
   group("limits and failures", () {
     test("a turn that never finishes stops at the step limit", () async {
       final client = FakeLlmClient(List.filled(3, [bashCall("sleep 1")]));
@@ -386,7 +474,7 @@ void main() {
       expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
           contains("no tool called 'python'"));
       expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
-          contains("no tool called 'python'"));
+          contains("`bash` and `$askToolName`"));
     });
 
     test("arguments that are not the ones the tool takes", () async {

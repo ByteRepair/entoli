@@ -166,6 +166,36 @@ would otherwise leave it waiting on a completer nobody holds. A turn that ends
 with one outstanding denies it, and `ChatController` stops its stall clock while
 one is on screen — nobody answers a banner inside a stall budget.
 
+#### Questions
+
+`ask_user` is the second tool, and the only one that runs nothing: the model
+puts questions to the user and the turn waits. Offered with or without a shell —
+a browser cannot run a command, but it can still ask — which is why `_tools`
+exists and `unknownTool` is told what was on offer rather than assuming `bash`.
+
+The call and its answers are an ordinary call/result pair, so `conv.json` keeps
+them with no new part type in it, a rewind carries them like anything else, and
+the chat draws an answered question back out of what was persisted. `AskLabel`
+is that: the question on a label, the answers behind the drawer. The tool
+message is the answers as they stand rather than an `observation`, which would
+claim a command ran.
+
+`askQuestionsFrom` is deliberately liberal. The arguments are the model's
+writing, not ours: it may batch under `questions` or write one question out at
+the top level, and it reaches for whichever word its prompt left in its head —
+`angles`, `choices`, `query` for a value. A question with no options is the one
+thing rejected, because the panel answers by clicking and there would be nothing
+to click. Every question comes back to the model whether or not it was answered:
+one that asked three and got two needs to know which one it is still missing.
+
+`QuestionPanel` takes the composer's place while a request is up — including its
+stop button, which is why `Skip` is on the panel: it answers with nothing so the
+turn can carry on, and it is the only way out. The rest mirrors approvals
+exactly: turn-scoped view state, `_clearQuestions` beside `_clearApprovals` so an
+abandoned turn answers its own questions, the completer created when the event is
+forwarded rather than when it is awaited, and the stall clock stopped while a
+person is what is being waited on.
+
 #### Live test
 
 `test/live/miniswe_live.dart` drives a real provider through the production

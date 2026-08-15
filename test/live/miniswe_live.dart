@@ -121,6 +121,12 @@ void main() {
           log("ERROR: $message");
         case ApprovalRequestEvent():
           log("approval asked for (should not happen here)");
+        // Nobody is here to pick an answer either, and a turn left waiting on
+        // one never ends.
+        case QuestionRequestEvent(:final request):
+          log("asked ${request.questions.length} question(s), answering nothing");
+          await backend.respondQuestions(chat.state.id, request.id,
+              List.filled(request.questions.length, null));
         case DoneEvent():
           log("done");
       }

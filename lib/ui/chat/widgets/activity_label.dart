@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
 
 /// What the model did before it answered, on a line of its own above the
@@ -62,6 +63,44 @@ class ToolLabel extends StatelessWidget {
           (label: "Arguments", body: arguments, isError: false),
           (label: "Output", body: result?.output, isError: false),
           (label: "Error", body: result?.exceptionInfo, isError: true),
+        ],
+      ),
+    );
+  }
+}
+
+/// A question the model put to the user, once it is history. The panel that
+/// asked it is gone by then, so this reads the question back out of the call
+/// and the answer out of the result that closed it.
+class AskLabel extends StatelessWidget {
+  const AskLabel({super.key, required this.call, this.result});
+
+  final ToolCall call;
+
+  /// Null while the panel is still on screen.
+  final ToolResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final questions = askQuestionsFrom(call.argumentsJson);
+    final answers = askAnswersFrom(result?.output, questions.length);
+    return _Label(
+      icon: Icons.help_outline,
+      text: switch (questions.length) {
+        0 => "Asked the user",
+        1 => questions.single.question,
+        final n => "Asked $n questions",
+      },
+      onTap: () => showActivitySheet(
+        context,
+        title: "Asked the user",
+        sections: [
+          for (var i = 0; i < questions.length; i++)
+            (
+              label: questions[i].question,
+              body: answers[i] ?? "Not answered",
+              isError: false,
+            ),
         ],
       ),
     );

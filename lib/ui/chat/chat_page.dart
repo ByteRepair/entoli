@@ -7,6 +7,7 @@ import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "widgets/composer.dart";
 import "widgets/message_bubble.dart";
+import "widgets/question_panel.dart";
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key});
@@ -130,12 +131,23 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               onAllow: () => notifier.respondApproval(a.id, ApprovalResponse.allow),
               onDeny: () => notifier.respondApproval(a.id, ApprovalResponse.deny),
             ),
-          Composer(
-            controller: _controller,
-            isRunning: view.isRunning,
-            onSend: _send,
-            onAbort: _abort,
-          ),
+          // A question takes the composer's place rather than sitting above it:
+          // the turn is waiting on this answer, and there is nothing useful to
+          // type until it has it.
+          if (view.questions.isEmpty)
+            Composer(
+              controller: _controller,
+              isRunning: view.isRunning,
+              onSend: _send,
+              onAbort: _abort,
+            )
+          else
+            QuestionPanel(
+              key: ValueKey(view.questions.first.id),
+              request: view.questions.first,
+              onAnswered: (answers) =>
+                  notifier.answerQuestions(view.questions.first.id, answers),
+            ),
         ],
       ),
     );

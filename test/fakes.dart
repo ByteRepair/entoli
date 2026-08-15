@@ -144,6 +144,14 @@ class FakeBackend implements AgentBackend {
   @override
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response) async {}
 
+  final List<({String requestId, List<String?> answers})> answered = [];
+
+  @override
+  Future<void> respondQuestions(
+      String chatId, String requestId, List<String?> answers) async {
+    answered.add((requestId: requestId, answers: answers));
+  }
+
   @override
   Future<void> disposeChat(String chatId) async {}
 
