@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 
 import "../harness.dart";
@@ -43,9 +44,37 @@ void main() {
     await tester.tap(find.byTooltip("New chat"));
     await tester.pumpAndSettle();
 
-    final chats = await app.repo.listChats();
-    expect(chats, hasLength(1));
-    expect(app.container.read(selectedChatIdProvider), chats.single.id);
+    expect(app.container.read(selectedChatIdProvider), isNotNull);
+  });
+
+  testWidgets("a new chat is not listed until something is said in it", (tester) async {
+    await app.seedChat();
+    await pumpBeside(tester);
+
+    await tester.tap(find.byTooltip("New chat"));
+    await tester.pumpAndSettle();
+
+    expect(await app.repo.listChats(), hasLength(1));
+    expect(find.text("New chat"), findsNothing);
+    expect(find.text("old chat"), findsOneWidget);
+  });
+
+  testWidgets("its first message puts it in the list", (tester) async {
+    await pumpBeside(tester);
+    await tester.tap(find.byTooltip("New chat"));
+    await tester.pumpAndSettle();
+    final id = app.container.read(selectedChatIdProvider)!;
+
+    final controller = app.container.read(chatControllerProvider(id).notifier);
+    await tester.runAsync(() async {
+      // The controller loads its chat before it can send anything.
+      await Future<void>.delayed(Duration.zero);
+      await controller.send("hello");
+    });
+    await pumpUntil(tester, find.text("New chat"));
+
+    expect(find.text("New chat"), findsOneWidget);
+    expect(await app.repo.listChats(), hasLength(1));
   });
 
   testWidgets("a second new chat becomes the selected one", (tester) async {
@@ -72,7 +101,7 @@ void main() {
   });
 
   testWidgets("tapping an existing chat in the drawer closes it too", (tester) async {
-    await app.repo.createChat(title: "old chat");
+    await app.seedChat();
     await pumpAsDrawer(tester);
 
     await tester.tap(find.text("old chat"));
@@ -83,7 +112,7 @@ void main() {
   });
 
   testWidgets("selecting beside the chat pane leaves the sidebar in place", (tester) async {
-    await app.repo.createChat(title: "old chat");
+    await app.seedChat();
     await pumpBeside(tester);
 
     await tester.tap(find.text("old chat"));

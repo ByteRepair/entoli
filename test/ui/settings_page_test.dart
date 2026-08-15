@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -124,11 +125,71 @@ void main() {
     expect(find.text(defaultOptionLabel), findsOneWidget);
   });
 
+  group("the title model", () {
+    Future<void> openTitleDropdown(WidgetTester tester) async {
+      final field = find.byType(DropdownButtonFormField<ModelOption?>);
+      await scrollTo(tester, field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("is off until one is picked, and every model is offered", (tester) async {
+      await pumpSettings(tester);
+      await openTitleDropdown(tester);
+
+      // Off, then all four models by name: nothing inherits from this, so
+      // there is no provider to narrow the list to.
+      expect(popupLabels(tester), [
+        "Off",
+        "Claude Haiku 3",
+        "Claude Sonnet 4",
+        "Llama 3",
+        "Qwen 2.5",
+      ]);
+    });
+
+    testWidgets("picking one stores the provider with it", (tester) async {
+      await pumpSettings(tester);
+      await openTitleDropdown(tester);
+
+      await tester.tap(find.text("Claude Haiku 3").last);
+      await tester.pumpAndSettle();
+
+      final settings = app.container.read(appSettingsProvider);
+      expect(settings.titleProviderId, firstProvider);
+      expect(settings.titleModelId, "claude-haiku-3");
+      expect(AppSettings.load(app.config).titleModelId, "claude-haiku-3");
+    });
+
+    testWidgets("turning it off drops both halves", (tester) async {
+      app.seedSettings(
+          AppSettings(titleProviderId: otherProvider, titleModelId: "qwen-2.5"));
+      await pumpSettings(tester);
+      expect(find.text("Qwen 2.5"), findsOneWidget);
+
+      await openTitleDropdown(tester);
+      await tester.tap(find.text("Off").last);
+      await tester.pumpAndSettle();
+
+      final settings = app.container.read(appSettingsProvider);
+      expect(settings.titleProviderId, isNull);
+      expect(settings.titleModelId, isNull);
+    });
+
+    testWidgets("a model the backend no longer offers reads as off", (tester) async {
+      app.seedSettings(AppSettings(titleProviderId: "gone", titleModelId: "vanished"));
+      await pumpSettings(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text("Off"), findsOneWidget);
+    });
+  });
+
   testWidgets("delete all chats asks first and then clears them", (tester) async {
     await pumpSettings(tester);
     final repo = app.repo;
-    await repo.createChat(title: "one");
-    await repo.createChat(title: "two");
+    await app.seedChat(title: "one");
+    await app.seedChat(title: "two");
 
     await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
@@ -144,7 +205,7 @@ void main() {
   testWidgets("cancelling the confirmation keeps the chats", (tester) async {
     await pumpSettings(tester);
     final repo = app.repo;
-    await repo.createChat(title: "one");
+    await app.seedChat(title: "one");
 
     await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));

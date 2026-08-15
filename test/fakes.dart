@@ -73,6 +73,18 @@ class FakeBackend implements AgentBackend {
     );
   }
 
+  final List<({String prompt, String model, String provider})> questions = [];
+
+  /// What `ask` answers. Null is a model that could not answer.
+  String? scriptedAnswer;
+
+  @override
+  Future<String?> ask(String prompt,
+      {required String model, required String provider}) async {
+    questions.add((prompt: prompt, model: model, provider: provider));
+    return scriptedAnswer;
+  }
+
   final List<
       ({
         String text,

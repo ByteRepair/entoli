@@ -12,6 +12,11 @@ abstract class ChatStore {
 
   Future<void> save(Chat chat);
 
+  /// Write `state.json` alone. A rename that went through [save] would write
+  /// back the conversation it had read, over whatever a running turn has
+  /// added since.
+  Future<void> saveState(ChatState state);
+
   Future<void> delete(String id);
 
   /// Save an attachment's bytes under `resources/` and return the name they

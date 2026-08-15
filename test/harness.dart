@@ -9,6 +9,7 @@ import "package:agent_chat/data/local/local_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
+import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/widgets/provider_model_selector.dart";
@@ -51,9 +52,20 @@ class TestApp {
 
   ChatRepository get repo => container.read(chatRepositoryProvider);
 
+  /// Settings on disk, written the way the app writes them.
+  void seedSettings(AppSettings settings) => settings.save(config);
+
   /// The app-level default, written the way the app writes it.
   void seedGlobalDefault({String? providerId, String? modelId}) =>
-      AppSettings(defaultProviderId: providerId, defaultModelId: modelId).save(config);
+      seedSettings(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
+
+  /// A chat that is already in the sidebar. Creating one no longer puts it
+  /// there: it is a draft until something is said in it.
+  Future<Chat> seedChat({String title = "old chat"}) async {
+    final chat = await repo.createChat(title: title);
+    await repo.save(chat);
+    return chat;
+  }
 
   /// A chat's own overrides, written the way the chat settings page writes them.
   void seedChatMeta(String chatId, ChatMeta meta) {

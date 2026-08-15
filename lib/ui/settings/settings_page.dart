@@ -89,6 +89,20 @@ class _DefaultsSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setDefault(choice),
           ),
         ),
+        LabelledField(
+          label: "Title LLM",
+          child: OptionalModelPicker(
+            offLabel: "Off",
+            helperText: "Names a chat from its first message. Off, chats stay "
+                "\"New chat\" until you rename them.",
+            choice: (
+              providerId: settings.titleProviderId,
+              modelId: settings.titleModelId,
+            ),
+            onChanged: (choice) =>
+                ref.read(appSettingsProvider.notifier).setTitleModel(choice),
+          ),
+        ),
       ],
     );
   }
