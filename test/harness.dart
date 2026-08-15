@@ -96,6 +96,15 @@ Future<void> pumpUntil(WidgetTester tester, Finder until, {int tries = 50}) asyn
   }
 }
 
+/// The app under system bars, the way Android draws it: the window is the whole
+/// screen and what the status and navigation bars cover is [padding].
+Widget underSystemBars(EdgeInsets padding, Widget child) => Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(padding: padding, viewPadding: padding),
+        child: child,
+      ),
+    );
+
 /// Bring [target] into view. A page taller than the test window builds only
 /// the part of itself that shows, so the finders cannot see the rest.
 Future<void> scrollTo(WidgetTester tester, Finder target) async {
