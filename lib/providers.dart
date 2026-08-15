@@ -81,11 +81,19 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   );
 });
 
-/// The sidebar's list: the chats on disk, which a new one joins when its first
-/// message is saved. Invalidated by whoever changes what it shows.
+/// The sidebar's list: the chats on disk, in every project — each says which
+/// one it is in. A new chat joins when its first message is saved, and whoever
+/// changes what the list shows invalidates it.
 final chatListProvider = FutureProvider((ref) async {
   final repo = ref.watch(chatRepositoryProvider);
   return repo.listChats();
+});
+
+/// The projects that exist, for the sidebar's switcher. The default project is
+/// not in it: it is null, and it is always there.
+final projectListProvider = FutureProvider((ref) async {
+  final repo = ref.watch(chatRepositoryProvider);
+  return repo.listProjects();
 });
 
 final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {

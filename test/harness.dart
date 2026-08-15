@@ -61,8 +61,8 @@ class TestApp {
 
   /// A chat that is already in the sidebar. Creating one no longer puts it
   /// there: it is a draft until something is said in it.
-  Future<Chat> seedChat({String title = "old chat"}) async {
-    final chat = await repo.createChat(title: title);
+  Future<Chat> seedChat({String title = "old chat", String? project}) async {
+    final chat = await repo.createChat(title: title, project: project);
     await repo.save(chat);
     return chat;
   }
@@ -133,11 +133,12 @@ List<String?> popupLabels(WidgetTester tester) => tester
     .toList();
 
 /// A data directory that cleans itself up when the test ends. `forDirectory`
-/// deliberately does not create `chats/`, and every caller needs it.
+/// deliberately creates nothing, and every caller needs the default project's
+/// directories.
 AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   final tmp = Directory.systemTemp.createTempSync(prefix);
   final config = AppConfig.forDirectory(tmp);
-  Directory(config.chatsDir.path).createSync(recursive: true);
+  config.ensureProjectDirs();
   addTearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });

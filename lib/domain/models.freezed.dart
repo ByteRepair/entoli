@@ -15,7 +15,11 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$ChatState {
 
- String get id; String get title; DateTime get createdAt; DateTime get updatedAt; String? get model; String? get provider;
+ String get id; String get title; DateTime get createdAt; DateTime get updatedAt;/// Which project's `chats/` this lives in. Null is the default project —
+/// the data directory itself, where every chat was before there were any.
+/// The directory a chat is found in wins over this: a chat moved by hand
+/// is in the project it was moved to.
+ String? get project;
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +32,16 @@ $ChatStateCopyWith<ChatState> get copyWith => _$ChatStateCopyWithImpl<ChatState>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.model, model) || other.model == model)&&(identical(other.provider, provider) || other.provider == provider));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.project, project) || other.project == project));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,model,provider);
+int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,project);
 
 @override
 String toString() {
-  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, model: $model, provider: $provider)';
+  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, project: $project)';
 }
 
 
@@ -48,7 +52,7 @@ abstract mixin class $ChatStateCopyWith<$Res>  {
   factory $ChatStateCopyWith(ChatState value, $Res Function(ChatState) _then) = _$ChatStateCopyWithImpl;
 @useResult
 $Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, String? model, String? provider
+ String id, String title, DateTime createdAt, DateTime updatedAt, String? project
 });
 
 
@@ -65,14 +69,13 @@ class _$ChatStateCopyWithImpl<$Res>
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? model = freezed,Object? provider = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? project = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
 as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
-as DateTime,model: freezed == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
-as String?,provider: freezed == provider ? _self.provider : provider // ignore: cast_nullable_to_non_nullable
+as DateTime,project: freezed == project ? _self.project : project // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -158,10 +161,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? model,  String? provider)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ChatState() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.model,_that.provider);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project);case _:
   return orElse();
 
 }
@@ -179,10 +182,10 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.model
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? model,  String? provider)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project)  $default,) {final _that = this;
 switch (_that) {
 case _ChatState():
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.model,_that.provider);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -199,10 +202,10 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.model
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? model,  String? provider)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project)?  $default,) {final _that = this;
 switch (_that) {
 case _ChatState() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.model,_that.provider);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project);case _:
   return null;
 
 }
@@ -214,15 +217,18 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.model
 @JsonSerializable()
 
 class _ChatState implements ChatState {
-  const _ChatState({required this.id, required this.title, required this.createdAt, required this.updatedAt, this.model, this.provider});
+  const _ChatState({required this.id, required this.title, required this.createdAt, required this.updatedAt, this.project});
   factory _ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
 
 @override final  String id;
 @override final  String title;
 @override final  DateTime createdAt;
 @override final  DateTime updatedAt;
-@override final  String? model;
-@override final  String? provider;
+/// Which project's `chats/` this lives in. Null is the default project —
+/// the data directory itself, where every chat was before there were any.
+/// The directory a chat is found in wins over this: a chat moved by hand
+/// is in the project it was moved to.
+@override final  String? project;
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
@@ -237,16 +243,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.model, model) || other.model == model)&&(identical(other.provider, provider) || other.provider == provider));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.project, project) || other.project == project));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,model,provider);
+int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,project);
 
 @override
 String toString() {
-  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, model: $model, provider: $provider)';
+  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, project: $project)';
 }
 
 
@@ -257,7 +263,7 @@ abstract mixin class _$ChatStateCopyWith<$Res> implements $ChatStateCopyWith<$Re
   factory _$ChatStateCopyWith(_ChatState value, $Res Function(_ChatState) _then) = __$ChatStateCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, String? model, String? provider
+ String id, String title, DateTime createdAt, DateTime updatedAt, String? project
 });
 
 
@@ -274,14 +280,13 @@ class __$ChatStateCopyWithImpl<$Res>
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? model = freezed,Object? provider = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? project = freezed,}) {
   return _then(_ChatState(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
 as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
-as DateTime,model: freezed == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
-as String?,provider: freezed == provider ? _self.provider : provider // ignore: cast_nullable_to_non_nullable
+as DateTime,project: freezed == project ? _self.project : project // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

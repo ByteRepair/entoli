@@ -1,5 +1,39 @@
 import "package:flutter/material.dart";
 
+import "../../domain/project.dart";
+
+/// Ask which project something belongs under. The answer is wrapped because
+/// the default project is null as well, and a dismissed dialog must not read
+/// as picking it.
+Future<({String? project})?> pickProject(
+  BuildContext context, {
+  required List<String?> projects,
+  String? current,
+}) =>
+    showDialog<({String? project})>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text("Move to project"),
+        children: [
+          for (final project in projects)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, (project: project)),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check,
+                    size: 18,
+                    color: project == current ? null : Colors.transparent,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(projectLabel(project))),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+
 /// Ask for a line (or a few) of text. Returns null if dismissed or left blank.
 Future<String?> promptForText(
   BuildContext context, {

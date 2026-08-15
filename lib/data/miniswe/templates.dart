@@ -11,12 +11,18 @@ const submitMarker = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT";
 /// asked something else once the turn is over.
 String systemPrompt({
   required String workspace,
+  required String projectWorkspace,
   required String platform,
   String? agentPrompt,
   bool canRunCommands = true,
 }) =>
     canRunCommands
-        ? _withShell(workspace: workspace, platform: platform, agentPrompt: agentPrompt)
+        ? _withShell(
+            workspace: workspace,
+            projectWorkspace: projectWorkspace,
+            platform: platform,
+            agentPrompt: agentPrompt,
+          )
         : _withoutShell(agentPrompt);
 
 /// Where there is no shell, the submission protocol is unsayable — submitting
@@ -46,6 +52,7 @@ never for something you could find out yourself.""";
 
 String _withShell({
   required String workspace,
+  required String projectWorkspace,
   required String platform,
   String? agentPrompt,
 }) =>
@@ -53,8 +60,15 @@ String _withShell({
 You are a helpful assistant that can interact with a computer to answer the
 user's questions and carry out their tasks.
 
-You work in a persistent workspace directory: $workspace
-It is yours; the files in it survive between turns and between conversations.
+Every command runs in this conversation's own workspace: $workspace
+It is yours; the files in it survive between turns, and no other conversation
+sees them.
+
+The project workspace is shared with every other conversation in this project:
+$projectWorkspace
+Work the user will come back to — a checkout, notes, data you built up — goes
+there, so another conversation can pick it up. Write to it by path; you do not
+have to be in it.
 
 ## How you act
 

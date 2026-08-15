@@ -6,9 +6,28 @@ import "../domain/models.dart";
 /// Persistent on-disk store for chats. Implements `state.json` + `conv.json`
 /// layout under the data directory.
 abstract class ChatStore {
+  /// Every chat, in every project. Each one says which it is in, so the UI can
+  /// show one project's without asking again.
   Future<List<ChatState>> list();
 
   Future<Chat> load(String id);
+
+  /// The projects that exist, by name, sorted. The default project is not one
+  /// of them: it is `null`, and it is always there.
+  Future<List<String>> listProjects();
+
+  /// Which project a chat's files are in — the default one when it has none,
+  /// which is also what an id nothing has been written under answers.
+  Future<String?> projectOf(String chatId);
+
+  Future<void> createProject(String name);
+
+  /// Delete a project, its chats and its shared workspace.
+  Future<void> deleteProject(String name);
+
+  /// Move a chat, its conversation, its resources and its own workspace into
+  /// [project] — null for the default one.
+  Future<void> moveChat(String chatId, String? project);
 
   Future<void> save(Chat chat);
 

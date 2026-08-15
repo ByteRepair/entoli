@@ -34,6 +34,7 @@ void main() {
       client: client,
       shell: shell,
       workspace: "/tmp/workspace",
+      projectWorkspace: "/tmp/project-workspace",
       model: "fake-model",
       options: options,
       requireApproval: requireApproval,
