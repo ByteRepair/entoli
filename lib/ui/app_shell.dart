@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 
 import "chat/chat_page.dart";
 import "sidebar/sidebar.dart";
+import "widgets/app_mark.dart";
 
 /// Responsive shell: sidebar + chat pane. On narrow screens the sidebar
 /// collapses into a drawer.
@@ -26,7 +27,13 @@ class AppShell extends StatelessWidget {
           drawer: const Drawer(child: Sidebar()),
           body: const ChatPage(),
           appBar: AppBar(
-            title: const Text("agent-chat"),
+            title: const Row(
+              children: [
+                AppMark(size: 24),
+                SizedBox(width: 10),
+                Text("Entoli"),
+              ],
+            ),
             leading: Builder(
               builder: (context) => IconButton(
                 icon: const Icon(Icons.menu),

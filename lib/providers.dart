@@ -3,6 +3,7 @@ import "dart:typed_data";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
+import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/attachment_picker.dart";
 import "domain/app_settings.dart";
@@ -62,6 +63,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setProfile(Profile? profile) =>
       _update((s) => s.profile = profile);
 
+  /// Setting first, launcher second: a launcher that refuses still leaves the
+  /// app showing what was picked.
+  Future<void> setAppIcon(AppIcon icon) async {
+    await _update((s) => s.appIcon = icon);
+    await ref.read(launcherIconsProvider).use(icon);
+  }
+
   /// The endpoints the agent can call. The model list is rebuilt from them, so
   /// it is invalidated here rather than left showing the old one.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
@@ -81,6 +89,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
 final appSettingsProvider =
     NotifierProvider<AppSettingsNotifier, AppSettings>(AppSettingsNotifier.new);
+
+final launcherIconsProvider =
+    Provider<LauncherIcons>((ref) => throw UnimplementedError());
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   // Deliberately not watching appSettingsProvider: the repository reads the
@@ -121,7 +132,7 @@ final attachmentBytesProvider =
     FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>((ref, key) =>
         ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource));
 
-/// The composer's `/` and `@` menus, read straight off the library: agent-chat
+/// The composer's `/` and `@` menus, read straight off the library: Entoli
 /// owns its commands and agents, so nothing has to be asked what it knows.
 final completionsProvider = Provider.family<List<CompletionOption>, CompletionKind>(
     (ref, kind) => ref.watch(promptLibraryProvider).options(kind));

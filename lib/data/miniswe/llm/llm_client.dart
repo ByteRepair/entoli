@@ -2,7 +2,7 @@ import "dart:convert";
 import "dart:typed_data";
 
 /// The conversation as a provider sees it. Deliberately not `Message` from the
-/// domain: that is what agent-chat persists, this is what goes over the wire,
+/// domain: that is what Entoli persists, this is what goes over the wire,
 /// and the two diverge (a tool result is a message here, a part there).
 enum LlmRole { system, user, assistant, tool }
 

@@ -1,8 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="agent_chat"
+        android:label="Entoli"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_prompt">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -20,11 +20,36 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+        </activity>
+
+        <!-- The launcher entry is an alias rather than the activity itself, so
+             that the icon can be changed while the app is installed: exactly
+             one of these is enabled, and MainActivity.kt switches which.
+             MainActivity carries no LAUNCHER filter of its own, or the app
+             would appear on the home screen twice. -->
+        <activity-alias
+            android:name=".PromptIcon"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_prompt"
+            android:enabled="true"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".CookieIcon"
+            android:targetActivity=".MainActivity"
+            android:icon="@mipmap/ic_cookie"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

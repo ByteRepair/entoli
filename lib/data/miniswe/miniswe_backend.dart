@@ -22,7 +22,7 @@ import "permission_classifier.dart";
 import "sub_agent.dart";
 
 /// mini-swe-agent, running in this process. The loop is [MinisweAgent]; this
-/// is what agent-chat talks to: it holds a session per chat, resolves which
+/// is what Entoli talks to: it holds a session per chat, resolves which
 /// endpoint a turn runs against, and turns the composer's `/` and `@` syntax
 /// into a task and a system prompt before the agent ever sees it.
 class MinisweBackend implements AgentBackend {
@@ -39,7 +39,7 @@ class MinisweBackend implements AgentBackend {
   final LlmRegistry registry;
   final Shell shell;
 
-  /// agent-chat's own commands and agents, expanded into the task and the
+  /// Entoli's own commands and agents, expanded into the task and the
   /// system prompt before the agent sees them.
   final PromptLibrary? library;
 
