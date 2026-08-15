@@ -6,6 +6,7 @@ import "domain/app_settings.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
 import "domain/models.dart";
+import "ui/widgets/provider_model_selector.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
@@ -20,15 +21,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     return AppSettings.load(_config);
   }
 
-  Future<void> setDefaultModel(String providerId, String modelId) =>
-      _store(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
-
-  /// Keep a provider without pinning a model, or clear both with null.
-  Future<void> setDefaultProvider(String? providerId) =>
-      _store(AppSettings(defaultProviderId: providerId));
-
-  Future<void> _store(AppSettings settings) async {
-    state = settings;
+  /// The app-level default, stored exactly as shown: a pair, one half, or
+  /// nothing at all.
+  Future<void> setDefault(ModelChoice choice) async {
+    state = AppSettings(
+      defaultProviderId: choice.providerId,
+      defaultModelId: choice.providerId == null ? null : choice.modelId,
+    );
     await state.save(_config);
   }
 }

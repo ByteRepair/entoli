@@ -1,9 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/app_settings.dart";
 import "../../domain/chat_meta.dart";
-import "../../domain/models.dart";
 import "../../providers.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
@@ -46,7 +44,6 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final modelsAsync = ref.watch(availableModelsProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text("Chat settings"),
@@ -64,7 +61,6 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
               children: [
                 _LlmField(
                   meta: _meta!,
-                  modelsAsync: modelsAsync,
                   onChanged: (m) => setState(() => _meta = m),
                 ),
                 const Divider(),
@@ -84,10 +80,9 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
 }
 
 class _LlmField extends ConsumerWidget {
-  const _LlmField({required this.meta, required this.modelsAsync, required this.onChanged});
+  const _LlmField({required this.meta, required this.onChanged});
 
   final ChatMeta meta;
-  final AsyncValue<List<ModelOption>> modelsAsync;
   final ValueChanged<ChatMeta> onChanged;
 
   @override
@@ -100,66 +95,19 @@ class _LlmField extends ConsumerWidget {
         children: [
           const Text("LLM", style: TextStyle(fontSize: 12)),
           const SizedBox(height: 4),
-          modelsAsync.when(
-            data: (models) => _LlmDropdowns(
-              models: models,
-              meta: meta,
-              defaults: defaults,
-              onChanged: onChanged,
+          ModelPicker(
+            choice: (providerId: meta.provider, modelId: meta.model),
+            inherited: (
+              providerId: defaults.defaultProviderId,
+              modelId: defaults.defaultModelId,
             ),
-            loading: () => const Row(
-              children: [
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text("Loading models..."),
-              ],
-            ),
-            error: (e, _) => Text("Failed to load models: $e"),
+            onChanged: (choice) => onChanged(meta
+              ..provider = choice.providerId
+              ..model = choice.modelId),
           ),
         ],
       ),
     );
-  }
-}
-
-class _LlmDropdowns extends StatelessWidget {
-  const _LlmDropdowns({
-    required this.models,
-    required this.meta,
-    required this.defaults,
-    required this.onChanged,
-  });
-
-  final List<ModelOption> models;
-  final ChatMeta meta;
-  final AppSettings defaults;
-  final ValueChanged<ChatMeta> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return ProviderModelSelector(
-      models: models,
-      choice: (providerId: _pinnedProvider, modelId: meta.model),
-      inherited: (
-        providerId: defaults.defaultProviderId,
-        modelId: defaults.defaultModelId,
-      ),
-      onChanged: (choice) => onChanged(meta
-        ..provider = choice.providerId
-        ..model = choice.modelId),
-    );
-  }
-
-  /// meta.json may name a model without its provider; recover it from the
-  /// model so the saved choice still shows up.
-  String? get _pinnedProvider {
-    if (meta.provider != null) return meta.provider;
-    final owning = models.where((m) => m.modelId == meta.model);
-    return owning.isEmpty ? null : owning.first.providerId;
   }
 }
 

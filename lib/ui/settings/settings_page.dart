@@ -1,7 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/app_settings.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
@@ -15,9 +14,6 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final kind = ref.watch(agentBackendProvider).kind;
-    final settings = ref.watch(appSettingsProvider);
-    final modelsAsync = ref.watch(availableModelsProvider);
-
     return Scaffold(
       appBar: AppBar(title: const Text("Settings")),
       body: ListView(
@@ -35,7 +31,7 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
           const Divider(),
-          _OpencodeSection(settings: settings, modelsAsync: modelsAsync),
+          const _OpencodeSection(),
           const Divider(),
           const _DeleteAllChats(),
         ],
@@ -87,78 +83,32 @@ class _DeleteAllChats extends ConsumerWidget {
 }
 
 class _OpencodeSection extends ConsumerWidget {
-  const _OpencodeSection({required this.settings, required this.modelsAsync});
-
-  final AppSettings settings;
-  final AsyncValue<List<ModelOption>> modelsAsync;
+  const _OpencodeSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            "OpenCode",
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          child: Text("OpenCode", style: Theme.of(context).textTheme.titleMedium),
         ),
-        modelsAsync.when(
-          data: (models) => _ModelSelector(models: models, settings: settings),
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text("Loading models..."),
-              ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          // Nothing above the app level to inherit from: Default means
+          // whatever the backend picks.
+          child: ModelPicker(
+            choice: (
+              providerId: settings.defaultProviderId,
+              modelId: settings.defaultModelId,
             ),
-          ),
-          error: (e, _) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Text("Failed to load models: $e"),
+            onChanged: (choice) =>
+                ref.read(appSettingsProvider.notifier).setDefault(choice),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ModelSelector extends ConsumerWidget {
-  const _ModelSelector({required this.models, required this.settings});
-
-  final List<ModelOption> models;
-  final AppSettings settings;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ProviderModelSelector(
-        models: models,
-        choice: (
-          providerId: settings.defaultProviderId,
-          modelId: settings.defaultModelId,
-        ),
-        // Nothing above the app level to inherit from: Default means whatever
-        // the backend picks.
-        onChanged: (choice) {
-          final notifier = ref.read(appSettingsProvider.notifier);
-          final providerId = choice.providerId;
-          final modelId = choice.modelId;
-          if (providerId == null || modelId == null) {
-            notifier.setDefaultProvider(providerId);
-          } else {
-            notifier.setDefaultModel(providerId, modelId);
-          }
-        },
-      ),
     );
   }
 }
