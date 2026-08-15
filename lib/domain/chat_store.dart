@@ -1,5 +1,7 @@
 import "dart:typed_data";
 
+import "package:uuid/uuid.dart";
+
 import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 
@@ -48,4 +50,15 @@ abstract class ChatStore {
   Future<ChatMeta> loadMeta(String chatId);
 
   Future<void> saveMeta(String chatId, ChatMeta meta);
+}
+
+/// What [ChatStore.saveResource] stores an attachment under: unique, so two
+/// turns can attach the same filename, and safe to be one — the disk store
+/// writes it as a path, and both stores answer [ChatStore.readResource] with
+/// the name they gave out.
+String resourceName(String filename) {
+  var safe = filename.replaceAll(RegExp(r"[^A-Za-z0-9._-]"), "_");
+  safe = safe.replaceAll(RegExp(r"\.{2,}"), ".");
+  if (safe.startsWith(".")) safe = safe.substring(1);
+  return "${const Uuid().v4()}-$safe";
 }

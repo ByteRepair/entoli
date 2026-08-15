@@ -12,10 +12,10 @@ class ProjectSettings {
   Profile? profile;
 
   static ProjectSettings load(AppConfig config, {String? project}) {
-    final file = config.projectSettingsFile(project: project);
-    if (!file.existsSync()) return ProjectSettings();
+    final text = AppConfig.readText(config.projectSettingsFile(project: project));
+    if (text == null) return ProjectSettings();
     try {
-      final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      final json = jsonDecode(text) as Map<String, dynamic>;
       return ProjectSettings(profile: Profile.fromJson(json["profile"]));
     } catch (_) {
       return ProjectSettings();
@@ -23,8 +23,7 @@ class ProjectSettings {
   }
 
   Future<void> save(AppConfig config, {String? project}) async {
-    final file = config.projectSettingsFile(project: project);
-    file.writeAsStringSync(jsonEncode({
+    AppConfig.writeText(config.projectSettingsFile(project: project), jsonEncode({
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
     }));
   }

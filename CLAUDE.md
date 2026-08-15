@@ -41,8 +41,24 @@ files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`, and
 `llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
-app-private storage (Android). The web build compiles and the UI runs, but
-storage is `dart:io`-backed, so a browser has no chats of its own yet.
+app-private storage (Android).
+
+A browser has none of this, and `dart:io` compiles for the web — it is the
+calls that throw — so nothing says so at build time. What the platform provides
+is answered once, in `core/platform/` (see "Running the commands"):
+`platformChatStore` is `MemoryChatStore` there, holding in fields what
+`LocalChatStore` holds in files, and `platformPromptSources` offers the presets
+alone. Neither `LocalChatStore` nor `DirectoryPrompts` is then part of the web
+program at all, which is why neither has to know a browser exists.
+
+What is left is `AppConfig` itself, and it guards its own calls: `load`
+resolves no directory and creates none — reading `Platform.environment` before
+it was what left the web build a white screen — `ensureDirs` is a no-op, and
+`readText`/`writeText`, what `settings.json` and `project.json` go through,
+keep them in memory. `_hasStorage` is private for that reason: the question is
+this file's, and anything else that needs a different answer per platform has a
+boundary to say so at. So a browser's chats and settings last as long as the
+page, and a reload starts over.
 
 ### Projects
 
@@ -213,10 +229,19 @@ turn-scoped view state, never a message part, so it is not persisted.
 
 #### Running the commands
 
-`Shell` is the only platform-varying part of the app — `LocalShell` on desktop
-and Android, `UnavailableShell` in a browser — which is why
-`lib/core/platform/backend.dart` holds the app's single conditional import
-(`io/shell.dart` or `web/shell.dart`) and is otherwise plain wiring.
+What the app is given by the platform it runs on — a shell or none, the network
+or CORS, a filesystem or a page's memory — is resolved in
+`lib/core/platform/platform.dart`, which holds the app's single conditional
+import (`io/platform.dart` or `web/platform.dart`) and is otherwise plain
+wiring: `LocalShell`, `DuckDuckGoSearch`, `LocalChatStore` and the user's own
+prompt directory on desktop and Android; `UnavailableShell`,
+`UnavailableWebSearch`, `MemoryChatStore` and the presets alone in a browser.
+One import site is the point: an implementation a platform cannot use is not
+reachable from its program, so nothing further down has to test for it.
+
+`MinisweBackend.webSearch` is required rather than defaulted for that reason —
+a default of `DuckDuckGoSearch()` puts its HTML parser in the web bundle
+(~280 KB) where CORS means it can never be called.
 
 `Shell.canRunCommands` is what a browser actually changes, and it is not one
 failing command — it is the whole loop. With no shell there is nothing to run,
@@ -562,6 +587,9 @@ list, so both routes share one code path; for a file it opens the chooser.
 - Build/test Linux desktop inside the `flutter-dev` toolbox (host lacks
   cmake/ninja/clang++): `toolbox run --container flutter-dev flutter build linux --debug`.
 - UI runs forwarded to host: `toolbox run --container flutter-dev flutter run -d linux --debug`.
+- Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
+  Nothing runs the app in a browser here, so a web-only regression is caught by
+  reloading the page, not by `flutter test`.
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test`.
 

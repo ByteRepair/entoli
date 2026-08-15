@@ -49,6 +49,7 @@ void main() {
       config: config,
       library: library,
       shell: shell,
+      webSearch: FakeWebSearch(),
       options: options,
       registry: LlmRegistry(
         providers: () => providers,

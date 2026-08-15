@@ -12,7 +12,6 @@ import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/web_search.dart";
-import "duckduckgo_search.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/llm_registry.dart";
@@ -30,10 +29,10 @@ class MinisweBackend implements AgentBackend {
     required this.config,
     required this.registry,
     required this.shell,
+    required this.webSearch,
     this.library,
-    WebSearch? webSearch,
     this.options = const MinisweOptions(),
-  }) : webSearch = webSearch ?? DuckDuckGoSearch();
+  });
 
   final AppConfig config;
   final LlmRegistry registry;
@@ -43,8 +42,11 @@ class MinisweBackend implements AgentBackend {
   /// system prompt before the agent sees them.
   final PromptLibrary? library;
 
-  /// Web search and fetch. `DuckDuckGoSearch` on desktop and Android;
-  /// `UnavailableWebSearch` on the web platform.
+  /// Web search and fetch, chosen by the platform like [shell] is:
+  /// `DuckDuckGoSearch` on desktop and Android, `UnavailableWebSearch` in a
+  /// browser. Named rather than defaulted because a default of the first would
+  /// ship its HTML parser to every browser that loads the app and could never
+  /// call it.
   final WebSearch webSearch;
 
   /// Limits and timeouts for every turn.
