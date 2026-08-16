@@ -57,6 +57,9 @@ typedef SendCallback = void Function(String text, List<Attachment> attachments);
 /// and whatever is attached, then clears both; calls onAbort when a turn is
 /// running. Typing `/` or `@` opens a menu of the app's commands or agents
 /// above the field, and the `+` button also attaches files.
+///
+/// Nothing here asks for the field's focus. On Android that is the keyboard
+/// coming up, and it comes up when the field is tapped and at no other time.
 class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,
@@ -75,32 +78,19 @@ class Composer extends ConsumerStatefulWidget {
   ConsumerState<Composer> createState() => _ComposerState();
 }
 
-class _ComposerState extends ConsumerState<Composer> with WidgetsBindingObserver {
+class _ComposerState extends ConsumerState<Composer> {
   static const _rowHeight = 40.0;
   static const _visibleRows = 5;
 
   final ScrollController _scroll = ScrollController();
-  final FocusNode _focus = FocusNode();
   final List<Attachment> _attachments = [];
   CompletionToken? _token;
   int _highlighted = 0;
-  bool _keyboardUp = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_syncToken);
-  }
-
-  /// Android's back key closes the keyboard without telling Flutter, and the
-  /// insets are the only report of it. Off the view rather than `MediaQuery`,
-  /// which a Scaffold has already taken the bottom inset out of.
-  @override
-  void didChangeMetrics() {
-    final up = View.of(context).viewInsets.bottom > 0;
-    if (_keyboardUp && !up) _focus.unfocus();
-    _keyboardUp = up;
   }
 
   @override
@@ -114,10 +104,8 @@ class _ComposerState extends ConsumerState<Composer> with WidgetsBindingObserver
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_syncToken);
     _scroll.dispose();
-    _focus.dispose();
     super.dispose();
   }
 
@@ -148,9 +136,9 @@ class _ComposerState extends ConsumerState<Composer> with WidgetsBindingObserver
 
   /// The `+` button opens the same menu the trigger characters do, by typing
   /// one — a command's at the start of the message, the only place one is read
-  /// from, and a mention's wherever the caret happens to be.
+  /// from, and a mention's wherever the caret happens to be. The menu that
+  /// opens is tapped rather than typed at, so the field is left unfocused.
   void _openMenu(CompletionKind kind) {
-    _focus.requestFocus();
     final value = widget.controller.value;
     if (kind == CompletionKind.command && value.text.startsWith(kind.trigger)) {
       widget.controller.selection = const TextSelection.collapsed(offset: 1);
@@ -187,7 +175,6 @@ class _ComposerState extends ConsumerState<Composer> with WidgetsBindingObserver
     final picked = await ref.read(attachmentPickerProvider).pick(kind);
     if (picked.isEmpty || !mounted) return;
     setState(() => _attachments.addAll(picked));
-    _focus.requestFocus();
   }
 
   void _submit() {
@@ -229,9 +216,8 @@ class _ComposerState extends ConsumerState<Composer> with WidgetsBindingObserver
               ),
             Row(
               children: [
-                // Running the entry's action on selection rather than on tap
-                // keeps it until after the menu has closed, so `_openMenu` is not
-                // asking for focus the dismissing route is about to take.
+                // Each entry carries its action as its value, so it runs once
+                // the menu has closed rather than under it.
                 PopupMenuButton<VoidCallback>(
                   icon: const Icon(Icons.add),
                   tooltip: "Attach or insert",
@@ -293,7 +279,6 @@ class _ComposerState extends ConsumerState<Composer> with WidgetsBindingObserver
                       },
                       child: TextField(
                         controller: widget.controller,
-                        focusNode: _focus,
                         minLines: 1,
                         maxLines: 6,
                         decoration: const InputDecoration(

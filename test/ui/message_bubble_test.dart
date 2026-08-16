@@ -57,6 +57,12 @@ void main() {
   double actionsOpacity(WidgetTester tester) =>
       tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity;
 
+  /// Open the drawer behind a thinking label, which every caller times at 12s.
+  Future<void> openThinking(WidgetTester tester) async {
+    await tester.tap(find.text("Thought for 12 seconds"));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets("an error part renders in the theme's error colour", (tester) async {
     await pump(tester, _message(MessageRole.assistant, [const ErrorPart(message: "usage limit reached")]));
 
@@ -184,10 +190,37 @@ void main() {
       ]),
     );
 
-    await tester.tap(find.text("Thought for 12 seconds"));
-    await tester.pumpAndSettle();
+    await openThinking(tester);
 
     expect(find.text("17*23 = 391"), findsOneWidget);
+  });
+
+  testWidgets("the back key closes the drawer rather than the app", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "17*23 = 391", durationMs: 12000),
+      ]),
+    );
+    await openThinking(tester);
+
+    expect(await pressBack(tester), isTrue);
+
+    expect(find.text("17*23 = 391"), findsNothing);
+  });
+
+  // Long output fills the screen rather than stopping at a fraction of it.
+  testWidgets("the drawer grows to what is in it", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [
+        ReasoningPart(text: List.filled(400, "thinking").join("\n"), durationMs: 12000),
+      ]),
+    );
+    await openThinking(tester);
+
+    final screen = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(tester.getSize(find.byType(BottomSheet)).height, screen);
   });
 
   testWidgets("a long think is counted in minutes", (tester) async {
