@@ -30,6 +30,11 @@ abstract class Chat with _$Chat {
   const factory Chat({
     required ChatState state,
     @Default([]) List<Message> messages,
+
+    /// The last message is a reply whose turn never finished, and so is one to
+    /// offer to carry on. Derived from the log by `endsUnfinished` rather than
+    /// persisted — the absence of a closing record is the whole of it.
+    @Default(false) bool unfinished,
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);

@@ -106,6 +106,38 @@ class InfoEvent extends AgentEvent {
   final String message;
 }
 
+/// Everything a turn runs under, resolved once by `ChatRepository` from the
+/// chat's `meta.json` over the app's `settings.json`. One value because every
+/// way of starting a turn takes all of it, and a forwarding site that drops one
+/// field is silent.
+class TurnSettings {
+  const TurnSettings({
+    this.model,
+    this.provider,
+    this.project,
+    this.approveMode = ApproveMode.ask,
+    this.classifierProvider,
+    this.classifierModel,
+    this.profile,
+  });
+
+  /// Only ever a matched pair: the registry keys clients by provider id.
+  final String? model;
+  final String? provider;
+
+  /// Which project's files the turn works in. Null is the default one.
+  final String? project;
+
+  final ApproveMode approveMode;
+
+  /// The model that classifies commands in auto mode. Null means auto mode
+  /// falls back to asking.
+  final String? classifierProvider;
+  final String? classifierModel;
+
+  final Profile? profile;
+}
+
 /// What runs a turn, and the app's one route to a provider. `MinisweBackend`
 /// is the implementation; this exists as a seam so the UI and the repository
 /// can be tested without one.
@@ -120,10 +152,7 @@ abstract class AgentBackend {
   /// on.
   Future<String?> ask(String prompt, {required String model, required String provider});
 
-  /// Send a user prompt; stream events until the turn completes. [project] is
-  /// which project's files the turn works in — null is the default one.
-  /// [classifierProvider]/[classifierModel] name the model that classifies
-  /// commands in auto mode; null means auto mode falls back to asking.
+  /// Send a user prompt; stream events until the turn completes.
   ///
   /// [history] is what was said before this prompt. It travels with the prompt
   /// rather than being handed over first: a session lives in memory for as long
@@ -132,15 +161,14 @@ abstract class AgentBackend {
   /// seen nothing of the chat to answer it fluently. Read only where the
   /// session is empty.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments,
-      List<Message> history,
-      String? model,
-      String? provider,
-      String? project,
-      ApproveMode approveMode = ApproveMode.ask,
-      String? classifierProvider,
-      String? classifierModel,
-      Profile? profile});
+      {List<Attachment> attachments, List<Message> history, TurnSettings settings});
+
+  /// Carry on the turn [history] ends in. No prompt, because there is no new
+  /// thing to say: the model is handed back what it had already done. Unlike
+  /// [sendPrompt] this rebuilds the session from [history] whether or not one
+  /// is already held.
+  Stream<AgentEvent> resumeTurn(String chatId,
+      {List<Message> history, TurnSettings settings});
 
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history].

@@ -9,8 +9,6 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 
 /// Two providers, two models each, deliberately not in alphabetical order so
@@ -108,15 +106,9 @@ class FakeBackend implements AgentBackend {
   final List<
       ({
         String text,
-        String? model,
-        String? provider,
-        String? project,
         List<Attachment> attachments,
         List<Message> history,
-        ApproveMode approveMode,
-        String? classifierProvider,
-        String? classifierModel,
-        Profile? profile
+        TurnSettings settings,
       })> prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
@@ -130,25 +122,25 @@ class FakeBackend implements AgentBackend {
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
       List<Message> history = const [],
-      String? model,
-      String? provider,
-      String? project,
-      ApproveMode approveMode = ApproveMode.ask,
-      String? classifierProvider,
-      String? classifierModel,
-      Profile? profile}) async* {
+      TurnSettings settings = const TurnSettings()}) async* {
     prompts.add((
       text: text,
-      model: model,
-      provider: provider,
-      project: project,
       attachments: attachments,
       history: history,
-      approveMode: approveMode,
-      classifierProvider: classifierProvider,
-      classifierModel: classifierModel,
-      profile: profile,
+      settings: settings,
     ));
+    yield* Stream.fromIterable(scriptedEvents);
+    if (hold != null) await hold!.future;
+  }
+
+  /// The same for `resumeTurn`, minus the prompt it does not have.
+  final List<({List<Message> history, TurnSettings settings})> resumes = [];
+
+  @override
+  Stream<AgentEvent> resumeTurn(String chatId,
+      {List<Message> history = const [],
+      TurnSettings settings = const TurnSettings()}) async* {
+    resumes.add((history: history, settings: settings));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;
   }
@@ -222,7 +214,7 @@ class FakeChatStore implements ChatStore {
   Future<Chat> load(String id) async {
     final state = _states[id];
     if (state == null) throw StateError("no chat $id");
-    return Chat(state: state, messages: replay(records(id)));
+    return chatFrom(state, records(id));
   }
 
   @override

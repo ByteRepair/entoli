@@ -122,7 +122,8 @@ written whole.
 `turnEnd` was being written when the process died, and that absence is the only
 thing that can tell a reload the difference between a killed turn and a finished
 one. `aborted` is kept distinct from `error` for the same reason — a turn
-someone chose to stop is not one to offer to resume.
+someone chose to stop is not one to offer to resume. See "Carrying on an
+interrupted turn" for what reads all this.
 
 Rewinding is a record rather than a truncation because shortening a log means
 rewriting it, which is the one thing the format exists to avoid.
@@ -191,15 +192,17 @@ A result is worded the way the agent worded it when it ran — `observation(...)
 or the answers themselves for an `ask_user` — so a projected conversation is the
 one the model already answered rather than a paraphrase of it. A call whose
 result never landed is answered anyway, since a provider that sees a tool call
-with no result rejects the next turn. Attachments are named, not resent: the
-bytes are on disk and reading them back would make this asynchronous.
+with no result rejects the next turn — worded by what was called, which is the
+next section. Attachments are named, not resent: the bytes are on disk and
+reading them back would make this asynchronous.
 
-Two things reach for it. `resetSession` on a rewind, which is what it replaced —
-the old path wrote the kept messages out as prose and told the model "earlier in
-this conversation", losing the thinking, the calls and the results. And
+Three things reach for it. `resetSession` on a rewind, which is what it replaced
+— the old path wrote the kept messages out as prose and told the model "earlier
+in this conversation", losing the thinking, the calls and the results.
 `sendPrompt`, which fills a session that is empty: sessions live in memory for as
 long as the app does, so a chat opened after a restart has none, and the model
-would have been answering the next message having seen nothing of the chat.
+would have been answering the next message having seen nothing of the chat. And
+`resumeTurn`, which rebuilds one whether or not it is empty.
 
 That is why `history` is a `sendPrompt` parameter rather than a call of its own.
 A separate "give the backend the conversation" method is one a caller can
@@ -214,6 +217,79 @@ signature, and every result verbatim, and the whole session is resent on every
 model call of the turn. That is parity — a live session that actually ran those
 steps holds exactly those messages — but it is what makes compaction, above, the
 thing that bounds a long chat.
+
+#### Carrying on an interrupted turn
+
+The design is deliberately dumb. Nothing resumes on its own, nothing is told to
+the model about what the interruption may have done, and nothing is written to
+tidy up a turn the user walked away from. Three routes out of an interrupted
+turn, all the user's: press Continue, press Regenerate, or say something else
+and carry on with the incomplete reply still in the conversation.
+
+`endsUnfinished` is the whole of the classifier: the log's last message, if it is
+a reply, and the last record naming it. `TurnEnd.resumable` decides — missing
+means the process was killed and `error` means the turn gave up, and nobody chose
+either; `done` finished and `aborted` is the one case where the user has already
+said to stop. It is on the enum because two places ask, the log's reader and the
+controller closing a turn, and they have to agree or the offer flickers on the
+next reload. `chatFrom` is the classifier and `replay` together, and it is what
+both stores load through.
+
+Only the **last** reply is asked about, and that is the rule rather than a
+shortcut. Every turn is marked, so a reply in the middle of a conversation can be
+left open — kill a turn, then type something new instead of carrying on, and that
+one stays open for good. It is still not resumable: resuming appends to a
+message, so continuing one from the middle would put new work before turns that
+already happened and that the model has since built on. Nothing reads it either,
+so nothing closes it; a tidy-up record would be written for no reader.
+
+One assumption is worth naming because it is invisible: an open log means nothing
+is running only because a turn cannot outlive the process running it. The
+foreground service of stage 5 breaks that, and a UI attaching to a chat whose
+turn is still running in the service would read an open log and offer Continue
+over the top of it.
+
+`Chat.unfinished` carries the answer out of the store as a bool — an id would
+only ever be `messages.last.id`, an invariant nothing could enforce. The chat page
+draws a `ResumeBar` above the composer from it, with the turn's age on it:
+continuing one from ten minutes ago is a different proposition from continuing
+one from a week ago, and only the reader can tell which this is. `_finishTurn`
+sets the flag to what a reload would now say, so a turn that gives up is offered
+straight away rather than only after the chat is opened again.
+
+Continuing **adds to the same reply** rather than starting another. There is one
+assistant message per turn and the interrupted turn is not over, so
+`ChatController.resume` seeds `_logged` with the parts the log already holds and a
+checkpoint writes only what this turn puts on the end. The message is then closed
+by a second `turnEnd`, which is why the classifier reads the last record naming a
+message rather than the first — and why `_outcome` is turn-scoped rather than
+read off the reply's parts, which is what it used to be. One message was one turn
+until this landed.
+
+`MinisweAgent.resume` is `run` without the task, over a session rebuilt from
+`projectionOf` the conversation **whether or not one is already held**. Not
+because a held session would double anything — it holds those messages exactly
+once — but so that carrying on in the same process and carrying on after a
+restart put the same thing in front of the model. A checkpoint that failed is
+swallowed on purpose, so a live session can hold more than the log does, and it
+is the log the user is reading.
+
+`AgentBackend.resumeTurn` is a method of its own rather than a flag on
+`sendPrompt`, because there is no prompt: no text, no attachments, no `/command`
+or `@agent` to expand. `@agent` mentions are recovered by re-parsing the last user
+message, the same way a resend re-parses rather than storing what it resolved to.
+What the two share is `TurnSettings`, resolved once by `ChatRepository`.
+
+The projection's answer to a call whose result never landed is the other half of
+this, and it is **one wording for every tool**. Which tool it was is in the call
+the model can already see, and refining "it may not have run" per tool is
+second-guessing an interruption nothing witnessed — that was tried and removed.
+It splits only where `_resultText` already splits, since an `ask_user` is answered
+in prose either way. Answered rather than dropped, tempting as dropping a
+re-runnable read is: the call is in `conv.jsonl` and on the screen, so a model
+with no memory of making it is a model that disagrees with the conversation the
+user is reading, and the thinking and any command that did land in the same
+response would go with it.
 
 ### Projects
 

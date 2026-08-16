@@ -21,18 +21,27 @@ part "chat_log.g.dart";
 
 /// Why a turn stopped. Its **absence** is the interesting case: a log whose
 /// last message has no [TurnEndRecord] was being written when the process
-/// died, which is what makes it worth offering to continue.
+/// died, which is what makes it worth offering to continue. See
+/// [ResumableTurn.resumable].
 enum TurnEnd {
   /// The model replied with no tool calls, or the stream closed on its own.
   done,
 
-  /// The user pressed stop. Deliberately distinct from [error]: a turn someone
-  /// chose to end is not one to offer to resume.
+  /// The user pressed stop.
   aborted,
 
   /// The turn reported an error and gave up — a rejected key, a provider that
   /// stayed down, the step limit.
   error,
+}
+
+extension ResumableTurn on TurnEnd {
+  /// Whether a turn that ended this way is one to offer to carry on. Nobody
+  /// chose to end an [TurnEnd.error], which is why it is offered and
+  /// [TurnEnd.aborted] is not. Here rather than at the two places that ask —
+  /// the log's reader and the controller closing a turn — which have to agree
+  /// or the offer flickers on the next reload.
+  bool get resumable => this == TurnEnd.error;
 }
 
 @freezed
@@ -131,6 +140,35 @@ List<Message> replay(Iterable<ChatRecord> records) {
   }
 
   return messages;
+}
+
+/// The chat a log describes: the conversation, and whether it stops in the
+/// middle of a turn. Both stores load through here, so one that reads the
+/// conversation and forgets the turn cannot exist.
+Chat chatFrom(ChatState state, List<ChatRecord> records) {
+  final messages = replay(records);
+  return Chat(
+    state: state,
+    messages: messages,
+    unfinished: endsUnfinished(messages, records),
+  );
+}
+
+/// Whether the log stops in the middle of a turn: its last message is a reply,
+/// and nothing closed it. See "Carrying on an interrupted turn" in CLAUDE.md
+/// for why only the last one is asked about.
+///
+/// Takes the replayed [messages] rather than replaying again: which messages a
+/// rewind left live is [replay]'s to answer. A resumed turn writes a second
+/// [TurnEndRecord] for the same message, so the last one wins.
+bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
+  final last = messages.lastOrNull;
+  if (last == null || last.role != MessageRole.assistant) return false;
+  TurnEnd? ended;
+  for (final record in records) {
+    if (record is TurnEndRecord && record.messageId == last.id) ended = record.reason;
+  }
+  return ended?.resumable ?? true;
 }
 
 /// The two parts an [AppendRecord] can land on, and what it does to them.

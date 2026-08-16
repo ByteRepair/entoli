@@ -97,10 +97,11 @@ class ChatController extends Notifier<ChatViewState> {
   /// one response at a time — see [MessagePart].
   String? _responseId;
 
-  /// How the turn ended, where something other than the model decided it. Set
-  /// before the abort is awaited, because the stream can close first and the
-  /// terminal record would otherwise say the turn simply finished. Null means
-  /// read it off the reply.
+  /// How the turn ended, where something other than the model decided it. Null
+  /// means it simply finished. Turn-scoped rather than read off the reply's
+  /// parts: a resumed turn adds to a message that may already hold the
+  /// [ErrorPart] the last attempt ended on. An abort wins over an error —
+  /// killing a turn is a good way to make it fail.
   TurnEnd? _outcome;
 
   @override
@@ -254,6 +255,7 @@ class ChatController extends Notifier<ChatViewState> {
   void _appendError(String message) {
     final reply = _reply;
     if (reply == null) return;
+    _outcome ??= TurnEnd.error;
     _flushDeltas();
     _writeReply([...?_reply?.parts, MessagePart.error(message: message)]);
     _checkpointLog();
@@ -313,10 +315,7 @@ class ChatController extends Notifier<ChatViewState> {
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked.
     await repo.saveState(updatedChat.state);
-    _outcome = null;
-    _responseId = null;
-    _loggedId = assistantMsg.id;
-    _logged = const [];
+    _openTurn(assistantMsg.id);
     await _enqueue(() => repo.append(chatId, recordsOf([userMsg, assistantMsg])));
     // Only the first: a later message changes nothing the sidebar shows, and
     // refreshing it re-reads every chat off disk.
@@ -327,14 +326,38 @@ class ChatController extends Notifier<ChatViewState> {
 
     // `chat` is the conversation before this turn was added to it, which is
     // what a backend holding no session for the chat needs to be told.
-    final stream = repo.sendPrompt(chatId, text,
-        attachments: attachments, history: chat.messages);
+    _listen(repo.sendPrompt(chatId, text,
+        attachments: attachments, history: chat.messages));
+  }
+
+  /// Carry on the turn the chat was cut off in. What this produces goes on the
+  /// end of the reply that is already there, closed by a second [TurnEndRecord]
+  /// when it finishes.
+  Future<void> resume() async {
+    final chat = state.chat;
+    if (chat == null || state.isRunning || !chat.unfinished) return;
+    final reply = chat.messages.last;
+
+    state = state.copyWith(isRunning: true, clearRetry: true);
+    _openTurn(reply.id, logged: reply.parts);
+
+    _listen(ref.read(chatRepositoryProvider)
+        .resumeTurn(chatId, history: chat.messages));
+  }
+
+  /// The bookkeeping every turn opens with. [logged] is what the log already
+  /// holds of the reply — nothing for a new turn, its parts so far for one
+  /// being carried on, so a checkpoint writes only what this turn adds.
+  void _openTurn(String replyId, {List<MessagePart> logged = const []}) {
+    _outcome = null;
+    _responseId = null;
+    _loggedId = replyId;
+    _logged = logged;
+  }
+
+  void _listen(Stream<AgentEvent> stream) {
     _sub?.cancel();
-    _sub = stream.listen(
-      (event) => _onEvent(event),
-      onDone: _finishTurn,
-      onError: (e) => _onError(e),
-    );
+    _sub = stream.listen(_onEvent, onDone: _finishTurn, onError: _onError);
   }
 
   /// The user message that produced [messageId] — itself when it is one,
@@ -451,11 +474,8 @@ class ChatController extends Notifier<ChatViewState> {
     _sub?.cancel();
     _sub = null;
     final ending = _loggedId;
+    final reason = _outcome ?? TurnEnd.done;
     if (ending != null) {
-      final reason = _outcome ??
-          (_reply?.parts.any((p) => p is ErrorPart) ?? false
-              ? TurnEnd.error
-              : TurnEnd.done);
       _loggedId = null;
       // The last of the reply and the record closing it in one write, since
       // every append is an open and a close of the file.
@@ -467,6 +487,9 @@ class ChatController extends Notifier<ChatViewState> {
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void.
     state = state.copyWith(
+      // What a reload would now make of the log, so a turn that gave up is
+      // offered straight away rather than only once the chat is opened again.
+      chat: state.chat?.copyWith(unfinished: reason.resumable),
       isRunning: false,
       approvals: const [],
       questions: const [],
@@ -476,7 +499,6 @@ class ChatController extends Notifier<ChatViewState> {
   }
 
   void _onError(Object e) {
-    _outcome = TurnEnd.error;
     _appendError(e.toString());
     _finishTurn();
   }

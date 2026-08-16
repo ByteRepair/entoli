@@ -72,10 +72,19 @@ void main() {
   }) =>
       backend
           .sendPrompt(chatId, text,
-              model: model,
-              provider: provider,
               history: history,
-              approveMode: ApproveMode.never)
+              settings: TurnSettings(
+                  model: model, provider: provider, approveMode: ApproveMode.never))
+          .toList();
+
+  /// Carrying on the turn [history] ends in, under the same settings [send]
+  /// uses.
+  Future<List<AgentEvent>> resuming(MinisweBackend backend, List<Message> history) =>
+      backend
+          .resumeTurn(chatId,
+              history: history,
+              settings: const TurnSettings(
+                  model: "fake-model", provider: "fake", approveMode: ApproveMode.never))
           .toList();
 
   /// A turn left running for the test to answer, whether what it stops on is a
@@ -83,7 +92,8 @@ void main() {
   Stream<AgentEvent> asking(MinisweBackend backend, String text,
           {ApproveMode approveMode = ApproveMode.ask}) =>
       backend.sendPrompt(chatId, text,
-          model: "fake-model", provider: "fake", approveMode: approveMode);
+          settings: TurnSettings(
+              model: "fake-model", provider: "fake", approveMode: approveMode));
 
   group("picking where the turn runs", () {
     test("a chat with no provider is told to configure one", () async {
@@ -147,10 +157,11 @@ void main() {
       ]);
       await backend
           .sendPrompt(chatId, "hi",
-              model: "fake-model",
-              provider: "fake",
-              project: "work",
-              approveMode: ApproveMode.never)
+              settings: const TurnSettings(
+                  model: "fake-model",
+                  provider: "fake",
+                  project: "work",
+                  approveMode: ApproveMode.never))
           .toList();
 
       final system = client.sent.first.first.text;
@@ -448,6 +459,38 @@ void main() {
       final transcript = client.sent.last.map((m) => m.text).join("\n");
       expect(transcript, isNot(contains("somebody else's")));
       expect(transcript, contains("first"));
+    });
+
+    // A turn that errored leaves the session behind it, so a resume that only
+    // filled an empty one would hand the model those messages twice.
+    test("a resume rebuilds the session even when one is already held", () async {
+      final backend = backendOver([
+        [finish],
+        [finish],
+      ]);
+      await send(backend, "count the files");
+      await resuming(backend, [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: DateTime(2026),
+          parts: const [MessagePart.text(text: "count the files")],
+        ),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026),
+          parts: const [
+            MessagePart.toolCall(
+              toolCall: ToolCall(id: "c1", name: "bash", argumentsJson: '{"command":"ls"}'),
+            ),
+          ],
+        ),
+      ]);
+
+      final sent = client.sent.last;
+      expect(sent.where((m) => m.text.contains("count the files")), hasLength(1));
+      expect(sent.last.text, contains("interrupted before it finished"));
     });
 
     test("a rewound turn names the files it is not resending", () async {
