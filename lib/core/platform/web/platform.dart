@@ -5,6 +5,8 @@ import "package:fs_shim/fs_browser.dart" show fileSystemWeb;
 import "package:fs_shim/fs_idb.dart" show FileSystemIdbExt, FileSystemIdbOptions;
 import "package:web/web.dart" as web;
 
+import "../../../data/web/web_file_handoff.dart";
+import "../../../domain/file_handoff.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/web_search.dart";
 
@@ -12,6 +14,8 @@ Shell platformShell({required Map<String, String> Function() environment}) =>
     const UnavailableShell();
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
+
+FileHandoff platformFileHandoff(FileSystem fs) => WebFileHandoff(fs);
 
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.

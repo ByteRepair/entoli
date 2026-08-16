@@ -7,6 +7,7 @@ import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/chat_store.dart";
+import "../../domain/file_handoff.dart";
 import "../../domain/prompt_library.dart";
 import "../config.dart";
 import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
@@ -52,6 +53,12 @@ Future<String> dataDir() => platformDataDir();
 Future<void> persist() => platformPersist();
 
 ChatStore createChatStore(AppConfig config) => FileChatStore(config);
+
+/// What a workspace file can do outside Entoli: a viewer, a file manager, a
+/// share sheet, a download. The one part of the app that still varies three
+/// ways rather than two, since desktop and Android disagree as much as either
+/// does with a browser.
+FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff(config.fs);
 
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now.

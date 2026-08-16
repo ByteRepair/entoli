@@ -9,6 +9,7 @@ import "../sidebar/sidebar.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
+import "../workspace/workspace_page.dart";
 
 class ChatSettingsPage extends ConsumerStatefulWidget {
   const ChatSettingsPage({super.key, required this.chatId});
@@ -21,6 +22,11 @@ class ChatSettingsPage extends ConsumerStatefulWidget {
 
 class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   ChatMeta? _meta;
+
+  /// The chat's own workspace, which needs the project its files are in before
+  /// it can be named. Loaded with the meta rather than watched, since a chat
+  /// does not move while its settings are open.
+  String? _workspace;
   bool _saving = false;
 
   @override
@@ -30,8 +36,20 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   }
 
   Future<void> _load() async {
-    final meta = await ref.read(chatRepositoryProvider).loadMeta(widget.chatId);
-    if (mounted) setState(() => _meta = meta);
+    final repo = ref.read(chatRepositoryProvider);
+    // Together: neither answer needs the other, and both go to the store.
+    final (meta, project) = await (
+      repo.loadMeta(widget.chatId),
+      repo.projectOf(widget.chatId),
+    ).wait;
+    final workspace =
+        ref.read(appConfigProvider).workspaceDir(widget.chatId, project: project);
+    if (mounted) {
+      setState(() {
+        _meta = meta;
+        _workspace = workspace;
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -61,6 +79,8 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
           : ListView(
               children: [
                 _IdField(id: widget.chatId),
+                const Divider(),
+                WorkspaceTile(root: _workspace!, title: "Chat workspace"),
                 const Divider(),
                 _LlmField(
                   meta: _meta!,

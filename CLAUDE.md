@@ -476,12 +476,13 @@ is not reachable from its program, so nothing further down has to test for it.
 The chat store and the prompt sources used to be in that list and are not any
 more — one filesystem means one of each, built in `platform.dart` itself. What
 is left varying is the shell, the network, which `FileSystem`, where its root
-is, whether the process has an environment, and `platformPersist`: on the web
-that is `navigator.storage.persist()`, without which IndexedDB is evictable and
-a chat can be gone on the next visit because something else wanted the space. A
-browser that refuses leaves the app working, just evictable again. Everywhere
-else it is a no-op, because a directory on a disk is already as durable as the
-app is.
+is, whether the process has an environment, `FileHandoff` (see "The workspace
+explorer" for why it is the one thing here with three implementations), and
+`platformPersist`: on the web that is `navigator.storage.persist()`, without
+which IndexedDB is evictable and a chat can be gone on the next visit because
+something else wanted the space. A browser that refuses leaves the app working,
+just evictable again. Everywhere else it is a no-op, because a directory on a
+disk is already as durable as the app is.
 
 `MinisweBackend.webSearch` is required rather than defaulted for that reason —
 a default of `DuckDuckGoSearch()` puts its HTML parser in the web bundle
@@ -649,7 +650,9 @@ genuinely fresh one next time.
 An engine outliving its activity is also why `IconChannel` was pulled out of
 `MainActivity` and registered on the engine against the application context: the
 handler used to close over the activity, and holding a destroyed one for the
-life of a process is the leak this feature would have created.
+life of a process is the leak this feature would have created. `FilesChannel`
+is built the same way for the same reason, and starts everything it starts with
+`FLAG_ACTIVITY_NEW_TASK`, which is what an application context needs.
 
 Stopping is one path. The notification's Stop asks Dart, Dart aborts every
 running turn, and the emptied `runningTurns` is what then stops the service — so
@@ -834,6 +837,101 @@ again.
 The store's resource I/O is async where the rest of it is sync: a JSON file is
 small enough to write on the UI thread, an attachment is not.
 
+### The workspace explorer
+
+A workspace is where the agent's work lands, and until now the only way to see
+it was to leave the app. `WorkspaceTile` on the chat and project settings pages
+opens `WorkspacePage` over one folder — the chat's own `workspace/` or the
+project's shared one, resolved by the page that knows which it is. The listing
+itself is `listWorkspace` over the config's `FileSystem`, so it is the same code
+on a disk and over IndexedDB.
+
+Everything else the page can do is `FileHandoff`'s, and every route is gated the
+way `Shell.canRunCommands` gates the agent's commands. The three platforms do
+not differ in degree here, they differ in kind — and so there are three
+implementations, not two. The conditional import splits `dart:io` from
+`dart:js_interop`, which it has to: `Process` will not compile in a browser and a
+`Blob` will not compile on the VM. Desktop and Android are then chosen at
+runtime in `platformFileHandoff`, because they share `dart:io` and agree on
+nothing else here. Choosing rather than branching is the point: a class that
+answered both would carry an `if (Platform.isAndroid)` in every member, and
+every future member too.
+
+- **Desktop** has a file manager and a registry of viewers, and `url_launcher`
+  reaches both: `reveal` opens the current folder (the app bar's button) and
+  `open` opens a file, which is the same call on a different path. It needs no
+  chooser of its own — the file manager is already pointed at the workspace —
+  and it has no share sheet, so there is no selection mode at all.
+- **Android** has the share sheet, both ways. `export` sends a selection through
+  `Intent.createChooser`, so every app on the device is on offer rather than a
+  default winning silently; `open` is an `ACTION_VIEW`. Files come back in the
+  same way, and only that way: another app shares to Entoli. See below.
+- **A browser** opens a file as a blob in a new tab, which is what lets the
+  browser preview it, downloads a selection, and takes files in through the
+  chooser `<input type="file">` already is — `webkitdirectory` for a folder,
+  whose `webkitRelativePath` is what keeps the folder's shape.
+
+`exportKind` is the one thing the port says about presentation, and it says the
+*kind* rather than the words: a share sheet and a download are not the same
+promise to the user, but which word and which glyph say so is `WorkspacePage`'s
+to decide. Null is a platform with nowhere to hand a selection, which is what
+takes the whole selection mode off the desktop toolbar.
+
+Neither a share sheet nor a download takes a folder, so a selection with one in
+it goes as a single zip (`zipEntries`, in `lib/data/` rather than `local/` or
+`web/` because it is written against the `FileSystem` and both sides use it).
+Several plain files stay several, which is what `ACTION_SEND_MULTIPLE` is for. A
+selection is one folder's — leaving the folder clears it — which is what lets
+Android's staging directory stay flat, and why nothing checks for two files of
+the same name in it.
+
+That staging directory is the other thing worth knowing about the Android half.
+Everything handed to an intent is a **copy under the app's cache**, never the
+workspace file itself, because a `FileProvider` only mints URIs under the paths
+in `res/xml/file_paths.xml` and one `<cache-path>` is the whole of that file.
+The alternative was a `<root-path>` exposing the data directory by path for the
+sake of not copying, which is a worse trade on a directory holding `settings.json`
+and every chat. It costs a copy per open; workspace files are the agent's output,
+and the ones big enough to notice are rare.
+
+#### Sharing to Entoli
+
+`MainActivity` carries `ACTION_SEND` / `ACTION_SEND_MULTIPLE` filters, and so
+does the `CookieIcon` alias — only one of the two components is enabled at a
+time, and a share must not stop working because the user changed the icon.
+
+`FilesChannel.receive` copies whatever the intent carries into `cacheDir` **at
+once**, from `onCreate` and `onNewIntent` alike: the read permission on those
+URIs is granted to the task and dies with it, and the user takes a while to pick
+a workspace. The intent's action is then cleared, so an activity recreated from
+the same one does not stage the share twice. A batch arriving with nothing
+already waiting empties the directory first — a share the user backed out of is
+never claimed, and nothing else would ever delete its copy.
+
+Dart claims them from `IncomingShares`, which wraps the app in `main` rather
+than living in `AppShell`: a share has to be offered a workspace over whatever
+is on screen, and a `Navigator` to push that onto only exists below
+`MaterialApp`. It reads twice over and needs both — once after the first frame,
+for the share that launched the app and was staged before Dart was listening,
+and once per `shareArrived`, for one that arrives while the app is already up.
+Reading empties the queue, so a share is offered a workspace exactly once.
+
+The nudge is what carries the cached engine's case, and it is the reason there
+is one. A share into an activity whose engine was cached runs `onCreate` but not
+`main`, so `initState` does not fire again and the first-frame read never
+repeats — but the channel is still registered and the widget still subscribed,
+so the invoke lands. See "Staying alive off screen".
+
+`ShareTargetPage` is that offer: every workspace Entoli has, as a list — the
+default project, each project beside it, then each chat's own — and picking one
+writes the files there and closes. Nothing else is on it, because a share
+arrives with nowhere to go and asking is the whole of what the page is for.
+
+A path that arrived from outside is sanitised by `safeRelativePath` before it is
+joined onto anything: the sharing app wrote it, and `../../settings.json` is a
+name a file can have. Folders in it are kept — that is what makes a folder
+upload survive — and only the segments that would climb are dropped.
+
 ### The app icon
 
 Two icons, `AppIcon.prompt` (the default) and `AppIcon.cookie`. Each exists
@@ -908,9 +1006,10 @@ no-op `available` being false gives. So the app still has exactly one
 conditional import — `ForegroundService` is the second channel to be built this
 way.
 
-Both channels are registered when the engine is created rather than on each
-attach, and hold the application context. That is forced by the engine
-outliving the activity: see "Staying alive off screen".
+Every channel — this one, `ForegroundService` and `FilesChannel` — is registered
+when the engine is created rather than on each attach, and holds the application
+context. That is forced by the engine outliving the activity: see "Staying alive
+off screen".
 
 ### Setting overrides
 

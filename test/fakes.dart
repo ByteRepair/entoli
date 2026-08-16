@@ -10,6 +10,7 @@ import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_store.dart";
+import "package:agent_chat/domain/file_handoff.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 
@@ -91,6 +92,83 @@ class FakeAttachmentPicker implements AttachmentPicker {
     return scripted;
   }
 }
+
+/// What a workspace file can do outside the app, which no test can drive: no
+/// viewer opens, no share sheet appears, no chooser is answered. The capability
+/// flags are the point — the explorer draws a different toolbar on each of the
+/// three platforms, and the named constructors are those three.
+class FakeFileHandoff implements FileHandoff {
+  FakeFileHandoff({this.canReveal = false, this.exportKind, this.canImport = false});
+
+  /// A desktop: a file manager and a viewer, nothing else.
+  factory FakeFileHandoff.desktop() => FakeFileHandoff(canReveal: true);
+
+  /// Android: the share sheet both ways, and no chooser of its own.
+  factory FakeFileHandoff.android() => FakeFileHandoff(exportKind: ExportKind.share);
+
+  /// A browser: a download out, a file input in.
+  factory FakeFileHandoff.web() =>
+      FakeFileHandoff(exportKind: ExportKind.download, canImport: true);
+
+  @override
+  final bool canReveal;
+  @override
+  final ExportKind? exportKind;
+  @override
+  final bool canImport;
+
+  final List<String> opened = [];
+  final List<String> revealed = [];
+  final List<List<String>> exported = [];
+
+  /// Whether each import asked for folders.
+  final List<bool> imports = [];
+
+  /// What the next import answers. Empty is a cancelled chooser.
+  List<IncomingFile> scriptedImport = const [];
+
+  /// What another app has shared and nothing has claimed. Emptied by
+  /// [takeShare], the way the real one is.
+  List<IncomingFile> pendingShare = const [];
+
+  final _arrived = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get shareArrived => _arrived.stream;
+
+  /// A share arriving while the app is already up.
+  void share(List<IncomingFile> files) {
+    pendingShare = files;
+    _arrived.add(null);
+  }
+
+  @override
+  Future<void> open(String path) async => opened.add(path);
+
+  @override
+  Future<void> reveal(String dir) async => revealed.add(dir);
+
+  @override
+  Future<void> export(List<String> paths) async => exported.add(paths);
+
+  @override
+  Future<List<IncomingFile>> import({required bool folders}) async {
+    imports.add(folders);
+    return scriptedImport;
+  }
+
+  @override
+  Future<List<IncomingFile>> takeShare() async {
+    final files = pendingShare;
+    pendingShare = const [];
+    return files;
+  }
+}
+
+/// A file arriving from outside, with recognisable bytes so a test can follow
+/// the same one from a chooser or a share into a workspace.
+IncomingFile incomingFile(String path, [String text = "hi"]) =>
+    IncomingFile(path: path, bytes: Uint8List.fromList(text.codeUnits));
 
 class FakeBackend implements AgentBackend {
   var _created = 0;
