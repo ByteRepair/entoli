@@ -9,7 +9,7 @@ import "activity_label.dart";
 
 /// Renders a single message. The bubble holds what the model said; thinking
 /// and tool runs sit above it as labels, in the order they happened.
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends StatefulWidget {
   const MessageBubble({
     super.key,
     required this.chatId,
@@ -38,80 +38,134 @@ class MessageBubble extends StatelessWidget {
   /// Run the turn this message belongs to again, unchanged.
   final VoidCallback? onRegenerate;
 
-  Future<void> _showMenu(BuildContext context, Offset position) async {
-    if (onEdit == null && onRegenerate == null) return;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        overlay.size.width - position.dx,
-        overlay.size.height - position.dy,
-      ),
-      items: [
-        if (onEdit != null)
-          const PopupMenuItem(
-            value: "edit",
-            child: ListTile(leading: Icon(Icons.edit), title: Text("Edit"), dense: true),
-          ),
-        if (onRegenerate != null)
-          const PopupMenuItem(
-            value: "regenerate",
-            child: ListTile(leading: Icon(Icons.refresh), title: Text("Regenerate"), dense: true),
-          ),
-      ],
-    );
-    if (selected == "regenerate") {
-      onRegenerate!();
-    } else if (selected == "edit" && context.mounted) {
-      final edited = await promptForText(
-        context,
-        title: "Edit message",
-        initial: message.plainText,
-        confirmLabel: "Send",
-        maxLines: 8,
-      );
-      if (edited != null) onEdit!(edited);
-    }
+  @override
+  State<MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<MessageBubble> {
+  /// Kept whether or not there is anything to show, so a message does not shift
+  /// under the pointer the moment the actions appear.
+  static const _actionsHeight = 28.0;
+
+  bool _hovered = false;
+  bool _tapped = false;
+  Offset? _pressedAt;
+
+  /// Uncovering the icons redraws the icons. A `setState` would rebuild the
+  /// whole message — every label re-parsing its call's arguments — to change
+  /// one opacity, and the pointer crosses a message twice on its way past.
+  final ValueNotifier<bool> _shown = ValueNotifier(false);
+
+  void _show({bool? hovered, bool? tapped}) {
+    _hovered = hovered ?? _hovered;
+    _tapped = tapped ?? _tapped;
+    _shown.value = _hovered || _tapped;
   }
 
-  bool get _hasError => message.parts.whereType<ErrorPart>().isNotEmpty;
+  @override
+  void dispose() {
+    _shown.dispose();
+    super.dispose();
+  }
+
+  Future<void> _edit() async {
+    final edited = await promptForText(
+      context,
+      title: "Edit message",
+      initial: widget.message.plainText,
+      confirmLabel: "Send",
+      maxLines: 8,
+    );
+    if (edited != null) widget.onEdit!(edited);
+  }
+
+  bool get _hasError => widget.message.parts.whereType<ErrorPart>().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isUser = message.role == MessageRole.user;
+    final isUser = widget.message.role == MessageRole.user;
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final (name, bg) = switch (message.role) {
+    final (name, bg) = switch (widget.message.role) {
       MessageRole.user => ("You", theme.colorScheme.primaryContainer),
       MessageRole.assistant => ("Assistant", theme.colorScheme.surfaceContainerHighest),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Column(
-        crossAxisAlignment: align,
-        children: [
-          GestureDetector(
-            // The bubble's SelectableText claims long-press for selection, so
-            // touch users reach the menu through the name label instead.
-            onLongPressStart: (d) => _showMenu(context, d.globalPosition),
-            child: Padding(
-              padding: const EdgeInsets.only(left: 4, bottom: 2),
-              child: Text(
-                name,
-                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+    return MouseRegion(
+      onEnter: (_) => _show(hovered: true),
+      onExit: (_) => _show(hovered: false),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          crossAxisAlignment: align,
+          children: [
+            Listener(
+              // A raw pointer listener sidesteps the gesture arena, which the
+              // bubble's SelectableText would otherwise win: a touch has to both
+              // place the caret and show what can be done to the message.
+              onPointerDown: (event) => _pressedAt = event.position,
+              onPointerUp: (event) {
+                final from = _pressedAt;
+                _pressedAt = null;
+                // A drag that began here was the list being scrolled, not this
+                // message being touched.
+                if (from == null || (event.position - from).distance > kTouchSlop) return;
+                _show(tapped: !_tapped);
+              },
+              child: Column(
+                crossAxisAlignment: align,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 2),
+                    child: Text(
+                      name,
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                  ..._rows(context, bg),
+                ],
               ),
             ),
-          ),
-          ..._rows(context, bg),
-        ],
+            _actions(theme),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _actions(ThemeData theme) => ValueListenableBuilder<bool>(
+        valueListenable: _shown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.onEdit != null) _action(theme, Icons.edit_outlined, "Edit", _edit),
+            if (widget.onRegenerate != null)
+              _action(theme, Icons.refresh, "Regenerate", widget.onRegenerate!),
+          ],
+        ),
+        builder: (context, shown, child) => SizedBox(
+          height: _actionsHeight,
+          child: AnimatedOpacity(
+            opacity: shown ? 1 : 0,
+            duration: const Duration(milliseconds: 120),
+            child: IgnorePointer(ignoring: !shown, child: child),
+          ),
+        ),
+      );
+
+  Widget _action(ThemeData theme, IconData icon, String tooltip, VoidCallback onPressed) =>
+      IconButton(
+        icon: Icon(icon, size: 16),
+        tooltip: tooltip,
+        onPressed: onPressed,
+        color: theme.colorScheme.onSurfaceVariant,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints.tightFor(width: 32, height: _actionsHeight),
+      );
 
   /// The message split the way it reads: everything the model did on labels of
   /// its own, everything it said in a bubble, in the order it happened.
@@ -119,24 +173,24 @@ class MessageBubble extends StatelessWidget {
     final theme = Theme.of(context);
     final rows = <Widget>[];
     final spoken = <({String text, bool isError})>[];
-    var files = message.files.toList();
+    var files = widget.message.files.toList();
 
-    final results = message.toolResults;
+    final results = widget.message.toolResults;
     final calls = {
-      for (final part in message.parts.whereType<ToolCallPart>()) part.toolCall.id,
+      for (final part in widget.message.parts.whereType<ToolCallPart>()) part.toolCall.id,
     };
 
     // Trailing state, not parts: they belong under the last thing said.
     final extras = <Widget>[
-      if (isWaiting && !message.hasText)
-        _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: waitingNotice),
-      // A failed turn is a dead end without this; the same action is on the
-      // context menu, but it should not have to be found.
-      if (_hasError && !isWaiting && onRegenerate != null)
+      if (widget.isWaiting && !widget.message.hasText)
+        _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: widget.waitingNotice),
+      // A failed turn is a dead end without this; the same action is under the
+      // message, but it should not have to be uncovered.
+      if (_hasError && !widget.isWaiting && widget.onRegenerate != null)
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
-            onPressed: onRegenerate,
+            onPressed: widget.onRegenerate,
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text("Retry"),
             style: TextButton.styleFrom(
@@ -154,14 +208,15 @@ class MessageBubble extends StatelessWidget {
       spoken.clear();
     }
 
-    for (var i = 0; i < message.parts.length; i++) {
-      final part = message.parts[i];
+    for (var i = 0; i < widget.message.parts.length; i++) {
+      final part = widget.message.parts[i];
       switch (part) {
         case ReasoningPart():
           closeBubble();
           rows.add(ThinkingLabel(
             part: part,
-            isLive: isWaiting && part.durationMs == null && i == message.parts.length - 1,
+            isLive:
+                widget.isWaiting && part.durationMs == null && i == widget.message.parts.length - 1,
           ));
         case ToolCallPart(:final toolCall):
           closeBubble();
@@ -197,38 +252,31 @@ class MessageBubble extends StatelessWidget {
     required List<Widget> trailing,
   }) {
     final theme = Theme.of(context);
-    return Listener(
-      // A raw pointer listener sidesteps the gesture arena, which
-      // SelectableText would otherwise win.
-      onPointerDown: (event) {
-        if (event.buttons == kSecondaryMouseButton) _showMenu(context, event.position);
-      },
-      child: Container(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (files.isNotEmpty)
-              AttachmentStrip(
-                children: [
-                  for (final f in files) AttachmentChip.sent(f, chatId: chatId),
-                ],
+    return Container(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (files.isNotEmpty)
+            AttachmentStrip(
+              children: [
+                for (final f in files) AttachmentChip.sent(f, chatId: widget.chatId),
+              ],
+            ),
+          for (final line in said)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: SelectableText(
+                line.text,
+                style: line.isError
+                    ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
+                    : theme.textTheme.bodyMedium,
               ),
-            for (final line in said)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: SelectableText(
-                  line.text,
-                  style: line.isError
-                      ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
-                      : theme.textTheme.bodyMedium,
-                ),
-              ),
-            ...trailing,
-          ],
-        ),
+            ),
+          ...trailing,
+        ],
       ),
     );
   }

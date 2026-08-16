@@ -428,6 +428,16 @@ A tool call and the result answering it are one label. The parts stay separate
 in `conv.json` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
+What can be done to a message — Edit, Regenerate — is a row of icons under it
+rather than a menu, uncovered by hovering the message or, where there is no
+pointer to hover with, by touching it. The row keeps its height whether or not
+anything is in it, so the conversation does not shift under the pointer the
+moment the icons appear. The reveal is a `Listener` rather than a
+`GestureDetector`: a raw pointer listener sidesteps the gesture arena, so one
+touch both places the caret in the bubble's `SelectableText` and shows the
+actions. It writes a `ValueNotifier` rather than calling `setState`, so
+uncovering the icons does not rebuild the message's labels behind them.
+
 ### Commands and agents
 
 `PromptLibrary` is the whole of what the composer's `/` and `@` menus offer,
