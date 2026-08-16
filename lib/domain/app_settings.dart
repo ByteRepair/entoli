@@ -58,7 +58,7 @@ class AppSettings {
   AppIcon appIcon;
 
   static AppSettings load(AppConfig config) {
-    final text = config.storage.read(config.settingsFile.path);
+    final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
     try {
       final json = jsonDecode(text) as Map<String, dynamic>;
@@ -127,7 +127,7 @@ class AppSettings {
       );
 
   Future<void> save(AppConfig config) async {
-    config.storage.write(config.settingsFile.path, jsonEncode({
+    await config.documents.write(config.settingsFile, jsonEncode({
       if (defaultModelId != null) "defaultModelId": defaultModelId,
       if (defaultProviderId != null) "defaultProviderId": defaultProviderId,
       if (titleModelId != null) "titleModelId": titleModelId,

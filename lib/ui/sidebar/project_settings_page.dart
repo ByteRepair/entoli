@@ -54,7 +54,7 @@ class ProjectSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chats = ref.watch(chatListProvider).value ?? const [];
     final count = chats.where((c) => c.project == project).length;
-    final path = ref.watch(appConfigProvider).projectDir(project: project).path;
+    final path = ref.watch(appConfigProvider).projectDir(project: project);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Project settings")),

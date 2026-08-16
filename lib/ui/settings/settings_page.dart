@@ -216,6 +216,7 @@ class _AgentSection extends ConsumerWidget {
           label: "Running commands",
           child: DropdownButtonFormField<ApproveMode>(
             initialValue: settings.approveMode,
+            isExpanded: true,
             decoration: InputDecoration(
               border: const OutlineInputBorder(),
               helperText: settings.approveMode == ApproveMode.auto && noClassifier

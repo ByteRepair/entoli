@@ -90,8 +90,8 @@ void main() {
     final chat = await backend.createChat();
     // A chat gets its directories when it is first saved or first sent to;
     // this drives the backend directly, so it asks for them itself.
-    config.ensureChatDirs(chat.state.id);
-    File("${config.workspaceDir(chat.state.id).path}/hello.txt")
+    await config.ensureChatDirs(chat.state.id);
+    File("${config.workspaceDir(chat.state.id)}/hello.txt")
         .writeAsStringSync("the answer is 42\n");
 
     final clock = Stopwatch()..start();
@@ -154,7 +154,7 @@ void _copyPresetsInto(AppConfig config) {
   for (final kind in CompletionKind.values) {
     final source = Directory(p.join("assets", "prompts", kind.folder));
     if (!source.existsSync()) continue;
-    final target = config.promptsDir(kind);
+    final target = Directory(config.promptsDir(kind));
     if (!target.existsSync()) target.createSync(recursive: true);
     for (final file in source.listSync().whereType<File>()) {
       file.copySync(p.join(target.path, p.basename(file.path)));

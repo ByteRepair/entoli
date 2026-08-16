@@ -21,14 +21,14 @@ void main() {
   Future<void> addProvider(WidgetTester tester, String entry) async {
     await scrollTo(tester, find.text("Add provider"));
     await tester.tap(find.text("Add provider"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     await tester.tap(find.text(entry).last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   Future<void> saveDialog(WidgetTester tester) async {
     await tester.tap(find.text("Save"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   List<LlmProviderConfig> saved() => app.container.read(appSettingsProvider).llmProviders;
@@ -107,7 +107,7 @@ void main() {
 
       await scrollTo(tester, find.text("Add provider"));
       await tester.tap(find.text("Add provider"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(find.text("Groq"), findsOneWidget); // the row, not a menu entry
       expect(find.text("OpenAI"), findsOneWidget);
@@ -119,7 +119,7 @@ void main() {
       await saveDialog(tester);
 
       await tester.tap(find.text("OpenAI"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await tester.enterText(find.byType(TextField).at(1), "https://proxy.local/v1");
       await saveDialog(tester);
 
@@ -136,7 +136,7 @@ void main() {
 
       await scrollTo(tester, find.byTooltip("Remove groq"));
       await tester.tap(find.byTooltip("Remove groq"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(saved().map((p) => p.id), ["openai"]);
     });
@@ -159,7 +159,7 @@ void main() {
       final field = find.byType(DropdownButtonFormField<ApproveMode>);
       await scrollTo(tester, field);
       await tester.tap(field);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
     }
 
     testWidgets("defaults to ask, the safe mode", (tester) async {
@@ -172,7 +172,7 @@ void main() {
     testWidgets("can be switched to ask", (tester) async {
       await openModeDropdown(tester);
       await tester.tap(find.text("Ask every time").last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
       expect(AppSettings.load(app.config).approveMode, ApproveMode.ask);
@@ -181,7 +181,7 @@ void main() {
     testWidgets("can be switched to run without asking", (tester) async {
       await openModeDropdown(tester);
       await tester.tap(find.textContaining("Run without asking").last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.never);
       expect(AppSettings.load(app.config).approveMode, ApproveMode.never);
@@ -194,7 +194,7 @@ void main() {
       final autoItem = find.text("Auto (classifier)");
       expect(autoItem, findsOneWidget);
       await tester.tap(autoItem);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
     });
@@ -206,7 +206,7 @@ void main() {
 
       await openModeDropdown(tester);
       await tester.tap(find.textContaining("Run without asking").last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(saved().map((p) => p.id), ["openai"]);
     });

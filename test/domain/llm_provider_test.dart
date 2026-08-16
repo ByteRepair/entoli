@@ -1,4 +1,5 @@
 import "dart:convert";
+import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
@@ -138,9 +139,9 @@ void main() {
       expect(loaded.defaultModelId, "kimi");
     });
 
-    test("settings written before any of this still load", () {
+    test("settings written before any of this still load", () async {
       final config = tempConfig("agent_chat_providers_old_");
-      config.settingsFile.writeAsStringSync(jsonEncode({"defaultModelId": "gpt-x"}));
+      await config.documents.write(config.settingsFile, jsonEncode({"defaultModelId": "gpt-x"}));
 
       final loaded = AppSettings.load(config);
 
@@ -152,7 +153,7 @@ void main() {
 
     test("an environment under its old name is still found, and is rewritten", () async {
       final config = tempConfig("agent_chat_providers_env_");
-      config.settingsFile.writeAsStringSync(jsonEncode({
+      await config.documents.write(config.settingsFile, jsonEncode({
         "opencodeEnv": {"ANTHROPIC_API_KEY": "sk-old"},
       }));
 
@@ -160,13 +161,13 @@ void main() {
       expect(loaded.environment, {"ANTHROPIC_API_KEY": "sk-old"});
 
       await loaded.save(config);
-      expect(config.settingsFile.readAsStringSync(), isNot(contains("opencodeEnv")));
+      expect(File(config.settingsFile).readAsStringSync(), isNot(contains("opencodeEnv")));
       expect(AppSettings.load(config).environment, {"ANTHROPIC_API_KEY": "sk-old"});
     });
 
-    test("a provider entry that is broken does not take the rest with it", () {
+    test("a provider entry that is broken does not take the rest with it", () async {
       final config = tempConfig("agent_chat_providers_bad_");
-      config.settingsFile.writeAsStringSync(jsonEncode({
+      await config.documents.write(config.settingsFile, jsonEncode({
         "llmProviders": [
           {"id": "good", "baseUrl": "https://good.test/v1"},
           {"baseUrl": "https://nameless.test/v1"},

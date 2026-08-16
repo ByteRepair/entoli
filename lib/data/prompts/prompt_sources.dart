@@ -1,8 +1,7 @@
 // Where prompt files come from: the presets packaged with the app, and the
 // user's own directory beside them.
-import "dart:io";
-
 import "package:flutter/services.dart";
+import "package:fs_shim/fs.dart";
 import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
@@ -37,7 +36,9 @@ class BundledPrompts implements PromptSource {
   }
 }
 
-/// Whatever the user has put in `$AGENT_CHAT_CONFIG/{commands,agents}/`.
+/// Whatever the user has put in `$AGENT_CHAT_CONFIG/{commands,agents}/`. Over
+/// the config's filesystem, so a browser has the directory too — the prompts a
+/// user writes there are theirs on every platform.
 class DirectoryPrompts implements PromptSource {
   const DirectoryPrompts(this.config);
 
@@ -45,15 +46,16 @@ class DirectoryPrompts implements PromptSource {
 
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
-    final directory = config.promptsDir(kind);
-    if (!directory.existsSync()) return const [];
+    final path = config.fs.path;
+    final directory = config.fs.directory(config.promptsDir(kind));
+    if (!await directory.exists()) return const [];
     final documents = <PromptDocument>[];
-    for (final entity in directory.listSync()) {
-      if (entity is! File || p.extension(entity.path) != ".md") continue;
+    await for (final entity in directory.list()) {
+      if (entity is! File || path.extension(entity.path) != ".md") continue;
       documents.add(PromptDocument.parse(
         kind,
-        p.basenameWithoutExtension(entity.path),
-        entity.readAsStringSync(),
+        path.basenameWithoutExtension(entity.path),
+        await entity.readAsString(),
       ));
     }
     return documents;

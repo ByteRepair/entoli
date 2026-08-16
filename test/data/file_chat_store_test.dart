@@ -6,18 +6,18 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/local_chat_store.dart";
+import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 
 import "../harness.dart";
 
 void main() {
   late AppConfig config;
-  late LocalChatStore store;
+  late FileChatStore store;
 
   setUp(() {
     config = tempConfig();
-    store = LocalChatStore(config);
+    store = FileChatStore(config);
   });
 
   test("save writes state.json and conv.json", () async {
@@ -32,16 +32,16 @@ void main() {
     ];
     await store.save(Chat(state: state, messages: messages));
 
-    expect(config.stateFile("c1").existsSync(), isTrue);
-    expect(config.convFile("c1").existsSync(), isTrue);
-    expect(config.resourcesDir("c1").existsSync(), isTrue);
-    expect(config.workspaceDir("c1").existsSync(), isTrue);
+    expect(File(config.stateFile("c1")).existsSync(), isTrue);
+    expect(File(config.convFile("c1")).existsSync(), isTrue);
+    expect(Directory(config.resourcesDir("c1")).existsSync(), isTrue);
+    expect(Directory(config.workspaceDir("c1")).existsSync(), isTrue);
 
-    final stateJson = jsonDecode(config.stateFile("c1").readAsStringSync()) as Map<String, dynamic>;
+    final stateJson = jsonDecode(File(config.stateFile("c1")).readAsStringSync()) as Map<String, dynamic>;
     expect(stateJson["id"], "c1");
     expect(stateJson["title"], "Test chat c1");
 
-    final convJson = jsonDecode(config.convFile("c1").readAsStringSync()) as Map<String, dynamic>;
+    final convJson = jsonDecode(File(config.convFile("c1")).readAsStringSync()) as Map<String, dynamic>;
     final msgs = convJson["messages"] as List;
     expect(msgs.length, 1);
     expect((msgs[0] as Map<String, dynamic>)["role"], "user");
@@ -100,7 +100,7 @@ void main() {
   });
 
   test("list skips dirs without state.json", () async {
-    Directory(p.join(config.chatsDir().path, "junk")).createSync();
+    Directory(p.join(config.chatsDir(), "junk")).createSync();
     await store.save(Chat(state: makeState("real"), messages: const []));
 
     final summaries = await store.list();
@@ -115,10 +115,10 @@ void main() {
 
   test("delete removes the chat directory", () async {
     await store.save(Chat(state: makeState("c3"), messages: const []));
-    expect(config.chatDir("c3").existsSync(), isTrue);
+    expect(Directory(config.chatDir("c3")).existsSync(), isTrue);
 
     await store.delete("c3");
-    expect(config.chatDir("c3").existsSync(), isFalse);
+    expect(Directory(config.chatDir("c3")).existsSync(), isFalse);
   });
 
   test("saveResource writes bytes under resources/ and reads them back", () async {
@@ -127,7 +127,7 @@ void main() {
     final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
     final resource = await store.saveResource("c4", "test.bin", bytes);
     expect(resource, endsWith("test.bin"));
-    expect(File(p.join(config.resourcesDir("c4").path, resource)).readAsBytesSync(), bytes);
+    expect(File(p.join(config.resourcesDir("c4"), resource)).readAsBytesSync(), bytes);
     expect(await store.readResource("c4", resource), bytes);
   });
 
@@ -161,16 +161,16 @@ void main() {
     test("a chat in one is written under it, not at the top level", () async {
       await store.save(Chat(state: makeState("p1", project: "work")));
 
-      expect(config.stateFile("p1", project: "work").existsSync(), isTrue);
-      expect(config.workspaceDir("p1", project: "work").existsSync(), isTrue);
-      expect(config.stateFile("p1").existsSync(), isFalse);
+      expect(File(config.stateFile("p1", project: "work")).existsSync(), isTrue);
+      expect(Directory(config.workspaceDir("p1", project: "work")).existsSync(), isTrue);
+      expect(File(config.stateFile("p1")).existsSync(), isFalse);
     });
 
     test("creating one lays down its chats and its shared workspace", () async {
       await store.createProject("work");
 
-      expect(config.chatsDir(project: "work").existsSync(), isTrue);
-      expect(config.projectWorkspaceDir(project: "work").existsSync(), isTrue);
+      expect(Directory(config.chatsDir(project: "work")).existsSync(), isTrue);
+      expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
       expect(await store.listProjects(), ["work"]);
     });
 
@@ -189,7 +189,7 @@ void main() {
     test("a chat in one is found by id by a store that has never listed", () async {
       await store.save(Chat(state: makeState("p2", project: "work")));
 
-      final fresh = LocalChatStore(config);
+      final fresh = FileChatStore(config);
       expect((await fresh.load("p2")).state.project, "work");
       expect(await fresh.projectOf("p2"), "work");
     });
@@ -199,7 +199,7 @@ void main() {
 
       await store.deleteProject("work");
 
-      expect(config.projectDir(project: "work").existsSync(), isFalse);
+      expect(Directory(config.projectDir(project: "work")).existsSync(), isFalse);
       expect(await store.list(), isEmpty);
       expect(await store.listProjects(), isEmpty);
     });
@@ -220,8 +220,8 @@ void main() {
 
       await store.moveChat("p4", "work");
 
-      expect(config.chatDir("p4").existsSync(), isFalse);
-      expect(config.workspaceDir("p4", project: "work").existsSync(), isTrue);
+      expect(Directory(config.chatDir("p4")).existsSync(), isFalse);
+      expect(Directory(config.workspaceDir("p4", project: "work")).existsSync(), isTrue);
       final moved = await store.load("p4");
       expect(moved.state.project, "work");
       expect(moved.messages, hasLength(1));
@@ -232,7 +232,7 @@ void main() {
       await store.save(Chat(state: makeState("p5")));
       await store.moveChat("p5", "work");
 
-      final json = jsonDecode(config.stateFile("p5", project: "work").readAsStringSync())
+      final json = jsonDecode(File(config.stateFile("p5", project: "work")).readAsStringSync())
           as Map<String, dynamic>;
       expect(json["project"], "work");
     });
@@ -245,7 +245,7 @@ void main() {
 
       await store.save(Chat(state: makeState("p6"), messages: const []));
 
-      expect(config.chatDir("p6").existsSync(), isFalse);
+      expect(Directory(config.chatDir("p6")).existsSync(), isFalse);
       expect((await store.load("p6")).state.project, "work");
     });
 
@@ -259,7 +259,7 @@ void main() {
     });
 
     test("a stray directory under projects/ is not offered as one", () async {
-      Directory(p.join(config.projectsDir.path, ".git")).createSync(recursive: true);
+      Directory(p.join(config.projectsDir, ".git")).createSync(recursive: true);
       await store.createProject("work");
 
       expect(await store.listProjects(), ["work"]);
@@ -269,10 +269,10 @@ void main() {
     // The directory a chat is in is what it is in, whatever the file says.
     test("a chat moved by hand is listed under where it ended up", () async {
       await store.save(Chat(state: makeState("p7")));
-      config.ensureProjectDirs(project: "work");
-      config.chatDir("p7").renameSync(config.chatDir("p7", project: "work").path);
+      await config.ensureProjectDirs(project: "work");
+      Directory(config.chatDir("p7")).renameSync(config.chatDir("p7", project: "work"));
 
-      final fresh = LocalChatStore(config);
+      final fresh = FileChatStore(config);
       expect((await fresh.list()).single.project, "work");
     });
   });

@@ -47,12 +47,12 @@ void main() {
       await pumpSettings(tester);
 
       await tester.tap(choice(AppIcon.cookie));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
       expectSelected(tester, AppIcon.cookie, selected: true);
 
       await tester.tap(choice(AppIcon.prompt));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
 
       // Told each time, in order — not toggled.
@@ -87,7 +87,7 @@ void main() {
       expect(find.textContaining("does not follow this"), findsOneWidget);
 
       await tester.tap(choice(AppIcon.cookie));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       // The in-app icon is the app's own either way; only the home screen
       // needs a platform that will take the change.
@@ -112,8 +112,8 @@ void main() {
         AppIcon.prompt,
       );
 
-      await app.container.read(appSettingsProvider.notifier).setAppIcon(AppIcon.cookie);
-      await tester.pumpAndSettle();
+      await io(tester, () => app.container.read(appSettingsProvider.notifier).setAppIcon(AppIcon.cookie));
+      await settleIo(tester);
 
       expect(
         tester.widget<AppIconImage>(find.byType(AppIconImage)).icon,
@@ -137,13 +137,13 @@ void main() {
   });
 
   group("the stored name", () {
-    test("a name this build does not know falls back to the default", () {
-      app.config.settingsFile.writeAsStringSync('{"appIcon":"sawhorse"}');
+    test("a name this build does not know falls back to the default", () async {
+      await app.config.documents.write(app.config.settingsFile, '{"appIcon":"sawhorse"}');
       expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
     });
 
-    test("an older file with no icon in it is the default", () {
-      app.config.settingsFile.writeAsStringSync('{"approveMode":"ask"}');
+    test("an older file with no icon in it is the default", () async {
+      await app.config.documents.write(app.config.settingsFile, '{"approveMode":"ask"}');
       expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
     });
   });

@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -44,7 +46,7 @@ void main() {
       ),
     );
     await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   testWidgets("the new chat button selects the chat it just created", (tester) async {
@@ -52,19 +54,19 @@ void main() {
     expect(app.container.read(selectedChatIdProvider), isNull);
 
     await tester.tap(find.byTooltip("New chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(app.container.read(selectedChatIdProvider), isNotNull);
   });
 
   testWidgets("a new chat is not listed until something is said in it", (tester) async {
-    await app.seedChat();
+    await io(tester, () => app.seedChat());
     await pumpBeside(tester);
 
     await tester.tap(find.byTooltip("New chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
-    expect(await app.repo.listChats(), hasLength(1));
+    expect(await io(tester, () => app.repo.listChats()), hasLength(1));
     expect(find.text("New chat"), findsNothing);
     expect(find.text("old chat"), findsOneWidget);
   });
@@ -72,7 +74,7 @@ void main() {
   testWidgets("its first message puts it in the list", (tester) async {
     await pumpBeside(tester);
     await tester.tap(find.byTooltip("New chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     final id = app.container.read(selectedChatIdProvider)!;
 
     final controller = app.container.read(chatControllerProvider(id).notifier);
@@ -82,20 +84,21 @@ void main() {
       await controller.send("hello");
     });
     await pumpUntil(tester, find.text("New chat"));
+    await settleIo(tester);
 
     expect(find.text("New chat"), findsOneWidget);
-    expect(await app.repo.listChats(), hasLength(1));
+    expect(await io(tester, () => app.repo.listChats()), hasLength(1));
   });
 
   testWidgets("a second new chat becomes the selected one", (tester) async {
     await pumpBeside(tester);
 
     await tester.tap(find.byTooltip("New chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     final first = app.container.read(selectedChatIdProvider);
 
     await tester.tap(find.byTooltip("New chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(app.container.read(selectedChatIdProvider), isNot(first));
   });
@@ -104,29 +107,29 @@ void main() {
     await pumpAsDrawer(tester);
 
     await tester.tap(find.byTooltip("New chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(app.container.read(selectedChatIdProvider), isNotNull);
     expect(find.byType(Drawer), findsNothing);
   });
 
   testWidgets("tapping an existing chat in the drawer closes it too", (tester) async {
-    await app.seedChat();
+    await io(tester, () => app.seedChat());
     await pumpAsDrawer(tester);
 
     await tester.tap(find.text("old chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(app.container.read(selectedChatIdProvider), isNotNull);
     expect(find.byType(Drawer), findsNothing);
   });
 
   testWidgets("selecting beside the chat pane leaves the sidebar in place", (tester) async {
-    await app.seedChat();
+    await io(tester, () => app.seedChat());
     await pumpBeside(tester);
 
     await tester.tap(find.text("old chat"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(app.container.read(selectedChatIdProvider), isNotNull);
     expect(find.byType(Sidebar), findsOneWidget);
@@ -159,13 +162,13 @@ void main() {
     /// Open the switcher at the top of the sidebar, whatever it currently says.
     Future<void> openProjectMenu(WidgetTester tester) async {
       await tester.tap(find.text(projectLabel(app.container.read(selectedProjectProvider))));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
     }
 
     Future<void> switchTo(WidgetTester tester, String label) async {
       await openProjectMenu(tester);
       await tester.tap(find.text(label).last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
     }
 
     testWidgets("the sidebar opens in the default project", (tester) async {
@@ -176,8 +179,8 @@ void main() {
     });
 
     testWidgets("only the chats of the project shown are listed", (tester) async {
-      await app.seedChat(title: "at home");
-      await app.seedChat(title: "at work", project: "work");
+      await io(tester, () => app.seedChat(title: "at home"));
+      await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await pumpBeside(tester);
 
       expect(find.text("at home"), findsOneWidget);
@@ -191,12 +194,12 @@ void main() {
 
     // A chat of the project just left is not in the list any more.
     testWidgets("switching projects deselects the chat that was open", (tester) async {
-      await app.seedChat(title: "at home");
-      await app.repo.createProject("work");
+      await io(tester, () => app.seedChat(title: "at home"));
+      await io(tester, () => app.repo.createProject("work"));
       await pumpBeside(tester);
 
       await tester.tap(find.text("at home"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       expect(app.container.read(selectedChatIdProvider), isNotNull);
 
       await switchTo(tester, "work");
@@ -205,15 +208,15 @@ void main() {
     });
 
     testWidgets("a new chat is created in the project being shown", (tester) async {
-      await app.repo.createProject("work");
+      await io(tester, () => app.repo.createProject("work"));
       await pumpBeside(tester);
       await switchTo(tester, "work");
 
       await tester.tap(find.byTooltip("New chat"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       final id = app.container.read(selectedChatIdProvider)!;
-      expect(await app.repo.projectOf(id), "work");
+      expect(await io(tester, () => app.repo.projectOf(id)), "work");
     });
 
     testWidgets("creating one names it, lays it down and switches to it", (tester) async {
@@ -221,45 +224,47 @@ void main() {
       await openProjectMenu(tester);
 
       await tester.tap(find.text("New project…"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await tester.enterText(find.byType(TextField), "My Side Project");
       await tester.tap(find.text("Create"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(app.container.read(selectedProjectProvider), "My-Side-Project");
-      expect(app.config.projectWorkspaceDir(project: "My-Side-Project").existsSync(), isTrue);
+      expect(Directory(app.config.projectWorkspaceDir(project: "My-Side-Project")).existsSync(), isTrue);
     });
 
     testWidgets("deleting one takes its chats and goes back to the default", (tester) async {
-      await app.seedChat(title: "at work", project: "work");
+      await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await pumpBeside(tester);
       await switchTo(tester, "work");
 
       await openProjectMenu(tester);
       await tester.tap(find.text("Delete project…"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await tester.tap(find.text("Delete"));
-      await tester.pumpAndSettle();
+      await settleIo(tester, least: 20);
 
       expect(app.container.read(selectedProjectProvider), isNull);
-      expect(await app.repo.listChats(), isEmpty);
-      expect(app.config.projectDir(project: "work").existsSync(), isFalse);
+      expect(await io(tester, () => app.repo.listChats()), isEmpty);
+      expect(Directory(app.config.projectDir(project: "work")).existsSync(), isFalse);
     });
 
     testWidgets("moving a chat follows it into the project it went to", (tester) async {
-      final chat = await app.seedChat(title: "at home");
-      await app.repo.createProject("work");
+      final chat = await io(tester, () => app.seedChat(title: "at home"));
+      await io(tester, () => app.repo.createProject("work"));
       await pumpBeside(tester);
 
       await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await tester.tap(find.text("Move to project…"));
-      await tester.pumpAndSettle();
+      await settleIo(tester, least: 20);
       await tester.tap(find.text("work"));
-      await tester.pumpAndSettle();
+      await settleIo(tester, least: 20);
 
-      expect(await app.repo.projectOf(chat.state.id), "work");
+      expect(await io(tester, () => app.repo.projectOf(chat.state.id)), "work");
       expect(app.container.read(selectedProjectProvider), "work");
+      // The list was invalidated by the move; it has to be read again to show it.
+      await pumpUntil(tester, find.text("at home"));
       expect(find.text("at home"), findsOneWidget);
     });
   });
