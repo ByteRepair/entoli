@@ -642,6 +642,11 @@ A tool call and the result answering it are one label. The parts stay separate
 in `conv.jsonl` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
+The drawer is sized by what is in it, up to the whole screen. It used to stop at
+seven tenths of the height, which is a tool's output cut short and a third of the
+screen left empty under it. It is a route, so the back key closes it and nothing
+had to be written for that.
+
 What can be done to a message — Edit, Regenerate — is a row of icons under it
 rather than a menu, uncovered by hovering the message or, where there is no
 pointer to hover with, by touching it. The row keeps its height whether or not
@@ -659,6 +664,20 @@ own drawer rather than a shell's — two bars stacked was the app's name over th
 chat's, saying nothing twice. What it shows follows the conversation: the mark
 and "Entoli" while the list is at its top, the chat's title and project once it
 is not. A chat too short to scroll is always at the top, so it keeps the mark.
+
+`_SidebarDrawer` is that drawer, and the only thing it says is a width: below
+Material's compact breakpoint it takes the whole screen, since 304dp of panel on
+a phone leaves a strip of chat nobody can read and nothing else. A width rather
+than a platform check, which is how every other question of room is answered
+here — the shell's own 900 above it, the bubble's share of the line below.
+
+The back key was going to need writing for and does not. An open `Drawer` puts a
+`LocalHistoryEntry` on the route it sits in, and a route holding one answers a
+pop by dropping the entry instead of leaving — which closes the drawer. A
+`PopScope` was written for this and deleted unrun: `LocalHistoryRoute` reports
+`pop` while an entry is open and never asks a scope at all. The tests stayed.
+What they pin is that back closes the sidebar rather than the app, which is worth
+knowing whoever implements it.
 
 A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
 until the extent stops moving: a builder lays out only what shows, so the extent
@@ -865,12 +884,20 @@ they do in a text box. The `+` button left of the field is a second way in: for
 a command or an agent it types the trigger character rather than opening its own
 list, so both routes share one code path; for a file it opens the chooser.
 
-It also drops the field's focus when the keyboard goes away. Android's back key
-closes the keyboard without telling Flutter, so the field keeps the focus and
-the next thing to hand it back — the `+` menu closing — brings the keyboard
-straight up again. The insets are the only report of it, and they are read off
-the view rather than off `MediaQuery`: a `Scaffold` takes the bottom inset out
-of what its body sees.
+It never asks for the field's focus, and that is the whole rule. On Android focus
+is the keyboard, so a composer that reaches for it is a keyboard rising over a
+conversation nobody was typing in — which is what attaching a file did, and what
+the `+` menu's own entries did. Neither has anything to type at: the file is
+already on the strip, and the menu the trigger character opens is tapped. The
+field has no `FocusNode` of its own any more, since nothing was left to point one
+at.
+
+What went with it is a second mechanism that existed only to undo the first: the
+`+` menu hands focus back to whatever held it when it closes, so a field still
+holding it brought the keyboard up again, and the composer watched the view
+insets for the keyboard Android closes without telling Flutter so it could take
+the focus away first. Nothing holds focus it was not given by a tap now, so
+there is nothing to take back.
 
 The sidebar's new-chat button is a `FloatingActionButton` over the profile and
 settings tiles, which is the one part of the sidebar that is not a list of

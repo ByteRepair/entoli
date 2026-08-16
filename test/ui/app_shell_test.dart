@@ -55,4 +55,41 @@ void main() {
     expect(find.byType(Drawer), findsNothing);
     expect(app.container.read(selectedChatIdProvider), isNotNull);
   });
+
+  group("the drawer", () {
+    Future<void> open(WidgetTester tester, Size size) async {
+      await pumpAt(tester, size);
+      await tester.tap(find.byIcon(Icons.menu));
+      await settleIo(tester);
+    }
+
+    testWidgets("takes a phone's whole width", (tester) async {
+      await open(tester, const Size(400, 900));
+
+      expect(tester.getSize(find.byType(Drawer)).width, 400);
+    });
+
+    // Wide enough that the chat behind it is still worth seeing.
+    testWidgets("leaves a tablet's chat showing beside it", (tester) async {
+      await open(tester, const Size(800, 900));
+
+      expect(tester.getSize(find.byType(Drawer)).width, lessThan(800));
+    });
+
+    testWidgets("the back key closes it rather than the app", (tester) async {
+      await open(tester, const Size(400, 900));
+      expect(find.byType(Sidebar), findsOneWidget);
+
+      expect(await pressBack(tester), isTrue);
+
+      expect(find.byType(Sidebar), findsNothing);
+    });
+
+    // Shut, there is nothing to close, and back is the app's to answer.
+    testWidgets("and is not in the way when it is shut", (tester) async {
+      await pumpAt(tester, const Size(400, 900));
+
+      expect(await pressBack(tester), isFalse);
+    });
+  });
 }

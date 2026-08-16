@@ -60,10 +60,28 @@ class _Waiting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        drawer: withDrawer ? const Drawer(child: Sidebar()) : null,
+        drawer: withDrawer ? const _SidebarDrawer() : null,
         appBar: withDrawer ? AppBar(title: const AppBrand()) : null,
         body: Center(child: child),
       );
+}
+
+/// The sidebar as this page's drawer, taking the whole screen where a panel of
+/// the usual width would leave a sliver of chat behind.
+class _SidebarDrawer extends StatelessWidget {
+  const _SidebarDrawer();
+
+  /// Material's compact breakpoint — a phone, either way up.
+  static const _compact = 600.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return Drawer(
+      width: width < _compact ? width : null,
+      child: const Sidebar(),
+    );
+  }
 }
 
 class _ChatBody extends ConsumerStatefulWidget {
@@ -167,7 +185,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     }
 
     return Scaffold(
-      drawer: widget.withDrawer ? const Drawer(child: Sidebar()) : null,
+      drawer: widget.withDrawer ? const _SidebarDrawer() : null,
       appBar: AppBar(
         titleSpacing: 0,
         title: InkWell(

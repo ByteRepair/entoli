@@ -189,6 +189,14 @@ Future<void> pumpUntil(WidgetTester tester, Finder until, {int tries = 50}) asyn
   }
 }
 
+/// Android's back key, as the engine reports it. True if something in the app
+/// handled it; false is the app being left.
+Future<bool> pressBack(WidgetTester tester) async {
+  final handled = await tester.binding.handlePopRoute();
+  await settleIo(tester);
+  return handled;
+}
+
 /// The app under system bars, the way Android draws it: the window is the whole
 /// screen and what the status and navigation bars cover is [padding].
 Widget underSystemBars(EdgeInsets padding, Widget child) => Builder(

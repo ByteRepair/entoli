@@ -279,6 +279,10 @@ typedef ActivitySection = ({String? label, String? body, bool isError});
 
 /// The drawer behind a label. Sections with nothing in them are left out, so
 /// a tool that returned nothing does not show an empty heading.
+///
+/// It grows to what is in it, up to the whole screen: a tool's output is as
+/// long as it is, and a fraction of the height left empty below it is a
+/// fraction of the output not read. A modal route, so the back key closes it.
 Future<void> showActivitySheet(
   BuildContext context, {
   required String title,
@@ -289,50 +293,46 @@ Future<void> showActivitySheet(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     showDragHandle: true,
     builder: (context) {
       final theme = Theme.of(context);
-      return SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (final section in filled) ...[
-                          if (section.label != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8, bottom: 2),
-                              child: Text(
-                                section.label!,
-                                style: theme.textTheme.labelSmall
-                                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                              ),
-                            ),
-                          SelectableText(
-                            section.body!,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontFamily: mono ? "monospace" : null,
-                              color: section.isError ? theme.colorScheme.error : null,
-                            ),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final section in filled) ...[
+                      if (section.label != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 2),
+                          child: Text(
+                            section.label!,
+                            style: theme.textTheme.labelSmall
+                                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
+                        ),
+                      SelectableText(
+                        section.body!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontFamily: mono ? "monospace" : null,
+                          color: section.isError ? theme.colorScheme.error : null,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       );
     },
