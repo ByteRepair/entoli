@@ -53,8 +53,11 @@ class MinisweBackend implements AgentBackend {
   /// Limits and timeouts for every turn.
   final MinisweOptions options;
 
+  @override
+  ValueListenable<Set<String>> get runningTurns => _running;
+
   final Map<String, MinisweSession> _sessions = {};
-  final Map<String, MinisweAgent> _running = {};
+  final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, List<ToolApproval>> _approvals = {};
   /// One per approval on screen, created when the request is forwarded and
@@ -204,7 +207,7 @@ class MinisweBackend implements AgentBackend {
         profile: settings.profile,
         rateLimitGate: rateLimitGate,
       );
-      _running[chatId] = agent;
+      _running.add(chatId, agent);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it.
@@ -235,10 +238,13 @@ class MinisweBackend implements AgentBackend {
     } catch (e) {
       _fail(controller, "$e");
     } finally {
-      _running.remove(chatId);
       _clearApprovals(chatId);
       _clearQuestions(chatId);
       if (!controller.isClosed) await controller.close();
+      // Last, after the stream is closed: dropping it here is what releases
+      // Android's hold on the process, and the listener is still writing the
+      // turn's closing records when the agent itself has stopped.
+      _running.remove(chatId);
     }
   }
 
@@ -393,7 +399,7 @@ class MinisweBackend implements AgentBackend {
     _clearQuestions(chatId);
     final controller = _controllers.remove(chatId);
     if (controller != null && !controller.isClosed) {
-      controller.add(const DoneEvent());
+      controller.add(const DoneEvent(aborted: true));
       await controller.close();
     }
   }
@@ -414,7 +420,7 @@ class MinisweBackend implements AgentBackend {
   /// out every live turn's process kill one after another.
   @override
   Future<void> shutdown() async {
-    await Future.wait(_running.keys.toList().map(abort));
+    await Future.wait(_running.value.toList().map(abort));
     _sessions.clear();
     registry.close();
     webSearch.close();
@@ -422,4 +428,29 @@ class MinisweBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() => registry.models();
+}
+
+/// The turns in flight, and which chats they belong to as that changes. One
+/// object rather than a map beside a notifier: two structures kept in step by
+/// hand are one forgotten update away from a foreground service that never goes
+/// away.
+class _RunningTurns extends ValueNotifier<Set<String>> {
+  _RunningTurns() : super(const {});
+
+  final Map<String, MinisweAgent> _agents = {};
+
+  void add(String chatId, MinisweAgent agent) {
+    _agents[chatId] = agent;
+    value = _agents.keys.toSet();
+  }
+
+  /// Publishes only where something was actually removed: `abort` reaches chats
+  /// with nothing running — deleting one does — and a `Set` compares by
+  /// identity, so a fresh one would notify every time and cost a round trip to
+  /// the platform to stop a service that was never started.
+  MinisweAgent? remove(String chatId) {
+    final agent = _agents.remove(chatId);
+    if (agent != null) value = _agents.keys.toSet();
+    return agent;
+  }
 }

@@ -1,3 +1,5 @@
+import "package:flutter/foundation.dart" show ValueListenable;
+
 import "../domain/ask.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
@@ -65,7 +67,13 @@ class QuestionRequestEvent extends AgentEvent {
 }
 
 class DoneEvent extends AgentEvent {
-  const DoneEvent();
+  const DoneEvent({this.aborted = false});
+
+  /// The turn was cancelled rather than run out. It rides on the event so that
+  /// every route to [AgentBackend.abort] records the same thing — the caller is
+  /// no longer the only one who knows, which it was while the composer's stop
+  /// button was the only route.
+  final bool aborted;
 }
 
 /// A sub-agent started running a delegated `task` call. Turn-scoped view
@@ -145,6 +153,14 @@ abstract class AgentBackend {
   /// A chat with an id and nothing else: its directories and its session are
   /// made when it is first used, so one that is never used costs nothing.
   Future<Chat> createChat({String? title});
+
+  /// The chats with a turn running, as it changes: a chat is in it from
+  /// [sendPrompt] or [resumeTurn] until that turn's event stream has closed,
+  /// which is later than the agent stopping — the caller is still writing the
+  /// turn's last records. Ids rather than a count, because the one reader
+  /// (`TurnKeepAlive`) aborts each of them and would otherwise need a second
+  /// way to stop a turn.
+  ValueListenable<Set<String>> get runningTurns;
 
   /// One question, answered in one call to [model]: no tools, no session,
   /// nothing kept. Null when the provider is not configured or says nothing —

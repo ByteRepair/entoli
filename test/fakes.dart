@@ -1,10 +1,12 @@
 import "dart:async";
 import "dart:convert";
-import "dart:typed_data";
+
+import "package:flutter/foundation.dart";
 
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
+import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_store.dart";
@@ -61,6 +63,21 @@ class FakeLauncherIcons implements LauncherIcons {
   Future<void> use(AppIcon icon) async => used.add(icon);
 }
 
+/// The platform's hold on the process, which a test has none of. Records the
+/// counts it was told, and [stop] is the notification's Stop being pressed.
+class FakeBackgroundWork implements BackgroundWork {
+  final List<int> told = [];
+  final _stops = StreamController<void>.broadcast();
+
+  @override
+  Future<void> running(int turns) async => told.add(turns);
+
+  @override
+  Stream<void> get stopRequests => _stops.stream;
+
+  void stop() => _stops.add(null);
+}
+
 /// Stands in for the platform's file chooser, which no test can drive.
 class FakeAttachmentPicker implements AttachmentPicker {
   final List<AttachmentKind> picks = [];
@@ -77,6 +94,12 @@ class FakeAttachmentPicker implements AttachmentPicker {
 
 class FakeBackend implements AgentBackend {
   var _created = 0;
+
+  /// Which chats have a turn running. Driven by hand — a scripted turn is over
+  /// the moment its events are yielded — so a test of the foreground service
+  /// sets it and watches what follows.
+  @override
+  final ValueNotifier<Set<String>> runningTurns = ValueNotifier(const {});
 
   @override
   Future<Chat> createChat({String? title}) async {
@@ -163,6 +186,7 @@ class FakeBackend implements AgentBackend {
   @override
   Future<void> abort(String chatId) async {
     aborted.add(chatId);
+    runningTurns.value = runningTurns.value.difference({chatId});
   }
 
   @override

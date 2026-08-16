@@ -10,7 +10,17 @@ obvious from reading a test. Everything about the app itself is in the root
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
-beside `FakeAttachmentPicker`, `FakeLauncherIcons` and `testLibrary`.
+beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork` and
+`testLibrary`.
+
+`FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
+drive: a scripted turn is over the moment its events are yielded, so
+`turn_keep_alive_test.dart` sets the ids by hand and watches what
+`TurnKeepAlive` does with them. `abort` takes one back out, which is what makes
+the Stop path end-to-end rather than two assertions. What the real one promises
+— that a chat stays listed until its event stream has closed, not until the
+agent stops — is pinned on `MinisweBackend` instead, in
+`miniswe_backend_test.dart`.
 
 `seedChat` is a chat that is actually in the sidebar: creating one no longer
 puts it there, so it creates and then writes its `state.json`. `writeChatTo`
