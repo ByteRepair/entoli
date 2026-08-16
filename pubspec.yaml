@@ -33,6 +33,9 @@ dependencies:
   # A dart:io-shaped FileSystem with an IndexedDB backend, so the web build has
   # the same layout as a disk. See CLAUDE.md, "On-disk layout".
   fs_shim: ^2.5.5
+  # Neither a share sheet nor a browser download takes a folder, so a folder
+  # leaves the workspace as a zip. See CLAUDE.md, "The workspace explorer".
+  archive: ^4.0.9
 
   # Icons
   flutter_svg: ^2.3.0

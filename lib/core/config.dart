@@ -104,6 +104,16 @@ class AppConfig {
   String workspaceDir(String chatId, {String? project}) =>
       fs.path.join(chatDir(chatId, project: project), "workspace");
 
+  /// A `task` call's own transcript, in the same format as [convFile] and named
+  /// by the call that spawned it. That id is the only one there is, and the
+  /// parent's log already holds it, so nothing has to be written down to pair
+  /// the two.
+  String subAgentsDir(String chatId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "subagents");
+
+  String subAgentFile(String chatId, String callId, {String? project}) =>
+      fs.path.join(subAgentsDir(chatId, project: project), "$callId.jsonl");
+
   /// Where the user's own commands and agents go, beside the presets the app
   /// ships with. App-wide: a project scopes files, not what the composer offers.
   String promptsDir(CompletionKind kind) => fs.path.join(dataDir, kind.folder);

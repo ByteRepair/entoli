@@ -67,7 +67,8 @@ class _Waiting extends StatelessWidget {
 }
 
 /// The sidebar as this page's drawer, taking the whole screen where a panel of
-/// the usual width would leave a sliver of chat behind.
+/// the usual width would leave a sliver of chat behind, and closed by the back
+/// key rather than leaving the app.
 class _SidebarDrawer extends StatelessWidget {
   const _SidebarDrawer();
 
@@ -79,7 +80,17 @@ class _SidebarDrawer extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     return Drawer(
       width: width < _compact ? width : null,
-      child: const Sidebar(),
+      // Claims the back key from Android, which the drawer's own
+      // `LocalHistoryEntry` does not — see CLAUDE.md. Deleting this as dead
+      // code is how it shipped broken once.
+      child: PopScope(
+        canPop: false,
+        // True when the route popped anyway, and then there is nothing to close.
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) Scaffold.of(context).closeDrawer();
+        },
+        child: const Sidebar(),
+      ),
     );
   }
 }

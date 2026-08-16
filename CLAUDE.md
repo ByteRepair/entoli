@@ -35,7 +35,8 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
 ### On-disk layout
 
 `<dataDir>/chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`,
-`resources/`, `workspace/`, and `<dataDir>/workspace/` beside them.
+`resources/`, `subagents/`, `workspace/`, and `<dataDir>/workspace/` beside
+them.
 `<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
@@ -476,12 +477,13 @@ is not reachable from its program, so nothing further down has to test for it.
 The chat store and the prompt sources used to be in that list and are not any
 more — one filesystem means one of each, built in `platform.dart` itself. What
 is left varying is the shell, the network, which `FileSystem`, where its root
-is, whether the process has an environment, and `platformPersist`: on the web
-that is `navigator.storage.persist()`, without which IndexedDB is evictable and
-a chat can be gone on the next visit because something else wanted the space. A
-browser that refuses leaves the app working, just evictable again. Everywhere
-else it is a no-op, because a directory on a disk is already as durable as the
-app is.
+is, whether the process has an environment, `FileHandoff` (see "The workspace
+explorer" for why it is the one thing here with three implementations), and
+`platformPersist`: on the web that is `navigator.storage.persist()`, without
+which IndexedDB is evictable and a chat can be gone on the next visit because
+something else wanted the space. A browser that refuses leaves the app working,
+just evictable again. Everywhere else it is a no-op, because a directory on a
+disk is already as durable as the app is.
 
 `MinisweBackend.webSearch` is required rather than defaulted for that reason —
 a default of `DuckDuckGoSearch()` puts its HTML parser in the web bundle
@@ -592,6 +594,60 @@ approvals and questions), so `conv.jsonl` keeps the call/result pair and
 nothing more; a reloaded chat draws a `TaskLabel` from the call's arguments
 alone. `SubAgentStrip` shows the running ones as chips above the composer.
 
+##### Their own transcripts
+
+A sub-agent writes one, at `<chat>/subagents/<callId>.jsonl`, and it is a
+`ChatRecord` log exactly like `conv.jsonl`. That is the whole design: `replay`
+reads it, `projectionOf` puts it back in front of a model, and a missing
+`turnEnd` means what it means anywhere else. A status file would have served
+the reporting and been thrown away the day sub-agent transcripts became
+something to look at.
+
+The call id is the only id there is. The transcript holds one message — a
+sub-agent's whole run is one turn — and it is named after the call that spawned
+it, which the parent's own log already holds. So nothing has to be written down
+to pair the two, and carrying one on adds to that message rather than writing a
+second beside it.
+
+`TurnRecorder` is what writes it, the same class `ChatController` uses for the
+conversation. It was pulled out of the controller for this: turning a turn's
+events into parts and records is the same job either way, and a sub-agent with
+its own weaker version would be one whose kill leaves a file nothing can read.
+The controller keeps the seven lines that mirror the parts into Riverpod state
+and passes them as a callback; a sub-agent passes none. The one thing the
+recorder does not write is the record opening the message — one level up that is
+`send`'s job, and for a sub-agent it is `_recorderFor`'s.
+
+`SubAgentLog` is a port rather than a call on `ChatStore` because the backend is
+the only thing that sees a sub-agent's events at all: they never reach the
+controller that writes `conv.jsonl`, so the store's owner never has them.
+
+##### Carrying one on
+
+`MinisweBackend._reviveSubAgents` runs before the resumed session is built. A
+`task` call in the interrupted reply whose result never landed is answered by
+running its sub-agent on, over a session rebuilt from its own transcript — which
+is `MinisweAgent.resume` and `projectionOf`, the same three steps the user's
+Continue takes one level up, so there is one mechanism and not two.
+
+**Nothing asks, and nobody is told.** "Carrying on an interrupted turn" says
+nothing resumes on its own and the three routes out are the user's — that is
+about the top of the conversation, which is theirs. A sub-agent is machinery
+inside a turn they have already said to continue, so reviving one needs no
+button, no tool argument and no prompt telling the model the mechanism exists.
+Reviving is also what makes the resumed turn honest: a fan-out of 75 that lost
+five keeps the seventy that finished.
+
+The revived results go out as ordinary `ToolResultEvent`s before the agent's own
+events, so the reply on screen and the records in `conv.jsonl` both gain them
+through the path every other result takes. They are folded into the history
+first, so the session is projected from a conversation that already has them
+rather than patched afterwards.
+
+A call with no transcript is left alone. It never started, so there is nothing
+to carry on and the projection's "this was interrupted" is the honest answer —
+which is also why the two have to stay side by side.
+
 #### Web search (the `websearch` / `webfetch` tools)
 
 `websearch` queries DuckDuckGo Lite — no API key — and returns titles, URLs,
@@ -649,7 +705,9 @@ genuinely fresh one next time.
 An engine outliving its activity is also why `IconChannel` was pulled out of
 `MainActivity` and registered on the engine against the application context: the
 handler used to close over the activity, and holding a destroyed one for the
-life of a process is the leak this feature would have created.
+life of a process is the leak this feature would have created. `FilesChannel`
+is built the same way for the same reason, and starts everything it starts with
+`FLAG_ACTIVITY_NEW_TASK`, which is what an application context needs.
 
 Stopping is one path. The notification's Stop asks Dart, Dart aborts every
 running turn, and the emptied `runningTurns` is what then stops the service — so
@@ -756,13 +814,31 @@ a phone leaves a strip of chat nobody can read and nothing else. A width rather
 than a platform check, which is how every other question of room is answered
 here — the shell's own 900 above it, the bubble's share of the line below.
 
-The back key was going to need writing for and does not. An open `Drawer` puts a
+The back key takes two halves, and a `Drawer` only brings one. An open one puts a
 `LocalHistoryEntry` on the route it sits in, and a route holding one answers a
-pop by dropping the entry instead of leaving — which closes the drawer. A
-`PopScope` was written for this and deleted unrun: `LocalHistoryRoute` reports
-`pop` while an entry is open and never asks a scope at all. The tests stayed.
-What they pin is that back closes the sidebar rather than the app, which is worth
-knowing whoever implements it.
+pop by dropping the entry rather than leaving — so if the press arrives, the
+right thing happens. It does not arrive. Android forwards one only while the
+framework has claimed it through `SystemNavigator.setFrameworkHandlesBack`; that
+is dispatched off a `NavigationNotification`; and the only things that recompute
+one are the `Navigator`'s route list changing and a `PopEntry` registering.
+Opening a drawer is neither. So the platform still holds the `false` it was told
+when the app had one route, keeps its own callback disabled, and finishes the
+activity without Flutter hearing anything.
+
+`PopScope(canPop: false)` in the drawer is that `PopEntry`, and claiming the key
+is what it is for — not the pop, which the history entry would have handled.
+`ModalRoute` consults its pop entries *before* `LocalHistoryRoute` gets a say, so
+the scope does reach `popDisposition`, and the `doNotPop` it forces is what makes
+the notification claim. After that the claim is all of it: the press comes in,
+the route declines to pop, and `onPopInvokedWithResult` closes the drawer by
+hand.
+
+This shipped broken once, and why is worth more than the fix. A widget test
+presses back through `handlePopRoute`, which calls the framework directly and
+never consults the platform — so the missing half was exactly the half the test
+could not see, and it passed against a build that closed the app on a phone.
+Anything asserting about the back key needs `frameworkHandlesBack` beside the
+press.
 
 A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
 until the extent stops moving: a builder lays out only what shows, so the extent
@@ -833,6 +909,138 @@ again.
 
 The store's resource I/O is async where the rest of it is sync: a JSON file is
 small enough to write on the UI thread, an attachment is not.
+
+### The workspace explorer
+
+A workspace is where the agent's work lands, and until now the only way to see
+it was to leave the app. `WorkspaceTile` on the chat and project settings pages
+opens `WorkspacePage` over one folder — the chat's own `workspace/` or the
+project's shared one, resolved by the page that knows which it is. The listing
+itself is `listWorkspace` over the config's `FileSystem`, so it is the same code
+on a disk and over IndexedDB.
+
+Everything else the page can do is `FileHandoff`'s, and every route is gated the
+way `Shell.canRunCommands` gates the agent's commands. The three platforms do
+not differ in degree here, they differ in kind — and so there are three
+implementations, not two. The conditional import splits `dart:io` from
+`dart:js_interop`, which it has to: `Process` will not compile in a browser and a
+`Blob` will not compile on the VM. Desktop and Android are then chosen at
+runtime in `platformFileHandoff`, because they share `dart:io` and agree on
+nothing else here. Choosing rather than branching is the point: a class that
+answered both would carry an `if (Platform.isAndroid)` in every member, and
+every future member too.
+
+- **Desktop** has a file manager and a registry of viewers, and `url_launcher`
+  reaches both: `reveal` opens the current folder (the app bar's button) and
+  `open` opens a file, which is the same call on a different path. It needs no
+  chooser of its own — the file manager is already pointed at the workspace —
+  and it has no share sheet, so there is no selection mode at all.
+- **Android** has the share sheet, both ways. `export` sends a selection through
+  `Intent.createChooser`, so every app on the device is on offer rather than a
+  default winning silently; `open` is an `ACTION_VIEW`. Files come back in the
+  same way, and only that way: another app shares to Entoli. See below.
+- **A browser** opens a file as a blob in a new tab, which is what lets the
+  browser preview it, downloads a selection, and takes files in through the
+  chooser `<input type="file">` already is — `webkitdirectory` for a folder,
+  whose `webkitRelativePath` is what keeps the folder's shape.
+
+`exportKind` is the one thing the port says about presentation, and it says the
+*kind* rather than the words: a share sheet and a download are not the same
+promise to the user, but which word and which glyph say so is `WorkspacePage`'s
+to decide. Null is a platform with nowhere to hand a selection, which is what
+takes the whole selection mode off the desktop toolbar.
+
+Neither a share sheet nor a download takes a folder, so a selection with one in
+it goes as a single zip (`zipEntries`, in `lib/data/` rather than `local/` or
+`web/` because it is written against the `FileSystem` and both sides use it).
+Several plain files stay several, which is what `ACTION_SEND_MULTIPLE` is for. A
+selection is one folder's — leaving the folder clears it — which is what lets
+Android's staging directory stay flat, and why nothing checks for two files of
+the same name in it.
+
+Coming the other way, an `IncomingFile` is deliberately **not** its bytes. A
+batch arrives with as many files as its source chose to send and then waits on
+screen while the user picks a workspace, so held as buffers it is a video's
+worth of heap for as long as that takes — and on a phone, long enough to be
+killed for it. What each one holds instead is whatever its own source already
+had: `IncomingBlob` in a browser, where a `File` is a handle to bytes that have
+not been loaded yet, and `IncomingStaged` on Android, which is the copy
+`FilesChannel` already made. `IncomingBytes` is the trivial third, for bytes
+genuinely in hand.
+
+`writeIncoming` makes room and hands over a target; `writeTo` decides what
+putting it there means. That split is where the traversal boundary lives —
+`safeRelativePath` runs once, before dispatch, so no variant can open a hole in
+it — and it is why the writes stay sequential: doing them at once would put
+every file's bytes in memory together, which is the whole thing being avoided.
+Only the folders are batched, because `create` on the web opens a read-write
+transaction before it looks, and a folder upload names one directory hundreds of
+times.
+
+`IncomingBlob` lives beside `WebFileHandoff` rather than with its siblings in
+`lib/domain/`, since it holds a `package:web` type. That is also why
+`IncomingFile` is `abstract` and not `sealed` — the variants are deliberately
+not all in one library, and nothing switches on them.
+
+That staging directory is the other thing worth knowing about the Android half.
+Everything handed to an intent is a **copy under the app's cache**, never the
+workspace file itself, because a `FileProvider` only mints URIs under the paths
+in `res/xml/file_paths.xml` and one `<cache-path>` is the whole of that file.
+The alternative was a `<root-path>` exposing the data directory by path for the
+sake of not copying, which is a worse trade on a directory holding `settings.json`
+and every chat. It costs a copy per open; workspace files are the agent's output,
+and the ones big enough to notice are rare.
+
+#### Sharing to Entoli
+
+`MainActivity` carries `ACTION_SEND` / `ACTION_SEND_MULTIPLE` filters, and so
+does the `CookieIcon` alias — only one of the two components is enabled at a
+time, and a share must not stop working because the user changed the icon.
+
+`FilesChannel.receive` copies whatever the intent carries into `cacheDir` **at
+once**, from `onCreate` and `onNewIntent` alike: the read permission on those
+URIs is granted to the task and dies with it, and the user takes a while to pick
+a workspace. The intent's action is then cleared, so an activity recreated from
+the same one does not stage the share twice. A batch arriving with nothing
+already waiting empties the directory first — a share the user backed out of is
+never claimed, and nothing else would ever delete its copy.
+
+Dart claims them from `IncomingShares`, which wraps the app in `main` rather
+than living in `AppShell`: a share has to be offered a workspace over whatever
+is on screen, and a `Navigator` to push that onto only exists below
+`MaterialApp`. It reads twice over and needs both — once after the first frame,
+for the share that launched the app and was staged before Dart was listening,
+and once per `shareArrived`, for one that arrives while the app is already up.
+Reading empties the queue, so a share is offered a workspace exactly once.
+
+The nudge is what carries the cached engine's case, and it is the reason there
+is one. A share into an activity whose engine was cached runs `onCreate` but not
+`main`, so `initState` does not fire again and the first-frame read never
+repeats — but the channel is still registered and the widget still subscribed,
+so the invoke lands. See "Staying alive off screen".
+
+`ShareTargetPage` is that offer: every workspace Entoli has, as a list — the
+default project, each project beside it, then each chat's own — and picking one
+writes the files there and closes. Nothing else is on it, because a share
+arrives with nowhere to go and asking is the whole of what the page is for.
+
+A path that arrived from outside is sanitised by `safeRelativePath` before it is
+joined onto anything: the sharing app wrote it, and `../../settings.json` is a
+name a file can have. Folders in it are kept — that is what makes a folder
+upload survive — and only the segments that would climb are dropped.
+
+A staged copy is **moved** into the workspace rather than read out of it. The
+cache and the data directory are one volume, so the move is the real path and
+the bytes never enter this process; the copy it falls back to is there because
+"one volume" is an assumption about a device rather than a guarantee.
+
+Moving consumes the copy, which is what makes the staging directory tidy itself
+and is also the reason `FilesChannel` prunes it on the way **out** rather than
+on the way in. Dart now holds the staged paths until a workspace is picked, so a
+second share arriving while that page is open would delete the paths the page is
+still pointing at. At `takeShare` there is no such hazard: only one batch is ever
+offered at a time, so anything left beside the batch being handed over is an
+earlier one nobody claimed.
 
 ### The app icon
 
@@ -908,9 +1116,10 @@ no-op `available` being false gives. So the app still has exactly one
 conditional import — `ForegroundService` is the second channel to be built this
 way.
 
-Both channels are registered when the engine is created rather than on each
-attach, and hold the application context. That is forced by the engine
-outliving the activity: see "Staying alive off screen".
+Every channel — this one, `ForegroundService` and `FilesChannel` — is registered
+when the engine is created rather than on each attach, and holds the application
+context. That is forced by the engine outliving the activity: see "Staying alive
+off screen".
 
 ### Setting overrides
 

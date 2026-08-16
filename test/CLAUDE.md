@@ -10,8 +10,8 @@ obvious from reading a test. Everything about the app itself is in the root
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
-beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork` and
-`testLibrary`.
+beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
+`FakeFileHandoff` and `testLibrary`.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so
@@ -21,6 +21,14 @@ the Stop path end-to-end rather than two assertions. What the real one promises
 — that a chat stays listed until its event stream has closed, not until the
 agent stops — is pinned on `MinisweBackend` instead, in
 `miniswe_backend_test.dart`.
+
+`FakeFileHandoff` is which platform the workspace explorer thinks it is on, and
+its three named constructors are the three answers — `desktop()` has a file
+manager and nothing else, `android()` has the share sheet both ways, `web()` has
+a download and a chooser. `TestApp.create(handoff: …)` takes one. The explorer
+draws a different toolbar for each, so the platform is the fixture rather than
+something to guess at with `defaultTargetPlatform`, which would not change what
+`kIsWeb` answers anyway.
 
 `seedChat` is a chat that is actually in the sidebar: creating one no longer
 puts it there, so it creates and then writes its `state.json`. `writeChatTo`
@@ -48,6 +56,12 @@ under a parallel test run is a test that flakes — twice, before they moved.
 Reach for it when a filesystem is incidental to what is being checked, not to
 avoid the pumping below.
 
+`sub_agent_log_test.dart` seeds a killed sub-agent the way a kill leaves one:
+`recordsOf` a message with something in it and no `turnEnd` after it. The
+message is named after the call, since that is the only id a sub-agent
+transcript has. `miniswe_backend_test.dart` does the same one level up, where
+the subject is the parent carrying it on.
+
 `web_filesystem_test.dart` is the other half. `newFileSystemMemory()` is the
 same `FileSystemIdb` the web build runs on, over an in-memory IndexedDB rather
 than the browser's, so the browser's chat store, its settings and its
@@ -74,9 +88,20 @@ default.
 `pumpUntil` is the same idea aimed at a finder, for waiting on something to
 appear.
 
-`pressBack` is Android's back key. It answers whether anything in the app took
-it, which is the assertion worth making: false is the app being left, and a
-sidebar or a drawer that swallows it has to say so.
+`pressBack` is Android's back key, and on its own it proves nothing: it goes
+through `handlePopRoute`, straight to the framework, and a real press is only
+forwarded while the framework has claimed the key. Whether the app *would*
+answer one says nothing about whether it would ever get one — see the back key
+in the root `CLAUDE.md` for what that costs.
+
+`frameworkHandlesBack` is the other half, so assert it beside any `pressBack`.
+It records what the app sent to `SystemNavigator.setFrameworkHandlesBack`,
+newest last, and it has to be installed before the action. Two things it does
+that a reader would not expect: it resumes the app, since `WidgetsApp` says
+nothing to the engine until there is a lifecycle state and a test starts with
+none, and it takes over `SystemChannels.platform` for the test — which is also
+`Clipboard`'s and `HapticFeedback`'s, so anything asserting on those cannot use
+it as it stands.
 
 Do not reach for the memory filesystem to avoid all this. It was tried: sembast
 resolves through timers, not microtasks, so a widget test hangs on it exactly as

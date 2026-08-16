@@ -293,11 +293,15 @@ void main() {
         expect(find.byType(Sidebar), findsOneWidget);
       });
 
-      // Only once the menu is out of the way does back reach the drawer.
+      // Only once the menu is out of the way does back reach the drawer — and
+      // the app has to still hold the key by then, or the second press never
+      // arrives to be answered.
       testWidgets("closes the drawer on the second press", (tester) async {
+        final claimed = frameworkHandlesBack(tester);
         await pumpAsDrawer(tester);
         await openProjectMenu(tester);
         await pressBack(tester);
+        expect(claimed.last, isTrue);
 
         expect(await pressBack(tester), isTrue);
 
