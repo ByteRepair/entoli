@@ -7,6 +7,7 @@ import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../profile/profile_page.dart";
 import "../settings/settings_page.dart";
+import "../widgets/anchored_menu.dart";
 import "../widgets/dialogs.dart";
 import "project_settings_page.dart";
 
@@ -241,32 +242,11 @@ class _ProjectMenu extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedProjectProvider);
     final projects = ref.watch(projectListProvider).value ?? const [];
-    return MenuAnchor(
-      menuChildren: [
-        for (final project in everyProject(projects))
-          MenuItemButton(
-            leadingIcon: Icon(
-              Icons.check,
-              size: 18,
-              color: project == selected ? null : Colors.transparent,
-            ),
-            onPressed: () => _select(ref, project),
-            child: Text(projectLabel(project)),
-          ),
-        const Divider(height: 1),
-        MenuItemButton(
-          onPressed: () => _create(context, ref),
-          child: const Text("New project…"),
-        ),
-        if (selected != null)
-          MenuItemButton(
-            onPressed: () => _delete(context, ref, selected),
-            child: const Text("Delete project…"),
-          ),
-      ],
-      builder: (context, controller, _) => Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
+    return Align(
+      alignment: Alignment.centerLeft,
+      // The button's own context, which is what the menu is anchored under.
+      child: Builder(
+        builder: (context) => TextButton.icon(
           iconAlignment: IconAlignment.end,
           icon: const Icon(Icons.arrow_drop_down),
           label: Text(
@@ -274,9 +254,45 @@ class _ProjectMenu extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+          onPressed: () => _open(context, ref, selected, projects),
         ),
       ),
     );
+  }
+
+  Future<void> _open(
+    BuildContext context,
+    WidgetRef ref,
+    String? selected,
+    List<String> projects,
+  ) async {
+    final chosen = await showAnchoredMenu<VoidCallback>(context, [
+      for (final project in everyProject(projects))
+        PopupMenuItem(
+          value: () => _select(ref, project),
+          child: Row(
+            children: [
+              Icon(
+                Icons.check,
+                size: 18,
+                color: project == selected ? null : Colors.transparent,
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(projectLabel(project), overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+        ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+        value: () => _create(context, ref),
+        child: const Text("New project…"),
+      ),
+      if (selected != null)
+        PopupMenuItem(
+          value: () => _delete(context, ref, selected),
+          child: const Text("Delete project…"),
+        ),
+    ]);
+    if (context.mounted) chosen?.call();
   }
 }
