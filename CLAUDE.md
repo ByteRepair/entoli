@@ -660,6 +660,20 @@ chat's, saying nothing twice. What it shows follows the conversation: the mark
 and "Entoli" while the list is at its top, the chat's title and project once it
 is not. A chat too short to scroll is always at the top, so it keeps the mark.
 
+`_SidebarDrawer` is that drawer, and the only thing it says is a width: below
+Material's compact breakpoint it takes the whole screen, since 304dp of panel on
+a phone leaves a strip of chat nobody can read and nothing else. A width rather
+than a platform check, which is how every other question of room is answered
+here — the shell's own 900 above it, the bubble's share of the line below.
+
+The back key was going to need writing for and does not. An open `Drawer` puts a
+`LocalHistoryEntry` on the route it sits in, and a route holding one answers a
+pop by dropping the entry instead of leaving — which closes the drawer. A
+`PopScope` was written for this and deleted unrun: `LocalHistoryRoute` reports
+`pop` while an entry is open and never asks a scope at all. The tests stayed.
+What they pin is that back closes the sidebar rather than the app, which is worth
+knowing whoever implements it.
+
 A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
 until the extent stops moving: a builder lays out only what shows, so the extent
 the first frame reports is an estimate and one jump lands short of the end. Not

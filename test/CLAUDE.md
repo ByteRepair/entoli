@@ -64,6 +64,10 @@ default.
 `pumpUntil` is the same idea aimed at a finder, for waiting on something to
 appear.
 
+`pressBack` is Android's back key. It answers whether anything in the app took
+it, which is the assertion worth making: false is the app being left, and a
+sidebar or a drawer that swallows it has to say so.
+
 Do not reach for the memory filesystem to avoid all this. It was tried: sembast
 resolves through timers, not microtasks, so a widget test hangs on it exactly as
 it hangs on a disk. `runAsync` is the only answer.
