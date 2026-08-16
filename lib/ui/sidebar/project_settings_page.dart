@@ -6,6 +6,7 @@ import "../../providers.dart";
 import "../profile/profile_page.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
+import "../workspace/workspace_page.dart";
 import "sidebar.dart";
 
 /// Delete a project, its chats, and its shared workspace. Confirms first
@@ -70,6 +71,11 @@ class ProjectSettingsPage extends ConsumerWidget {
             label: "Path",
             value: path,
             snack: "Copied project path",
+          ),
+          const Divider(),
+          WorkspaceTile(
+            root: ref.watch(appConfigProvider).projectWorkspaceDir(project: project),
+            title: "Project workspace",
           ),
           const Divider(),
           ListTile(

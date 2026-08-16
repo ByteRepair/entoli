@@ -10,8 +10,8 @@ obvious from reading a test. Everything about the app itself is in the root
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
-beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork` and
-`testLibrary`.
+beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
+`FakeFileHandoff` and `testLibrary`.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so
@@ -21,6 +21,14 @@ the Stop path end-to-end rather than two assertions. What the real one promises
 — that a chat stays listed until its event stream has closed, not until the
 agent stops — is pinned on `MinisweBackend` instead, in
 `miniswe_backend_test.dart`.
+
+`FakeFileHandoff` is which platform the workspace explorer thinks it is on, and
+its three named constructors are the three answers — `desktop()` has a file
+manager and nothing else, `android()` has the share sheet both ways, `web()` has
+a download and a chooser. `TestApp.create(handoff: …)` takes one. The explorer
+draws a different toolbar for each, so the platform is the fixture rather than
+something to guess at with `defaultTargetPlatform`, which would not change what
+`kIsWeb` answers anyway.
 
 `seedChat` is a chat that is actually in the sidebar: creating one no longer
 puts it there, so it creates and then writes its `state.json`. `writeChatTo`

@@ -10,6 +10,7 @@ import "domain/background_work.dart";
 import "domain/app_settings.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
+import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
 import "domain/models.dart";
@@ -24,6 +25,7 @@ final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError(
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
+final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
 
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.

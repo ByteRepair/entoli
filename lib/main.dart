@@ -12,6 +12,7 @@ import "data/local/file_selector_picker.dart";
 import "domain/prompt_library.dart";
 import "providers.dart";
 import "ui/app_shell.dart";
+import "ui/share/incoming_shares.dart";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,7 @@ void main() async {
       launcherIconsProvider.overrideWithValue(const LauncherAliases()),
       linkOpenerProvider.overrideWithValue(const PlatformLinkOpener()),
       backgroundWorkProvider.overrideWithValue(ForegroundService()),
+      fileHandoffProvider.overrideWithValue(platform.createFileHandoff(config)),
     ],
   );
   container.read(availableModelsProvider);
@@ -75,7 +77,10 @@ class _AgentChatAppState extends State<AgentChatApp> {
     return MaterialApp(
       title: "Entoli",
       theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo)),
-      home: const AppShell(),
+      // Wrapped rather than folded into the shell: what another app shared has
+      // to be offered a workspace over whatever is on screen, and a Navigator
+      // to push that onto only exists below here.
+      home: const IncomingShares(child: AppShell()),
     );
   }
 }
