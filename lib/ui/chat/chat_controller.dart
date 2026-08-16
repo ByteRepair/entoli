@@ -434,7 +434,8 @@ class ChatController extends Notifier<ChatViewState> {
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
       case InfoEvent():
         break;
-      case DoneEvent():
+      case DoneEvent(:final aborted):
+        if (aborted) _outcome ??= TurnEnd.aborted;
         _finishTurn();
     }
   }
@@ -503,8 +504,10 @@ class ChatController extends Notifier<ChatViewState> {
     _finishTurn();
   }
 
-  /// Set before the abort is awaited: killing the turn closes the stream, so
-  /// `onDone` can reach [_finishTurn] first and record it as having finished.
+  /// Set before the abort is awaited, though `DoneEvent.aborted` would say the
+  /// same: killing the turn closes the stream, and a backend that closed it
+  /// without the event would let `onDone` reach [_finishTurn] first and record
+  /// the turn as having finished.
   Future<void> abort() async {
     _outcome = TurnEnd.aborted;
     await ref.read(chatRepositoryProvider).abort(chatId);

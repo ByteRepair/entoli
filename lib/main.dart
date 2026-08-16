@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
 import "core/platform/app_icon.dart";
+import "core/platform/background_work.dart";
 import "core/platform/link_opener.dart";
 import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
@@ -28,9 +29,11 @@ void main() async {
       promptLibraryProvider.overrideWithValue(library),
       launcherIconsProvider.overrideWithValue(const LauncherAliases()),
       linkOpenerProvider.overrideWithValue(const PlatformLinkOpener()),
+      backgroundWorkProvider.overrideWithValue(ForegroundService()),
     ],
   );
   container.read(availableModelsProvider);
+  container.read(turnKeepAliveProvider);
   runApp(UncontrolledProviderScope(
     container: container,
     child: AgentChatApp(onExit: backend.shutdown),

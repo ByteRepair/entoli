@@ -245,9 +245,10 @@ so nothing closes it; a tidy-up record would be written for no reader.
 
 One assumption is worth naming because it is invisible: an open log means nothing
 is running only because a turn cannot outlive the process running it. The
-foreground service of stage 5 breaks that, and a UI attaching to a chat whose
-turn is still running in the service would read an open log and offer Continue
-over the top of it.
+foreground service does not break it — the turn stays in the app's own isolate
+and the service only keeps that process alive, so the UI that comes back is the
+one that never stopped listening. A second engine would break it, and that is
+the reason there is not one. See "Staying alive off screen".
 
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
 only ever be `messages.last.id`, an invariant nothing could enforce. The chat page
@@ -608,6 +609,90 @@ search page is HTML, not JSON, so results are parsed out of the table it
 renders. Both return a `ShellResult`, so the agent words a search's outcome
 the same way it words a command's — the model reads one shape, whatever ran.
 
+### Staying alive off screen
+
+Android kills a process nobody is looking at, and a turn is minutes of a model's
+time and a half-written reply. `AgentService` is a `dataSync` foreground service
+that says the process is busy; `TurnKeepAlive` starts and stops it from
+`AgentBackend.runningTurns`, which is the chats `MinisweBackend` has an agent
+running for. It is a `ValueListenable` of ids rather than a count so that Stop
+can abort each one, which is also why there is no `abortAll` — one way to stop a
+turn.
+
+**Nothing moves into the service.** The turn runs in the app's own isolate, as
+it always did; all the service buys is the right for that isolate to keep
+running. That is what keeps the invariant of "Carrying on an interrupted turn"
+true: the UI that comes back is the one that never stopped listening, not a new
+one reading a log. A second engine in the service would have broken it, and
+would have had two copies of every session besides.
+
+Two halves, and only together: the service stops the *process* being killed, and
+a **cached `FlutterEngine`** stops the *isolate* dying with the activity when the
+app is swiped off the recents list. `MainActivity.provideFlutterEngine` builds
+one and puts it in `FlutterEngineCache`; `FlutterActivity` already declines to
+destroy an engine the host provided, and the delegate runs the Dart entrypoint
+only while Dart is not already executing, so a relaunch reattaches to the
+running app rather than starting it again. `main` therefore does not run twice,
+which is what makes the controllers, the sessions and the settings cache still
+be there.
+
+That is also why `onDestroy` throws the engine away again when the activity is
+finishing and `AgentService.busy` is false. Cached unconditionally it would be a
+permanent change to what "a restart" means: `main` builds the `PromptLibrary`
+once and hydrates the `Documents` cache once, and both are documented as picking
+up an edit made behind the app's back on the next restart. With no eviction that
+restart would only ever come when Android reclaimed the process, which is
+nothing the user can do on purpose. So the sticky isolate lasts exactly as long
+as the thing that needs it, and closing the app with nothing running gives a
+genuinely fresh one next time.
+
+An engine outliving its activity is also why `IconChannel` was pulled out of
+`MainActivity` and registered on the engine against the application context: the
+handler used to close over the activity, and holding a destroyed one for the
+life of a process is the leak this feature would have created.
+
+Stopping is one path. The notification's Stop asks Dart, Dart aborts every
+running turn, and the emptied `runningTurns` is what then stops the service — so
+the notification goes when the work does rather than when the button is pressed.
+What made that a second path rather than one was the *record*: `TurnEnd.aborted`
+used to be set by `ChatController.abort`, the caller, so a turn stopped from
+anywhere else was logged as having finished. It rides on `DoneEvent.aborted`
+now, which the backend sets wherever `abort` is reached, and the controller still
+sets it before awaiting because a backend that closed the stream without the
+event would let `onDone` record the turn first.
+`onTimeout` (Android 15 caps a `dataSync` service at six hours a day, and crashes
+the app if it lingers) is the exception: it drops the service and leaves the turn
+running, since the process is then merely killable again, which is where every
+other platform already is.
+
+`POST_NOTIFICATIONS` is asked for in `onCreate` rather than when a turn first
+needs it. The service is started from a running turn, and by then there may be
+no activity in front of the user to ask through — and a foreground service whose
+notification cannot be shown is one the user can neither see nor stop.
+
+The service is started while the app is in the foreground, never later: Android
+forbids a backgrounded app from starting one at all. That is free here, because
+a turn only ever starts from a tap. A refusal is caught all the same and stands
+the service down, since an uncaught one in `onStartCommand` is a crash and the
+daily cap can already have been spent.
+
+`runningTurns` drops a chat *after* its event stream closes rather than when the
+agent stops, which is the whole of what the seam is for: `_finishTurn` is still
+draining the append queue and writing the `turnEnd` record when the loop ends,
+and that is the window "When a turn is over" says the process must survive. What
+is still not covered is the last few milliseconds of that write — the listener's
+queue is the UI's, and the hold is released when the backend's stream closes, not
+when the log falls quiet. A lease taken by the writer would close it, and would
+be the thing to reach for if a killed tail ever shows up in practice.
+
+Two costs are deliberate. The wake lock covers a turn parked on an approval
+banner, where nothing is running and the phone is being kept from suspending for
+as long as the user does not answer; releasing it there needs a second signal
+through three layers for a rare case, and the six-hour cap bounds it. And the
+notification's wording lives in Kotlin, because the port carries a count rather
+than the chats — which is also what a notification naming the chat would have to
+change.
+
 ### When a turn is over
 
 `_finishTurn` drains the append queue and writes the `turnEnd` record before it
@@ -793,7 +878,7 @@ enabling an `activity-alias` in its place when a non-default icon is picked.
 `android:icon` (`@mipmap/ic_prompt`); each non-default icon is an
 `activity-alias` targeting `MainActivity`, disabled by default. Exactly one
 entry is enabled at a time, or the app appears on the home screen twice — so
-`MainActivity.kt` treats the default as one entry among the aliases, enabling
+`IconChannel.kt` treats the default as one entry among the aliases, enabling
 the wanted one *before* disabling the rest. An instant with no launcher entry
 enabled is one a launcher can read, and it drops the app off the home screen
 for good.
@@ -809,9 +894,10 @@ work too.
 A `ComponentName` is (application id, fully-qualified class), and the halves
 come from different strings. The manifest's `.CookieIcon` is expanded against
 the **namespace**, so the class name is derived from `MainActivity`'s own
-package, while the package half has to be `packageName` — the id the app is
-installed under, which the debug `applicationIdSuffix` (`.debug`, what lets a
-debug and a release build sit side by side) makes a different string. Naming the
+package, while the package half has to be the context's `packageName` — the id
+the app is installed under, which the debug `applicationIdSuffix` (`.debug`,
+what lets a debug and a release build sit side by side) makes a different
+string. Naming the
 package half with the namespace makes `setComponentEnabledSetting` throw, and
 the Dart side swallows that, so the first version of this silently did nothing
 in every debug build.
@@ -819,7 +905,12 @@ in every debug build.
 Not behind a conditional import the way `Shell` is: a `MethodChannel` compiles
 everywhere and a platform with nothing answering it throws, which is the same
 no-op `available` being false gives. So the app still has exactly one
-conditional import.
+conditional import — `ForegroundService` is the second channel to be built this
+way.
+
+Both channels are registered when the engine is created rather than on each
+attach, and hold the application context. That is forced by the engine
+outliving the activity: see "Staying alive off screen".
 
 ### Setting overrides
 
