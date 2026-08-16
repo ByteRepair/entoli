@@ -520,18 +520,33 @@ anything at all; everywhere else `LauncherIcons.available` is false, the
 settings page says the home screen will not follow, and the setting is in-app
 only.
 
-Android switches icons by having every icon be an `activity-alias` carrying the
-`LAUNCHER` filter and enabling exactly one. `MainActivity` therefore has no
-`LAUNCHER` filter of its own — with one it would appear on the home screen
-twice — and `MainActivity.kt` enables the wanted alias *before* disabling the
-others, because an instant with none enabled is one a launcher can read, and it
-drops the app off the home screen for good.
+Android switches icons by making `MainActivity` the launcher entry and
+enabling an `activity-alias` in its place when a non-default icon is picked.
+`MainActivity` carries the MAIN+LAUNCHER intent-filter and wears the app-level
+`android:icon` (`@mipmap/ic_prompt`); each non-default icon is an
+`activity-alias` targeting `MainActivity`, disabled by default. Only one of
+`MainActivity` and the active alias is enabled at a time, or the app appears on
+the home screen twice. `MainActivity.kt` enables the wanted alias *before*
+disabling `MainActivity`, because an instant with no launcher entry enabled is
+one a launcher can read, and it drops the app off the home screen for good.
+Selecting the default icon is the reverse: `MainActivity` is re-enabled and the
+alias disabled.
 
-The alias is written `.PromptIcon` in the manifest, which Gradle expands against
+`MainActivity` carries the LAUNCHER filter (rather than only the aliases
+carrying it) because Flutter's pre-build manifest parse — the fallback when no
+built APK exists yet — matches `activity` by exact element name and never sees
+`activity-alias`. With the launcher entry only on aliases, `flutter run` after
+`flutter clean` fails to find a launch activity and never builds. The aapt2
+path (used once an APK exists) does handle aliases, but the fallback has to
+work too.
+
+The alias is written `.CookieIcon` in the manifest, which Gradle expands against
 the **namespace**, not the application id. They are the same string today, so
 `MainActivity.kt` derives the class name from its own package rather than from
 `packageName`: the two are free to diverge, and if they ever do, a launcher
-switch built on `packageName` would name a component that does not exist.
+switch built on `packageName` would name a component that does not exist. A
+debug `applicationIdSuffix` (`.debug`) is exactly that divergence, and is what
+lets a debug and a release build sit side by side on the same device.
 
 Not behind a conditional import the way `Shell` is: a `MethodChannel` compiles
 everywhere and a platform with nothing answering it throws, which is the same
