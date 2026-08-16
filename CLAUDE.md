@@ -438,6 +438,29 @@ touch both places the caret in the bubble's `SelectableText` and shows the
 actions. It writes a `ValueNotifier` rather than calling `setState`, so
 uncovering the icons does not rebuild the message's labels behind them.
 
+### The chat page
+
+One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
+own drawer rather than a shell's — two bars stacked was the app's name over the
+chat's, saying nothing twice. What it shows follows the conversation: the mark
+and "Entoli" while the list is at its top, the chat's title and project once it
+is not. A chat too short to scroll is always at the top, so it keeps the mark.
+
+A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
+until the extent stops moving: a builder lays out only what shows, so the extent
+the first frame reports is an estimate and one jump lands short of the end. Not
+`reverse: true`, which would land at the end exactly and for free — in a
+reversed viewport the offsets of older messages shift as the newest one grows,
+so a reader scrolled up during a turn would watch the text move.
+
+A turn follows itself only while the reader is already within `_slack` of the
+end. Outside it the list is left alone — the offsets of earlier messages do not
+move as the last one grows, so reading back through a turn is undisturbed — and
+a button appears to go back down. The same slack decides both, so the button
+turns up exactly when the view stops keeping up. Both edges are
+`ValueNotifier`s, since a `setState` mid-drag would rebuild every visible bubble
+to swap a title or a button.
+
 ### Commands and agents
 
 `PromptLibrary` is the whole of what the composer's `/` and `@` menus offer,
