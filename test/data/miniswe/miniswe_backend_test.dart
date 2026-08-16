@@ -68,10 +68,14 @@ void main() {
     String text, {
     String? model = "fake-model",
     String? provider = "fake",
+    List<Message> history = const [],
   }) =>
       backend
           .sendPrompt(chatId, text,
-              model: model, provider: provider, approveMode: ApproveMode.never)
+              model: model,
+              provider: provider,
+              history: history,
+              approveMode: ApproveMode.never)
           .toList();
 
   /// A turn left running for the test to answer, whether what it stops on is a
@@ -408,7 +412,7 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      await backend.ensureSession(chatId, [
+      await send(backend, "and 3+3?", history: [
         Message(
           id: "m1",
           role: MessageRole.user,
@@ -422,7 +426,6 @@ void main() {
           parts: const [MessagePart.text(text: "four")],
         ),
       ]);
-      await send(backend, "and 3+3?");
 
       expect(client.sent.single.map((m) => m.text).join("\n"), contains("what is 2+2?"));
     });
@@ -433,7 +436,7 @@ void main() {
         [finish],
       ]);
       await send(backend, "first");
-      await backend.ensureSession(chatId, [
+      await send(backend, "second", history: [
         Message(
           id: "m1",
           role: MessageRole.user,
@@ -441,11 +444,10 @@ void main() {
           parts: const [MessagePart.text(text: "somebody else's conversation")],
         ),
       ]);
-      await send(backend, "second");
 
-      expect(client.sent.last.map((m) => m.text).join("\n"),
-          isNot(contains("somebody else's")));
-      expect(client.sent.last.map((m) => m.text).join("\n"), contains("first"));
+      final transcript = client.sent.last.map((m) => m.text).join("\n");
+      expect(transcript, isNot(contains("somebody else's")));
+      expect(transcript, contains("first"));
     });
 
     test("a rewound turn names the files it is not resending", () async {

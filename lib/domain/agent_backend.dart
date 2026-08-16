@@ -124,8 +124,16 @@ abstract class AgentBackend {
   /// which project's files the turn works in — null is the default one.
   /// [classifierProvider]/[classifierModel] name the model that classifies
   /// commands in auto mode; null means auto mode falls back to asking.
+  ///
+  /// [history] is what was said before this prompt. It travels with the prompt
+  /// rather than being handed over first: a session lives in memory for as long
+  /// as the app does, so a chat opened after a restart has none, and a separate
+  /// call to fill one is a call a caller can forget — leaving a model that has
+  /// seen nothing of the chat to answer it fluently. Read only where the
+  /// session is empty.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments,
+      List<Message> history,
       String? model,
       String? provider,
       String? project,
@@ -137,12 +145,6 @@ abstract class AgentBackend {
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history].
   Future<void> resetSession(String chatId, {List<Message> history = const []});
-
-  /// Seed the chat's session with [history] if it does not have one yet. A
-  /// session lives in memory for as long as the app does, so a chat opened
-  /// after a restart has none — and would otherwise be answered by a model
-  /// that had never seen a word of it.
-  Future<void> ensureSession(String chatId, List<Message> history);
 
   /// Release everything this backend holds. Called when the app exits.
   Future<void> shutdown();

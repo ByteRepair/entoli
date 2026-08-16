@@ -186,6 +186,12 @@ String observation({
 
 const _pretty = JsonEncoder.withIndent("  ");
 
+/// What a call that never ran is answered with. Named because two places say
+/// it: the agent, padding the calls an aborted turn left behind, and the
+/// projection, padding a call whose result a kill landed in the middle of. The
+/// model has to be told the same thing either way.
+const notExecuted = "This command was not executed.";
+
 /// The "About the user" block appended to the system prompt when a profile is
 /// set. Only non-null fields are emitted; an empty profile produces nothing,
 /// so a chat with no profile set gets the same system prompt as before.

@@ -149,7 +149,7 @@ String? textGrownFrom(MessagePart was, MessagePart part) {
   final had = _growingText(was);
   final now = _growingText(part);
   if (had == null || now == null) return null;
-  if (now.length <= had.length || !now.startsWith(had)) return null;
+  if (now.length <= had.length) return null;
   final grew = now.substring(had.length);
   // Asking [withMoreText] rather than comparing the fields by hand, so a field
   // added to a part cannot quietly start being dropped by an append.

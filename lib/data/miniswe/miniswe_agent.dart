@@ -319,7 +319,7 @@ class MinisweAgent {
         // Task calls are answered at the end; a task call that was never
         // collected (no sub-agent runner) is answered here instead.
         if (call.name != taskToolName || taskCalls.isEmpty) {
-          _answerRun(call, const ShellResult.failed("This command was not executed."));
+          _answerRun(call, const ShellResult.failed(notExecuted));
         }
         continue;
       }

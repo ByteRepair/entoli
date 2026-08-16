@@ -124,14 +124,13 @@ class ChatRepository {
     await _store.saveMeta(chatId, meta);
   }
 
-  /// Give the backend the conversation so far, if it is not already holding it.
-  /// Sessions live in memory, so the first turn after the app starts is the one
-  /// that would otherwise be answered by a model that never saw the chat.
-  Future<void> ensureSession(String chatId, List<Message> history) =>
-      _backend.ensureSession(chatId, history);
-
+  /// [history] is what was said before this prompt, for a backend that is not
+  /// holding the chat's session — see `AgentBackend.sendPrompt`. It comes from
+  /// the caller rather than being read back here: the turn's own records are
+  /// still on their way to the store.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const []}) async* {
+      {List<Attachment> attachments = const [],
+      List<Message> history = const []}) async* {
     final meta = await loadMeta(chatId);
     // The chat's own choice wins, else the app default, else whatever the
     // backend picks. Never mix halves: a chat's model under the app default's
@@ -144,6 +143,7 @@ class ChatRepository {
     final profile = (await projectSettingsOf(project)).profile ?? settings.profile;
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
+        history: history,
         model: model,
         provider: provider,
         project: project,

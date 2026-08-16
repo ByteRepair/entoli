@@ -239,7 +239,7 @@ class ChatController extends Notifier<ChatViewState> {
     final sealed = MessagePart.reasoning(
       text: body,
       durationMs: duration?.inMilliseconds,
-      signature: signature ?? open?.signature,
+      signature: signature,
       responseId: _responseId,
     );
     if (open == null) {
@@ -325,13 +325,10 @@ class ChatController extends Notifier<ChatViewState> {
       unawaited(_nameChat(text));
     }
 
-    // What came before this turn, in case the backend is not holding it: a chat
-    // opened after a restart has no session, and would be answered from
-    // nothing. Passed from here rather than read back, since the store may not
-    // have caught up with the records just queued.
-    await repo.ensureSession(chatId, chat.messages);
-
-    final stream = repo.sendPrompt(chatId, text, attachments: attachments);
+    // `chat` is the conversation before this turn was added to it, which is
+    // what a backend holding no session for the chat needs to be told.
+    final stream = repo.sendPrompt(chatId, text,
+        attachments: attachments, history: chat.messages);
     _sub?.cancel();
     _sub = stream.listen(
       (event) => _onEvent(event),
@@ -395,7 +392,7 @@ class ChatController extends Notifier<ChatViewState> {
       case ReasoningEnd(:final text, :final duration, :final signature):
         _endReasoning(text, duration, signature);
       case ToolCallEvent(:final call):
-        _appendPart(MessagePart.toolCall(toolCall: call, responseId: _responseId));
+        _appendPart(MessagePart.toolCall(toolCall: call));
       case ToolResultEvent(:final result):
         _appendPart(MessagePart.toolResult(result: result));
       case ErrorEvent(:final message):
@@ -419,13 +416,23 @@ class ChatController extends Notifier<ChatViewState> {
     }
   }
 
-  /// Every discrete part goes through here, and so does its record: a new kind
-  /// of event cannot forget to log what it added.
+  /// Every discrete part goes through here, and so do its record and the
+  /// response it belongs to: a new kind of event cannot forget either.
   void _appendPart(MessagePart part) {
     _flushDeltas();
-    _writeReply([...?_reply?.parts, part]);
+    _writeReply([...?_reply?.parts, _inResponse(part)]);
     _checkpointLog();
   }
+
+  /// Stamp a part with the response being streamed, where it has somewhere to
+  /// put it. A result belongs to the call it answers and an error to nobody, so
+  /// neither carries one.
+  MessagePart _inResponse(MessagePart part) => switch (part) {
+        TextPart() => part.copyWith(responseId: _responseId),
+        ReasoningPart() => part.copyWith(responseId: _responseId),
+        ToolCallPart() => part.copyWith(responseId: _responseId),
+        _ => part,
+      };
 
   /// The turn is over when it has been written, not when the last event
   /// arrives. Writing is asynchronous — a browser's filesystem cannot be

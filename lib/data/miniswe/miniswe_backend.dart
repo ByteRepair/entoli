@@ -96,6 +96,7 @@ class MinisweBackend implements AgentBackend {
     String chatId,
     String text, {
     List<Attachment> attachments = const [],
+    List<Message> history = const [],
     String? model,
     String? provider,
     String? project,
@@ -113,6 +114,7 @@ class MinisweBackend implements AgentBackend {
         provider: provider,
         project: project,
         attachments: attachments,
+        history: history,
         approveMode: approveMode,
         classifierProvider: classifierProvider,
         classifierModel: classifierModel,
@@ -128,6 +130,7 @@ class MinisweBackend implements AgentBackend {
     String? provider,
     String? project,
     List<Attachment> attachments = const [],
+    List<Message> history = const [],
     ApproveMode approveMode = ApproveMode.ask,
     String? classifierProvider,
     String? classifierModel,
@@ -168,8 +171,13 @@ class MinisweBackend implements AgentBackend {
         rateLimitGate: rateLimitGate,
       );
       final classifier = _resolveClassifier(classifierProvider, classifierModel);
+      final session = _sessions.putIfAbsent(chatId, MinisweSession.new);
+      // A session the app was not already holding is the one after a restart,
+      // and it is empty. Filling it from the conversation is what keeps the
+      // chat going rather than starting it over.
+      if (session.isFresh) session.replaceWith(projectionOf(history));
       final agent = MinisweAgent(
-        session: _sessions.putIfAbsent(chatId, MinisweSession.new),
+        session: session,
         client: gatedClient,
         shell: shell,
         workspace: workspace,
@@ -372,16 +380,7 @@ class MinisweBackend implements AgentBackend {
   @override
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
     await _running.remove(chatId)?.cancel();
-    _sessions.putIfAbsent(chatId, MinisweSession.new).replaceWith(project(history));
-  }
-
-  /// A session the app has never held for this chat is the one after a restart,
-  /// and it is empty. Filling it from the conversation is what keeps the chat
-  /// going rather than starting it over.
-  @override
-  Future<void> ensureSession(String chatId, List<Message> history) async {
-    final session = _sessions.putIfAbsent(chatId, MinisweSession.new);
-    if (session.isFresh) session.replaceWith(project(history));
+    _sessions.putIfAbsent(chatId, MinisweSession.new).replaceWith(projectionOf(history));
   }
 
   @override

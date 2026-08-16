@@ -164,13 +164,14 @@ carries eleven copies of that turn's records and pays for them on every open, so
 
 #### The projection
 
-`replay` reads the log for the UI; `project` reads it for a provider, and the
-two are what the log exists to make possible. A domain `Message` is a whole turn
-and a turn is several provider responses — think, call a tool, look at the
-result, think again — so `project` splits one assistant message back into one
+`replay` reads the log for the UI; `projectionOf` reads it for a provider, and
+the two are what the log exists to make possible. A domain `Message` is a whole
+turn and a turn is several provider responses — think, call a tool, look at the
+result, think again — so it splits one assistant message back into one
 `LlmMessage` per response, each followed by the `tool` messages answering its
 calls. Handing a response's thinking back with a later response's tool calls is
-rejected, so the split has to be right.
+rejected, so the split has to be right. Named `projectionOf` rather than
+`project`, which everywhere else here is the directory a chat lives in.
 
 That is what `responseId` is for. `MinisweAgent` names each step before it runs
 and emits `ResponseStart`; every part the controller writes while it is set
@@ -196,11 +197,23 @@ bytes are on disk and reading them back would make this asynchronous.
 Two things reach for it. `resetSession` on a rewind, which is what it replaced —
 the old path wrote the kept messages out as prose and told the model "earlier in
 this conversation", losing the thinking, the calls and the results. And
-`ensureSession`, called at the head of every turn: sessions live in memory for
-as long as the app does, so a chat opened after a restart has none, and the
-model would have been answering the next message having seen nothing of the
-chat. The controller passes what it holds rather than the store being re-read,
-since the turn's own messages are already in `state` by then.
+`sendPrompt`, which fills a session that is empty: sessions live in memory for as
+long as the app does, so a chat opened after a restart has none, and the model
+would have been answering the next message having seen nothing of the chat.
+
+That is why `history` is a `sendPrompt` parameter rather than a call of its own.
+A separate "give the backend the conversation" method is one a caller can
+forget, and forgetting it is silent — the model answers fluently from nothing
+rather than failing. Riding with the prompt, there is no order to get wrong. It
+comes from the controller rather than being read back off the store, since the
+turn's own records are still on their way there.
+
+What the projection restores is not free. `seed` collapsed any history into two
+messages of prose; this puts back every response, every thinking block with its
+signature, and every result verbatim, and the whole session is resent on every
+model call of the turn. That is parity — a live session that actually ran those
+steps holds exactly those messages — but it is what makes compaction, above, the
+thing that bounds a long chat.
 
 ### Projects
 
@@ -314,7 +327,8 @@ for a tool that does not exist. A provider that sees a
 
 `MinisweSession` holds the conversation as the model sees it, per chat, for as
 long as the app runs — which is the whole of its lifetime, so `resetSession` and
-`ensureSession` fill one from the log through `project`. See "The projection".
+an empty one at the head of a turn are filled from the log through
+`projectionOf`. See "The projection".
 
 #### Reaching a provider
 
@@ -617,7 +631,7 @@ reads the library directly and is synchronous.
 
 Edit and regenerate discard the turn and everything after it, then re-run it.
 The live session still holds the discarded exchange, so `resetSession` drops it
-and puts back `project` of the kept messages — thinking, calls and results and
+and puts back `projectionOf` the kept messages — thinking, calls and results and
 all. This is where the "conv.jsonl is the source of truth, re-inject context"
 rule is exercised, and the projection is what makes it true rather than
 approximate. Only the turn being replayed carries its own attachments back; the

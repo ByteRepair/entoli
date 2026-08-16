@@ -13,7 +13,10 @@ import "templates.dart";
 /// thinking, text and calls, followed by the results answering them. The parts
 /// say which response they came out of, so the grouping is read rather than
 /// guessed.
-List<LlmMessage> project(List<Message> messages) {
+///
+/// Named for the projection rather than `project`, which everywhere else in
+/// this codebase is the directory a chat lives in.
+List<LlmMessage> projectionOf(List<Message> messages) {
   final projected = <LlmMessage>[];
   for (final message in messages) {
     switch (message.role) {
@@ -43,13 +46,16 @@ String _userText(Message message) {
 }
 
 Iterable<LlmMessage> _assistant(Message message) sync* {
+  // Over the whole message rather than per response: a result is paired to its
+  // call by id, and one that landed in a later response than the call it
+  // answers must not be read as missing.
+  final results = message.toolResults;
+
   for (final response in _responses(message.parts)) {
     final reasoning = StringBuffer();
     final text = StringBuffer();
     String? signature;
     final calls = <LlmToolCall>[];
-    final names = <String, String>{};
-    final answers = <String, String>{};
 
     for (final part in response) {
       switch (part) {
@@ -59,18 +65,17 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         case TextPart():
           text.write(part.text);
         case ToolCallPart(:final toolCall):
-          names[toolCall.id] = toolCall.name;
           calls.add(LlmToolCall(
             id: toolCall.id,
             name: toolCall.name,
             argumentsJson: toolCall.argumentsJson ?? "{}",
           ));
-        case ToolResultPart(:final result):
-          answers[result.callId] = _resultText(names[result.callId], result);
+        case ToolResultPart():
         case FilePart():
         case ErrorPart():
-          // An error is what the turn reported to the user; the model never
-          // saw it, so putting it back would be inventing an exchange.
+          // Results are read off `results` by the call they answer. An error is
+          // what the turn reported to the user; the model never saw it, so
+          // putting it back would be inventing an exchange.
           break;
       }
     }
@@ -88,10 +93,11 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
     // Every call is answered, including one whose result never landed: a
     // provider that sees a tool call with no result rejects the next turn.
     for (final call in calls) {
+      final result = results[call.id];
       yield LlmMessage(
         role: LlmRole.tool,
         toolCallId: call.id,
-        text: answers[call.id] ?? _unanswered,
+        text: result == null ? _unanswered : _resultText(call.name, result),
       );
     }
   }
@@ -125,7 +131,7 @@ String? _responseIdOf(MessagePart part) => switch (part) {
 /// Worded the way the agent worded it when it ran, so a projected conversation
 /// is the one the model already answered. An `ask_user` result is the answers
 /// themselves; every other call reads as a command's outcome.
-String _resultText(String? tool, ToolResult result) => tool == askToolName
+String _resultText(String tool, ToolResult result) => tool == askToolName
     ? result.output
     : observation(
         returnCode: result.returnCode,
@@ -133,8 +139,4 @@ String _resultText(String? tool, ToolResult result) => tool == askToolName
         exceptionInfo: result.exceptionInfo,
       );
 
-final _unanswered = observation(
-  returnCode: -1,
-  output: "",
-  exceptionInfo: "This command was not executed.",
-);
+final _unanswered = observation(returnCode: -1, output: "", exceptionInfo: notExecuted);

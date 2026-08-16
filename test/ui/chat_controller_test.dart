@@ -346,16 +346,16 @@ void main() {
   });
 
   // A session lives in memory, so a chat opened after a restart has none. The
-  // conversation goes down with the prompt rather than the backend being left
-  // to answer it from nothing.
-  test("every turn offers the backend what came before it", () async {
+  // conversation travels with the prompt rather than the backend being left to
+  // answer it from nothing.
+  test("every prompt carries what came before it", () async {
     final (id, controller) = await chatWithOneTurn("first");
     await controller.send("second");
     await waitIdle(id);
 
-    expect(app.backend.seeded, hasLength(2));
-    expect(app.backend.seeded.first, isEmpty);
-    expect(app.backend.seeded.last.map((m) => m.plainText), contains("first"));
+    expect(app.backend.prompts, hasLength(2));
+    expect(app.backend.prompts.first.history, isEmpty);
+    expect(app.backend.prompts.last.history.map((m) => m.plainText), contains("first"));
   });
 
   test("an attachment is saved, recorded on the message and sent with it", () async {

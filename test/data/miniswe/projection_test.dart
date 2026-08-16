@@ -27,7 +27,7 @@ void main() {
   setUp(() => next = 0);
 
   test("a plain exchange goes back as one message each way", () {
-    final projected = project([
+    final projected = projectionOf([
       asked("what is 2+2?"),
       said(MessageRole.assistant, const [MessagePart.text(text: "four")]),
     ]);
@@ -39,7 +39,7 @@ void main() {
   });
 
   test("thinking travels with the response it belongs to, signature and all", () {
-    final projected = project([
+    final projected = projectionOf([
       asked("go on"),
       said(MessageRole.assistant, const [
         MessagePart.reasoning(text: "weighing it up", durationMs: 20, signature: "sig-1", responseId: "r1"),
@@ -54,7 +54,7 @@ void main() {
   });
 
   test("a turn of several responses goes back as one message each", () {
-    final projected = project([
+    final projected = projectionOf([
       asked("list the files"),
       said(MessageRole.assistant, [
         const MessagePart.reasoning(text: "have a look", responseId: "r1"),
@@ -81,7 +81,7 @@ void main() {
   });
 
   test("a result is worded the way the agent worded it when it ran", () {
-    final projected = project([
+    final projected = projectionOf([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"false"}', response: "r1"),
         ran("c1", "nope", returnCode: 1),
@@ -94,7 +94,7 @@ void main() {
   // The answers are the answer; wrapping them as a command's outcome would put
   // the user's own words behind a return code.
   test("an ask_user result goes back as the answers themselves", () {
-    final projected = project([
+    final projected = projectionOf([
       said(MessageRole.assistant, [
         call("a1", askToolName, '{"questions":[]}', response: "r1"),
         ran("a1", "Which one? Rust"),
@@ -106,7 +106,7 @@ void main() {
 
   // A provider that sees a tool call with no result rejects the next turn.
   test("a call whose result never landed is answered anyway", () {
-    final projected = project([
+    final projected = projectionOf([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"sleep 1000"}', response: "r1"),
       ]),
@@ -118,7 +118,7 @@ void main() {
   });
 
   test("two calls in one response are answered in order, after it", () {
-    final projected = project([
+    final projected = projectionOf([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"ls"}', response: "r1"),
         ran("c1", "one"),
@@ -135,7 +135,7 @@ void main() {
   });
 
   test("what the user attached is named, not resent", () {
-    final projected = project([
+    final projected = projectionOf([
       said(MessageRole.user, const [
         MessagePart.file(resource: "r1", filename: "diagram.png", mimeType: "image/png"),
         MessagePart.text(text: "what is this?"),
@@ -147,7 +147,7 @@ void main() {
   });
 
   test("an error is the turn's own report, so it is not put back", () {
-    final projected = project([
+    final projected = projectionOf([
       asked("go"),
       said(MessageRole.assistant, const [
         MessagePart.text(text: "started", responseId: "r1"),
@@ -160,6 +160,6 @@ void main() {
   });
 
   test("a message with nothing in it contributes nothing", () {
-    expect(project([asked("   ".trim()), said(MessageRole.assistant, const [])]), isEmpty);
+    expect(projectionOf([asked("   ".trim()), said(MessageRole.assistant, const [])]), isEmpty);
   });
 }
