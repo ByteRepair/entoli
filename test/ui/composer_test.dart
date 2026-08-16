@@ -323,41 +323,34 @@ void main() {
     expect(send.top - bar.top, lessThan(bars.top));
   });
 
-  group("the keyboard going away", () {
-    /// The keyboard opening and closing, which is all Android reports of a back
-    /// key pressed over it.
-    Future<void> keyboard(WidgetTester tester, {required bool up}) async {
-      tester.view.viewInsets = up
-          ? const FakeViewPadding(bottom: 300)
-          : const FakeViewPadding();
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets("takes the field's focus with it", (tester) async {
+  group("the keyboard", () {
+    testWidgets("comes up when the field is tapped", (tester) async {
       await pump(tester);
+      expect(tester.testTextInput.isVisible, isFalse);
+
       await tester.tap(find.byType(TextField));
-      await keyboard(tester, up: true);
-      expect(tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus, isTrue);
+      await settleIo(tester);
 
-      await keyboard(tester, up: false);
-
-      expect(tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus, isFalse);
+      expect(tester.testTextInput.isVisible, isTrue);
     });
 
-    // Which is the point: the + menu hands focus back when it closes, and a
-    // field still holding it would bring the keyboard up again.
-    testWidgets("so the + menu does not bring it back", (tester) async {
+    testWidgets("stays down for a file that was attached", (tester) async {
+      app.picker.scripted = [testAttachment("notes.txt")];
       await pump(tester);
-      await tester.tap(find.byType(TextField));
-      await keyboard(tester, up: true);
-      await keyboard(tester, up: false);
+      await insertVia(tester, "File");
 
-      await tester.tap(find.byIcon(Icons.add));
-      await settleIo(tester);
-      await tester.tapAt(const Offset(400, 20));
-      await settleIo(tester);
+      expect(find.text("notes.txt"), findsOneWidget);
+      expect(tester.testTextInput.isVisible, isFalse);
+    });
 
-      expect(tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus, isFalse);
+    // The menu it opens is tapped rather than typed at, so there is nothing
+    // to bring the keyboard up for.
+    testWidgets("stays down for a menu opened from +", (tester) async {
+      await pump(tester);
+      await insertVia(tester, "Commands");
+
+      expect(menuItems(tester), ["/init", "/revert", "/review"]);
+      expect(tester.testTextInput.isVisible, isFalse);
     });
   });
 }

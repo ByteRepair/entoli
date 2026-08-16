@@ -865,12 +865,20 @@ they do in a text box. The `+` button left of the field is a second way in: for
 a command or an agent it types the trigger character rather than opening its own
 list, so both routes share one code path; for a file it opens the chooser.
 
-It also drops the field's focus when the keyboard goes away. Android's back key
-closes the keyboard without telling Flutter, so the field keeps the focus and
-the next thing to hand it back — the `+` menu closing — brings the keyboard
-straight up again. The insets are the only report of it, and they are read off
-the view rather than off `MediaQuery`: a `Scaffold` takes the bottom inset out
-of what its body sees.
+It never asks for the field's focus, and that is the whole rule. On Android focus
+is the keyboard, so a composer that reaches for it is a keyboard rising over a
+conversation nobody was typing in — which is what attaching a file did, and what
+the `+` menu's own entries did. Neither has anything to type at: the file is
+already on the strip, and the menu the trigger character opens is tapped. The
+field has no `FocusNode` of its own any more, since nothing was left to point one
+at.
+
+What went with it is a second mechanism that existed only to undo the first: the
+`+` menu hands focus back to whatever held it when it closes, so a field still
+holding it brought the keyboard up again, and the composer watched the view
+insets for the keyboard Android closes without telling Flutter so it could take
+the focus away first. Nothing holds focus it was not given by a tap now, so
+there is nothing to take back.
 
 The sidebar's new-chat button is a `FloatingActionButton` over the profile and
 settings tiles, which is the one part of the sidebar that is not a list of

@@ -87,3 +87,7 @@ provider/model pair and they only say where the values come from.
 A test that writes `settings.json` has to go through `config.documents.write`,
 not the file: the app reads settings from the synchronous copy `Documents`
 holds, and a file written behind it is not seen.
+
+The composer's keyboard is asserted as `tester.testTextInput.isVisible` rather
+than as which node holds focus. The rule the composer keeps is about the
+keyboard, and the field has no `FocusNode` to reach for anyway.
