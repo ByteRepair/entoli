@@ -23,26 +23,34 @@ import "fakes.dart";
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
-  TestApp._(this.config, this.backend, this.picker, this.launcher, this.store, this.container);
+  TestApp._(this.config, this.backend, this.picker, this.launcher, this.handoff,
+      this.store, this.container);
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
   /// [FakeChatStore] where the subject is which records a turn wrote.
+  ///
+  /// [handoff] is which of the three platforms the workspace explorer thinks it
+  /// is on. The default can do nothing outside the app, which is right for
+  /// every test that is not about the explorer.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
     ChatStore? store,
+    FakeFileHandoff? handoff,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
     final picker = FakeAttachmentPicker();
     final launcher = FakeLauncherIcons(available: launcherIcons);
+    final files = handoff ?? FakeFileHandoff();
     final chats = store ?? FileChatStore(config);
     return TestApp._(
       config,
       backend,
       picker,
       launcher,
+      files,
       chats,
       ProviderContainer(
         overrides: [
@@ -52,6 +60,7 @@ class TestApp {
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           launcherIconsProvider.overrideWithValue(launcher),
+          fileHandoffProvider.overrideWithValue(files),
         ],
       ),
     );
@@ -61,6 +70,7 @@ class TestApp {
   final FakeBackend backend;
   final FakeAttachmentPicker picker;
   final FakeLauncherIcons launcher;
+  final FakeFileHandoff handoff;
   final ChatStore store;
   final ProviderContainer container;
 

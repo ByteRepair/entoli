@@ -42,6 +42,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Entoli as a share target: another app's files, offered a
+                 workspace by ShareTargetPage. On the alias below as well, since
+                 whichever of the two is enabled is the only component that can
+                 be started, and a share must not stop working because the user
+                 changed the icon. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
         </activity>
 
         <!-- The non-default icon, enabled by MainActivity.kt when the user picks
@@ -58,6 +69,12 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
         </activity-alias>
         <!-- dataSync rather than one of the named types: what a turn is doing
              is a model call and whatever the user's own commands do, which is
@@ -66,6 +83,20 @@
             android:name=".AgentService"
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
+
+        <!-- What lets another app read a workspace file Entoli hands it. The
+             paths it will mint a URI for are one cache directory: everything
+             shared or opened is copied there first, so the data directory is
+             never exposed. See FilesChannel.kt and res/xml/file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

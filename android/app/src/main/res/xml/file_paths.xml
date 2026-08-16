@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The whole of what the FileProvider will mint a URI for. Deliberately only
+     the cache: a workspace file is copied here before it is opened or shared,
+     so the data directory is never exposed by path. See FilesChannel.kt. -->
+<paths>
+    <cache-path name="shared" path="shared/"/>
+</paths>

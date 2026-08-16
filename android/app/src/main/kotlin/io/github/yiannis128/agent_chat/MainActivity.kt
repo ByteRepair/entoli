@@ -2,6 +2,7 @@ package io.github.yiannis128.agent_chat
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -13,6 +14,14 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotifications()
+        FilesChannel.receive(this, intent)
+    }
+
+    // The share that arrives while the app is already up. onCreate above is the
+    // one that launched it; singleTop is what keeps the two apart.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        FilesChannel.receive(this, intent)
     }
 
     // Cached, so the isolate outlives this activity and a turn survives the app
@@ -26,6 +35,7 @@ class MainActivity : FlutterActivity() {
         val engine = FlutterEngine(appContext)
         IconChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         AgentService.register(appContext, engine.dartExecutor.binaryMessenger)
+        FilesChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
         return engine
     }
