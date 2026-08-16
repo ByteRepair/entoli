@@ -1,11 +1,11 @@
 name: Debug build
 
-# Master only, and deliberately not on pull requests: these are minutes-long
-# native builds, where CI's gates are seconds. They are also the only Android
-# and Linux binaries anything here produces — pages.yml ships web alone.
+# Asked for, never automatic: these are minutes-long native builds, and a debug
+# artifact is wanted when someone means to install one, not on every commit.
+# They are still the only Android and Linux binaries anything here produces —
+# pages.yml ships web alone. A run builds whichever ref it was dispatched from.
 on:
-  push:
-    branches: [master]
+  workflow_dispatch:
 
 concurrency:
   group: debug-build-${{ github.ref }}
