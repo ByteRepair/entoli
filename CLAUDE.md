@@ -759,13 +759,31 @@ a phone leaves a strip of chat nobody can read and nothing else. A width rather
 than a platform check, which is how every other question of room is answered
 here — the shell's own 900 above it, the bubble's share of the line below.
 
-The back key was going to need writing for and does not. An open `Drawer` puts a
+The back key takes two halves, and a `Drawer` only brings one. An open one puts a
 `LocalHistoryEntry` on the route it sits in, and a route holding one answers a
-pop by dropping the entry instead of leaving — which closes the drawer. A
-`PopScope` was written for this and deleted unrun: `LocalHistoryRoute` reports
-`pop` while an entry is open and never asks a scope at all. The tests stayed.
-What they pin is that back closes the sidebar rather than the app, which is worth
-knowing whoever implements it.
+pop by dropping the entry rather than leaving — so if the press arrives, the
+right thing happens. It does not arrive. Android forwards one only while the
+framework has claimed it through `SystemNavigator.setFrameworkHandlesBack`; that
+is dispatched off a `NavigationNotification`; and the only things that recompute
+one are the `Navigator`'s route list changing and a `PopEntry` registering.
+Opening a drawer is neither. So the platform still holds the `false` it was told
+when the app had one route, keeps its own callback disabled, and finishes the
+activity without Flutter hearing anything.
+
+`PopScope(canPop: false)` in the drawer is that `PopEntry`, and claiming the key
+is what it is for — not the pop, which the history entry would have handled.
+`ModalRoute` consults its pop entries *before* `LocalHistoryRoute` gets a say, so
+the scope does reach `popDisposition`, and the `doNotPop` it forces is what makes
+the notification claim. After that the claim is all of it: the press comes in,
+the route declines to pop, and `onPopInvokedWithResult` closes the drawer by
+hand.
+
+This shipped broken once, and why is worth more than the fix. A widget test
+presses back through `handlePopRoute`, which calls the framework directly and
+never consults the platform — so the missing half was exactly the half the test
+could not see, and it passed against a build that closed the app on a phone.
+Anything asserting about the back key needs `frameworkHandlesBack` beside the
+press.
 
 A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
 until the extent stops moving: a builder lays out only what shows, so the extent

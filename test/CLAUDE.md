@@ -82,9 +82,20 @@ default.
 `pumpUntil` is the same idea aimed at a finder, for waiting on something to
 appear.
 
-`pressBack` is Android's back key. It answers whether anything in the app took
-it, which is the assertion worth making: false is the app being left, and a
-sidebar or a drawer that swallows it has to say so.
+`pressBack` is Android's back key, and on its own it proves nothing: it goes
+through `handlePopRoute`, straight to the framework, and a real press is only
+forwarded while the framework has claimed the key. Whether the app *would*
+answer one says nothing about whether it would ever get one — see the back key
+in the root `CLAUDE.md` for what that costs.
+
+`frameworkHandlesBack` is the other half, so assert it beside any `pressBack`.
+It records what the app sent to `SystemNavigator.setFrameworkHandlesBack`,
+newest last, and it has to be installed before the action. Two things it does
+that a reader would not expect: it resumes the app, since `WidgetsApp` says
+nothing to the engine until there is a lifecycle state and a test starts with
+none, and it takes over `SystemChannels.platform` for the test — which is also
+`Clipboard`'s and `HapticFeedback`'s, so anything asserting on those cannot use
+it as it stands.
 
 Do not reach for the memory filesystem to avoid all this. It was tried: sembast
 resolves through timers, not microtasks, so a widget test hangs on it exactly as
