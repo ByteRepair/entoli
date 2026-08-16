@@ -1,11 +1,12 @@
+/// Declaration order is the order the settings page offers them in.
 enum AppIcon {
-  prompt(
-    label: "Prompt",
-    description: "A speech bubble around a shell prompt.",
-  ),
   cookie(
     label: "Cookie",
-    description: "The same prompt in Material 3's scalloped shape.",
+    description: "A shell prompt in Material 3's scalloped shape.",
+  ),
+  prompt(
+    label: "Prompt",
+    description: "The same prompt in a speech bubble.",
   );
 
   const AppIcon({required this.label, required this.description});
@@ -18,7 +19,7 @@ enum AppIcon {
   /// An unknown name is a file written by a later build, so it falls back
   /// rather than failing the whole settings load.
   static AppIcon fromName(String? name) =>
-      values.firstWhere((icon) => icon.name == name, orElse: () => prompt);
+      values.firstWhere((icon) => icon.name == name, orElse: () => cookie);
 }
 
 /// Changes the icon the launcher shows. Android only; elsewhere [available] is

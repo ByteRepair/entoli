@@ -97,7 +97,7 @@ class AgentService : Service() {
             // The monochrome adaptive layer: already a silhouette on
             // transparent, which is what a status bar icon has to be, and one
             // fewer copy of path data that has no generator.
-            .setSmallIcon(R.drawable.ic_prompt_monochrome)
+            .setSmallIcon(R.drawable.ic_cookie_monochrome)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(Notification.Action.Builder(null as Icon?, "Stop", pendingStop()).build())
