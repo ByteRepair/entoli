@@ -322,4 +322,42 @@ void main() {
     expect(bar.bottom - send.bottom, greaterThanOrEqualTo(bars.bottom));
     expect(send.top - bar.top, lessThan(bars.top));
   });
+
+  group("the keyboard going away", () {
+    /// The keyboard opening and closing, which is all Android reports of a back
+    /// key pressed over it.
+    Future<void> keyboard(WidgetTester tester, {required bool up}) async {
+      tester.view.viewInsets = up
+          ? const FakeViewPadding(bottom: 300)
+          : const FakeViewPadding();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("takes the field's focus with it", (tester) async {
+      await pump(tester);
+      await tester.tap(find.byType(TextField));
+      await keyboard(tester, up: true);
+      expect(tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus, isTrue);
+
+      await keyboard(tester, up: false);
+
+      expect(tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus, isFalse);
+    });
+
+    // Which is the point: the + menu hands focus back when it closes, and a
+    // field still holding it would bring the keyboard up again.
+    testWidgets("so the + menu does not bring it back", (tester) async {
+      await pump(tester);
+      await tester.tap(find.byType(TextField));
+      await keyboard(tester, up: true);
+      await keyboard(tester, up: false);
+
+      await tester.tap(find.byIcon(Icons.add));
+      await settleIo(tester);
+      await tester.tapAt(const Offset(400, 20));
+      await settleIo(tester);
+
+      expect(tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus, isFalse);
+    });
+  });
 }

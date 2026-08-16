@@ -617,6 +617,13 @@ they do in a text box. The `+` button left of the field is a second way in: for
 a command or an agent it types the trigger character rather than opening its own
 list, so both routes share one code path; for a file it opens the chooser.
 
+It also drops the field's focus when the keyboard goes away. Android's back key
+closes the keyboard without telling Flutter, so the field keeps the focus and
+the next thing to hand it back — the `+` menu closing — brings the keyboard
+straight up again. The insets are the only report of it, and they are read off
+the view rather than off `MediaQuery`: a `Scaffold` takes the bottom inset out
+of what its body sees.
+
 ## Development
 
 - Build/test Linux desktop inside the `flutter-dev` toolbox (host lacks
