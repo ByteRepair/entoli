@@ -46,12 +46,12 @@ void main() {
     app.backend.hold = Completer<void>();
     addTearDown(() => app.backend.hold?.complete());
 
-    final chat = await app.repo.createChat();
+    final chat = await io(tester, () => app.repo.createChat());
     final id = chat.state.id;
     app.container.read(selectedChatIdProvider.notifier).state = id;
     await app.pump(tester, underSystemBars(bars, const ChatPage()), settle: false);
     await pumpUntil(tester, find.byType(Composer));
-    await app.container.read(chatControllerProvider(id).notifier).send("set up storage");
+    await io(tester, () => app.container.read(chatControllerProvider(id).notifier).send("set up storage"));
     await pumpUntil(tester, find.byType(QuestionPanel));
     return id;
   }

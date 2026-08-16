@@ -1,24 +1,34 @@
-import "../../../data/local/memory_chat_store.dart";
-import "../../../data/local/memory_storage.dart";
-import "../../../data/prompts/prompt_sources.dart";
-import "../../../domain/chat_store.dart";
-import "../../../domain/prompt_library.dart";
+import "dart:js_interop";
+
+import "package:fs_shim/fs.dart";
+import "package:fs_shim/fs_browser.dart" show fileSystemWeb;
+import "package:web/web.dart" as web;
+
 import "../../../domain/shell.dart";
-import "../../../domain/storage.dart";
 import "../../../domain/web_search.dart";
-import "../../config.dart";
 
 Shell platformShell({required Map<String, String> Function() environment}) =>
     const UnavailableShell();
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 
-Storage platformStorage() => MemoryStorage();
+/// IndexedDB, through the same `FileSystem` the rest of the app is written
+/// against. The layout under [platformDataDir] is the one on disk elsewhere.
+FileSystem platformFileSystem() => fileSystemWeb;
 
-ChatStore platformChatStore(AppConfig config) => MemoryChatStore();
+/// Nominal on a platform with no filesystem of its own, but not arbitrary: it
+/// is the root every path is resolved under, and what the chats are stored
+/// beneath.
+Future<String> platformDataDir() async => "/agent-chat";
 
-/// Only the presets: there is no directory a browser could have put a prompt
-/// file in.
-List<PromptSource> platformPromptSources(AppConfig config) => [const BundledPrompts()];
+/// Ask the browser to keep what we wrote. Without this the origin's storage is
+/// evictable, and a chat can be gone on the next visit because something else
+/// wanted the space. A browser that refuses (or does not implement it) leaves
+/// the app working exactly as it did — the data is just evictable again.
+Future<void> platformPersist() async {
+  try {
+    await web.window.navigator.storage.persist().toDart;
+  } catch (_) {}
+}
 
 String? processEnv(String name) => null;

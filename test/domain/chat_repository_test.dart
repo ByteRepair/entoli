@@ -3,8 +3,8 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/disk_storage.dart";
-import "package:agent_chat/data/local/local_chat_store.dart";
+import "package:fs_shim/fs_io.dart" show fileSystemIo;
+import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -19,7 +19,7 @@ void main() {
   late AppConfig config;
 
   ChatRepository repoWith(AppSettings settings) =>
-      ChatRepository(LocalChatStore(config), backend, () => settings, config);
+      ChatRepository(FileChatStore(config), backend, () => settings, config);
 
   /// A chat that is on disk, the way one is by the time a prompt is sent.
   Future<Chat> savedChat(ChatRepository repo) async {
@@ -30,14 +30,15 @@ void main() {
 
   /// What the chat settings page would have written.
   void pinChatModel(String chatId, {String? provider, String? model}) {
-    config.ensureChatDirs(chatId);
-    ChatMeta(provider: provider, model: model).saveTo(config.metaFile(chatId));
+    Directory(config.chatDir(chatId)).createSync(recursive: true);
+    File(config.metaFile(chatId))
+        .writeAsStringSync(ChatMeta(provider: provider, model: model).encode());
   }
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("chat_repo_test_");
-    config = AppConfig.forDirectory(tmp, const DiskStorage());
-    config.ensureProjectDirs();
+    config = AppConfig.forDirectory(tmp.path, fileSystemIo);
+    Directory(config.chatsDir()).createSync(recursive: true);
     backend = FakeBackend();
   });
 
@@ -84,7 +85,7 @@ void main() {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat();
 
-      expect(config.chatDir(chat.state.id).existsSync(), isFalse);
+      expect(Directory(config.chatDir(chat.state.id)).existsSync(), isFalse);
       expect(await repo.listChats(), isEmpty);
       expect((await repo.openChat(chat.state.id)).state.id, chat.state.id);
     });
@@ -96,11 +97,12 @@ void main() {
       final chat = await repo.createChat();
 
       await repo.saveMeta(chat.state.id, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
-      expect(config.chatDir(chat.state.id).existsSync(), isFalse);
+      expect(Directory(config.chatDir(chat.state.id)).existsSync(), isFalse);
       expect((await repo.loadMeta(chat.state.id)).model, "qwen-2.5");
 
       await repo.save(chat);
-      expect(ChatMeta.fromFile(config.metaFile(chat.state.id)).model, "qwen-2.5");
+      expect(ChatMeta.parse(File(config.metaFile(chat.state.id)).readAsStringSync()).model,
+          "qwen-2.5");
     });
 
     test("renaming one keeps it a draft", () async {
@@ -119,10 +121,10 @@ void main() {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat(project: "work");
 
-      expect(config.chatDir(chat.state.id, project: "work").existsSync(), isFalse);
+      expect(Directory(config.chatDir(chat.state.id, project: "work")).existsSync(), isFalse);
       await repo.save(chat);
 
-      expect(config.stateFile(chat.state.id, project: "work").existsSync(), isTrue);
+      expect(File(config.stateFile(chat.state.id, project: "work")).existsSync(), isTrue);
       expect((await repo.listChats()).single.project, "work");
     });
 
@@ -251,7 +253,7 @@ void main() {
     );
 
     expect((again.single as FilePart).resource, (first.single as FilePart).resource);
-    expect(config.resourcesDir(chat.state.id).listSync(), hasLength(1));
+    expect(Directory(config.resourcesDir(chat.state.id)).listSync(), hasLength(1));
   });
 
   test("an attachment whose file has gone is dropped, not resent empty", () async {

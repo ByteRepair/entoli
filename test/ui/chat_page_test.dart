@@ -21,7 +21,7 @@ void main() {
 
   testWidgets("a chat in a project says which one above the conversation",
       (tester) async {
-    final chat = await app.seedChat(title: "at work", project: "work");
+    final chat = await io(tester, () => app.seedChat(title: "at work", project: "work"));
 
     await open(tester, chat.state.id);
 
@@ -32,7 +32,7 @@ void main() {
   // Every chat is in one, so naming the default on all of them says nothing.
   testWidgets("a chat in the default project is titled and nothing more",
       (tester) async {
-    final chat = await app.seedChat(title: "at home");
+    final chat = await io(tester, () => app.seedChat(title: "at home"));
 
     await open(tester, chat.state.id);
 

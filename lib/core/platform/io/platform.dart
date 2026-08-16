@@ -1,29 +1,41 @@
 import "dart:io";
 
-import "../../../data/local/disk_storage.dart";
-import "../../../data/local/local_chat_store.dart";
+import "package:fs_shim/fs.dart";
+import "package:fs_shim/fs_io.dart" show fileSystemIo;
+import "package:path/path.dart" as p;
+import "package:path_provider/path_provider.dart";
+
 import "../../../data/miniswe/duckduckgo_search.dart";
 import "../../../data/miniswe/local_shell.dart";
-import "../../../data/prompts/prompt_sources.dart";
-import "../../../domain/chat_store.dart";
-import "../../../domain/prompt_library.dart";
 import "../../../domain/shell.dart";
-import "../../../domain/storage.dart";
 import "../../../domain/web_search.dart";
-import "../../config.dart";
 
 Shell platformShell({required Map<String, String> Function() environment}) =>
     LocalShell(environment: environment);
 
 WebSearch platformWebSearch() => DuckDuckGoSearch();
 
-Storage platformStorage() => const DiskStorage();
+FileSystem platformFileSystem() => fileSystemIo;
 
-ChatStore platformChatStore(AppConfig config) => LocalChatStore(config);
+/// `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` on desktop and
+/// app-private storage on Android.
+Future<String> platformDataDir() async {
+  final override = Platform.environment["AGENT_CHAT_CONFIG"];
+  return override ?? p.join(await _resolveBase(), "agent-chat");
+}
 
-/// The user's own come last: a file they wrote replaces the preset it shares a
-/// name with.
-List<PromptSource> platformPromptSources(AppConfig config) =>
-    [const BundledPrompts(), DirectoryPrompts(config)];
+Future<String> _resolveBase() async {
+  if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+    return p.join(_home, ".config");
+  }
+  final dir = await getApplicationDocumentsDirectory();
+  return dir.path;
+}
+
+String get _home => Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"]!;
+
+/// Nothing to ask for: a directory on this machine is already as durable as
+/// the app is.
+Future<void> platformPersist() async {}
 
 String? processEnv(String name) => Platform.environment[name];

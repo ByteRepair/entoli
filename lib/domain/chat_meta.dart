@@ -1,5 +1,4 @@
 import "dart:convert";
-import "dart:io";
 
 import "permission.dart";
 
@@ -19,10 +18,12 @@ class ChatMeta {
         approveMode: _approveMode(json),
       );
 
-  factory ChatMeta.fromFile(File file) {
-    if (!file.existsSync()) return ChatMeta();
+  /// Null is a `meta.json` that was never written, which inherits everything —
+  /// and so is one that cannot be parsed.
+  factory ChatMeta.parse(String? text) {
+    if (text == null) return ChatMeta();
     try {
-      return ChatMeta.fromJson(jsonDecode(file.readAsStringSync()) as Map<String, dynamic>);
+      return ChatMeta.fromJson(jsonDecode(text) as Map<String, dynamic>);
     } catch (_) {
       return ChatMeta();
     }
@@ -40,7 +41,5 @@ class ChatMeta {
         if (approveMode != null) "approveMode": approveMode!.name,
       };
 
-  Future<void> saveTo(File file) async {
-    file.writeAsStringSync(jsonEncode(toJson()));
-  }
+  String encode() => jsonEncode(toJson());
 }

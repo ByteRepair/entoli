@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
@@ -74,7 +76,7 @@ void main() {
   group("a new chat", () {
     test("is not on disk until its first message is sent", () async {
       final chat = await app.repo.createChat();
-      expect(app.config.stateFile(chat.state.id).existsSync(), isFalse);
+      expect(File(app.config.stateFile(chat.state.id)).existsSync(), isFalse);
       expect(await app.repo.listChats(), isEmpty);
 
       final controller = app.container.read(chatControllerProvider(chat.state.id).notifier);
@@ -345,7 +347,7 @@ void main() {
     final file = (await app.repo.openChat(id)).messages.first.parts.whereType<FilePart>().single;
     expect(file.filename, "shot.png");
     expect(file.mimeType, "image/png");
-    expect(app.config.resourcesDir(id).listSync(), hasLength(1));
+    expect(Directory(app.config.resourcesDir(id)).listSync(), hasLength(1));
     expect(app.backend.prompts.single.attachments.single.bytes, [104, 105]);
   });
 
@@ -361,7 +363,7 @@ void main() {
     expect(app.backend.prompts.map((p) => p.attachments.single.filename), ["shot.png", "shot.png"]);
     expect(messagesOf(id).first.parts.whereType<FilePart>(), hasLength(1));
     // The same file, not a second copy of it.
-    expect(app.config.resourcesDir(id).listSync(), hasLength(1));
+    expect(Directory(app.config.resourcesDir(id)).listSync(), hasLength(1));
   });
 
   test("editing the text keeps what the message carried", () async {

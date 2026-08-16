@@ -143,10 +143,10 @@ class MinisweBackend implements AgentBackend {
         return;
       }
 
-      config.ensureChatDirs(chatId, project: project);
-      config.ensureProjectDirs(project: project);
-      final workspace = config.workspaceDir(chatId, project: project).path;
-      final projectWorkspace = config.projectWorkspaceDir(project: project).path;
+      await config.ensureChatDirs(chatId, project: project);
+      await config.ensureProjectDirs(project: project);
+      final workspace = config.workspaceDir(chatId, project: project);
+      final projectWorkspace = config.projectWorkspaceDir(project: project);
       // One gate per turn, shared by the parent and every sub-agent it spawns:
       // bounds in-flight stream() calls and coordinates 429 backoff so a
       // fan-out doesn't each-retry-into the same rate limit.

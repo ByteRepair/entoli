@@ -44,7 +44,7 @@ void main() {
 
   Future<void> type(WidgetTester tester, String text) async {
     await tester.enterText(find.byType(TextField), text);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   /// The names the menu is offering, in order — the descriptions beside them
@@ -97,7 +97,7 @@ void main() {
     await type(tester, "/rev");
 
     await tester.tap(find.text("/revert"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(controller.text, "/revert ");
     expect(find.byType(ListView), findsNothing);
@@ -108,7 +108,7 @@ void main() {
     await type(tester, "ask @exp");
 
     await tester.tap(find.text("@explore"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(controller.text, "ask @explore ");
   });
@@ -119,7 +119,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(controller.text, "/revert ");
     expect(sent, isEmpty);
@@ -131,7 +131,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(controller.text, "/review ");
   });
@@ -141,11 +141,11 @@ void main() {
     await type(tester, "/rev");
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     expect(find.byType(ListView), findsNothing);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     expect(controller.text, "/rev");
   });
 
@@ -156,7 +156,7 @@ void main() {
     await type(tester, "hello");
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(controller.text, "hello");
     expect(sent, isEmpty);
@@ -169,7 +169,7 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(sent, ["hello"]);
     expect(controller.text, isEmpty);
@@ -177,9 +177,9 @@ void main() {
 
   Future<void> insertVia(WidgetTester tester, String label) async {
     await tester.tap(find.byIcon(Icons.add));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     await tester.tap(find.text(label));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   testWidgets("the + button's Commands entry opens the command menu", (tester) async {
@@ -223,7 +223,7 @@ void main() {
     await pump(tester);
     await type(tester, "/");
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     expect(find.byType(ListView), findsNothing);
 
     await insertVia(tester, "Commands");
@@ -260,7 +260,7 @@ void main() {
 
     await type(tester, "look");
     await tester.tap(find.byIcon(Icons.send));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(sent, ["look"]);
     expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
@@ -284,7 +284,7 @@ void main() {
     await insertVia(tester, "File");
 
     await tester.tap(find.byIcon(Icons.close).first);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(find.text("notes.txt"), findsNothing);
     expect(find.text("other.txt"), findsOneWidget);
@@ -295,12 +295,12 @@ void main() {
     await pump(tester);
 
     await tester.tap(find.byIcon(Icons.send));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     expect(sent, isEmpty);
 
     await insertVia(tester, "File");
     await tester.tap(find.byIcon(Icons.send));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(sent, [""]);
     expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);

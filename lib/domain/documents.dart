@@ -1,0 +1,43 @@
+import "package:fs_shim/fs.dart";
+
+/// The two JSON documents that are read synchronously: `settings.json` and each
+/// project's `project.json`. Everything else on the filesystem is read as it is
+/// needed.
+///
+/// These are not, because they are read on every command (`LocalShell` asks for
+/// the environment per run) and on every model call (`LlmRegistry` asks for the
+/// providers per client). The filesystem is async — a browser's has to be — so
+/// they are read once at startup and served from memory after that.
+///
+/// The cost is that a file edited behind the app's back is not picked up until
+/// a restart. Everything the app itself writes goes through [write], which
+/// updates the copy before it touches the filesystem, so a read on the next
+/// line sees it.
+class Documents {
+  Documents(this._fs);
+
+  final FileSystem _fs;
+  final Map<String, String> _texts = {};
+
+  Future<void> hydrate(Iterable<String> paths) async {
+    for (final path in paths) {
+      final file = _fs.file(path);
+      if (await file.exists()) _texts[path] = await file.readAsString();
+    }
+  }
+
+  /// Null where nothing has been written, which is the caller's cue to use its
+  /// defaults rather than an error.
+  String? read(String path) => _texts[path];
+
+  /// Written through a rename for the same reason the chat store is:
+  /// `writeAsString` truncates before it writes, so a read landing between the
+  /// two finds an empty file. The copy is updated first, so a read on the next
+  /// line sees the new value whatever the filesystem is still doing.
+  Future<void> write(String path, String text) async {
+    _texts[path] = text;
+    final temp = _fs.file("$path.writing");
+    await temp.writeAsString(text);
+    await temp.rename(path);
+  }
+}

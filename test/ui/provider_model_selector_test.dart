@@ -30,7 +30,7 @@ void main() {
         ),
       ),
     ));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   testWidgets("Default leads both lists, the rest sorted", (tester) async {
@@ -39,7 +39,7 @@ void main() {
     await openDropdown(tester, model: false);
     expect(popupLabels(tester), [defaultOptionLabel, "anthropic", "ollama-cloud"]);
     await tester.tap(find.text(defaultOptionLabel).last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await openDropdown(tester, model: true);
     expect(popupLabels(tester), [defaultOptionLabel, "Llama 3", "Qwen 2.5"]);
@@ -57,7 +57,7 @@ void main() {
 
     await openDropdown(tester, model: true);
     await tester.tap(find.text("Claude Sonnet 4"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(reported, (providerId: "anthropic", modelId: "claude-sonnet-4"));
   });
@@ -67,7 +67,7 @@ void main() {
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text("anthropic").last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(reported, (providerId: "anthropic", modelId: null));
   });
@@ -81,7 +81,7 @@ void main() {
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text("b").last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(reported, (providerId: "b", modelId: "shared"));
   });
@@ -120,7 +120,7 @@ void main() {
     await pump(tester, choice: (providerId: "ollama-cloud", modelId: "qwen-2.5"));
 
     await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").first);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(reported, (providerId: null, modelId: null));
   });
@@ -129,7 +129,7 @@ void main() {
     await pump(tester, choice: (providerId: "ollama-cloud", modelId: "qwen-2.5"));
 
     await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(reported, (providerId: "ollama-cloud", modelId: null));
   });

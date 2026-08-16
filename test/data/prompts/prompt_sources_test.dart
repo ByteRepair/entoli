@@ -27,10 +27,10 @@ void main() {
 
   test("the user's own come from \$AGENT_CHAT_CONFIG", () async {
     final config = tempConfig();
-    config.ensureDirs();
-    File(p.join(config.promptsDir(CompletionKind.command).path, "ship.md"))
+    await config.ensureDirs();
+    File(p.join(config.promptsDir(CompletionKind.command), "ship.md"))
         .writeAsStringSync("---\ndescription: ship it\n---\n\nShip \$ARGUMENTS.\n");
-    File(p.join(config.promptsDir(CompletionKind.agent).path, "notes.txt"))
+    File(p.join(config.promptsDir(CompletionKind.agent), "notes.txt"))
         .writeAsStringSync("not markdown");
 
     final commands = await DirectoryPrompts(config).load(CompletionKind.command);
@@ -48,9 +48,9 @@ void main() {
 
   test("a file the user wrote replaces the preset it shares a name with", () async {
     final config = tempConfig();
-    config.ensureDirs();
+    await config.ensureDirs();
     final preset = (await const BundledPrompts().load(CompletionKind.command)).first;
-    File(p.join(config.promptsDir(CompletionKind.command).path, "${preset.name}.md"))
+    File(p.join(config.promptsDir(CompletionKind.command), "${preset.name}.md"))
         .writeAsStringSync("---\ndescription: mine\n---\n\nDo it my way.\n");
 
     final library = await PromptLibrary.from([

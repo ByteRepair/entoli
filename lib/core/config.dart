@@ -1,13 +1,12 @@
-import "dart:io";
 import "package:flutter/foundation.dart";
-import "package:path/path.dart" as p;
+import "package:fs_shim/fs.dart";
 
+import "../domain/documents.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
-import "../domain/storage.dart";
 
-/// Composes the paths of the Entoli data directory. Where they lead, and
-/// whether anywhere at all, is [storage]: this file builds names.
+/// Composes the paths of the Entoli data directory, and holds the filesystem
+/// they lead into. This file builds names; [fs] is what they mean.
 ///
 /// Layout:
 ///   `<dataDir>/settings.json`
@@ -25,106 +24,127 @@ import "../domain/storage.dart";
 /// project, and it is the data directory itself, so a chat written before
 /// there were projects is already in it.
 class AppConfig {
-  AppConfig._(this.dataDir, this.storage);
+  AppConfig._(this.dataDir, this.fs) : documents = Documents(fs);
 
-  /// Test-only constructor using an explicit data directory.
+  /// Test-only constructor using an explicit data directory. Creates nothing,
+  /// and hydrates nothing.
   @visibleForTesting
-  AppConfig.forDirectory(this.dataDir, this.storage);
+  AppConfig.forDirectory(this.dataDir, this.fs) : documents = Documents(fs);
 
-  final Directory dataDir;
+  final String dataDir;
 
-  /// What the paths below are read and written through, and what answers where
-  /// the data directory is in the first place.
-  final Storage storage;
+  /// A real filesystem on desktop and Android, IndexedDB in a browser. The
+  /// layout is the same either way, which is the point of it being a port.
+  final FileSystem fs;
 
-  static Future<AppConfig> load(Storage storage) async {
-    final config = AppConfig._(Directory(await storage.dataDir()), storage);
-    config.ensureDirs();
+  /// The handful of documents that have to be readable synchronously.
+  final Documents documents;
+
+  static Future<AppConfig> load(FileSystem fs, String dataDir) async {
+    final config = AppConfig._(dataDir, fs);
+    await config.ensureDirs();
+    await config.documents.hydrate([
+      config.settingsFile,
+      for (final project in everyProject(await config.projectNames()))
+        config.projectSettingsFile(project: project),
+    ]);
     return config;
   }
 
-  Directory get projectsDir => Directory(p.join(dataDir.path, "projects"));
+  String get projectsDir => fs.path.join(dataDir, "projects");
 
   /// Every project-scoped path goes through here, so this is where a name that
   /// would reach outside `projects/` is refused rather than joined.
-  Directory projectDir({String? project}) {
+  String projectDir({String? project}) {
     if (project == null) return dataDir;
     if (!isProjectName(project)) {
       throw ArgumentError.value(project, "project", "not a project name");
     }
-    return Directory(p.join(projectsDir.path, project));
+    return fs.path.join(projectsDir, project);
   }
 
-  Directory chatsDir({String? project}) =>
-      Directory(p.join(projectDir(project: project).path, "chats"));
+  /// The projects that exist, by name, sorted. A directory that could not have
+  /// been created as a project is not one, so a stray `.git` beside them is not
+  /// listed.
+  Future<List<String>> projectNames() async {
+    final dir = fs.directory(projectsDir);
+    if (!await dir.exists()) return const [];
+    final names = <String>[
+      await for (final entity in dir.list())
+        if (entity is Directory) fs.path.basename(entity.path),
+    ];
+    return names.where(isProjectName).toList()..sort();
+  }
+
+  String chatsDir({String? project}) =>
+      fs.path.join(projectDir(project: project), "chats");
 
   /// The workspace every chat in the project shares, beside the one each has
   /// of its own.
-  Directory projectWorkspaceDir({String? project}) =>
-      Directory(p.join(projectDir(project: project).path, "workspace"));
+  String projectWorkspaceDir({String? project}) =>
+      fs.path.join(projectDir(project: project), "workspace");
 
-  Directory chatDir(String chatId, {String? project}) =>
-      Directory(p.join(chatsDir(project: project).path, chatId));
+  String chatDir(String chatId, {String? project}) =>
+      fs.path.join(chatsDir(project: project), chatId);
 
-  File stateFile(String chatId, {String? project}) =>
-      File(p.join(chatDir(chatId, project: project).path, "state.json"));
+  String stateFile(String chatId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "state.json");
 
-  File convFile(String chatId, {String? project}) =>
-      File(p.join(chatDir(chatId, project: project).path, "conv.json"));
+  String convFile(String chatId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "conv.json");
 
-  File metaFile(String chatId, {String? project}) =>
-      File(p.join(chatDir(chatId, project: project).path, "meta.json"));
+  String metaFile(String chatId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "meta.json");
 
-  Directory resourcesDir(String chatId, {String? project}) =>
-      Directory(p.join(chatDir(chatId, project: project).path, "resources"));
+  String resourcesDir(String chatId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "resources");
 
-  Directory workspaceDir(String chatId, {String? project}) =>
-      Directory(p.join(chatDir(chatId, project: project).path, "workspace"));
+  String workspaceDir(String chatId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "workspace");
 
   /// Where the user's own commands and agents go, beside the presets the app
   /// ships with. App-wide: a project scopes files, not what the composer offers.
-  Directory promptsDir(CompletionKind kind) => Directory(p.join(dataDir.path, kind.folder));
+  String promptsDir(CompletionKind kind) => fs.path.join(dataDir, kind.folder);
 
   /// Create a chat's directories. Reading a path no longer creates it, so the
-  /// few places that need them on disk say so.
-  void ensureChatDirs(String chatId, {String? project}) {
-    _ensure([
-      chatDir(chatId, project: project),
-      resourcesDir(chatId, project: project),
-      workspaceDir(chatId, project: project),
-    ]);
-  }
+  /// few places that need them on the filesystem say so.
+  Future<void> ensureChatDirs(String chatId, {String? project}) => _ensure([
+        chatDir(chatId, project: project),
+        resourcesDir(chatId, project: project),
+        workspaceDir(chatId, project: project),
+      ]);
 
   /// A project is its directories: there is nothing else to create one, and
   /// the shared workspace is named in the agent's prompt whether or not
   /// anything has been put in it yet.
-  void ensureProjectDirs({String? project}) {
-    _ensure([chatsDir(project: project), projectWorkspaceDir(project: project)]);
-  }
+  Future<void> ensureProjectDirs({String? project}) => _ensure([
+        chatsDir(project: project),
+        projectWorkspaceDir(project: project),
+      ]);
 
   /// The prompt directories are created empty rather than on demand: an
   /// absent one is a worse hint than an empty one about where a custom
   /// command goes.
-  void ensureDirs() {
-    _ensure([
+  Future<void> ensureDirs() async {
+    await _ensure([
       dataDir,
       projectsDir,
       for (final kind in CompletionKind.values) promptsDir(kind),
     ]);
-    ensureProjectDirs();
+    await ensureProjectDirs();
   }
 
-  void _ensure(List<Directory> dirs) {
+  Future<void> _ensure(List<String> dirs) async {
     for (final dir in dirs) {
-      storage.ensureDir(dir.path);
+      await fs.directory(dir).create(recursive: true);
     }
   }
 
-  File get settingsFile => File(p.join(dataDir.path, "settings.json"));
+  String get settingsFile => fs.path.join(dataDir, "settings.json");
 
   /// Project-scoped overrides. The default project is null, and it is the data
   /// directory, so its settings sit beside `settings.json` rather than under
   /// `projects/`.
-  File projectSettingsFile({String? project}) =>
-      File(p.join(projectDir(project: project).path, "project.json"));
+  String projectSettingsFile({String? project}) =>
+      fs.path.join(projectDir(project: project), "project.json");
 }

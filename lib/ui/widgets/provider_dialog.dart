@@ -84,6 +84,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
               const SizedBox(height: 16),
               DropdownButtonFormField<LlmApi>(
                 initialValue: _api,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: "API",
                   border: OutlineInputBorder(),
