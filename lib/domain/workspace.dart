@@ -84,6 +84,28 @@ Future<void> writeIncoming(
   }
 }
 
+Future<void> createFolder(FileSystem fs, String dir, String name) => fs
+    .directory(fs.path.join(dir, safeRelativePath(fs, name)))
+    .create(recursive: true);
+
+/// Remove [paths], each with whatever is under it. One already gone is a
+/// deletion that happened.
+///
+/// The lookups go out in one wave and the deletions in another, for the reason
+/// [listWorkspace] stats in one: a selection is a folder's siblings, so nothing
+/// here is ordered, and awaiting per path is one IndexedDB transaction at a
+/// time in front of the busy bar.
+Future<void> deleteEntries(FileSystem fs, List<String> paths) async {
+  final types = await Future.wait(paths.map(fs.type));
+  await Future.wait([
+    for (final (index, path) in paths.indexed)
+      if (types[index] == FileSystemEntityType.directory)
+        fs.directory(path).delete(recursive: true)
+      else if (types[index] != FileSystemEntityType.notFound)
+        fs.file(path).delete(),
+  ]);
+}
+
 /// A path from outside, made safe to join onto a workspace. `..` and a leading
 /// separator are what this exists for: a shared file names itself, and one
 /// naming `../../settings.json` would otherwise be written there. Everything

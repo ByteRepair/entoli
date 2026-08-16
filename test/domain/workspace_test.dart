@@ -136,6 +136,54 @@ void main() {
     });
   });
 
+  group("making a folder", () {
+    test("a name becomes one", () async {
+      await createFolder(fileSystemIo, dir, "notes");
+
+      expect(Directory("$dir/notes").existsSync(), isTrue);
+    });
+
+    test("one that is already there is left alone", () async {
+      File("$dir/notes/a.txt")
+        ..createSync(recursive: true)
+        ..writeAsStringSync("a");
+
+      await createFolder(fileSystemIo, dir, "notes");
+
+      expect(File("$dir/notes/a.txt").readAsStringSync(), "a");
+    });
+  });
+
+  group("deleting", () {
+    test("a file goes and its neighbours stay", () async {
+      File("$dir/a.txt").writeAsStringSync("a");
+      File("$dir/b.txt").writeAsStringSync("b");
+
+      await deleteEntries(fileSystemIo, ["$dir/a.txt"]);
+
+      expect(File("$dir/a.txt").existsSync(), isFalse);
+      expect(File("$dir/b.txt").existsSync(), isTrue);
+    });
+
+    test("a folder goes with everything in it", () async {
+      File("$dir/src/deep/main.dart").createSync(recursive: true);
+
+      await deleteEntries(fileSystemIo, ["$dir/src"]);
+
+      expect(Directory("$dir/src").existsSync(), isFalse);
+    });
+
+    // The listing under a selection is re-read, and the agent writes to the
+    // same folder — so a path can be gone by the time this runs.
+    test("one that is already gone is a deletion that happened", () async {
+      File("$dir/a.txt").writeAsStringSync("a");
+
+      await deleteEntries(fileSystemIo, ["$dir/never-was", "$dir/a.txt"]);
+
+      expect(File("$dir/a.txt").existsSync(), isFalse);
+    });
+  });
+
   group("safeRelativePath", () {
     test("keeps a folder", () {
       expect(safeRelativePath(fileSystemIo, "notes/today/a.txt"), "notes/today/a.txt");

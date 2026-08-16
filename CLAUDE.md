@@ -913,11 +913,21 @@ small enough to write on the UI thread, an attachment is not.
 ### The workspace explorer
 
 A workspace is where the agent's work lands, and until now the only way to see
-it was to leave the app. `WorkspaceTile` on the chat and project settings pages
-opens `WorkspacePage` over one folder — the chat's own `workspace/` or the
-project's shared one, resolved by the page that knows which it is. The listing
-itself is `listWorkspace` over the config's `FileSystem`, so it is the same code
-on a disk and over IndexedDB.
+it was to leave the app. `WorkspaceTile` on the chat, project and app settings
+pages opens `WorkspacePage` over one folder — the chat's own `workspace/`, the
+project's shared one, or the default project's, resolved by the page that knows
+which it is. The default project's is reached from the app's settings because
+there is nowhere else it could be: every other project opens its own from its
+settings page, and the default project has none — it is the data directory, so a
+settings page for it would be the app's own said twice.
+
+Listing, making a folder and deleting go through the config's `FileSystem`
+(`listWorkspace`, `createFolder`, `deleteEntries`), so they are the same code on
+a disk and over IndexedDB and are offered wherever the explorer is. A typed
+folder name is sanitised by `safeRelativePath` like anything else joined onto a
+workspace — `../` is a name a folder can be asked for. Deleting looks each path
+up rather than trusting what the listing said it was, since a selection is held
+as paths and the listing under it is re-read.
 
 Everything else the page can do is `FileHandoff`'s, and every route is gated the
 way `Shell.canRunCommands` gates the agent's commands. The three platforms do
@@ -934,7 +944,7 @@ every future member too.
   reaches both: `reveal` opens the current folder (the app bar's button) and
   `open` opens a file, which is the same call on a different path. It needs no
   chooser of its own — the file manager is already pointed at the workspace —
-  and it has no share sheet, so there is no selection mode at all.
+  and it has no share sheet, so a selection there is only ever deleted.
 - **Android** has the share sheet, both ways. `export` sends a selection through
   `Intent.createChooser`, so every app on the device is on offer rather than a
   default winning silently; `open` is an `ACTION_VIEW`. Files come back in the
@@ -948,7 +958,12 @@ every future member too.
 *kind* rather than the words: a share sheet and a download are not the same
 promise to the user, but which word and which glyph say so is `WorkspacePage`'s
 to decide. Null is a platform with nowhere to hand a selection, which is what
-takes the whole selection mode off the desktop toolbar.
+takes the export button off the desktop toolbar — selecting itself stays, since
+deleting is the filesystem's rather than a route out of the app.
+
+A selection replaces the browsing actions rather than sitting beside them: the
+app bar is the filesystem's verbs on what is picked, and the FAB stays the route
+out of the app, which is the one thing a platform can be without.
 
 Neither a share sheet nor a download takes a folder, so a selection with one in
 it goes as a single zip (`zipEntries`, in `lib/data/` rather than `local/` or
@@ -1152,8 +1167,9 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is four sections plus deleting everything: **New chats**
-(default model, title model), **Appearance** (app icon), **Agent** (command
+The settings page is five sections plus deleting everything: **New chats**
+(default model, title model), **Workspace** (the default project's, which has
+nowhere else to be reached from), **Appearance** (app icon), **Agent** (command
 approval mode, classifier model, providers), **Environment**.
 
 ### Shared UI
