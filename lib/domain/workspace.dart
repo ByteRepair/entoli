@@ -54,15 +54,33 @@ Future<List<WorkspaceEntry>> listWorkspace(FileSystem fs, String dir) async {
 /// Write [files] into [dir], creating whatever folders they name. Their paths
 /// were written by another app, so each one is sanitised before it is joined
 /// onto a workspace — see [safeRelativePath].
+///
+/// One at a time, and each one's bytes are the file's own business: this makes
+/// room and hands over the target, so a staged share is moved where a browser's
+/// buffer is written. See [IncomingFile].
+///
+/// Sequential on purpose. Writing them at once would put every file's bytes in
+/// memory together, which is the thing [IncomingFile] exists to avoid, and buys
+/// nothing back — IndexedDB serialises writes to a store anyway, and a rename
+/// is too cheap to overlap.
+///
+/// The folders are made first, once each. A folder upload names one directory
+/// hundreds of times, and `create` on the web opens a read-write transaction
+/// before it looks, so asking per file is hundreds of empty transactions in
+/// front of the spinner.
 Future<void> writeIncoming(
   FileSystem fs,
   String dir,
   List<IncomingFile> files,
 ) async {
-  for (final file in files) {
-    final target = fs.path.join(dir, safeRelativePath(fs, file.path));
-    await fs.directory(fs.path.dirname(target)).create(recursive: true);
-    await fs.file(target).writeAsBytes(file.bytes);
+  final targets = [
+    for (final file in files) fs.path.join(dir, safeRelativePath(fs, file.path)),
+  ];
+  for (final folder in {for (final target in targets) fs.path.dirname(target)}) {
+    await fs.directory(folder).create(recursive: true);
+  }
+  for (var i = 0; i < files.length; i++) {
+    await files[i].writeTo(fs, targets[i]);
   }
 }
 

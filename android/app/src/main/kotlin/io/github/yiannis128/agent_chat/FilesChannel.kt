@@ -44,7 +44,7 @@ object FilesChannel {
                 when (call.method) {
                     "open" -> result.wrap { open(appContext, call) }
                     "share" -> result.wrap { share(appContext, call) }
-                    "takeShare" -> result.success(take())
+                    "takeShare" -> result.success(take(appContext))
                     else -> result.notImplemented()
                 }
             }
@@ -67,11 +67,7 @@ object FilesChannel {
         intent.action = Intent.ACTION_MAIN
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
-        // Emptied first when nothing is waiting: a share the user backed out of
-        // is never claimed, and nothing else would ever delete its copy.
-        val dir = File(appContext.cacheDir, "incoming")
-        if (pending.isEmpty()) dir.deleteRecursively()
-        dir.mkdirs()
+        val dir = incomingDir(appContext).apply { mkdirs() }
         uris.forEach { uri -> stage(appContext, uri, dir)?.let { pending += it } }
         if (pending.isNotEmpty()) channel?.invokeMethod("shared", null)
     }
@@ -90,7 +86,15 @@ object FilesChannel {
         null
     }
 
-    private fun take(): List<Map<String, String>> {
+    // Pruned here rather than on the way in, because Dart now holds the staged
+    // copies until a workspace is picked instead of reading them at once: a
+    // second share arriving while that page is open would otherwise delete the
+    // paths the page is still pointing at. Anything left over at this moment is
+    // an earlier batch nobody claimed, since only one is ever offered at a
+    // time — see `IncomingShares`.
+    private fun take(context: Context): List<Map<String, String>> {
+        val keep = pending.map { it.file }.toSet()
+        incomingDir(context).listFiles()?.forEach { if (it !in keep) it.deleteRecursively() }
         val staged = pending.map { mapOf("path" to it.name, "file" to it.file.absolutePath) }
         pending.clear()
         return staged
@@ -130,6 +134,8 @@ object FilesChannel {
 
     // The authority is ${applicationId}.files, so it follows the debug
     // applicationIdSuffix the way IconChannel's ComponentName has to.
+    private fun incomingDir(context: Context) = File(context.cacheDir, "incoming")
+
     private fun uriFor(context: Context, path: String): Uri =
         FileProvider.getUriForFile(context, "${context.packageName}.files", File(path))
 
