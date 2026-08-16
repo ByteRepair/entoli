@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_icon.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
+import "../../domain/project.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/anchored_menu.dart";
@@ -12,6 +13,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
+import "../workspace/workspace_page.dart";
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -23,6 +25,8 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         children: const [
           _DefaultsSection(),
+          Divider(),
+          _WorkspaceSection(),
           Divider(),
           _AppearanceSection(),
           Divider(),
@@ -66,6 +70,31 @@ class _SectionHeader extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The default project has no settings page of its own, so this is the only way
+/// to the workspace the chats outside a project share.
+class _WorkspaceSection extends ConsumerWidget {
+  const _WorkspaceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = "${projectLabel(null)} workspace";
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(
+          name,
+          description: "Where the agent puts work meant for another chat, for "
+              "every chat outside a project.",
+        ),
+        WorkspaceTile(
+          root: ref.watch(appConfigProvider).projectWorkspaceDir(),
+          title: name,
+        ),
+      ],
     );
   }
 }

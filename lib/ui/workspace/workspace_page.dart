@@ -4,13 +4,17 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/workspace.dart";
 import "../../providers.dart";
+import "../widgets/dialogs.dart";
 
-/// The row that opens the explorer, on the chat and project settings pages
-/// alike. Both hold a workspace and neither has anything else to say about it.
+/// The row that opens the explorer, on the chat, project and app settings pages
+/// alike. All three hold a workspace and none has anything else to say about it.
 class WorkspaceTile extends StatelessWidget {
   const WorkspaceTile({super.key, required this.root, required this.title});
 
   final String root;
+
+  /// What the explorer's app bar says at the root. The row says only
+  /// "Workspace": the page it sits in has already named the owner.
   final String title;
 
   @override
@@ -27,10 +31,10 @@ class WorkspaceTile extends StatelessWidget {
   }
 }
 
-/// A workspace folder, and what this platform can do with what is in it. The
-/// listing is the same everywhere; the actions are `FileHandoff`'s, and each is
-/// drawn only where it leads somewhere — see CLAUDE.md, "The workspace
-/// explorer".
+/// A workspace folder, and what can be done with what is in it. Listing,
+/// creating a folder and deleting go through the `FileSystem` and are on every
+/// platform; the routes out of the app are `FileHandoff`'s, and each is drawn
+/// only where it leads somewhere — see CLAUDE.md, "The workspace explorer".
 class WorkspacePage extends ConsumerStatefulWidget {
   const WorkspacePage({super.key, required this.root, required this.title});
 
@@ -88,8 +92,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   /// The two always move together, so nothing sets one of them: a selection
-  /// outside selection mode is a state the page does not have, which is what
-  /// lets everything else test `_selected` alone.
+  /// outside selection mode is a state the page does not have. Which of them to
+  /// read is then the question being asked — the toolbar is the mode, the title
+  /// and the export button are what is picked.
   void _clearSelection() {
     _selecting = false;
     _selected.clear();
@@ -138,6 +143,44 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         _reload();
       });
 
+  Future<void> _newFolder() async {
+    final name = await promptForText(
+      context,
+      title: "New folder",
+      initial: "",
+      hint: "Name",
+      confirmLabel: "Create",
+    );
+    if (name == null) return;
+    await _guard(() async {
+      await createFolder(ref.read(appConfigProvider).fs, _dir, name);
+      _reload();
+    });
+  }
+
+  Future<void> _delete() async {
+    final paths = _selected.toList();
+    if (paths.isEmpty) return;
+    final fs = ref.read(appConfigProvider).fs;
+    final agreed = await confirm(
+      context,
+      title: paths.length == 1
+          ? "Delete \"${fs.path.basename(paths.first)}\"?"
+          : "Delete ${paths.length} items?",
+      message: "A folder goes with everything in it. This cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    );
+    if (!agreed) return;
+    await _guard(() async {
+      await deleteEntries(fs, paths);
+      setState(() {
+        _clearSelection();
+        _entries = _read();
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final handoff = ref.watch(fileHandoffProvider);
@@ -152,36 +195,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               : (_atRoot ? widget.title : fs.path.basename(_dir)),
           under: _atRoot ? null : fs.path.relative(_dir, from: widget.root),
         ),
-        actions: [
-          if (handoff.canReveal)
-            IconButton(
-              icon: const Icon(Icons.open_in_new),
-              tooltip: "Show in file manager",
-              onPressed: () => _guard(() => handoff.reveal(_dir)),
-            ),
-          if (handoff.canImport)
-            PopupMenuButton<bool>(
-              icon: const Icon(Icons.upload_file),
-              tooltip: "Upload",
-              onSelected: (folders) => _import(folders: folders),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: false, child: Text("Upload files")),
-                PopupMenuItem(value: true, child: Text("Upload folder")),
-              ],
-            ),
-          if (export != null)
-            _selecting
-                ? IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: "Cancel selection",
-                    onPressed: () => setState(_clearSelection),
-                  )
-                : IconButton(
-                    icon: const Icon(Icons.checklist),
-                    tooltip: "Select",
-                    onPressed: () => setState(() => _selecting = true),
-                  ),
-        ],
+        actions: _selecting ? _selectionActions() : _browseActions(handoff),
       ),
       floatingActionButton: export == null || _selected.isEmpty
           ? null
@@ -223,7 +237,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                         _open(entries[i]);
                       }
                     },
-                    onLongPress: export == null ? null : () => _select(entries[i]),
+                    onLongPress: () => _select(entries[i]),
                   ),
                 );
               },
@@ -233,6 +247,51 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       ),
     );
   }
+
+  /// What can be done to what is picked. It replaces the browsing actions
+  /// rather than sitting beside them.
+  List<Widget> _selectionActions() => [
+        if (_selected.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: "Delete",
+            onPressed: _delete,
+          ),
+        IconButton(
+          icon: const Icon(Icons.close),
+          tooltip: "Cancel selection",
+          onPressed: () => setState(_clearSelection),
+        ),
+      ];
+
+  List<Widget> _browseActions(FileHandoff handoff) => [
+        if (handoff.canReveal)
+          IconButton(
+            icon: const Icon(Icons.open_in_new),
+            tooltip: "Show in file manager",
+            onPressed: () => _guard(() => handoff.reveal(_dir)),
+          ),
+        IconButton(
+          icon: const Icon(Icons.create_new_folder_outlined),
+          tooltip: "New folder",
+          onPressed: _newFolder,
+        ),
+        if (handoff.canImport)
+          PopupMenuButton<bool>(
+            icon: const Icon(Icons.upload_file),
+            tooltip: "Upload",
+            onSelected: (folders) => _import(folders: folders),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: false, child: Text("Upload files")),
+              PopupMenuItem(value: true, child: Text("Upload folder")),
+            ],
+          ),
+        IconButton(
+          icon: const Icon(Icons.checklist),
+          tooltip: "Select",
+          onPressed: () => setState(() => _selecting = true),
+        ),
+      ];
 
   void _toggle(WorkspaceEntry entry) => setState(() {
         if (!_selected.remove(entry.path)) _selected.add(entry.path);
@@ -317,7 +376,7 @@ class _Row extends StatelessWidget {
   final bool selecting;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback? onLongPress;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {

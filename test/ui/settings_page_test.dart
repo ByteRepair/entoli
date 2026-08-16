@@ -34,6 +34,7 @@ void main() {
 
     // scrollTo ends in ensureVisible, which throws unless the finder matches
     // exactly one widget — reaching each section is the assertion.
+    await scrollTo(tester, find.text("Default workspace"));
     await scrollTo(tester, find.text("Agent"));
     await scrollTo(tester, find.text("Environment"));
     await scrollTo(tester, find.text("Delete all chats"));
