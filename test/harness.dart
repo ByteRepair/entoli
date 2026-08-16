@@ -212,7 +212,9 @@ Future<bool> pressBack(WidgetTester tester) async {
 ///
 /// It resumes the app as well, because a test starts with no lifecycle state at
 /// all and `WidgetsApp` deliberately says nothing to the engine until there is
-/// one — so without this the list is empty however the app behaves.
+/// one — so without this the list is empty however the app behaves. And it
+/// takes `SystemChannels.platform` over for the test, which `Clipboard` and
+/// `HapticFeedback` ride too.
 List<bool> frameworkHandlesBack(WidgetTester tester) {
   final answers = <bool>[];
   final messenger = tester.binding.defaultBinaryMessenger;

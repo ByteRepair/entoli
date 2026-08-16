@@ -76,30 +76,18 @@ void main() {
       expect(tester.getSize(find.byType(Drawer)).width, lessThan(800));
     });
 
+    // `claimed` is the half the press cannot see: Android forwards one only
+    // while the framework has asked for it, and an open drawer does not ask by
+    // itself. Without it the app closes on a phone and the rest still passes.
     testWidgets("the back key closes it rather than the app", (tester) async {
+      final claimed = frameworkHandlesBack(tester);
       await open(tester, const Size(400, 900));
       expect(find.byType(Sidebar), findsOneWidget);
+      expect(claimed.last, isTrue);
 
       expect(await pressBack(tester), isTrue);
 
       expect(find.byType(Sidebar), findsNothing);
-    });
-
-    // The half the press above cannot see: Android forwards one only while the
-    // framework has claimed it, and an open drawer does not claim it by itself.
-    // Without this the app closes on a phone and every other test still passes.
-    testWidgets("and the platform is told the app wants it", (tester) async {
-      final claimed = frameworkHandlesBack(tester);
-      await open(tester, const Size(400, 900));
-
-      expect(claimed.last, isTrue);
-    });
-
-    testWidgets("and given it back once the drawer is shut", (tester) async {
-      final claimed = frameworkHandlesBack(tester);
-      await open(tester, const Size(400, 900));
-      await pressBack(tester);
-
       expect(claimed.last, isFalse);
     });
 
