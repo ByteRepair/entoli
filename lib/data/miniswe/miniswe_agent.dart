@@ -442,7 +442,7 @@ class MinisweAgent {
       final (:agent, :prompt) = parsed;
       controller.add(SubAgentStartEvent(
           id: call.id, agent: agent, prompt: _truncate(prompt, 80)));
-      final result = await subAgentRunner!.run(agent, prompt);
+      final result = await subAgentRunner!.run(agent, prompt, callId: call.id);
       results[index] = result;
       controller.add(SubAgentEndEvent(id: call.id, failed: result.returnCode != 0));
       controller.add(ToolCallEvent(ToolCall(
