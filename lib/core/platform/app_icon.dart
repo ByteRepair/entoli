@@ -28,10 +28,12 @@ class LauncherAliases implements LauncherIcons {
   Future<void> use(AppIcon icon) async {
     if (!available) return;
     // Swallowed: the setting is already saved, and it is what the app draws
-    // from.
+    // from. Logged because a launcher that silently refuses looks exactly like
+    // a bug in the setting.
     try {
       await _channel.invokeMethod<void>("use", _components[icon]);
-    } on PlatformException catch (_) {
+    } on PlatformException catch (e) {
+      debugPrint("Launcher icon not changed: $e");
     } on MissingPluginException catch (_) {}
   }
 }
