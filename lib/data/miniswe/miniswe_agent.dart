@@ -707,6 +707,7 @@ class MinisweAgent {
     while (true) {
       var produced = false;
       var textStreamed = false;
+      var reasoningClosed = false;
       DateTime? thinkingSince;
       String? signature;
 
@@ -737,6 +738,7 @@ class MinisweAgent {
                     duration: DateTime.now().difference(thinkingSince),
                     signature: signature);
                 thinkingSince = null;
+                reasoningClosed = true;
               }
               yield TextDelta(text);
 
@@ -746,9 +748,13 @@ class MinisweAgent {
                 yield ReasoningEnd(
                     duration: DateTime.now().difference(thinkingSince),
                     signature: signature);
-              } else if (chunk.message.reasoning != null) {
+                reasoningClosed = true;
+              } else if (!reasoningClosed && chunk.message.reasoning != null) {
                 // A provider that reports thinking only once it is over still
-                // fills the block.
+                // fills the block. Guarded, because the OpenAI shape reports it
+                // *as well as* streaming it: closing the block a second time
+                // writes the thinking twice, into the chat and into what goes
+                // back to the provider.
                 yield ReasoningEnd(text: chunk.message.reasoning, signature: signature);
               }
               // Text that was in the completion but never streamed as a delta —

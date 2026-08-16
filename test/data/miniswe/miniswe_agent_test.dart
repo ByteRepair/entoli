@@ -214,6 +214,28 @@ void main() {
       expect(ids.toSet(), hasLength(2));
     });
 
+    // The OpenAI shape reports the whole of the thinking on the completion as
+    // well as streaming it, so closing the block on both wrote it twice.
+    test("thinking that streamed is not closed again by the completion", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmReasoningChunk("weighing it up"),
+          const LlmTextChunk("Looking now."),
+          const LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              reasoning: "weighing it up",
+              text: "Looking now.",
+            ),
+          ),
+        ],
+      ]);
+      final events = await agentOver(client).run("hi").toList();
+
+      expect(events.whereType<ReasoningEnd>(), hasLength(1));
+      expect(events.whereType<ReasoningEnd>().single.duration, isNotNull);
+    });
+
     test("thinking reported only at the end still fills the block", () async {
       final client = FakeLlmClient([
         [
