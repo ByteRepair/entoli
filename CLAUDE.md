@@ -642,6 +642,11 @@ A tool call and the result answering it are one label. The parts stay separate
 in `conv.jsonl` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
+The drawer is sized by what is in it, up to the whole screen. It used to stop at
+seven tenths of the height, which is a tool's output cut short and a third of the
+screen left empty under it. It is a route, so the back key closes it and nothing
+had to be written for that.
+
 What can be done to a message — Edit, Regenerate — is a row of icons under it
 rather than a menu, uncovered by hovering the message or, where there is no
 pointer to hover with, by touching it. The row keeps its height whether or not
