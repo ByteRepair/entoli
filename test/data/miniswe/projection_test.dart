@@ -114,7 +114,33 @@ void main() {
 
     expect(projected.last.role, LlmRole.tool);
     expect(projected.last.toolCallId, "c1");
-    expect(projected.last.text, contains("not executed"));
+    expect(projected.last.text, contains("interrupted"));
+  });
+
+  // A command's effects outlive the process that ran it, so "not executed"
+  // would be a guess — and the wrong one half the time.
+  test("an interrupted command is not claimed to have been skipped", () {
+    final projected = projectionOf([
+      said(MessageRole.assistant, [
+        call("c1", "bash", '{"command":"make install"}', response: "r1"),
+      ]),
+    ]);
+
+    expect(projected.last.text, contains("may or may not have run"));
+    expect(projected.last.text, isNot(contains("not executed")));
+  });
+
+  // The answered form is the answers themselves, so the unanswered one is
+  // plainly worded too rather than dressed as a command's outcome.
+  test("questions the user never saw are answered as questions", () {
+    final projected = projectionOf([
+      said(MessageRole.assistant, [
+        call("a1", askToolName, '{"questions":[]}', response: "r1"),
+      ]),
+    ]);
+
+    expect(projected.last.text, contains("nothing was answered"));
+    expect(projected.last.text, isNot(contains("returncode")));
   });
 
   test("two calls in one response are answered in order, after it", () {

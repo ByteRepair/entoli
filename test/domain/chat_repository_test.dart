@@ -55,8 +55,8 @@ void main() {
 
     await repo.sendPrompt(chat.state.id, "hi").toList();
 
-    expect(backend.prompts.single.provider, "anthropic");
-    expect(backend.prompts.single.model, "claude-sonnet-4");
+    expect(backend.prompts.single.settings.provider, "anthropic");
+    expect(backend.prompts.single.settings.model, "claude-sonnet-4");
   });
 
   test("a chat's own model wins over the app default", () async {
@@ -67,8 +67,8 @@ void main() {
 
     await repo.sendPrompt(chat.state.id, "hi").toList();
 
-    expect(backend.prompts.single.provider, "ollama-cloud");
-    expect(backend.prompts.single.model, "qwen-2.5");
+    expect(backend.prompts.single.settings.provider, "ollama-cloud");
+    expect(backend.prompts.single.settings.model, "qwen-2.5");
   });
 
   test("a chat's model is never paired with the app default's provider", () async {
@@ -79,8 +79,22 @@ void main() {
 
     await repo.sendPrompt(chat.state.id, "hi").toList();
 
-    expect(backend.prompts.single.model, "qwen-2.5");
-    expect(backend.prompts.single.provider, isNull);
+    expect(backend.prompts.single.settings.model, "qwen-2.5");
+    expect(backend.prompts.single.settings.provider, isNull);
+  });
+
+  // A turn carried on runs under whatever the chat is set to now, resolved the
+  // same way — not under whatever it was when the turn was cut off.
+  test("carrying a turn on resolves the same settings a prompt would", () async {
+    final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
+    final chat = await savedChat(repo);
+
+    pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
+
+    await repo.resumeTurn(chat.state.id).toList();
+
+    expect(backend.resumes.single.settings.provider, "ollama-cloud");
+    expect(backend.resumes.single.settings.model, "qwen-2.5");
   });
 
   group("a draft chat", () {
@@ -138,7 +152,7 @@ void main() {
 
       await repo.sendPrompt(chat.state.id, "hi").toList();
 
-      expect(backend.prompts.single.project, "work");
+      expect(backend.prompts.single.settings.project, "work");
     });
 
     // A draft is not on disk to be looked up, and its first turn is sent
@@ -171,7 +185,7 @@ void main() {
       await repo.moveChat(chat.state.id, "work");
       await repo.sendPrompt(chat.state.id, "hi").toList();
 
-      expect(backend.prompts.single.project, "work");
+      expect(backend.prompts.single.settings.project, "work");
     });
   });
 

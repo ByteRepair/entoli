@@ -131,26 +131,38 @@ class ChatRepository {
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
       List<Message> history = const []}) async* {
-    final meta = await loadMeta(chatId);
-    // The chat's own choice wins, else the app default, else whatever the
-    // backend picks. Never mix halves: a chat's model under the app default's
-    // provider is not a combination anyone asked for.
-    final settings = _settings();
-    final model = meta.model ?? settings.defaultModelId;
-    final provider = meta.model != null ? meta.provider : settings.defaultProviderId;
-    final project = await projectOf(chatId);
-    // A project can override the app-level profile; null falls back to it.
-    final profile = (await projectSettingsOf(project)).profile ?? settings.profile;
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
         history: history,
-        model: model,
-        provider: provider,
-        project: project,
-        approveMode: meta.approveMode ?? settings.approveMode,
-        classifierProvider: settings.classifierProviderId,
-        classifierModel: settings.classifierModelId,
-        profile: profile);
+        settings: await _turnSettings(chatId));
+  }
+
+  /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
+  /// runs under whatever the chat's settings are now, not whatever they were
+  /// when the turn was cut off: the same rule an edit or a regenerate follows.
+  Stream<AgentEvent> resumeTurn(String chatId,
+      {List<Message> history = const []}) async* {
+    yield* _backend.resumeTurn(chatId,
+        history: history, settings: await _turnSettings(chatId));
+  }
+
+  /// The chat's own choice wins, else the app default, else whatever the
+  /// backend picks. Never mix halves: a chat's model under the app default's
+  /// provider is not a combination anyone asked for.
+  Future<TurnSettings> _turnSettings(String chatId) async {
+    final meta = await loadMeta(chatId);
+    final settings = _settings();
+    final project = await projectOf(chatId);
+    return TurnSettings(
+      model: meta.model ?? settings.defaultModelId,
+      provider: meta.model != null ? meta.provider : settings.defaultProviderId,
+      project: project,
+      approveMode: meta.approveMode ?? settings.approveMode,
+      classifierProvider: settings.classifierProviderId,
+      classifierModel: settings.classifierModelId,
+      // A project can override the app-level profile; null falls back to it.
+      profile: (await projectSettingsOf(project)).profile ?? settings.profile,
+    );
   }
 
   /// A project's settings, read off `project.json` when they exist. The default
@@ -201,7 +213,9 @@ class ChatRepository {
     final kept = chat.messages.sublist(0, index);
     await append(chat.state.id, [ChatRecord.rewind(messageId: chat.messages[index].id)]);
     await _backend.resetSession(chat.state.id, history: kept);
-    return chat.copyWith(messages: kept);
+    // Whatever turn was left open is one of the things being forgotten, even
+    // where the rewind cuts above it.
+    return chat.copyWith(messages: kept, unfinished: false);
   }
 
   Future<void> abort(String chatId) => _backend.abort(chatId);

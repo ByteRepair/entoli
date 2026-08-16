@@ -9,6 +9,7 @@ import "chat_controller.dart";
 import "widgets/composer.dart";
 import "widgets/message_bubble.dart";
 import "widgets/question_panel.dart";
+import "widgets/resume_bar.dart";
 import "widgets/sub_agent_strip.dart";
 
 class ChatPage extends ConsumerWidget {
@@ -252,6 +253,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     ],
                   ),
           ),
+          // Only while nothing is running: the turn being carried on is the one
+          // at the end, so the offer and the work are never both on screen.
+          if (chat.unfinished && !view.isRunning)
+            ResumeBar(
+              startedAt: chat.messages.last.createdAt,
+              onContinue: notifier.resume,
+            ),
           SubAgentStrip(agents: view.runningSubAgents),
           for (final a in view.approvals)
             ApprovalBanner(

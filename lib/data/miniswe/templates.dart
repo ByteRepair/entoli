@@ -155,6 +155,16 @@ Work step by step: look before you change anything, and check that what you
 changed does what you meant. When you have an answer, reply with it as text and
 do not call a tool.""";
 
+/// What a resumed turn is asked. The conversation is already back in front of
+/// the model, half-finished work and all, so this only says why it is being
+/// asked again.
+const continueTask = """
+This turn was interrupted before it finished. Everything above is what you had
+done by then, and whatever you were in the middle of may not have completed.
+
+Carry on from where you left off rather than starting again. Check anything you
+cannot be sure of before relying on it, and finish the turn as normal.""";
+
 String unknownTool(String name, Iterable<String> available) =>
     "There is no tool called '$name'. The tools you have are "
     "${available.map((t) => "`$t`").join(" and ")}.";
@@ -186,10 +196,10 @@ String observation({
 
 const _pretty = JsonEncoder.withIndent("  ");
 
-/// What a call that never ran is answered with. Named because two places say
-/// it: the agent, padding the calls an aborted turn left behind, and the
-/// projection, padding a call whose result a kill landed in the middle of. The
-/// model has to be told the same thing either way.
+/// What a call the agent never got to is answered with — the ones left over
+/// when a turn is aborted part-way through a message's calls. A call that may
+/// have run but whose result was never written down is not this; see
+/// `projection.dart`.
 const notExecuted = "This command was not executed.";
 
 /// The "About the user" block appended to the system prompt when a profile is

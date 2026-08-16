@@ -565,4 +565,54 @@ void main() {
       expect(session.isFresh, isTrue);
     });
   });
+
+  group("carrying on an interrupted turn", () {
+    test("says what happened and runs the loop again", () async {
+      session.replaceWith(const [
+        LlmMessage(role: LlmRole.user, text: "build it"),
+        LlmMessage(role: LlmRole.assistant, toolCalls: [
+          LlmToolCall(id: "c1", name: "bash", argumentsJson: '{"command":"make"}'),
+        ]),
+        LlmMessage(role: LlmRole.tool, toolCallId: "c1", text: "interrupted"),
+      ]);
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      final events = await agentOver(client).resume().toList();
+
+      expect(client.sent.single.last.role, LlmRole.user);
+      expect(client.sent.single.last.text, contains("interrupted before it finished"));
+      expect(events.last, isA<DoneEvent>());
+    });
+
+    test("the system prompt is rewritten, so an @agent carries on too", () async {
+      session.replaceWith(const [
+        LlmMessage(role: LlmRole.system, text: "stale"),
+        LlmMessage(role: LlmRole.user, text: "research it"),
+        LlmMessage(role: LlmRole.assistant, text: "part way"),
+      ]);
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(client).resume(agentPrompt: "Be brief.").toList();
+
+      expect(client.sent.single.first.role, LlmRole.system);
+      expect(client.sent.single.first.text, contains("Be brief."));
+      expect(client.sent.single.map((m) => m.text).join(), isNot(contains("stale")));
+    });
+
+    // Killed before the model was ever called: the question is still the last
+    // thing said, and there is nothing yet to carry on from.
+    test("a turn that never got started is just asked again", () async {
+      session.replaceWith(const [
+        LlmMessage(role: LlmRole.user, text: "what is 2+2?"),
+      ]);
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(client).resume().toList();
+
+      expect(client.sent.single.last.text, "what is 2+2?");
+    });
+  });
 }

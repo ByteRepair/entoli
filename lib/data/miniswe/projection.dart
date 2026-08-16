@@ -97,7 +97,9 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
       yield LlmMessage(
         role: LlmRole.tool,
         toolCallId: call.id,
-        text: result == null ? _unanswered : _resultText(call.name, result),
+        text: result == null
+            ? _interruptedText(call.name)
+            : _resultText(call.name, result),
       );
     }
   }
@@ -139,4 +141,21 @@ String _resultText(String tool, ToolResult result) => tool == askToolName
         exceptionInfo: result.exceptionInfo,
       );
 
-final _unanswered = observation(returnCode: -1, output: "", exceptionInfo: notExecuted);
+/// A call whose result never landed, which is a turn killed between making it
+/// and writing the answer down. One wording for every tool: which one it was is
+/// in the call the model can already see, and refining "it may not have run"
+/// per tool is second-guessing an interruption nothing here witnessed. Split
+/// only where [_resultText] splits — an `ask_user` is answered in prose either
+/// way, never as a command's outcome.
+String _interruptedText(String tool) =>
+    tool == askToolName ? _askInterrupted : _interrupted;
+
+const _askInterrupted = "The turn was interrupted before these questions reached "
+    "the user, so nothing was answered.";
+
+final _interrupted = observation(
+  returnCode: -1,
+  output: "",
+  exceptionInfo: "The turn was interrupted before this returned, so its result "
+      "was never recorded. It may or may not have run — check rather than assume.",
+);

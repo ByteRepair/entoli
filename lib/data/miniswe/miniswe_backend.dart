@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
 import "package:uuid/uuid.dart";
 
@@ -8,7 +9,6 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
-import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/web_search.dart";
@@ -97,53 +97,58 @@ class MinisweBackend implements AgentBackend {
     String text, {
     List<Attachment> attachments = const [],
     List<Message> history = const [],
-    String? model,
-    String? provider,
-    String? project,
-    ApproveMode approveMode = ApproveMode.ask,
-    String? classifierProvider,
-    String? classifierModel,
-    Profile? profile,
+    TurnSettings settings = const TurnSettings(),
+  }) =>
+      _start(chatId, text,
+          attachments: attachments, history: history, settings: settings);
+
+  @override
+  Stream<AgentEvent> resumeTurn(
+    String chatId, {
+    List<Message> history = const [],
+    TurnSettings settings = const TurnSettings(),
+  }) =>
+      _start(chatId, null, history: history, settings: settings);
+
+  /// The stream is returned rather than yielded, so the caller is listening
+  /// before the turn starts: closing a controller nobody listens to never
+  /// completes.
+  Stream<AgentEvent> _start(
+    String chatId,
+    String? text, {
+    List<Attachment> attachments = const [],
+    List<Message> history = const [],
+    required TurnSettings settings,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
-    // Returned rather than yielded, so the caller is listening before the turn
-    // starts. Closing a controller nobody listens to never completes.
     unawaited(_runTurn(chatId, text, controller,
-        model: model,
-        provider: provider,
-        project: project,
-        attachments: attachments,
-        history: history,
-        approveMode: approveMode,
-        classifierProvider: classifierProvider,
-        classifierModel: classifierModel,
-        profile: profile));
+        attachments: attachments, history: history, settings: settings));
     return controller.stream;
   }
 
+  /// [text] is what the user said, or null to carry on the turn [history] ends
+  /// in. Everything either needs — the model, the directories, the gate, the
+  /// sub-agent runner — is the same; they differ only in what the agent is
+  /// asked and in how much of the session is rebuilt first.
   Future<void> _runTurn(
     String chatId,
-    String text,
+    String? text,
     StreamController<AgentEvent> controller, {
-    String? model,
-    String? provider,
-    String? project,
     List<Attachment> attachments = const [],
     List<Message> history = const [],
-    ApproveMode approveMode = ApproveMode.ask,
-    String? classifierProvider,
-    String? classifierModel,
-    Profile? profile,
+    required TurnSettings settings,
   }) async {
+    final project = settings.project;
     try {
-      final target = _resolveModel(model, provider);
+      final target = _resolveModel(settings.model, settings.provider);
       if (target == null) {
         _fail(
             controller,
-            provider == null
+            settings.provider == null
                 ? "No model is selected. Add a provider in Settings and pick one."
-                : "'$provider' is not configured. Add it in Settings, or pick another model.");
+                : "'${settings.provider}' is not configured. Add it in Settings, "
+                    "or pick another model.");
         return;
       }
 
@@ -170,12 +175,18 @@ class MinisweBackend implements AgentBackend {
         webSearch: webSearch,
         rateLimitGate: rateLimitGate,
       );
-      final classifier = _resolveClassifier(classifierProvider, classifierModel);
+      final classifier =
+          _resolveClassifier(settings.classifierProvider, settings.classifierModel);
       final session = _sessions.putIfAbsent(chatId, MinisweSession.new);
       // A session the app was not already holding is the one after a restart,
       // and it is empty. Filling it from the conversation is what keeps the
-      // chat going rather than starting it over.
-      if (session.isFresh) session.replaceWith(projectionOf(history));
+      // chat going rather than starting it over. A resume rebuilds it either
+      // way, so that carrying on in the same process and carrying on after a
+      // restart put the same thing in front of the model — a checkpoint that
+      // failed is swallowed, so a live session can hold more than the log does.
+      if (text == null || session.isFresh) {
+        session.replaceWith(projectionOf(history));
+      }
       final agent = MinisweAgent(
         session: session,
         client: gatedClient,
@@ -184,22 +195,29 @@ class MinisweBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         model: target.modelId,
         options: options,
-        approveMode: approveMode,
+        approveMode: settings.approveMode,
         classifier: classifier,
         approve: _awaitApproval,
         answer: _awaitAnswers,
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
-        profile: profile,
+        profile: settings.profile,
         rateLimitGate: rateLimitGate,
       );
       _running[chatId] = agent;
 
-      await for (final event in agent.run(
-        _taskOf(text),
-        attachments: attachments.map(_toLlmAttachment).toList(),
-        agentPrompt: _agentPromptOf(text),
-      )) {
+      // A resumed turn has no prompt of its own to read `@agent` mentions out
+      // of, so they come off the message that started it.
+      final agentPrompt = _agentPromptOf(text ?? _lastUserText(history));
+      final events = text == null
+          ? agent.resume(agentPrompt: agentPrompt)
+          : agent.run(
+              _taskOf(text),
+              attachments: attachments.map(_toLlmAttachment).toList(),
+              agentPrompt: agentPrompt,
+            );
+
+      await for (final event in events) {
         if (controller.isClosed) break;
         if (event is ApprovalRequestEvent) {
           _approvals.putIfAbsent(chatId, () => []).add(event.approval);
@@ -298,6 +316,9 @@ class MinisweBackend implements AgentBackend {
     }
     return bodies.isEmpty ? null : bodies.join("\n\n");
   }
+
+  String _lastUserText(List<Message> history) =>
+      history.lastWhereOrNull((m) => m.role == MessageRole.user)?.plainText ?? "";
 
   LlmAttachment _toLlmAttachment(Attachment attachment) => LlmAttachment(
         filename: attachment.filename,
