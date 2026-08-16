@@ -12,6 +12,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
+import "../workspace/workspace_page.dart";
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -23,6 +24,8 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         children: const [
           _DefaultsSection(),
+          Divider(),
+          _WorkspaceSection(),
           Divider(),
           _AppearanceSection(),
           Divider(),
@@ -66,6 +69,32 @@ class _SectionHeader extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The default project's shared workspace. Every other project reaches its own
+/// from its settings page, and the default project has none — so this is the
+/// only way to the folder chats outside a project share.
+class _WorkspaceSection extends ConsumerWidget {
+  const _WorkspaceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(
+          "Workspace",
+          description: "Where the agent puts work meant for another chat, for "
+              "every chat outside a project.",
+        ),
+        WorkspaceTile(
+          root: ref.watch(appConfigProvider).projectWorkspaceDir(),
+          title: "Default workspace",
+          label: "Default workspace",
+        ),
+      ],
     );
   }
 }

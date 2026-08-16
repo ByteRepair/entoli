@@ -66,6 +66,27 @@ Future<void> writeIncoming(
   }
 }
 
+/// Create [name] as a folder under [dir]. The name was typed, so it goes
+/// through [safeRelativePath] like anything else joined onto a workspace.
+Future<void> createFolder(FileSystem fs, String dir, String name) => fs
+    .directory(fs.path.join(dir, safeRelativePath(fs, name)))
+    .create(recursive: true);
+
+/// Remove [paths], each with whatever is under it. Whether one is a folder is
+/// looked up rather than remembered: a selection is held as paths and the
+/// listing under it is re-read, so the entry that named it is gone. A path that
+/// is already gone is a deletion that happened.
+Future<void> deleteEntries(FileSystem fs, List<String> paths) async {
+  for (final path in paths) {
+    final type = await fs.type(path);
+    if (type == FileSystemEntityType.directory) {
+      await fs.directory(path).delete(recursive: true);
+    } else if (type != FileSystemEntityType.notFound) {
+      await fs.file(path).delete();
+    }
+  }
+}
+
 /// A path from outside, made safe to join onto a workspace. `..` and a leading
 /// separator are what this exists for: a shared file names itself, and one
 /// naming `../../settings.json` would otherwise be written there. Everything
