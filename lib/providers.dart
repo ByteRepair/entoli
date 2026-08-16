@@ -9,6 +9,7 @@ import "domain/attachment_picker.dart";
 import "domain/app_settings.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
+import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
 import "domain/models.dart";
 import "domain/permission.dart";
@@ -92,6 +93,9 @@ final appSettingsProvider =
 
 final launcherIconsProvider =
     Provider<LauncherIcons>((ref) => throw UnimplementedError());
+
+final linkOpenerProvider =
+    Provider<LinkOpener>((ref) => throw UnimplementedError());
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   // Deliberately not watching appSettingsProvider: the repository reads the

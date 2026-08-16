@@ -1,5 +1,6 @@
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
+import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
@@ -18,6 +19,7 @@ class MessageBubble extends StatefulWidget {
     this.waitingNotice,
     this.onEdit,
     this.onRegenerate,
+    this.onTapLink,
   });
 
   /// Which chat's `resources/` the attachments are read back from.
@@ -37,6 +39,9 @@ class MessageBubble extends StatefulWidget {
 
   /// Run the turn this message belongs to again, unchanged.
   final VoidCallback? onRegenerate;
+
+  /// Open a link tapped in the rendered markdown. Receives the `href`.
+  final ValueChanged<String>? onTapLink;
 
   @override
   State<MessageBubble> createState() => _MessageBubbleState();
@@ -251,7 +256,6 @@ class _MessageBubbleState extends State<MessageBubble> {
     required List<FilePart> files,
     required List<Widget> trailing,
   }) {
-    final theme = Theme.of(context);
     return Container(
       constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
       padding: const EdgeInsets.all(10),
@@ -268,16 +272,75 @@ class _MessageBubbleState extends State<MessageBubble> {
           for (final line in said)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: SelectableText(
-                line.text,
-                style: line.isError
-                    ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
-                    : theme.textTheme.bodyMedium,
+              child: _MessageText(
+                text: line.text,
+                isError: line.isError,
+                isWaiting: widget.isWaiting,
+                onTapLink: widget.onTapLink,
               ),
             ),
           ...trailing,
         ],
       ),
+    );
+  }
+}
+
+/// One line of a message bubble: raw `SelectableText` while the reply streams
+/// or when it is an error, `MarkdownBody` once finished. Owns the markdown
+/// style sheet so the parent's build does not rebuild it on every scroll frame.
+class _MessageText extends StatefulWidget {
+  const _MessageText({
+    required this.text,
+    required this.isError,
+    required this.isWaiting,
+    this.onTapLink,
+  });
+
+  final String text;
+  final bool isError;
+  final bool isWaiting;
+  final ValueChanged<String>? onTapLink;
+
+  @override
+  State<_MessageText> createState() => _MessageTextState();
+}
+
+class _MessageTextState extends State<_MessageText> {
+  MarkdownStyleSheet? _styleSheet;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final theme = Theme.of(context);
+    _styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
+      p: theme.textTheme.bodyMedium,
+      a: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.primary,
+        decoration: TextDecoration.underline,
+        decorationColor: theme.colorScheme.primary,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (widget.isWaiting || widget.isError) {
+      return SelectableText(
+        widget.text,
+        style: widget.isError
+            ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
+            : theme.textTheme.bodyMedium,
+      );
+    }
+    return MarkdownBody(
+      data: widget.text,
+      selectable: true,
+      styleSheet: _styleSheet,
+      onTapLink: (text, href, title) {
+        if (href != null) widget.onTapLink?.call(href);
+      },
     );
   }
 }
