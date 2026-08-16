@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
+import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/app_mark.dart";
 import "chat_settings_page.dart";
@@ -221,6 +222,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                             message: m,
                             isWaiting: view.isRunning && i == chat.messages.length - 1,
                             waitingNotice: view.retry,
+                            onTapLink: (href) {
+                              final uri = Uri.tryParse(href);
+                              if (uri != null) {
+                                ref.read(linkOpenerProvider).open(context, uri);
+                              }
+                            },
                             onEdit: m.role == MessageRole.user && !view.isRunning
                                 ? (text) => notifier.editAndResend(m.id, text)
                                 : null,
