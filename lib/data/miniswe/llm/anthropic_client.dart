@@ -138,6 +138,14 @@ class AnthropicClient implements LlmClient {
               block.body.write(delta["partial_json"] as String? ?? "");
           }
 
+        case "content_block_stop":
+          // The signature is complete here, which is still before the reply
+          // starts — so the thinking block can be closed holding it.
+          final block = blocks[index];
+          if (block != null && block.type == "thinking" && block.signature != null) {
+            yield LlmReasoningSignature(block.signature!);
+          }
+
         case "message_delta":
           final delta = event["delta"] as Map<String, dynamic>? ?? const {};
           stopReason = delta["stop_reason"] as String? ?? stopReason;
