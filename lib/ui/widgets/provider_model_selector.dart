@@ -59,6 +59,7 @@ class OptionalModelPicker extends StatelessWidget {
             (m) => m.providerId == choice.providerId && m.modelId == choice.modelId);
         return DropdownButtonFormField<ModelOption?>(
           initialValue: selected,
+          isExpanded: true,
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
             helperText: helperText,
@@ -164,6 +165,7 @@ class ProviderModelSelector extends StatelessWidget {
               helperText: _helper(providerId, inherited?.providerId),
             ),
             initialValue: providerId,
+            isExpanded: true,
             items: [
               defaultMenuItem(),
               ...providerIds.map((p) => DropdownMenuItem<String?>(value: p, child: Text(p))),
@@ -186,6 +188,7 @@ class ProviderModelSelector extends StatelessWidget {
               helperText: _helper(choice.modelId, labelFor(models, inherited?.modelId)),
             ),
             initialValue: modelId,
+            isExpanded: true,
             items: [
               defaultMenuItem(),
               ...forProvider.map((m) {
