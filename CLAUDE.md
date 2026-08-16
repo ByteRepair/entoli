@@ -657,6 +657,12 @@ straight up again. The insets are the only report of it, and they are read off
 the view rather than off `MediaQuery`: a `Scaffold` takes the bottom inset out
 of what its body sees.
 
+The sidebar's new-chat button is a `FloatingActionButton` over the profile and
+settings tiles, which is the one part of the sidebar that is not a list of
+chats and has room to its right. Not `Scaffold.floatingActionButton`: the
+sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
+the one holding the drawer.
+
 ## Development
 
 - Build/test Linux desktop inside the `flutter-dev` toolbox (host lacks
