@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -60,7 +62,7 @@ void main() {
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text(firstProvider).last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await openDropdown(tester, model: true);
     expect(popupLabels(tester), [defaultOptionLabel, "Claude Haiku 3", "Claude Sonnet 4"]);
@@ -70,17 +72,17 @@ void main() {
     await pumpSettings(tester);
     await openDropdown(tester, model: false);
     await tester.tap(find.text(firstProvider).last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await openDropdown(tester, model: true);
     await tester.tap(find.text("Claude Sonnet 4"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     final settings = app.container.read(appSettingsProvider);
     expect(settings.defaultProviderId, firstProvider);
     expect(settings.defaultModelId, "claude-sonnet-4");
     expect(
-      app.config.settingsFile.readAsStringSync(),
+      File(app.config.settingsFile).readAsStringSync(),
       contains("claude-sonnet-4"),
     );
   });
@@ -90,7 +92,7 @@ void main() {
     await openDropdown(tester, model: false);
 
     await tester.tap(find.text(otherProvider));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await openDropdown(tester, model: true);
 
@@ -109,7 +111,7 @@ void main() {
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text(firstProvider));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(tester.takeException(), isNull);
     expect(find.text("Qwen 2.5"), findsNothing);
@@ -137,7 +139,7 @@ void main() {
         matching: find.byType(DropdownButtonFormField<ModelOption?>),
       );
       await tester.tap(field);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
     }
 
     testWidgets("is off until one is picked, and every model is offered", (tester) async {
@@ -160,7 +162,7 @@ void main() {
       await openTitleDropdown(tester);
 
       await tester.tap(find.text("Claude Haiku 3").last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       final settings = app.container.read(appSettingsProvider);
       expect(settings.titleProviderId, firstProvider);
@@ -176,7 +178,7 @@ void main() {
 
       await openTitleDropdown(tester);
       await tester.tap(find.text("Off").last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       final settings = app.container.read(appSettingsProvider);
       expect(settings.titleProviderId, isNull);
@@ -202,32 +204,32 @@ void main() {
   testWidgets("delete all chats asks first and then clears them", (tester) async {
     await pumpSettings(tester);
     final repo = app.repo;
-    await app.seedChat(title: "one");
-    await app.seedChat(title: "two");
+    await io(tester, () => app.seedChat(title: "one"));
+    await io(tester, () => app.seedChat(title: "two"));
 
     await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     expect(find.textContaining("permanently removes 2 chats"), findsOneWidget);
 
     await tester.tap(find.text("Delete all"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
-    expect(await repo.listChats(), isEmpty);
+    expect(await io(tester, () => repo.listChats()), isEmpty);
   });
 
   testWidgets("cancelling the confirmation keeps the chats", (tester) async {
     await pumpSettings(tester);
     final repo = app.repo;
-    await app.seedChat(title: "one");
+    await io(tester, () => app.seedChat(title: "one"));
 
     await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
     await tester.tap(find.text("Cancel"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
-    expect(await repo.listChats(), hasLength(1));
+    expect(await io(tester, () => repo.listChats()), hasLength(1));
   });
 
   testWidgets("with no chats there is nothing to confirm", (tester) async {
@@ -235,7 +237,7 @@ void main() {
 
     await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(find.text("There are no chats to delete."), findsOneWidget);
     expect(find.text("Delete all"), findsNothing);
@@ -247,7 +249,7 @@ void main() {
     expect(find.text("Qwen 2.5"), findsOneWidget);
 
     await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(app.container.read(appSettingsProvider).defaultModelId, isNull);
     expect(find.text("Qwen 2.5"), findsNothing);
@@ -257,11 +259,11 @@ void main() {
     Future<void> addVariable(WidgetTester tester, String name, String value) async {
       await scrollTo(tester, find.text("Add variable"));
       await tester.tap(find.text("Add variable"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await tester.enterText(find.byType(TextField).first, name);
       await tester.enterText(find.byType(TextField).last, value);
       await tester.tap(find.text("Save"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
     }
 
     testWidgets("a variable added here reaches the next server", (tester) async {
@@ -286,10 +288,10 @@ void main() {
       await addVariable(tester, "OLD_NAME", "value");
 
       await tester.tap(find.text("OLD_NAME"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await tester.enterText(find.byType(TextField).first, "NEW_NAME");
       await tester.tap(find.text("Save"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(app.container.read(appSettingsProvider).environment, {"NEW_NAME": "value"});
     });
@@ -300,7 +302,7 @@ void main() {
       await addVariable(tester, "DROP", "2");
 
       await tester.tap(find.byTooltip("Remove DROP"));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
 
       expect(app.container.read(appSettingsProvider).environment, {"KEEP": "1"});
     });

@@ -17,10 +17,11 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  void seedMeta(ChatMeta meta) => app.seedChatMeta(_chatId, meta);
+  Future<void> seedMeta(WidgetTester tester, ChatMeta meta) =>
+      io(tester, () => app.seedChatMeta(_chatId, meta));
 
-  void seedGlobalDefault(String providerId, String modelId) =>
-      app.seedGlobalDefault(providerId: providerId, modelId: modelId);
+  Future<void> seedGlobalDefault(WidgetTester tester, String providerId, String modelId) =>
+      io(tester, () => app.seedGlobalDefault(providerId: providerId, modelId: modelId));
 
   // Pushes the page on a route so the save button's pop() has somewhere to go,
   // and so a second tap re-creates the page the way reopening it does.
@@ -43,16 +44,16 @@ void main() {
       );
     }
     await tester.tap(find.text("open"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   Future<void> save(WidgetTester tester) async {
     await tester.tap(find.byTooltip("Save"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
   }
 
   testWidgets("preselects the provider and model stored in meta.json", (tester) async {
-    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
+    await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
     expect(find.text("ollama-cloud"), findsOneWidget);
@@ -64,15 +65,15 @@ void main() {
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text("ollama-cloud"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await openDropdown(tester, model: true);
     await tester.tap(find.text("Qwen 2.5"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await save(tester);
-    expect(app.savedMeta(_chatId).provider, "ollama-cloud");
-    expect(app.savedMeta(_chatId).model, "qwen-2.5");
+    expect((await io(tester, () => app.savedMeta(_chatId))).provider, "ollama-cloud");
+    expect((await io(tester, () => app.savedMeta(_chatId))).model, "qwen-2.5");
 
     await openPage(tester);
     expect(find.text("ollama-cloud"), findsOneWidget);
@@ -84,34 +85,34 @@ void main() {
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text("anthropic").last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await openDropdown(tester, model: true);
     await tester.tap(find.text("Claude Sonnet 4"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await save(tester);
-    expect(app.savedMeta(_chatId).provider, "anthropic");
-    expect(app.savedMeta(_chatId).model, "claude-sonnet-4");
+    expect((await io(tester, () => app.savedMeta(_chatId))).provider, "anthropic");
+    expect((await io(tester, () => app.savedMeta(_chatId))).model, "claude-sonnet-4");
   });
 
   testWidgets("switching provider drops a model that is no longer offered", (tester) async {
-    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
+    await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text("anthropic"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(tester.takeException(), isNull);
     expect(find.text("Qwen 2.5"), findsNothing);
 
     await save(tester);
-    expect(app.savedMeta(_chatId).model, isNull);
+    expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
   });
 
   testWidgets("a model saved without its provider is still preselected", (tester) async {
-    seedMeta(ChatMeta(model: "qwen-2.5"));
+    await seedMeta(tester, ChatMeta(model: "qwen-2.5"));
     await openPage(tester);
 
     expect(tester.takeException(), isNull);
@@ -120,7 +121,7 @@ void main() {
   });
 
   testWidgets("a chat with no override reads Default and names what it inherits", (tester) async {
-    seedGlobalDefault("ollama-cloud", "qwen-2.5");
+    await seedGlobalDefault(tester, "ollama-cloud", "qwen-2.5");
     await openPage(tester);
 
     // provider and model; the approval field names what it inherits instead
@@ -130,29 +131,29 @@ void main() {
   });
 
   testWidgets("the reset button clears a pinned model back to Default", (tester) async {
-    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
+    await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
     expect(find.text("Qwen 2.5"), findsOneWidget);
 
     await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").at(1));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(find.text("Qwen 2.5"), findsNothing);
     await save(tester);
-    expect(app.savedMeta(_chatId).model, isNull);
-    expect(app.savedMeta(_chatId).provider, "ollama-cloud");
+    expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
+    expect((await io(tester, () => app.savedMeta(_chatId))).provider, "ollama-cloud");
   });
 
   testWidgets("selecting Default in the list is the same as resetting", (tester) async {
-    seedMeta(ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
+    await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
     await openDropdown(tester, model: true);
     await tester.tap(find.text(defaultOptionLabel).last);
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     await save(tester);
-    expect(app.savedMeta(_chatId).model, isNull);
+    expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
   });
 
   testWidgets("Default follows the global default as it changes", (tester) async {
@@ -164,16 +165,16 @@ void main() {
     app.container
         .read(appSettingsProvider.notifier)
         .setDefault((providerId: "anthropic", modelId: "claude-haiku-3"));
-    await tester.pumpAndSettle();
+    await settleIo(tester);
 
     expect(find.text("Using anthropic"), findsOneWidget);
     expect(find.text("Using Claude Haiku 3"), findsOneWidget);
-    expect(app.savedMeta(_chatId).model, isNull);
+    expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
   });
 
   testWidgets("a chat's own model wins over the global default", (tester) async {
-    seedGlobalDefault("ollama-cloud", "qwen-2.5");
-    seedMeta(ChatMeta(provider: "anthropic", model: "claude-haiku-3"));
+    await seedGlobalDefault(tester, "ollama-cloud", "qwen-2.5");
+    await seedMeta(tester, ChatMeta(provider: "anthropic", model: "claude-haiku-3"));
     await openPage(tester);
 
     expect(find.text("anthropic"), findsOneWidget);
@@ -186,7 +187,7 @@ void main() {
       await openPage(tester);
       await scrollTo(tester, find.byType(DropdownButtonFormField<ApproveMode?>));
       await tester.tap(find.byType(DropdownButtonFormField<ApproveMode?>));
-      await tester.pumpAndSettle();
+      await settleIo(tester);
     }
 
     testWidgets("Default names what the app would do", (tester) async {
@@ -194,11 +195,11 @@ void main() {
       await scrollTo(tester, find.text("Running commands"));
 
       expect(find.text("$defaultOptionLabel (Ask every time)"), findsOneWidget);
-      expect(app.savedMeta(_chatId).approveMode, isNull);
+      expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, isNull);
     });
 
     testWidgets("Default follows the app setting as it changes", (tester) async {
-      await app.container.read(appSettingsProvider.notifier).setApproveMode(ApproveMode.never);
+      await io(tester, () => app.container.read(appSettingsProvider.notifier).setApproveMode(ApproveMode.never));
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
 
@@ -208,23 +209,23 @@ void main() {
     testWidgets("a chat can run without asking, and that survives a save", (tester) async {
       await openField(tester);
       await tester.tap(find.textContaining("Run without asking").last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await save(tester);
 
-      expect(app.savedMeta(_chatId).approveMode, ApproveMode.never);
+      expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, ApproveMode.never);
     });
 
     testWidgets("resetting puts it back on the app's answer", (tester) async {
-      seedMeta(ChatMeta(approveMode: ApproveMode.never));
+      await seedMeta(tester, ChatMeta(approveMode: ApproveMode.never));
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
       expect(find.textContaining("Run without asking"), findsOneWidget);
 
       await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
-      await tester.pumpAndSettle();
+      await settleIo(tester);
       await save(tester);
 
-      expect(app.savedMeta(_chatId).approveMode, isNull);
+      expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, isNull);
     });
   });
 }

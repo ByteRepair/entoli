@@ -41,34 +41,53 @@ files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`, and
 `llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
-app-private storage (Android). A browser has none of this, and `dart:io`
-compiles for the web — it is the calls that throw — so nothing says so at build
-time.
+app-private storage (Android), and `/agent-chat` in a browser — where it is a
+name in IndexedDB rather than a path, and load-bearing all the same.
 
-`Storage` is where that is answered: `dataDir`, `ensureDir`, `read`, `write`,
-and two implementations, `DiskStorage` and `MemoryStorage`. `AppConfig` is
-built on one and does no I/O of its own — it composes path names, and whether
-they lead anywhere is the port's business. That is also where the data
-directory is resolved, since "where does this platform keep things" is the same
-question: `MemoryStorage` answers `/agent-chat` and remembers what is written
-there for the life of the page. `AppConfig.load` reading `Platform.environment`
-before there was a port is what left the web build a white screen.
+The filesystem is a port, and it is `fs_shim`'s `FileSystem` rather than one of
+ours: `fileSystemIo` on desktop and Android, `fileSystemWeb` (IndexedDB) in a
+browser. Declaring an interface over it would have been the same members twice.
+`AppConfig` holds one and composes path names against it — `dataDir` and every
+helper are plain `String`s now, since the `dart:io` `File` and `Directory` they
+used to return were unusable on the platform that needed them most. The one
+question a `FileSystem` does not answer is where this platform keeps things,
+and that stays in `core/platform/`.
 
-Chats are not in it. They are a `ChatStore`, a whole store rather than three
-calls, and `MemoryChatStore` holds in fields what `LocalChatStore` holds in
-files. Prompts are the same shape: `platformPromptSources` offers the presets
-alone where there is no directory to have written one in. Both are chosen in
-`core/platform/` (see "Running the commands"), so neither `LocalChatStore` nor
-`DirectoryPrompts` is part of the web program at all, and neither has to know a
-browser exists.
+The whole layout is in it, prefs included: `settings.json` on the web is
+`/agent-chat/settings.json` in IndexedDB, the same path it has on a disk. What
+that costs is the synchronous read — `fs_shim` has no sync methods anywhere,
+deliberately, because a browser cannot have them. `AppSettings.load` and
+`ProjectSettings.load` need one: the shell asks for the environment on every
+command and the registry for the providers on every model call. So `Documents`
+holds those two kinds of small JSON file in memory, hydrated in `main` before
+`runApp` and written through on save. Nothing else gets a copy; everything else
+reads through, async. The cost is that a file edited behind the app's back is
+not picked up until a restart, where it used to reach the next command.
 
-The port is what makes the no-filesystem path testable off a browser:
-`storage_test.dart` runs the settings round trip over a `MemoryStorage` on the
-VM, which is otherwise reachable only by loading the app in a tab.
-`ChatMeta.fromFile` and `LocalChatStore` still use `dart:io` directly, on
-purpose — the disk store is allowed to be the disk store, and listing,
-renaming and recursive delete are not going in a port that exists for four
-calls.
+Writes go through a rename. `writeAsString` truncates and only then writes, so a
+read landing between the two finds an empty file — and a turn writes `conv.json`
+as its events arrive while the title call renames the same chat beside it. A
+serialising queue was the other answer and a worse one: it made a read wait on a
+write, which deadlocks a widget test where only pumping advances the fake clock.
+
+Chats are a `ChatStore` — a whole store rather than four calls — and there is
+one implementation, `FileChatStore`, because the layout no longer varies.
+`DirectoryPrompts` is the same: it reads the config's filesystem, so the user's
+own commands and agents exist on every platform. Neither is chosen per platform
+any more; `core/platform/` builds both once.
+
+`web_filesystem_test.dart` is what this buys. `newFileSystemMemory()` is the
+same `FileSystemIdb` the web build runs on, over an in-memory IndexedDB, so the
+browser's store, its settings and its attachments are exercised by `flutter
+test` on the VM — including a reload, which is two `AppConfig`s over one
+filesystem. `tempConfig` stays on `fileSystemIo` for the tests that are about
+the layout on a disk.
+
+Because the store is asynchronous, a widget test cannot await it directly: a
+`testWidgets` body runs on a fake clock and only `runAsync` lets real I/O
+finish. `io(tester, …)` in the harness is that, and `settleIo` is `pumpAndSettle`
+with real rounds interleaved — a spinner is a running animation, so settling on
+one used to return and now times out.
 
 ### Projects
 
@@ -85,7 +104,7 @@ system prompt as where work another conversation should find goes. The agent
 writes to it by path; it is deliberately not the cwd, because a turn's scratch
 files would then be everyone's.
 
-`ChatStore` is addressed by chat id alone, so `LocalChatStore` is what knows
+`ChatStore` is addressed by chat id alone, so `FileChatStore` is what knows
 where a chat is: `_locate` answers from a cache that `list` fills, and falls
 back to looking for the id under each project. It returns a record rather than a
 name because "in the default project" and "nowhere yet" are both `null` and mean
@@ -240,15 +259,23 @@ turn-scoped view state, never a message part, so it is not persisted.
 #### Running the commands
 
 What the app is given by the platform it runs on — a shell or none, the network
-or CORS, a filesystem or a page's memory — is resolved in
+or CORS, a directory on a disk or a database in a page — is resolved in
 `lib/core/platform/platform.dart`, which holds the app's single conditional
 import (`io/platform.dart` or `web/platform.dart`) and is otherwise plain
-wiring: `LocalShell`, `DuckDuckGoSearch`, `DiskStorage`, `LocalChatStore` and
-the user's own prompt directory on desktop and Android; `UnavailableShell`,
-`UnavailableWebSearch`, `MemoryStorage`, `MemoryChatStore` and the presets
-alone in a browser.
-One import site is the point: an implementation a platform cannot use is not
-reachable from its program, so nothing further down has to test for it.
+wiring: `LocalShell`, `DuckDuckGoSearch` and `fileSystemIo` on desktop and
+Android; `UnavailableShell`, `UnavailableWebSearch` and `fileSystemWeb` in a
+browser. One import site is the point: an implementation a platform cannot use
+is not reachable from its program, so nothing further down has to test for it.
+
+The chat store and the prompt sources used to be in that list and are not any
+more — one filesystem means one of each, built in `platform.dart` itself. What
+is left varying is the shell, the network, which `FileSystem`, where its root
+is, whether the process has an environment, and `platformPersist`: on the web
+that is `navigator.storage.persist()`, without which IndexedDB is evictable and
+a chat can be gone on the next visit because something else wanted the space. A
+browser that refuses leaves the app working, just evictable again. Everywhere
+else it is a no-op, because a directory on a disk is already as durable as the
+app is.
 
 `MinisweBackend.webSearch` is required rather than defaulted for that reason —
 a default of `DuckDuckGoSearch()` puts its HTML parser in the web bundle
@@ -385,6 +412,16 @@ path. It deliberately does **not** call
 live test is for. That rules out `rootBundle`, so it copies `assets/prompts/`
 off disk instead of using `BundledPrompts`. Not a `_test.dart` file, so
 `flutter test` skips it.
+
+### When a turn is over
+
+`_finishTurn` awaits the save before it clears `isRunning`. That was a
+fire-and-forget call while writing was synchronous and the distinction did not
+exist; now that a write is asynchronous, not waiting would report a finished
+turn whose `conv.json` is still in flight, and closing the app in that window
+would lose it. The window is milliseconds on a disk and longer on IndexedDB. A
+save that fails still has to clear the flag, or the composer stays disabled with
+nothing running.
 
 ### Thinking and tool runs
 
@@ -599,8 +636,9 @@ list, so both routes share one code path; for a file it opens the chooser.
   cmake/ninja/clang++): `toolbox run --container flutter-dev flutter build linux --debug`.
 - UI runs forwarded to host: `toolbox run --container flutter-dev flutter run -d linux --debug`.
 - Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
-  Nothing runs the app in a browser here, so a web-only regression is caught by
-  reloading the page, not by `flutter test`.
+  Nothing runs the app in a browser here, so a web-only regression in the UI is
+  caught by reloading the page. Its storage is not: `web_filesystem_test.dart`
+  runs that path on the VM.
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test`.
 

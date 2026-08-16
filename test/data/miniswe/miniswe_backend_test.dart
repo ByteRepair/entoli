@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
@@ -121,8 +123,8 @@ void main() {
       ]);
       await send(backend, "where am I?");
 
-      expect(config.workspaceDir(chatId).existsSync(), isTrue);
-      expect(client.sent.first.first.text, contains(config.workspaceDir(chatId).path));
+      expect(Directory(config.workspaceDir(chatId)).existsSync(), isTrue);
+      expect(client.sent.first.first.text, contains(config.workspaceDir(chatId)));
     });
 
     test("the model is told about the project workspace it shares", () async {
@@ -131,8 +133,8 @@ void main() {
       ]);
       await send(backend, "hi");
 
-      expect(config.projectWorkspaceDir().existsSync(), isTrue);
-      expect(client.sent.first.first.text, contains(config.projectWorkspaceDir().path));
+      expect(Directory(config.projectWorkspaceDir()).existsSync(), isTrue);
+      expect(client.sent.first.first.text, contains(config.projectWorkspaceDir()));
     });
 
     test("a chat in a project works in that project's directories", () async {
@@ -148,9 +150,9 @@ void main() {
           .toList();
 
       final system = client.sent.first.first.text;
-      expect(system, contains(config.workspaceDir(chatId, project: "work").path));
-      expect(system, contains(config.projectWorkspaceDir(project: "work").path));
-      expect(config.projectWorkspaceDir(project: "work").existsSync(), isTrue);
+      expect(system, contains(config.workspaceDir(chatId, project: "work")));
+      expect(system, contains(config.projectWorkspaceDir(project: "work")));
+      expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
     });
   });
 
@@ -498,8 +500,11 @@ void main() {
 }
 
 /// Let the agent's own async work run before looking at what it has published.
+/// Let the turn get as far as it can before the test looks. A prompt now lays
+/// down the chat's directories before the agent starts, so a handful of empty
+/// microtasks no longer reaches the first tool call.
 Future<void> pumpEvents() async {
-  for (var i = 0; i < 10; i++) {
-    await Future<void>.delayed(Duration.zero);
+  for (var i = 0; i < 20; i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
   }
 }

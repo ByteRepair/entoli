@@ -478,7 +478,7 @@ void main() {
   // A sent message holds only the resource name, so the bytes have to come
   // back off disk before the bubble can show anything.
   testWidgets("an attachment on a sent message shows what it carried", (tester) async {
-    final chat = await app.repo.createChat();
+    final chat = await io(tester, () => app.repo.createChat());
     late List<MessagePart> parts;
     await tester.runAsync(() async {
       parts = await app.repo.saveAttachments(chat.state.id, [

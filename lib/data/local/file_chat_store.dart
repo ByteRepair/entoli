@@ -1,0 +1,209 @@
+import "dart:convert";
+import "dart:typed_data";
+
+import "package:fs_shim/fs.dart";
+
+import "../../core/config.dart";
+import "../../domain/chat_meta.dart";
+import "../../domain/chat_store.dart";
+import "../../domain/models.dart";
+import "../../domain/project.dart";
+
+/// The `ChatStore`, on whatever filesystem this platform was given: real
+/// directories on desktop and Android, IndexedDB in a browser. One
+/// implementation, because the layout is the same either way.
+class FileChatStore implements ChatStore {
+  FileChatStore(this.config);
+
+  final AppConfig config;
+
+  FileSystem get _fs => config.fs;
+
+  /// Which project each chat is in. A chat is addressed by its id alone, so
+  /// this is how its directory is found: [list] fills it, and an id it has
+  /// never seen is looked for on the filesystem.
+  final Map<String, String?> _projects = {};
+
+  /// Writing is two steps now that it is asynchronous — `writeAsString`
+  /// truncates and only then writes — so a read landing between them finds an
+  /// empty file where JSON should be. A turn writes `conv.json` as its events
+  /// arrive while the title call renames the same chat beside it, so that race
+  /// is not hypothetical. Renaming over the target is one step, and a reader
+  /// sees either the whole old file or the whole new one.
+  Future<void> _write(String path, String text) async {
+    final temp = _fs.file("$path.writing");
+    await temp.writeAsString(text);
+    await temp.rename(path);
+  }
+
+  Future<String?> _readOrNull(String path) async {
+    final file = _fs.file(path);
+    return await file.exists() ? file.readAsString() : null;
+  }
+
+  @override
+  Future<List<ChatState>> list() async {
+    final chats = <ChatState>[];
+    for (final project in everyProject(await config.projectNames())) {
+      chats.addAll(await _listIn(project));
+    }
+    chats.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return chats;
+  }
+
+  /// Where a chat was found wins over what its `state.json` says, so one moved
+  /// by hand is in the project it was moved to.
+  Future<List<ChatState>> _listIn(String? project) async {
+    final dir = _fs.directory(config.chatsDir(project: project));
+    if (!await dir.exists()) return const [];
+    final chats = <ChatState>[];
+    await for (final entity in dir.list()) {
+      if (entity is! Directory) continue;
+      final state = await _readState(_fs.path.basename(entity.path), project);
+      if (state != null) chats.add(state);
+    }
+    return chats;
+  }
+
+  Future<ChatState?> _readState(String id, String? project) async {
+    final text = await _readOrNull(config.stateFile(id, project: project));
+    if (text == null) return null;
+    try {
+      final json = jsonDecode(text) as Map<String, dynamic>;
+      _projects[id] = project;
+      return ChatState.fromJson(json).copyWith(project: project);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<String>> listProjects() => config.projectNames();
+
+  @override
+  Future<String?> projectOf(String chatId) => _projectOf(chatId);
+
+  /// Where a chat's files already are, or null if it has none yet. Wrapped
+  /// because being in the default project is `null` as well, and the two mean
+  /// opposite things to a save.
+  Future<({String? project})?> _locate(String chatId) async {
+    if (_projects.containsKey(chatId)) return (project: _projects[chatId]);
+    for (final project in everyProject(await config.projectNames())) {
+      if (await _fs.file(config.stateFile(chatId, project: project)).exists()) {
+        _projects[chatId] = project;
+        return (project: project);
+      }
+    }
+    return null;
+  }
+
+  /// A chat nothing has been written for is answered as the default project,
+  /// which is where a new one goes unless it says otherwise.
+  Future<String?> _projectOf(String chatId) async => (await _locate(chatId))?.project;
+
+  @override
+  Future<void> createProject(String name) => config.ensureProjectDirs(project: name);
+
+  @override
+  Future<void> deleteProject(String name) async {
+    final dir = _fs.directory(config.projectDir(project: name));
+    if (await dir.exists()) await dir.delete(recursive: true);
+    _projects.removeWhere((_, project) => project == name);
+  }
+
+  @override
+  Future<void> moveChat(String chatId, String? project) async {
+    final to = config.chatDir(chatId, project: project);
+    final from = config.chatDir(chatId, project: await _projectOf(chatId));
+    if (!await _fs.directory(from).exists() || from == to) return;
+    await config.ensureProjectDirs(project: project);
+    await _fs.directory(from).rename(to);
+    _projects[chatId] = project;
+    // `state.json` names its project too, so a chat read straight off the
+    // filesystem still knows where it is.
+    final state = await _readState(chatId, project);
+    if (state != null) await saveState(state);
+  }
+
+  @override
+  Future<Chat> load(String id) async {
+    final project = await _projectOf(id);
+    final stateText = await _readOrNull(config.stateFile(id, project: project));
+    if (stateText == null) throw StateError("no chat $id");
+    final json = jsonDecode(stateText) as Map<String, dynamic>;
+    final state = ChatState.fromJson(json).copyWith(project: project);
+    final messages = <Message>[];
+    final convText = await _readOrNull(config.convFile(id, project: project));
+    if (convText != null) {
+      final convJson = jsonDecode(convText) as Map<String, dynamic>;
+      final list = convJson["messages"] as List? ?? [];
+      messages.addAll(list.map((m) => Message.fromJson(m as Map<String, dynamic>)));
+    }
+    return Chat(state: state, messages: messages);
+  }
+
+  @override
+  Future<void> save(Chat chat) async {
+    await saveState(chat.state);
+    // Asked after the state was written, which is what settles where the chat
+    // lives.
+    final project = await _projectOf(chat.state.id);
+    await _write(
+      config.convFile(chat.state.id, project: project),
+      jsonEncode({"messages": chat.messages.map((m) => m.toJson()).toList()}),
+    );
+  }
+
+  @override
+  Future<void> saveState(ChatState state) async {
+    // Where the chat already is wins: a copy held from before it was moved
+    // would otherwise write a second one back where it used to be. Its own
+    // project only says where a chat that is nowhere yet should go.
+    final located = await _locate(state.id);
+    final project = located == null ? state.project : located.project;
+    _projects[state.id] = project;
+    await config.ensureChatDirs(state.id, project: project);
+    await _write(
+      config.stateFile(state.id, project: project),
+      jsonEncode(state.copyWith(project: project).toJson()),
+    );
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    final dir = _fs.directory(config.chatDir(id, project: await _projectOf(id)));
+    if (await dir.exists()) await dir.delete(recursive: true);
+    _projects.remove(id);
+  }
+
+  @override
+  Future<String> saveResource(String chatId, String filename, Uint8List bytes) async {
+    final project = await _projectOf(chatId);
+    await config.ensureChatDirs(chatId, project: project);
+    final resource = resourceName(filename);
+    // Bytes, not text: a browser's filesystem stores them as bytes too, and
+    // base64 would cost a third of the quota that is actually scarce there.
+    await _fs
+        .file(_fs.path.join(config.resourcesDir(chatId, project: project), resource))
+        .writeAsBytes(bytes);
+    return resource;
+  }
+
+  @override
+  Future<Uint8List?> readResource(String chatId, String resource) async {
+    final dir = config.resourcesDir(chatId, project: await _projectOf(chatId));
+    final file = _fs.file(_fs.path.join(dir, _fs.path.basename(resource)));
+    return await file.exists() ? file.readAsBytes() : null;
+  }
+
+  @override
+  Future<ChatMeta> loadMeta(String chatId) async =>
+      ChatMeta.parse(await _readOrNull(config.metaFile(chatId, project: await _projectOf(chatId))));
+
+  @override
+  Future<void> saveMeta(String chatId, ChatMeta meta) async {
+    final project = await _projectOf(chatId);
+    await config.ensureChatDirs(chatId, project: project);
+    await _write(config.metaFile(chatId, project: project), meta.encode());
+  }
+}

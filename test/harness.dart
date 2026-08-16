@@ -4,9 +4,10 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "package:fs_shim/fs_io.dart" show fileSystemIo;
+
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/local/disk_storage.dart";
-import "package:agent_chat/data/local/local_chat_store.dart";
+import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -37,7 +38,7 @@ class TestApp {
       launcher,
       ProviderContainer(
         overrides: [
-          chatStoreProvider.overrideWithValue(LocalChatStore(config)),
+          chatStoreProvider.overrideWithValue(FileChatStore(config)),
           agentBackendProvider.overrideWithValue(backend),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
@@ -56,11 +57,12 @@ class TestApp {
 
   ChatRepository get repo => container.read(chatRepositoryProvider);
 
-  /// Settings on disk, written the way the app writes them.
-  void seedSettings(AppSettings settings) => settings.save(config);
+  /// Settings on disk, written the way the app writes them — which is also
+  /// what puts them in the synchronous copy `AppSettings.load` reads.
+  Future<void> seedSettings(AppSettings settings) => settings.save(config);
 
   /// The app-level default, written the way the app writes it.
-  void seedGlobalDefault({String? providerId, String? modelId}) =>
+  Future<void> seedGlobalDefault({String? providerId, String? modelId}) =>
       seedSettings(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
 
   /// A chat that is already in the sidebar. Creating one no longer puts it
@@ -72,12 +74,11 @@ class TestApp {
   }
 
   /// A chat's own overrides, written the way the chat settings page writes them.
-  void seedChatMeta(String chatId, ChatMeta meta) {
-    config.ensureChatDirs(chatId);
-    meta.saveTo(config.metaFile(chatId));
-  }
+  Future<void> seedChatMeta(String chatId, ChatMeta meta) =>
+      container.read(chatStoreProvider).saveMeta(chatId, meta);
 
-  ChatMeta savedMeta(String chatId) => ChatMeta.fromFile(config.metaFile(chatId));
+  Future<ChatMeta> savedMeta(String chatId) =>
+      container.read(chatStoreProvider).loadMeta(chatId);
 
   /// Pump [child] as the whole app. [settle] is for a widget that never comes
   /// to rest — a spinner runs forever, and settling on one times out.
@@ -85,7 +86,7 @@ class TestApp {
     await tester.pumpWidget(
       UncontrolledProviderScope(container: container, child: MaterialApp(home: child)),
     );
-    if (settle) await tester.pumpAndSettle();
+    if (settle) await settleIo(tester);
   }
 
   /// `tempConfig` already registers the directory's own teardown.
@@ -101,6 +102,34 @@ ChatState makeState(String id, {String? project, int day = 2}) => ChatState(
       updatedAt: DateTime.utc(2026, 1, day),
       project: project,
     );
+
+/// Settle, giving the app's own file I/O real time as it goes. Anything that
+/// reads the store draws a spinner until it answers, and a spinner is a running
+/// animation, so plain `pumpAndSettle` times out where it used to return. Loops
+/// while anything is animating: a real round for the I/O, then a frame so the
+/// animation itself advances.
+/// [least] rounds happen whatever the tree looks like: a store write started by
+/// a tap shows no spinner while it runs, so an empty frame is not evidence that
+/// it landed.
+Future<void> settleIo(WidgetTester tester, {int least = 6, int tries = 40}) async {
+  for (var i = 0; i < tries && (i < least || tester.binding.transientCallbackCount > 0); i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await tester.pumpAndSettle();
+}
+
+/// Run [body] where its file I/O can actually complete. A `testWidgets` body
+/// runs on a fake clock, and the store is asynchronous now — awaiting a save
+/// directly in one waits forever. Everything that reads or writes through the
+/// store or the settings goes through here.
+Future<T> io<T>(WidgetTester tester, Future<T> Function() body) async {
+  // Drain first. The store runs one operation at a time, so a read here would
+  // queue behind a save the turn left in flight — and that save only advances
+  // when the tree is pumped, which cannot happen from inside `runAsync`.
+  await settleIo(tester);
+  return (await tester.runAsync(body)) as T;
+}
 
 /// Pump until [until] matches, letting real file I/O run in between. A widget
 /// test's clock is fake and never advances it, so anything read off disk needs
@@ -157,11 +186,12 @@ List<String?> popupLabels(WidgetTester tester) => tester
 
 /// A data directory that cleans itself up when the test ends. `forDirectory`
 /// deliberately creates nothing, and every caller needs the default project's
-/// directories.
+/// directories — made with `dart:io` so this stays synchronous.
 AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   final tmp = Directory.systemTemp.createTempSync(prefix);
-  final config = AppConfig.forDirectory(tmp, const DiskStorage());
-  config.ensureProjectDirs();
+  final config = AppConfig.forDirectory(tmp.path, fileSystemIo);
+  Directory(config.chatsDir()).createSync(recursive: true);
+  Directory(config.projectWorkspaceDir()).createSync(recursive: true);
   addTearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });

@@ -176,6 +176,7 @@ class ChatController extends Notifier<ChatViewState> {
     if (title == null || chat == null || !ref.mounted) return;
     applyTitle(title);
     await ref.read(chatRepositoryProvider).retitle(chat.state, title);
+    if (!ref.mounted) return;
     ref.invalidate(chatListProvider);
   }
 
@@ -307,14 +308,23 @@ class ChatController extends Notifier<ChatViewState> {
     _writeReply([...?_reply?.parts, part]);
   }
 
-  void _finishTurn() {
+  /// The turn is over when it has been written, not when the last event
+  /// arrives. Writing is asynchronous now — a browser's filesystem cannot be
+  /// anything else — so leaving the save unawaited would report a finished turn
+  /// whose `conv.json` is still in flight, and closing the app in that window
+  /// would lose it. A save that fails still has to clear [isRunning], or the
+  /// composer stays disabled with nothing running.
+  Future<void> _finishTurn() async {
     _flushDeltas();
     _sub?.cancel();
     _sub = null;
     final chat = state.chat;
     if (chat != null) {
-      ref.read(chatRepositoryProvider).save(chat);
+      try {
+        await ref.read(chatRepositoryProvider).save(chat);
+      } catch (_) {}
     }
+    if (!ref.mounted) return;
     // Nothing is left to answer once the turn is over: the backend has already
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void.
@@ -335,7 +345,7 @@ class ChatController extends Notifier<ChatViewState> {
   Future<void> abort() async {
     final repo = ref.read(chatRepositoryProvider);
     await repo.abort(chatId);
-    _finishTurn();
+    await _finishTurn();
   }
 
   Future<void> respondApproval(String approvalId, ApprovalResponse r) async {
