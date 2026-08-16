@@ -7,7 +7,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val aliases = listOf("PromptIcon", "CookieIcon")
+    private val aliases = listOf("CookieIcon")
 
     private val declaredIn = MainActivity::class.java.name.substringBeforeLast('.')
 
@@ -20,25 +20,54 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 val wanted = call.arguments as? String
-                if (wanted == null || wanted !in aliases) {
-                    result.error("unknown_icon", "No alias named $wanted", null)
-                    return@setMethodCallHandler
+                when (wanted) {
+                    null -> result.error("unknown_icon", "No icon named null", null)
+                    // The default icon is what MainActivity itself wears via the
+                    // app-level android:icon, so selecting it means restoring
+                    // MainActivity as the launcher entry and dropping any alias.
+                    "MainActivity" -> {
+                        resetIcon()
+                        result.success(null)
+                    }
+                    in aliases -> {
+                        // Enable before disabling: an instant with no launcher
+                        // entry enabled takes the app off the home screen for
+                        // good. The alias and MainActivity are mutually
+                        // exclusive — both enabled at once shows the app twice
+                        // — so the alias goes on first, then MainActivity off.
+                        enable(wanted)
+                        disableSelf()
+                        result.success(null)
+                    }
+                    else -> result.error("unknown_icon", "No icon named $wanted", null)
                 }
-                // Enable before disabling: an instant with no alias enabled
-                // takes the app off the home screen for good.
-                enable(wanted)
-                aliases.filter { it != wanted }.forEach(::disable)
-                result.success(null)
             }
+    }
+
+    private fun resetIcon() {
+        aliases.forEach(::disable)
+        packageManager.setComponentEnabledSetting(
+            ComponentName(declaredIn, MainActivity::class.java.name),
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP,
+        )
     }
 
     private fun enable(alias: String) = setState(alias, PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
 
     private fun disable(alias: String) = setState(alias, PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
 
-    // DONT_KILL_APP: the default kills the app, and a settings page is waiting.
+    private fun disableSelf() = packageManager.setComponentEnabledSetting(
+        ComponentName(declaredIn, MainActivity::class.java.name),
+        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        PackageManager.DONT_KILL_APP,
+    )
+
+    // The package is the namespace, not the applicationId: a debug
+    // applicationIdSuffix makes the two diverge, and the alias names in the
+    // manifest are relative to the namespace.
     private fun setState(alias: String, state: Int) = packageManager.setComponentEnabledSetting(
-        ComponentName(packageName, "$declaredIn.$alias"),
+        ComponentName(declaredIn, "$declaredIn.$alias"),
         state,
         PackageManager.DONT_KILL_APP,
     )
