@@ -15,7 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 // handler closing over one would hold a destroyed activity for as long as the
 // process.
 object IconChannel {
-    private val entries = listOf("MainActivity", "CookieIcon")
+    private val entries = listOf("MainActivity", "PromptIcon")
 
     private val declaredIn = MainActivity::class.java.name.substringBeforeLast('.')
 
@@ -37,7 +37,7 @@ object IconChannel {
     }
 
     // The class half is namespace-relative, since that is what the manifest
-    // merger expanded `.CookieIcon` against; the package half has to be
+    // merger expanded `.PromptIcon` against; the package half has to be
     // packageName, the id the app is installed under, which a debug
     // applicationIdSuffix makes a different string.
     private fun setState(context: Context, entry: String, enabled: Boolean) =

@@ -4,7 +4,7 @@ import "package:flutter/services.dart";
 import "../../domain/app_icon.dart";
 
 /// Tells `MainActivity.kt` which launcher entry to show. The default icon
-/// (prompt) is what `MainActivity` itself wears via the app-level
+/// (cookie) is what `MainActivity` itself wears via the app-level
 /// `android:icon`, so selecting it sends `"MainActivity"` — answered by
 /// `resetIcon`, which re-enables the activity and drops the alias. Every other
 /// icon is an `activity-alias` enabled in the manifest's place.
@@ -16,8 +16,8 @@ class LauncherAliases implements LauncherIcons {
   /// Written out rather than derived from [AppIcon.label]: these have to match
   /// `AndroidManifest.xml` and `MainActivity.kt`, not the UI copy.
   static const _components = {
-    AppIcon.prompt: "MainActivity",
-    AppIcon.cookie: "CookieIcon",
+    AppIcon.cookie: "MainActivity",
+    AppIcon.prompt: "PromptIcon",
   };
 
   @override
