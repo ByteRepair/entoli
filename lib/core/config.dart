@@ -13,7 +13,7 @@ import "../domain/project.dart";
 ///   `<dataDir>/commands/*.md`, `<dataDir>/agents/*.md`
 ///   `<dataDir>/chats/<chat-id>/`
 ///     state.json
-///     conv.json
+///     conv.jsonl
 ///     meta.json
 ///     resources/
 ///     workspace/
@@ -90,8 +90,10 @@ class AppConfig {
   String stateFile(String chatId, {String? project}) =>
       fs.path.join(chatDir(chatId, project: project), "state.json");
 
+  /// The conversation, as the log of `ChatRecord`s it is appended to. Not a
+  /// document: see `chat_log.dart` for why.
   String convFile(String chatId, {String? project}) =>
-      fs.path.join(chatDir(chatId, project: project), "conv.json");
+      fs.path.join(chatDir(chatId, project: project), "conv.jsonl");
 
   String metaFile(String chatId, {String? project}) =>
       fs.path.join(chatDir(chatId, project: project), "meta.json");

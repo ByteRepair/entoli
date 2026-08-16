@@ -43,7 +43,7 @@ void main() {
             ),
         ];
         final full = chat.copyWith(messages: said);
-        await app.repo.save(full);
+        await app.writeChat(full);
         return full;
       });
 

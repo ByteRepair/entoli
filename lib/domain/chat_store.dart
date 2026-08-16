@@ -2,10 +2,11 @@ import "dart:typed_data";
 
 import "package:uuid/uuid.dart";
 
+import "../domain/chat_log.dart";
 import "../domain/chat_meta.dart";
 import "../domain/models.dart";
 
-/// Persistent on-disk store for chats. Implements `state.json` + `conv.json`
+/// Persistent on-disk store for chats. Implements `state.json` + `conv.jsonl`
 /// layout under the data directory.
 abstract class ChatStore {
   /// Every chat, in every project. Each one says which it is in, so the UI can
@@ -31,11 +32,15 @@ abstract class ChatStore {
   /// [project] — null for the default one.
   Future<void> moveChat(String chatId, String? project);
 
-  Future<void> save(Chat chat);
+  /// Add to the chat's log. The only way a conversation is written: records are
+  /// appended and never rewritten, so a turn killed halfway keeps everything
+  /// that had already happened. There is deliberately no whole-log write to go
+  /// with it — one would be the truncation the format exists to avoid, and a
+  /// conversation held in memory is `append(id, recordsOf(messages))`.
+  Future<void> append(String chatId, List<ChatRecord> records);
 
-  /// Write `state.json` alone. A rename that went through [save] would write
-  /// back the conversation it had read, over whatever a running turn has
-  /// added since.
+  /// Write `state.json`, creating the chat's directories. Everything else about
+  /// a chat is written by something that has already been through here.
   Future<void> saveState(ChatState state);
 
   Future<void> delete(String id);

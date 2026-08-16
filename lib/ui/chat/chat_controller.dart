@@ -5,6 +5,7 @@ import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
+import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 
@@ -55,7 +56,7 @@ class ChatViewState {
 }
 
 /// Drives a single chat: loads from store, sends prompts, accumulates streamed
-/// events into messages, persists conv.json after each turn.
+/// events into messages, and appends them to the chat's log as they arrive.
 class ChatController extends Notifier<ChatViewState> {
   ChatController(this.chatId);
 
@@ -68,14 +69,92 @@ class ChatController extends Notifier<ChatViewState> {
   Timer? _flush;
   bool _pendingIsReasoning = false;
 
+  /// The reply being logged, and its parts as the log last saw them. A
+  /// checkpoint writes the difference, so a part that has not changed is not
+  /// written twice.
+  String? _loggedId;
+  List<MessagePart> _logged = const [];
+
+  /// Text grows without any event to hang a write off, so a delta arms this
+  /// and the log catches up a second later. Everything else is written the
+  /// moment it lands. One-shot rather than periodic, like [_flush]: a timer
+  /// that keeps rearming itself is a widget test that never settles.
+  Timer? _checkpoint;
+  static const _checkpointEvery = Duration(seconds: 1);
+
+  /// Appends run one at a time and in order: the log is a file being added to,
+  /// and two writers would interleave lines. Queued work reads the state when
+  /// it runs, so calls that pile up behind a slow write collapse into one.
+  ///
+  /// Null until the first one rather than seeded with a completed future. A
+  /// `Future.value()` built when the controller is — which in a widget test is
+  /// on the fake clock — only completes when the tree is pumped, and the first
+  /// append is awaited from inside `runAsync`, where it cannot be.
+  Future<void>? _queue;
+
+  /// How the turn ended, where something other than the model decided it. Set
+  /// before the abort is awaited, because the stream can close first and the
+  /// terminal record would otherwise say the turn simply finished. Null means
+  /// read it off the reply.
+  TurnEnd? _outcome;
+
   @override
   ChatViewState build() {
     ref.onDispose(() {
       _sub?.cancel();
       _flush?.cancel();
+      _checkpoint?.cancel();
     });
     _load();
     return ChatViewState();
+  }
+
+  /// Write whatever the reply has grown by, and [then] after it. Parts are
+  /// compared rather than counted: a thinking block is closed in place, and a
+  /// provider that interleaves parts can close one that is no longer last.
+  ///
+  /// Text that only grew is written as the piece it grew by. Writing the part
+  /// whole each time would cost its length once per checkpoint, so a reply
+  /// streaming for two minutes would be written a hundred times over.
+  /// [forMessage] is passed rather than read here: queued work runs later, and
+  /// by then the turn it belongs to may have cleared itself.
+  Future<void> _appendChanged(String forMessage,
+      {List<ChatRecord> then = const []}) async {
+    final reply = _reply;
+    final parts = reply?.id == forMessage ? reply!.parts : const <MessagePart>[];
+    final records = <ChatRecord>[];
+    for (var i = 0; i < parts.length; i++) {
+      if (i >= _logged.length) {
+        records.add(ChatRecord.part(messageId: forMessage, index: i, part: parts[i]));
+        continue;
+      }
+      if (_logged[i] == parts[i]) continue;
+      final grown = textGrownFrom(_logged[i], parts[i]);
+      records.add(grown == null
+          ? ChatRecord.part(messageId: forMessage, index: i, part: parts[i])
+          : ChatRecord.append(messageId: forMessage, index: i, text: grown));
+    }
+    records.addAll(then);
+    if (records.isEmpty) return;
+    await ref.read(chatRepositoryProvider).append(chatId, records);
+    // After the write, so a failed one is retried by the next checkpoint
+    // rather than treated as landed.
+    if (parts.isNotEmpty) _logged = List.of(parts);
+  }
+
+  /// Put [work] at the end of the append queue. Failures are swallowed on
+  /// purpose: a checkpoint that could not be written is not worth ending a
+  /// turn over, and the next one writes what this one missed.
+  Future<void> _enqueue(Future<void> Function() work) {
+    final queued = _queue;
+    return _queue =
+        (queued == null ? Future<void>.sync(work) : queued.then((_) => work()))
+            .catchError((Object _) {});
+  }
+
+  void _checkpointLog() {
+    final logging = _loggedId;
+    if (logging != null) unawaited(_enqueue(() => _appendChanged(logging)));
   }
 
   /// The reply being written. It is always the last message of a running turn.
@@ -98,6 +177,11 @@ class ChatController extends Notifier<ChatViewState> {
     _pendingIsReasoning = reasoning;
     _pending.write(text);
     _flush ??= Timer(const Duration(milliseconds: 16), _flushDeltas);
+    _checkpoint ??= Timer(_checkpointEvery, () {
+      _checkpoint = null;
+      _flushDeltas();
+      _checkpointLog();
+    });
   }
 
   /// Fold everything buffered into the reply's trailing part of the same kind.
@@ -152,6 +236,7 @@ class ChatController extends Notifier<ChatViewState> {
       parts[at] = sealed;
     }
     _writeReply(parts);
+    _checkpointLog();
   }
 
   void _appendError(String message) {
@@ -159,6 +244,7 @@ class ChatController extends Notifier<ChatViewState> {
     if (reply == null) return;
     _flushDeltas();
     _writeReply([...?_reply?.parts, MessagePart.error(message: message)]);
+    _checkpointLog();
   }
 
   /// Retitle in place. Reloading instead would dispose a running turn.
@@ -212,7 +298,13 @@ class ChatController extends Notifier<ChatViewState> {
     );
     final isFirst = chat.messages.isEmpty;
     state = state.copyWith(chat: updatedChat, isRunning: true, clearRetry: true);
-    await repo.save(updatedChat);
+    // The prompt and the empty reply go down before the turn starts, so a chat
+    // killed before the model says anything still shows what was asked.
+    await repo.saveState(updatedChat.state);
+    _outcome = null;
+    _loggedId = assistantMsg.id;
+    _logged = const [];
+    await _enqueue(() => repo.append(chatId, recordsOf([userMsg, assistantMsg])));
     // Only the first: a later message changes nothing the sidebar shows, and
     // refreshing it re-reads every chat off disk.
     if (isFirst) {
@@ -303,26 +395,41 @@ class ChatController extends Notifier<ChatViewState> {
     }
   }
 
+  /// Every discrete part goes through here, and so does its record: a new kind
+  /// of event cannot forget to log what it added.
   void _appendPart(MessagePart part) {
     _flushDeltas();
     _writeReply([...?_reply?.parts, part]);
+    _checkpointLog();
   }
 
   /// The turn is over when it has been written, not when the last event
-  /// arrives. Writing is asynchronous now — a browser's filesystem cannot be
-  /// anything else — so leaving the save unawaited would report a finished turn
-  /// whose `conv.json` is still in flight, and closing the app in that window
-  /// would lose it. A save that fails still has to clear [isRunning], or the
-  /// composer stays disabled with nothing running.
+  /// arrives. Writing is asynchronous — a browser's filesystem cannot be
+  /// anything else — so returning before the queue drains would report a
+  /// finished turn whose last records are still in flight, and closing the app
+  /// in that window would lose them. A write that fails still has to clear
+  /// [isRunning], or the composer stays disabled with nothing running.
+  ///
+  /// The terminal record is the point of this: a log whose last message has no
+  /// [TurnEndRecord] was being written when the process died, and that absence
+  /// is the only thing that can tell a reload the difference.
   Future<void> _finishTurn() async {
     _flushDeltas();
+    _checkpoint?.cancel();
+    _checkpoint = null;
     _sub?.cancel();
     _sub = null;
-    final chat = state.chat;
-    if (chat != null) {
-      try {
-        await ref.read(chatRepositoryProvider).save(chat);
-      } catch (_) {}
+    final ending = _loggedId;
+    if (ending != null) {
+      final reason = _outcome ??
+          (_reply?.parts.any((p) => p is ErrorPart) ?? false
+              ? TurnEnd.error
+              : TurnEnd.done);
+      _loggedId = null;
+      // The last of the reply and the record closing it in one write, since
+      // every append is an open and a close of the file.
+      await _enqueue(() => _appendChanged(ending,
+          then: [ChatRecord.turnEnd(messageId: ending, reason: reason)]));
     }
     if (!ref.mounted) return;
     // Nothing is left to answer once the turn is over: the backend has already
@@ -338,13 +445,16 @@ class ChatController extends Notifier<ChatViewState> {
   }
 
   void _onError(Object e) {
+    _outcome = TurnEnd.error;
     _appendError(e.toString());
     _finishTurn();
   }
 
+  /// Set before the abort is awaited: killing the turn closes the stream, so
+  /// `onDone` can reach [_finishTurn] first and record it as having finished.
   Future<void> abort() async {
-    final repo = ref.read(chatRepositoryProvider);
-    await repo.abort(chatId);
+    _outcome = TurnEnd.aborted;
+    await ref.read(chatRepositoryProvider).abort(chatId);
     await _finishTurn();
   }
 

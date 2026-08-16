@@ -47,7 +47,7 @@ void main() {
 
   group("chats", () {
     test("save round-trips a chat", () async {
-      await store.save(chatOf("c1"));
+      await writeChatTo(store, chatOf("c1"));
 
       final chat = await store.load("c1");
       expect(chat.state.title, "Test chat c1");
@@ -60,9 +60,9 @@ void main() {
 
     test("list is newest first and stamps each chat with its project", () async {
       await store.createProject("work");
-      await store.save(Chat(state: makeState("old", day: 1)));
-      await store.save(Chat(state: makeState("new", day: 3)));
-      await store.save(chatOf("scoped", project: "work"));
+      await store.saveState(makeState("old", day: 1));
+      await store.saveState(makeState("new", day: 3));
+      await writeChatTo(store, chatOf("scoped", project: "work"));
 
       final listed = await store.list();
       expect(listed.map((s) => s.id), ["new", "scoped", "old"]);
@@ -72,7 +72,7 @@ void main() {
     });
 
     test("saveState keeps the messages already written", () async {
-      await store.save(chatOf("c1"));
+      await writeChatTo(store, chatOf("c1"));
       await store.saveState(makeState("c1").copyWith(title: "Renamed"));
 
       final chat = await store.load("c1");
@@ -82,7 +82,7 @@ void main() {
 
     test("where a chat already is wins over what a held copy says", () async {
       await store.createProject("work");
-      await store.save(chatOf("c1", project: "work"));
+      await writeChatTo(store, chatOf("c1", project: "work"));
       // A copy from before the chat was in a project, saved late.
       await store.saveState(makeState("c1"));
 
@@ -91,7 +91,7 @@ void main() {
 
     test("moveChat moves a chat between projects", () async {
       await store.createProject("work");
-      await store.save(chatOf("c1"));
+      await writeChatTo(store, chatOf("c1"));
       await store.moveChat("c1", "work");
       expect((await store.load("c1")).state.project, "work");
 
@@ -101,8 +101,8 @@ void main() {
 
     test("deleteProject takes its chats with it", () async {
       await store.createProject("work");
-      await store.save(chatOf("kept"));
-      await store.save(chatOf("gone", project: "work"));
+      await writeChatTo(store, chatOf("kept"));
+      await writeChatTo(store, chatOf("gone", project: "work"));
 
       await store.deleteProject("work");
 
@@ -123,7 +123,7 @@ void main() {
   group("attachments", () {
     test("bytes are stored as bytes, per chat, and go with a delete", () async {
       final bytes = Uint8List.fromList([0, 1, 2, 253, 254, 255]);
-      await store.save(chatOf("c1"));
+      await writeChatTo(store, chatOf("c1"));
       final resource = await store.saveResource("c1", "shot.png", bytes);
 
       expect(resource, endsWith("-shot.png"));
@@ -164,7 +164,7 @@ void main() {
   group("across a reload", () {
     test("chats, their messages and their attachments are still there", () async {
       await store.createProject("work");
-      await store.save(chatOf("kept", project: "work"));
+      await writeChatTo(store, chatOf("kept", project: "work"));
       await store.saveMeta("kept", ChatMeta(model: "qwen-2.5"));
       final resource = await store.saveResource("kept", "note.txt", Uint8List.fromList([7]));
 

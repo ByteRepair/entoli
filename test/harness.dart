@@ -9,8 +9,10 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
+import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
@@ -21,24 +23,30 @@ import "fakes.dart";
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
-  TestApp._(this.config, this.backend, this.picker, this.launcher, this.container);
+  TestApp._(this.config, this.backend, this.picker, this.launcher, this.store, this.container);
 
+  /// [store] defaults to the real one over a temp directory, since most of the
+  /// suite is checking what the app does with what is on disk. Pass a
+  /// [FakeChatStore] where the subject is which records a turn wrote.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
+    ChatStore? store,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
     final picker = FakeAttachmentPicker();
     final launcher = FakeLauncherIcons(available: launcherIcons);
+    final chats = store ?? FileChatStore(config);
     return TestApp._(
       config,
       backend,
       picker,
       launcher,
+      chats,
       ProviderContainer(
         overrides: [
-          chatStoreProvider.overrideWithValue(FileChatStore(config)),
+          chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
@@ -53,6 +61,7 @@ class TestApp {
   final FakeBackend backend;
   final FakeAttachmentPicker picker;
   final FakeLauncherIcons launcher;
+  final ChatStore store;
   final ProviderContainer container;
 
   ChatRepository get repo => container.read(chatRepositoryProvider);
@@ -69,9 +78,12 @@ class TestApp {
   /// there: it is a draft until something is said in it.
   Future<Chat> seedChat({String title = "old chat", String? project}) async {
     final chat = await repo.createChat(title: title, project: project);
-    await repo.save(chat);
+    await repo.saveState(chat.state);
     return chat;
   }
+
+  /// A whole chat on disk, conversation and all.
+  Future<void> writeChat(Chat chat) => writeChatVia(repo, chat);
 
   /// A chat's own overrides, written the way the chat settings page writes them.
   Future<void> seedChatMeta(String chatId, ChatMeta meta) =>
@@ -92,6 +104,31 @@ class TestApp {
   /// `tempConfig` already registers the directory's own teardown.
   void dispose() => container.dispose();
 }
+
+/// Put a whole chat on disk the way the app would have: its state, then its
+/// conversation as the records a turn would have appended. There is no
+/// whole-log write to call instead — see `ChatStore.append`.
+Future<void> writeChatTo(ChatStore store, Chat chat) async {
+  await store.saveState(chat.state);
+  await store.append(chat.state.id, recordsOf(chat.messages));
+}
+
+/// The same through a [ChatRepository], which is what a UI or repository test
+/// wants: going straight to the store leaves the repository still holding the
+/// chat as a draft, and everything it answers for one takes the draft path.
+Future<void> writeChatVia(ChatRepository repo, Chat chat) async {
+  await repo.saveState(chat.state);
+  await repo.append(chat.state.id, recordsOf(chat.messages));
+}
+
+/// A message as a store test hands it in.
+Message makeMessage(String id, String text, {MessageRole role = MessageRole.user}) =>
+    Message(
+      id: id,
+      role: role,
+      createdAt: DateTime.utc(2026, 1, 1),
+      parts: [MessagePart.text(text: text)],
+    );
 
 /// A chat's state as a store test hands it in, dated so [day] orders one
 /// against another.
