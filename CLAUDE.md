@@ -958,6 +958,30 @@ selection is one folder's — leaving the folder clears it — which is what let
 Android's staging directory stay flat, and why nothing checks for two files of
 the same name in it.
 
+Coming the other way, an `IncomingFile` is deliberately **not** its bytes. A
+batch arrives with as many files as its source chose to send and then waits on
+screen while the user picks a workspace, so held as buffers it is a video's
+worth of heap for as long as that takes — and on a phone, long enough to be
+killed for it. What each one holds instead is whatever its own source already
+had: `IncomingBlob` in a browser, where a `File` is a handle to bytes that have
+not been loaded yet, and `IncomingStaged` on Android, which is the copy
+`FilesChannel` already made. `IncomingBytes` is the trivial third, for bytes
+genuinely in hand.
+
+`writeIncoming` makes room and hands over a target; `writeTo` decides what
+putting it there means. That split is where the traversal boundary lives —
+`safeRelativePath` runs once, before dispatch, so no variant can open a hole in
+it — and it is why the writes stay sequential: doing them at once would put
+every file's bytes in memory together, which is the whole thing being avoided.
+Only the folders are batched, because `create` on the web opens a read-write
+transaction before it looks, and a folder upload names one directory hundreds of
+times.
+
+`IncomingBlob` lives beside `WebFileHandoff` rather than with its siblings in
+`lib/domain/`, since it holds a `package:web` type. That is also why
+`IncomingFile` is `abstract` and not `sealed` — the variants are deliberately
+not all in one library, and nothing switches on them.
+
 That staging directory is the other thing worth knowing about the Android half.
 Everything handed to an intent is a **copy under the app's cache**, never the
 workspace file itself, because a `FileProvider` only mints URIs under the paths
@@ -1004,6 +1028,19 @@ A path that arrived from outside is sanitised by `safeRelativePath` before it is
 joined onto anything: the sharing app wrote it, and `../../settings.json` is a
 name a file can have. Folders in it are kept — that is what makes a folder
 upload survive — and only the segments that would climb are dropped.
+
+A staged copy is **moved** into the workspace rather than read out of it. The
+cache and the data directory are one volume, so the move is the real path and
+the bytes never enter this process; the copy it falls back to is there because
+"one volume" is an assumption about a device rather than a guarantee.
+
+Moving consumes the copy, which is what makes the staging directory tidy itself
+and is also the reason `FilesChannel` prunes it on the way **out** rather than
+on the way in. Dart now holds the staged paths until a workspace is picked, so a
+second share arriving while that page is open would delete the paths the page is
+still pointing at. At `takeShare` there is no such hazard: only one batch is ever
+offered at a time, so anything left beside the batch being handed over is an
+earlier one nobody claimed.
 
 ### The app icon
 

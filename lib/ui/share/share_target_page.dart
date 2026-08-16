@@ -66,8 +66,9 @@ class ShareTargetPage extends ConsumerWidget {
     try {
       await writeIncoming(fs, dir, files);
     } catch (e) {
-      // Left open on purpose: the files are still in hand, and another
-      // workspace is one tap away.
+      // Left open so the failure is on screen, not so it can be tried again:
+      // `writeTo` consumes what it wrote, so whatever landed before the failure
+      // has landed, and picking a second workspace would only move the rest.
       messenger.showSnackBar(SnackBar(content: Text("Could not save: $e")));
       return;
     }

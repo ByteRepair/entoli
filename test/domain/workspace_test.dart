@@ -1,17 +1,24 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
+import "package:fs_shim/fs.dart" show FileSystemException;
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
+import "package:agent_chat/core/config.dart";
+import "package:agent_chat/domain/file_handoff.dart";
 import "package:agent_chat/domain/workspace.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
 
 void main() {
+  late AppConfig config;
   late String dir;
 
-  setUp(() => dir = tempConfig().projectWorkspaceDir());
+  setUp(() {
+    config = tempConfig();
+    dir = config.projectWorkspaceDir();
+  });
 
   group("listing", () {
     test("folders come before files, each by name", () async {
@@ -80,6 +87,52 @@ void main() {
       await writeIncoming(fileSystemIo, dir, [incomingFile("/etc/passwd", "nope")]);
 
       expect(File("$dir/etc/passwd").readAsStringSync(), "nope");
+    });
+  });
+
+  /// What the platform staged is moved, not read: a share of twenty photos
+  /// would otherwise be twenty photos of heap for as long as the user takes to
+  /// pick a workspace.
+  group("what the platform staged", () {
+    late String staging;
+
+    setUp(() {
+      staging = "${config.dataDir}/staged";
+      Directory(staging).createSync(recursive: true);
+    });
+
+    /// Staged flat and named by its basename, the way Android's cache holds
+    /// one, then offered under the workspace path it asked for.
+    IncomingStaged staged(String path, [String text = "hi"]) {
+      final file = File("$staging/${fileSystemIo.path.basename(path)}")
+        ..writeAsStringSync(text);
+      return IncomingStaged(path, file.path);
+    }
+
+    test("is moved, not copied", () async {
+      final file = staged("shared.txt", "from elsewhere");
+      await writeIncoming(fileSystemIo, dir, [file]);
+
+      expect(File("$dir/shared.txt").readAsStringSync(), "from elsewhere");
+      expect(File(file.staged).existsSync(), isFalse);
+    });
+
+    // The folder has to exist before a rename can land in it, which a write
+    // would have created on its own.
+    test("keeps the folder its name asks for", () async {
+      await writeIncoming(fileSystemIo, dir, [staged("notes/a.txt", "deep")]);
+
+      expect(File("$dir/notes/a.txt").readAsStringSync(), "deep");
+    });
+
+    // `fs_shim` raises its own `FileSystemException` rather than `dart:io`'s,
+    // which is what the move's fallback to a copy catches. Pinned because the
+    // wrong type there would leave the fallback dead and look like nothing.
+    test("a staged copy that is no longer there is reported, not skipped", () {
+      expect(
+        writeIncoming(fileSystemIo, dir, [IncomingStaged("gone.txt", "$staging/gone.txt")]),
+        throwsA(isA<FileSystemException>()),
+      );
     });
   });
 

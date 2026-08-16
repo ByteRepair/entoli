@@ -67,19 +67,17 @@ class AndroidFileHandoff implements FileHandoff {
     });
   }
 
+  /// The staged copies, named but not read. `FilesChannel` hands over the
+  /// directory it put them in, and each one is moved out of it when a workspace
+  /// is picked — so nothing here holds a share's bytes, and reading the queue
+  /// still empties it.
   @override
   Future<List<IncomingFile>> takeShare() async {
     final staged = await _invoke<List<Object?>>("takeShare") ?? const [];
-    final files = <IncomingFile>[];
-    for (final entry in staged.cast<Map<Object?, Object?>>()) {
-      final file = _fs.file(entry["file"]! as String);
-      if (!await file.exists()) continue;
-      files.add(IncomingFile(path: entry["path"]! as String, bytes: await file.readAsBytes()));
-      // Claimed: the bytes are in hand, and a share is offered a workspace
-      // exactly once.
-      await file.delete();
-    }
-    return files;
+    return [
+      for (final entry in staged.cast<Map<Object?, Object?>>())
+        IncomingStaged(entry["path"]! as String, entry["file"]! as String),
+    ];
   }
 
   /// The copies the share sheet and the viewer are handed. A folder becomes one

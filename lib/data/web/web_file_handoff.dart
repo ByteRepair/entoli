@@ -72,7 +72,7 @@ class WebFileHandoff implements FileHandoff {
     // Block bodies, not arrows: a callback handed to `toJS` has to return void,
     // and an arrow would return the future `then` makes.
     input.addEventListener("change", ((web.Event _) {
-      _read(input).then(done.complete, onError: done.completeError);
+      done.complete(_chosen(input));
     }).toJS);
     // A cancelled chooser fires nothing else, and a future nobody completes is
     // a menu that never closes.
@@ -83,16 +83,17 @@ class WebFileHandoff implements FileHandoff {
     return done.future;
   }
 
-  Future<List<IncomingFile>> _read(web.HTMLInputElement input) async {
+  /// The chosen files, unread. Nothing here awaits: a `File` is a handle to
+  /// bytes the browser has not loaded, and `arrayBuffer` is what loads them —
+  /// so reading here would put a whole `webkitdirectory` upload in the heap at
+  /// once, which is the folder the button exists to take.
+  List<IncomingFile> _chosen(web.HTMLInputElement input) {
     final chosen = input.files;
     if (chosen == null) return const [];
-    final files = <IncomingFile>[];
-    for (var i = 0; i < chosen.length; i++) {
-      final file = chosen.item(i)!;
-      final buffer = (await file.arrayBuffer().toDart).toDart;
-      files.add(IncomingFile(path: _pathOf(file), bytes: buffer.asUint8List()));
-    }
-    return files;
+    return [
+      for (var i = 0; i < chosen.length; i++)
+        IncomingBlob(_pathOf(chosen.item(i)!), chosen.item(i)!),
+    ];
   }
 
   /// A folder upload names each file by its path under the folder that was
@@ -124,4 +125,24 @@ class WebFileHandoff implements FileHandoff {
 
   String? _held;
   Timer? _trailing;
+}
+
+/// A file the chooser handed over, still in the browser rather than in the
+/// heap. A `File` is a handle to bytes that have not been loaded, so the load
+/// waits until there is somewhere to put them and only one is resident at a
+/// time — which is what makes a folder upload bounded by its largest file
+/// rather than by the folder.
+///
+/// Lives here rather than beside its siblings in `lib/domain/`: it holds a
+/// `package:web` type, which is exactly what will not compile off the web.
+class IncomingBlob extends IncomingFile {
+  IncomingBlob(super.path, this._file);
+
+  final web.File _file;
+
+  @override
+  Future<void> writeTo(FileSystem fs, String target) async {
+    final buffer = (await _file.arrayBuffer().toDart).toDart;
+    await fs.file(target).writeAsBytes(buffer.asUint8List());
+  }
 }
