@@ -11,6 +11,7 @@ import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/models.dart";
 
 import "../fakes.dart";
+import "../harness.dart";
 
 void main() {
   late Directory tmp;
@@ -21,10 +22,12 @@ void main() {
   ChatRepository repoWith(AppSettings settings) =>
       ChatRepository(FileChatStore(config), backend, () => settings, config);
 
+
+
   /// A chat that is on disk, the way one is by the time a prompt is sent.
   Future<Chat> savedChat(ChatRepository repo) async {
     final chat = await repo.createChat();
-    await repo.save(chat);
+    await writeChatVia(repo, chat);
     return chat;
   }
 
@@ -100,7 +103,7 @@ void main() {
       expect(Directory(config.chatDir(chat.state.id)).existsSync(), isFalse);
       expect((await repo.loadMeta(chat.state.id)).model, "qwen-2.5");
 
-      await repo.save(chat);
+      await writeChatVia(repo, chat);
       expect(ChatMeta.parse(File(config.metaFile(chat.state.id)).readAsStringSync()).model,
           "qwen-2.5");
     });
@@ -122,7 +125,7 @@ void main() {
       final chat = await repo.createChat(project: "work");
 
       expect(Directory(config.chatDir(chat.state.id, project: "work")).existsSync(), isFalse);
-      await repo.save(chat);
+      await writeChatVia(repo, chat);
 
       expect(File(config.stateFile(chat.state.id, project: "work")).existsSync(), isTrue);
       expect((await repo.listChats()).single.project, "work");
@@ -131,7 +134,7 @@ void main() {
     test("the turn is told which project's files it works in", () async {
       final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
       final chat = await repo.createChat(project: "work");
-      await repo.save(chat);
+      await writeChatVia(repo, chat);
 
       await repo.sendPrompt(chat.state.id, "hi").toList();
 
@@ -150,9 +153,9 @@ void main() {
     test("deleting a project drops the sessions of the chats in it", () async {
       final repo = repoWith(AppSettings());
       final kept = await repo.createChat();
-      await repo.save(kept);
+      await writeChatVia(repo, kept);
       final gone = await repo.createChat(project: "work");
-      await repo.save(gone);
+      await writeChatVia(repo, gone);
 
       await repo.deleteProject("work");
 
@@ -163,7 +166,7 @@ void main() {
     test("a moved chat's next turn runs in its new project", () async {
       final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
       final chat = await repo.createChat();
-      await repo.save(chat);
+      await writeChatVia(repo, chat);
 
       await repo.moveChat(chat.state.id, "work");
       await repo.sendPrompt(chat.state.id, "hi").toList();
@@ -176,8 +179,8 @@ void main() {
   test("renaming writes the title without touching the conversation", () async {
     final repo = repoWith(AppSettings());
     final chat = await repo.createChat();
-    await repo.save(chat);
-    await repo.save(chat.copyWith(messages: [
+    await writeChatVia(repo, chat);
+    await writeChatVia(repo, chat.copyWith(messages: [
       Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026)),
     ]));
 

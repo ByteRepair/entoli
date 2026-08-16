@@ -5,6 +5,9 @@ import "dart:typed_data";
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
+import "package:agent_chat/domain/chat_log.dart";
+import "package:agent_chat/domain/chat_meta.dart";
+import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/profile.dart";
@@ -186,4 +189,87 @@ class FakeBackend implements AgentBackend {
 
   @override
   Future<List<ModelOption>> models() async => modelList;
+}
+
+/// A `ChatStore` that keeps everything in memory, for the tests whose subject
+/// is *what* gets written rather than where it lands. `FileChatStore` over a
+/// temp directory is still what the store's own tests use — the layout on a
+/// disk is the thing under test there — but a test asking which records a turn
+/// produced does not need a filesystem, and polling one for them is how those
+/// tests turn flaky.
+class FakeChatStore implements ChatStore {
+  final Map<String, ChatState> _states = {};
+  final Map<String, List<ChatRecord>> _logs = {};
+  final Map<String, ChatMeta> _metas = {};
+  final Map<String, Map<String, Uint8List>> _resources = {};
+  final Set<String> _projects = {};
+
+  /// The chat's log, as it has been appended to. What the log tests assert on.
+  List<ChatRecord> records(String chatId) => List.unmodifiable(_logs[chatId] ?? const []);
+
+  @override
+  Future<void> append(String chatId, List<ChatRecord> records) async =>
+      _logs.putIfAbsent(chatId, () => []).addAll(records);
+
+  @override
+  Future<void> saveState(ChatState state) async => _states[state.id] = state;
+
+  @override
+  Future<Chat> load(String id) async {
+    final state = _states[id];
+    if (state == null) throw StateError("no chat $id");
+    return Chat(state: state, messages: replay(records(id)));
+  }
+
+  @override
+  Future<List<ChatState>> list() async =>
+      _states.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+  @override
+  Future<List<String>> listProjects() async => _projects.toList()..sort();
+
+  @override
+  Future<String?> projectOf(String chatId) async => _states[chatId]?.project;
+
+  @override
+  Future<void> createProject(String name) async => _projects.add(name);
+
+  @override
+  Future<void> deleteProject(String name) async {
+    _projects.remove(name);
+    for (final id in _states.entries.where((e) => e.value.project == name).map((e) => e.key).toList()) {
+      await delete(id);
+    }
+  }
+
+  @override
+  Future<void> moveChat(String chatId, String? project) async {
+    final state = _states[chatId];
+    if (state != null) _states[chatId] = state.copyWith(project: project);
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    _states.remove(id);
+    _logs.remove(id);
+    _metas.remove(id);
+    _resources.remove(id);
+  }
+
+  @override
+  Future<String> saveResource(String chatId, String filename, Uint8List bytes) async {
+    final resource = resourceName(filename);
+    _resources.putIfAbsent(chatId, () => {})[resource] = bytes;
+    return resource;
+  }
+
+  @override
+  Future<Uint8List?> readResource(String chatId, String resource) async =>
+      _resources[chatId]?[resource];
+
+  @override
+  Future<ChatMeta> loadMeta(String chatId) async => _metas[chatId] ?? ChatMeta();
+
+  @override
+  Future<void> saveMeta(String chatId, ChatMeta meta) async => _metas[chatId] = meta;
 }

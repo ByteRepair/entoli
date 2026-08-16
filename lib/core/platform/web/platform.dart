@@ -2,6 +2,7 @@ import "dart:js_interop";
 
 import "package:fs_shim/fs.dart";
 import "package:fs_shim/fs_browser.dart" show fileSystemWeb;
+import "package:fs_shim/fs_idb.dart" show FileSystemIdbExt, FileSystemIdbOptions;
 import "package:web/web.dart" as web;
 
 import "../../../domain/shell.dart";
@@ -14,7 +15,13 @@ WebSearch platformWebSearch() => const UnavailableWebSearch();
 
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.
-FileSystem platformFileSystem() => fileSystemWeb;
+///
+/// Paged, which the default is not: unpaged, `fs_shim` stores a file as one
+/// value and an append reads the whole thing back to rewrite it, which is the
+/// opposite of what `conv.jsonl` is for. Page size is per file and converted on
+/// the first write, so nothing has to be migrated.
+FileSystem platformFileSystem() =>
+    fileSystemWeb.withIdbOptions(options: FileSystemIdbOptions.pageDefault);
 
 /// Nominal on a platform with no filesystem of its own, but not arbitrary: it
 /// is the root every path is resolved under, and what the chats are stored

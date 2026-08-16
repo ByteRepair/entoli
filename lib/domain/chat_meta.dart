@@ -4,7 +4,7 @@ import "permission.dart";
 
 /// A chat's overrides of the app defaults, persisted to `meta.json`. Edited via
 /// the chat settings page. Distinct from `state.json` (chat metadata) and
-/// `conv.json` (message tree). Null everywhere means "inherit".
+/// `conv.jsonl` (message tree). Null everywhere means "inherit".
 class ChatMeta {
   ChatMeta({this.model, this.provider, this.approveMode});
 

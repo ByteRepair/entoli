@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
 import "../fakes.dart";
@@ -18,10 +19,11 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  /// Give whatever is still in flight a chance to land.
-  Future<void> waitFor(bool Function() done, {String what = "it"}) async {
+  /// Give whatever is still in flight a chance to land. The predicate may be
+  /// async, since some of what lands has to be read back off disk.
+  Future<void> waitFor(FutureOr<bool> Function() done, {String what = "it"}) async {
     for (var i = 0; i < 200; i++) {
-      if (done()) return;
+      if (await done()) return;
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
     fail("$what never happened");
@@ -100,6 +102,11 @@ void main() {
       app.backend.scriptedAnswer = "Sorting a list of records";
       final (id, _) = await chatWithOneTurn("how do I sort a list?");
       await waitFor(() => titleOf(id) != "New chat", what: "the title");
+      // On disk, not just on screen: the name is applied before it is written,
+      // and the turn ending no longer writes `state.json` on its way past.
+      await waitFor(
+          () async => (await app.repo.openChat(id)).state.title != "New chat",
+          what: "the title reaching disk");
 
       expect(app.backend.questions.single.prompt, contains("how do I sort a list?"));
       expect((await app.repo.openChat(id)).state.title, "Sorting a list of records");
@@ -391,6 +398,107 @@ void main() {
     final stored = await app.repo.openChat(id);
     expect(stored.messages, hasLength(2));
     expect(textOf(stored.messages.first), "goodbye");
+  });
+
+  group("the log", () {
+    late FakeChatStore store;
+
+    // Over a fake store rather than a temp directory: what these check is which
+    // records a turn wrote, which no filesystem is needed to answer — and
+    // reading one back meant polling it, which is how they flaked.
+    setUp(() {
+      store = FakeChatStore();
+      app.dispose();
+      app = TestApp.create(store: store);
+    });
+
+    List<ChatRecord> records(String id) => store.records(id);
+
+    /// The chat as a reload would find it, rather than as the controller holds
+    /// it. The two have to agree, which is the point of most of these.
+    List<Message> reloaded(String id) => replay(store.records(id));
+
+    // The one that pins the live path to the replay path: what the controller
+    // built as events arrived, and what replay makes of the records it wrote,
+    // are the same conversation. Anything that appends to a message without
+    // logging it breaks here.
+    test("what is on screen is what a reload reads back", () async {
+      app.backend.scriptedEvents = [
+        const ReasoningDelta("weighing it up"),
+        ReasoningEnd(text: "weighing it up", duration: const Duration(seconds: 2)),
+        const TextDelta("running it"),
+        ToolCallEvent(ToolCall(id: "t1", name: "bash", argumentsJson: '{"command":"ls"}')),
+        ToolResultEvent(ToolResult(callId: "t1", returnCode: 0, output: "a\nb")),
+        const TextDelta("two files"),
+        const DoneEvent(),
+      ];
+
+      final (id, _) = await chatWithOneTurn("what is here");
+
+      expect(reloaded(id), messagesOf(id));
+    });
+
+    test("a turn killed mid-flight keeps what had already happened", () async {
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedEvents = [
+        const TextDelta("looking"),
+        ToolCallEvent(ToolCall(id: "t1", name: "bash", argumentsJson: '{"command":"ls"}')),
+        ToolResultEvent(ToolResult(callId: "t1", returnCode: 0, output: "a\nb")),
+      ];
+
+      final (id, _) = await startTurn("what is here");
+      await waitFor(
+          () => reloaded(id).last.parts.whereType<ToolResultPart>().isNotEmpty,
+          what: "the tool result reaching the log");
+
+      // Nothing has ended the turn, which is exactly the state a kill leaves.
+      final stored = reloaded(id);
+      expect(stored, hasLength(2));
+      expect(stored.last.parts.whereType<ToolResultPart>().single.result.output, "a\nb");
+      expect(records(id).whereType<TurnEndRecord>(), isEmpty);
+
+      app.backend.hold!.complete();
+      await waitIdle(id);
+    });
+
+    test("a finished turn is closed with why it ended", () async {
+      final (id, _) = await chatWithOneTurn("hello");
+
+      expect(records(id).last, isA<TurnEndRecord>()
+          .having((r) => r.reason, "reason", TurnEnd.done));
+    });
+
+    test("a turn the user stops is closed as aborted, not as an error", () async {
+      app.backend.hold = Completer<void>();
+      final (id, controller) = await startTurn("hello");
+      await controller.abort();
+
+      expect(records(id).last, isA<TurnEndRecord>()
+          .having((r) => r.reason, "reason", TurnEnd.aborted));
+      app.backend.hold!.complete();
+    });
+
+    test("a turn that failed is closed as an error", () async {
+      app.backend.scriptedEvents = const [ErrorEvent("nope"), DoneEvent()];
+      final (id, _) = await chatWithOneTurn("hello");
+
+      expect(records(id).last, isA<TurnEndRecord>()
+          .having((r) => r.reason, "reason", TurnEnd.error));
+    });
+
+    test("a rewind is written as a record, and the log is only added to", () async {
+      final (id, controller) = await chatWithOneTurn("hello");
+      final before = records(id).length;
+      final userId = messagesOf(id).first.id;
+
+      await controller.editAndResend(userId, "goodbye");
+      await waitIdle(id);
+
+      final after = records(id);
+      expect(after.length, greaterThan(before));
+      expect(after.whereType<RewindRecord>(), hasLength(1));
+      expect(reloaded(id), messagesOf(id));
+    });
   });
 }
 

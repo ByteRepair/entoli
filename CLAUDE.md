@@ -24,16 +24,17 @@ One backend, `MinisweBackend` — mini-swe-agent's loop ported to Dart and runni
 in this process. No server, no Python, nothing to install. `AgentBackend` stays
 as an interface so the UI and repository can be tested against `FakeBackend`.
 
-- `conv.json` is the source of truth. `ChatController` accumulates a turn's
-  events into it as they arrive; `ChatRepository` resolves which model runs and
-  owns rewinding. Context is re-injected only when a turn is resent — otherwise
-  the agent's own session carries it.
+- `conv.jsonl` is the source of truth, and it is a log rather than a document.
+  `ChatController` appends a turn's events to it as they arrive;
+  `ChatRepository` resolves which model runs and owns rewinding. Context is
+  re-injected only when a turn is resent — otherwise the agent's own session
+  carries it.
 - The agent runs **on top of** Entoli. Commands and agents are Entoli's,
   expanded before the agent sees them.
 
 ### On-disk layout
 
-`<dataDir>/chats/<chat-id>/` with `state.json`, `conv.json`, `meta.json`,
+`<dataDir>/chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`,
 `resources/`, `workspace/`, and `<dataDir>/workspace/` beside them.
 `<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
@@ -65,10 +66,17 @@ reads through, async. The cost is that a file edited behind the app's back is
 not picked up until a restart, where it used to reach the next command.
 
 Writes go through a rename. `writeAsString` truncates and only then writes, so a
-read landing between the two finds an empty file — and a turn writes `conv.json`
-as its events arrive while the title call renames the same chat beside it. A
-serialising queue was the other answer and a worse one: it made a read wait on a
-write, which deadlocks a widget test where only pumping advances the fake clock.
+read landing between the two finds an empty file — and the title call renames a
+chat while a turn is writing beside it. A serialising queue was the other answer
+and a worse one: it made a read wait on a write, which deadlocks a widget test
+where only pumping advances the fake clock. This is for the documents;
+`conv.jsonl` is appended to and has its own answer to the same hazard.
+
+The web filesystem is paged (`FileSystemIdbOptions.pageDefault`), which the
+`fs_shim` default is not. Unpaged, a file is one IndexedDB value and an append
+reads the whole thing back to rewrite it, which is the opposite of what a log is
+for. Page size is per file and converted on the first write, so nothing has to
+be migrated.
 
 Chats are a `ChatStore` — a whole store rather than four calls — and there is
 one implementation, `FileChatStore`, because the layout no longer varies.
@@ -78,6 +86,85 @@ any more; `core/platform/` builds both once.
 
 None of this is checked by loading a tab — see `test/CLAUDE.md` for how the
 browser's filesystem is exercised on the VM instead.
+
+### The conversation log
+
+`conv.jsonl` is a log of `ChatRecord`s, one per line, appended as a turn happens
+and never rewritten. It was a JSON document, and a document has to be written
+whole to stay parseable — so it could only be written once a turn was over, and
+a turn killed halfway left nothing at all. A line is complete the moment it is
+written, so the only thing a kill can now cost is whatever had not been appended
+yet. That is what makes an interrupted turn something to offer to continue
+rather than something to apologise for.
+
+Five records. `message` opens one — before it holds anything, which is what the
+empty assistant message at the head of a turn is. `part` is one part of it, at
+an index. `append` is more text on the end of the part at an index. `turnEnd`
+closes the turn and says why: `done`, `aborted`, or `error`. `rewind` forgets a
+message and everything after it.
+
+Nothing is mutable, so a part that changed is **superseded**: the same index
+written again wins, and `replay` applies records in order, so the last one
+stands. That is what lets a thinking block be closed after a tool call has
+landed behind it — `_appendChanged` diffs the reply's parts against what it last
+wrote rather than counting them, because the part that changed is not always the
+last one.
+
+`append` exists because superseding is the wrong shape for the common case.
+Rewriting a growing reply whole on every checkpoint costs its whole length once
+per second it streams for, so a local model answering slowly would write its
+reply a hundred times over and decode all hundred copies on every open. Only
+text grows a piece at a time, so `textGrownFrom` decides — a part that grew and
+changed nothing else is written as the piece it grew by, and anything else is
+written whole.
+
+`turnEnd` matters most when it is **missing**: a log whose last message has no
+`turnEnd` was being written when the process died, and that absence is the only
+thing that can tell a reload the difference between a killed turn and a finished
+one. `aborted` is kept distinct from `error` for the same reason — a turn
+someone chose to stop is not one to offer to resume.
+
+Rewinding is a record rather than a truncation because shortening a log means
+rewriting it, which is the one thing the format exists to avoid.
+
+`replay` is deliberately liberal: a part naming a message that is not there, or
+an index past the end of one, is skipped. The reader's job is to salvage a file
+written by a process that could be killed between any two lines, which is also
+why `decodeLog` stops at the first line that will not parse rather than failing
+— appends are ordered, so a broken line is the one the kill landed in and
+everything before it is whole. Both live in `chat_log.dart` with the record
+types, so the one file that describes the format is the one that reads and
+writes it.
+
+There is deliberately no whole-log write. `ChatStore` offers `append` and
+nothing else for a conversation, because a whole-log write is the truncation the
+format exists to avoid — a chat assembled in memory is
+`append(id, recordsOf(messages))`, which is what the tests seed with.
+
+Two writers would interleave lines, so the controller's appends go through one
+queue. Queued work reads the state when it runs rather than capturing it, so
+calls that pile up behind a slow write collapse into one no-op each. Not the
+serialising queue rejected above: that one was in the store and made a read wait
+on a write, this one is per-controller and write-only. It has a trap of its own
+— the chain starts null rather than at a completed future, because a
+`Future.value()` built on a widget test's fake clock only completes when the
+tree is pumped, and the first append is awaited from inside `runAsync`, where
+nothing can pump.
+`ChatController` writes a part the moment it lands, from `_appendPart` /
+`_endReasoning` / `_appendError` rather than from the event arms that call them,
+so a new kind of event cannot forget to log what it added. Text is the exception
+and goes on a one-second timer, since it grows with no event to hang a write
+off. That timer is one-shot and re-armed by the
+next delta, not periodic: a timer that rearms itself forever is a widget test
+that never settles.
+
+Two things the format still wants, both for the projection rather than for this.
+Parts need to say which provider response they came out of, since parts of one
+response have to be kept or dropped together — a reasoning block that outlives
+the tool call it preceded is rejected by the provider it goes back to. And
+nothing compacts: a chat regenerated ten times carries eleven copies of that
+turn's records and pays for them on every open, so `load` will want to rewrite
+the log once the dead records outweigh the live ones.
 
 ### Projects
 
@@ -140,7 +227,7 @@ configured. When one is, `ChatRepository` sends the first message to it through
 `AgentBackend.ask` — one call, no tools, no session, not the agent — and
 `cleanTitle` cuts the answer down to a title. Nothing waits on it: it is asked
 while the turn runs, and it lands through `retitle`, which writes `state.json`
-alone because the turn is still adding to `conv.json`. A model that cannot
+alone because the turn is still adding to `conv.jsonl`. A model that cannot
 answer names nothing and the chat keeps the name it has; there is no turn to
 report that on.
 
@@ -318,7 +405,7 @@ user and the turn waits. Offered with or without a shell — a browser cannot
 run a command, but it can still ask — which is why `_tools` exists and
 `unknownTool` is told what was on offer rather than assuming `bash`.
 
-The call and its answers are an ordinary call/result pair, so `conv.json` keeps
+The call and its answers are an ordinary call/result pair, so `conv.jsonl` keeps
 them with no new part type in it, a rewind carries them like anything else, and
 the chat draws an answered question back out of what was persisted. `AskLabel`
 is that: the question on a label, the answers behind the drawer, parsed once and
@@ -372,7 +459,7 @@ alternative — interleaving a sub-agent with a command it might depend on —
 would race the two.
 
 `SubAgentStartEvent` / `SubAgentEndEvent` are turn-scoped view state (like
-approvals and questions), so `conv.json` keeps the call/result pair and
+approvals and questions), so `conv.jsonl` keeps the call/result pair and
 nothing more; a reloaded chat draws a `TaskLabel` from the call's arguments
 alone. `SubAgentStrip` shows the running ones as chips above the composer.
 
@@ -395,13 +482,12 @@ the same way it words a command's — the model reads one shape, whatever ran.
 
 ### When a turn is over
 
-`_finishTurn` awaits the save before it clears `isRunning`. That was a
-fire-and-forget call while writing was synchronous and the distinction did not
-exist; now that a write is asynchronous, not waiting would report a finished
-turn whose `conv.json` is still in flight, and closing the app in that window
-would lose it. The window is milliseconds on a disk and longer on IndexedDB. A
-save that fails still has to clear the flag, or the composer stays disabled with
-nothing running.
+`_finishTurn` drains the append queue and writes the `turnEnd` record before it
+clears `isRunning`. Returning earlier would report a finished turn whose last
+records are still in flight, and closing the app in that window would lose them
+— and would leave a log that reads as killed when it was not. The window is
+milliseconds on a disk and longer on IndexedDB. A write that fails still has to
+clear the flag, or the composer stays disabled with nothing running.
 
 ### Thinking and tool runs
 
@@ -425,7 +511,7 @@ the block.
 session is seeded with what was said, never with what was thought.
 
 A tool call and the result answering it are one label. The parts stay separate
-in `conv.json` (they arrive at different times) and the UI pairs them by
+in `conv.jsonl` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
 What can be done to a message — Edit, Regenerate — is a row of icons under it
@@ -478,7 +564,7 @@ system prompt an agent runs under. `PromptDocument` reads only the top-level
 scalars — `description` is all the menu needs.
 
 The syntax is parsed in `MinisweBackend` (`_command` / `_mention`), not in the
-repository or the UI: `conv.json` stores the message as typed, so a regenerated
+repository or the UI: `conv.jsonl` stores the message as typed, so a regenerated
 turn re-parses to the same thing. `activeCompletionToken` in the composer has to
 agree with those two patterns — anything the menu offers has to dispatch.
 
@@ -494,7 +580,7 @@ reads the library directly and is synchronous.
 Edit and regenerate discard the turn and everything after it, then re-run it.
 The live session still holds the discarded exchange, so `resetSession` drops it
 and seeds a fresh one with `transcriptOf` the kept messages. This is the one
-place where the "conv.json is the source of truth, re-inject context" rule is
+place where the "conv.jsonl is the source of truth, re-inject context" rule is
 actually exercised. The transcript names the files the kept messages carried
 rather than resending them: only the turn being replayed carries its own back.
 
@@ -507,7 +593,7 @@ mime type and bytes.
 
 Bytes are saved under the chat's `resources/` and the message keeps a `FilePart`
 naming the resource. That is what makes an edit or a regenerate work: the parts
-are in `conv.json`, so a resend reads the bytes back off disk rather than
+are in `conv.jsonl`, so a resend reads the bytes back off disk rather than
 needing the composer to still hold them. `saveAttachments` leaves one that
 already has a resource where it is, so replaying a turn does not copy its bytes
 again.

@@ -3,6 +3,7 @@ import "dart:typed_data";
 import "../core/config.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
+import "../domain/chat_log.dart";
 import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
@@ -73,14 +74,21 @@ class ChatRepository {
 
   Future<Chat> openChat(String id) async => _isDraft(id) ? _draft! : await _store.load(id);
 
-  /// Where a draft becomes a chat: whatever was pinned on it while it was one
-  /// is written with it.
-  Future<void> save(Chat chat) async {
-    final pinned = _isDraft(chat.state.id) ? _draftMeta : null;
-    _forgetDraft(chat.state.id);
-    await _store.save(chat);
-    if (pinned != null) await _store.saveMeta(chat.state.id, pinned);
+  /// Write `state.json` and the directories under it, promoting the draft if it
+  /// still is one — which is where whatever was pinned on it gets written too.
+  /// Called at the head of every turn, not only the first. The conversation is
+  /// deliberately not written here: it arrives as records, through [append].
+  Future<void> saveState(ChatState state) async {
+    final pinned = _isDraft(state.id) ? _draftMeta : null;
+    _forgetDraft(state.id);
+    await _store.saveState(state);
+    if (pinned != null) await _store.saveMeta(state.id, pinned);
   }
+
+  /// Add to a chat's log. What a running turn does with everything it produces,
+  /// and the only way a conversation is written.
+  Future<void> append(String chatId, List<ChatRecord> records) =>
+      _store.append(chatId, records);
 
   /// A title change on its own. The conversation is deliberately not written:
   /// a turn may still be adding to it.
@@ -180,13 +188,14 @@ class ChatRepository {
       _store.readResource(chatId, resource);
 
   /// Forget the message at [index] and everything after it, then give the
-  /// backend a session that never saw them.
+  /// backend a session that never saw them. Written as a record rather than by
+  /// cutting the log: the log is only ever appended to, and shortening it would
+  /// mean rewriting the whole thing.
   Future<Chat> rewind(Chat chat, int index) async {
     final kept = chat.messages.sublist(0, index);
-    final truncated = chat.copyWith(messages: kept);
-    await save(truncated);
+    await append(chat.state.id, [ChatRecord.rewind(messageId: chat.messages[index].id)]);
     await _backend.resetSession(chat.state.id, history: kept);
-    return truncated;
+    return chat.copyWith(messages: kept);
   }
 
   Future<void> abort(String chatId) => _backend.abort(chatId);
