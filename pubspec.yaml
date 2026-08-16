@@ -2,7 +2,9 @@ name: agent_chat
 description: "Client-side ChatGPT-style chat UI with a built-in coding agent"
 publish_to: "none"
 
-version: 1.0.0+1
+# No `+build` suffix: release.yml derives the Android version code from these
+# three numbers, and a second number to bump is a second number to forget.
+version: 1.0.0
 
 environment:
   sdk: ^3.12.2

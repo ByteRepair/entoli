@@ -1007,6 +1007,92 @@ chats and has room to its right. Not `Scaffold.floatingActionButton`: the
 sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
 the one holding the drawer.
 
+## Releasing
+
+Publishing a release starts two workflows that share nothing but the event:
+`release.yml` builds and attaches the Android APK, and `pages.yml` deploys the
+web app from the same tag. Either can fail without the other, and only the
+first checks the tag against pubspec — a version disagreement stops the APK and
+deploys the site anyway. Linux is built by `debug-build.yml` on request and is
+not part of a release at all.
+
+`release.yml` attaches one signed APK with a provenance attestation beside it.
+There is no Play channel and so no App Bundle: the file on the release is the
+file that gets installed. It is named `entoli-<version>.apk` — a person
+downloads it, so it carries the app's name rather than the package's, and the
+name is composed once in the build job because the attestation records its
+subject by name.
+
+**The version is `pubspec.yaml`'s `version:` and nothing else.** The workflow
+refuses to build when the tag disagrees with it, since an APK reporting a
+version nobody released cannot be talked out of it afterwards.
+
+**The Android version code is derived from that version rather than stored**,
+as `major * 10000 + minor * 100 + patch` — 1.0.0 is 10000, 1.2.3 is 10203. So
+pubspec carries no `+build` suffix: a suffix would be a second number to bump
+and so a second number to forget, and forgetting it means a release that will
+not install over the one before it. **Minor and patch must stay below 100**, or
+1.0.100 and 1.1.0 compute the same code; the workflow fails rather than
+shipping the collision. The debug builds are a separate application id
+(`.debug`), so the run numbers `debug-build.yml` gives them are never compared
+against these.
+
+**Signing material never enters the repository.** Four secrets —
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD` — are decoded into the runner's temp directory, never
+into the workspace an artifact is uploaded from.
+`android/app/build.gradle.kts` reads the environment first and
+`android/key.properties` second, which is deliberate twice over: a stray
+properties file in a workspace cannot then change what CI signs with, and a
+password survives the environment unaltered, where `java.util.Properties`
+reads a backslash in a value as an escape and would corrupt one.
+
+**Where nothing is configured the release build falls back to the debug key,
+and that fallback is what the checks are built around.** It keeps
+`flutter run --release` working on a machine with no keystore, and Gradle
+generates a debug keystore on any runner that lacks one — so a build with the
+secrets missing still *succeeds*, and ships an APK that nothing installs over
+at the next release. So the run fails before it builds if any of the four
+secrets is empty, and asserts on the signer certificate afterwards;
+`CN=Android Debug` in `apksigner verify --print-certs` fails it. Gradle applies
+the same rule to its own inputs — all four settings or none, since a
+half-filled `key.properties` would otherwise reach AGP as a signing config with
+null members. The signer's SHA-256 goes in the run summary, because a change in
+it is the one thing a user cannot recover from.
+
+**The keystore is the maintainer's and nothing here can regenerate it.**
+Android identifies an app by its signing key, so losing it ends the ability to
+update Entoli for anyone who already has it. Making one, once:
+
+```sh
+keytool -genkey -v -keystore entoli.jks -keyalg RSA -keysize 4096 \
+  -validity 10000 -alias entoli
+base64 -w0 entoli.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS
+gh secret set ANDROID_KEY_PASSWORD
+```
+
+**Two jobs, because the one holding the keystore should not also hold
+`contents: write`.** The publisher attests the APK with
+`actions/attest-build-provenance` and attaches both files, so a download can be
+checked against the build that made it:
+
+```sh
+gh attestation verify entoli-1.0.0.apk --repo Yiannis128/agent-chat
+```
+
+Splitting also means a failed upload re-runs against the artifact that was
+already built and checked rather than a rebuild that would have to be trusted
+to match. **A job that never checks out has no git remote**, which is the trap
+in that split: `gh release upload` reads the repository from it and fails with
+`not a git repository` pointing at the runner, so the publisher names the
+repository explicitly.
+
+`workflow_dispatch` takes a tag and rebuilds an existing release for the same
+reason: recreating a release to retry a publish changes its timestamp and
+notifies every watcher a second time.
+
 ## Development
 
 - Build/test Linux desktop inside the `flutter-dev` toolbox (host lacks
