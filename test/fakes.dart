@@ -112,6 +112,7 @@ class FakeBackend implements AgentBackend {
         String? provider,
         String? project,
         List<Attachment> attachments,
+        List<Message> history,
         ApproveMode approveMode,
         String? classifierProvider,
         String? classifierModel,
@@ -128,6 +129,7 @@ class FakeBackend implements AgentBackend {
   @override
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
+      List<Message> history = const [],
       String? model,
       String? provider,
       String? project,
@@ -141,6 +143,7 @@ class FakeBackend implements AgentBackend {
       provider: provider,
       project: project,
       attachments: attachments,
+      history: history,
       approveMode: approveMode,
       classifierProvider: classifierProvider,
       classifierModel: classifierModel,
@@ -156,6 +159,7 @@ class FakeBackend implements AgentBackend {
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
     resets.add(history);
   }
+
 
   var didShutdown = false;
 

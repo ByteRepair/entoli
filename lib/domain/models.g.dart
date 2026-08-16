@@ -66,11 +66,13 @@ const _$MessageRoleEnumMap = {
 
 TextPart _$TextPartFromJson(Map<String, dynamic> json) => TextPart(
   text: json['text'] as String,
+  responseId: json['responseId'] as String?,
   $type: json['runtimeType'] as String?,
 );
 
 Map<String, dynamic> _$TextPartToJson(TextPart instance) => <String, dynamic>{
   'text': instance.text,
+  'responseId': instance.responseId,
   'runtimeType': instance.$type,
 };
 
@@ -78,6 +80,8 @@ ReasoningPart _$ReasoningPartFromJson(Map<String, dynamic> json) =>
     ReasoningPart(
       text: json['text'] as String,
       durationMs: (json['durationMs'] as num?)?.toInt(),
+      signature: json['signature'] as String?,
+      responseId: json['responseId'] as String?,
       $type: json['runtimeType'] as String?,
     );
 
@@ -85,17 +89,21 @@ Map<String, dynamic> _$ReasoningPartToJson(ReasoningPart instance) =>
     <String, dynamic>{
       'text': instance.text,
       'durationMs': instance.durationMs,
+      'signature': instance.signature,
+      'responseId': instance.responseId,
       'runtimeType': instance.$type,
     };
 
 ToolCallPart _$ToolCallPartFromJson(Map<String, dynamic> json) => ToolCallPart(
   toolCall: ToolCall.fromJson(json['toolCall'] as Map<String, dynamic>),
+  responseId: json['responseId'] as String?,
   $type: json['runtimeType'] as String?,
 );
 
 Map<String, dynamic> _$ToolCallPartToJson(ToolCallPart instance) =>
     <String, dynamic>{
       'toolCall': instance.toolCall,
+      'responseId': instance.responseId,
       'runtimeType': instance.$type,
     };
 

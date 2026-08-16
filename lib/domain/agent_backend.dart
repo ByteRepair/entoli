@@ -8,6 +8,15 @@ sealed class AgentEvent {
   const AgentEvent();
 }
 
+/// The model is about to answer. A turn is several responses — think, call a
+/// tool, look at the result, think again — and every part produced from here
+/// until the next one belongs to this one. See [MessagePart] for why they have
+/// to be kept together.
+class ResponseStart extends AgentEvent {
+  const ResponseStart(this.id);
+  final String id;
+}
+
 class TextDelta extends AgentEvent {
   const TextDelta(this.text);
   final String text;
@@ -24,9 +33,13 @@ class ReasoningDelta extends AgentEvent {
 /// streams no deltas still sends it here, so it is what the block ends up
 /// holding.
 class ReasoningEnd extends AgentEvent {
-  const ReasoningEnd({this.text, this.duration});
+  const ReasoningEnd({this.text, this.duration, this.signature});
   final String? text;
   final Duration? duration;
+
+  /// Anthropic's signature for the block, where the provider sent one. See
+  /// [ReasoningPart.signature] for why it is kept.
+  final String? signature;
 }
 
 class ToolCallEvent extends AgentEvent {
@@ -111,8 +124,16 @@ abstract class AgentBackend {
   /// which project's files the turn works in — null is the default one.
   /// [classifierProvider]/[classifierModel] name the model that classifies
   /// commands in auto mode; null means auto mode falls back to asking.
+  ///
+  /// [history] is what was said before this prompt. It travels with the prompt
+  /// rather than being handed over first: a session lives in memory for as long
+  /// as the app does, so a chat opened after a restart has none, and a separate
+  /// call to fill one is a call a caller can forget — leaving a model that has
+  /// seen nothing of the chat to answer it fluently. Read only where the
+  /// session is empty.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments,
+      List<Message> history,
       String? model,
       String? provider,
       String? project,

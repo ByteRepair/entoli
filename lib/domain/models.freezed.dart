@@ -1027,12 +1027,12 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text)?  text,TResult Function( String text,  int? durationMs)?  reasoning,TResult Function( ToolCall toolCall)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String resource,  String filename,  String mimeType)?  file,TResult Function( String message)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text,  String? responseId)?  text,TResult Function( String text,  int? durationMs,  String? signature,  String? responseId)?  reasoning,TResult Function( ToolCall toolCall,  String? responseId)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String resource,  String filename,  String mimeType)?  file,TResult Function( String message)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
-return text(_that.text);case ReasoningPart() when reasoning != null:
-return reasoning(_that.text,_that.durationMs);case ToolCallPart() when toolCall != null:
-return toolCall(_that.toolCall);case ToolResultPart() when toolResult != null:
+return text(_that.text,_that.responseId);case ReasoningPart() when reasoning != null:
+return reasoning(_that.text,_that.durationMs,_that.signature,_that.responseId);case ToolCallPart() when toolCall != null:
+return toolCall(_that.toolCall,_that.responseId);case ToolResultPart() when toolResult != null:
 return toolResult(_that.result);case FilePart() when file != null:
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
 return error(_that.message);case _:
@@ -1053,12 +1053,12 @@ return error(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text)  text,required TResult Function( String text,  int? durationMs)  reasoning,required TResult Function( ToolCall toolCall)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String resource,  String filename,  String mimeType)  file,required TResult Function( String message)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text,  String? responseId)  text,required TResult Function( String text,  int? durationMs,  String? signature,  String? responseId)  reasoning,required TResult Function( ToolCall toolCall,  String? responseId)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String resource,  String filename,  String mimeType)  file,required TResult Function( String message)  error,}) {final _that = this;
 switch (_that) {
 case TextPart():
-return text(_that.text);case ReasoningPart():
-return reasoning(_that.text,_that.durationMs);case ToolCallPart():
-return toolCall(_that.toolCall);case ToolResultPart():
+return text(_that.text,_that.responseId);case ReasoningPart():
+return reasoning(_that.text,_that.durationMs,_that.signature,_that.responseId);case ToolCallPart():
+return toolCall(_that.toolCall,_that.responseId);case ToolResultPart():
 return toolResult(_that.result);case FilePart():
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart():
 return error(_that.message);}
@@ -1075,12 +1075,12 @@ return error(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text)?  text,TResult? Function( String text,  int? durationMs)?  reasoning,TResult? Function( ToolCall toolCall)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String resource,  String filename,  String mimeType)?  file,TResult? Function( String message)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text,  String? responseId)?  text,TResult? Function( String text,  int? durationMs,  String? signature,  String? responseId)?  reasoning,TResult? Function( ToolCall toolCall,  String? responseId)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String resource,  String filename,  String mimeType)?  file,TResult? Function( String message)?  error,}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
-return text(_that.text);case ReasoningPart() when reasoning != null:
-return reasoning(_that.text,_that.durationMs);case ToolCallPart() when toolCall != null:
-return toolCall(_that.toolCall);case ToolResultPart() when toolResult != null:
+return text(_that.text,_that.responseId);case ReasoningPart() when reasoning != null:
+return reasoning(_that.text,_that.durationMs,_that.signature,_that.responseId);case ToolCallPart() when toolCall != null:
+return toolCall(_that.toolCall,_that.responseId);case ToolResultPart() when toolResult != null:
 return toolResult(_that.result);case FilePart() when file != null:
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
 return error(_that.message);case _:
@@ -1095,10 +1095,11 @@ return error(_that.message);case _:
 @JsonSerializable()
 
 class TextPart implements MessagePart {
-  const TextPart({required this.text, final  String? $type}): $type = $type ?? 'text';
+  const TextPart({required this.text, this.responseId, final  String? $type}): $type = $type ?? 'text';
   factory TextPart.fromJson(Map<String, dynamic> json) => _$TextPartFromJson(json);
 
  final  String text;
+ final  String? responseId;
 
 @JsonKey(name: 'runtimeType')
 final String $type;
@@ -1117,16 +1118,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TextPart&&(identical(other.text, text) || other.text == text));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is TextPart&&(identical(other.text, text) || other.text == text)&&(identical(other.responseId, responseId) || other.responseId == responseId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,text);
+int get hashCode => Object.hash(runtimeType,text,responseId);
 
 @override
 String toString() {
-  return 'MessagePart.text(text: $text)';
+  return 'MessagePart.text(text: $text, responseId: $responseId)';
 }
 
 
@@ -1137,7 +1138,7 @@ abstract mixin class $TextPartCopyWith<$Res> implements $MessagePartCopyWith<$Re
   factory $TextPartCopyWith(TextPart value, $Res Function(TextPart) _then) = _$TextPartCopyWithImpl;
 @useResult
 $Res call({
- String text
+ String text, String? responseId
 });
 
 
@@ -1154,10 +1155,11 @@ class _$TextPartCopyWithImpl<$Res>
 
 /// Create a copy of MessagePart
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? text = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? text = null,Object? responseId = freezed,}) {
   return _then(TextPart(
 text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
-as String,
+as String,responseId: freezed == responseId ? _self.responseId : responseId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -1168,11 +1170,13 @@ as String,
 @JsonSerializable()
 
 class ReasoningPart implements MessagePart {
-  const ReasoningPart({required this.text, this.durationMs, final  String? $type}): $type = $type ?? 'reasoning';
+  const ReasoningPart({required this.text, this.durationMs, this.signature, this.responseId, final  String? $type}): $type = $type ?? 'reasoning';
   factory ReasoningPart.fromJson(Map<String, dynamic> json) => _$ReasoningPartFromJson(json);
 
  final  String text;
  final  int? durationMs;
+ final  String? signature;
+ final  String? responseId;
 
 @JsonKey(name: 'runtimeType')
 final String $type;
@@ -1191,16 +1195,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReasoningPart&&(identical(other.text, text) || other.text == text)&&(identical(other.durationMs, durationMs) || other.durationMs == durationMs));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReasoningPart&&(identical(other.text, text) || other.text == text)&&(identical(other.durationMs, durationMs) || other.durationMs == durationMs)&&(identical(other.signature, signature) || other.signature == signature)&&(identical(other.responseId, responseId) || other.responseId == responseId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,text,durationMs);
+int get hashCode => Object.hash(runtimeType,text,durationMs,signature,responseId);
 
 @override
 String toString() {
-  return 'MessagePart.reasoning(text: $text, durationMs: $durationMs)';
+  return 'MessagePart.reasoning(text: $text, durationMs: $durationMs, signature: $signature, responseId: $responseId)';
 }
 
 
@@ -1211,7 +1215,7 @@ abstract mixin class $ReasoningPartCopyWith<$Res> implements $MessagePartCopyWit
   factory $ReasoningPartCopyWith(ReasoningPart value, $Res Function(ReasoningPart) _then) = _$ReasoningPartCopyWithImpl;
 @useResult
 $Res call({
- String text, int? durationMs
+ String text, int? durationMs, String? signature, String? responseId
 });
 
 
@@ -1228,11 +1232,13 @@ class _$ReasoningPartCopyWithImpl<$Res>
 
 /// Create a copy of MessagePart
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? text = null,Object? durationMs = freezed,}) {
+@pragma('vm:prefer-inline') $Res call({Object? text = null,Object? durationMs = freezed,Object? signature = freezed,Object? responseId = freezed,}) {
   return _then(ReasoningPart(
 text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as String,durationMs: freezed == durationMs ? _self.durationMs : durationMs // ignore: cast_nullable_to_non_nullable
-as int?,
+as int?,signature: freezed == signature ? _self.signature : signature // ignore: cast_nullable_to_non_nullable
+as String?,responseId: freezed == responseId ? _self.responseId : responseId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -1243,10 +1249,11 @@ as int?,
 @JsonSerializable()
 
 class ToolCallPart implements MessagePart {
-  const ToolCallPart({required this.toolCall, final  String? $type}): $type = $type ?? 'toolCall';
+  const ToolCallPart({required this.toolCall, this.responseId, final  String? $type}): $type = $type ?? 'toolCall';
   factory ToolCallPart.fromJson(Map<String, dynamic> json) => _$ToolCallPartFromJson(json);
 
  final  ToolCall toolCall;
+ final  String? responseId;
 
 @JsonKey(name: 'runtimeType')
 final String $type;
@@ -1265,16 +1272,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolCallPart&&(identical(other.toolCall, toolCall) || other.toolCall == toolCall));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolCallPart&&(identical(other.toolCall, toolCall) || other.toolCall == toolCall)&&(identical(other.responseId, responseId) || other.responseId == responseId));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,toolCall);
+int get hashCode => Object.hash(runtimeType,toolCall,responseId);
 
 @override
 String toString() {
-  return 'MessagePart.toolCall(toolCall: $toolCall)';
+  return 'MessagePart.toolCall(toolCall: $toolCall, responseId: $responseId)';
 }
 
 
@@ -1285,7 +1292,7 @@ abstract mixin class $ToolCallPartCopyWith<$Res> implements $MessagePartCopyWith
   factory $ToolCallPartCopyWith(ToolCallPart value, $Res Function(ToolCallPart) _then) = _$ToolCallPartCopyWithImpl;
 @useResult
 $Res call({
- ToolCall toolCall
+ ToolCall toolCall, String? responseId
 });
 
 
@@ -1302,10 +1309,11 @@ class _$ToolCallPartCopyWithImpl<$Res>
 
 /// Create a copy of MessagePart
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? toolCall = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? toolCall = null,Object? responseId = freezed,}) {
   return _then(ToolCallPart(
 toolCall: null == toolCall ? _self.toolCall : toolCall // ignore: cast_nullable_to_non_nullable
-as ToolCall,
+as ToolCall,responseId: freezed == responseId ? _self.responseId : responseId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

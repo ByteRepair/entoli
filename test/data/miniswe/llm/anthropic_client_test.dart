@@ -69,6 +69,12 @@ void main() {
       expect(message.reasoning, "let me see");
       expect(message.reasoningSignature, "sig-abc");
       expect(message.text, "done");
+
+      // Reported while the block is still the last thing that happened, so it
+      // can be closed already holding it rather than written again later.
+      expect(chunks.whereType<LlmReasoningSignature>().single.signature, "sig-abc");
+      expect(chunks.indexWhere((c) => c is LlmReasoningSignature),
+          lessThan(chunks.indexWhere((c) => c is LlmTextChunk)));
     });
 
     test("a tool call's input is rebuilt from its partial JSON", () async {

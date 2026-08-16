@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:uuid/uuid.dart";
+
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
@@ -83,20 +85,12 @@ class MinisweSession {
 
   bool get isFresh => messages.isEmpty;
 
-  void clear() => messages.clear();
-
-  /// Seed a session that missed the conversation, so a rewound chat is not
-  /// answered by a model that never saw it. Worded as an exchange because a
-  /// bare preamble reads as the task itself.
-  void seed(String transcript) {
-    clear();
-    if (transcript.isEmpty) return;
-    messages.add(LlmMessage(role: LlmRole.user, text: transcriptPreamble(transcript)));
-    messages.add(const LlmMessage(
-      role: LlmRole.assistant,
-      text: "Understood. I have the conversation so far.",
-    ));
-  }
+  /// Put the conversation back into a session that does not have it — one
+  /// rewound, or one belonging to a chat opened after a restart. `project` is
+  /// what builds the argument, out of what `conv.jsonl` kept.
+  void replaceWith(Iterable<LlmMessage> conversation) => messages
+    ..clear()
+    ..addAll(conversation);
 }
 
 /// mini-swe-agent's control flow, in Dart: ask the model, run the command it
@@ -237,6 +231,11 @@ class MinisweAgent {
     for (var step = 0; step < options.stepLimit; step++) {
       if (_cancelled) break;
 
+      // One response per step, named before it starts: what streams out of it
+      // is stamped with this, so the turn can be handed back to a provider a
+      // response at a time.
+      yield ResponseStart(const Uuid().v4());
+
       _completion = null;
       _queryError = null;
       yield* _query();
@@ -320,7 +319,7 @@ class MinisweAgent {
         // Task calls are answered at the end; a task call that was never
         // collected (no sub-agent runner) is answered here instead.
         if (call.name != taskToolName || taskCalls.isEmpty) {
-          _answerRun(call, const ShellResult.failed("This command was not executed."));
+          _answerRun(call, const ShellResult.failed(notExecuted));
         }
         continue;
       }
@@ -708,7 +707,9 @@ class MinisweAgent {
     while (true) {
       var produced = false;
       var textStreamed = false;
+      var reasoningClosed = false;
       DateTime? thinkingSince;
+      String? signature;
 
       try {
         await for (final chunk in client.stream(
@@ -725,23 +726,36 @@ class MinisweAgent {
               thinkingSince ??= DateTime.now();
               yield ReasoningDelta(text);
 
+            case LlmReasoningSignature():
+              signature = chunk.signature;
+
             case LlmTextChunk(:final text):
               produced = true;
               textStreamed = true;
               // Thinking ended when the reply started, not when the call did.
               if (thinkingSince != null) {
-                yield ReasoningEnd(duration: DateTime.now().difference(thinkingSince));
+                yield ReasoningEnd(
+                    duration: DateTime.now().difference(thinkingSince),
+                    signature: signature);
                 thinkingSince = null;
+                reasoningClosed = true;
               }
               yield TextDelta(text);
 
             case LlmCompletion():
+              signature ??= chunk.message.reasoningSignature;
               if (thinkingSince != null) {
-                yield ReasoningEnd(duration: DateTime.now().difference(thinkingSince));
-              } else if (chunk.message.reasoning != null) {
+                yield ReasoningEnd(
+                    duration: DateTime.now().difference(thinkingSince),
+                    signature: signature);
+                reasoningClosed = true;
+              } else if (!reasoningClosed && chunk.message.reasoning != null) {
                 // A provider that reports thinking only once it is over still
-                // fills the block.
-                yield ReasoningEnd(text: chunk.message.reasoning);
+                // fills the block. Guarded, because the OpenAI shape reports it
+                // *as well as* streaming it: closing the block a second time
+                // writes the thinking twice, into the chat and into what goes
+                // back to the provider.
+                yield ReasoningEnd(text: chunk.message.reasoning, signature: signature);
               }
               // Text that was in the completion but never streamed as a delta —
               // the fake client does this, and a provider may too. Without it,

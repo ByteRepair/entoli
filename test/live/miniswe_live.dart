@@ -108,6 +108,8 @@ void main() {
       approveMode: ApproveMode.never,
     )) {
       switch (event) {
+        case ResponseStart():
+          break;
         case TextDelta(:final text):
           reply.write(text);
         case ReasoningDelta(:final text):

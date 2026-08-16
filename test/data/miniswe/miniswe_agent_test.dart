@@ -166,6 +166,76 @@ void main() {
       expect(events.whereType<ReasoningEnd>().single.duration, isNotNull);
     });
 
+    // The block has to go back to Anthropic signed, so it is closed holding
+    // the signature rather than written again once the response completes.
+    test("a signed thinking block is closed with its signature", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmReasoningChunk("weighing it up"),
+          const LlmReasoningSignature("sig-abc"),
+          const LlmTextChunk("Looking now."),
+          saidOnly("Looking now."),
+        ],
+      ]);
+      final events = await agentOver(client).run("hi").toList();
+
+      expect(events.whereType<ReasoningEnd>().single.signature, "sig-abc");
+    });
+
+    test("a provider that reports the signature only at the end still keeps it", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              reasoning: "all of it at once",
+              reasoningSignature: "sig-late",
+              text: "done",
+            ),
+          ),
+        ],
+      ]);
+      final events = await agentOver(client).run("hi").toList();
+
+      expect(events.whereType<ReasoningEnd>().single.signature, "sig-late");
+    });
+
+    // Each is a message the provider has to be handed back whole, so the parts
+    // of one have to be told apart from the parts of the next.
+    test("every step opens a response of its own", () async {
+      final client = FakeLlmClient([
+        [bashCall("pwd")],
+        [finish],
+      ]);
+      final events = await agentOver(client).run("where am I?").toList();
+
+      final ids = events.whereType<ResponseStart>().map((e) => e.id).toList();
+      expect(ids, hasLength(2));
+      expect(ids.toSet(), hasLength(2));
+    });
+
+    // The OpenAI shape reports the whole of the thinking on the completion as
+    // well as streaming it, so closing the block on both wrote it twice.
+    test("thinking that streamed is not closed again by the completion", () async {
+      final client = FakeLlmClient([
+        [
+          const LlmReasoningChunk("weighing it up"),
+          const LlmTextChunk("Looking now."),
+          const LlmCompletion(
+            message: LlmMessage(
+              role: LlmRole.assistant,
+              reasoning: "weighing it up",
+              text: "Looking now.",
+            ),
+          ),
+        ],
+      ]);
+      final events = await agentOver(client).run("hi").toList();
+
+      expect(events.whereType<ReasoningEnd>(), hasLength(1));
+      expect(events.whereType<ReasoningEnd>().single.duration, isNotNull);
+    });
+
     test("thinking reported only at the end still fills the block", () async {
       final client = FakeLlmClient([
         [
@@ -475,8 +545,11 @@ void main() {
   });
 
   group("a session that missed the conversation", () {
-    test("is seeded with a transcript before the next turn", () async {
-      session.seed("user: what is 2+2?\n\nassistant: four");
+    test("carries on from what it was given", () async {
+      session.replaceWith(const [
+        LlmMessage(role: LlmRole.user, text: "what is 2+2?"),
+        LlmMessage(role: LlmRole.assistant, text: "four"),
+      ]);
       final client = FakeLlmClient([
         [finish],
       ]);
@@ -487,8 +560,8 @@ void main() {
       expect(client.sent.first.last.text, "and 3+3?");
     });
 
-    test("seeding nothing leaves a session that starts from the task", () async {
-      session.seed("");
+    test("given nothing, it starts from the task", () async {
+      session.replaceWith(const []);
       expect(session.isFresh, isTrue);
     });
   });

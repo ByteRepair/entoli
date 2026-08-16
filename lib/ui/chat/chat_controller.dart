@@ -92,6 +92,11 @@ class ChatController extends Notifier<ChatViewState> {
   /// append is awaited from inside `runAsync`, where it cannot be.
   Future<void>? _queue;
 
+  /// The response being streamed. Every part produced while it is set is
+  /// stamped with it, which is what lets a turn be handed back to a provider
+  /// one response at a time — see [MessagePart].
+  String? _responseId;
+
   /// How the turn ended, where something other than the model decided it. Set
   /// before the abort is awaited, because the stream can close first and the
   /// terminal record would otherwise say the turn simply finished. Null means
@@ -201,27 +206,29 @@ class ChatController extends Notifier<ChatViewState> {
     if (_pendingIsReasoning) {
       final at = _openReasoningAt(parts);
       if (at < 0) {
-        parts.add(MessagePart.reasoning(text: text));
+        parts.add(MessagePart.reasoning(text: text, responseId: _responseId));
       } else {
-        parts[at] = ReasoningPart(text: "${(parts[at] as ReasoningPart).text}$text");
+        final open = parts[at] as ReasoningPart;
+        parts[at] = open.copyWith(text: "${open.text}$text");
       }
-    } else if (last is TextPart) {
-      parts[parts.length - 1] = TextPart(text: "${last.text}$text");
+    } else if (last is TextPart && last.responseId == _responseId) {
+      parts[parts.length - 1] = last.copyWith(text: "${last.text}$text");
     } else {
-      parts.add(MessagePart.text(text: text));
+      parts.add(MessagePart.text(text: text, responseId: _responseId));
     }
     _writeReply(parts);
   }
 
   /// A block is timed once it closes, so an untimed one is still being
   /// written. Searched for rather than assumed last: another part can land
-  /// between a block's deltas and the event that closes it.
-  int _openReasoningAt(List<MessagePart> parts) =>
-      parts.lastIndexWhere((p) => p is ReasoningPart && p.durationMs == null);
+  /// between a block's deltas and the event that closes it. Only this
+  /// response's: a block left open by the one before is not this one's to fill.
+  int _openReasoningAt(List<MessagePart> parts) => parts.lastIndexWhere(
+      (p) => p is ReasoningPart && p.durationMs == null && p.responseId == _responseId);
 
   /// Close the thinking block being written. The backend's text wins over what
   /// streamed: a provider that sends no deltas still reports the whole of it.
-  void _endReasoning(String? text, Duration? duration) {
+  void _endReasoning(String? text, Duration? duration, String? signature) {
     _flushDeltas();
     final parts = List<MessagePart>.from(_reply?.parts ?? const []);
     final at = _openReasoningAt(parts);
@@ -229,7 +236,12 @@ class ChatController extends Notifier<ChatViewState> {
     final body = text != null && text.isNotEmpty ? text : (open?.text ?? "");
     if (body.isEmpty && open == null) return;
 
-    final sealed = MessagePart.reasoning(text: body, durationMs: duration?.inMilliseconds);
+    final sealed = MessagePart.reasoning(
+      text: body,
+      durationMs: duration?.inMilliseconds,
+      signature: signature,
+      responseId: _responseId,
+    );
     if (open == null) {
       parts.add(sealed);
     } else {
@@ -302,6 +314,7 @@ class ChatController extends Notifier<ChatViewState> {
     // killed before the model says anything still shows what was asked.
     await repo.saveState(updatedChat.state);
     _outcome = null;
+    _responseId = null;
     _loggedId = assistantMsg.id;
     _logged = const [];
     await _enqueue(() => repo.append(chatId, recordsOf([userMsg, assistantMsg])));
@@ -312,7 +325,10 @@ class ChatController extends Notifier<ChatViewState> {
       unawaited(_nameChat(text));
     }
 
-    final stream = repo.sendPrompt(chatId, text, attachments: attachments);
+    // `chat` is the conversation before this turn was added to it, which is
+    // what a backend holding no session for the chat needs to be told.
+    final stream = repo.sendPrompt(chatId, text,
+        attachments: attachments, history: chat.messages);
     _sub?.cancel();
     _sub = stream.listen(
       (event) => _onEvent(event),
@@ -364,12 +380,17 @@ class ChatController extends Notifier<ChatViewState> {
     if (_reply == null) return;
 
     switch (event) {
+      case ResponseStart(:final id):
+        // Before the id moves: what is buffered was said by the response that
+        // is ending, not the one starting.
+        _flushDeltas();
+        _responseId = id;
       case TextDelta(:final text):
         _bufferDelta(text);
       case ReasoningDelta(:final text):
         _bufferDelta(text, reasoning: true);
-      case ReasoningEnd(:final text, :final duration):
-        _endReasoning(text, duration);
+      case ReasoningEnd(:final text, :final duration, :final signature):
+        _endReasoning(text, duration, signature);
       case ToolCallEvent(:final call):
         _appendPart(MessagePart.toolCall(toolCall: call));
       case ToolResultEvent(:final result):
@@ -395,13 +416,23 @@ class ChatController extends Notifier<ChatViewState> {
     }
   }
 
-  /// Every discrete part goes through here, and so does its record: a new kind
-  /// of event cannot forget to log what it added.
+  /// Every discrete part goes through here, and so do its record and the
+  /// response it belongs to: a new kind of event cannot forget either.
   void _appendPart(MessagePart part) {
     _flushDeltas();
-    _writeReply([...?_reply?.parts, part]);
+    _writeReply([...?_reply?.parts, _inResponse(part)]);
     _checkpointLog();
   }
+
+  /// Stamp a part with the response being streamed, where it has somewhere to
+  /// put it. A result belongs to the call it answers and an error to nobody, so
+  /// neither carries one.
+  MessagePart _inResponse(MessagePart part) => switch (part) {
+        TextPart() => part.copyWith(responseId: _responseId),
+        ReasoningPart() => part.copyWith(responseId: _responseId),
+        ToolCallPart() => part.copyWith(responseId: _responseId),
+        _ => part,
+      };
 
   /// The turn is over when it has been written, not when the last event
   /// arrives. Writing is asynchronous — a browser's filesystem cannot be

@@ -89,6 +89,15 @@ class LlmReasoningChunk extends LlmChunk {
   final String text;
 }
 
+/// The signature Anthropic stamps a thinking block with. Its own chunk because
+/// it arrives while the block is still open — before the reply's first token —
+/// so the block can be closed already carrying it, rather than being written a
+/// second time once the response completes.
+class LlmReasoningSignature extends LlmChunk {
+  const LlmReasoningSignature(this.signature);
+  final String signature;
+}
+
 class LlmCompletion extends LlmChunk {
   const LlmCompletion({required this.message, this.finishReason});
 
