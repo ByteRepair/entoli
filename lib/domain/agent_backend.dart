@@ -8,6 +8,15 @@ sealed class AgentEvent {
   const AgentEvent();
 }
 
+/// The model is about to answer. A turn is several responses — think, call a
+/// tool, look at the result, think again — and every part produced from here
+/// until the next one belongs to this one. See [MessagePart] for why they have
+/// to be kept together.
+class ResponseStart extends AgentEvent {
+  const ResponseStart(this.id);
+  final String id;
+}
+
 class TextDelta extends AgentEvent {
   const TextDelta(this.text);
   final String text;
@@ -24,9 +33,13 @@ class ReasoningDelta extends AgentEvent {
 /// streams no deltas still sends it here, so it is what the block ends up
 /// holding.
 class ReasoningEnd extends AgentEvent {
-  const ReasoningEnd({this.text, this.duration});
+  const ReasoningEnd({this.text, this.duration, this.signature});
   final String? text;
   final Duration? duration;
+
+  /// Anthropic's signature for the block, where the provider sent one. See
+  /// [ReasoningPart.signature] for why it is kept.
+  final String? signature;
 }
 
 class ToolCallEvent extends AgentEvent {
@@ -124,6 +137,12 @@ abstract class AgentBackend {
   /// Drop the chat's live session so the next prompt starts a clean one,
   /// seeded with [history].
   Future<void> resetSession(String chatId, {List<Message> history = const []});
+
+  /// Seed the chat's session with [history] if it does not have one yet. A
+  /// session lives in memory for as long as the app does, so a chat opened
+  /// after a restart has none — and would otherwise be answered by a model
+  /// that had never seen a word of it.
+  Future<void> ensureSession(String chatId, List<Message> history);
 
   /// Release everything this backend holds. Called when the app exits.
   Future<void> shutdown();

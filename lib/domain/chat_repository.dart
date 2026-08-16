@@ -124,6 +124,12 @@ class ChatRepository {
     await _store.saveMeta(chatId, meta);
   }
 
+  /// Give the backend the conversation so far, if it is not already holding it.
+  /// Sessions live in memory, so the first turn after the app starts is the one
+  /// that would otherwise be answered by a model that never saw the chat.
+  Future<void> ensureSession(String chatId, List<Message> history) =>
+      _backend.ensureSession(chatId, history);
+
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const []}) async* {
     final meta = await loadMeta(chatId);

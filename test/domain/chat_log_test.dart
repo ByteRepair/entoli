@@ -124,6 +124,35 @@ void main() {
           textGrownFrom(const MessagePart.reasoning(text: "hm"),
               const MessagePart.reasoning(text: "hmmm")),
           "mm");
+      // So did one being signed, and one belonging to another response.
+      expect(
+          textGrownFrom(const MessagePart.reasoning(text: "hm"),
+              const MessagePart.reasoning(text: "hmmm", signature: "sig")),
+          isNull);
+      expect(
+          textGrownFrom(const MessagePart.text(text: "one", responseId: "r1"),
+              const MessagePart.text(text: "one two", responseId: "r2")),
+          isNull);
+      expect(
+          textGrownFrom(const MessagePart.text(text: "one", responseId: "r1"),
+              const MessagePart.text(text: "one two", responseId: "r1")),
+          " two");
+    });
+
+    test("an append keeps what the part it lands on already carried", () {
+      final messages = replay([
+        message("m1", MessageRole.assistant),
+        const ChatRecord.part(
+            messageId: "m1",
+            index: 0,
+            part: MessagePart.reasoning(text: "hm", signature: "sig", responseId: "r1")),
+        const ChatRecord.append(messageId: "m1", index: 0, text: "mm"),
+      ]);
+
+      final block = messages.single.parts.single as ReasoningPart;
+      expect(block.text, "hmmm");
+      expect(block.signature, "sig");
+      expect(block.responseId, "r1");
     });
   });
 

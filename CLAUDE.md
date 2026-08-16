@@ -158,13 +158,49 @@ off. That timer is one-shot and re-armed by the
 next delta, not periodic: a timer that rearms itself forever is a widget test
 that never settles.
 
-Two things the format still wants, both for the projection rather than for this.
-Parts need to say which provider response they came out of, since parts of one
-response have to be kept or dropped together — a reasoning block that outlives
-the tool call it preceded is rejected by the provider it goes back to. And
-nothing compacts: a chat regenerated ten times carries eleven copies of that
-turn's records and pays for them on every open, so `load` will want to rewrite
-the log once the dead records outweigh the live ones.
+One thing the format still wants: nothing compacts. A chat regenerated ten times
+carries eleven copies of that turn's records and pays for them on every open, so
+`load` will want to rewrite the log once the dead records outweigh the live ones.
+
+#### The projection
+
+`replay` reads the log for the UI; `project` reads it for a provider, and the
+two are what the log exists to make possible. A domain `Message` is a whole turn
+and a turn is several provider responses — think, call a tool, look at the
+result, think again — so `project` splits one assistant message back into one
+`LlmMessage` per response, each followed by the `tool` messages answering its
+calls. Handing a response's thinking back with a later response's tool calls is
+rejected, so the split has to be right.
+
+That is what `responseId` is for. `MinisweAgent` names each step before it runs
+and emits `ResponseStart`; every part the controller writes while it is set
+carries it, so the grouping is read out of the log rather than guessed from the
+order parts happen to be in. A part naming no response — a result, an error —
+belongs to the response before it.
+
+`ReasoningPart.signature` is Anthropic's and exists only for it: with thinking
+enabled it rejects a tool-use turn whose thinking comes back unsigned. Nothing
+else reads the field, so it goes when `AnthropicClient` stops needing one. It is
+`AnthropicClient` that decides when: the signature arrives while the thinking
+block is still open, and it is yielded there as `LlmReasoningSignature` rather
+than waiting for the completion, so the block is closed already holding it
+instead of being written to the log a second time.
+
+A result is worded the way the agent worded it when it ran — `observation(...)`,
+or the answers themselves for an `ask_user` — so a projected conversation is the
+one the model already answered rather than a paraphrase of it. A call whose
+result never landed is answered anyway, since a provider that sees a tool call
+with no result rejects the next turn. Attachments are named, not resent: the
+bytes are on disk and reading them back would make this asynchronous.
+
+Two things reach for it. `resetSession` on a rewind, which is what it replaced —
+the old path wrote the kept messages out as prose and told the model "earlier in
+this conversation", losing the thinking, the calls and the results. And
+`ensureSession`, called at the head of every turn: sessions live in memory for
+as long as the app does, so a chat opened after a restart has none, and the
+model would have been answering the next message having seen nothing of the
+chat. The controller passes what it holds rather than the store being re-read,
+since the turn's own messages are already in `state` by then.
 
 ### Projects
 
@@ -277,7 +313,8 @@ for a tool that does not exist. A provider that sees a
 "this command was not executed" is what keeps the session usable.
 
 `MinisweSession` holds the conversation as the model sees it, per chat, for as
-long as the app runs. `resetSession` seeds a fresh one with a transcript.
+long as the app runs — which is the whole of its lifetime, so `resetSession` and
+`ensureSession` fill one from the log through `project`. See "The projection".
 
 #### Reaching a provider
 
@@ -291,8 +328,9 @@ holding all N results.
 
 Thinking is handed back with the `signature` it arrived with. With thinking
 enabled, Anthropic rejects a tool-use turn whose thinking was dropped, so
-`LlmMessage` carries `reasoningSignature` for no other reason. Enabling
-thinking also pins the temperature at 1, so the two are never sent together.
+`LlmMessage` carries `reasoningSignature` and `ReasoningPart` carries
+`signature` for no other reason — see "The projection". Enabling thinking also
+pins the temperature at 1, so the two are never sent together.
 
 Providers are configured in `settings.json` under `llmProviders` — id, API
 shape, base URL, key, and an optional model list — and `llmProviderPresets`
@@ -579,10 +617,11 @@ reads the library directly and is synchronous.
 
 Edit and regenerate discard the turn and everything after it, then re-run it.
 The live session still holds the discarded exchange, so `resetSession` drops it
-and seeds a fresh one with `transcriptOf` the kept messages. This is the one
-place where the "conv.jsonl is the source of truth, re-inject context" rule is
-actually exercised. The transcript names the files the kept messages carried
-rather than resending them: only the turn being replayed carries its own back.
+and puts back `project` of the kept messages — thinking, calls and results and
+all. This is where the "conv.jsonl is the source of truth, re-inject context"
+rule is exercised, and the projection is what makes it true rather than
+approximate. Only the turn being replayed carries its own attachments back; the
+kept messages name theirs.
 
 ### Attachments
 

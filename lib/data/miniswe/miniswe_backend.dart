@@ -18,6 +18,7 @@ import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
 import "miniswe_agent.dart";
 import "permission_classifier.dart";
+import "projection.dart";
 import "sub_agent.dart";
 
 /// mini-swe-agent, running in this process. The loop is [MinisweAgent]; this
@@ -371,7 +372,16 @@ class MinisweBackend implements AgentBackend {
   @override
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
     await _running.remove(chatId)?.cancel();
-    _sessions.putIfAbsent(chatId, MinisweSession.new).seed(transcriptOf(history));
+    _sessions.putIfAbsent(chatId, MinisweSession.new).replaceWith(project(history));
+  }
+
+  /// A session the app has never held for this chat is the one after a restart,
+  /// and it is empty. Filling it from the conversation is what keeps the chat
+  /// going rather than starting it over.
+  @override
+  Future<void> ensureSession(String chatId, List<Message> history) async {
+    final session = _sessions.putIfAbsent(chatId, MinisweSession.new);
+    if (session.isFresh) session.replaceWith(project(history));
   }
 
   @override

@@ -136,24 +136,30 @@ List<Message> replay(Iterable<ChatRecord> records) {
 /// The two parts an [AppendRecord] can land on, and what it does to them.
 /// Anything else is left alone: only text grows a piece at a time.
 MessagePart withMoreText(MessagePart part, String text) => switch (part) {
-      TextPart(text: final had) => MessagePart.text(text: "$had$text"),
-      ReasoningPart(text: final had, :final durationMs) =>
-        MessagePart.reasoning(text: "$had$text", durationMs: durationMs),
+      TextPart(text: final had) => part.copyWith(text: "$had$text"),
+      ReasoningPart(text: final had) => part.copyWith(text: "$had$text"),
       _ => part,
     };
 
 /// The text [part] has beyond [was], when growing is the only thing that
 /// happened to it. Null means it changed some other way and has to be written
-/// whole — a thinking block being timed as it closes is the case that matters.
+/// whole — a thinking block being timed and signed as it closes is the case
+/// that matters.
 String? textGrownFrom(MessagePart was, MessagePart part) {
-  final (String had, String now) = switch ((was, part)) {
-    (TextPart(text: final a), TextPart(text: final b)) => (a, b),
-    (ReasoningPart a, ReasoningPart b) when a.durationMs == b.durationMs => (a.text, b.text),
-    _ => ("", ""),
-  };
+  final had = _growingText(was);
+  final now = _growingText(part);
+  if (had == null || now == null) return null;
   if (now.length <= had.length || !now.startsWith(had)) return null;
-  return now.substring(had.length);
+  final grew = now.substring(had.length);
+  // Asking [withMoreText] rather than comparing the fields by hand, so a field
+  // added to a part cannot quietly start being dropped by an append.
+  return withMoreText(was, grew) == part ? grew : null;
 }
+
+String? _growingText(MessagePart part) => switch (part) {
+      TextPart(:final text) || ReasoningPart(:final text) => text,
+      _ => null,
+    };
 
 /// The records [messages] are made of: each message, then each part it already
 /// has. What writes a conversation assembled in memory; a turn appends its

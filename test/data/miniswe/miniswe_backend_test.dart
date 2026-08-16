@@ -402,6 +402,52 @@ void main() {
       expect(transcript, isNot(contains("first")));
     });
 
+    // Sessions live in memory, so a chat opened after a restart has none —
+    // and the model would be answering the next message from nothing.
+    test("a chat the backend has never held is filled from its conversation", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await backend.ensureSession(chatId, [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: DateTime(2026),
+          parts: const [MessagePart.text(text: "what is 2+2?")],
+        ),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026),
+          parts: const [MessagePart.text(text: "four")],
+        ),
+      ]);
+      await send(backend, "and 3+3?");
+
+      expect(client.sent.single.map((m) => m.text).join("\n"), contains("what is 2+2?"));
+    });
+
+    test("one the backend is already holding is left alone", () async {
+      final backend = backendOver([
+        [finish],
+        [finish],
+      ]);
+      await send(backend, "first");
+      await backend.ensureSession(chatId, [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: DateTime(2026),
+          parts: const [MessagePart.text(text: "somebody else's conversation")],
+        ),
+      ]);
+      await send(backend, "second");
+
+      expect(client.sent.last.map((m) => m.text).join("\n"),
+          isNot(contains("somebody else's")));
+      expect(client.sent.last.map((m) => m.text).join("\n"), contains("first"));
+    });
+
     test("a rewound turn names the files it is not resending", () async {
       final backend = backendOver([
         [finish],

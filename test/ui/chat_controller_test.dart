@@ -345,6 +345,19 @@ void main() {
     expect(seeded, isNot(contains("second")));
   });
 
+  // A session lives in memory, so a chat opened after a restart has none. The
+  // conversation goes down with the prompt rather than the backend being left
+  // to answer it from nothing.
+  test("every turn offers the backend what came before it", () async {
+    final (id, controller) = await chatWithOneTurn("first");
+    await controller.send("second");
+    await waitIdle(id);
+
+    expect(app.backend.seeded, hasLength(2));
+    expect(app.backend.seeded.first, isEmpty);
+    expect(app.backend.seeded.last.map((m) => m.plainText), contains("first"));
+  });
+
   test("an attachment is saved, recorded on the message and sent with it", () async {
     final (id, _) = await chatWithOneTurn(
       "look",
@@ -436,6 +449,46 @@ void main() {
       final (id, _) = await chatWithOneTurn("what is here");
 
       expect(reloaded(id), messagesOf(id));
+    });
+
+    // What lets the turn be handed back to a provider a response at a time —
+    // the reasoning block and the call it preceded have to stay together.
+    test("parts are stamped with the response they came out of", () async {
+      app.backend.scriptedEvents = [
+        const ResponseStart("r1"),
+        const ReasoningDelta("have a look"),
+        const ReasoningEnd(duration: Duration(seconds: 1), signature: "sig-1"),
+        ToolCallEvent(ToolCall(id: "t1", name: "bash", argumentsJson: '{"command":"ls"}')),
+        ToolResultEvent(ToolResult(callId: "t1", returnCode: 0, output: "a")),
+        const ResponseStart("r2"),
+        const TextDelta("one file"),
+        const DoneEvent(),
+      ];
+
+      final (id, _) = await chatWithOneTurn("what is here");
+
+      final parts = reloaded(id).last.parts;
+      final thinking = parts.whereType<ReasoningPart>().single;
+      expect(thinking.responseId, "r1");
+      expect(thinking.signature, "sig-1");
+      expect(parts.whereType<ToolCallPart>().single.responseId, "r1");
+      expect(parts.whereType<TextPart>().single.responseId, "r2");
+    });
+
+    test("text from two responses is kept as two parts", () async {
+      app.backend.scriptedEvents = const [
+        ResponseStart("r1"),
+        TextDelta("running it"),
+        ResponseStart("r2"),
+        TextDelta("done"),
+        DoneEvent(),
+      ];
+
+      final (id, _) = await chatWithOneTurn("go");
+
+      expect(
+          reloaded(id).last.parts.whereType<TextPart>().map((p) => (p.text, p.responseId)),
+          [("running it", "r1"), ("done", "r2")]);
     });
 
     test("a turn killed mid-flight keeps what had already happened", () async {

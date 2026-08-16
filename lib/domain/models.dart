@@ -53,18 +53,38 @@ abstract class Message with _$Message {
 
 /// Polymorphic part of a message: what the model said, thought, ran, or was
 /// handed.
+///
+/// `responseId` names the provider response a part came out of. A turn is
+/// several of them — think, call a tool, think again — and each has to be
+/// projected back as one message: a provider handed a reasoning block that
+/// outlived the tool call it preceded rejects the turn. Only what a response
+/// produces carries one; a result belongs to the call it answers.
 @freezed
 sealed class MessagePart with _$MessagePart {
-  const factory MessagePart.text({required String text}) = TextPart;
+  const factory MessagePart.text({
+    required String text,
+    String? responseId,
+  }) = TextPart;
 
   /// The model thinking out loud. Kept out of [TextPart] because it is not the
   /// reply: the UI files it under a label and a transcript leaves it out.
   /// [durationMs] is null while it is still being written.
+  ///
+  /// [signature] is Anthropic's and exists only for it: with thinking enabled
+  /// it rejects a tool-use turn whose thinking comes back unsigned, so a
+  /// conversation replayed out of the log has to hand the token back. Nothing
+  /// else reads it — if `AnthropicClient` stops needing one, this field goes
+  /// with it.
   const factory MessagePart.reasoning({
     required String text,
     int? durationMs,
+    String? signature,
+    String? responseId,
   }) = ReasoningPart;
-  const factory MessagePart.toolCall({required ToolCall toolCall}) = ToolCallPart;
+  const factory MessagePart.toolCall({
+    required ToolCall toolCall,
+    String? responseId,
+  }) = ToolCallPart;
   const factory MessagePart.toolResult({required ToolResult result}) = ToolResultPart;
   const factory MessagePart.file({
     required String resource,
@@ -189,20 +209,4 @@ extension MessageParts on Message {
 
 extension ChatTitle on String {
   String get orUntitled => isEmpty ? "(untitled)" : this;
-}
-
-/// The conversation as a session that never saw it is told about it. Files are
-/// named rather than resent: only the turn being replayed carries its
-/// attachments back, so the rest are context the agent can ask about.
-String transcriptOf(List<Message> history) {
-  final buffer = StringBuffer();
-  for (final message in history) {
-    final text = message.plainText.trim();
-    final files = message.files.map((p) => p.filename).join(", ");
-    if (text.isEmpty && files.isEmpty) continue;
-    buffer.writeln("${message.role.name}: $text");
-    if (files.isNotEmpty) buffer.writeln("(attached: $files)");
-    buffer.writeln();
-  }
-  return buffer.toString().trim();
 }

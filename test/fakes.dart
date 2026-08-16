@@ -157,6 +157,13 @@ class FakeBackend implements AgentBackend {
     resets.add(history);
   }
 
+  final List<List<Message>> seeded = [];
+
+  @override
+  Future<void> ensureSession(String chatId, List<Message> history) async {
+    seeded.add(history);
+  }
+
   var didShutdown = false;
 
   @override

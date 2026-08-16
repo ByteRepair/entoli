@@ -186,9 +186,6 @@ String observation({
 
 const _pretty = JsonEncoder.withIndent("  ");
 
-/// What a fresh session is told about the conversation it missed.
-String transcriptPreamble(String body) => "Earlier in this conversation:\n\n$body";
-
 /// The "About the user" block appended to the system prompt when a profile is
 /// set. Only non-null fields are emitted; an empty profile produces nothing,
 /// so a chat with no profile set gets the same system prompt as before.
