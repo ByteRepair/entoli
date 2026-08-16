@@ -67,7 +67,8 @@ class _Waiting extends StatelessWidget {
 }
 
 /// The sidebar as this page's drawer, taking the whole screen where a panel of
-/// the usual width would leave a sliver of chat behind.
+/// the usual width would leave a sliver of chat behind, and closed by the back
+/// key rather than leaving the app.
 class _SidebarDrawer extends StatelessWidget {
   const _SidebarDrawer();
 
@@ -79,7 +80,23 @@ class _SidebarDrawer extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     return Drawer(
       width: width < _compact ? width : null,
-      child: const Sidebar(),
+      // What this is for is the *platform*, not the pop. An open drawer already
+      // puts a `LocalHistoryEntry` on the route, which `Navigator.maybePop`
+      // honours — but nothing recomputes the notification behind
+      // `SystemNavigator.setFrameworkHandlesBack`, so Android is still holding
+      // `false`, keeps its own back callback disabled, and finishes the activity
+      // without Flutter ever hearing the press. A `PopEntry` is what does
+      // recompute it. Built only while the drawer is open, so it says so for
+      // exactly that long.
+      child: PopScope(
+        canPop: false,
+        // `didPop` is false whenever this scope is what stopped the pop, and
+        // true when the route went anyway — nothing to close in that case.
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) Scaffold.of(context).closeDrawer();
+        },
+        child: const Sidebar(),
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import "dart:io";
 
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -191,10 +192,43 @@ Future<void> pumpUntil(WidgetTester tester, Finder until, {int tries = 50}) asyn
 
 /// Android's back key, as the engine reports it. True if something in the app
 /// handled it; false is the app being left.
+///
+/// This asks the framework directly, which is a step further in than a real
+/// press gets: Android only forwards one while the framework has said it wants
+/// it. [frameworkHandlesBack] is that half, and a test that presses without
+/// watching it passes happily over a device that closes the app.
 Future<bool> pressBack(WidgetTester tester) async {
   final handled = await tester.binding.handlePopRoute();
   await settleIo(tester);
   return handled;
+}
+
+/// Every answer the framework has given the platform about who owns the back
+/// key, newest last. Android keeps its own back callback disabled while the
+/// latest is false, so the press finishes the activity instead of arriving.
+///
+/// Install it before the thing under test: this is what the app *said*, not
+/// what it would have done if asked.
+///
+/// It resumes the app as well, because a test starts with no lifecycle state at
+/// all and `WidgetsApp` deliberately says nothing to the engine until there is
+/// one — so without this the list is empty however the app behaves.
+List<bool> frameworkHandlesBack(WidgetTester tester) {
+  final answers = <bool>[];
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+    if (call.method == "SystemNavigator.setFrameworkHandlesBack") {
+      answers.add(call.arguments as bool);
+    }
+    return null;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  messenger.handlePlatformMessage(
+    "flutter/lifecycle",
+    const StringCodec().encodeMessage(AppLifecycleState.resumed.toString()),
+    (_) {},
+  );
+  return answers;
 }
 
 /// The app under system bars, the way Android draws it: the window is the whole

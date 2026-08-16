@@ -85,6 +85,24 @@ void main() {
       expect(find.byType(Sidebar), findsNothing);
     });
 
+    // The half the press above cannot see: Android forwards one only while the
+    // framework has claimed it, and an open drawer does not claim it by itself.
+    // Without this the app closes on a phone and every other test still passes.
+    testWidgets("and the platform is told the app wants it", (tester) async {
+      final claimed = frameworkHandlesBack(tester);
+      await open(tester, const Size(400, 900));
+
+      expect(claimed.last, isTrue);
+    });
+
+    testWidgets("and given it back once the drawer is shut", (tester) async {
+      final claimed = frameworkHandlesBack(tester);
+      await open(tester, const Size(400, 900));
+      await pressBack(tester);
+
+      expect(claimed.last, isFalse);
+    });
+
     // Shut, there is nothing to close, and back is the app's to answer.
     testWidgets("and is not in the way when it is shut", (tester) async {
       await pumpAt(tester, const Size(400, 900));
