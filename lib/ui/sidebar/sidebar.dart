@@ -68,18 +68,6 @@ class Sidebar extends ConsumerWidget {
                         ),
                       ),
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: "New chat",
-                    // Nothing is listed here yet: an empty chat is not on disk,
-                    // and joins the list when its first message is saved.
-                    onPressed: () async {
-                      final chat = await ref
-                          .read(chatRepositoryProvider)
-                          .createChat(project: project);
-                      if (context.mounted) _open(context, ref, chat.state.id);
-                    },
-                  ),
                 ],
               ),
             ),
@@ -145,19 +133,44 @@ class Sidebar extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: const Text("Profile"),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text("Settings"),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsPage()),
-              ),
+            Stack(
+              alignment: Alignment.centerRight,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.person_outline),
+                      title: const Text("Profile"),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ProfilePage(project: null)),
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.settings),
+                      title: const Text("Settings"),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SettingsPage()),
+                      ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: FloatingActionButton(
+                    heroTag: null,
+                    tooltip: "New chat",
+                    // Nothing is listed here yet: an empty chat is not on disk,
+                    // and joins the list when its first message is saved.
+                    onPressed: () async {
+                      final chat =
+                          await ref.read(chatRepositoryProvider).createChat(project: project);
+                      if (context.mounted) _open(context, ref, chat.state.id);
+                    },
+                    child: const Icon(Icons.add),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

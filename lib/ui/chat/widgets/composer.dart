@@ -75,7 +75,7 @@ class Composer extends ConsumerStatefulWidget {
   ConsumerState<Composer> createState() => _ComposerState();
 }
 
-class _ComposerState extends ConsumerState<Composer> {
+class _ComposerState extends ConsumerState<Composer> with WidgetsBindingObserver {
   static const _rowHeight = 40.0;
   static const _visibleRows = 5;
 
@@ -84,11 +84,23 @@ class _ComposerState extends ConsumerState<Composer> {
   final List<Attachment> _attachments = [];
   CompletionToken? _token;
   int _highlighted = 0;
+  bool _keyboardUp = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_syncToken);
+  }
+
+  /// Android's back key closes the keyboard without telling Flutter, and the
+  /// insets are the only report of it. Off the view rather than `MediaQuery`,
+  /// which a Scaffold has already taken the bottom inset out of.
+  @override
+  void didChangeMetrics() {
+    final up = View.of(context).viewInsets.bottom > 0;
+    if (_keyboardUp && !up) _focus.unfocus();
+    _keyboardUp = up;
   }
 
   @override
@@ -102,6 +114,7 @@ class _ComposerState extends ConsumerState<Composer> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_syncToken);
     _scroll.dispose();
     _focus.dispose();
