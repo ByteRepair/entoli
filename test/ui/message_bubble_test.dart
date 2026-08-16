@@ -2,6 +2,7 @@ import "dart:convert";
 
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
@@ -27,6 +28,7 @@ void main() {
     String? waitingNotice,
     ValueChanged<String>? onEdit,
     VoidCallback? onRegenerate,
+    ValueChanged<String>? onTapLink,
   }) =>
       app.pump(
         tester,
@@ -38,6 +40,7 @@ void main() {
             waitingNotice: waitingNotice,
             onEdit: onEdit,
             onRegenerate: onRegenerate,
+            onTapLink: onTapLink,
           ),
         ),
         settle: !isWaiting,
@@ -510,5 +513,47 @@ void main() {
 
     expect(find.byType(Image), findsOneWidget);
     expect(find.text("notes.txt"), findsOneWidget);
+  });
+
+  // While the turn is running, the bubble shows the raw text as it streams; a
+  // finished message renders markdown. Both so a streaming reply does not
+  // re-parse partial markdown on every delta, and so the finished one is read
+  // the way it was meant.
+  testWidgets("a finished message renders markdown, not the raw syntax", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "here is **bold** code")]),
+    );
+
+    expect(find.byType(MarkdownBody), findsOneWidget);
+    // The asterisks are consumed by the markdown renderer, so the raw syntax
+    // is gone while the word inside it remains.
+    expect(find.text("here is **bold** code"), findsNothing);
+    expect(find.textContaining("bold"), findsOneWidget);
+  });
+
+  testWidgets("a streaming message shows raw text, not a markdown widget", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "here is **bold** code")]),
+      isWaiting: true,
+    );
+
+    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.text("here is **bold** code"), findsOneWidget);
+  });
+
+  testWidgets("tapping a rendered link fires onTapLink with the href", (tester) async {
+    String? tapped;
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "see [Flutter](https://flutter.dev)")]),
+      onTapLink: (href) => tapped = href,
+    );
+
+    await tester.tap(find.textContaining("Flutter"));
+    await tester.pumpAndSettle();
+
+    expect(tapped, "https://flutter.dev");
   });
 }

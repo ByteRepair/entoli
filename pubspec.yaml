@@ -35,6 +35,15 @@ dependencies:
   # Icons
   flutter_svg: ^2.3.0
 
+  # Markdown rendering for finished message bubbles. Continuation of the
+  # discontinued flutter_markdown; same API.
+  flutter_markdown_plus: ^1.0.12
+
+  # Opening links from rendered markdown: external browser on desktop and
+  # web, in-app webview on Android.
+  url_launcher: ^6.3.2
+  webview_flutter: ^4.14.1
+
   # Misc
   uuid: ^4.6.0
   collection: ^1.19.1

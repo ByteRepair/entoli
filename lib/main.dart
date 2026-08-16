@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
 import "core/platform/app_icon.dart";
+import "core/platform/link_opener.dart";
 import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
 import "domain/prompt_library.dart";
@@ -26,6 +27,7 @@ void main() async {
       attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
       promptLibraryProvider.overrideWithValue(library),
       launcherIconsProvider.overrideWithValue(const LauncherAliases()),
+      linkOpenerProvider.overrideWithValue(const PlatformLinkOpener()),
     ],
   );
   container.read(availableModelsProvider);

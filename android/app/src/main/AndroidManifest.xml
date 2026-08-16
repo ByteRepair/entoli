@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for LLM HTTP calls and the in-app webview, which the debug
+         and profile overlays below also declare. Listing it here means a
+         release build can reach the network too. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Entoli"
         android:name="${applicationName}"
