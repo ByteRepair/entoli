@@ -6,6 +6,7 @@ import "package:uuid/uuid.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
+import "../../domain/chat_repository.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
@@ -174,9 +175,8 @@ class ChatController extends Notifier<ChatViewState> {
     Message? replacing,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
-    final updated = (replacing == null
-            ? chat.copyWith(messages: [...chat.messages, ...opening], unfinished: false)
-            : chat.withBranch(replacing.id, opening))
+    final updated = chat
+        .withTurn(opening, siblingOf: replacing?.id)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
@@ -185,13 +185,7 @@ class ChatController extends Notifier<ChatViewState> {
     // killed before the model says anything still shows what was asked.
     await repo.saveState(updated.state);
     _recorder.open(opening.last.id);
-    await _recorder.write([
-      // Before the message it introduces, which is what makes it a branch
-      // rather than the next thing on the thread.
-      if (replacing != null)
-        ChatRecord.branch(messageId: opening.first.id, siblingOf: replacing.id),
-      ...recordsOf(opening),
-    ]);
+    await _recorder.write(recordsOf(opening, siblingOf: replacing?.id));
     // Only the first: a later message changes nothing the sidebar shows, and
     // refreshing it re-reads every chat off disk.
     if (isFirst) {
@@ -199,11 +193,8 @@ class ChatController extends Notifier<ChatViewState> {
       unawaited(_nameChat(text));
     }
 
-    // The session still holds the thread this one branched off, which the model
-    // must not answer from.
-    if (replacing != null) await repo.resetSession(chatId, history);
-
-    _listen(repo.sendPrompt(chatId, text, attachments: attachments, history: history));
+    _listen(repo.sendPrompt(chatId, text,
+        attachments: attachments, history: history, branched: replacing != null));
   }
 
   Message _newReply() => Message(
@@ -290,22 +281,35 @@ class ChatController extends Notifier<ChatViewState> {
   /// Read the thread beside the one [messageId] is on. [step] is -1 or 1 — the
   /// arrows under the message.
   Future<void> stepThread(String messageId, int step) async {
-    final chat = state.chat;
-    if (chat == null || state.isRunning) return;
-    final to = chat.threadBeside(messageId, step);
-    if (to == null) return;
-    final now = await ref.read(chatRepositoryProvider).selectThread(chat, to);
-    if (!ref.mounted) return;
-    state = state.copyWith(chat: now);
+    final chat = _rethreadable;
+    final to = chat?.threadBeside(messageId, step);
+    if (chat == null || to == null) return;
+    await _rethread((repo) => repo.selectThread(chat, to));
   }
 
   /// Delete the thread [messageId] heads, and everything below it.
   Future<void> deleteThread(String messageId) async {
-    final chat = state.chat;
-    if (chat == null || state.isRunning) return;
-    final now = await ref.read(chatRepositoryProvider).deleteThread(chat, messageId);
-    if (!ref.mounted) return;
-    state = state.copyWith(chat: now);
+    final chat = _rethreadable;
+    if (chat == null) return;
+    await _rethread((repo) => repo.deleteThread(chat, messageId));
+  }
+
+  /// The conversation a thread change can be worked out from, or null where
+  /// there is none to make. An earlier change still in flight is one of those:
+  /// it is about to replace the conversation this one would be computed from,
+  /// so a held-down arrow would issue a reload per frame against state that no
+  /// longer holds.
+  Chat? get _rethreadable => state.isRunning || _rethreading ? null : state.chat;
+  bool _rethreading = false;
+
+  Future<void> _rethread(Future<Chat> Function(ChatRepository repo) change) async {
+    _rethreading = true;
+    try {
+      final now = await change(ref.read(chatRepositoryProvider));
+      if (ref.mounted) state = state.copyWith(chat: now);
+    } finally {
+      _rethreading = false;
+    }
   }
 
   void _onEvent(AgentEvent event) {

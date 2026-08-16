@@ -671,9 +671,8 @@ void main() {
       expect(after.length, greaterThan(before.length));
       // The thread it replaces is still readable, so nothing was forgotten.
       expect(after.whereType<RewindRecord>(), isEmpty);
-      expect(
-          after.whereType<BranchRecord>().single,
-          isA<BranchRecord>().having((r) => r.siblingOf, "siblingOf", userId));
+      expect(after.whereType<MessageRecord>().map((r) => r.siblingOf).nonNulls,
+          [userId]);
       expect(reloaded(id), messagesOf(id));
     });
 

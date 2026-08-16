@@ -11,6 +11,13 @@ void main() {
   ChatRecord message(String id, [MessageRole role = MessageRole.user]) =>
       ChatRecord.message(id: id, role: role, createdAt: at);
 
+  /// A message opening a thread beside [of] rather than continuing the one
+  /// being read.
+  ChatRecord branch(String id, {required String of, MessageRole role = MessageRole.user}) =>
+      ChatRecord.message(id: id, role: role, createdAt: at, siblingOf: of);
+
+  ChatState state() => ChatState(id: "c", title: "t", createdAt: at, updatedAt: at);
+
   ChatRecord part(String message, int index, String text) =>
       ChatRecord.part(messageId: message, index: index, part: MessagePart.text(text: text));
 
@@ -197,8 +204,7 @@ void main() {
     test("a branch is read in place of what it replaces, which stays", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
-        message("a2", MessageRole.assistant),
+        branch("a2", of: "a1", role: MessageRole.assistant),
         part("a2", 0, "hello again"),
       ]);
 
@@ -213,8 +219,7 @@ void main() {
     test("branching the first message has no parent to hang off", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "u2", siblingOf: "u1"),
-        message("u2"),
+        branch("u2", of: "u1"),
         part("u2", 0, "goodbye"),
         message("a2", MessageRole.assistant),
         part("a2", 0, "bye"),
@@ -229,8 +234,7 @@ void main() {
     test("what is written after a branch goes on the thread it opened", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
-        message("a2", MessageRole.assistant),
+        branch("a2", of: "a1", role: MessageRole.assistant),
         part("a2", 0, "hello again"),
         message("u2"),
         part("u2", 0, "thanks"),
@@ -242,8 +246,7 @@ void main() {
     test("select puts an earlier thread back, and what hung below it", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "u2", siblingOf: "u1"),
-        message("u2"),
+        branch("u2", of: "u1"),
         part("u2", 0, "goodbye"),
         message("a2", MessageRole.assistant),
         part("a2", 0, "bye"),
@@ -259,8 +262,7 @@ void main() {
     test("the last select wins, the way a superseded part does", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
-        message("a2", MessageRole.assistant),
+        branch("a2", of: "a1", role: MessageRole.assistant),
         part("a2", 0, "hello again"),
         ChatRecord.select(messageId: "a1"),
         ChatRecord.select(messageId: "a2"),
@@ -272,8 +274,7 @@ void main() {
     test("deleting a thread falls back to the one beside it", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
-        message("a2", MessageRole.assistant),
+        branch("a2", of: "a1", role: MessageRole.assistant),
         part("a2", 0, "hello again"),
         ChatRecord.rewind(messageId: "a2"),
       ]);
@@ -286,8 +287,7 @@ void main() {
     test("deleting a thread takes everything below it", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "u2", siblingOf: "u1"),
-        message("u2"),
+        branch("u2", of: "u1"),
         part("u2", 0, "goodbye"),
         message("a2", MessageRole.assistant),
         part("a2", 0, "bye"),
@@ -310,8 +310,7 @@ void main() {
     test("a branch of a message that has gone goes on the end instead", () {
       final replayed = replayTree([
         ...oneTurn(),
-        ChatRecord.branch(messageId: "u2", siblingOf: "never"),
-        message("u2"),
+        branch("u2", of: "never"),
         part("u2", 0, "thanks"),
       ]);
 
@@ -319,16 +318,34 @@ void main() {
       expect(replayed.branches, isEmpty);
     });
 
+    // Whether the log stops mid-turn is now a question about the thread being
+    // read, so cycling changes the answer. The reply left open is the end of
+    // its own thread, so carrying it on still only ever appends — which is the
+    // reason the middle of a conversation was refused, and it does not apply.
+    test("an interrupted thread is offered again once it is stepped back to", () {
+      final log = [
+        message("u1"),
+        part("u1", 0, "hello"),
+        message("a1", MessageRole.assistant),
+        part("a1", 0, "half an"),
+        // No turnEnd: this is where the process was killed.
+        branch("a2", of: "a1", role: MessageRole.assistant),
+        part("a2", 0, "a whole answer"),
+        ChatRecord.turnEnd(messageId: "a2", reason: TurnEnd.done),
+      ];
+
+      expect(chatFrom(state(), log).unfinished, isFalse);
+      expect(
+          chatFrom(state(), [...log, ChatRecord.select(messageId: "a1")]).unfinished,
+          isTrue);
+    });
+
     test("the arrows stop at either end rather than wrapping", () {
-      final chat = chatFrom(
-        ChatState(id: "c", title: "t", createdAt: at, updatedAt: at),
-        [
-          ...oneTurn(),
-          ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
-          message("a2", MessageRole.assistant),
-          part("a2", 0, "hello again"),
-        ],
-      );
+      final chat = chatFrom(state(), [
+        ...oneTurn(),
+        branch("a2", of: "a1", role: MessageRole.assistant),
+        part("a2", 0, "hello again"),
+      ]);
 
       expect(chat.threadsAt("a2"), ["a1", "a2"]);
       expect(chat.threadIndex("a2"), 1);

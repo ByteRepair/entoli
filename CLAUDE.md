@@ -98,13 +98,13 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Seven records. `message` opens one — before it holds anything, which is what the
-empty assistant message at the head of a turn is. `part` is one part of it, at
-an index. `append` is more text on the end of the part at an index. `turnEnd`
-closes the turn and says why: `done`, `aborted`, or `error`. `branch` says the
-next message is an alternative to one already there rather than a continuation,
-and `select` says which of those alternatives to read. `rewind` forgets a
-message and everything below it.
+Six records. `message` opens one — before it holds anything, which is what the
+empty assistant message at the head of a turn is — and its `siblingOf` names
+what it is an alternative to, or nothing at all, which puts it on the end of the
+thread being read. `part` is one part of it, at an index. `append` is more text
+on the end of the part at an index. `turnEnd` closes the turn and says why:
+`done`, `aborted`, or `error`. `select` says which of a message's alternatives
+to read. `rewind` forgets a message and everything below it.
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -174,21 +174,30 @@ now starts with deleting threads, which is a thing to offer rather than to do.
 
 The log describes a tree, and `replayTree` walks the one path through it that is
 on screen. An edit or a regenerate no longer discards the turn it replaces: it
-appends a `branch` naming the message the new one stands beside, and the two are
-threads at that point in the conversation. `Chat.messages` is the thread being
-read; `Chat.branches` is, for each message on it that has any, the alternatives
+opens a message naming the one it stands beside, and the two are threads at that
+point in the conversation. `Chat.messages` is the thread being read;
+`Chat.branches` is, for each message on it that has any, the alternatives
 written there — which is the `2/3` under the message and what its arrows move
 between.
 
-**Why `branch` is a record rather than a parent named on the message.**
-`MessageRecord` has carried an unused `parentId` since the first version, and
-naming a parent there cannot express the case that matters: editing the *first*
-message of a chat produces an alternative whose parent is nothing, which is the
-same null a message written before threads uses to mean "on the end of what is
-already there". Naming the sibling instead says it without ambiguity at every
-depth, and it leaves every existing log exactly as it was — holding no `branch`,
-each of its messages continues the one thread it has, which is what they meant
-when they were written. There is no migration and nothing to version.
+**The tree edge is `siblingOf`, not a parent.** `MessageRecord` carried an
+unused `parentId` from the first version until this landed, and naming a parent
+there cannot express the case that matters: editing the *first* message of a
+chat produces an alternative whose parent is nothing, which is the same null a
+message written before threads uses to mean "on the end of what is already
+there". Naming the **sibling** has no such collision at any depth, including the
+root, and it leaves every existing log exactly as it was — naming nothing, each
+of its messages continues the one thread it has, which is what they meant when
+they were written. There is no migration and nothing to version. `parentId` went
+with it, having never been written or read; the parent is `replayTree`'s to
+compute, and a `Message` on its own cannot answer which thread it is on.
+
+It is a field rather than a record of its own, which is what this was first
+built as. A separate `branch` record written before the message it introduces
+splits one fact across two lines, and the format's whole claim is that a line is
+complete the moment it is written — so it needed a pending map in the reader, an
+ordering contract in the writer, and a comment at each end saying so. A field
+has no order to get wrong.
 
 Which thread is being read is itself a record. `select` is appended as the user
 cycles, so what they were reading survives a reload; the last one written wins,
@@ -211,6 +220,15 @@ Moving between threads is deliberately *not* worked out in memory, and that is
 the split. `selectThread` and `deleteThread` append their record and load the
 chat back, because which messages another thread leaves live is `replayTree`'s
 to answer, and a second version of that walk is a second version to disagree.
+That reload is why `ChatController` refuses a thread change while one is still
+in flight: a held-down arrow would otherwise compute each move from a
+conversation the previous load is about to replace.
+
+Starting a turn on a thread the model has not been down is where the session
+has to be forgotten, and that rides on `sendPrompt` as `branched` rather than
+being a `resetSession` the caller makes first. Same reason `history` does — see
+"The projection": a separate call is one a caller can forget, and forgetting it
+is silent, the model answering fluently from the thread the user has just left.
 
 #### The projection
 
@@ -275,14 +293,14 @@ tidy up a turn the user walked away from. Three routes out of an interrupted
 turn, all the user's: press Continue, press Regenerate, or say something else
 and carry on with the incomplete reply still in the conversation.
 
-`endsUnfinished` is the whole of the classifier: the log's last message, if it is
-a reply, and the last record naming it. `TurnEnd.resumable` decides — missing
-means the process was killed and `error` means the turn gave up, and nobody chose
-either; `done` finished and `aborted` is the one case where the user has already
-said to stop. It is on the enum because two places ask, the log's reader and the
-controller closing a turn, and they have to agree or the offer flickers on the
-next reload. `chatFrom` is the classifier and `replay` together, and it is what
-both stores load through.
+`endsUnfinished` is the whole of the classifier: the last message of the thread
+being read, if it is a reply, and the last record naming it. `TurnEnd.resumable`
+decides — missing means the process was killed and `error` means the turn gave
+up, and nobody chose either; `done` finished and `aborted` is the one case where
+the user has already said to stop. It is on the enum because two places ask, the
+log's reader and the controller closing a turn, and they have to agree or the
+offer flickers on the next reload. `chatFrom` is the classifier and `replayTree`
+together, and it is what both stores load through.
 
 Only the **last** reply is asked about, and that is the rule rather than a
 shortcut. Every turn is marked, so a reply in the middle of a conversation can be
@@ -291,6 +309,15 @@ one stays open for good. It is still not resumable: resuming appends to a
 message, so continuing one from the middle would put new work before turns that
 already happened and that the model has since built on. Nothing reads it either,
 so nothing closes it; a tidy-up record would be written for no reader.
+
+**"Last" is now the last of the thread being read**, which means the offer moves
+as the user cycles. Kill a turn, regenerate, and step back: the reply that was
+killed is the end of *its* thread, so it is offered again and carrying it on
+still only ever appends. That is the same rule and not an exception to it — the
+reason the middle of a conversation is refused is that there are turns below it,
+and on that thread there are none. It does mean `Chat.unfinished` is answered per
+thread rather than per chat, so the `ResumeBar` can appear and go as the arrows
+are pressed.
 
 One assumption is worth naming because it is invisible: an open log means nothing
 is running only because a turn cannot outlive the process running it. The

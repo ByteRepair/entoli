@@ -61,31 +61,34 @@ extension Threads on Chat {
   /// The thread to move to, or null at either end. Deliberately does not wrap:
   /// an arrow that comes back to where it started reads as having done nothing.
   String? threadBeside(String messageId, int step) {
+    final to = threadIndex(messageId) + step;
     final threads = threadsAt(messageId);
-    final to = threads.indexOf(messageId) + step;
     return to < 0 || to >= threads.length ? null : threads[to];
   }
 
-  /// What this becomes when [opening] is written as an alternative to
-  /// [siblingOf]: the conversation cut back to where it branches, the new
-  /// messages on the end of it, and the first of them counted among the threads
-  /// it has joined.
+  /// What this becomes when a turn opening with [turn] starts: on the end of
+  /// the conversation, or — where [siblingOf] names a message — as an
+  /// alternative to that one, which cuts the thread back to where it branches
+  /// and counts the first new message among the threads it has joined.
   ///
-  /// This is what `replayTree` will make of the records a branch appends, said
-  /// here as well so an edit or a regenerate does not cost a reload of the log
-  /// to draw. The two have to agree; the one thing keeping them honest is that
-  /// both put a new thread last and read it.
-  Chat withBranch(String siblingOf, List<Message> opening) {
+  /// For a branch this is what `replayTree` will make of the records the turn
+  /// writes, said here as well so an edit or a regenerate does not cost a
+  /// reload of the log to draw. The two have to agree, and what pins that is
+  /// `chat_controller_test.dart`'s "what a branch puts on screen is what a
+  /// reload reads back", which compares both the messages and the branches.
+  Chat withTurn(List<Message> turn, {String? siblingOf}) {
+    if (siblingOf == null) {
+      return copyWith(messages: [...messages, ...turn], unfinished: false);
+    }
     final at = messages.indexWhere((m) => m.id == siblingOf);
-    if (at < 0 || opening.isEmpty) return this;
-    final above = {for (final message in messages.take(at)) message.id};
+    assert(at >= 0, "$siblingOf is not on the thread being read");
+    final kept = messages.take(at).toList();
     return copyWith(
-      messages: [...messages.take(at), ...opening],
+      messages: [...kept, ...turn],
       branches: {
         // A branch below this one went with the thread it was on.
-        for (final threads in branches.entries)
-          if (above.contains(threads.key)) threads.key: threads.value,
-        opening.first.id: [...threadsAt(siblingOf), opening.first.id],
+        for (final message in kept) message.id: ?branches[message.id],
+        turn.first.id: [...threadsAt(siblingOf), turn.first.id],
       },
       unfinished: false,
     );
@@ -94,7 +97,9 @@ extension Threads on Chat {
 
 enum MessageRole { system, user, assistant, tool }
 
-/// A node in the conversation tree. Linear in v1; tree-structured later.
+/// One message of a conversation. Which thread it is on, and what it was
+/// written as an alternative to, are in the log rather than here — see
+/// `replayTree`, which is the only thing that can answer either.
 @freezed
 abstract class Message with _$Message {
   const factory Message({
@@ -102,7 +107,6 @@ abstract class Message with _$Message {
     required MessageRole role,
     required DateTime createdAt,
     @Default([]) List<MessagePart> parts,
-    String? parentId,
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);

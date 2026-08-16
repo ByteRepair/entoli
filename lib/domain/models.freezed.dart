@@ -621,7 +621,7 @@ $ChatStateCopyWith<$Res> get state {
 /// @nodoc
 mixin _$Message {
 
- String get id; MessageRole get role; DateTime get createdAt; List<MessagePart> get parts; String? get parentId;
+ String get id; MessageRole get role; DateTime get createdAt; List<MessagePart> get parts;
 /// Create a copy of Message
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -634,16 +634,16 @@ $MessageCopyWith<Message> get copyWith => _$MessageCopyWithImpl<Message>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other.parts, parts)&&(identical(other.parentId, parentId) || other.parentId == parentId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other.parts, parts));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(parts),parentId);
+int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(parts));
 
 @override
 String toString() {
-  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts, parentId: $parentId)';
+  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts)';
 }
 
 
@@ -654,7 +654,7 @@ abstract mixin class $MessageCopyWith<$Res>  {
   factory $MessageCopyWith(Message value, $Res Function(Message) _then) = _$MessageCopyWithImpl;
 @useResult
 $Res call({
- String id, MessageRole role, DateTime createdAt, List<MessagePart> parts, String? parentId
+ String id, MessageRole role, DateTime createdAt, List<MessagePart> parts
 });
 
 
@@ -671,14 +671,13 @@ class _$MessageCopyWithImpl<$Res>
 
 /// Create a copy of Message
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,Object? parentId = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,role: null == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
 as MessageRole,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,parts: null == parts ? _self.parts : parts // ignore: cast_nullable_to_non_nullable
-as List<MessagePart>,parentId: freezed == parentId ? _self.parentId : parentId // ignore: cast_nullable_to_non_nullable
-as String?,
+as List<MessagePart>,
   ));
 }
 
@@ -763,10 +762,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts,  String? parentId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Message() when $default != null:
-return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.parentId);case _:
+return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
   return orElse();
 
 }
@@ -784,10 +783,10 @@ return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.parentId);
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts,  String? parentId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts)  $default,) {final _that = this;
 switch (_that) {
 case _Message():
-return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.parentId);case _:
+return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -804,10 +803,10 @@ return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.parentId);
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts,  String? parentId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts)?  $default,) {final _that = this;
 switch (_that) {
 case _Message() when $default != null:
-return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.parentId);case _:
+return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
   return null;
 
 }
@@ -819,7 +818,7 @@ return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.parentId);
 @JsonSerializable()
 
 class _Message implements Message {
-  const _Message({required this.id, required this.role, required this.createdAt, final  List<MessagePart> parts = const [], this.parentId}): _parts = parts;
+  const _Message({required this.id, required this.role, required this.createdAt, final  List<MessagePart> parts = const []}): _parts = parts;
   factory _Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
 
 @override final  String id;
@@ -832,7 +831,6 @@ class _Message implements Message {
   return EqualUnmodifiableListView(_parts);
 }
 
-@override final  String? parentId;
 
 /// Create a copy of Message
 /// with the given fields replaced by the non-null parameter values.
@@ -847,16 +845,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other._parts, _parts)&&(identical(other.parentId, parentId) || other.parentId == parentId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other._parts, _parts));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(_parts),parentId);
+int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(_parts));
 
 @override
 String toString() {
-  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts, parentId: $parentId)';
+  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts)';
 }
 
 
@@ -867,7 +865,7 @@ abstract mixin class _$MessageCopyWith<$Res> implements $MessageCopyWith<$Res> {
   factory _$MessageCopyWith(_Message value, $Res Function(_Message) _then) = __$MessageCopyWithImpl;
 @override @useResult
 $Res call({
- String id, MessageRole role, DateTime createdAt, List<MessagePart> parts, String? parentId
+ String id, MessageRole role, DateTime createdAt, List<MessagePart> parts
 });
 
 
@@ -884,14 +882,13 @@ class __$MessageCopyWithImpl<$Res>
 
 /// Create a copy of Message
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,Object? parentId = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,}) {
   return _then(_Message(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,role: null == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
 as MessageRole,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,parts: null == parts ? _self._parts : parts // ignore: cast_nullable_to_non_nullable
-as List<MessagePart>,parentId: freezed == parentId ? _self.parentId : parentId // ignore: cast_nullable_to_non_nullable
-as String?,
+as List<MessagePart>,
   ));
 }
 

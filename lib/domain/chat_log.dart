@@ -18,11 +18,11 @@ part "chat_log.g.dart";
 /// text, which only ever grows and so is written as [AppendRecord] — the piece
 /// it grew by, not the whole of it again.
 ///
-/// What the log describes is a tree, not a list. An edit or a regenerate writes
-/// a [BranchRecord] and then the message it introduces, so the turn it replaces
-/// is still there to be read; [replayTree] folds the whole tree and walks the
-/// one thread through it that is on screen. A log holding no [BranchRecord] is
-/// a tree of one thread, which is what every log written before this was.
+/// What the log describes is a tree, not a list. An edit or a regenerate opens
+/// a message that names what it stands beside, so the turn it replaces is still
+/// there to be read; [replayTree] folds the whole tree and walks the one thread
+/// through it that is on screen. A log whose messages all name nothing is a
+/// tree of one thread, which is what every log written before this was.
 
 /// Why a turn stopped. Its **absence** is the interesting case: a log whose
 /// last message has no [TurnEndRecord] was being written when the process
@@ -55,13 +55,14 @@ sealed class ChatRecord with _$ChatRecord {
   /// can be written before anything has been said in it — which is what the
   /// empty assistant message at the head of a turn is.
   ///
-  /// It goes on the end of the thread being read, unless a [BranchRecord] just
-  /// said otherwise.
+  /// [siblingOf] names the message this one is an alternative to — an edit, or
+  /// a regenerate. Null goes on the end of the thread being read, which is what
+  /// every message in a log written before there were threads does.
   const factory ChatRecord.message({
     required String id,
     required MessageRole role,
     required DateTime createdAt,
-    String? parentId,
+    String? siblingOf,
   }) = MessageRecord;
 
   /// One part of a message. Written again with the same [index] to supersede
@@ -90,19 +91,6 @@ sealed class ChatRecord with _$ChatRecord {
     required String messageId,
     required TurnEnd reason,
   }) = TurnEndRecord;
-
-  /// The message about to be written is an alternative to [siblingOf] rather
-  /// than a continuation of the conversation: an edit, or a regenerate.
-  ///
-  /// A record of its own rather than a parent named on the message, because the
-  /// first message of a chat can be edited too and the thread that replaces it
-  /// has no parent to name. It also leaves every log written before threads
-  /// alone: holding none of these, each of its messages continues the one
-  /// thread it has, which is what they meant when they were written.
-  const factory ChatRecord.branch({
-    required String messageId,
-    required String siblingOf,
-  }) = BranchRecord;
 
   /// Read [messageId] rather than whichever of its siblings was being read.
   /// Appended as the user cycles through the threads at a branch, so which one
@@ -147,25 +135,26 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   final parent = <String, String?>{};
   final children = <String?, List<String>>{};
   final shown = <String?, String>{};
-  final branching = <String, String>{};
 
   /// The child of [of] the thread runs through: the one last selected, or
   /// failing that the newest, since a thread just written is the one to read.
+  ///
+  /// [shown] is only ever set to a child already in [children], and `forget`
+  /// drops the two together, so there is nothing to check it against here.
   String? through(String? of) {
     final kids = children[of];
     if (kids == null || kids.isEmpty) return null;
-    final picked = shown[of];
-    return picked != null && kids.contains(picked) ? picked : kids.last;
+    return shown[of] ?? kids.last;
   }
 
-  /// The end of the thread being read, which is where a message that is not a
-  /// branch goes.
-  String? tail() {
-    String? at;
-    while (true) {
-      final next = through(at);
-      if (next == null) return at;
-      at = next;
+  /// The thread being read, oldest first. Walked from the root each time rather
+  /// than kept, since a select or a delete can move it anywhere — which makes
+  /// folding a log of n messages O(n·depth). Measured at a few milliseconds for
+  /// a chat of several hundred, against a `decodeLog` of the same log costing
+  /// more, so it is left as the shorter code.
+  Iterable<String> thread() sync* {
+    for (var at = through(null); at != null; at = through(at)) {
+      yield at;
     }
   }
 
@@ -183,21 +172,18 @@ Replayed replayTree(Iterable<ChatRecord> records) {
 
   for (final record in records) {
     switch (record) {
-      case MessageRecord(:final id, :final role, :final createdAt, :final parentId):
-        final replaces = branching.remove(id);
-        final under = replaces != null && nodes.containsKey(replaces)
-            ? parent[replaces]
-            : tail();
+      case MessageRecord(:final id, :final role, :final createdAt, :final siblingOf):
+        // A branch of a message that has since been deleted goes on the end
+        // instead, which is where it would have gone naming nothing at all.
+        final under = siblingOf != null && nodes.containsKey(siblingOf)
+            ? parent[siblingOf]
+            : thread().lastOrNull;
         parent[id] = under;
         (children[under] ??= []).add(id);
         // A thread just written is the one being read, until a [SelectRecord]
         // further down the log says the user cycled off it.
         shown[under] = id;
-        nodes[id] =
-            Message(id: id, role: role, createdAt: createdAt, parentId: parentId);
-
-      case BranchRecord(:final messageId, :final siblingOf):
-        branching[messageId] = siblingOf;
+        nodes[id] = Message(id: id, role: role, createdAt: createdAt);
 
       case SelectRecord(:final messageId):
         if (!nodes.containsKey(messageId)) continue;
@@ -233,16 +219,10 @@ Replayed replayTree(Iterable<ChatRecord> records) {
 
   final messages = <Message>[];
   final branches = <String, List<String>>{};
-  String? at;
-  while (true) {
-    final next = through(at);
-    if (next == null) break;
-    final node = nodes[next];
-    if (node == null) break;
-    messages.add(node);
-    final kids = children[at]!;
-    if (kids.length > 1) branches[next] = List.unmodifiable(kids);
-    at = next;
+  for (final id in thread()) {
+    messages.add(nodes[id]!);
+    final kids = children[parent[id]]!;
+    if (kids.length > 1) branches[id] = List.unmodifiable(kids);
   }
 
   return Replayed(messages: messages, branches: branches);
@@ -310,16 +290,21 @@ String? _growingText(MessagePart part) => switch (part) {
     };
 
 /// The records [messages] are made of: each message, then each part it already
-/// has. What writes a conversation assembled in memory; a turn appends its
-/// records as they happen rather than going through this. One thread and no
-/// branches, which is what a conversation held as a list can describe.
-List<ChatRecord> recordsOf(List<Message> messages) => [
-      for (final message in messages) ...[
+/// has. What writes a conversation assembled in memory, and what a turn opens
+/// itself with; the rest of a turn is appended as it happens rather than going
+/// through here.
+///
+/// [siblingOf] names what the first of them stands beside, which is the whole
+/// of what makes a turn a thread rather than a continuation. Left out, this
+/// describes one thread and no branches — which is all a conversation held as a
+/// list can say.
+List<ChatRecord> recordsOf(List<Message> messages, {String? siblingOf}) => [
+      for (final (at, message) in messages.indexed) ...[
         ChatRecord.message(
           id: message.id,
           role: message.role,
           createdAt: message.createdAt,
-          parentId: message.parentId,
+          siblingOf: at == 0 ? siblingOf : null,
         ),
         for (final (index, part) in message.parts.indexed)
           ChatRecord.part(messageId: message.id, index: index, part: part),

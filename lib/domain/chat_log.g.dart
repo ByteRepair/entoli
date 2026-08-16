@@ -11,7 +11,7 @@ MessageRecord _$MessageRecordFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       role: $enumDecode(_$MessageRoleEnumMap, json['role']),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      parentId: json['parentId'] as String?,
+      siblingOf: json['siblingOf'] as String?,
       $type: json['runtimeType'] as String?,
     );
 
@@ -20,7 +20,7 @@ Map<String, dynamic> _$MessageRecordToJson(MessageRecord instance) =>
       'id': instance.id,
       'role': _$MessageRoleEnumMap[instance.role]!,
       'createdAt': instance.createdAt.toIso8601String(),
-      'parentId': instance.parentId,
+      'siblingOf': instance.siblingOf,
       'runtimeType': instance.$type,
     };
 
@@ -80,19 +80,6 @@ const _$TurnEndEnumMap = {
   TurnEnd.aborted: 'aborted',
   TurnEnd.error: 'error',
 };
-
-BranchRecord _$BranchRecordFromJson(Map<String, dynamic> json) => BranchRecord(
-  messageId: json['messageId'] as String,
-  siblingOf: json['siblingOf'] as String,
-  $type: json['runtimeType'] as String?,
-);
-
-Map<String, dynamic> _$BranchRecordToJson(BranchRecord instance) =>
-    <String, dynamic>{
-      'messageId': instance.messageId,
-      'siblingOf': instance.siblingOf,
-      'runtimeType': instance.$type,
-    };
 
 SelectRecord _$SelectRecordFromJson(Map<String, dynamic> json) => SelectRecord(
   messageId: json['messageId'] as String,

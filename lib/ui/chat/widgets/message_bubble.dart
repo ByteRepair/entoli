@@ -17,8 +17,7 @@ class MessageBubble extends StatefulWidget {
     required this.message,
     this.isWaiting = false,
     this.waitingNotice,
-    this.threadIndex = 0,
-    this.threadCount = 1,
+    this.threads,
     this.onThreadStep,
     this.onDelete,
     this.onEdit,
@@ -38,11 +37,11 @@ class MessageBubble extends StatefulWidget {
   /// rate limit. Shown in red beside the spinner.
   final String? waitingNotice;
 
-  /// Where this message sits among the threads written at its point in the
-  /// conversation, counting from zero, and how many there are. One thread shows
-  /// no counter and no arrows: there is nothing to say and nowhere to go.
-  final int threadIndex;
-  final int threadCount;
+  /// The threads written where this message is, oldest first and including it.
+  /// Null where nothing was branched here, which shows no counter and no
+  /// arrows: one thread is nothing to say and nowhere to go. One value rather
+  /// than a position and a count, which could disagree.
+  final List<String>? threads;
 
   /// Read the thread this many along, -1 or 1.
   final ValueChanged<int>? onThreadStep;
@@ -101,7 +100,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Future<void> _delete() async {
-    final others = widget.threadCount - 1;
+    final others = _threads - 1;
     final ok = await confirm(
       context,
       title: "Delete thread",
@@ -179,24 +178,17 @@ class _MessageBubbleState extends State<MessageBubble> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (widget.threadCount > 1) ...[
+            if (_threads > 1) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
-                  "${widget.threadIndex + 1}/${widget.threadCount}",
+                  "${_thread + 1}/$_threads",
                   style: theme.textTheme.labelSmall
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
-              _action(theme, Icons.chevron_left, "Previous thread",
-                  widget.threadIndex == 0 ? null : () => widget.onThreadStep?.call(-1)),
-              _action(
-                  theme,
-                  Icons.chevron_right,
-                  "Next thread",
-                  widget.threadIndex == widget.threadCount - 1
-                      ? null
-                      : () => widget.onThreadStep?.call(1)),
+              _step(theme, Icons.chevron_left, "Previous thread", -1),
+              _step(theme, Icons.chevron_right, "Next thread", 1),
             ],
             if (widget.onDelete != null)
               _action(theme, Icons.delete_outline, "Delete thread", _delete),
@@ -214,6 +206,21 @@ class _MessageBubbleState extends State<MessageBubble> {
           ),
         ),
       );
+
+  /// How many threads were written where this message is, and which of them it
+  /// is. A message with none is a thread of one, and the only one.
+  int get _threads => widget.threads?.length ?? 1;
+  int get _thread => widget.threads?.indexOf(widget.message.id) ?? 0;
+
+  /// An arrow to the thread [step] along, dead at either end of the list and
+  /// while nothing is listening — the row is uncovered during a turn, when
+  /// moving between threads is refused.
+  Widget _step(ThemeData theme, IconData icon, String tooltip, int step) {
+    final onStep = widget.onThreadStep;
+    final to = _thread + step;
+    return _action(theme, icon, tooltip,
+        onStep == null || to < 0 || to >= _threads ? null : () => onStep(step));
+  }
 
   Widget _action(ThemeData theme, IconData icon, String tooltip, VoidCallback? onPressed) =>
       IconButton(

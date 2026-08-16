@@ -128,9 +128,18 @@ class ChatRepository {
   /// holding the chat's session — see `AgentBackend.sendPrompt`. It comes from
   /// the caller rather than being read back here: the turn's own records are
   /// still on their way to the store.
+  ///
+  /// [branched] says the turn opens a thread beside the one that was being
+  /// read, so the session the backend holds is a conversation this prompt is
+  /// not a continuation of. It rides with the prompt for the reason [history]
+  /// does: a separate "forget what you were told" call is one a caller can
+  /// forget, and forgetting it is silent — the model answers fluently from the
+  /// thread the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
-      List<Message> history = const []}) async* {
+      List<Message> history = const [],
+      bool branched = false}) async* {
+    if (branched) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
         history: history,
@@ -205,12 +214,6 @@ class ChatRepository {
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);
 
-  /// Put the backend's session back to [history], forgetting whatever it held.
-  /// What moving between threads costs: a session is the conversation the model
-  /// has seen, and which conversation that is has just changed.
-  Future<void> resetSession(String chatId, List<Message> history) =>
-      _backend.resetSession(chatId, history: history);
-
   /// Read [messageId] rather than the thread beside it that is on screen.
   Future<Chat> selectThread(Chat chat, String messageId) =>
       _rethread(chat, ChatRecord.select(messageId: messageId));
@@ -227,8 +230,10 @@ class ChatRepository {
   /// second version of that walk is a second version to disagree.
   Future<Chat> _rethread(Chat chat, ChatRecord record) async {
     await append(chat.state.id, [record]);
-    final now = await _store.load(chat.state.id);
-    await resetSession(chat.state.id, now.messages);
+    final now = await openChat(chat.state.id);
+    // A session is the conversation the model has seen, and which conversation
+    // that is has just changed.
+    await _backend.resetSession(chat.state.id, history: now.messages);
     return now;
   }
 

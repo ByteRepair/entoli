@@ -26,8 +26,7 @@ void main() {
     String chatId = "chat-1",
     bool isWaiting = false,
     String? waitingNotice,
-    int threadIndex = 0,
-    int threadCount = 1,
+    List<String>? threads,
     ValueChanged<int>? onThreadStep,
     VoidCallback? onDelete,
     ValueChanged<String>? onEdit,
@@ -42,8 +41,7 @@ void main() {
             message: message,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,
-            threadIndex: threadIndex,
-            threadCount: threadCount,
+            threads: threads,
             onThreadStep: onThreadStep,
             onDelete: onDelete,
             onEdit: onEdit,
@@ -547,19 +545,23 @@ void main() {
             .onPressed !=
         null;
 
+    /// This message as one of [count] threads, at [index]. [stepping] false is
+    /// a turn running, where the row is still uncovered but moving is refused.
     Future<void> pumpThread(
       WidgetTester tester, {
       required int index,
       required int count,
+      bool stepping = true,
       ValueChanged<int>? onThreadStep,
       VoidCallback? onDelete,
     }) async {
       await pump(
         tester,
         _message(MessageRole.assistant, [const TextPart(text: "an answer")]),
-        threadIndex: index,
-        threadCount: count,
-        onThreadStep: onThreadStep ?? (_) {},
+        threads: count == 1
+            ? null
+            : [for (var i = 0; i < count; i++) i == index ? "m1" : "other$i"],
+        onThreadStep: stepping ? (onThreadStep ?? (_) {}) : null,
         onDelete: onDelete,
       );
       await reveal(tester, find.text("an answer"));
@@ -648,6 +650,17 @@ void main() {
       await pumpThread(tester, index: 1, count: 2);
 
       expect(find.byTooltip("Delete thread"), findsNothing);
+    });
+
+    // The row is uncovered while a turn runs, and delete disappears there. The
+    // arrows have to say the same thing rather than looking live and doing
+    // nothing when tapped.
+    testWidgets("the arrows are dead while a turn is running", (tester) async {
+      await pumpThread(tester, index: 1, count: 3, stepping: false);
+
+      expect(find.text("2/3"), findsOneWidget);
+      expect(enabled(tester, "Previous thread"), isFalse);
+      expect(enabled(tester, "Next thread"), isFalse);
     });
   });
 

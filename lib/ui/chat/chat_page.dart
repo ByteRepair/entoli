@@ -258,8 +258,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                 ref.read(linkOpenerProvider).open(context, uri);
                               }
                             },
-                            threadIndex: chat.threadIndex(m.id),
-                            threadCount: chat.threadsAt(m.id).length,
+                            threads: chat.branches[m.id],
                             onThreadStep: view.isRunning
                                 ? null
                                 : (step) => notifier.stepThread(m.id, step),
