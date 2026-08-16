@@ -185,6 +185,161 @@ void main() {
     expect(textOf(messages.single), "kept");
   });
 
+  group("threads", () {
+    /// One finished exchange, which is what an edit or a regenerate branches.
+    List<ChatRecord> oneTurn() => [
+          message("u1"),
+          part("u1", 0, "hello"),
+          message("a1", MessageRole.assistant),
+          part("a1", 0, "hi"),
+        ];
+
+    test("a branch is read in place of what it replaces, which stays", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
+        message("a2", MessageRole.assistant),
+        part("a2", 0, "hello again"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["hello", "hello again"]);
+      expect(replayed.branches, {
+        "a2": ["a1", "a2"]
+      });
+    });
+
+    // The case a parent named on the message could not express: the thread
+    // replacing the first message of a chat has nothing above it to name.
+    test("branching the first message has no parent to hang off", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "u2", siblingOf: "u1"),
+        message("u2"),
+        part("u2", 0, "goodbye"),
+        message("a2", MessageRole.assistant),
+        part("a2", 0, "bye"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["goodbye", "bye"]);
+      expect(replayed.branches, {
+        "u2": ["u1", "u2"]
+      });
+    });
+
+    test("what is written after a branch goes on the thread it opened", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
+        message("a2", MessageRole.assistant),
+        part("a2", 0, "hello again"),
+        message("u2"),
+        part("u2", 0, "thanks"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["hello", "hello again", "thanks"]);
+    });
+
+    test("select puts an earlier thread back, and what hung below it", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "u2", siblingOf: "u1"),
+        message("u2"),
+        part("u2", 0, "goodbye"),
+        message("a2", MessageRole.assistant),
+        part("a2", 0, "bye"),
+        ChatRecord.select(messageId: "u1"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["hello", "hi"]);
+      expect(replayed.branches, {
+        "u1": ["u1", "u2"]
+      });
+    });
+
+    test("the last select wins, the way a superseded part does", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
+        message("a2", MessageRole.assistant),
+        part("a2", 0, "hello again"),
+        ChatRecord.select(messageId: "a1"),
+        ChatRecord.select(messageId: "a2"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["hello", "hello again"]);
+    });
+
+    test("deleting a thread falls back to the one beside it", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
+        message("a2", MessageRole.assistant),
+        part("a2", 0, "hello again"),
+        ChatRecord.rewind(messageId: "a2"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["hello", "hi"]);
+      // Nothing left to count once it is alone again.
+      expect(replayed.branches, isEmpty);
+    });
+
+    test("deleting a thread takes everything below it", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "u2", siblingOf: "u1"),
+        message("u2"),
+        part("u2", 0, "goodbye"),
+        message("a2", MessageRole.assistant),
+        part("a2", 0, "bye"),
+        ChatRecord.rewind(messageId: "u2"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["hello", "hi"]);
+    });
+
+    // What the record meant before there were threads, and still does: the same
+    // assertion as "rewind drops its message and everything after it", reached
+    // from a message that has siblings.
+    test("deleting the last thread cuts the conversation off there", () {
+      final replayed = replayTree([...oneTurn(), ChatRecord.rewind(messageId: "a1")]);
+
+      expect(replayed.messages.map(textOf), ["hello"]);
+      expect(replayed.branches, isEmpty);
+    });
+
+    test("a branch of a message that has gone goes on the end instead", () {
+      final replayed = replayTree([
+        ...oneTurn(),
+        ChatRecord.branch(messageId: "u2", siblingOf: "never"),
+        message("u2"),
+        part("u2", 0, "thanks"),
+      ]);
+
+      expect(replayed.messages.map(textOf), ["hello", "hi", "thanks"]);
+      expect(replayed.branches, isEmpty);
+    });
+
+    test("the arrows stop at either end rather than wrapping", () {
+      final chat = chatFrom(
+        ChatState(id: "c", title: "t", createdAt: at, updatedAt: at),
+        [
+          ...oneTurn(),
+          ChatRecord.branch(messageId: "a2", siblingOf: "a1"),
+          message("a2", MessageRole.assistant),
+          part("a2", 0, "hello again"),
+        ],
+      );
+
+      expect(chat.threadsAt("a2"), ["a1", "a2"]);
+      expect(chat.threadIndex("a2"), 1);
+      expect(chat.threadBeside("a2", -1), "a1");
+      expect(chat.threadBeside("a2", 1), isNull);
+      // A message nothing was branched at is a thread of one.
+      expect(chat.threadsAt("u1"), ["u1"]);
+      expect(chat.threadBeside("u1", -1), isNull);
+    });
+  });
+
   group("the turn a log stops in", () {
     bool unfinishedIn(List<ChatRecord> records) =>
         endsUnfinished(replay(records), records);

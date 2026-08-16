@@ -29,7 +29,15 @@ abstract class ChatState with _$ChatState {
 abstract class Chat with _$Chat {
   const factory Chat({
     required ChatState state,
+
+    /// The thread being read, which is one path through the tree the log holds.
     @Default([]) List<Message> messages,
+
+    /// For each message in [messages] that has any, the alternatives written
+    /// beside it — oldest first, including the one being read. Derived by
+    /// `replayTree` rather than persisted, like [unfinished]: the tree is in
+    /// the records, and a message on its own says nothing about it.
+    @Default({}) Map<String, List<String>> branches,
 
     /// The last message is a reply whose turn never finished, and so is one to
     /// offer to carry on. Derived from the log by `endsUnfinished` rather than
@@ -38,6 +46,50 @@ abstract class Chat with _$Chat {
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
+}
+
+/// Where a message sits among the threads written at its point in the
+/// conversation. The counter under a message, and what its arrows move between.
+extension Threads on Chat {
+  /// Every thread written where [messageId] is, oldest first. One entry — the
+  /// message itself — where nothing was ever branched there.
+  List<String> threadsAt(String messageId) => branches[messageId] ?? [messageId];
+
+  /// Which of [threadsAt] is being read, counting from zero.
+  int threadIndex(String messageId) => threadsAt(messageId).indexOf(messageId);
+
+  /// The thread to move to, or null at either end. Deliberately does not wrap:
+  /// an arrow that comes back to where it started reads as having done nothing.
+  String? threadBeside(String messageId, int step) {
+    final threads = threadsAt(messageId);
+    final to = threads.indexOf(messageId) + step;
+    return to < 0 || to >= threads.length ? null : threads[to];
+  }
+
+  /// What this becomes when [opening] is written as an alternative to
+  /// [siblingOf]: the conversation cut back to where it branches, the new
+  /// messages on the end of it, and the first of them counted among the threads
+  /// it has joined.
+  ///
+  /// This is what `replayTree` will make of the records a branch appends, said
+  /// here as well so an edit or a regenerate does not cost a reload of the log
+  /// to draw. The two have to agree; the one thing keeping them honest is that
+  /// both put a new thread last and read it.
+  Chat withBranch(String siblingOf, List<Message> opening) {
+    final at = messages.indexWhere((m) => m.id == siblingOf);
+    if (at < 0 || opening.isEmpty) return this;
+    final above = {for (final message in messages.take(at)) message.id};
+    return copyWith(
+      messages: [...messages.take(at), ...opening],
+      branches: {
+        // A branch below this one went with the thread it was on.
+        for (final threads in branches.entries)
+          if (above.contains(threads.key)) threads.key: threads.value,
+        opening.first.id: [...threadsAt(siblingOf), opening.first.id],
+      },
+      unfinished: false,
+    );
+  }
 }
 
 enum MessageRole { system, user, assistant, tool }

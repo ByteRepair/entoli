@@ -258,6 +258,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                 ref.read(linkOpenerProvider).open(context, uri);
                               }
                             },
+                            threadIndex: chat.threadIndex(m.id),
+                            threadCount: chat.threadsAt(m.id).length,
+                            onThreadStep: view.isRunning
+                                ? null
+                                : (step) => notifier.stepThread(m.id, step),
+                            onDelete:
+                                view.isRunning ? null : () => notifier.deleteThread(m.id),
                             onEdit: m.role == MessageRole.user && !view.isRunning
                                 ? (text) => notifier.editAndResend(m.id, text)
                                 : null,

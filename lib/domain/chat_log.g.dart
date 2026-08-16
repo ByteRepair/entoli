@@ -81,6 +81,30 @@ const _$TurnEndEnumMap = {
   TurnEnd.error: 'error',
 };
 
+BranchRecord _$BranchRecordFromJson(Map<String, dynamic> json) => BranchRecord(
+  messageId: json['messageId'] as String,
+  siblingOf: json['siblingOf'] as String,
+  $type: json['runtimeType'] as String?,
+);
+
+Map<String, dynamic> _$BranchRecordToJson(BranchRecord instance) =>
+    <String, dynamic>{
+      'messageId': instance.messageId,
+      'siblingOf': instance.siblingOf,
+      'runtimeType': instance.$type,
+    };
+
+SelectRecord _$SelectRecordFromJson(Map<String, dynamic> json) => SelectRecord(
+  messageId: json['messageId'] as String,
+  $type: json['runtimeType'] as String?,
+);
+
+Map<String, dynamic> _$SelectRecordToJson(SelectRecord instance) =>
+    <String, dynamic>{
+      'messageId': instance.messageId,
+      'runtimeType': instance.$type,
+    };
+
 RewindRecord _$RewindRecordFromJson(Map<String, dynamic> json) => RewindRecord(
   messageId: json['messageId'] as String,
   $type: json['runtimeType'] as String?,

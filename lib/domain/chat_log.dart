@@ -16,8 +16,13 @@ part "chat_log.g.dart";
 /// Nothing here is mutable, so a part that changed is superseded rather than
 /// edited: the same [PartRecord.index] written again wins. The exception is
 /// text, which only ever grows and so is written as [AppendRecord] — the piece
-/// it grew by, not the whole of it again. [replay] is the only reader, and what
-/// it produces is the conversation.
+/// it grew by, not the whole of it again.
+///
+/// What the log describes is a tree, not a list. An edit or a regenerate writes
+/// a [BranchRecord] and then the message it introduces, so the turn it replaces
+/// is still there to be read; [replayTree] folds the whole tree and walks the
+/// one thread through it that is on screen. A log holding no [BranchRecord] is
+/// a tree of one thread, which is what every log written before this was.
 
 /// Why a turn stopped. Its **absence** is the interesting case: a log whose
 /// last message has no [TurnEndRecord] was being written when the process
@@ -49,6 +54,9 @@ sealed class ChatRecord with _$ChatRecord {
   /// A message begins. Its parts arrive as their own records, so the message
   /// can be written before anything has been said in it — which is what the
   /// empty assistant message at the head of a turn is.
+  ///
+  /// It goes on the end of the thread being read, unless a [BranchRecord] just
+  /// said otherwise.
   const factory ChatRecord.message({
     required String id,
     required MessageRole role,
@@ -83,48 +91,135 @@ sealed class ChatRecord with _$ChatRecord {
     required TurnEnd reason,
   }) = TurnEndRecord;
 
-  /// Forget [messageId] and everything after it. An edit or a regenerate,
-  /// written rather than performed: truncating a log means rewriting it, which
-  /// is the one thing this format is for not doing.
+  /// The message about to be written is an alternative to [siblingOf] rather
+  /// than a continuation of the conversation: an edit, or a regenerate.
+  ///
+  /// A record of its own rather than a parent named on the message, because the
+  /// first message of a chat can be edited too and the thread that replaces it
+  /// has no parent to name. It also leaves every log written before threads
+  /// alone: holding none of these, each of its messages continues the one
+  /// thread it has, which is what they meant when they were written.
+  const factory ChatRecord.branch({
+    required String messageId,
+    required String siblingOf,
+  }) = BranchRecord;
+
+  /// Read [messageId] rather than whichever of its siblings was being read.
+  /// Appended as the user cycles through the threads at a branch, so which one
+  /// they were on survives a reload; the last one written wins, the way a
+  /// superseded part does.
+  const factory ChatRecord.select({required String messageId}) = SelectRecord;
+
+  /// Forget [messageId] and everything below it.
+  ///
+  /// This is what an edit or a regenerate wrote before there were threads, and
+  /// its meaning did not have to change: in a conversation of one thread,
+  /// everything below a message is everything after it. Now it is deleting a
+  /// thread. Written rather than performed, because truncating a log means
+  /// rewriting it, which is the one thing this format is for not doing.
   const factory ChatRecord.rewind({required String messageId}) = RewindRecord;
 
   factory ChatRecord.fromJson(Map<String, dynamic> json) => _$ChatRecordFromJson(json);
 }
 
-/// Fold a log into the conversation it describes.
+/// What a log describes: the one thread through it that is on screen, and the
+/// alternatives the messages on that thread sit among.
+class Replayed {
+  const Replayed({required this.messages, required this.branches});
+
+  /// The thread being read, oldest message first.
+  final List<Message> messages;
+
+  /// For each message in [messages] that has any, every message written as an
+  /// alternative to it — oldest first, and including the one on the thread. A
+  /// message that has none is absent rather than present on its own.
+  final Map<String, List<String>> branches;
+}
+
+/// Fold a log into the conversation it describes, and the thread of it to show.
 ///
 /// Liberal about what it cannot place: a part naming a message that is not
-/// there, or an index past the end of one, is skipped rather than thrown on. A
-/// log is written by a process that can be killed between any two lines, and
-/// the reader's job is to salvage it.
-List<Message> replay(Iterable<ChatRecord> records) {
-  final messages = <Message>[];
-  final at = <String, int>{};
+/// there, an index past the end of one, a branch of a message that has since
+/// been deleted. A log is written by a process that can be killed between any
+/// two lines, and the reader's job is to salvage it.
+Replayed replayTree(Iterable<ChatRecord> records) {
+  final nodes = <String, Message>{};
+  final parent = <String, String?>{};
+  final children = <String?, List<String>>{};
+  final shown = <String?, String>{};
+  final branching = <String, String>{};
+
+  /// The child of [of] the thread runs through: the one last selected, or
+  /// failing that the newest, since a thread just written is the one to read.
+  String? through(String? of) {
+    final kids = children[of];
+    if (kids == null || kids.isEmpty) return null;
+    final picked = shown[of];
+    return picked != null && kids.contains(picked) ? picked : kids.last;
+  }
+
+  /// The end of the thread being read, which is where a message that is not a
+  /// branch goes.
+  String? tail() {
+    String? at;
+    while (true) {
+      final next = through(at);
+      if (next == null) return at;
+      at = next;
+    }
+  }
+
+  void forget(String id) {
+    final stack = [id];
+    while (stack.isNotEmpty) {
+      final at = stack.removeLast();
+      stack.addAll(children.remove(at) ?? const []);
+      nodes.remove(at);
+      final of = parent.remove(at);
+      children[of]?.remove(at);
+      if (shown[of] == at) shown.remove(of);
+    }
+  }
 
   for (final record in records) {
     switch (record) {
       case MessageRecord(:final id, :final role, :final createdAt, :final parentId):
-        at[id] = messages.length;
-        messages.add(
-            Message(id: id, role: role, createdAt: createdAt, parentId: parentId));
+        final replaces = branching.remove(id);
+        final under = replaces != null && nodes.containsKey(replaces)
+            ? parent[replaces]
+            : tail();
+        parent[id] = under;
+        (children[under] ??= []).add(id);
+        // A thread just written is the one being read, until a [SelectRecord]
+        // further down the log says the user cycled off it.
+        shown[under] = id;
+        nodes[id] =
+            Message(id: id, role: role, createdAt: createdAt, parentId: parentId);
+
+      case BranchRecord(:final messageId, :final siblingOf):
+        branching[messageId] = siblingOf;
+
+      case SelectRecord(:final messageId):
+        if (!nodes.containsKey(messageId)) continue;
+        shown[parent[messageId]] = messageId;
 
       case PartRecord(:final messageId, :final index, :final part):
-        final into = at[messageId];
-        if (into == null || index < 0 || index > messages[into].parts.length) continue;
-        final parts = List<MessagePart>.of(messages[into].parts);
+        final into = nodes[messageId];
+        if (into == null || index < 0 || index > into.parts.length) continue;
+        final parts = List<MessagePart>.of(into.parts);
         if (index == parts.length) {
           parts.add(part);
         } else {
           parts[index] = part;
         }
-        messages[into] = messages[into].copyWith(parts: parts);
+        nodes[messageId] = into.copyWith(parts: parts);
 
       case AppendRecord(:final messageId, :final index, :final text):
-        final into = at[messageId];
-        if (into == null || index < 0 || index >= messages[into].parts.length) continue;
-        final parts = List<MessagePart>.of(messages[into].parts);
+        final into = nodes[messageId];
+        if (into == null || index < 0 || index >= into.parts.length) continue;
+        final parts = List<MessagePart>.of(into.parts);
         parts[index] = withMoreText(parts[index], text);
-        messages[into] = messages[into].copyWith(parts: parts);
+        nodes[messageId] = into.copyWith(parts: parts);
 
       case TurnEndRecord():
         // Read by the tail classifier, which decides whether to offer to
@@ -132,34 +227,49 @@ List<Message> replay(Iterable<ChatRecord> records) {
         break;
 
       case RewindRecord(:final messageId):
-        final from = at[messageId];
-        if (from == null) continue;
-        messages.removeRange(from, messages.length);
-        at.removeWhere((_, index) => index >= from);
+        if (nodes.containsKey(messageId)) forget(messageId);
     }
   }
 
-  return messages;
+  final messages = <Message>[];
+  final branches = <String, List<String>>{};
+  String? at;
+  while (true) {
+    final next = through(at);
+    if (next == null) break;
+    final node = nodes[next];
+    if (node == null) break;
+    messages.add(node);
+    final kids = children[at]!;
+    if (kids.length > 1) branches[next] = List.unmodifiable(kids);
+    at = next;
+  }
+
+  return Replayed(messages: messages, branches: branches);
 }
 
-/// The chat a log describes: the conversation, and whether it stops in the
-/// middle of a turn. Both stores load through here, so one that reads the
-/// conversation and forgets the turn cannot exist.
+/// The thread a log describes. [replayTree] for the branches beside it.
+List<Message> replay(Iterable<ChatRecord> records) => replayTree(records).messages;
+
+/// The chat a log describes: the conversation, the threads beside it, and
+/// whether it stops in the middle of a turn. Both stores load through here, so
+/// one that reads the conversation and forgets the turn cannot exist.
 Chat chatFrom(ChatState state, List<ChatRecord> records) {
-  final messages = replay(records);
+  final replayed = replayTree(records);
   return Chat(
     state: state,
-    messages: messages,
-    unfinished: endsUnfinished(messages, records),
+    messages: replayed.messages,
+    branches: replayed.branches,
+    unfinished: endsUnfinished(replayed.messages, records),
   );
 }
 
-/// Whether the log stops in the middle of a turn: its last message is a reply,
-/// and nothing closed it. See "Carrying on an interrupted turn" in CLAUDE.md
-/// for why only the last one is asked about.
+/// Whether the log stops in the middle of a turn: the last message of the
+/// thread being read is a reply, and nothing closed it. See "Carrying on an
+/// interrupted turn" in CLAUDE.md for why only the last one is asked about.
 ///
 /// Takes the replayed [messages] rather than replaying again: which messages a
-/// rewind left live is [replay]'s to answer. A resumed turn writes a second
+/// rewind left live is [replayTree]'s to answer. A resumed turn writes a second
 /// [TurnEndRecord] for the same message, so the last one wins.
 bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   final last = messages.lastOrNull;
@@ -201,7 +311,8 @@ String? _growingText(MessagePart part) => switch (part) {
 
 /// The records [messages] are made of: each message, then each part it already
 /// has. What writes a conversation assembled in memory; a turn appends its
-/// records as they happen rather than going through this.
+/// records as they happen rather than going through this. One thread and no
+/// branches, which is what a conversation held as a list can describe.
 List<ChatRecord> recordsOf(List<Message> messages) => [
       for (final message in messages) ...[
         ChatRecord.message(

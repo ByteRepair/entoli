@@ -298,10 +298,14 @@ as String?,
 /// @nodoc
 mixin _$Chat {
 
- ChatState get state; List<Message> get messages;/// The last message is a reply whose turn never finished — the process was
-/// killed, or the turn gave up — and so is one to offer to carry on. Read
-/// off the log by `endsUnfinished` when the chat is loaded; nothing writes
-/// it down, since the absence of a closing record is the whole of it.
+ ChatState get state;/// The thread being read, which is one path through the tree the log holds.
+ List<Message> get messages;/// For each message in [messages] that has any, the alternatives written
+/// beside it — oldest first, including the one being read. Derived by
+/// `replayTree` rather than persisted, like [unfinished]: the tree is in
+/// the records, and a message on its own says nothing about it.
+ Map<String, List<String>> get branches;/// The last message is a reply whose turn never finished, and so is one to
+/// offer to carry on. Derived from the log by `endsUnfinished` rather than
+/// persisted — the absence of a closing record is the whole of it.
  bool get unfinished;
 /// Create a copy of Chat
 /// with the given fields replaced by the non-null parameter values.
@@ -315,16 +319,16 @@ $ChatCopyWith<Chat> get copyWith => _$ChatCopyWithImpl<Chat>(this as Chat, _$ide
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other.messages, messages)&&(identical(other.unfinished, unfinished) || other.unfinished == unfinished));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other.messages, messages)&&const DeepCollectionEquality().equals(other.branches, branches)&&(identical(other.unfinished, unfinished) || other.unfinished == unfinished));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(messages),unfinished);
+int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(messages),const DeepCollectionEquality().hash(branches),unfinished);
 
 @override
 String toString() {
-  return 'Chat(state: $state, messages: $messages, unfinished: $unfinished)';
+  return 'Chat(state: $state, messages: $messages, branches: $branches, unfinished: $unfinished)';
 }
 
 
@@ -335,7 +339,7 @@ abstract mixin class $ChatCopyWith<$Res>  {
   factory $ChatCopyWith(Chat value, $Res Function(Chat) _then) = _$ChatCopyWithImpl;
 @useResult
 $Res call({
- ChatState state, List<Message> messages, bool unfinished
+ ChatState state, List<Message> messages, Map<String, List<String>> branches, bool unfinished
 });
 
 
@@ -352,11 +356,12 @@ class _$ChatCopyWithImpl<$Res>
 
 /// Create a copy of Chat
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? state = null,Object? messages = null,Object? unfinished = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? state = null,Object? messages = null,Object? branches = null,Object? unfinished = null,}) {
   return _then(_self.copyWith(
 state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as ChatState,messages: null == messages ? _self.messages : messages // ignore: cast_nullable_to_non_nullable
-as List<Message>,unfinished: null == unfinished ? _self.unfinished : unfinished // ignore: cast_nullable_to_non_nullable
+as List<Message>,branches: null == branches ? _self.branches : branches // ignore: cast_nullable_to_non_nullable
+as Map<String, List<String>>,unfinished: null == unfinished ? _self.unfinished : unfinished // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }
@@ -451,10 +456,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages,  bool unfinished)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages,  Map<String, List<String>> branches,  bool unfinished)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Chat() when $default != null:
-return $default(_that.state,_that.messages,_that.unfinished);case _:
+return $default(_that.state,_that.messages,_that.branches,_that.unfinished);case _:
   return orElse();
 
 }
@@ -472,10 +477,10 @@ return $default(_that.state,_that.messages,_that.unfinished);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages,  bool unfinished)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages,  Map<String, List<String>> branches,  bool unfinished)  $default,) {final _that = this;
 switch (_that) {
 case _Chat():
-return $default(_that.state,_that.messages,_that.unfinished);case _:
+return $default(_that.state,_that.messages,_that.branches,_that.unfinished);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -492,10 +497,10 @@ return $default(_that.state,_that.messages,_that.unfinished);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ChatState state,  List<Message> messages,  bool unfinished)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ChatState state,  List<Message> messages,  Map<String, List<String>> branches,  bool unfinished)?  $default,) {final _that = this;
 switch (_that) {
 case _Chat() when $default != null:
-return $default(_that.state,_that.messages,_that.unfinished);case _:
+return $default(_that.state,_that.messages,_that.branches,_that.unfinished);case _:
   return null;
 
 }
@@ -507,21 +512,37 @@ return $default(_that.state,_that.messages,_that.unfinished);case _:
 @JsonSerializable()
 
 class _Chat implements Chat {
-  const _Chat({required this.state, final  List<Message> messages = const [], this.unfinished = false}): _messages = messages;
+  const _Chat({required this.state, final  List<Message> messages = const [], final  Map<String, List<String>> branches = const {}, this.unfinished = false}): _messages = messages,_branches = branches;
   factory _Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
 
 @override final  ChatState state;
+/// The thread being read, which is one path through the tree the log holds.
  final  List<Message> _messages;
+/// The thread being read, which is one path through the tree the log holds.
 @override@JsonKey() List<Message> get messages {
   if (_messages is EqualUnmodifiableListView) return _messages;
   // ignore: implicit_dynamic_type
   return EqualUnmodifiableListView(_messages);
 }
 
-/// The last message is a reply whose turn never finished — the process was
-/// killed, or the turn gave up — and so is one to offer to carry on. Read
-/// off the log by `endsUnfinished` when the chat is loaded; nothing writes
-/// it down, since the absence of a closing record is the whole of it.
+/// For each message in [messages] that has any, the alternatives written
+/// beside it — oldest first, including the one being read. Derived by
+/// `replayTree` rather than persisted, like [unfinished]: the tree is in
+/// the records, and a message on its own says nothing about it.
+ final  Map<String, List<String>> _branches;
+/// For each message in [messages] that has any, the alternatives written
+/// beside it — oldest first, including the one being read. Derived by
+/// `replayTree` rather than persisted, like [unfinished]: the tree is in
+/// the records, and a message on its own says nothing about it.
+@override@JsonKey() Map<String, List<String>> get branches {
+  if (_branches is EqualUnmodifiableMapView) return _branches;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_branches);
+}
+
+/// The last message is a reply whose turn never finished, and so is one to
+/// offer to carry on. Derived from the log by `endsUnfinished` rather than
+/// persisted — the absence of a closing record is the whole of it.
 @override@JsonKey() final  bool unfinished;
 
 /// Create a copy of Chat
@@ -537,16 +558,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other._messages, _messages)&&(identical(other.unfinished, unfinished) || other.unfinished == unfinished));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other._messages, _messages)&&const DeepCollectionEquality().equals(other._branches, _branches)&&(identical(other.unfinished, unfinished) || other.unfinished == unfinished));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(_messages),unfinished);
+int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(_messages),const DeepCollectionEquality().hash(_branches),unfinished);
 
 @override
 String toString() {
-  return 'Chat(state: $state, messages: $messages, unfinished: $unfinished)';
+  return 'Chat(state: $state, messages: $messages, branches: $branches, unfinished: $unfinished)';
 }
 
 
@@ -557,7 +578,7 @@ abstract mixin class _$ChatCopyWith<$Res> implements $ChatCopyWith<$Res> {
   factory _$ChatCopyWith(_Chat value, $Res Function(_Chat) _then) = __$ChatCopyWithImpl;
 @override @useResult
 $Res call({
- ChatState state, List<Message> messages, bool unfinished
+ ChatState state, List<Message> messages, Map<String, List<String>> branches, bool unfinished
 });
 
 
@@ -574,11 +595,12 @@ class __$ChatCopyWithImpl<$Res>
 
 /// Create a copy of Chat
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? state = null,Object? messages = null,Object? unfinished = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? state = null,Object? messages = null,Object? branches = null,Object? unfinished = null,}) {
   return _then(_Chat(
 state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as ChatState,messages: null == messages ? _self._messages : messages // ignore: cast_nullable_to_non_nullable
-as List<Message>,unfinished: null == unfinished ? _self.unfinished : unfinished // ignore: cast_nullable_to_non_nullable
+as List<Message>,branches: null == branches ? _self._branches : branches // ignore: cast_nullable_to_non_nullable
+as Map<String, List<String>>,unfinished: null == unfinished ? _self.unfinished : unfinished // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }

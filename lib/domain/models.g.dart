@@ -30,12 +30,19 @@ _Chat _$ChatFromJson(Map<String, dynamic> json) => _Chat(
           ?.map((e) => Message.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const [],
+  branches:
+      (json['branches'] as Map<String, dynamic>?)?.map(
+        (k, e) =>
+            MapEntry(k, (e as List<dynamic>).map((e) => e as String).toList()),
+      ) ??
+      const {},
   unfinished: json['unfinished'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$ChatToJson(_Chat instance) => <String, dynamic>{
   'state': instance.state,
   'messages': instance.messages,
+  'branches': instance.branches,
   'unfinished': instance.unfinished,
 };
 

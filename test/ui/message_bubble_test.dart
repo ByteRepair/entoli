@@ -26,6 +26,10 @@ void main() {
     String chatId = "chat-1",
     bool isWaiting = false,
     String? waitingNotice,
+    int threadIndex = 0,
+    int threadCount = 1,
+    ValueChanged<int>? onThreadStep,
+    VoidCallback? onDelete,
     ValueChanged<String>? onEdit,
     VoidCallback? onRegenerate,
     ValueChanged<String>? onTapLink,
@@ -38,6 +42,10 @@ void main() {
             message: message,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,
+            threadIndex: threadIndex,
+            threadCount: threadCount,
+            onThreadStep: onThreadStep,
+            onDelete: onDelete,
             onEdit: onEdit,
             onRegenerate: onRegenerate,
             onTapLink: onTapLink,
@@ -527,6 +535,120 @@ void main() {
 
     expect(find.byTooltip("Regenerate"), findsNothing);
     expect(find.byTooltip("Edit"), findsNothing);
+  });
+
+  group("threads", () {
+    /// Whether an action is offered rather than greyed out. The tooltip is a
+    /// descendant of the button it belongs to.
+    bool enabled(WidgetTester tester, String tooltip) =>
+        tester
+            .widget<IconButton>(find.ancestor(
+                of: find.byTooltip(tooltip), matching: find.byType(IconButton)))
+            .onPressed !=
+        null;
+
+    Future<void> pumpThread(
+      WidgetTester tester, {
+      required int index,
+      required int count,
+      ValueChanged<int>? onThreadStep,
+      VoidCallback? onDelete,
+    }) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "an answer")]),
+        threadIndex: index,
+        threadCount: count,
+        onThreadStep: onThreadStep ?? (_) {},
+        onDelete: onDelete,
+      );
+      await reveal(tester, find.text("an answer"));
+    }
+
+    testWidgets("a message nothing was branched at has no counter", (tester) async {
+      await pumpThread(tester, index: 0, count: 1);
+
+      expect(find.text("1/1"), findsNothing);
+      expect(find.byTooltip("Previous thread"), findsNothing);
+      expect(find.byTooltip("Next thread"), findsNothing);
+    });
+
+    testWidgets("several threads are counted, with a way between them", (tester) async {
+      await pumpThread(tester, index: 1, count: 3);
+
+      expect(find.text("2/3"), findsOneWidget);
+      expect(enabled(tester, "Previous thread"), isTrue);
+      expect(enabled(tester, "Next thread"), isTrue);
+    });
+
+    // The arrows do not wrap, so each end is a dead one rather than a way back
+    // round to where the reader started.
+    testWidgets("the first thread has no way back", (tester) async {
+      await pumpThread(tester, index: 0, count: 2);
+
+      expect(find.text("1/2"), findsOneWidget);
+      expect(enabled(tester, "Previous thread"), isFalse);
+      expect(enabled(tester, "Next thread"), isTrue);
+    });
+
+    testWidgets("the last thread has no way on", (tester) async {
+      await pumpThread(tester, index: 1, count: 2);
+
+      expect(enabled(tester, "Previous thread"), isTrue);
+      expect(enabled(tester, "Next thread"), isFalse);
+    });
+
+    testWidgets("an arrow says which way it went", (tester) async {
+      final steps = <int>[];
+      await pumpThread(tester, index: 1, count: 3, onThreadStep: steps.add);
+
+      await tester.tap(find.byTooltip("Previous thread"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip("Next thread"));
+      await tester.pumpAndSettle();
+
+      expect(steps, [-1, 1]);
+    });
+
+    testWidgets("deleting asks first, and says what else is there", (tester) async {
+      var deleted = 0;
+      await pumpThread(tester, index: 1, count: 3, onDelete: () => deleted++);
+
+      await tester.tap(find.byTooltip("Delete thread"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Delete thread"), findsWidgets);
+      expect(find.textContaining("The other 2 stay"), findsOneWidget);
+      expect(deleted, 0);
+
+      await tester.tap(find.widgetWithText(TextButton, "Delete"));
+      await tester.pumpAndSettle();
+
+      expect(deleted, 1);
+    });
+
+    testWidgets("a cancelled confirmation deletes nothing", (tester) async {
+      var deleted = 0;
+      await pumpThread(tester, index: 0, count: 1, onDelete: () => deleted++);
+
+      await tester.tap(find.byTooltip("Delete thread"));
+      await tester.pumpAndSettle();
+      // The last thread at a branch takes the rest of the conversation with it,
+      // which the wording has to say rather than counting what stays.
+      expect(find.textContaining("everything below it"), findsOneWidget);
+      expect(find.textContaining("stay"), findsNothing);
+
+      await tester.tap(find.widgetWithText(TextButton, "Cancel"));
+      await tester.pumpAndSettle();
+
+      expect(deleted, 0);
+    });
+
+    testWidgets("there is nothing to delete when no callback is given", (tester) async {
+      await pumpThread(tester, index: 1, count: 2);
+
+      expect(find.byTooltip("Delete thread"), findsNothing);
+    });
   });
 
   // A sent message holds only the resource name, so the bytes have to come
