@@ -9,27 +9,19 @@ import "../widgets/dialogs.dart";
 /// The row that opens the explorer, on the chat, project and app settings pages
 /// alike. All three hold a workspace and none has anything else to say about it.
 class WorkspaceTile extends StatelessWidget {
-  const WorkspaceTile({
-    super.key,
-    required this.root,
-    required this.title,
-    this.label = "Workspace",
-  });
+  const WorkspaceTile({super.key, required this.root, required this.title});
 
   final String root;
 
-  /// What the explorer's app bar says at the root.
+  /// What the explorer's app bar says at the root. The row says only
+  /// "Workspace": the page it sits in has already named the owner.
   final String title;
-
-  /// What the row says. A chat's or a project's sits under the page naming its
-  /// owner already; settings has no such page above it.
-  final String label;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: const Icon(Icons.folder_outlined),
-      title: Text(label),
+      title: const Text("Workspace"),
       subtitle: const Text("Browse files"),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
@@ -100,8 +92,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   }
 
   /// The two always move together, so nothing sets one of them: a selection
-  /// outside selection mode is a state the page does not have, which is what
-  /// lets everything else test `_selected` alone.
+  /// outside selection mode is a state the page does not have. Which of them to
+  /// read is then the question being asked — the toolbar is the mode, the title
+  /// and the export button are what is picked.
   void _clearSelection() {
     _selecting = false;
     _selected.clear();
@@ -169,10 +162,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     final paths = _selected.toList();
     if (paths.isEmpty) return;
     final fs = ref.read(appConfigProvider).fs;
-    final one = paths.length == 1;
     final agreed = await confirm(
       context,
-      title: one
+      title: paths.length == 1
           ? "Delete \"${fs.path.basename(paths.first)}\"?"
           : "Delete ${paths.length} items?",
       message: "A folder goes with everything in it. This cannot be undone.",
@@ -182,8 +174,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     if (!agreed) return;
     await _guard(() async {
       await deleteEntries(fs, paths);
-      _clearSelection();
-      _reload();
+      setState(() {
+        _clearSelection();
+        _entries = _read();
+      });
     });
   }
 
@@ -201,50 +195,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               : (_atRoot ? widget.title : fs.path.basename(_dir)),
           under: _atRoot ? null : fs.path.relative(_dir, from: widget.root),
         ),
-        // A selection has its own toolbar: what is on offer then is what can be
-        // done to what is picked, and browsing the folder is not it.
-        actions: _selecting
-            ? [
-                if (_selected.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: "Delete",
-                    onPressed: _delete,
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: "Cancel selection",
-                  onPressed: () => setState(_clearSelection),
-                ),
-              ]
-            : [
-                if (handoff.canReveal)
-                  IconButton(
-                    icon: const Icon(Icons.open_in_new),
-                    tooltip: "Show in file manager",
-                    onPressed: () => _guard(() => handoff.reveal(_dir)),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.create_new_folder_outlined),
-                  tooltip: "New folder",
-                  onPressed: _newFolder,
-                ),
-                if (handoff.canImport)
-                  PopupMenuButton<bool>(
-                    icon: const Icon(Icons.upload_file),
-                    tooltip: "Upload",
-                    onSelected: (folders) => _import(folders: folders),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: false, child: Text("Upload files")),
-                      PopupMenuItem(value: true, child: Text("Upload folder")),
-                    ],
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.checklist),
-                  tooltip: "Select",
-                  onPressed: () => setState(() => _selecting = true),
-                ),
-              ],
+        actions: _selecting ? _selectionActions() : _browseActions(handoff),
       ),
       floatingActionButton: export == null || _selected.isEmpty
           ? null
@@ -296,6 +247,51 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       ),
     );
   }
+
+  /// What can be done to what is picked. It replaces the browsing actions
+  /// rather than sitting beside them.
+  List<Widget> _selectionActions() => [
+        if (_selected.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: "Delete",
+            onPressed: _delete,
+          ),
+        IconButton(
+          icon: const Icon(Icons.close),
+          tooltip: "Cancel selection",
+          onPressed: () => setState(_clearSelection),
+        ),
+      ];
+
+  List<Widget> _browseActions(FileHandoff handoff) => [
+        if (handoff.canReveal)
+          IconButton(
+            icon: const Icon(Icons.open_in_new),
+            tooltip: "Show in file manager",
+            onPressed: () => _guard(() => handoff.reveal(_dir)),
+          ),
+        IconButton(
+          icon: const Icon(Icons.create_new_folder_outlined),
+          tooltip: "New folder",
+          onPressed: _newFolder,
+        ),
+        if (handoff.canImport)
+          PopupMenuButton<bool>(
+            icon: const Icon(Icons.upload_file),
+            tooltip: "Upload",
+            onSelected: (folders) => _import(folders: folders),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: false, child: Text("Upload files")),
+              PopupMenuItem(value: true, child: Text("Upload folder")),
+            ],
+          ),
+        IconButton(
+          icon: const Icon(Icons.checklist),
+          tooltip: "Select",
+          onPressed: () => setState(() => _selecting = true),
+        ),
+      ];
 
   void _toggle(WorkspaceEntry entry) => setState(() {
         if (!_selected.remove(entry.path)) _selected.add(entry.path);

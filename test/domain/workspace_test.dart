@@ -90,13 +90,6 @@ void main() {
       expect(Directory("$dir/notes").existsSync(), isTrue);
     });
 
-    test("a typed path is sanitised like any other", () async {
-      await createFolder(fileSystemIo, dir, "../escaped");
-
-      expect(Directory("$dir/escaped").existsSync(), isTrue);
-      expect(Directory(fileSystemIo.path.join(dir, "..", "escaped")).existsSync(), isFalse);
-    });
-
     test("one that is already there is left alone", () async {
       File("$dir/notes/a.txt")
         ..createSync(recursive: true)

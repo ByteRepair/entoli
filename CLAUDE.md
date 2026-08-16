@@ -961,9 +961,9 @@ to decide. Null is a platform with nowhere to hand a selection, which is what
 takes the export button off the desktop toolbar — selecting itself stays, since
 deleting is the filesystem's rather than a route out of the app.
 
-A selection has the toolbar to itself: while one is up the app bar holds Delete
-and the way out of it, and what it replaced — reveal, new folder, upload — is
-what the folder is browsed with rather than what is done to what is picked.
+A selection replaces the browsing actions rather than sitting beside them: the
+app bar is the filesystem's verbs on what is picked, and the FAB stays the route
+out of the app, which is the one thing a platform can be without.
 
 Neither a share sheet nor a download takes a folder, so a selection with one in
 it goes as a single zip (`zipEntries`, in `lib/data/` rather than `local/` or
@@ -1130,8 +1130,9 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is four sections plus deleting everything: **New chats**
-(default model, title model), **Appearance** (app icon), **Agent** (command
+The settings page is five sections plus deleting everything: **New chats**
+(default model, title model), **Workspace** (the default project's, which has
+nowhere else to be reached from), **Appearance** (app icon), **Agent** (command
 approval mode, classifier model, providers), **Environment**.
 
 ### Shared UI

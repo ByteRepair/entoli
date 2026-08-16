@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_icon.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
+import "../../domain/project.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/anchored_menu.dart";
@@ -73,26 +74,25 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// The default project's shared workspace. Every other project reaches its own
-/// from its settings page, and the default project has none — so this is the
-/// only way to the folder chats outside a project share.
+/// The default project has no settings page of its own, so this is the only way
+/// to the workspace the chats outside a project share.
 class _WorkspaceSection extends ConsumerWidget {
   const _WorkspaceSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final name = "${projectLabel(null)} workspace";
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionHeader(
-          "Workspace",
+        _SectionHeader(
+          name,
           description: "Where the agent puts work meant for another chat, for "
               "every chat outside a project.",
         ),
         WorkspaceTile(
           root: ref.watch(appConfigProvider).projectWorkspaceDir(),
-          title: "Default workspace",
-          label: "Default workspace",
+          title: name,
         ),
       ],
     );

@@ -37,6 +37,13 @@ void main() {
     root = app.config.projectWorkspaceDir();
   }
 
+  Future<void> deleteSelection(WidgetTester tester) async {
+    await tester.tap(find.byTooltip("Delete"));
+    await settleIo(tester);
+    await tester.tap(find.widgetWithText(TextButton, "Delete"));
+    await settleIo(tester);
+  }
+
   tearDown(() => app.dispose());
 
   group("listing", () {
@@ -142,12 +149,14 @@ void main() {
       expect(app.handoff.revealed, ["$root/src"]);
     });
 
-    testWidgets("there is nothing to share or upload", (tester) async {
+    // Selecting survives having nowhere to share to, because deleting is not a
+    // route out of the app.
+    testWidgets("there is nothing to share or upload, but there is to select",
+        (tester) async {
       seed(files: ["notes.md"]);
       await open(tester);
 
       expect(find.byTooltip("Upload"), findsNothing);
-      // Selecting is still offered: deleting is not a route out of the app.
       expect(find.byTooltip("Select"), findsOneWidget);
     });
 
@@ -159,10 +168,7 @@ void main() {
       await settleIo(tester);
       expect(find.byType(FloatingActionButton), findsNothing);
 
-      await tester.tap(find.byTooltip("Delete"));
-      await settleIo(tester);
-      await tester.tap(find.widgetWithText(TextButton, "Delete"));
-      await settleIo(tester);
+      await deleteSelection(tester);
 
       expect(File("$root/a.txt").existsSync(), isFalse);
     });
@@ -281,8 +287,6 @@ void main() {
       expect(find.text("notes"), findsOneWidget);
     });
 
-    // The name is typed, so it is sanitised like anything else joined onto a
-    // workspace — `../` is a name a folder can be asked for.
     testWidgets("a typed path cannot climb out of the workspace", (tester) async {
       seed(files: ["a.txt"]);
       await open(tester);
@@ -308,13 +312,6 @@ void main() {
 
   group("deleting", () {
     setUp(() => start(handoff: FakeFileHandoff.android()));
-
-    Future<void> deleteSelection(WidgetTester tester) async {
-      await tester.tap(find.byTooltip("Delete"));
-      await settleIo(tester);
-      await tester.tap(find.widgetWithText(TextButton, "Delete"));
-      await settleIo(tester);
-    }
 
     testWidgets("a folder goes with everything in it", (tester) async {
       seed(files: ["src/deep/main.dart", "keep.txt"]);
@@ -409,15 +406,14 @@ void main() {
       expect(find.text("in-project.txt"), findsOneWidget);
     });
 
-    // The default project has no settings page of its own, so this is the only
-    // way to the workspace every chat outside a project shares.
     testWidgets("the settings page opens the default workspace", (tester) async {
-      File("$root/shared.md").writeAsStringSync("everyone's");
+      seed(files: ["shared.md"]);
 
       await app.pump(tester, const SettingsPage());
-      await tester.tap(find.text("Default workspace"));
+      await tester.tap(find.text("Workspace"));
       await settleIo(tester);
 
+      expect(find.text("Default workspace"), findsOneWidget);
       expect(find.text("shared.md"), findsOneWidget);
     });
 
