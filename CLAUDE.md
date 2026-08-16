@@ -35,7 +35,8 @@ as an interface so the UI and repository can be tested against `FakeBackend`.
 ### On-disk layout
 
 `<dataDir>/chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`,
-`resources/`, `workspace/`, and `<dataDir>/workspace/` beside them.
+`resources/`, `subagents/`, `workspace/`, and `<dataDir>/workspace/` beside
+them.
 `<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
@@ -592,6 +593,60 @@ would race the two.
 approvals and questions), so `conv.jsonl` keeps the call/result pair and
 nothing more; a reloaded chat draws a `TaskLabel` from the call's arguments
 alone. `SubAgentStrip` shows the running ones as chips above the composer.
+
+##### Their own transcripts
+
+A sub-agent writes one, at `<chat>/subagents/<callId>.jsonl`, and it is a
+`ChatRecord` log exactly like `conv.jsonl`. That is the whole design: `replay`
+reads it, `projectionOf` puts it back in front of a model, and a missing
+`turnEnd` means what it means anywhere else. A status file would have served
+the reporting and been thrown away the day sub-agent transcripts became
+something to look at.
+
+The call id is the only id there is. The transcript holds one message — a
+sub-agent's whole run is one turn — and it is named after the call that spawned
+it, which the parent's own log already holds. So nothing has to be written down
+to pair the two, and carrying one on adds to that message rather than writing a
+second beside it.
+
+`TurnRecorder` is what writes it, the same class `ChatController` uses for the
+conversation. It was pulled out of the controller for this: turning a turn's
+events into parts and records is the same job either way, and a sub-agent with
+its own weaker version would be one whose kill leaves a file nothing can read.
+The controller keeps the seven lines that mirror the parts into Riverpod state
+and passes them as a callback; a sub-agent passes none. The one thing the
+recorder does not write is the record opening the message — one level up that is
+`send`'s job, and for a sub-agent it is `_recorderFor`'s.
+
+`SubAgentLog` is a port rather than a call on `ChatStore` because the backend is
+the only thing that sees a sub-agent's events at all: they never reach the
+controller that writes `conv.jsonl`, so the store's owner never has them.
+
+##### Carrying one on
+
+`MinisweBackend._reviveSubAgents` runs before the resumed session is built. A
+`task` call in the interrupted reply whose result never landed is answered by
+running its sub-agent on, over a session rebuilt from its own transcript — which
+is `MinisweAgent.resume` and `projectionOf`, the same three steps the user's
+Continue takes one level up, so there is one mechanism and not two.
+
+**Nothing asks, and nobody is told.** "Carrying on an interrupted turn" says
+nothing resumes on its own and the three routes out are the user's — that is
+about the top of the conversation, which is theirs. A sub-agent is machinery
+inside a turn they have already said to continue, so reviving one needs no
+button, no tool argument and no prompt telling the model the mechanism exists.
+Reviving is also what makes the resumed turn honest: a fan-out of 75 that lost
+five keeps the seventy that finished.
+
+The revived results go out as ordinary `ToolResultEvent`s before the agent's own
+events, so the reply on screen and the records in `conv.jsonl` both gain them
+through the path every other result takes. They are folded into the history
+first, so the session is projected from a conversation that already has them
+rather than patched afterwards.
+
+A call with no transcript is left alone. It never started, so there is nothing
+to carry on and the projection's "this was interrupted" is the honest answer —
+which is also why the two have to stay side by side.
 
 #### Web search (the `websearch` / `webfetch` tools)
 

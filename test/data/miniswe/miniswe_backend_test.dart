@@ -2,7 +2,11 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
+import "dart:convert";
+
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/local/file_sub_agent_log.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/data/miniswe/llm/llm_client.dart";
 import "package:agent_chat/data/miniswe/llm/llm_registry.dart";
 import "package:agent_chat/data/miniswe/miniswe_agent.dart";
@@ -428,6 +432,107 @@ void main() {
       await backend.abort("never-ran");
 
       expect(notified, 0);
+    });
+  });
+
+  group("carrying on a killed sub-agent", () {
+    /// A conversation stopped mid-fan-out: the reply holds a `task` call whose
+    /// result never landed, which is what a killed turn leaves behind.
+    List<Message> historyWithPendingTask({String callId = "task-1"}) => [
+          Message(
+            id: "u1",
+            role: MessageRole.user,
+            createdAt: DateTime.utc(2026),
+            parts: [MessagePart.text(text: "count the files")],
+          ),
+          Message(
+            id: "a1",
+            role: MessageRole.assistant,
+            createdAt: DateTime.utc(2026),
+            parts: [
+              MessagePart.toolCall(
+                toolCall: ToolCall(
+                  id: callId,
+                  name: "task",
+                  argumentsJson: jsonEncode({"agent": "general", "prompt": "count"}),
+                ),
+              ),
+            ],
+          ),
+        ];
+
+    /// The transcript that sub-agent left: something said, and no `turnEnd`.
+    Future<void> seedKilledSubAgent(String callId, String said) =>
+        FileSubAgentLog(config, chatId).append(
+            callId,
+            recordsOf([
+              Message(
+                id: callId,
+                role: MessageRole.assistant,
+                createdAt: DateTime.utc(2026),
+                parts: [MessagePart.text(text: said)],
+              ),
+            ]));
+
+    test("it is carried on, and its answer reaches the parent", () async {
+      await seedKilledSubAgent("task-1", "I was halfway through");
+      // The sub-agent finishes, then the parent says its piece.
+      final backend = backendOver([
+        [saidOnly("there are three")],
+        [finish],
+      ]);
+
+      final events = await resuming(backend, historyWithPendingTask());
+
+      final result = events
+          .whereType<ToolResultEvent>()
+          .firstWhere((e) => e.result.callId == "task-1")
+          .result;
+      expect(result.returnCode, 0);
+      expect(result.output, contains("there are three"));
+    });
+
+    test("what it had already done is put back in front of it", () async {
+      await seedKilledSubAgent("task-1", "I was halfway through");
+      final backend = backendOver([
+        [saidOnly("there are three")],
+        [finish],
+      ]);
+
+      await resuming(backend, historyWithPendingTask());
+
+      expect(client.sent.first.any((m) => m.text.contains("I was halfway through")), isTrue);
+    });
+
+    test("the parent is shown the answer, not that it was interrupted", () async {
+      await seedKilledSubAgent("task-1", "halfway");
+      final backend = backendOver([
+        [saidOnly("there are three")],
+        [finish],
+      ]);
+
+      await resuming(backend, historyWithPendingTask());
+
+      // The parent's own call is the second: the first is the revived
+      // sub-agent's. What answers its `task` call is the sub-agent's output.
+      final answered = client.sent.last
+          .where((m) => m.role == LlmRole.tool && m.toolCallId == "task-1");
+      expect(answered.single.text, contains("there are three"));
+      expect(answered.single.text, isNot(contains("interrupted")));
+    });
+
+    test("a call that never started keeps the interrupted wording", () async {
+      // No transcript seeded: the sub-agent died before writing anything.
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      final events = await resuming(backend, historyWithPendingTask());
+
+      expect(events.whereType<ToolResultEvent>(), isEmpty);
+      final answered = client.sent.single
+          .where((m) => m.role == LlmRole.tool && m.toolCallId == "task-1");
+      expect(answered.single.text, contains("interrupted"));
     });
   });
 
