@@ -48,6 +48,12 @@ under a parallel test run is a test that flakes — twice, before they moved.
 Reach for it when a filesystem is incidental to what is being checked, not to
 avoid the pumping below.
 
+`sub_agent_log_test.dart` seeds a killed sub-agent the way a kill leaves one:
+`recordsOf` a message with something in it and no `turnEnd` after it. The
+message is named after the call, since that is the only id a sub-agent
+transcript has. `miniswe_backend_test.dart` does the same one level up, where
+the subject is the parent carrying it on.
+
 `web_filesystem_test.dart` is the other half. `newFileSystemMemory()` is the
 same `FileSystemIdb` the web build runs on, over an in-memory IndexedDB rather
 than the browser's, so the browser's chat store, its settings and its

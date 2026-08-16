@@ -5,12 +5,15 @@ import "package:flutter/foundation.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
+import "../local/file_sub_agent_log.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
+import "../../domain/sub_agent_log.dart";
+import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
@@ -20,6 +23,7 @@ import "miniswe_agent.dart";
 import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
+import "task_tool.dart";
 
 /// mini-swe-agent, running in this process. The loop is [MinisweAgent]; this
 /// is what Entoli talks to: it holds a session per chat, resolves which
@@ -167,6 +171,7 @@ class MinisweBackend implements AgentBackend {
         maxRetryBudget: options.rateLimitRetryBudget,
       );
       final gatedClient = GatedLlmClient(target.client, rateLimitGate);
+      final subAgentLog = FileSubAgentLog(config, chatId, project: project);
       final subAgentRunner = SubAgentRunner(
         client: gatedClient,
         shell: shell,
@@ -177,6 +182,7 @@ class MinisweBackend implements AgentBackend {
         options: options,
         webSearch: webSearch,
         rateLimitGate: rateLimitGate,
+        log: subAgentLog,
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
@@ -187,6 +193,11 @@ class MinisweBackend implements AgentBackend {
       // way, so that carrying on in the same process and carrying on after a
       // restart put the same thing in front of the model — a checkpoint that
       // failed is swallowed, so a live session can hold more than the log does.
+      // Before the session is built, so the revived results are in the history
+      // it is projected from rather than patched in afterwards.
+      if (text == null) {
+        history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
+      }
       if (text == null || session.isFresh) {
         session.replaceWith(projectionOf(history));
       }
@@ -246,6 +257,64 @@ class MinisweBackend implements AgentBackend {
       // turn's closing records when the agent itself has stopped.
       _running.remove(chatId);
     }
+  }
+
+  /// Carry on the sub-agents the interrupted turn left in flight. A `task`
+  /// call whose result never landed is answered by reviving the sub-agent that
+  /// was running it, rather than by the projection's "this was interrupted" —
+  /// the parent asked for that work and is owed the answer, and the sub-agent's
+  /// own transcript is right there to carry on from.
+  ///
+  /// Nothing asks the user, and nothing asks the model. Only the top of the
+  /// conversation is the user's to resume; a sub-agent is machinery inside a
+  /// turn they have already said to continue.
+  ///
+  /// A call with no transcript is left alone: it never started, so there is
+  /// nothing to carry on and the projection's wording is the honest answer.
+  Future<List<Message>> _reviveSubAgents(
+    List<Message> history,
+    SubAgentRunner runner,
+    SubAgentLog log,
+    StreamController<AgentEvent> controller,
+  ) async {
+    final reply = history.lastOrNull;
+    if (reply == null || reply.role != MessageRole.assistant) return history;
+
+    final answered = reply.parts.whereType<ToolResultPart>().map((p) => p.result.callId).toSet();
+    final pending = reply.parts
+        .whereType<ToolCallPart>()
+        .where((p) => p.toolCall.name == taskToolName && !answered.contains(p.toolCall.id))
+        .toList();
+    if (pending.isEmpty) return history;
+
+    final revived = await Future.wait(pending.map((part) async {
+      final callId = part.toolCall.id;
+      final agent = stringArg(part.toolCall.argumentsJson, "agent");
+      if (agent == null || !await log.isResumable(callId)) return null;
+      final result = await runner.resume(agent, callId);
+      return ToolResult(
+        callId: callId,
+        returnCode: result.returnCode,
+        output: result.output,
+        exceptionInfo: result.exceptionInfo,
+      );
+    }));
+
+    final results = revived.nonNulls.toList();
+    if (results.isEmpty) return history;
+    // Through the event stream like any other result, so the reply on screen
+    // and the records in `conv.jsonl` both gain it without a second path.
+    for (final result in results) {
+      if (controller.isClosed) break;
+      controller.add(ToolResultEvent(result));
+    }
+    return [
+      ...history.take(history.length - 1),
+      reply.copyWith(parts: [
+        ...reply.parts,
+        for (final result in results) MessagePart.toolResult(result: result),
+      ]),
+    ];
   }
 
   void _fail(StreamController<AgentEvent> controller, String message) {
