@@ -76,18 +76,8 @@ one implementation, `FileChatStore`, because the layout no longer varies.
 own commands and agents exist on every platform. Neither is chosen per platform
 any more; `core/platform/` builds both once.
 
-`web_filesystem_test.dart` is what this buys. `newFileSystemMemory()` is the
-same `FileSystemIdb` the web build runs on, over an in-memory IndexedDB, so the
-browser's store, its settings and its attachments are exercised by `flutter
-test` on the VM — including a reload, which is two `AppConfig`s over one
-filesystem. `tempConfig` stays on `fileSystemIo` for the tests that are about
-the layout on a disk.
-
-Because the store is asynchronous, a widget test cannot await it directly: a
-`testWidgets` body runs on a fake clock and only `runAsync` lets real I/O
-finish. `io(tester, …)` in the harness is that, and `settleIo` is `pumpAndSettle`
-with real rounds interleaved — a spinner is a running animation, so settling on
-one used to return and now times out.
+None of this is checked by loading a tab — see `test/CLAUDE.md` for how the
+browser's filesystem is exercised on the VM instead.
 
 ### Projects
 
@@ -403,16 +393,6 @@ search page is HTML, not JSON, so results are parsed out of the table it
 renders. Both return a `ShellResult`, so the agent words a search's outcome
 the same way it words a command's — the model reads one shape, whatever ran.
 
-#### Live test
-
-`test/live/miniswe_live.dart` drives a real provider through the production
-path. It deliberately does **not** call
-`TestWidgetsFlutterBinding.ensureInitialized()`: that installs an
-`HttpOverrides` answering every request with a 400, which is the whole of what a
-live test is for. That rules out `rootBundle`, so it copies `assets/prompts/`
-off disk instead of using `BundledPrompts`. Not a `_test.dart` file, so
-`flutter test` skips it.
-
 ### When a turn is over
 
 `_finishTurn` awaits the save before it clears `isRunning`. That was a
@@ -500,9 +480,7 @@ already has a resource where it is, so replaying a turn does not copy its bytes
 again.
 
 The store's resource I/O is async where the rest of it is sync: a JSON file is
-small enough to write on the UI thread, an attachment is not. A widget test's
-clock is fake and never advances real I/O, which is what `pumpUntil` in
-`test/harness.dart` is for.
+small enough to write on the UI thread, an attachment is not.
 
 ### The app icon
 
@@ -600,18 +578,11 @@ approval mode, classifier model, providers), **Environment**.
 `lib/ui/widgets/` holds what more than one page needs: `ModelPicker` and
 `OptionalModelPicker` (each a field over the model list, sharing the loading and
 failure states every page would otherwise spell out) over
-`ProviderModelSelector` (which owns every rule about the pair, and is tested
-directly in `provider_model_selector_test.dart` rather than through both pages),
-the
+`ProviderModelSelector` (which owns every rule about the pair), the
 `Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs, and `AttachmentChip` /
-`AttachmentStrip`. Tests share `test/harness.dart` (`TestApp`, `tempConfig`,
-`pumpUntil`, `seedChat` for a chat that is actually listed, the dropdown
-finders) and `test/fakes.dart` (`FakeBackend`, whose `scriptedEvents` and `hold`
-drive a turn and whose `scriptedTitle` names a chat, plus `FakeAttachmentPicker`
-and `testLibrary`).
+`pickProject` dialogs, and `AttachmentChip` / `AttachmentStrip`.
 
 Streamed deltas are coalesced into one state update per frame: per-token updates
 made the reply's text quadratic and rebuilt every visible bubble thousands of
@@ -637,10 +608,11 @@ list, so both routes share one code path; for a file it opens the chooser.
 - UI runs forwarded to host: `toolbox run --container flutter-dev flutter run -d linux --debug`.
 - Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
   Nothing runs the app in a browser here, so a web-only regression in the UI is
-  caught by reloading the page. Its storage is not: `web_filesystem_test.dart`
-  runs that path on the VM.
+  caught by reloading the page.
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
-- Analyze: `flutter analyze`. Tests: `flutter test`.
+- Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
+- The repo is not `dart format` clean and is not meant to be; match the file you
+  are in rather than reformatting it.
 
 ## Dependency note
 
