@@ -13,14 +13,27 @@ and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
 beside `FakeAttachmentPicker`, `FakeLauncherIcons` and `testLibrary`.
 
 `seedChat` is a chat that is actually in the sidebar: creating one no longer
-puts it there, so it creates and then saves.
+puts it there, so it creates and then writes its `state.json`. `writeChatTo`
+(and `TestApp.writeChat`) is for one that has a conversation in it: there is no
+whole-log write on `ChatStore` to reach for, since a log is only ever appended
+to, so it writes the state and then appends `recordsOf` the messages — which is
+what a turn would have done.
 
 ## The filesystem a test runs on
 
 `tempConfig` is a real temp directory over `fileSystemIo`, torn down when the
-test ends. That is what `TestApp` uses, and what the store and repository tests
-assert against with `dart:io` — the layout on a disk is the thing under test, so
-`File(config.stateFile(id)).existsSync()` is the honest way to check it.
+test ends. That is what `TestApp` uses by default, and what the store and
+repository tests assert against with `dart:io` — the layout on a disk is the
+thing under test, so `File(config.stateFile(id)).existsSync()` is the honest way
+to check it.
+
+`FakeChatStore` is for the other kind: a test whose subject is *what* was
+written rather than where it landed. `TestApp.create(store: …)` takes one, and
+its `records(id)` hands back the chat's log directly. The log tests use it
+because reading records back off a disk meant polling for them, and a poll
+under a parallel test run is a test that flakes — twice, before they moved.
+Reach for it when a filesystem is incidental to what is being checked, not to
+avoid the pumping below.
 
 `web_filesystem_test.dart` is the other half. `newFileSystemMemory()` is the
 same `FileSystemIdb` the web build runs on, over an in-memory IndexedDB rather

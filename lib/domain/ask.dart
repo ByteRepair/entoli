@@ -2,7 +2,7 @@ import "dart:convert";
 
 /// The tool the agent asks with. Named here rather than beside the schema that
 /// defines it, because the chat draws an answered question back out of
-/// `conv.json`, and what it has to recognise there is a tool call by this name.
+/// `conv.jsonl`, and what it has to recognise there is a tool call by this name.
 const askToolName = "ask_user";
 
 /// One answer the user can pick.

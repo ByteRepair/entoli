@@ -7,6 +7,7 @@ import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 
 import "../harness.dart";
@@ -20,17 +21,19 @@ void main() {
     store = FileChatStore(config);
   });
 
-  test("save writes state.json and conv.json", () async {
-    final state = makeState("c1");
-    final messages = [
-      Message(
-        id: "m1",
+  List<String> logLines(String id) =>
+      const LineSplitter().convert(File(config.convFile(id)).readAsStringSync())
+        ..removeWhere((line) => line.isEmpty);
+
+  Message userMessage(String id, String text) => Message(
+        id: id,
         role: MessageRole.user,
         createdAt: DateTime.utc(2026, 1, 1),
-        parts: [const MessagePart.text(text: "hello")],
-      ),
-    ];
-    await store.save(Chat(state: state, messages: messages));
+        parts: [MessagePart.text(text: text)],
+      );
+
+  test("save writes state.json and a log of records", () async {
+    await writeChatTo(store, Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]));
 
     expect(File(config.stateFile("c1")).existsSync(), isTrue);
     expect(File(config.convFile("c1")).existsSync(), isTrue);
@@ -41,10 +44,45 @@ void main() {
     expect(stateJson["id"], "c1");
     expect(stateJson["title"], "Test chat c1");
 
-    final convJson = jsonDecode(File(config.convFile("c1")).readAsStringSync()) as Map<String, dynamic>;
-    final msgs = convJson["messages"] as List;
-    expect(msgs.length, 1);
-    expect((msgs[0] as Map<String, dynamic>)["role"], "user");
+    // One line per record: the message, then the part it holds.
+    final lines = logLines("c1").map(
+        (line) => jsonDecode(line) as Map<String, dynamic>).toList();
+    expect(lines, hasLength(2));
+    expect(lines[0]["runtimeType"], "message");
+    expect(lines[0]["role"], "user");
+    expect(lines[1]["runtimeType"], "part");
+    expect(lines[1]["index"], 0);
+  });
+
+  test("append adds to the log without rewriting what is there", () async {
+    await writeChatTo(store, Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]));
+    final before = logLines("c1");
+
+    await store.append("c1", [
+      ChatRecord.message(
+          id: "m2", role: MessageRole.assistant, createdAt: DateTime.utc(2026, 1, 1)),
+      const ChatRecord.part(
+          messageId: "m2", index: 0, part: MessagePart.text(text: "hi")),
+    ]);
+
+    expect(logLines("c1").take(before.length), before);
+    expect(logLines("c1"), hasLength(before.length + 2));
+
+    final loaded = await store.load("c1");
+    expect(loaded.messages, hasLength(2));
+    expect((loaded.messages[1].parts.single as TextPart).text, "hi");
+  });
+
+  test("a line left half-written by a kill is dropped, and the rest stands", () async {
+    await writeChatTo(store, Chat(state: makeState("c1"), messages: [userMessage("m1", "hello")]));
+    // What a process dying mid-append leaves behind.
+    File(config.convFile("c1")).writeAsStringSync(
+        '{"runtimeType":"message","id":"m2","role":"assis',
+        mode: FileMode.append);
+
+    final loaded = await store.load("c1");
+    expect(loaded.messages, hasLength(1));
+    expect((loaded.messages.single.parts.single as TextPart).text, "hello");
   });
 
   test("load reads back a saved chat", () async {
@@ -63,7 +101,7 @@ void main() {
         parts: [const MessagePart.text(text: "hello back")],
       ),
     ];
-    await store.save(Chat(state: state, messages: messages));
+    await writeChatTo(store, Chat(state: state, messages: messages));
 
     final loaded = await store.load("c2");
     expect(loaded.state.id, "c2");
@@ -90,8 +128,8 @@ void main() {
       createdAt: DateTime.utc(2026, 1, 1),
       updatedAt: DateTime.utc(2026, 6, 1),
     );
-    await store.save(Chat(state: older, messages: const []));
-    await store.save(Chat(state: newer, messages: const []));
+    await store.saveState(older);
+    await store.saveState(newer);
 
     final summaries = await store.list();
     expect(summaries.length, 2);
@@ -101,7 +139,7 @@ void main() {
 
   test("list skips dirs without state.json", () async {
     Directory(p.join(config.chatsDir(), "junk")).createSync();
-    await store.save(Chat(state: makeState("real"), messages: const []));
+    await store.saveState(makeState("real"));
 
     final summaries = await store.list();
     expect(summaries.length, 1);
@@ -114,7 +152,7 @@ void main() {
   });
 
   test("delete removes the chat directory", () async {
-    await store.save(Chat(state: makeState("c3"), messages: const []));
+    await store.saveState(makeState("c3"));
     expect(Directory(config.chatDir("c3")).existsSync(), isTrue);
 
     await store.delete("c3");
@@ -122,7 +160,7 @@ void main() {
   });
 
   test("saveResource writes bytes under resources/ and reads them back", () async {
-    await store.save(Chat(state: makeState("c4"), messages: const []));
+    await store.saveState(makeState("c4"));
 
     final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
     final resource = await store.saveResource("c4", "test.bin", bytes);
@@ -132,7 +170,7 @@ void main() {
   });
 
   test("saveResource sanitizes unsafe filename characters", () async {
-    await store.save(Chat(state: makeState("c5"), messages: const []));
+    await store.saveState(makeState("c5"));
 
     final resource = await store.saveResource("c5", "../bad name.txt", Uint8List(0));
     expect(resource, contains("bad_name.txt"));
@@ -141,7 +179,7 @@ void main() {
 
   // Two turns attaching the same filename must not overwrite each other.
   test("saveResource gives each attachment its own name", () async {
-    await store.save(Chat(state: makeState("c5b"), messages: const []));
+    await store.saveState(makeState("c5b"));
 
     final first = await store.saveResource("c5b", "shot.png", Uint8List.fromList([1]));
     final second = await store.saveResource("c5b", "shot.png", Uint8List.fromList([2]));
@@ -152,14 +190,14 @@ void main() {
   });
 
   test("readResource is null for a resource that is not there", () async {
-    await store.save(Chat(state: makeState("c5c"), messages: const []));
+    await store.saveState(makeState("c5c"));
 
     expect(await store.readResource("c5c", "missing.png"), isNull);
   });
 
   group("projects", () {
     test("a chat in one is written under it, not at the top level", () async {
-      await store.save(Chat(state: makeState("p1", project: "work")));
+      await store.saveState(makeState("p1", project: "work"));
 
       expect(File(config.stateFile("p1", project: "work")).existsSync(), isTrue);
       expect(Directory(config.workspaceDir("p1", project: "work")).existsSync(), isTrue);
@@ -175,8 +213,8 @@ void main() {
     });
 
     test("list returns every project's chats, each saying which it is in", () async {
-      await store.save(Chat(state: makeState("here")));
-      await store.save(Chat(state: makeState("there", project: "work")));
+      await store.saveState(makeState("here"));
+      await store.saveState(makeState("there", project: "work"));
 
       final all = await store.list();
       expect(all.map((c) => c.id), containsAll(["here", "there"]));
@@ -187,7 +225,7 @@ void main() {
     // A chat is addressed by its id alone, so a store that has not listed
     // anything yet still has to find one that is not in the default project.
     test("a chat in one is found by id by a store that has never listed", () async {
-      await store.save(Chat(state: makeState("p2", project: "work")));
+      await store.saveState(makeState("p2", project: "work"));
 
       final fresh = FileChatStore(config);
       expect((await fresh.load("p2")).state.project, "work");
@@ -195,7 +233,7 @@ void main() {
     });
 
     test("deleting one takes its chats and its workspace with it", () async {
-      await store.save(Chat(state: makeState("p3", project: "work")));
+      await store.saveState(makeState("p3", project: "work"));
 
       await store.deleteProject("work");
 
@@ -205,7 +243,7 @@ void main() {
     });
 
     test("moving a chat takes its files and its own workspace", () async {
-      await store.save(Chat(
+      await writeChatTo(store, Chat(
         state: makeState("p4"),
         messages: [
           Message(
@@ -229,7 +267,7 @@ void main() {
     });
 
     test("a moved chat says so in its state.json", () async {
-      await store.save(Chat(state: makeState("p5")));
+      await store.saveState(makeState("p5"));
       await store.moveChat("p5", "work");
 
       final json = jsonDecode(File(config.stateFile("p5", project: "work")).readAsStringSync())
@@ -240,10 +278,10 @@ void main() {
     // The UI can be holding a copy from before the move; saving it must not
     // write the chat back where it used to be.
     test("saving a stale copy does not put the chat back", () async {
-      await store.save(Chat(state: makeState("p6")));
+      await store.saveState(makeState("p6"));
       await store.moveChat("p6", "work");
 
-      await store.save(Chat(state: makeState("p6"), messages: const []));
+      await store.saveState(makeState("p6"));
 
       expect(Directory(config.chatDir("p6")).existsSync(), isFalse);
       expect((await store.load("p6")).state.project, "work");
@@ -268,7 +306,7 @@ void main() {
 
     // The directory a chat is in is what it is in, whatever the file says.
     test("a chat moved by hand is listed under where it ended up", () async {
-      await store.save(Chat(state: makeState("p7")));
+      await store.saveState(makeState("p7"));
       await config.ensureProjectDirs(project: "work");
       Directory(config.chatDir("p7")).renameSync(config.chatDir("p7", project: "work"));
 
@@ -301,7 +339,7 @@ void main() {
         ],
       ),
     ];
-    await store.save(Chat(state: state, messages: messages));
+    await writeChatTo(store, Chat(state: state, messages: messages));
     final loaded = await store.load("c6");
     expect(loaded.messages[0].parts.first, isA<ToolCallPart>());
     expect((loaded.messages[0].parts.first as ToolCallPart).toolCall.name, "bash");

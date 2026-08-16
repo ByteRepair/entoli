@@ -4,6 +4,7 @@ import "dart:typed_data";
 import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
+import "../../domain/chat_log.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/models.dart";
@@ -26,10 +27,10 @@ class FileChatStore implements ChatStore {
 
   /// Writing is two steps now that it is asynchronous — `writeAsString`
   /// truncates and only then writes — so a read landing between them finds an
-  /// empty file where JSON should be. A turn writes `conv.json` as its events
-  /// arrive while the title call renames the same chat beside it, so that race
-  /// is not hypothetical. Renaming over the target is one step, and a reader
-  /// sees either the whole old file or the whole new one.
+  /// empty file where JSON should be. Renaming over the target is one step,
+  /// and a reader sees either the whole old file or the whole new one. This is
+  /// for the documents beside the log: the log itself is appended to, where
+  /// the same hazard is a torn last line the reader drops.
   Future<void> _write(String path, String text) async {
     final temp = _fs.file("$path.writing");
     await temp.writeAsString(text);
@@ -132,26 +133,22 @@ class FileChatStore implements ChatStore {
     if (stateText == null) throw StateError("no chat $id");
     final json = jsonDecode(stateText) as Map<String, dynamic>;
     final state = ChatState.fromJson(json).copyWith(project: project);
-    final messages = <Message>[];
-    final convText = await _readOrNull(config.convFile(id, project: project));
-    if (convText != null) {
-      final convJson = jsonDecode(convText) as Map<String, dynamic>;
-      final list = convJson["messages"] as List? ?? [];
-      messages.addAll(list.map((m) => Message.fromJson(m as Map<String, dynamic>)));
-    }
-    return Chat(state: state, messages: messages);
+    final text = await _readOrNull(config.convFile(id, project: project));
+    return Chat(state: state, messages: replay(text == null ? const [] : decodeLog(text)));
   }
 
   @override
-  Future<void> save(Chat chat) async {
-    await saveState(chat.state);
-    // Asked after the state was written, which is what settles where the chat
-    // lives.
-    final project = await _projectOf(chat.state.id);
-    await _write(
-      config.convFile(chat.state.id, project: project),
-      jsonEncode({"messages": chat.messages.map((m) => m.toJson()).toList()}),
-    );
+  Future<void> append(String chatId, List<ChatRecord> records) async {
+    if (records.isEmpty) return;
+    // No `ensureChatDirs`: every append follows the `saveState` that created
+    // the chat's directory, and three directory checks per checkpoint is three
+    // IndexedDB transactions on the path a turn waits for.
+    final project = await _projectOf(chatId);
+    // Straight onto the end of the file, not through [_write]: a rename would
+    // have to write out everything already there to put one line on it.
+    await _fs
+        .file(config.convFile(chatId, project: project))
+        .writeAsString(encodeLog(records), mode: FileMode.append);
   }
 
   @override

@@ -24,7 +24,7 @@ abstract class ChatState with _$ChatState {
   factory ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
 }
 
-/// A full chat: state + message tree. Persisted across `state.json` + `conv.json`.
+/// A full chat: state + message tree. Persisted across `state.json` + `conv.jsonl`.
 @freezed
 abstract class Chat with _$Chat {
   const factory Chat({
