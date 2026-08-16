@@ -20,25 +20,23 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-        </activity>
-
-        <!-- The launcher entry is an alias rather than the activity itself, so
-             that the icon can be changed while the app is installed: exactly
-             one of these is enabled, and MainActivity.kt switches which.
-             MainActivity carries no LAUNCHER filter of its own, or the app
-             would appear on the home screen twice. -->
-        <activity-alias
-            android:name=".PromptIcon"
-            android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_prompt"
-            android:enabled="true"
-            android:exported="true">
+            <!-- MainActivity is the launch entry, so the Flutter tool's pre-build
+                 manifest parse (which matches `activity` by exact name and never
+                 sees `activity-alias`) finds it. It wears the app-level icon
+                 (@mipmap/ic_prompt); the CookieIcon alias below is enabled by
+                 MainActivity.kt when the user picks the other icon, and
+                 MainActivity is disabled in its place so the app does not show
+                 twice. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-        </activity-alias>
+        </activity>
 
+        <!-- The non-default icon, enabled by MainActivity.kt when the user picks
+             it. Disabled by default: MainActivity is the launcher entry, and only
+             one of {MainActivity, this alias} is enabled at a time, or the app
+             appears on the home screen twice. -->
         <activity-alias
             android:name=".CookieIcon"
             android:targetActivity=".MainActivity"
