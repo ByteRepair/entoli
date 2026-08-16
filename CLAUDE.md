@@ -1009,7 +1009,7 @@ and the ones big enough to notice are rare.
 #### Sharing to Entoli
 
 `MainActivity` carries `ACTION_SEND` / `ACTION_SEND_MULTIPLE` filters, and so
-does the `CookieIcon` alias — only one of the two components is enabled at a
+does the `PromptIcon` alias — only one of the two components is enabled at a
 time, and a share must not stop working because the user changed the icon.
 
 `FilesChannel.receive` copies whatever the intent carries into `cacheDir` **at
@@ -1059,7 +1059,9 @@ earlier one nobody claimed.
 
 ### The app icon
 
-Two icons, `AppIcon.prompt` (the default) and `AppIcon.cookie`. Each exists
+Two icons, `AppIcon.cookie` (the default) and `AppIcon.prompt`. The enum's
+declaration order is the order the settings page offers them in, so the default
+reads first. Each exists
 several times over, because each platform wants its own form and they are
 checked in rather than built: `assets/icons/*.svg` is what the app draws,
 `drawable/ic_<name>_{foreground,monochrome}` over the shared
@@ -1067,6 +1069,12 @@ checked in rather than built: `assets/icons/*.svg` is what the app draws,
 `mipmap-anydpi-v26/ic_<name>.xml`, and `web/icons/` is the PWA set. Android
 reads no SVG, so its copies are the same path data as a vector drawable, and
 editing one means editing all of them — there is no generator.
+
+The PWA set is the default icon's SVG rendered at each size, and only the
+default's — a browser cannot be told to switch, so the other icon has no copy
+there. `Icon-*` is the file as it stands and `Icon-maskable-*` is the same file
+with the squircle `clip-path` dropped, which is what makes it the full-bleed
+square a maskable icon has to be. `favicon.png` is the clipped one at 32.
 
 `minSdk` is pinned to 26 rather than following `flutter.minSdkVersion`, which
 is 24. Adaptive icons start at 26; below it every icon needs a full set of
@@ -1078,9 +1086,11 @@ theme background instead of hardcoding white, so the splash follows dark mode.
 The monochrome layer is not decoration: a themed icon is the silhouette tinted
 from the wallpaper, so an icon whose meaning lives in its colour has none there.
 The background is one file for both icons rather than one each, since both sit
-on the same flat indigo.
+on the same flat indigo. `AgentService`'s status bar icon is the default icon's
+monochrome layer, and it does not follow the setting: a notification is the
+app's, and nothing there is per-choice.
 
-`<application android:icon>` points at `@mipmap/ic_prompt`, the default icon's
+`<application android:icon>` points at `@mipmap/ic_cookie`, the default icon's
 own resource, rather than a copy under a name of its own — the app-info icon
 then gets the adaptive form too, and there is one fewer image to keep in step.
 
@@ -1098,7 +1108,7 @@ only.
 Android switches icons by making `MainActivity` the launcher entry and
 enabling an `activity-alias` in its place when a non-default icon is picked.
 `MainActivity` carries the MAIN+LAUNCHER intent-filter and wears the app-level
-`android:icon` (`@mipmap/ic_prompt`); each non-default icon is an
+`android:icon` (`@mipmap/ic_cookie`); each non-default icon is an
 `activity-alias` targeting `MainActivity`, disabled by default. Exactly one
 entry is enabled at a time, or the app appears on the home screen twice — so
 `IconChannel.kt` treats the default as one entry among the aliases, enabling
@@ -1115,7 +1125,7 @@ path (used once an APK exists) does handle aliases, but the fallback has to
 work too.
 
 A `ComponentName` is (application id, fully-qualified class), and the halves
-come from different strings. The manifest's `.CookieIcon` is expanded against
+come from different strings. The manifest's `.PromptIcon` is expanded against
 the **namespace**, so the class name is derived from `MainActivity`'s own
 package, while the package half has to be the context's `packageName` — the id
 the app is installed under, which the debug `applicationIdSuffix` (`.debug`,

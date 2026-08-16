@@ -19,7 +19,7 @@ class AppSettings {
     this.approveMode = ApproveMode.ask,
     this.llmProviders = const [],
     this.profile,
-    this.appIcon = AppIcon.prompt,
+    this.appIcon = AppIcon.cookie,
   });
 
   String? defaultModelId;

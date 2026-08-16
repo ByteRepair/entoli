@@ -32,40 +32,48 @@ void main() {
       expect(tester.getSemantics(choice(icon)), isSemantics(isSelected: selected));
 
   group("app icon", () {
-    testWidgets("a fresh install wears Prompt", (tester) async {
+    testWidgets("a fresh install wears Cookie", (tester) async {
       final semantics = tester.ensureSemantics();
-      expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
+      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
       await pumpSettings(tester);
 
-      expectSelected(tester, AppIcon.prompt, selected: true);
-      expectSelected(tester, AppIcon.cookie, selected: false);
+      expectSelected(tester, AppIcon.cookie, selected: true);
+      expectSelected(tester, AppIcon.prompt, selected: false);
       semantics.dispose();
+    });
+
+    testWidgets("the default is offered first", (tester) async {
+      await pumpSettings(tester);
+      expect(
+        tester.getTopLeft(choice(AppIcon.cookie)).dx,
+        lessThan(tester.getTopLeft(choice(AppIcon.prompt)).dx),
+      );
     });
 
     testWidgets("picking one persists it and tells the launcher", (tester) async {
       final semantics = tester.ensureSemantics();
       await pumpSettings(tester);
 
-      await tester.tap(choice(AppIcon.cookie));
-      await settleIo(tester);
-      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
-      expectSelected(tester, AppIcon.cookie, selected: true);
-
       await tester.tap(choice(AppIcon.prompt));
       await settleIo(tester);
       expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
+      expectSelected(tester, AppIcon.prompt, selected: true);
+
+      await tester.tap(choice(AppIcon.cookie));
+      await settleIo(tester);
+      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
 
       // Told each time, in order — not toggled.
-      expect(app.launcher.used, [AppIcon.cookie, AppIcon.prompt]);
+      expect(app.launcher.used, [AppIcon.prompt, AppIcon.cookie]);
       semantics.dispose();
     });
 
     testWidgets("the choice survives a restart", (tester) async {
       final semantics = tester.ensureSemantics();
-      app.seedSettings(AppSettings(appIcon: AppIcon.cookie));
+      app.seedSettings(AppSettings(appIcon: AppIcon.prompt));
       await pumpSettings(tester);
 
-      expectSelected(tester, AppIcon.cookie, selected: true);
+      expectSelected(tester, AppIcon.prompt, selected: true);
       // Nothing was tapped, so the launcher was not told to do anything: it
       // has been showing this icon since it was picked.
       expect(app.launcher.used, isEmpty);
@@ -86,22 +94,22 @@ void main() {
       await pumpSettings(tester);
       expect(find.textContaining("does not follow this"), findsOneWidget);
 
-      await tester.tap(choice(AppIcon.cookie));
+      await tester.tap(choice(AppIcon.prompt));
       await settleIo(tester);
 
       // The in-app icon is the app's own either way; only the home screen
       // needs a platform that will take the change.
-      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
+      expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
     });
   });
 
   group("what the app draws", () {
     testWidgets("the mark follows the setting", (tester) async {
-      app.seedSettings(AppSettings(appIcon: AppIcon.cookie));
+      app.seedSettings(AppSettings(appIcon: AppIcon.prompt));
       await app.pump(tester, const Scaffold(body: AppMark()));
       expect(
         tester.widget<AppIconImage>(find.byType(AppIconImage)).icon,
-        AppIcon.cookie,
+        AppIcon.prompt,
       );
     });
 
@@ -109,15 +117,15 @@ void main() {
       await app.pump(tester, const Scaffold(body: AppMark()));
       expect(
         tester.widget<AppIconImage>(find.byType(AppIconImage)).icon,
-        AppIcon.prompt,
+        AppIcon.cookie,
       );
 
-      await io(tester, () => app.container.read(appSettingsProvider.notifier).setAppIcon(AppIcon.cookie));
+      await io(tester, () => app.container.read(appSettingsProvider.notifier).setAppIcon(AppIcon.prompt));
       await settleIo(tester);
 
       expect(
         tester.widget<AppIconImage>(find.byType(AppIconImage)).icon,
-        AppIcon.cookie,
+        AppIcon.prompt,
       );
     });
   });
@@ -139,12 +147,12 @@ void main() {
   group("the stored name", () {
     test("a name this build does not know falls back to the default", () async {
       await app.config.documents.write(app.config.settingsFile, '{"appIcon":"sawhorse"}');
-      expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
+      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
     });
 
     test("an older file with no icon in it is the default", () async {
       await app.config.documents.write(app.config.settingsFile, '{"approveMode":"ask"}');
-      expect(AppSettings.load(app.config).appIcon, AppIcon.prompt);
+      expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
     });
   });
 }

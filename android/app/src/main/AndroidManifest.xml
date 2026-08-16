@@ -13,7 +13,7 @@
     <application
         android:label="Entoli"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_prompt">
+        android:icon="@mipmap/ic_cookie">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -34,7 +34,7 @@
             <!-- MainActivity is the launch entry, so the Flutter tool's pre-build
                  manifest parse (which matches `activity` by exact name and never
                  sees `activity-alias`) finds it. It wears the app-level icon
-                 (@mipmap/ic_prompt); the CookieIcon alias below is enabled by
+                 (@mipmap/ic_cookie); the PromptIcon alias below is enabled by
                  MainActivity.kt when the user picks the other icon, and
                  MainActivity is disabled in its place so the app does not show
                  twice. -->
@@ -60,9 +60,9 @@
              one of {MainActivity, this alias} is enabled at a time, or the app
              appears on the home screen twice. -->
         <activity-alias
-            android:name=".CookieIcon"
+            android:name=".PromptIcon"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_cookie"
+            android:icon="@mipmap/ic_prompt"
             android:enabled="false"
             android:exported="true">
             <intent-filter>
