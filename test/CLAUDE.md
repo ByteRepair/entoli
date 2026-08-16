@@ -17,7 +17,10 @@ puts it there, so it creates and then writes its `state.json`. `writeChatTo`
 (and `TestApp.writeChat`) is for one that has a conversation in it: there is no
 whole-log write on `ChatStore` to reach for, since a log is only ever appended
 to, so it writes the state and then appends `recordsOf` the messages — which is
-what a turn would have done.
+what a turn would have done. It closes each reply with a `turnEnd` as well:
+without one the chat reads as a turn the process was killed in the middle of and
+is offered to be carried on, which is the point of `finished: false` and a
+surprise everywhere else.
 
 ## The filesystem a test runs on
 

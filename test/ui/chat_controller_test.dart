@@ -552,6 +552,108 @@ void main() {
       expect(after.whereType<RewindRecord>(), hasLength(1));
       expect(reloaded(id), messagesOf(id));
     });
+
+    group("carrying on an interrupted turn", () {
+      final at = DateTime.utc(2026, 1, 1);
+
+      /// A chat put in the store as a killed process would have left it: a
+      /// prompt, a reply holding a command nothing answered, and no record
+      /// closing the turn. Nothing the controller does starts before the
+      /// reload, so there is no turn to run to get here.
+      Future<(String, ChatController)> killedChat() async {
+        const id = "killed";
+        await writeChatTo(
+          store,
+          Chat(
+            state: ChatState(id: id, title: "t", createdAt: at, updatedAt: at),
+            messages: [
+              Message(id: "m1", role: MessageRole.user, createdAt: at, parts: const [
+                MessagePart.text(text: "count the files"),
+              ]),
+              Message(id: "m2", role: MessageRole.assistant, createdAt: at, parts: const [
+                MessagePart.toolCall(
+                    toolCall:
+                        ToolCall(id: "c1", name: "bash", argumentsJson: '{"command":"ls"}')),
+              ]),
+            ],
+          ),
+          finished: false,
+        );
+        final controller = app.container.read(chatControllerProvider(id).notifier);
+        await waitFor(() => app.container.read(chatControllerProvider(id)).chat != null,
+            what: "the chat loading");
+        return (id, controller);
+      }
+
+      bool offeredIn(String id) =>
+          app.container.read(chatControllerProvider(id)).chat!.unfinished;
+
+      test("a reply nothing closed is offered", () async {
+        final (id, _) = await killedChat();
+        expect(offeredIn(id), isTrue);
+      });
+
+      // The whole point of resuming rather than regenerating: the command that
+      // did run stays where it is, and the answer lands under it.
+      test("what it produces goes on the end of the same reply", () async {
+        app.backend.scriptedEvents = const [
+          ResponseStart("r9"),
+          TextDelta("two files"),
+          DoneEvent(),
+        ];
+        final (id, controller) = await killedChat();
+        final opened = records(id).whereType<MessageRecord>().length;
+
+        await controller.resume();
+        await waitIdle(id);
+
+        expect(records(id).whereType<MessageRecord>(), hasLength(opened));
+        final messages = reloaded(id);
+        expect(messages, hasLength(2));
+        expect(messages.last.parts.first, isA<ToolCallPart>());
+        expect(messages.last.parts.whereType<TextPart>().single.text, "two files");
+        expect(messages, messagesOf(id));
+      });
+
+      test("the turn is closed when it finishes this time", () async {
+        final (id, controller) = await killedChat();
+        await controller.resume();
+        await waitIdle(id);
+
+        expect(records(id).last,
+            isA<TurnEndRecord>().having((r) => r.reason, "reason", TurnEnd.done));
+        expect(offeredIn(id), isFalse);
+      });
+
+      // The reply already holds the ErrorPart the first attempt left in it, so
+      // a turn whose outcome was read back off the parts would close as an
+      // error again and go on being offered for ever.
+      test("carrying on a turn that gave up closes it as done", () async {
+        final (id, controller) = await killedChat();
+        app.backend.scriptedEvents = const [ErrorEvent("nope"), DoneEvent()];
+        await controller.resume();
+        await waitIdle(id);
+
+        expect(records(id).last,
+            isA<TurnEndRecord>().having((r) => r.reason, "reason", TurnEnd.error));
+
+        app.backend.scriptedEvents = const [TextDelta("two files"), DoneEvent()];
+        await controller.resume();
+        await waitIdle(id);
+
+        expect(records(id).last,
+            isA<TurnEndRecord>().having((r) => r.reason, "reason", TurnEnd.done));
+      });
+
+      test("the backend is given the turn it is carrying on", () async {
+        final (id, controller) = await killedChat();
+        await controller.resume();
+        await waitIdle(id);
+
+        expect(app.backend.prompts, isEmpty);
+        expect(app.backend.resumes.single.history.map((m) => m.id), ["m1", "m2"]);
+      });
+    });
   });
 }
 

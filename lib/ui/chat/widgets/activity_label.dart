@@ -350,4 +350,14 @@ String formatThinkingTime(int milliseconds) {
   return rest == 0 ? head : "$head ${_plural(rest, "second")}";
 }
 
+/// "a moment ago", "5 minutes ago", "2 days ago" — how long ago something
+/// happened. Coarse on purpose: it is read to decide whether carrying on still
+/// makes sense, not to know exactly when.
+String formatAge(Duration age) {
+  if (age.inMinutes < 1) return "a moment ago";
+  if (age.inHours < 1) return "${_plural(age.inMinutes, "minute")} ago";
+  if (age.inDays < 1) return "${_plural(age.inHours, "hour")} ago";
+  return "${_plural(age.inDays, "day")} ago";
+}
+
 String _plural(int count, String unit) => "$count $unit${count == 1 ? "" : "s"}";

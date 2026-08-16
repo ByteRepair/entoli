@@ -134,7 +134,7 @@ class FileChatStore implements ChatStore {
     final json = jsonDecode(stateText) as Map<String, dynamic>;
     final state = ChatState.fromJson(json).copyWith(project: project);
     final text = await _readOrNull(config.convFile(id, project: project));
-    return Chat(state: state, messages: replay(text == null ? const [] : decodeLog(text)));
+    return chatFrom(state, text == null ? const [] : decodeLog(text));
   }
 
   @override

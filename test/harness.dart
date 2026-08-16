@@ -83,7 +83,8 @@ class TestApp {
   }
 
   /// A whole chat on disk, conversation and all.
-  Future<void> writeChat(Chat chat) => writeChatVia(repo, chat);
+  Future<void> writeChat(Chat chat, {bool finished = true}) =>
+      writeChatVia(repo, chat, finished: finished);
 
   /// A chat's own overrides, written the way the chat settings page writes them.
   Future<void> seedChatMeta(String chatId, ChatMeta meta) =>
@@ -108,18 +109,28 @@ class TestApp {
 /// Put a whole chat on disk the way the app would have: its state, then its
 /// conversation as the records a turn would have appended. There is no
 /// whole-log write to call instead — see `ChatStore.append`.
-Future<void> writeChatTo(ChatStore store, Chat chat) async {
+Future<void> writeChatTo(ChatStore store, Chat chat, {bool finished = true}) async {
   await store.saveState(chat.state);
-  await store.append(chat.state.id, recordsOf(chat.messages));
+  await store.append(chat.state.id, _asWritten(chat.messages, finished));
 }
 
 /// The same through a [ChatRepository], which is what a UI or repository test
 /// wants: going straight to the store leaves the repository still holding the
 /// chat as a draft, and everything it answers for one takes the draft path.
-Future<void> writeChatVia(ChatRepository repo, Chat chat) async {
+Future<void> writeChatVia(ChatRepository repo, Chat chat, {bool finished = true}) async {
   await repo.saveState(chat.state);
-  await repo.append(chat.state.id, recordsOf(chat.messages));
+  await repo.append(chat.state.id, _asWritten(chat.messages, finished));
 }
+
+/// The records, plus the one closing each reply. A log with no closing record
+/// reads as a turn the process was killed in the middle of, which is the point
+/// of `finished: false` and a surprise everywhere else.
+List<ChatRecord> _asWritten(List<Message> messages, bool finished) => [
+      ...recordsOf(messages),
+      if (finished)
+        for (final m in messages.where((m) => m.role == MessageRole.assistant))
+          ChatRecord.turnEnd(messageId: m.id, reason: TurnEnd.done),
+    ];
 
 /// A message as a store test hands it in.
 Message makeMessage(String id, String text, {MessageRole role = MessageRole.user}) =>

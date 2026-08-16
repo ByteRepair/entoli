@@ -227,7 +227,26 @@ class MinisweAgent {
     String? agentPrompt,
   }) async* {
     _openTurn(task, attachments, agentPrompt);
+    yield* _loop();
+  }
 
+  /// [run] without the task: the session is already holding everything the
+  /// interrupted turn had done, so all this adds is the reason it is being
+  /// asked again.
+  ///
+  /// Not even that where the session ends in a user message, which is a turn
+  /// killed before the model was ever called. Telling a model it was cut off
+  /// part-way when there is nothing of its own above is a contradiction, and
+  /// small models are what this app is for.
+  Stream<AgentEvent> resume({String? agentPrompt}) async* {
+    _setSystemPrompt(agentPrompt);
+    if (session.messages.lastOrNull?.role != LlmRole.user) {
+      session.messages.add(const LlmMessage(role: LlmRole.user, text: continueTask));
+    }
+    yield* _loop();
+  }
+
+  Stream<AgentEvent> _loop() async* {
     for (var step = 0; step < options.stepLimit; step++) {
       if (_cancelled) break;
 
@@ -266,10 +285,22 @@ class MinisweAgent {
     yield const DoneEvent();
   }
 
+  void _openTurn(String task, List<LlmAttachment> attachments, String? agentPrompt) {
+    final fresh = session.isFresh;
+    _setSystemPrompt(agentPrompt);
+    session.messages.add(LlmMessage(
+      role: LlmRole.user,
+      // Only the first prompt is dressed as a task; the rest continue it.
+      text: fresh ? firstTask(task) : task,
+      attachments: attachments,
+    ));
+  }
+
   /// The system prompt is rewritten every turn rather than once, so an
   /// `@agent` mention applies to the turn that used it whether or not the
-  /// session is new.
-  void _openTurn(String task, List<LlmAttachment> attachments, String? agentPrompt) {
+  /// session is new — and so a resumed turn runs under the prompt the turn it
+  /// is continuing ran under.
+  void _setSystemPrompt(String? agentPrompt) {
     final system = LlmMessage(
       role: LlmRole.system,
       text: systemPrompt(
@@ -281,18 +312,11 @@ class MinisweAgent {
         canRunCommands: shell.canRunCommands,
       ),
     );
-    final fresh = session.isFresh;
     if (session.messages.firstOrNull?.role == LlmRole.system) {
       session.messages[0] = system;
     } else {
       session.messages.insert(0, system);
     }
-    session.messages.add(LlmMessage(
-      role: LlmRole.user,
-      // Only the first prompt is dressed as a task; the rest continue it.
-      text: fresh ? firstTask(task) : task,
-      attachments: attachments,
-    ));
   }
 
   /// Every call the model made gets an answer, including the ones we never ran:

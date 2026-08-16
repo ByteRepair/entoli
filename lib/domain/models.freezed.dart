@@ -298,7 +298,11 @@ as String?,
 /// @nodoc
 mixin _$Chat {
 
- ChatState get state; List<Message> get messages;
+ ChatState get state; List<Message> get messages;/// The last message is a reply whose turn never finished — the process was
+/// killed, or the turn gave up — and so is one to offer to carry on. Read
+/// off the log by `endsUnfinished` when the chat is loaded; nothing writes
+/// it down, since the absence of a closing record is the whole of it.
+ bool get unfinished;
 /// Create a copy of Chat
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -311,16 +315,16 @@ $ChatCopyWith<Chat> get copyWith => _$ChatCopyWithImpl<Chat>(this as Chat, _$ide
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other.messages, messages));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other.messages, messages)&&(identical(other.unfinished, unfinished) || other.unfinished == unfinished));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(messages));
+int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(messages),unfinished);
 
 @override
 String toString() {
-  return 'Chat(state: $state, messages: $messages)';
+  return 'Chat(state: $state, messages: $messages, unfinished: $unfinished)';
 }
 
 
@@ -331,7 +335,7 @@ abstract mixin class $ChatCopyWith<$Res>  {
   factory $ChatCopyWith(Chat value, $Res Function(Chat) _then) = _$ChatCopyWithImpl;
 @useResult
 $Res call({
- ChatState state, List<Message> messages
+ ChatState state, List<Message> messages, bool unfinished
 });
 
 
@@ -348,11 +352,12 @@ class _$ChatCopyWithImpl<$Res>
 
 /// Create a copy of Chat
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? state = null,Object? messages = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? state = null,Object? messages = null,Object? unfinished = null,}) {
   return _then(_self.copyWith(
 state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as ChatState,messages: null == messages ? _self.messages : messages // ignore: cast_nullable_to_non_nullable
-as List<Message>,
+as List<Message>,unfinished: null == unfinished ? _self.unfinished : unfinished // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 /// Create a copy of Chat
@@ -446,10 +451,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages,  bool unfinished)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Chat() when $default != null:
-return $default(_that.state,_that.messages);case _:
+return $default(_that.state,_that.messages,_that.unfinished);case _:
   return orElse();
 
 }
@@ -467,10 +472,10 @@ return $default(_that.state,_that.messages);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( ChatState state,  List<Message> messages,  bool unfinished)  $default,) {final _that = this;
 switch (_that) {
 case _Chat():
-return $default(_that.state,_that.messages);case _:
+return $default(_that.state,_that.messages,_that.unfinished);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -487,10 +492,10 @@ return $default(_that.state,_that.messages);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ChatState state,  List<Message> messages)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( ChatState state,  List<Message> messages,  bool unfinished)?  $default,) {final _that = this;
 switch (_that) {
 case _Chat() when $default != null:
-return $default(_that.state,_that.messages);case _:
+return $default(_that.state,_that.messages,_that.unfinished);case _:
   return null;
 
 }
@@ -502,7 +507,7 @@ return $default(_that.state,_that.messages);case _:
 @JsonSerializable()
 
 class _Chat implements Chat {
-  const _Chat({required this.state, final  List<Message> messages = const []}): _messages = messages;
+  const _Chat({required this.state, final  List<Message> messages = const [], this.unfinished = false}): _messages = messages;
   factory _Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
 
 @override final  ChatState state;
@@ -513,6 +518,11 @@ class _Chat implements Chat {
   return EqualUnmodifiableListView(_messages);
 }
 
+/// The last message is a reply whose turn never finished — the process was
+/// killed, or the turn gave up — and so is one to offer to carry on. Read
+/// off the log by `endsUnfinished` when the chat is loaded; nothing writes
+/// it down, since the absence of a closing record is the whole of it.
+@override@JsonKey() final  bool unfinished;
 
 /// Create a copy of Chat
 /// with the given fields replaced by the non-null parameter values.
@@ -527,16 +537,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other._messages, _messages));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Chat&&(identical(other.state, state) || other.state == state)&&const DeepCollectionEquality().equals(other._messages, _messages)&&(identical(other.unfinished, unfinished) || other.unfinished == unfinished));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(_messages));
+int get hashCode => Object.hash(runtimeType,state,const DeepCollectionEquality().hash(_messages),unfinished);
 
 @override
 String toString() {
-  return 'Chat(state: $state, messages: $messages)';
+  return 'Chat(state: $state, messages: $messages, unfinished: $unfinished)';
 }
 
 
@@ -547,7 +557,7 @@ abstract mixin class _$ChatCopyWith<$Res> implements $ChatCopyWith<$Res> {
   factory _$ChatCopyWith(_Chat value, $Res Function(_Chat) _then) = __$ChatCopyWithImpl;
 @override @useResult
 $Res call({
- ChatState state, List<Message> messages
+ ChatState state, List<Message> messages, bool unfinished
 });
 
 
@@ -564,11 +574,12 @@ class __$ChatCopyWithImpl<$Res>
 
 /// Create a copy of Chat
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? state = null,Object? messages = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? state = null,Object? messages = null,Object? unfinished = null,}) {
   return _then(_Chat(
 state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as ChatState,messages: null == messages ? _self._messages : messages // ignore: cast_nullable_to_non_nullable
-as List<Message>,
+as List<Message>,unfinished: null == unfinished ? _self.unfinished : unfinished // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

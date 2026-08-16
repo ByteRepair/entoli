@@ -185,6 +185,58 @@ void main() {
     expect(textOf(messages.single), "kept");
   });
 
+  group("the turn a log stops in", () {
+    bool unfinishedIn(List<ChatRecord> records) =>
+        endsUnfinished(replay(records), records);
+
+    /// A turn as it is written: the prompt, the reply, and whatever closed it.
+    List<ChatRecord> turn({TurnEnd? end}) => [
+          message("m1"),
+          part("m1", 0, "do it"),
+          message("m2", MessageRole.assistant),
+          part("m2", 0, "on it"),
+          if (end != null) ChatRecord.turnEnd(messageId: "m2", reason: end),
+        ];
+
+    test("a reply with nothing closing it was being written when the process died",
+        () => expect(unfinishedIn(turn()), isTrue));
+
+    test("a turn that ended is not offered",
+        () => expect(unfinishedIn(turn(end: TurnEnd.done)), isFalse));
+
+    // The one case where the user has already said they want it to stop.
+    test("a turn the user stopped is not offered",
+        () => expect(unfinishedIn(turn(end: TurnEnd.aborted)), isFalse));
+
+    test("a turn that gave up is offered, like one that was killed",
+        () => expect(unfinishedIn(turn(end: TurnEnd.error)), isTrue));
+
+    test("a log that ends on a prompt has no reply to carry on", () {
+      expect(unfinishedIn([message("m1"), part("m1", 0, "do it")]), isFalse);
+    });
+
+    test("nothing written yet is nothing to carry on", () {
+      expect(unfinishedIn([]), isFalse);
+    });
+
+    test("a reply that was rewound away is gone, not unfinished", () {
+      expect(unfinishedIn([...turn(), ChatRecord.rewind(messageId: "m1")]), isFalse);
+    });
+
+    // A resumed turn closes the same message a second time, so the last record
+    // is the one that says how it went.
+    test("the last record naming the message wins", () {
+      expect(
+        unfinishedIn([
+          ...turn(end: TurnEnd.error),
+          part("m2", 1, " finished it"),
+          ChatRecord.turnEnd(messageId: "m2", reason: TurnEnd.done),
+        ]),
+        isFalse,
+      );
+    });
+  });
+
   test("a record survives the round trip through JSON", () {
     final records = [
       message("m1"),

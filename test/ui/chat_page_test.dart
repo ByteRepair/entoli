@@ -30,6 +30,7 @@ void main() {
     String title = "at home",
     String? project,
     int messages = 40,
+    bool finished = true,
   }) =>
       io(tester, () async {
         final chat = await app.repo.createChat(title: title, project: project);
@@ -43,7 +44,7 @@ void main() {
             ),
         ];
         final full = chat.copyWith(messages: said);
-        await app.writeChat(full);
+        await app.writeChat(full, finished: finished);
         return full;
       });
 
@@ -143,6 +144,37 @@ void main() {
 
       expect(position(tester).pixels, held);
       expect(find.byTooltip("Jump to latest"), findsOneWidget);
+    });
+  });
+
+  group("a turn that never finished", () {
+    testWidgets("is offered to be carried on", (tester) async {
+      final chat = await seedLongChat(tester, messages: 2, finished: false);
+
+      await open(tester, chat.state.id);
+
+      expect(find.text("Continue"), findsOneWidget);
+      expect(find.textContaining("Unfinished turn"), findsOneWidget);
+    });
+
+    testWidgets("a finished one is not", (tester) async {
+      final chat = await seedLongChat(tester, messages: 2);
+
+      await open(tester, chat.state.id);
+
+      expect(find.text("Continue"), findsNothing);
+    });
+
+    testWidgets("the offer goes once it is taken", (tester) async {
+      final chat = await seedLongChat(tester, messages: 2, finished: false);
+      await open(tester, chat.state.id);
+
+      app.backend.scriptedEvents = const [TextDelta(" — two files"), DoneEvent()];
+      await tester.tap(find.text("Continue"));
+      await settleIo(tester);
+
+      expect(find.text("Continue"), findsNothing);
+      expect(app.backend.resumes, hasLength(1));
     });
   });
 
