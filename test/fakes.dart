@@ -167,8 +167,8 @@ class FakeFileHandoff implements FileHandoff {
 
 /// A file arriving from outside, with recognisable bytes so a test can follow
 /// the same one from a chooser or a share into a workspace.
-IncomingFile incomingFile(String path, [String text = "hi"]) =>
-    IncomingFile(path: path, bytes: Uint8List.fromList(text.codeUnits));
+IncomingBytes incomingFile(String path, [String text = "hi"]) =>
+    IncomingBytes(path, Uint8List.fromList(text.codeUnits));
 
 class FakeBackend implements AgentBackend {
   var _created = 0;
