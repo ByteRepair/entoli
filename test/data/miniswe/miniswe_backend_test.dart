@@ -376,6 +376,61 @@ void main() {
     });
   });
 
+  group("which turns are running", () {
+    test("a chat is listed for the whole of its turn", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final seen = <Set<String>>[];
+      backend.runningTurns.addListener(() => seen.add(backend.runningTurns.value));
+
+      var listedAtTheEnd = false;
+      await for (final event in backend.sendPrompt(chatId, "hi",
+          settings: const TurnSettings(
+              model: "fake-model", provider: "fake", approveMode: ApproveMode.never))) {
+        // The listener writing the turn's closing records is still reading this
+        // stream, so the hold has to outlast the last event rather than the
+        // agent that produced it.
+        if (event is DoneEvent) listedAtTheEnd = backend.runningTurns.value.contains(chatId);
+      }
+
+      expect(listedAtTheEnd, isTrue);
+      // Only now: the drop is deliberately after the stream closes, so it lands
+      // a microtask behind the reader that has just finished with it.
+      await pumpEvents();
+      expect(seen, [
+        {chatId},
+        <String>{},
+      ]);
+    });
+
+    test("aborting says so on the way out, so the turn is not logged as done",
+        () async {
+      final backend = backendOver([
+        [bashCall("sleep 5")],
+      ]);
+      final events = <AgentEvent>[];
+      final turn = asking(backend, "hi", approveMode: ApproveMode.ask).listen(events.add);
+      await pumpEvents();
+
+      await backend.abort(chatId);
+      await turn.cancel();
+
+      expect(events.whereType<DoneEvent>().single.aborted, isTrue);
+      expect(backend.runningTurns.value, isEmpty);
+    });
+
+    test("a chat with nothing running is not published again", () async {
+      final backend = backendOver([]);
+      var notified = 0;
+      backend.runningTurns.addListener(() => notified++);
+
+      await backend.abort("never-ran");
+
+      expect(notified, 0);
+    });
+  });
+
   group("sessions", () {
     test("a second prompt continues the conversation", () async {
       final backend = backendOver([

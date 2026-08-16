@@ -6,6 +6,7 @@ import "../core/config.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/attachment_picker.dart";
+import "domain/background_work.dart";
 import "domain/app_settings.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
@@ -16,6 +17,7 @@ import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
+import "domain/turn_keep_alive.dart";
 import "ui/widgets/provider_model_selector.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
@@ -96,6 +98,20 @@ final launcherIconsProvider =
 
 final linkOpenerProvider =
     Provider<LinkOpener>((ref) => throw UnimplementedError());
+
+final backgroundWorkProvider =
+    Provider<BackgroundWork>((ref) => throw UnimplementedError());
+
+/// Read once in `main` for its effect: it listens to the backend from the
+/// moment it exists, and nothing ever asks it anything. Here rather than a bare
+/// object in `main` so that its lifetime is the container's and `dispose` has a
+/// caller.
+final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
+  final keepAlive = TurnKeepAlive(
+      ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));
+  ref.onDispose(keepAlive.dispose);
+  return keepAlive;
+});
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   // Deliberately not watching appSettingsProvider: the repository reads the
