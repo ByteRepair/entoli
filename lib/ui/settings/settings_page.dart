@@ -6,6 +6,7 @@ import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
+import "../widgets/anchored_menu.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/provider_dialog.dart";
@@ -310,30 +311,34 @@ class _ProvidersEditor extends ConsumerWidget {
             onRemove: () => _remove(ref, provider),
           ),
         _AddButtonRow(
-          child: MenuAnchor(
-            menuChildren: [
-              // One already configured is edited from its row rather than
-              // added again.
-              for (final preset in llmProviderPresets)
-                if (!configured.contains(preset.id))
-                  MenuItemButton(
-                    onPressed: () => _upsert(context, ref, initial: preset),
-                    child: Text(preset.displayName),
-                  ),
-              MenuItemButton(
-                onPressed: () => _upsert(context, ref),
-                child: const Text("Custom…"),
-              ),
-            ],
-            builder: (context, controller, _) => OutlinedButton.icon(
+          // The button's own context, which is what the menu is anchored under.
+          child: Builder(
+            builder: (context) => OutlinedButton.icon(
               icon: const Icon(Icons.add),
               label: const Text("Add provider"),
-              onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+              onPressed: () => _add(context, ref, configured),
             ),
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _add(BuildContext context, WidgetRef ref, Set<String> configured) async {
+    final chosen = await showAnchoredMenu<VoidCallback>(context, [
+      // One already configured is edited from its row rather than added again.
+      for (final preset in llmProviderPresets)
+        if (!configured.contains(preset.id))
+          PopupMenuItem(
+            value: () => _upsert(context, ref, initial: preset),
+            child: Text(preset.displayName),
+          ),
+      PopupMenuItem(
+        value: () => _upsert(context, ref),
+        child: const Text("Custom…"),
+      ),
+    ]);
+    if (context.mounted) chosen?.call();
   }
 
   String _describe(LlmProviderConfig provider) {

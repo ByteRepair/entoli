@@ -956,7 +956,18 @@ failure states every page would otherwise spell out) over
 `Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs, and `AttachmentChip` / `AttachmentStrip`.
+`pickProject` dialogs, `showAnchoredMenu`, and `AttachmentChip` /
+`AttachmentStrip`.
+
+`showAnchoredMenu` is a menu under a button, as a **route**. A `MenuAnchor`
+draws into an overlay instead, and an overlay is not popped by anything: the
+back key passes through it to whatever is behind, which beside the chat is the
+app leaving and inside the drawer is the whole sidebar closing. Neither is what
+back means over a menu. `PopupMenuButton` gets this right by pushing a route, and
+this is the same push without having to be the button — the project switcher and
+the add-provider row keep the buttons they had. It takes the button's own
+context, so both callers reach for a `Builder`: their build context is the whole
+section, and a menu anchored to that hangs off the wrong edge.
 
 Streamed deltas are coalesced into one state update per frame: per-token updates
 made the reply's text quadratic and rebuilt every visible bubble thousands of
