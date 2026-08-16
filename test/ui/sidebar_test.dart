@@ -140,7 +140,7 @@ void main() {
   /// Nothing at either end of the sidebar is under a system bar.
   void expectClearOfBars(WidgetTester tester) {
     final sidebar = tester.getRect(find.byType(Sidebar));
-    final top = tester.getRect(find.byTooltip("New chat"));
+    final top = tester.getRect(find.text(projectLabel(null)));
     final bottom = tester.getRect(find.text("Settings"));
     expect(top.top - sidebar.top, greaterThanOrEqualTo(bars.top));
     expect(sidebar.bottom - bottom.bottom, greaterThanOrEqualTo(bars.bottom));

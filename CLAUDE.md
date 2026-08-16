@@ -428,6 +428,39 @@ A tool call and the result answering it are one label. The parts stay separate
 in `conv.json` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
+What can be done to a message — Edit, Regenerate — is a row of icons under it
+rather than a menu, uncovered by hovering the message or, where there is no
+pointer to hover with, by touching it. The row keeps its height whether or not
+anything is in it, so the conversation does not shift under the pointer the
+moment the icons appear. The reveal is a `Listener` rather than a
+`GestureDetector`: a raw pointer listener sidesteps the gesture arena, so one
+touch both places the caret in the bubble's `SelectableText` and shows the
+actions. It writes a `ValueNotifier` rather than calling `setState`, so
+uncovering the icons does not rebuild the message's labels behind them.
+
+### The chat page
+
+One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
+own drawer rather than a shell's — two bars stacked was the app's name over the
+chat's, saying nothing twice. What it shows follows the conversation: the mark
+and "Entoli" while the list is at its top, the chat's title and project once it
+is not. A chat too short to scroll is always at the top, so it keeps the mark.
+
+A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
+until the extent stops moving: a builder lays out only what shows, so the extent
+the first frame reports is an estimate and one jump lands short of the end. Not
+`reverse: true`, which would land at the end exactly and for free — in a
+reversed viewport the offsets of older messages shift as the newest one grows,
+so a reader scrolled up during a turn would watch the text move.
+
+A turn follows itself only while the reader is already within `_slack` of the
+end. Outside it the list is left alone — the offsets of earlier messages do not
+move as the last one grows, so reading back through a turn is undisturbed — and
+a button appears to go back down. The same slack decides both, so the button
+turns up exactly when the view stops keeping up. Both edges are
+`ValueNotifier`s, since a `setState` mid-drag would rebuild every visible bubble
+to swap a title or a button.
+
 ### Commands and agents
 
 `PromptLibrary` is the whole of what the composer's `/` and `@` menus offer,
@@ -616,6 +649,19 @@ while the menu has a match — the rest of the time they have to keep doing what
 they do in a text box. The `+` button left of the field is a second way in: for
 a command or an agent it types the trigger character rather than opening its own
 list, so both routes share one code path; for a file it opens the chooser.
+
+It also drops the field's focus when the keyboard goes away. Android's back key
+closes the keyboard without telling Flutter, so the field keeps the focus and
+the next thing to hand it back — the `+` menu closing — brings the keyboard
+straight up again. The insets are the only report of it, and they are read off
+the view rather than off `MediaQuery`: a `Scaffold` takes the bottom inset out
+of what its body sees.
+
+The sidebar's new-chat button is a `FloatingActionButton` over the profile and
+settings tiles, which is the one part of the sidebar that is not a list of
+chats and has room to its right. Not `Scaffold.floatingActionButton`: the
+sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
+the one holding the drawer.
 
 ## Development
 

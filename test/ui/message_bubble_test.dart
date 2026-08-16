@@ -1,6 +1,5 @@
 import "dart:convert";
 
-import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -44,16 +43,16 @@ void main() {
         settle: !isWaiting,
       );
 
-  /// Right-click, the way the menu is meant to be opened on desktop.
-  Future<void> rightClick(WidgetTester tester, Finder target) async {
-    final gesture = await tester.createGesture(
-      kind: PointerDeviceKind.mouse,
-      buttons: kSecondaryMouseButton,
-    );
-    await gesture.down(tester.getCenter(target));
-    await gesture.up();
+  /// Touch the message, which is how the actions under it are uncovered where
+  /// there is no pointer to hover with.
+  Future<void> reveal(WidgetTester tester, Finder target) async {
+    await tester.tap(target, warnIfMissed: false);
     await tester.pumpAndSettle();
   }
+
+  /// How visible the row of action icons currently is.
+  double actionsOpacity(WidgetTester tester) =>
+      tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity;
 
   testWidgets("an error part renders in the theme's error colour", (tester) async {
     await pump(tester, _message(MessageRole.assistant, [const ErrorPart(message: "usage limit reached")]));
@@ -383,10 +382,10 @@ void main() {
       onRegenerate: () {},
     );
 
-    await rightClick(tester, find.text("hello"));
+    await reveal(tester, find.text("hello"));
 
-    expect(find.text("Edit"), findsOneWidget);
-    expect(find.text("Regenerate"), findsOneWidget);
+    expect(find.byTooltip("Edit"), findsOneWidget);
+    expect(find.byTooltip("Regenerate"), findsOneWidget);
   });
 
   testWidgets("an assistant message offers only Regenerate", (tester) async {
@@ -396,10 +395,41 @@ void main() {
       onRegenerate: () {},
     );
 
-    await rightClick(tester, find.text("hi there"));
+    await reveal(tester, find.text("hi there"));
 
-    expect(find.text("Edit"), findsNothing);
-    expect(find.text("Regenerate"), findsOneWidget);
+    expect(find.byTooltip("Edit"), findsNothing);
+    expect(find.byTooltip("Regenerate"), findsOneWidget);
+  });
+
+  // The row keeps its height whatever is in it, so a message does not shift
+  // under the pointer the moment the icons appear.
+  testWidgets("the actions are covered until the message is touched", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.user, [const TextPart(text: "hello")]),
+      onRegenerate: () {},
+    );
+
+    final before = tester.getRect(find.byType(MessageBubble));
+    expect(actionsOpacity(tester), 0);
+
+    await reveal(tester, find.text("hello"));
+
+    expect(actionsOpacity(tester), 1);
+    expect(tester.getRect(find.byType(MessageBubble)), before);
+  });
+
+  testWidgets("touching it again covers them back up", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.user, [const TextPart(text: "hello")]),
+      onRegenerate: () {},
+    );
+
+    await reveal(tester, find.text("hello"));
+    await reveal(tester, find.text("hello"));
+
+    expect(actionsOpacity(tester), 0);
   });
 
   testWidgets("Regenerate fires the callback", (tester) async {
@@ -410,8 +440,8 @@ void main() {
       onRegenerate: () => fired++,
     );
 
-    await rightClick(tester, find.text("hello"));
-    await tester.tap(find.text("Regenerate"));
+    await reveal(tester, find.text("hello"));
+    await tester.tap(find.byTooltip("Regenerate"));
     await tester.pumpAndSettle();
 
     expect(fired, 1);
@@ -425,8 +455,8 @@ void main() {
       onEdit: (text) => edited = text,
     );
 
-    await rightClick(tester, find.text("helo"));
-    await tester.tap(find.text("Edit"));
+    await reveal(tester, find.text("helo"));
+    await tester.tap(find.byTooltip("Edit"));
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(TextField, "helo"), findsOneWidget);
@@ -445,8 +475,8 @@ void main() {
       onEdit: (text) => edited = text,
     );
 
-    await rightClick(tester, find.text("helo"));
-    await tester.tap(find.text("Edit"));
+    await reveal(tester, find.text("helo"));
+    await tester.tap(find.byTooltip("Edit"));
     await tester.pumpAndSettle();
     await tester.tap(find.text("Cancel"));
     await tester.pumpAndSettle();
@@ -454,25 +484,13 @@ void main() {
     expect(edited, isNull);
   });
 
-  testWidgets("long-pressing the name label opens the menu on touch", (tester) async {
-    await pump(
-      tester,
-      _message(MessageRole.user, [const TextPart(text: "hello")]),
-      onRegenerate: () {},
-    );
-
-    await tester.longPress(find.text("You"));
-    await tester.pumpAndSettle();
-
-    expect(find.text("Regenerate"), findsOneWidget);
-  });
-
-  testWidgets("no menu appears when neither action is offered", (tester) async {
+  testWidgets("nothing is offered when neither action is", (tester) async {
     await pump(tester, _message(MessageRole.user, [const TextPart(text: "hello")]));
 
-    await rightClick(tester, find.text("hello"));
+    await reveal(tester, find.text("hello"));
 
-    expect(find.text("Regenerate"), findsNothing);
+    expect(find.byTooltip("Regenerate"), findsNothing);
+    expect(find.byTooltip("Edit"), findsNothing);
   });
 
   // A sent message holds only the resource name, so the bytes have to come
