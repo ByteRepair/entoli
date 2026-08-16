@@ -524,13 +524,12 @@ Android switches icons by making `MainActivity` the launcher entry and
 enabling an `activity-alias` in its place when a non-default icon is picked.
 `MainActivity` carries the MAIN+LAUNCHER intent-filter and wears the app-level
 `android:icon` (`@mipmap/ic_prompt`); each non-default icon is an
-`activity-alias` targeting `MainActivity`, disabled by default. Only one of
-`MainActivity` and the active alias is enabled at a time, or the app appears on
-the home screen twice. `MainActivity.kt` enables the wanted alias *before*
-disabling `MainActivity`, because an instant with no launcher entry enabled is
-one a launcher can read, and it drops the app off the home screen for good.
-Selecting the default icon is the reverse: `MainActivity` is re-enabled and the
-alias disabled.
+`activity-alias` targeting `MainActivity`, disabled by default. Exactly one
+entry is enabled at a time, or the app appears on the home screen twice — so
+`MainActivity.kt` treats the default as one entry among the aliases, enabling
+the wanted one *before* disabling the rest. An instant with no launcher entry
+enabled is one a launcher can read, and it drops the app off the home screen
+for good.
 
 `MainActivity` carries the LAUNCHER filter (rather than only the aliases
 carrying it) because Flutter's pre-build manifest parse — the fallback when no
@@ -540,13 +539,15 @@ built APK exists yet — matches `activity` by exact element name and never sees
 path (used once an APK exists) does handle aliases, but the fallback has to
 work too.
 
-The alias is written `.CookieIcon` in the manifest, which Gradle expands against
-the **namespace**, not the application id. They are the same string today, so
-`MainActivity.kt` derives the class name from its own package rather than from
-`packageName`: the two are free to diverge, and if they ever do, a launcher
-switch built on `packageName` would name a component that does not exist. A
-debug `applicationIdSuffix` (`.debug`) is exactly that divergence, and is what
-lets a debug and a release build sit side by side on the same device.
+A `ComponentName` is (application id, fully-qualified class), and the halves
+come from different strings. The manifest's `.CookieIcon` is expanded against
+the **namespace**, so the class name is derived from `MainActivity`'s own
+package, while the package half has to be `packageName` — the id the app is
+installed under, which the debug `applicationIdSuffix` (`.debug`, what lets a
+debug and a release build sit side by side) makes a different string. Naming the
+package half with the namespace makes `setComponentEnabledSetting` throw, and
+the Dart side swallows that, so the first version of this silently did nothing
+in every debug build.
 
 Not behind a conditional import the way `Shell` is: a `MethodChannel` compiles
 everywhere and a platform with nothing answering it throws, which is the same
