@@ -124,12 +124,13 @@ rather than through both settings pages, since it owns every rule about the
 provider/model pair and they only say where the values come from.
 
 `openCategory` is the settings page's sidebar. A test window is narrower than
-`navBreakpoint`, so the categories are a drawer there and the helper opens one
-if it finds a hamburger — which is what lets the same call work at either size.
-The page opens on General, so only the other two need it. `pumpSettings` is that
-plus the pump, and it takes the category rather than defaulting to one: the two
-settings test files wanted opposite defaults, which made the same call mean
-different pages depending on which file was being read.
+`navBreakpoint`, so a category there is a page pushed over the list rather than
+a panel's selection — the helper goes back first when the bar is not the list's,
+which is what lets the same call work at either size. Every category needs it
+now, General included: narrow, the page opens on the list and nothing else.
+`pumpSettings` is that plus the pump, and it takes the category rather than
+defaulting to one: the two settings test files wanted opposite defaults, which
+made the same call mean different pages depending on which file was being read.
 
 `useWindow` is a window size for the length of a test, reset when it ends. Any
 test either side of `navBreakpoint` needs one, and a copy that forgets the reset

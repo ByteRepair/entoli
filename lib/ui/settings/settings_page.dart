@@ -40,78 +40,100 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   SettingsCategory _category = SettingsCategory.general;
 
+  /// The state is kept where the category is a page of its own too, so that a
+  /// window widened while one is open lands on it rather than on General.
+  void _open(SettingsCategory category, {required bool push}) {
+    setState(() => _category = category);
+    if (push) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => _CategoryPage(category)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final categories = _Categories(
-      selected: _category,
-      onSelect: (category) => setState(() => _category = category),
-    );
-    final body = ListView(key: ValueKey(_category), children: _sections);
-
     // The page is the whole window, so its width is the window's — no
     // `LayoutBuilder`, which would run the Scaffold's build during layout.
-    if (MediaQuery.sizeOf(context).width >= navBreakpoint) {
-      return Scaffold(
-        appBar: AppBar(title: const Text("Settings")),
-        body: Row(
-          children: [
-            SizedBox(width: navPanelWidth, child: categories),
-            const VerticalDivider(width: 1),
-            Expanded(child: body),
-          ],
-        ),
-      );
-    }
-    // The drawer takes the bar's leading slot, so leaving the page is an
-    // action of its own rather than the back arrow it displaced.
+    final wide = MediaQuery.sizeOf(context).width >= navBreakpoint;
+    final categories = _Categories(
+      // Nothing is selected where the list is the whole page: a category there
+      // is somewhere to go rather than what is showing beside it.
+      selected: wide ? _category : null,
+      onSelect: (category) => _open(category, push: !wide),
+    );
+    final bar = AppBar(title: const Text("Settings"));
+
+    if (!wide) return Scaffold(appBar: bar, body: categories);
     return Scaffold(
-      drawer: NavDrawer(child: categories),
-      appBar: AppBar(
-        title: Text(_category.label),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: "Close settings",
-            onPressed: () => Navigator.of(context).maybePop(),
+      appBar: bar,
+      body: Row(
+        children: [
+          SizedBox(width: navPanelWidth, child: categories),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: ListView(key: ValueKey(_category), children: _sectionsOf(_category)),
           ),
         ],
       ),
-      body: body,
     );
   }
-
-  List<Widget> get _sections => switch (_category) {
-        // The agent's own settings are here rather than under LLMs: the mode is
-        // a behaviour, and the classifier picker travels with it because auto
-        // mode is unusable without one.
-        SettingsCategory.general => const [
-            _WorkspaceSection(),
-            Divider(),
-            _AppearanceSection(),
-            Divider(),
-            _AgentSection(),
-            Divider(),
-            _EnvironmentSection(),
-            Divider(),
-            _DeleteAllChats(),
-          ],
-        SettingsCategory.providers => const [_ProvidersEditor()],
-        SettingsCategory.llms => const [_DefaultsSection()],
-      };
 }
 
-/// The categories as a list, beside the page or in its drawer. Material, not
-/// Scaffold: the page's own owns the drawer this sits in.
+/// One category as a page over the list, which is what a narrow window gets in
+/// place of the panel. Leaving it is the back gesture, so the bar holds nothing
+/// but the name of what is on it.
+class _CategoryPage extends StatelessWidget {
+  const _CategoryPage(this.category);
+
+  final SettingsCategory category;
+
+  @override
+  Widget build(BuildContext context) {
+    // Widened, the page behind is already showing this category beside its
+    // panel, and two of it is one too many.
+    if (MediaQuery.sizeOf(context).width >= navBreakpoint) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
+    return Scaffold(
+      appBar: AppBar(title: Text(category.label)),
+      body: ListView(children: _sectionsOf(category)),
+    );
+  }
+}
+
+/// What is filed under a category, whether it is drawn beside the list or on a
+/// page of its own.
+List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
+      // The agent's own settings are here rather than under LLMs: the mode is a
+      // behaviour, and the classifier picker travels with it because auto mode
+      // is unusable without one.
+      SettingsCategory.general => const [
+          _WorkspaceSection(),
+          Divider(),
+          _AppearanceSection(),
+          Divider(),
+          _AgentSection(),
+          Divider(),
+          _EnvironmentSection(),
+          Divider(),
+          _DeleteAllChats(),
+        ],
+      SettingsCategory.providers => const [_ProvidersEditor()],
+      SettingsCategory.llms => const [_DefaultsSection()],
+    };
+
+/// The categories as a list: beside the page where there is room for one, and
+/// the page itself where there is not. Material, not Scaffold, since the page
+/// owns that.
 class _Categories extends StatelessWidget {
   const _Categories({required this.selected, required this.onSelect});
 
-  final SettingsCategory selected;
+  final SettingsCategory? selected;
   final ValueChanged<SettingsCategory> onSelect;
-
-  void _tap(BuildContext context, SettingsCategory category) {
-    onSelect(category);
-    closeNavDrawer(context);
-  }
 
   @override
   Widget build(BuildContext context) => Material(
@@ -123,7 +145,8 @@ class _Categories extends StatelessWidget {
                   selected: category == selected,
                   leading: Icon(category.icon),
                   title: Text(category.label),
-                  onTap: () => _tap(context, category),
+                  trailing: selected == null ? const Icon(Icons.chevron_right) : null,
+                  onTap: () => onSelect(category),
                 ),
             ],
           ),

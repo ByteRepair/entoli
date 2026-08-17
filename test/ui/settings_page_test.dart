@@ -34,22 +34,52 @@ void main() {
 
       expect(find.byIcon(Icons.menu), findsNothing);
       expect(tile("Providers"), findsOneWidget);
+      // Beside the list, so the page opens on a category as well as on them.
+      expect(find.text("Default workspace"), findsOneWidget);
     });
 
-    // The same drawer the chat's sidebar becomes, back key and all.
-    testWidgets("and are the page's drawer where there is not", (tester) async {
+    testWidgets("and are the page itself where there is not", (tester) async {
       await app.pump(tester, const SettingsPage());
-      expect(tile("Providers"), findsNothing);
 
-      await tester.tap(find.byIcon(Icons.menu));
-      await settleIo(tester);
+      // The list is what settings opens on, and there is no hamburger because
+      // there is no drawer to open.
       expect(tile("Providers"), findsOneWidget);
+      expect(find.byIcon(Icons.menu), findsNothing);
+      expect(find.byType(Drawer), findsNothing);
+      expect(find.text("Default workspace"), findsNothing);
+    });
+
+    testWidgets("a category is then a page over it, left by the back key", (tester) async {
+      final handlesBack = frameworkHandlesBack(tester);
+      await app.pump(tester, const SettingsPage());
 
       await tester.tap(tile("Providers"));
       await settleIo(tester);
-
-      expect(find.byType(Drawer), findsNothing);
       expect(find.text("Add provider"), findsOneWidget);
+      expect(find.byIcon(Icons.menu), findsNothing);
+
+      // Pushing claims the key from Android, which is what makes the press
+      // below one a device would actually deliver.
+      expect(handlesBack.last, isTrue);
+      expect(await pressBack(tester), isTrue);
+
+      expect(find.text("Add provider"), findsNothing);
+      expect(tile("Providers"), findsOneWidget);
+    });
+
+    testWidgets("widening puts the open category beside the list", (tester) async {
+      useWindow(tester, const Size(800, 600));
+      await app.pump(tester, const SettingsPage());
+
+      await tester.tap(tile("LLMs"));
+      await settleIo(tester);
+      expect(tile("LLMs"), findsNothing);
+
+      tester.view.physicalSize = const Size(1200, 800);
+      await settleIo(tester);
+
+      expect(tile("LLMs"), findsOneWidget);
+      expect(find.text("New chats"), findsOneWidget);
     });
 
     testWidgets("are offered General, Providers, LLMs, in that order", (tester) async {
