@@ -181,6 +181,7 @@ _ToolApproval _$ToolApprovalFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       toolName: json['toolName'] as String,
       argumentsJson: json['argumentsJson'] as String?,
+      argumentsText: json['argumentsText'] as String?,
     );
 
 Map<String, dynamic> _$ToolApprovalToJson(_ToolApproval instance) =>
@@ -188,6 +189,7 @@ Map<String, dynamic> _$ToolApprovalToJson(_ToolApproval instance) =>
       'id': instance.id,
       'toolName': instance.toolName,
       'argumentsJson': instance.argumentsJson,
+      'argumentsText': instance.argumentsText,
     };
 
 _ModelOption _$ModelOptionFromJson(Map<String, dynamic> json) => _ModelOption(

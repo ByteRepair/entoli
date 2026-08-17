@@ -234,6 +234,12 @@ abstract class ToolApproval with _$ToolApproval {
     required String id,
     required String toolName,
     String? argumentsJson,
+
+    /// What the call actually does — the command for a `bash`, the URL for a
+    /// `webfetch`. The same field [ToolCall] carries and for the same reason:
+    /// the site that builds the call has it in hand, and a reader digging it
+    /// back out of the JSON is guessing at which key this tool used.
+    String? argumentsText,
   }) = _ToolApproval;
 
   factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);

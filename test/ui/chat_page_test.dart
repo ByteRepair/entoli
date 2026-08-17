@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
@@ -142,6 +143,86 @@ void main() {
     await open(tester, chat.state.id);
 
     expect(find.text("Entoli"), findsOneWidget);
+  });
+
+  group("a chat with nothing said in it", () {
+    Future<void> openBlank(WidgetTester tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "brand new"));
+      await open(tester, chat.state.id);
+    }
+
+    String typed(WidgetTester tester) =>
+        tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
+    // The composer's menus are the only place these are named, and nothing
+    // names them until the character that opens one has been typed.
+    testWidgets("offers what the / and @ menus hold", (tester) async {
+      await openBlank(tester);
+
+      expect(find.text("/review"), findsOneWidget);
+      expect(find.text("@explore"), findsOneWidget);
+    });
+
+    testWidgets("picking one types it, and does not reach for the keyboard",
+        (tester) async {
+      await openBlank(tester);
+
+      await tester.tap(find.text("/review"));
+      await tester.pump();
+
+      expect(typed(tester), "/review ");
+      expect(holdsCaret(tester, find.byType(TextField)), isFalse);
+    });
+
+    // Appended wherever the caret was, a `/command` is text nothing expands:
+    // `BuiltinBackend._command` only reads one at the start of the message,
+    // and the composer's own menu gates `/` on the same rule.
+    testWidgets("a command lands where a command is read from", (tester) async {
+      await openBlank(tester);
+      await tester.enterText(find.byType(TextField), "about the parser");
+      await tester.pump();
+
+      await tester.tap(find.text("/review"));
+      await tester.pump();
+
+      expect(typed(tester), "/review about the parser");
+    });
+
+    // A mention is read anywhere a word starts, so it goes where the caret is.
+    testWidgets("an agent lands at the caret", (tester) async {
+      await openBlank(tester);
+      await tester.enterText(find.byType(TextField), "look here");
+      await tester.pump();
+
+      await tester.tap(find.text("@explore"));
+      await tester.pump();
+
+      expect(typed(tester), "look here @explore ");
+    });
+
+    testWidgets("with nothing to offer it says how to reach them",
+        (tester) async {
+      app.dispose();
+      app = TestApp.create(library: PromptLibrary.empty);
+      await openBlank(tester);
+
+      expect(find.text("Type / for commands, @ for agents."), findsOneWidget);
+    });
+
+    // Everything the user has written is a menu, and `/` opens the menu.
+    testWidgets("offers a handful rather than every command there is",
+        (tester) async {
+      app.dispose();
+      app = TestApp.create(
+        library: PromptLibrary([
+          for (var i = 0; i < 12; i++)
+            PromptDocument.parse(CompletionKind.command, "cmd$i", "do $i"),
+        ]),
+      );
+      await openBlank(tester);
+
+      expect(find.byType(ActionChip), findsNWidgets(6));
+    });
   });
 
   group("keeping up with a turn", () {

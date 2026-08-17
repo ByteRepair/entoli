@@ -21,8 +21,13 @@ void main() {
 
   /// Give whatever is still in flight a chance to land. The predicate may be
   /// async, since some of what lands has to be read back off disk.
+  ///
+  /// The ceiling is generous because it costs nothing: this returns the moment
+  /// the condition holds, so only a genuine failure ever pays it. At 200ms the
+  /// title call was occasionally still in flight on a machine running the rest
+  /// of the suite alongside it, which is what CI always is.
   Future<void> waitFor(FutureOr<bool> Function() done, {String what = "it"}) async {
-    for (var i = 0; i < 200; i++) {
+    for (var i = 0; i < 2000; i++) {
       if (await done()) return;
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }

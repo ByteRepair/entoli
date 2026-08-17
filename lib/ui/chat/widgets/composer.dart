@@ -51,6 +51,41 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
 /// Space, tab, newline — every break a typed message can hold.
 bool _isSpace(int codeUnit) => codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
 
+/// Where [kind]'s trigger goes: a command's at the start of the message, since
+/// that is the only place `BuiltinBackend._command` reads one from, and a
+/// mention's wherever the caret is.
+int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
+      CompletionKind.command => 0,
+      CompletionKind.agent =>
+        value.selection.isValid ? value.selection.baseOffset : value.text.length,
+    };
+
+void _replaceIn(TextEditingController controller, int start, int end, String text) {
+  controller.value = TextEditingValue(
+    text: controller.text.replaceRange(start, end, text),
+    selection: TextSelection.collapsed(offset: start + text.length),
+  );
+}
+
+/// Type a whole completion into [controller] — the trigger, the name, and the
+/// trailing space that makes what follows arguments rather than more name.
+///
+/// Here rather than in the composer's own state because the empty chat's
+/// starter chips do the same thing from outside it, and the rule they have to
+/// agree on is *where* it lands: appended wherever the caret was, a `/command`
+/// is text the backend will never expand and the composer's own menu will not
+/// recognise.
+void insertCompletion(
+  TextEditingController controller,
+  CompletionKind kind,
+  String name,
+) {
+  final value = controller.value;
+  final at = _triggerAt(value, kind);
+  final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
+  _replaceIn(controller, at, at, "$space${kind.trigger}$name ");
+}
+
 typedef SendCallback = void Function(String text, List<Attachment> attachments);
 
 /// Message composer with send/abort toggle. Calls onSend with the typed text
@@ -155,11 +190,7 @@ class _ComposerState extends ConsumerState<Composer> {
     if (kind == CompletionKind.command && value.text.startsWith(kind.trigger)) {
       widget.controller.selection = const TextSelection.collapsed(offset: 1);
     } else {
-      final at = switch (kind) {
-        CompletionKind.command => 0,
-        CompletionKind.agent =>
-          value.selection.isValid ? value.selection.baseOffset : value.text.length,
-      };
+      final at = _triggerAt(value, kind);
       final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
       _replace(at, at, "$space${kind.trigger}");
     }
@@ -176,12 +207,8 @@ class _ComposerState extends ConsumerState<Composer> {
         "${token.kind.trigger}${option.name} ");
   }
 
-  void _replace(int start, int end, String text) {
-    widget.controller.value = TextEditingValue(
-      text: widget.controller.text.replaceRange(start, end, text),
-      selection: TextSelection.collapsed(offset: start + text.length),
-    );
-  }
+  void _replace(int start, int end, String text) =>
+      _replaceIn(widget.controller, start, end, text);
 
   Future<void> _attach(AttachmentKind kind) async {
     final picked = await ref.read(attachmentPickerProvider).pick(kind);
