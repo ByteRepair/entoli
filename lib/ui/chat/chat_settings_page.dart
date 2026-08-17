@@ -6,6 +6,7 @@ import "../../domain/chat_meta.dart";
 import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
+import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
@@ -113,7 +114,7 @@ class _IdField extends StatelessWidget {
           Expanded(
             child: Text(
               id,
-              style: const TextStyle(fontFamily: "monospace"),
+              style: const TextStyle(fontFamily: monoFamily),
               overflow: TextOverflow.ellipsis,
             ),
           ),

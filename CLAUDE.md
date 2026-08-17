@@ -1005,6 +1005,76 @@ gesture arena, so one touch both starts a selection in the bubble and shows the
 actions. It writes a `ValueNotifier` rather than calling `setState`, so
 uncovering the icons does not rebuild the message's labels behind them.
 
+#### How a reply is set
+
+`replyStyleSheet` is the whole of it, and it starts from
+`MarkdownStyleSheet.fromTheme` because most of what that answers is right. What
+gets overridden is where the defaults were written for a document rather than a
+chat, or where they read a Material 2 field that M3 leaves null.
+
+The null-reading ones are bugs rather than taste. Inline `code` asks for
+`cardTheme.color`, which is null here, so a `` `word` `` in a sentence was that
+word in another face and nothing else. It sits on a surface now. A
+`backgroundColor` paints tight to the glyphs with no room either side, which is
+not as good as the padded container a block gets — but a block is one thing on a
+line of its own, while inline code has to wrap with the sentence, and a
+`WidgetSpan` cannot break across lines.
+
+The document-shaped ones are the headings and the rule. `fromTheme` gives h1
+`headlineSmall` and h4 down `bodyLarge`, which is body size carrying no weight,
+so the bottom three levels did not read as headings at all; they now step 21,
+18, 16 and then sit at the body size with weight to tell them apart. Every level
+is given room **above** and none below, since a heading belongs to the paragraph
+it introduces — the default is `EdgeInsets.zero` everywhere, which put a heading
+against the paragraph before it. And a horizontal rule was five pixels of
+`dividerColor`, which is a slab across the page rather than a rule.
+
+Prose is set looser than Material's 1.43, since a reply is read as prose in a
+column where the line you want next is the one below. That goes to `p`,
+`listBullet`, `blockquote` and `tableBody` rather than to `p` alone — the rule
+is about the reply, not about the `<p>` element, and `fromTheme` hands all four
+the same plain `bodyMedium`. A list is the shape a reply most often takes.
+
+**Code is set in a bundled face**, and `ui/fonts.dart` is the whole of what
+Dart knows about it. `monospace` is an alias the platform resolves, so the same
+reply was Roboto Mono on one Android, Droid Sans Mono on another, DejaVu on
+this desktop and whatever a browser prefers on the web — and the five things
+this app shows verbatim (code, a tool's command and its output, a chat id, a
+config value) are shown that way precisely because their characters line up.
+Roboto Mono is the mono companion to the face Material already uses.
+
+`monoFamily` and `registerBundledFontLicences` are in a file of their own
+rather than in `ui/theme.dart`, which owns the palette and could not read an
+asset if it wanted to. Five facts have to move together — the `family` and the
+two `.ttf` entries in pubspec's `fonts:` block, the `OFL.txt` asset, and those
+two — so they are one file and one section here rather than scattered by
+proximity.
+
+**Both faces are subset to Latin.** Text fonts are not tree-shaken the way icon
+fonts are, so the full files shipped 876 codepoints of which nearly half were
+Cyrillic, Greek and Latin-Extended — and on the web the engine blocks the first
+frame on every font in the manifest, so that was 148 KB gzipped before anything
+painted. Subset it is 58 KB. Anything outside the subset falls back to a system
+face, which is what already happened to arrows and box-drawing: Roboto Mono has
+never had them. Regenerating, which nothing automates:
+
+```sh
+uv tool run --from fonttools pyftsubset RobotoMono-Regular.ttf \
+  --output-file=assets/fonts/RobotoMono-Regular.ttf --layout-features='*' \
+  --name-IDs='*' \
+  --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,\
+U+2000-206F,U+2070-209F,U+20A0-20BF,U+2100-214F,U+2190-21FF,U+2200-22FF,\
+U+2500-257F,U+2580-259F,U+25A0-25FF,U+2713-2717,U+FFFD"
+```
+
+`--name-IDs='*'` is not decoration: it keeps the copyright and licence records
+in the file, which is half of what the OFL asks for. The other half is
+`assets/fonts/OFL.txt`, an asset rather than only a file in the repo, read into
+`LicenseRegistry` lazily — so Flutter's own licence page has it whether or not
+this app grows one. Bold is bundled beside regular because inline code inherits
+the weight of what holds it, and a heading with a `` `name` `` in it is a shape
+this app's replies take constantly.
+
 #### Code blocks
 
 A fenced block is `code_block.dart`'s: a bar naming what it was fenced as with
@@ -1070,9 +1140,8 @@ widget to own.
 a `pre`. Registering a builder for it makes the package's own `visitText` arm
 unreachable, and `codeblockPadding` is read nowhere else, so setting it would
 be configuring a path that no longer runs. The font is the exception in the
-other direction: `code` is set from the same `codeFont` the block is built on,
-so bundling a monospace reaches an inline span and a block together rather than
-one of them.
+other direction: the sheet's inline `code` and the block are both built on
+`codeFont`, so the bundled face reaches the two of them rather than one.
 
 ### The chat page
 
@@ -1129,9 +1198,13 @@ could not see, and it passed against a build that closed the app on a phone.
 Anything asserting about the back key needs `frameworkHandlesBack` beside the
 press.
 
-A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
-until the extent stops moving: a builder lays out only what shows, so the extent
-the first frame reports is an estimate and one jump lands short of the end. Not
+A chat opens at its latest message. `_settleAtBottom` jumps and then jumps
+again until the extent stops moving: a builder lays out only what shows, so the
+extent any one frame reports is an estimate and a single jump lands short of the
+end. **Jump to latest goes through it too**, after its animation — the extent it
+read when the button was pressed was that same estimate, so on its own the
+button left the reader a little above the last message, by an amount that
+depended on how tall the messages happened to be. Not
 `reverse: true`, which would land at the end exactly and for free — in a
 reversed viewport the offsets of older messages shift as the newest one grows,
 so a reader scrolled up during a turn would watch the text move.
