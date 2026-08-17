@@ -3,14 +3,16 @@ import "dart:js_interop";
 
 import "package:web/web.dart" as web;
 
+import "../../../domain/artifact_style.dart";
 import "../../../domain/chat_store.dart";
 import "../../../domain/content_type.dart";
 import "../../../domain/web_artifact_opener.dart";
 
 /// The web implementation: reads the artifact's files from IndexedDB, builds
 /// blob URLs for each, rewrites `index.html`'s relative references to point
-/// at them, and opens the result in a new tab. The name matches the io stub
-/// so the conditional import resolves to one symbol on either platform.
+/// at them, injects the base stylesheet, and opens the result in a new tab.
+/// The name matches the io stub so the conditional import resolves to one
+/// symbol on either platform.
 class WebArtifactOpenerImpl implements WebArtifactOpener {
   const WebArtifactOpenerImpl(this._store);
 
@@ -20,7 +22,7 @@ class WebArtifactOpenerImpl implements WebArtifactOpener {
   Future<void> open(String chatId, String artifactId, {required String entryFile}) async {
     final indexBytes = await _store.readArtifactFile(chatId, artifactId, entryFile);
     if (indexBytes == null) return;
-    final indexHtml = utf8.decode(indexBytes);
+    final indexHtml = injectBaseStyles(utf8.decode(indexBytes));
 
     final refs = _relativeRefs(indexHtml);
     final blobUrls = <String, String>{};

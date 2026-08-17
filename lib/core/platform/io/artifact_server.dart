@@ -1,12 +1,18 @@
+import "dart:convert";
 import "dart:io";
 
 import "../../../domain/artifact_server.dart";
+import "../../../domain/artifact_style.dart";
 import "../../../domain/content_type.dart";
 
 /// Serves [rootDir] over HTTP on a random localhost port. Used on Android,
 /// where the WebView blocks `file://` URLs — even with `setAllowFileAccess(true)`
 /// — so local content is served over `http://` instead, which the WebView allows
 /// without restriction. Stopped by [stop] when the viewer page is disposed.
+///
+/// HTML responses are run through [injectBaseStyles] before serving, so the
+/// artifact gets the base stylesheet the viewer provides — the model writes
+/// semantic HTML and the newspaper look is layered under whatever it adds.
 class IoArtifactServer implements ArtifactServer {
   IoArtifactServer._(this._server, this.rootDir);
 
@@ -37,10 +43,19 @@ class IoArtifactServer implements ArtifactServer {
     }
 
     final bytes = await file.readAsBytes();
+    final type = contentTypeFor(file.path);
     request.response
       ..statusCode = HttpStatus.ok
-      ..headers.contentType = ContentType.parse(contentTypeFor(file.path))
-      ..add(bytes);
+      ..headers.contentType = ContentType.parse(type);
+
+    // The base stylesheet rides under the model's own CSS, so it is injected
+    // into HTML before serving. Other content types pass through unchanged.
+    if (type == "text/html") {
+      final html = injectBaseStyles(utf8.decode(bytes));
+      request.response.add(utf8.encode(html));
+    } else {
+      request.response.add(bytes);
+    }
     await request.response.close();
   }
 
