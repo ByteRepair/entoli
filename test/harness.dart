@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/material.dart";
@@ -9,6 +10,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -17,8 +19,12 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/ui/chat/chat_page.dart";
+import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
+import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/provider_model_selector.dart";
 
@@ -219,6 +225,37 @@ Future<void> pumpUntil(WidgetTester tester, Finder until, {int tries = 50}) asyn
   }
 }
 
+/// A chat parked mid-turn with [event] delivered and [until] on screen. The
+/// turn is held open the way a real one is while the agent waits to be told
+/// something, so the composer is gone and answering is the only way on.
+/// Returns the chat's id.
+///
+/// Shared by everything that draws turn-scoped view state — approvals,
+/// questions, and whatever asks next — since the ten lines that get a chat into
+/// that position are the same ten every time.
+Future<String> heldTurn(
+  WidgetTester tester,
+  TestApp app, {
+  required AgentEvent event,
+  required Finder until,
+  String prompt = "get on with it",
+  EdgeInsets bars = EdgeInsets.zero,
+}) async {
+  app.backend.scriptedEvents = [event];
+  app.backend.hold = Completer<void>();
+  addTearDown(() => app.backend.hold?.complete());
+
+  final chat = await io(tester, () => app.repo.createChat());
+  final id = chat.state.id;
+  app.container.read(selectedChatIdProvider.notifier).select(id);
+  await app.pump(tester, underSystemBars(bars, const ChatPage()), settle: false);
+  await pumpUntil(tester, find.byType(Composer));
+  await io(tester,
+      () => app.container.read(chatControllerProvider(id).notifier).send(prompt));
+  await pumpUntil(tester, until);
+  return id;
+}
+
 /// Android's back key, as the engine reports it. True if something in the app
 /// handled it; false is the app being left.
 ///
@@ -289,8 +326,13 @@ Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
 
 /// Whether [button] would do anything if it were pressed. A dead one is still
 /// drawn and still hit by a tap, so its callback is the only thing that says so.
-bool enabled(WidgetTester tester, Finder button) =>
-    tester.widget<IconButton>(button).onPressed != null;
+///
+/// `IconButton` is not a `ButtonStyleButton`, which is why this asks twice.
+bool enabled(WidgetTester tester, Finder button) => switch (tester.widget(button)) {
+      IconButton(:final onPressed) => onPressed != null,
+      ButtonStyleButton(:final onPressed) => onPressed != null,
+      final other => throw ArgumentError("not a button: ${other.runtimeType}"),
+    };
 
 /// An icon button by the tooltip on it, which is how most of them are named.
 Finder buttonTipped(String tooltip) =>

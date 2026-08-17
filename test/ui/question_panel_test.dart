@@ -1,15 +1,11 @@
-import "dart:async";
-
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
-import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/question_panel.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
 
 import "../harness.dart";
 
@@ -35,26 +31,19 @@ void main() {
     options: [AskOption(label: "Yes"), AskOption(label: "No")],
   );
 
-  /// A chat mid-turn, with [asked] on screen. The turn is held open, the way a
-  /// real one is while the agent waits to be told.
   Future<String> asking(
     WidgetTester tester,
     AskRequest asked, {
     EdgeInsets bars = EdgeInsets.zero,
-  }) async {
-    app.backend.scriptedEvents = [QuestionRequestEvent(asked)];
-    app.backend.hold = Completer<void>();
-    addTearDown(() => app.backend.hold?.complete());
-
-    final chat = await io(tester, () => app.repo.createChat());
-    final id = chat.state.id;
-    app.container.read(selectedChatIdProvider.notifier).state = id;
-    await app.pump(tester, underSystemBars(bars, const ChatPage()), settle: false);
-    await pumpUntil(tester, find.byType(Composer));
-    await io(tester, () => app.container.read(chatControllerProvider(id).notifier).send("set up storage"));
-    await pumpUntil(tester, find.byType(QuestionPanel));
-    return id;
-  }
+  }) =>
+      heldTurn(
+        tester,
+        app,
+        event: QuestionRequestEvent(asked),
+        until: find.byType(QuestionPanel),
+        prompt: "set up storage",
+        bars: bars,
+      );
 
   /// Let the held turn finish — the composer goes back to offering `send` when
   /// it has.
@@ -72,7 +61,18 @@ void main() {
     expect(find.text("Both are already in the stack."), findsOneWidget);
     expect(find.text("Postgres"), findsOneWidget);
     expect(find.text("Already running in staging."), findsOneWidget);
-    expect(find.text("Question 1 of 1"), findsOneWidget);
+  });
+
+  // `Question 1 of 1` over a single segment, with two arrows that can only be
+  // dead, is the `1/1` the thread counter leaves out for the same reason.
+  testWidgets("one question is not counted, and has nowhere to move",
+      (tester) async {
+    await asking(tester, request([database]));
+
+    expect(find.text("Question 1 of 1"), findsNothing);
+    expect(find.text("Back"), findsNothing);
+    expect(find.text("Next"), findsNothing);
+    expect(find.text("Skip"), findsOneWidget);
   });
 
   testWidgets("the bar counts the questions, and picking one moves on",
@@ -89,13 +89,20 @@ void main() {
     expect(app.backend.answered, isEmpty);
   });
 
-  testWidgets("answering the last one sends them all and gives the composer back",
+  // Picking the last option used to submit the lot, which left no moment in
+  // which an answer already given could be looked at again.
+  testWidgets("answering every question sends nothing until Send is pressed",
       (tester) async {
     final id = await asking(tester, request([database, migrate]));
 
     await tester.tap(find.text("SQLite"));
     await tester.pump();
     await tester.tap(find.text("No"));
+    await tester.pump();
+    expect(app.backend.answered, isEmpty);
+    expect(find.byType(QuestionPanel), findsOneWidget);
+
+    await tester.tap(find.text("Send"));
     await tester.pump();
 
     // The option's own value, not the label it was read under.
@@ -105,6 +112,87 @@ void main() {
     expect(find.byType(QuestionPanel), findsNothing);
     expect(find.byType(Composer), findsOneWidget);
     await endTurn(tester);
+  });
+
+  // One button and one action. Two names for it would be two promises, and
+  // which one it is is the whole of what "nothing picked" changes.
+  testWidgets("the button offers to skip until something is picked",
+      (tester) async {
+    await asking(tester, request([database, migrate]));
+    expect(find.text("Skip"), findsOneWidget);
+    expect(find.text("Send"), findsNothing);
+
+    await tester.tap(find.text("Postgres"));
+    await tester.pump();
+
+    expect(find.text("Send"), findsOneWidget);
+    expect(find.text("Skip"), findsNothing);
+  });
+
+  group("moving between them", () {
+    /// The segment standing for [question], which is the way to jump straight
+    /// to one rather than stepping through what is in between.
+    Finder segmentFor(String question) => find.byTooltip(question);
+
+    Finder step(String label) => find.widgetWithText(TextButton, label);
+
+    testWidgets("a segment jumps straight to its question", (tester) async {
+      await asking(tester, request([database, migrate]));
+
+      await tester.tap(segmentFor("Migrate the old rows?"));
+      await tester.pump();
+
+      expect(find.text("Question 2 of 2"), findsOneWidget);
+      expect(app.backend.answered, isEmpty);
+    });
+
+    testWidgets("Next moves on without answering, and Back comes back",
+        (tester) async {
+      await asking(tester, request([database, migrate]));
+
+      await tester.tap(find.text("Next"));
+      await tester.pump();
+      expect(find.text("Question 2 of 2"), findsOneWidget);
+
+      await tester.tap(find.text("Back"));
+      await tester.pump();
+      expect(find.text("Question 1 of 2"), findsOneWidget);
+      expect(app.backend.answered, isEmpty);
+    });
+
+    // They stop rather than wrapping round, the way the thread arrows under a
+    // message do: one that comes back to where the reader started has done
+    // nothing they can see.
+    testWidgets("they are dead at either end", (tester) async {
+      await asking(tester, request([database, migrate]));
+      expect(enabled(tester, step("Back")), isFalse);
+      expect(enabled(tester, step("Next")), isTrue);
+
+      await tester.tap(find.text("Next"));
+      await tester.pump();
+
+      expect(enabled(tester, step("Back")), isTrue);
+      expect(enabled(tester, step("Next")), isFalse);
+    });
+
+    testWidgets("an answer given earlier can be changed before sending",
+        (tester) async {
+      await asking(tester, request([database, migrate]));
+      await tester.tap(find.text("Postgres"));
+      await tester.pump();
+      await tester.tap(find.text("No"));
+      await tester.pump();
+
+      await tester.tap(segmentFor("Which database?"));
+      await tester.pump();
+      await tester.tap(find.text("SQLite"));
+      await tester.pump();
+      await tester.tap(find.text("Send"));
+      await tester.pump();
+
+      expect(app.backend.answered.single.answers, ["sqlite", "No"]);
+      await endTurn(tester);
+    });
   });
 
   testWidgets("going back re-asks a question that was already answered",
@@ -117,6 +205,7 @@ void main() {
     await tester.pump();
 
     expect(find.text("Question 1 of 2"), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsOneWidget);
     expect(app.backend.answered, isEmpty);
   });
 

@@ -30,6 +30,13 @@ draws a different toolbar for each, so the platform is the fixture rather than
 something to guess at with `defaultTargetPlatform`, which would not change what
 `kIsWeb` answers anyway.
 
+`heldTurn` is a chat parked mid-turn with one event delivered and the widget it
+raises on screen, over a backend whose `hold` keeps the turn open the way a real
+one is while it waits to be told something. Everything drawing turn-scoped view
+state wants it — approvals and questions today — because the ten lines that get
+a chat into that position are the same ten each time, and the second copy of
+them was already drifting from the first.
+
 `seedChat` is a chat that is actually in the sidebar: creating one no longer
 puts it there, so it creates and then writes its `state.json`. `writeChatTo`
 (and `TestApp.writeChat`) is for one that has a conversation in it: there is no

@@ -389,8 +389,8 @@ class BuiltinAgent {
         argumentsText: command,
       ));
 
-      yield* _runGated(call, call.argumentsJson, "bash",
-          () => _execute(command));
+      yield* _runGated(call, call.argumentsJson, "bash", () => _execute(command),
+          argumentsText: command);
       final result = _commandResult!;
 
       yield ToolResultEvent(ToolResult(
@@ -606,7 +606,8 @@ class BuiltinAgent {
       argumentsText: url,
     ));
     yield* _runGated(call, call.argumentsJson, webfetchToolName,
-        () => webSearch!.fetch(url));
+        () => webSearch!.fetch(url),
+        argumentsText: url);
     final result = _commandResult!;
     yield ToolResultEvent(ToolResult(
       callId: call.id,
@@ -630,17 +631,21 @@ class BuiltinAgent {
   /// Run [run] gated by [approveMode]: ask the user, classify then maybe ask,
   /// or run directly. Emits the approval banner and circuit-breaker info as
   /// needed, and sets [_commandResult] to the outcome.
+  /// [argumentsText] is what the banner shows: what this call does, worded
+  /// here where it is already in hand rather than parsed back out of the JSON
+  /// by whoever draws it.
   Stream<AgentEvent> _runGated(
     LlmToolCall call,
     String arguments,
     String toolName,
-    Future<ShellResult> Function() run,
-  ) async* {
+    Future<ShellResult> Function() run, {
+    String? argumentsText,
+  }) async* {
     switch (approveMode) {
       case ApproveMode.ask:
-        yield* _askAndExecute(call, arguments, toolName, run);
+        yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
       case ApproveMode.auto:
-        yield* _autoClassifyAndExecute(call, arguments, toolName, run);
+        yield* _autoClassifyAndExecute(call, arguments, toolName, run, argumentsText);
       case ApproveMode.never:
         _commandResult = await run();
     }
@@ -653,11 +658,13 @@ class BuiltinAgent {
     String arguments,
     String toolName,
     Future<ShellResult> Function() run,
+    String? argumentsText,
   ) async* {
     final approval = ToolApproval(
       id: call.id,
       toolName: toolName,
       argumentsJson: arguments,
+      argumentsText: argumentsText,
     );
     yield ApprovalRequestEvent(approval);
     final allowed = await approve(approval) == ApprovalResponse.allow;
@@ -674,9 +681,10 @@ class BuiltinAgent {
     String arguments,
     String toolName,
     Future<ShellResult> Function() run,
+    String? argumentsText,
   ) async* {
     if (_autoPaused) {
-      yield* _askAndExecute(call, arguments, toolName, run);
+      yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
       return;
     }
 
@@ -700,7 +708,7 @@ class BuiltinAgent {
           yield InfoEvent("Auto mode paused: too many uncertain commands. "
               "Asking for every command for the rest of this turn.");
         }
-        yield* _askAndExecute(call, arguments, toolName, run);
+        yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
     }
   }
 

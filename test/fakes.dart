@@ -267,8 +267,13 @@ class FakeBackend implements AgentBackend {
     runningTurns.value = runningTurns.value.difference({chatId});
   }
 
+  final List<({String approvalId, ApprovalResponse response})> approvals = [];
+
   @override
-  Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response) async {}
+  Future<void> respondApproval(
+      String chatId, String approvalId, ApprovalResponse response) async {
+    approvals.add((approvalId: approvalId, response: response));
+  }
 
   final List<({String requestId, List<String?> answers})> answered = [];
 
