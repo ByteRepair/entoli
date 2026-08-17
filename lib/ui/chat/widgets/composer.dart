@@ -89,6 +89,10 @@ class _ComposerState extends ConsumerState<Composer> {
   CompletionToken? _token;
   int _highlighted = 0;
 
+  /// Whether Send would do anything. Kept here so only the button redraws when
+  /// the answer flips, which is about twice a message.
+  final ValueNotifier<bool> _canSend = ValueNotifier(false);
+
   @override
   void initState() {
     super.initState();
@@ -101,17 +105,23 @@ class _ComposerState extends ConsumerState<Composer> {
     if (old.controller != widget.controller) {
       old.controller.removeListener(_syncToken);
       widget.controller.addListener(_syncToken);
+      _canSend.value = _worthSending;
     }
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_syncToken);
+    _canSend.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
   void _syncToken() {
+    // Rides the listener the field already has. Its own notifier rather than a
+    // `setState`, because the composer's build resolves the completion menu and
+    // its matches, and that has no business re-running because Send went live.
+    _canSend.value = _worthSending;
     final next = activeCompletionToken(widget.controller.value);
     if (next == _token) return;
     setState(() {
@@ -177,14 +187,21 @@ class _ComposerState extends ConsumerState<Composer> {
     final picked = await ref.read(attachmentPickerProvider).pick(kind);
     if (picked.isEmpty || !mounted) return;
     setState(() => _attachments.addAll(picked));
+    _canSend.value = _worthSending;
   }
 
+  /// A file on its own is worth sending, and whitespace on its own is not.
+  bool get _worthSending =>
+      widget.controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
+
   void _submit() {
-    final text = widget.controller.text.trim();
-    if (text.isEmpty && _attachments.isEmpty) return;
-    widget.onSend(text, List.of(_attachments));
+    // The button is dead when this is false, but Ctrl/Cmd+Enter reaches here
+    // without passing it.
+    if (!_worthSending) return;
+    widget.onSend(widget.controller.text.trim(), List.of(_attachments));
     widget.controller.clear();
     setState(_attachments.clear);
+    _canSend.value = _worthSending;
   }
 
   @override
@@ -299,10 +316,13 @@ class _ComposerState extends ConsumerState<Composer> {
                         icon: const Icon(Icons.stop),
                         tooltip: "Stop",
                       )
-                    : IconButton.filled(
-                        onPressed: _submit,
-                        icon: const Icon(Icons.send),
-                        tooltip: "Send",
+                    : ValueListenableBuilder<bool>(
+                        valueListenable: _canSend,
+                        builder: (context, canSend, _) => IconButton.filled(
+                          onPressed: canSend ? _submit : null,
+                          icon: const Icon(Icons.send),
+                          tooltip: "Send",
+                        ),
                       ),
               ],
             ),

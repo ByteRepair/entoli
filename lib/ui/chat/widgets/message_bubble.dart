@@ -126,11 +126,14 @@ class _MessageBubbleState extends State<MessageBubble> {
     final theme = Theme.of(context);
     final isUser = widget.message.role == MessageRole.user;
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    // The reply has no tint behind it: it is the page rather than something
-    // said to one side of it, which is what a null background draws.
+    // The reply has no tint behind it and no name over it: it is the page
+    // rather than something said to one side of it, and nothing else in the
+    // conversation is drawn full width and unbubbled — so both were the layout
+    // said a second time. The other three keep a name, which is what makes the
+    // prompt something said and a tool run something reported.
     final (name, bg) = switch (widget.message.role) {
       MessageRole.user => ("You", theme.colorScheme.primaryContainer),
-      MessageRole.assistant => ("Assistant", null),
+      MessageRole.assistant => (null, null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
@@ -159,14 +162,15 @@ class _MessageBubbleState extends State<MessageBubble> {
               child: Column(
                 crossAxisAlignment: align,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 2),
-                    child: Text(
-                      name,
-                      style: theme.textTheme.labelSmall
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  if (name != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 2),
+                      child: Text(
+                        name,
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
                     ),
-                  ),
                   // One region for the whole reply, so a drag runs from the
                   // first paragraph to the last rather than stopping at the
                   // bubble — or the tool label — it started in.
@@ -255,8 +259,31 @@ class _MessageBubbleState extends State<MessageBubble> {
   List<Widget> _rows(BuildContext context, Color? bg) {
     final theme = Theme.of(context);
     final rows = <Widget>[];
-    final spoken = <({String text, bool isError})>[];
+    final spoken = <Widget>[];
     var files = widget.message.files.toList();
+
+    final parts = widget.message.parts;
+    // The part a running turn is working on. A turn is always working on its
+    // last one, so this is what "live" means for anything drawn from the loop
+    // below — the thinking block that has not closed, and the text still being
+    // written.
+    final liveAt = widget.isWaiting && parts.isNotEmpty ? parts.length - 1 : null;
+    // A running turn shows one of two things and never both: a caret at the end
+    // of the text being written, or a spinner when there is no such text to put
+    // one on. `hasText` was not that decision on its own — it ignores
+    // whitespace, so a first flush of it drew a spinner beside a caret.
+    final carets = liveAt != null && parts[liveAt] is TextPart;
+
+    Widget said(String text, {bool isError = false, bool caret = false}) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: _MessageText(
+            text: text,
+            isError: isError,
+            isWaiting: widget.isWaiting,
+            caret: caret,
+            onTapLink: widget.onTapLink,
+          ),
+        );
 
     final results = widget.message.toolResults;
     final calls = {
@@ -265,7 +292,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     // Trailing state, not parts: they belong under the last thing said.
     final extras = <Widget>[
-      if (widget.isWaiting && !widget.message.hasText)
+      if (widget.isWaiting && !carets && !widget.message.hasText)
         _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: widget.waitingNotice),
       // A failed turn is a dead end without this; the same action is under the
       // message, but it should not have to be uncovered.
@@ -291,15 +318,14 @@ class _MessageBubbleState extends State<MessageBubble> {
       spoken.clear();
     }
 
-    for (var i = 0; i < widget.message.parts.length; i++) {
-      final part = widget.message.parts[i];
+    for (var i = 0; i < parts.length; i++) {
+      final part = parts[i];
       switch (part) {
         case ReasoningPart():
           closeBubble();
           rows.add(_label(ThinkingLabel(
             part: part,
-            isLive:
-                widget.isWaiting && part.durationMs == null && i == widget.message.parts.length - 1,
+            isLive: i == liveAt && part.durationMs == null,
           )));
         case ToolCallPart(:final toolCall):
           closeBubble();
@@ -318,9 +344,12 @@ class _MessageBubbleState extends State<MessageBubble> {
         case FilePart():
           continue;
         case TextPart(:final text):
-          spoken.add((text: text, isError: false));
+          // Text with a tool call under it stopped arriving before the call
+          // started, so a caret there would point at nothing while the label
+          // below it is what is busy.
+          spoken.add(said(text, caret: i == liveAt));
         case ErrorPart(:final message):
-          spoken.add((text: "Error: $message", isError: true));
+          spoken.add(said("Error: $message", isError: true));
       }
     }
     closeBubble(trailing: extras);
@@ -336,7 +365,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   Widget _bubble(
     BuildContext context,
     Color? bg, {
-    required List<({String text, bool isError})> said,
+    required List<Widget> said,
     required List<FilePart> files,
     required List<Widget> trailing,
   }) {
@@ -349,16 +378,7 @@ class _MessageBubbleState extends State<MessageBubble> {
               for (final f in files) AttachmentChip.sent(f, chatId: widget.chatId),
             ],
           ),
-        for (final line in said)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: _MessageText(
-              text: line.text,
-              isError: line.isError,
-              isWaiting: widget.isWaiting,
-              onTapLink: widget.onTapLink,
-            ),
-          ),
+        ...said,
         ...trailing,
       ],
     );
@@ -382,12 +402,17 @@ class _MessageText extends StatefulWidget {
     required this.text,
     required this.isError,
     required this.isWaiting,
+    required this.caret,
     this.onTapLink,
   });
 
   final String text;
   final bool isError;
   final bool isWaiting;
+
+  /// This is the text being written right now, so it ends in a caret.
+  final bool caret;
+
   final ValueChanged<String>? onTapLink;
 
   @override
@@ -443,11 +468,30 @@ class _MessageTextState extends State<_MessageText> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (!_rendered) {
-      return Text(
-        widget.text,
-        style: widget.isError
-            ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
-            : theme.textTheme.bodyMedium,
+      final style = widget.isError
+          ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
+          : theme.textTheme.bodyMedium;
+      // Rich only where there is a caret to put in it. Folding both into one
+      // `Text.rich` reads tidier and costs the plain string: `Text.data` is
+      // null for a span, so an error would stop being something `find.text`
+      // and `.data` can reach, for no gain to anything on screen.
+      if (!widget.caret) return Text(widget.text, style: style);
+      return Text.rich(
+        TextSpan(
+          text: widget.text,
+          children: [
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: StreamingCaret(
+                color: theme.colorScheme.primary,
+                // A bare rectangle inside the span rather than text in it, so
+                // nothing else gives it a height.
+                height: style?.fontSize ?? 14,
+              ),
+            ),
+          ],
+        ),
+        style: style,
       );
     }
     return SelectionContainer(
@@ -481,6 +525,58 @@ class _MarkdownSource extends StaticSelectionContainerDelegate {
   @override
   SelectedContent? getSelectedContent() =>
       value.hasSelection ? SelectedContent(plainText: source) : null;
+}
+
+/// Sits at the end of the text while it is still arriving. [_Spinner] answers
+/// for a reply that has said nothing yet; once there are words, the thing worth
+/// pointing at is where the next one goes.
+///
+/// It fades rather than blinking on and off: a hard blink beside prose that is
+/// itself growing reads as two things moving, and this has to be noticed
+/// without being watched.
+class StreamingCaret extends StatefulWidget {
+  const StreamingCaret({super.key, required this.color, required this.height});
+
+  final Color color;
+  final double height;
+
+  @override
+  State<StreamingCaret> createState() => _StreamingCaretState();
+}
+
+class _StreamingCaretState extends State<StreamingCaret>
+    with SingleTickerProviderStateMixin {
+  late final _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  /// Built once beside the controller rather than in `build`: a streaming reply
+  /// rebuilds on every coalesced delta, and a fresh `Animation` each time makes
+  /// the render object drop and re-add its listener for no change.
+  ///
+  /// It fades to 0.2 rather than to nothing, which also keeps the opacity layer
+  /// a repaint boundary throughout — at zero it stops being one twice a cycle
+  /// and takes the paragraph above it into the repaint.
+  late final _opacity = _pulse.drive(Tween(begin: 1.0, end: 0.2));
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: _opacity,
+        child: Container(
+          // Beside the last word rather than against it.
+          margin: const EdgeInsets.only(left: 2),
+          width: 2,
+          height: widget.height,
+          color: widget.color,
+        ),
+      );
 }
 
 /// Stands in for the reply until the first text arrives.

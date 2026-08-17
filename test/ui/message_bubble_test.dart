@@ -95,7 +95,59 @@ void main() {
     );
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text("Hel"), findsOneWidget);
+    // Not `find.text`: a reply still being written ends in a caret, so it is a
+    // span, and the caret's placeholder is part of what that span reads as.
+    expect(find.textContaining("Hel", findRichText: true), findsOneWidget);
+  });
+
+  group("the streaming caret", () {
+    testWidgets("sits at the end of a reply still being written", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "Hel")]),
+        isWaiting: true,
+      );
+
+      expect(find.byType(StreamingCaret), findsOneWidget);
+    });
+
+    testWidgets("goes when the turn is over", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "done")]),
+      );
+
+      expect(find.byType(StreamingCaret), findsNothing);
+    });
+
+    // Text with a tool call under it finished arriving before the call
+    // started, so a caret there would point at nothing.
+    testWidgets("is not left on text a tool call has since followed",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(text: "running it now"),
+          const ToolCallPart(toolCall: ToolCall(id: "1", name: "bash")),
+        ]),
+        isWaiting: true,
+      );
+
+      expect(find.byType(StreamingCaret), findsNothing);
+    });
+
+    // `hasText` ignores whitespace, so asking it and the caret separately drew
+    // both for a turn whose first flush was a blank line.
+    testWidgets("stands in for the spinner rather than beside it", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "  ")]),
+        isWaiting: true,
+      );
+
+      expect(find.byType(StreamingCaret), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
   });
 
   testWidgets("a tool call with no text yet still spins", (tester) async {
@@ -130,7 +182,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets("an errored reply shows the error, not a spinner", (tester) async {
+  testWidgets("an errored reply shows the error", (tester) async {
     await pump(
       tester,
       _message(MessageRole.assistant, [const ErrorPart(message: "usage limit reached")]),
@@ -138,6 +190,9 @@ void main() {
     );
 
     expect(find.textContaining("usage limit reached"), findsOneWidget);
+    // It does still spin, since the turn is retrying and nothing has been said.
+    // But an error is not text being written, so no caret sits on it.
+    expect(find.byType(StreamingCaret), findsNothing);
   });
 
   testWidgets("a failed reply offers Retry without hunting for the menu", (tester) async {
@@ -538,15 +593,6 @@ void main() {
   });
 
   group("threads", () {
-    /// Whether an action is offered rather than greyed out. The tooltip is a
-    /// descendant of the button it belongs to.
-    bool enabled(WidgetTester tester, String tooltip) =>
-        tester
-            .widget<IconButton>(find.ancestor(
-                of: find.byTooltip(tooltip), matching: find.byType(IconButton)))
-            .onPressed !=
-        null;
-
     /// This message as one of [count] threads, at [index]. [stepping] false is
     /// a turn running, where the row is still uncovered but moving is refused.
     Future<void> pumpThread(
@@ -581,8 +627,8 @@ void main() {
       await pumpThread(tester, index: 1, count: 3);
 
       expect(find.text("2/3"), findsOneWidget);
-      expect(enabled(tester, "Previous thread"), isTrue);
-      expect(enabled(tester, "Next thread"), isTrue);
+      expect(enabled(tester, buttonTipped("Previous thread")), isTrue);
+      expect(enabled(tester, buttonTipped("Next thread")), isTrue);
     });
 
     // The arrows do not wrap, so each end is a dead one rather than a way back
@@ -591,15 +637,15 @@ void main() {
       await pumpThread(tester, index: 0, count: 2);
 
       expect(find.text("1/2"), findsOneWidget);
-      expect(enabled(tester, "Previous thread"), isFalse);
-      expect(enabled(tester, "Next thread"), isTrue);
+      expect(enabled(tester, buttonTipped("Previous thread")), isFalse);
+      expect(enabled(tester, buttonTipped("Next thread")), isTrue);
     });
 
     testWidgets("the last thread has no way on", (tester) async {
       await pumpThread(tester, index: 1, count: 2);
 
-      expect(enabled(tester, "Previous thread"), isTrue);
-      expect(enabled(tester, "Next thread"), isFalse);
+      expect(enabled(tester, buttonTipped("Previous thread")), isTrue);
+      expect(enabled(tester, buttonTipped("Next thread")), isFalse);
     });
 
     testWidgets("an arrow says which way it went", (tester) async {
@@ -661,8 +707,8 @@ void main() {
       await pumpThread(tester, index: 1, count: 3, stepping: false);
 
       expect(find.text("2/3"), findsOneWidget);
-      expect(enabled(tester, "Previous thread"), isFalse);
-      expect(enabled(tester, "Next thread"), isFalse);
+      expect(enabled(tester, buttonTipped("Previous thread")), isFalse);
+      expect(enabled(tester, buttonTipped("Next thread")), isFalse);
     });
   });
 
@@ -710,7 +756,8 @@ void main() {
     );
 
     expect(find.byType(MarkdownBody), findsNothing);
-    expect(find.text("here is **bold** code"), findsOneWidget);
+    expect(find.textContaining("here is **bold** code", findRichText: true),
+        findsOneWidget);
   });
 
   group("the message as text", () {
@@ -820,6 +867,16 @@ void main() {
 
     await pump(tester, _message(MessageRole.user, [const TextPart(text: "hello")]));
     expect(tint(), findsOneWidget);
+  });
+
+  // The reply is the page, and nothing else is drawn full width and unbubbled,
+  // so a byline over it only said what the layout already had.
+  testWidgets("only the prompt is named above it", (tester) async {
+    await pump(tester, _message(MessageRole.assistant, [const TextPart(text: "hello")]));
+    expect(find.text("Assistant"), findsNothing);
+
+    await pump(tester, _message(MessageRole.user, [const TextPart(text: "hello")]));
+    expect(find.text("You"), findsOneWidget);
   });
 
   testWidgets("tapping a rendered link fires onTapLink with the href", (tester) async {
