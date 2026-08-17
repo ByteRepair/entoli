@@ -7,6 +7,8 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
+import "../../domain/chat_store.dart";
+import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
@@ -35,6 +37,7 @@ class BuiltinBackend implements AgentBackend {
     required this.registry,
     required this.shell,
     required this.webSearch,
+    required this.store,
     this.library,
     this.options = const BuiltinOptions(),
   });
@@ -42,6 +45,10 @@ class BuiltinBackend implements AgentBackend {
   final AppConfig config;
   final LlmRegistry registry;
   final Shell shell;
+
+  /// The chat store, which the agent writes artifacts to. Held here rather
+  /// than passed per-turn: the store resolves which project a chat is in.
+  final ChatStore store;
 
   /// Entoli's own commands and agents, expanded into the task and the
   /// system prompt before the agent sees them.
@@ -175,6 +182,7 @@ class BuiltinBackend implements AgentBackend {
       final subAgentRunner = SubAgentRunner(
         client: gatedClient,
         shell: shell,
+        fs: config.fs,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
         model: target.modelId,
@@ -205,6 +213,7 @@ class BuiltinBackend implements AgentBackend {
         session: session,
         client: gatedClient,
         shell: shell,
+        fs: config.fs,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
         model: target.modelId,
@@ -217,6 +226,14 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         profile: settings.profile,
         rateLimitGate: rateLimitGate,
+        saveArtifact: (path, {artifactId}) async {
+          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+          if (artifactId != null) {
+            await store.updateArtifact(chatId, artifactId, resolved, project: project);
+            return artifactId;
+          }
+          return store.createArtifact(chatId, resolved, project: project);
+        },
       );
       _running.add(chatId, agent);
 

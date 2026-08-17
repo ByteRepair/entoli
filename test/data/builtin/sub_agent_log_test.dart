@@ -2,6 +2,8 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
+import "package:fs_shim/fs_io.dart" show fileSystemIo;
+
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/data/builtin/sub_agent.dart";
@@ -42,6 +44,7 @@ void main() {
       SubAgentRunner(
         client: client,
         shell: FakeShell(respond ?? (_) => ok(""), canRunCommands: true),
+        fs: fileSystemIo,
         workspace: config.workspaceDir(chatId),
         projectWorkspace: config.projectWorkspaceDir(),
         model: "fake-model",

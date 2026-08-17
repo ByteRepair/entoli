@@ -344,6 +344,14 @@ class _MessageBubbleState extends State<MessageBubble> {
           rows.add(_label(ToolLabel(result: result)));
         case FilePart():
           continue;
+        case ArtifactPart(:final artifactId, :final entryFile, :final title):
+          closeBubble();
+          rows.add(ArtifactLabel(
+            chatId: widget.chatId,
+            artifactId: artifactId,
+            entryFile: entryFile,
+            title: title,
+          ));
         case TextPart(:final text):
           // Text with a tool call under it stopped arriving before the call
           // started, so a caret there would point at nothing while the label

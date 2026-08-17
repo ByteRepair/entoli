@@ -1,8 +1,13 @@
+import "dart:io";
+
 import "package:flutter_test/flutter_test.dart";
+import "package:fs_shim/fs_io.dart" show fileSystemIo;
+import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -17,7 +22,8 @@ void main() {
   setUp(() => session = BuiltinSession());
 
   /// The agent under test. [approvals] answers each request in order; without
-  /// one, commands run unasked.
+  /// one, commands run unasked. [saveArtifact] makes the `artifact` tool
+  /// available and records what was saved.
   BuiltinAgent agentOver(
     FakeLlmClient client, {
     ShellResult Function(String)? respond,
@@ -26,21 +32,30 @@ void main() {
     BuiltinOptions options = const BuiltinOptions(),
     ApproveMode approveMode = ApproveMode.never,
     bool canRunCommands = true,
+    Future<String> Function(String path, {String? artifactId})? saveArtifact,
   }) {
+    final tempDir = Directory.systemTemp.createTempSync("agent-test");
+    final testWorkspace = p.join(tempDir.path, "workspace");
+    final testProjectWorkspace = p.join(tempDir.path, "project-workspace");
+    Directory(testWorkspace).createSync(recursive: true);
+    Directory(testProjectWorkspace).createSync(recursive: true);
+    addTearDown(() => tempDir.deleteSync(recursive: true));
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
     final allowed = [...approvals];
     return BuiltinAgent(
       session: session,
       client: client,
       shell: shell,
-      workspace: "/tmp/workspace",
-      projectWorkspace: "/tmp/project-workspace",
+      fs: fileSystemIo,
+      workspace: testWorkspace,
+      projectWorkspace: testProjectWorkspace,
       model: "fake-model",
       options: options,
       approveMode: approveMode,
       approve: (_) async => allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
       // Nothing picked, unless the test says what was.
       answer: (request) async => answers ?? request.unanswered,
+      saveArtifact: saveArtifact,
     );
   }
 
@@ -79,10 +94,11 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client).run("fix the bug").toList();
+      final agent = agentOver(client);
+      await agent.run("fix the bug").toList();
 
       expect(client.sent.first.first.role, LlmRole.system);
-      expect(client.sent.first.first.text, contains("/tmp/workspace"));
+      expect(client.sent.first.first.text, contains(agent.workspace));
       expect(client.sent.first.first.text, contains("TestOS 1.0 test"));
       expect(client.sent.first[1].text, contains("fix the bug"));
     });
@@ -97,7 +113,7 @@ void main() {
       await agent.run("second").toList();
 
       expect(client.sent.last.where((m) => m.role == LlmRole.system), hasLength(1));
-      expect(client.sent.last.first.text, contains("/tmp/workspace"));
+      expect(client.sent.last.first.text, contains(agent.workspace));
       expect(client.sent.last.last.text, "second");
       expect(client.sent.last.map((m) => m.text).join(), contains("first"));
     });
@@ -422,7 +438,11 @@ void main() {
       ]);
       await agentOver(client, canRunCommands: false).run("hi").toList();
 
-      expect(client.calls.single.tools.map((t) => t.name), [askToolName]);
+      // File tools are always offered; bash is dropped without a shell, and
+      // ask_user is still there.
+      final tools = client.calls.single.tools.map((t) => t.name).toSet();
+      expect(tools, containsAll([askToolName, "read", "write", "edit"]));
+      expect(tools, isNot(contains("bash")));
       expect(client.sent.first.first.text, contains(askToolName));
     });
   });
@@ -631,6 +651,205 @@ void main() {
       await agentOver(client).resume().toList();
 
       expect(client.sent.single.last.text, "what is 2+2?");
+    });
+  });
+
+  group("artifacts", () {
+    /// A [saveArtifact] that records what it was given and returns a fake id.
+    Future<String> Function(String, {String? artifactId}) saveAndRecord(
+      List<({String path, String? artifactId})> saved,
+    ) =>
+        (path, {artifactId}) async {
+          saved.add((path: path, artifactId: artifactId));
+          return "art-${saved.length}";
+        };
+
+    test("publishes a workspace path and yields an ArtifactEvent", () async {
+      final saved = <({String path, String? artifactId})>[];
+      final client = FakeLlmClient([
+        [artifactCall("report/index.html", title: "Demo")],
+        [finish],
+      ]);
+      final events = await agentOver(client, saveArtifact: saveAndRecord(saved))
+          .run("show me a demo")
+          .toList();
+
+      expect(saved, hasLength(1));
+      expect(saved.first.path, "report/index.html");
+
+      final artifactEvent = events.whereType<ArtifactEvent>().single;
+      expect(artifactEvent.title, "Demo");
+      expect(artifactEvent.entryFile, "index.html");
+      expect(artifactEvent.artifactId, "art-1");
+
+      // The call/result pair reaches the UI.
+      expect(events.whereType<ToolCallEvent>(), hasLength(1));
+      expect(events.whereType<ToolResultEvent>(), hasLength(1));
+      expect(events.whereType<ToolResultEvent>().single.result.returnCode, 0);
+
+      // The session was answered, so the next turn is not rejected.
+      final toolMsg = session.messages.lastWhere((m) => m.toolCallId == "art-1");
+      expect(toolMsg.role, LlmRole.tool);
+    });
+
+    test("updates in place when artifact_id is passed", () async {
+      final saved = <({String path, String? artifactId})>[];
+      final client = FakeLlmClient([
+        [artifactCall("report/index.html", artifactId: "existing-id")],
+        [finish],
+      ]);
+      await agentOver(client, saveArtifact: saveAndRecord(saved))
+          .run("update it")
+          .toList();
+
+      expect(saved.first.artifactId, "existing-id");
+      expect(saved.first.artifactId, isNotNull);
+    });
+
+    test("rejects a call with no path argument", () async {
+      final saved = <({String path, String? artifactId})>[];
+      final client = FakeLlmClient([
+        [LlmCompletion(
+          message: LlmMessage(
+            role: LlmRole.assistant,
+            toolCalls: [
+              LlmToolCall(id: "bad", name: artifactToolName, argumentsJson: "{}"),
+            ],
+          ),
+        )],
+        [finish],
+      ]);
+      final events = await agentOver(client, saveArtifact: saveAndRecord(saved))
+          .run("show me")
+          .toList();
+
+      expect(saved, isEmpty);
+      expect(events.whereType<ToolResultEvent>().single.result.returnCode, -1);
+      expect(events.whereType<ArtifactEvent>(), isEmpty);
+    });
+
+    test("the tool is dropped when saveArtifact is null", () async {
+      final client = FakeLlmClient([
+        [artifactCall("report/index.html")],
+        [finish],
+      ]);
+      await agentOver(client).run("show me").toList();
+
+      // The tool was not offered.
+      final tools = client.calls.first.tools.map((t) => t.name).toList();
+      expect(tools, isNot(contains(artifactToolName)));
+    });
+  });
+
+  group("file tools", () {
+    test("write creates a file and read reads it back", () async {
+      final client = FakeLlmClient([
+        [writeCall("hello.txt", "hello world")],
+        [readCall("hello.txt")],
+        [finish],
+      ]);
+      final events = await agentOver(client).run("write and read").toList();
+
+      // Both calls succeeded.
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results, hasLength(2));
+      expect(results[0].result.returnCode, 0);
+      expect(results[0].result.output, contains("Wrote"));
+      expect(results[1].result.returnCode, 0);
+      expect(results[1].result.output, contains("hello world"));
+    });
+
+    test("edit replaces a unique string", () async {
+      final client = FakeLlmClient([
+        [writeCall("test.txt", "foo bar baz")],
+        [editCall("test.txt", "bar", "qux")],
+        [readCall("test.txt")],
+        [finish],
+      ]);
+      final events = await agentOver(client).run("write, edit, read").toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results[1].result.returnCode, 0);
+      expect(results[1].result.output, contains("replaced 1"));
+      expect(results[2].result.output, contains("foo qux baz"));
+    });
+
+    test("edit rejects a non-unique string without replace_all", () async {
+      final client = FakeLlmClient([
+        [writeCall("test.txt", "a a a")],
+        [editCall("test.txt", "a", "b")],
+        [finish],
+      ]);
+      final events = await agentOver(client).run("write and edit").toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results[1].result.returnCode, -1);
+      expect(results[1].result.exceptionInfo, contains("3 times"));
+    });
+
+    test("edit with replace_all replaces all occurrences", () async {
+      final client = FakeLlmClient([
+        [writeCall("test.txt", "a a a")],
+        [editCall("test.txt", "a", "b", replaceAll: true)],
+        [readCall("test.txt")],
+        [finish],
+      ]);
+      final events = await agentOver(client).run("write, edit, read").toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results[1].result.returnCode, 0);
+      expect(results[1].result.output, contains("replaced 3"));
+      expect(results[2].result.output, contains("b b b"));
+    });
+
+    test("read with offset and limit reads a slice", () async {
+      final client = FakeLlmClient([
+        [writeCall("lines.txt", "line1\nline2\nline3\nline4\nline5")],
+        [readCall("lines.txt", offset: 2, limit: 2)],
+        [finish],
+      ]);
+      final events = await agentOver(client).run("write and read").toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results[1].result.output, contains("2: line2"));
+      expect(results[1].result.output, contains("3: line3"));
+      expect(results[1].result.output, isNot(contains("line1")));
+      expect(results[1].result.output, isNot(contains("line4")));
+    });
+
+    test("project: prefix writes to the project workspace", () async {
+      final client = FakeLlmClient([
+        [writeCall("project:shared.txt", "from project")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      await agent.run("write to project").toList();
+
+      expect(File(p.join(agent.projectWorkspace, "shared.txt")).readAsStringSync(), "from project");
+      expect(File(p.join(agent.workspace, "shared.txt")).existsSync(), isFalse);
+    });
+
+    test("read on a missing file returns an error", () async {
+      final client = FakeLlmClient([
+        [readCall("nope.txt")],
+        [finish],
+      ]);
+      final events = await agentOver(client).run("read missing").toList();
+
+      expect(events.whereType<ToolResultEvent>().single.result.returnCode, -1);
+      expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo, contains("not found"));
+    });
+
+    test("file tools are always offered, even without a shell", () async {
+      final client = FakeLlmClient([
+        [writeCall("test.txt", "hi")],
+        [finish],
+      ]);
+      await agentOver(client, canRunCommands: false).run("write").toList();
+
+      final tools = client.calls.first.tools.map((t) => t.name).toSet();
+      expect(tools, containsAll(["read", "write", "edit"]));
+      expect(tools, isNot(contains("bash")));
     });
   });
 }

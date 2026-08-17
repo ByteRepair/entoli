@@ -102,6 +102,8 @@ class TurnRecorder {
         addPart(MessagePart.toolCall(toolCall: call));
       case ToolResultEvent(:final result):
         addPart(MessagePart.toolResult(result: result));
+      case ArtifactEvent(:final artifactId, :final entryFile, :final title):
+        addPart(MessagePart.artifact(artifactId: artifactId, entryFile: entryFile, title: title));
       case ErrorEvent(:final message):
         _appendError(message);
       // Turn-scoped view state, or the turn's own end. Listed rather than

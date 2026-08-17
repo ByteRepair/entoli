@@ -327,6 +327,7 @@ class ChatController extends Notifier<ChatViewState> {
       case ReasoningEnd():
       case ToolCallEvent():
       case ToolResultEvent():
+      case ArtifactEvent():
       case ErrorEvent():
       case InfoEvent():
         break;

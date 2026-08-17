@@ -34,7 +34,7 @@ import "fakes.dart";
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
   TestApp._(this.config, this.backend, this.picker, this.launcher, this.handoff,
-      this.store, this.container);
+      this.store, this.linkOpener, this.container);
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
@@ -55,6 +55,7 @@ class TestApp {
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
     final chats = store ?? FileChatStore(config);
+    final linkOpener = FakeLinkOpener();
     return TestApp._(
       config,
       backend,
@@ -62,6 +63,7 @@ class TestApp {
       launcher,
       files,
       chats,
+      linkOpener,
       ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
@@ -71,6 +73,7 @@ class TestApp {
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           launcherIconsProvider.overrideWithValue(launcher),
           fileHandoffProvider.overrideWithValue(files),
+          linkOpenerProvider.overrideWithValue(linkOpener),
         ],
       ),
     );
@@ -82,6 +85,7 @@ class TestApp {
   final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
   final ChatStore store;
+  final FakeLinkOpener linkOpener;
   final ProviderContainer container;
 
   ChatRepository get repo => container.read(chatRepositoryProvider);

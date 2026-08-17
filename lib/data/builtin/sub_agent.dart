@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:fs_shim/fs.dart";
+
 import "../../domain/agent_backend.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/models.dart";
@@ -24,6 +26,7 @@ class SubAgentRunner {
   SubAgentRunner({
     required this.client,
     required this.shell,
+    required this.fs,
     required this.workspace,
     required this.projectWorkspace,
     required this.model,
@@ -38,6 +41,7 @@ class SubAgentRunner {
 
   final LlmClient client;
   final Shell shell;
+  final FileSystem fs;
   final String workspace;
   final String projectWorkspace;
   final String model;
@@ -101,6 +105,7 @@ class SubAgentRunner {
       session: session,
       client: client,
       shell: shell,
+      fs: fs,
       workspace: workspace,
       projectWorkspace: projectWorkspace,
       model: model,
