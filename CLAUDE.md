@@ -914,13 +914,19 @@ is the page.
 
 While a reply is still being written it ends in a `StreamingCaret`, which is
 the other half of what the spinner does — the spinner answers for a turn that
-has said nothing yet, the caret for one that has, and never both at once. It
-goes on the last text part **only when that part is the last part of the
-message**: text with a tool call under it stopped arriving before the call
-started, so a caret left there points at nothing while the label below is what
-is actually busy. It is a `WidgetSpan` so that it sits after the last word
-rather than under the paragraph, and that costs the exact `find.text` in a
-test, since a placeholder is part of what the span reads as.
+has said nothing yet, the caret for one that has. It goes on the last text part
+**only when that part is the last part of the message**: text with a tool call
+under it stopped arriving before the call started, so a caret left there points
+at nothing while the label below is what is actually busy. It is a `WidgetSpan`
+so that it sits after the last word rather than under the paragraph.
+
+**Never both**, and that is one decision in `_rows` rather than two that happen
+to agree. Asked separately they did not: the spinner's question was
+`Message.hasText`, which trims, so a turn whose first flush was a blank line had
+said nothing by that test while its last part was already a `TextPart` — a
+spinner and a caret at once. `liveAt` is the same consolidation a level down,
+since "the part this turn is working on" was being spelled out for the caret and
+again, with a clause on the end, for `ThinkingLabel.isLive`.
 
 `durationMs` is what the label reads ("Thought for 12 seconds") and is null
 while the block is still being written — which is also how the UI knows to say
@@ -1631,12 +1637,19 @@ a command or an agent it types the trigger character rather than opening its own
 list, so both routes share one code path; for a file it opens the chooser.
 
 Send is dead while there is nothing to send, which `_worthSending` decides —
-whitespace is nothing, a file on its own is something. `_submit` asks the same
-question rather than trusting the button, since Enter reaches it directly. The
-button is under a `ValueListenableBuilder` on the field rather than a
-`setState` per keystroke: the composer's own build resolves the completion menu
-and its matches, and that has no business re-running because a letter was
-typed.
+whitespace is nothing, a file on its own is something. `_submit` asks it again
+rather than trusting the button, because Ctrl/Cmd+Enter reaches `_submit`
+without passing the button at all.
+
+Which way the button is driven is worth the two lines it takes to say. A
+`setState` would rebuild the composer, and the composer's build resolves the
+completion menu and its matches — no business re-running because a letter was
+typed. Watching the `TextEditingController` directly fixes that but fires on
+every `TextEditingValue`, so a bare caret move rebuilt the button and the
+thirty-odd widgets Material puts under it for an answer that cannot have
+changed. So it is a `ValueNotifier<bool>`, set from the listener the field
+already has for the completion token, and the button redraws when the answer
+flips rather than when the field is touched.
 
 It never asks for the field's focus, and that is the whole rule. On Android focus
 is the keyboard, so a composer that reaches for it is a keyboard rising over a

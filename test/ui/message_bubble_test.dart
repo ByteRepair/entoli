@@ -136,27 +136,17 @@ void main() {
       expect(find.byType(StreamingCaret), findsNothing);
     });
 
-    // The spinner answers for a reply that has said nothing; the caret answers
-    // once there are words. Never both, or a turn reports itself twice.
+    // `hasText` ignores whitespace, so asking it and the caret separately drew
+    // both for a turn whose first flush was a blank line.
     testWidgets("stands in for the spinner rather than beside it", (tester) async {
       await pump(
         tester,
-        _message(MessageRole.assistant, [const TextPart(text: "Hel")]),
+        _message(MessageRole.assistant, [const TextPart(text: "  ")]),
         isWaiting: true,
       );
 
       expect(find.byType(StreamingCaret), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
-    });
-
-    testWidgets("an error is not something still being written", (tester) async {
-      await pump(
-        tester,
-        _message(MessageRole.assistant, [const ErrorPart(message: "gave up")]),
-        isWaiting: true,
-      );
-
-      expect(find.byType(StreamingCaret), findsNothing);
     });
   });
 
@@ -192,7 +182,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets("an errored reply shows the error, not a spinner", (tester) async {
+  testWidgets("an errored reply shows the error", (tester) async {
     await pump(
       tester,
       _message(MessageRole.assistant, [const ErrorPart(message: "usage limit reached")]),
@@ -200,6 +190,9 @@ void main() {
     );
 
     expect(find.textContaining("usage limit reached"), findsOneWidget);
+    // It does still spin, since the turn is retrying and nothing has been said.
+    // But an error is not text being written, so no caret sits on it.
+    expect(find.byType(StreamingCaret), findsNothing);
   });
 
   testWidgets("a failed reply offers Retry without hunting for the menu", (tester) async {
@@ -600,15 +593,6 @@ void main() {
   });
 
   group("threads", () {
-    /// Whether an action is offered rather than greyed out. The tooltip is a
-    /// descendant of the button it belongs to.
-    bool enabled(WidgetTester tester, String tooltip) =>
-        tester
-            .widget<IconButton>(find.ancestor(
-                of: find.byTooltip(tooltip), matching: find.byType(IconButton)))
-            .onPressed !=
-        null;
-
     /// This message as one of [count] threads, at [index]. [stepping] false is
     /// a turn running, where the row is still uncovered but moving is refused.
     Future<void> pumpThread(
@@ -643,8 +627,8 @@ void main() {
       await pumpThread(tester, index: 1, count: 3);
 
       expect(find.text("2/3"), findsOneWidget);
-      expect(enabled(tester, "Previous thread"), isTrue);
-      expect(enabled(tester, "Next thread"), isTrue);
+      expect(enabled(tester, buttonTipped("Previous thread")), isTrue);
+      expect(enabled(tester, buttonTipped("Next thread")), isTrue);
     });
 
     // The arrows do not wrap, so each end is a dead one rather than a way back
@@ -653,15 +637,15 @@ void main() {
       await pumpThread(tester, index: 0, count: 2);
 
       expect(find.text("1/2"), findsOneWidget);
-      expect(enabled(tester, "Previous thread"), isFalse);
-      expect(enabled(tester, "Next thread"), isTrue);
+      expect(enabled(tester, buttonTipped("Previous thread")), isFalse);
+      expect(enabled(tester, buttonTipped("Next thread")), isTrue);
     });
 
     testWidgets("the last thread has no way on", (tester) async {
       await pumpThread(tester, index: 1, count: 2);
 
-      expect(enabled(tester, "Previous thread"), isTrue);
-      expect(enabled(tester, "Next thread"), isFalse);
+      expect(enabled(tester, buttonTipped("Previous thread")), isTrue);
+      expect(enabled(tester, buttonTipped("Next thread")), isFalse);
     });
 
     testWidgets("an arrow says which way it went", (tester) async {
@@ -723,8 +707,8 @@ void main() {
       await pumpThread(tester, index: 1, count: 3, stepping: false);
 
       expect(find.text("2/3"), findsOneWidget);
-      expect(enabled(tester, "Previous thread"), isFalse);
-      expect(enabled(tester, "Next thread"), isFalse);
+      expect(enabled(tester, buttonTipped("Previous thread")), isFalse);
+      expect(enabled(tester, buttonTipped("Next thread")), isFalse);
     });
   });
 

@@ -143,6 +143,15 @@ Its `brightness` is for the few widgets that pick a colour per palette instead
 of reading one out of the scheme — a code block's token colours are the only
 ones so far, and they are wrong in exactly one direction, so both are asserted.
 
+`enabled` is whether an icon button would do anything, over `buttonTipped` where
+one is named by its tooltip. A dead button is still drawn and still hit by a
+tap, so a test that presses it and asserts nothing happened cannot tell disabled
+from broken — the callback is the only witness there is.
+
+A reply still being written ends in a caret, and a caret is a `WidgetSpan`, so
+its placeholder is part of what that span reads as: `find.text` will not match
+the words even with `findRichText`, and those tests use `find.textContaining`.
+
 `clipboard` collects what the app copied. It takes `SystemChannels.platform`
 over for the test the same way `frameworkHandlesBack` does, so a test wanting
 both wants one of them — which is why neither is written out per file.

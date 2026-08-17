@@ -287,6 +287,15 @@ Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
   await tester.pump();
 }
 
+/// Whether [button] would do anything if it were pressed. A dead one is still
+/// drawn and still hit by a tap, so its callback is the only thing that says so.
+bool enabled(WidgetTester tester, Finder button) =>
+    tester.widget<IconButton>(button).onPressed != null;
+
+/// An icon button by the tooltip on it, which is how most of them are named.
+Finder buttonTipped(String tooltip) =>
+    find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+
 /// Whether [field] holds the caret. A `TextField` here has no `FocusNode` of its
 /// own, so the node to ask is the `EditableText`'s inside it — which is also
 /// what a `SelectableText` is built out of.
