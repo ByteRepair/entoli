@@ -13,11 +13,13 @@ import "domain/prompt_library.dart";
 import "providers.dart";
 import "ui/app_shell.dart";
 import "ui/focus_follows_keyboard.dart";
+import "ui/fonts.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/theme.dart";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerBundledFontLicences();
   await platform.persist();
   final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
   final store = platform.createChatStore(config);

@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../providers.dart";
 import "../profile/profile_page.dart";
+import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
 import "../workspace/workspace_page.dart";
@@ -118,7 +119,7 @@ class _CopyField extends StatelessWidget {
       title: Text(label),
       subtitle: Text(
         value,
-        style: const TextStyle(fontFamily: "monospace"),
+        style: const TextStyle(fontFamily: monoFamily),
         overflow: TextOverflow.ellipsis,
       ),
       trailing: IconButton(

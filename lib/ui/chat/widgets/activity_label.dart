@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 
+import "../../fonts.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
 import "../../../domain/tool_arg.dart";
@@ -323,7 +324,7 @@ Future<void> showActivitySheet(
                       SelectableText(
                         section.body!,
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          fontFamily: mono ? "monospace" : null,
+                          fontFamily: mono ? monoFamily : null,
                           color: section.isError ? theme.colorScheme.error : null,
                         ),
                       ),

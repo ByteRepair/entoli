@@ -167,13 +167,17 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         }
       });
 
-  /// A chat opens at its latest message. A builder lays out only what shows, so
-  /// the extent the first frame reports is an estimate — jump again until it
-  /// stops moving, rather than landing short of the end.
-  void _openAtBottom([int tries = 8]) => _afterLayout((position) {
+  /// Land at the end, and keep landing until the end stops moving. A builder
+  /// lays out only what shows, so the extent any one frame reports is an
+  /// estimate, and a single jump lands short of the last message.
+  ///
+  /// Both ways down want this. A chat opens at its latest message; Jump to
+  /// latest animates for the travel and then finishes the trip here, since the
+  /// extent it read at the moment of the press was the estimate.
+  void _settleAtBottom([int tries = 8]) => _afterLayout((position) {
         if (position.pixels >= position.maxScrollExtent) return;
         _scroll.jumpTo(position.maxScrollExtent);
-        if (tries > 0) _openAtBottom(tries - 1);
+        if (tries > 0) _settleAtBottom(tries - 1);
       });
 
   Future<void> _send(String text, List<Attachment> attachments) => ref
@@ -196,7 +200,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     }
     if (_opened != widget.chatId) {
       _opened = widget.chatId;
-      _openAtBottom();
+      _settleAtBottom();
     }
 
     return Scaffold(
@@ -331,11 +335,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             child: FloatingActionButton.small(
               heroTag: null,
               tooltip: "Jump to latest",
-              onPressed: () => _scroll.animateTo(
-                _scroll.position.maxScrollExtent,
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-              ),
+              onPressed: () => _scroll
+                  .animateTo(
+                    _scroll.position.maxScrollExtent,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                  )
+                  .then((_) => _settleAtBottom()),
               child: const Icon(Icons.arrow_downward),
             ),
           ),
