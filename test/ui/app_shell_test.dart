@@ -13,9 +13,7 @@ void main() {
   tearDown(() => app.dispose());
 
   Future<void> pumpAt(WidgetTester tester, Size size) async {
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+    useWindow(tester, size);
     await app.pump(tester, const AppShell());
   }
 

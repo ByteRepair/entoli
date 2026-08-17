@@ -15,8 +15,6 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  Future<void> pumpSettings(WidgetTester tester) => app.pump(tester, const SettingsPage());
-
   /// Open the menu behind the Add provider button and choose an entry.
   Future<void> addProvider(WidgetTester tester, String entry) async {
     await scrollTo(tester, find.text("Add provider"));
@@ -35,14 +33,13 @@ void main() {
 
   group("providers", () {
     testWidgets("says plainly that nothing is configured yet", (tester) async {
-      await pumpSettings(tester);
-      await scrollTo(tester, find.text("Providers"));
+      await pumpSettings(tester, app, SettingsCategory.providers);
 
       expect(find.textContaining("cannot answer until one is added"), findsOneWidget);
     });
 
     testWidgets("a preset arrives filled in, so only the key is left to type", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Ollama Cloud");
 
       expect(find.text("ollama-cloud"), findsOneWidget);
@@ -58,7 +55,7 @@ void main() {
     });
 
     testWidgets("a custom endpoint starts empty and is typed in", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
 
       await tester.enterText(find.byType(TextField).at(0), "vllm");
@@ -73,7 +70,7 @@ void main() {
     });
 
     testWidgets("one missing its name or URL is not saved", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
 
       await tester.enterText(find.byType(TextField).at(0), "nameless");
@@ -83,7 +80,7 @@ void main() {
     });
 
     testWidgets("the key is never shown back on the page", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Anthropic");
       await tester.enterText(find.byType(TextField).at(2), "sk-ant-secret");
       await saveDialog(tester);
@@ -93,7 +90,7 @@ void main() {
     });
 
     testWidgets("one with no key of its own says which variable it reads", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Anthropic");
       await saveDialog(tester);
 
@@ -101,7 +98,7 @@ void main() {
     });
 
     testWidgets("a preset already configured is not offered twice", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Groq");
       await saveDialog(tester);
 
@@ -114,7 +111,7 @@ void main() {
     });
 
     testWidgets("editing one replaces it rather than adding another", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
       await saveDialog(tester);
 
@@ -128,7 +125,7 @@ void main() {
     });
 
     testWidgets("removing one leaves the rest", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
       await saveDialog(tester);
       await addProvider(tester, "Groq");
@@ -142,7 +139,7 @@ void main() {
     });
 
     testWidgets("adding one refreshes what the model picker can offer", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       final before = app.container.read(availableModelsProvider);
       await addProvider(tester, "Anthropic");
       await saveDialog(tester);
@@ -155,7 +152,6 @@ void main() {
 
   group("running commands", () {
     Future<void> openModeDropdown(WidgetTester tester) async {
-      await pumpSettings(tester);
       final field = find.byType(DropdownButtonFormField<ApproveMode>);
       await scrollTo(tester, field);
       await tester.tap(field);
@@ -163,13 +159,14 @@ void main() {
     }
 
     testWidgets("defaults to ask, the safe mode", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.general);
       await scrollTo(tester, find.text("Running commands"));
 
       expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
     });
 
     testWidgets("can be switched to ask", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
       await tester.tap(find.text("Ask every time").last);
       await settleIo(tester);
@@ -179,6 +176,7 @@ void main() {
     });
 
     testWidgets("can be switched to run without asking", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
       await tester.tap(find.textContaining("Run without asking").last);
       await settleIo(tester);
@@ -188,6 +186,7 @@ void main() {
     });
 
     testWidgets("auto is disabled when no classifier model is set", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
 
       // The item is there but greyed out — tapping it does nothing.
@@ -200,10 +199,11 @@ void main() {
     });
 
     testWidgets("changing the mode does not disturb the providers", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "OpenAI");
       await saveDialog(tester);
 
+      await openCategory(tester, SettingsCategory.general);
       await openModeDropdown(tester);
       await tester.tap(find.textContaining("Run without asking").last);
       await settleIo(tester);

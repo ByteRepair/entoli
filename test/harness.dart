@@ -18,6 +18,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
+import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/provider_model_selector.dart";
 
 import "fakes.dart";
@@ -265,6 +266,15 @@ bool holdsCaret(WidgetTester tester, Finder field) => tester
     .focusNode
     .hasFocus;
 
+/// Run the test in a window of [size], put back when it ends. Anything
+/// asserting about a layout either side of a breakpoint needs one; forgetting
+/// the reset leaks the size into a later test.
+void useWindow(WidgetTester tester, Size size) {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
 /// The app under system bars, the way Android draws it: the window is the whole
 /// screen and what the status and navigation bars cover is [padding].
 Widget underSystemBars(EdgeInsets padding, Widget child) => Builder(
@@ -285,6 +295,32 @@ Future<void> scrollTo(WidgetTester tester, Finder target) async {
   // exists, which can leave half of it under the edge of the window.
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
+}
+
+/// The settings page opened on [category]. A default would mean two different
+/// pages depending on which test file is being read, so it is named at every
+/// call site.
+Future<void> pumpSettings(
+  WidgetTester tester,
+  TestApp app,
+  SettingsCategory category,
+) async {
+  await app.pump(tester, const SettingsPage());
+  // The page opens on General, so only the other two have to be reached.
+  if (category != SettingsCategory.general) await openCategory(tester, category);
+}
+
+/// Move the settings page to [category]. The categories are a panel beside the
+/// page where there is room and its drawer where there is not, and a test
+/// window is narrow — so this opens the drawer when there is one.
+Future<void> openCategory(WidgetTester tester, SettingsCategory category) async {
+  final menu = find.byIcon(Icons.menu);
+  if (menu.evaluate().isNotEmpty) {
+    await tester.tap(menu);
+    await settleIo(tester);
+  }
+  await tester.tap(find.widgetWithText(ListTile, category.label));
+  await settleIo(tester);
 }
 
 /// Open one of the two provider/model dropdowns. Scoped to the picker: other

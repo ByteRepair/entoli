@@ -5,6 +5,7 @@ import "../../domain/models.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/app_mark.dart";
+import "../widgets/nav_drawer.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "widgets/composer.dart";
@@ -24,19 +25,51 @@ class ChatPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
     if (chatId == null) {
-      return _Waiting(
-        withDrawer: withDrawer,
-        child: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppMark(size: 64),
-            SizedBox(height: 16),
-            Text("Select or create a chat"),
-          ],
-        ),
-      );
+      return _Waiting(withDrawer: withDrawer, child: const _NoChat());
     }
     return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+  }
+}
+
+/// The conversation's share of a wide window. Past this a reply is a line of
+/// text too long to track back to the start of.
+const double _readableWidth = 760;
+
+/// Nothing selected: the two ways to have a conversation, and nothing else.
+class _NoChat extends ConsumerWidget {
+  const _NoChat();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Opening one is the sidebar, so this is offered only where the sidebar is
+    // out of sight. The Scaffold above already answers that, and a flag threaded
+    // down beside it is a second answer that can disagree.
+    final scaffold = Scaffold.maybeOf(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AppMark(size: 64),
+            const SizedBox(height: 32),
+            FilledButton(
+              onPressed: () => startChat(context, ref),
+              child: const Text("New Chat"),
+            ),
+            if (scaffold?.hasDrawer ?? false) ...[
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: scaffold!.openDrawer,
+                child: const Text("Open Chat"),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -60,39 +93,10 @@ class _Waiting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        drawer: withDrawer ? const _SidebarDrawer() : null,
+        drawer: withDrawer ? const NavDrawer(child: Sidebar()) : null,
         appBar: withDrawer ? AppBar(title: const AppBrand()) : null,
         body: Center(child: child),
       );
-}
-
-/// The sidebar as this page's drawer, taking the whole screen where a panel of
-/// the usual width would leave a sliver of chat behind, and closed by the back
-/// key rather than leaving the app.
-class _SidebarDrawer extends StatelessWidget {
-  const _SidebarDrawer();
-
-  /// Material's compact breakpoint — a phone, either way up.
-  static const _compact = 600.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    return Drawer(
-      width: width < _compact ? width : null,
-      // Claims the back key from Android, which the drawer's own
-      // `LocalHistoryEntry` does not — see CLAUDE.md. Deleting this as dead
-      // code is how it shipped broken once.
-      child: PopScope(
-        canPop: false,
-        // True when the route popped anyway, and then there is nothing to close.
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) Scaffold.of(context).closeDrawer();
-        },
-        child: const Sidebar(),
-      ),
-    );
-  }
 }
 
 class _ChatBody extends ConsumerStatefulWidget {
@@ -196,7 +200,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     }
 
     return Scaffold(
-      drawer: widget.withDrawer ? const _SidebarDrawer() : null,
+      drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
       appBar: AppBar(
         titleSpacing: 0,
         title: InkWell(
@@ -235,99 +239,108 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: chat.messages.isEmpty
-                ? const Center(child: Text("What would you like to discuss?"))
-                : Stack(
-                    children: [
-                      ListView.builder(
-                        controller: _scroll,
-                        itemCount: chat.messages.length,
-                        itemBuilder: (context, i) {
-                          final m = chat.messages[i];
-                          return MessageBubble(
-                            chatId: widget.chatId,
-                            message: m,
-                            isWaiting: view.isRunning && i == chat.messages.length - 1,
-                            waitingNotice: view.retry,
-                            onTapLink: (href) {
-                              final uri = Uri.tryParse(href);
-                              if (uri != null) {
-                                ref.read(linkOpenerProvider).open(context, uri);
-                              }
-                            },
-                            threads: chat.branches[m.id],
-                            onThreadStep: view.isRunning
-                                ? null
-                                : (step) => notifier.stepThread(m.id, step),
-                            onDelete:
-                                view.isRunning ? null : () => notifier.deleteThread(m.id),
-                            onEdit: m.role == MessageRole.user && !view.isRunning
-                                ? (text) => notifier.editAndResend(m.id, text)
-                                : null,
-                            onRegenerate: view.isRunning ? null : () => notifier.regenerate(m.id),
-                          );
-                        },
-                      ),
-                      // Only once the reader has left the end: up there a turn
-                      // no longer follows itself, and this is the way back.
-                      Positioned(
-                        right: 16,
-                        bottom: 12,
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _atBottom,
-                          builder: (context, atBottom, child) =>
-                              atBottom ? const SizedBox.shrink() : child!,
-                          child: FloatingActionButton.small(
-                            heroTag: null,
-                            tooltip: "Jump to latest",
-                            onPressed: () => _scroll.animateTo(
-                              _scroll.position.maxScrollExtent,
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOut,
-                            ),
-                            child: const Icon(Icons.arrow_downward),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+      // A reply is full width on a phone and a centred column on a monitor:
+      // the composer goes with it, or the conversation would sit under a field
+      // twice its width.
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _readableWidth),
+          child: Column(
+            children: [
+              Expanded(child: _conversation(chat, view, notifier)),
+              // Only while nothing is running: the turn being carried on is the one
+              // at the end, so the offer and the work are never both on screen.
+              if (chat.unfinished && !view.isRunning)
+                ResumeBar(
+                  startedAt: chat.messages.last.createdAt,
+                  onContinue: notifier.resume,
+                ),
+              SubAgentStrip(agents: view.runningSubAgents),
+              for (final a in view.approvals)
+                ApprovalBanner(
+                  approval: a,
+                  onAllow: () => notifier.respondApproval(a.id, ApprovalResponse.allow),
+                  onDeny: () => notifier.respondApproval(a.id, ApprovalResponse.deny),
+                ),
+              // A question takes the composer's place rather than sitting above it:
+              // the turn is waiting on this answer, and there is nothing useful to
+              // type until it has it.
+              if (view.questions.isEmpty)
+                Composer(
+                  controller: _controller,
+                  isRunning: view.isRunning,
+                  onSend: _send,
+                  onAbort: _abort,
+                )
+              else
+                QuestionPanel(
+                  key: ValueKey(view.questions.first.id),
+                  request: view.questions.first,
+                  onAnswered: (answers) =>
+                      notifier.answerQuestions(view.questions.first.id, answers),
+                ),
+            ],
           ),
-          // Only while nothing is running: the turn being carried on is the one
-          // at the end, so the offer and the work are never both on screen.
-          if (chat.unfinished && !view.isRunning)
-            ResumeBar(
-              startedAt: chat.messages.last.createdAt,
-              onContinue: notifier.resume,
-            ),
-          SubAgentStrip(agents: view.runningSubAgents),
-          for (final a in view.approvals)
-            ApprovalBanner(
-              approval: a,
-              onAllow: () => notifier.respondApproval(a.id, ApprovalResponse.allow),
-              onDeny: () => notifier.respondApproval(a.id, ApprovalResponse.deny),
-            ),
-          // A question takes the composer's place rather than sitting above it:
-          // the turn is waiting on this answer, and there is nothing useful to
-          // type until it has it.
-          if (view.questions.isEmpty)
-            Composer(
-              controller: _controller,
-              isRunning: view.isRunning,
-              onSend: _send,
-              onAbort: _abort,
-            )
-          else
-            QuestionPanel(
-              key: ValueKey(view.questions.first.id),
-              request: view.questions.first,
-              onAnswered: (answers) =>
-                  notifier.answerQuestions(view.questions.first.id, answers),
-            ),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _conversation(Chat chat, ChatViewState view, ChatController notifier) {
+    if (chat.messages.isEmpty) {
+      return const Center(child: Text("What would you like to discuss?"));
+    }
+    return Stack(
+      children: [
+        ListView.builder(
+          controller: _scroll,
+          itemCount: chat.messages.length,
+          itemBuilder: (context, i) {
+            final m = chat.messages[i];
+            return MessageBubble(
+              chatId: widget.chatId,
+              message: m,
+              isWaiting: view.isRunning && i == chat.messages.length - 1,
+              waitingNotice: view.retry,
+              onTapLink: (href) {
+                final uri = Uri.tryParse(href);
+                if (uri != null) {
+                  ref.read(linkOpenerProvider).open(context, uri);
+                }
+              },
+              threads: chat.branches[m.id],
+              onThreadStep:
+                  view.isRunning ? null : (step) => notifier.stepThread(m.id, step),
+              onDelete: view.isRunning ? null : () => notifier.deleteThread(m.id),
+              onEdit: m.role == MessageRole.user && !view.isRunning
+                  ? (text) => notifier.editAndResend(m.id, text)
+                  : null,
+              onRegenerate: view.isRunning ? null : () => notifier.regenerate(m.id),
+            );
+          },
+        ),
+        // Only once the reader has left the end: up there a turn no longer
+        // follows itself, and this is the way back.
+        Positioned(
+          right: 16,
+          bottom: 12,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _atBottom,
+            builder: (context, atBottom, child) =>
+                atBottom ? const SizedBox.shrink() : child!,
+            child: FloatingActionButton.small(
+              heroTag: null,
+              tooltip: "Jump to latest",
+              onPressed: () => _scroll.animateTo(
+                _scroll.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+              ),
+              child: const Icon(Icons.arrow_downward),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

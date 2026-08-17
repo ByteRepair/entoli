@@ -1,5 +1,8 @@
 import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
+// `SelectedContent`, which material does not re-export.
+import "package:flutter/rendering.dart";
+import "package:flutter/services.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../../domain/ask.dart";
@@ -116,6 +119,13 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (ok) widget.onDelete!();
   }
 
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.message.plainText));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Message copied")));
+  }
+
   bool get _hasError => widget.message.parts.whereType<ErrorPart>().isNotEmpty;
 
   @override
@@ -123,9 +133,11 @@ class _MessageBubbleState extends State<MessageBubble> {
     final theme = Theme.of(context);
     final isUser = widget.message.role == MessageRole.user;
     final align = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    // The reply has no tint behind it: it is the page rather than something
+    // said to one side of it, which is what a null background draws.
     final (name, bg) = switch (widget.message.role) {
       MessageRole.user => ("You", theme.colorScheme.primaryContainer),
-      MessageRole.assistant => ("Assistant", theme.colorScheme.surfaceContainerHighest),
+      MessageRole.assistant => ("Assistant", null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
@@ -140,8 +152,8 @@ class _MessageBubbleState extends State<MessageBubble> {
           children: [
             Listener(
               // A raw pointer listener sidesteps the gesture arena, which the
-              // bubble's SelectableText would otherwise win: a touch has to both
-              // place the caret and show what can be done to the message.
+              // bubble's selection would otherwise win: a touch has to both
+              // start a selection and show what can be done to the message.
               onPointerDown: (event) => _pressedAt = event.position,
               onPointerUp: (event) {
                 final from = _pressedAt;
@@ -162,7 +174,16 @@ class _MessageBubbleState extends State<MessageBubble> {
                           ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ),
-                  ..._rows(context, bg),
+                  // One region for the whole reply, so a drag runs from the
+                  // first paragraph to the last rather than stopping at the
+                  // bubble — or the tool label — it started in.
+                  SelectionArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: align,
+                      children: _rows(context, bg),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -190,6 +211,8 @@ class _MessageBubbleState extends State<MessageBubble> {
               _step(theme, Icons.chevron_left, "Previous thread", -1),
               _step(theme, Icons.chevron_right, "Next thread", 1),
             ],
+            if (widget.message.hasText)
+              _action(theme, Icons.copy_outlined, "Copy message", _copy),
             if (widget.onDelete != null)
               _action(theme, Icons.delete_outline, "Delete thread", _delete),
             if (widget.onEdit != null) _action(theme, Icons.edit_outlined, "Edit", _edit),
@@ -235,7 +258,7 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   /// The message split the way it reads: everything the model did on labels of
   /// its own, everything it said in a bubble, in the order it happened.
-  List<Widget> _rows(BuildContext context, Color bg) {
+  List<Widget> _rows(BuildContext context, Color? bg) {
     final theme = Theme.of(context);
     final rows = <Widget>[];
     final spoken = <({String text, bool isError})>[];
@@ -279,25 +302,25 @@ class _MessageBubbleState extends State<MessageBubble> {
       switch (part) {
         case ReasoningPart():
           closeBubble();
-          rows.add(ThinkingLabel(
+          rows.add(_label(ThinkingLabel(
             part: part,
             isLive:
                 widget.isWaiting && part.durationMs == null && i == widget.message.parts.length - 1,
-          ));
+          )));
         case ToolCallPart(:final toolCall):
           closeBubble();
-          rows.add(switch (toolCall.name) {
+          rows.add(_label(switch (toolCall.name) {
             askToolName => AskLabel(call: toolCall, result: results[toolCall.id]),
             "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
             "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
             "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
             _ => ToolLabel(call: toolCall, result: results[toolCall.id]),
-          });
+          }));
         case ToolResultPart(:final result):
           // Already drawn by the call it answers, unless the call is gone.
           if (calls.contains(result.callId)) continue;
           closeBubble();
-          rows.add(ToolLabel(result: result));
+          rows.add(_label(ToolLabel(result: result)));
         case FilePart():
           continue;
         case TextPart(:final text):
@@ -310,46 +333,56 @@ class _MessageBubbleState extends State<MessageBubble> {
     return rows;
   }
 
+  /// A label sits inside the message's selection region but is not part of what
+  /// the message says, so dragging past one must not put "Thought for 12
+  /// seconds" on the clipboard. Its own drawer is a route and so is outside the
+  /// region already.
+  Widget _label(Widget child) => SelectionContainer.disabled(child: child);
+
   Widget _bubble(
     BuildContext context,
-    Color bg, {
+    Color? bg, {
     required List<({String text, bool isError})> said,
     required List<FilePart> files,
     required List<Widget> trailing,
   }) {
-    return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (files.isNotEmpty)
-            AttachmentStrip(
-              children: [
-                for (final f in files) AttachmentChip.sent(f, chatId: widget.chatId),
-              ],
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (files.isNotEmpty)
+          AttachmentStrip(
+            children: [
+              for (final f in files) AttachmentChip.sent(f, chatId: widget.chatId),
+            ],
+          ),
+        for (final line in said)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: _MessageText(
+              text: line.text,
+              isError: line.isError,
+              isWaiting: widget.isWaiting,
+              onTapLink: widget.onTapLink,
             ),
-          for (final line in said)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: _MessageText(
-                text: line.text,
-                isError: line.isError,
-                isWaiting: widget.isWaiting,
-                onTapLink: widget.onTapLink,
-              ),
-            ),
-          ...trailing,
-        ],
+          ),
+        ...trailing,
+      ],
+    );
+    if (bg == null) return SizedBox(width: double.infinity, child: content);
+    return LayoutBuilder(
+      builder: (context, constraints) => Container(
+        constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.8),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+        child: content,
       ),
     );
   }
 }
 
-/// One line of a message bubble: raw `SelectableText` while the reply streams
-/// or when it is an error, `MarkdownBody` once finished. Owns the markdown
-/// style sheet so the parent's build does not rebuild it on every scroll frame.
+/// One line of a message bubble: raw text while the reply streams or when it is
+/// an error, `MarkdownBody` once finished. Owns the markdown style sheet so the
+/// parent's build does not rebuild it on every scroll frame.
 class _MessageText extends StatefulWidget {
   const _MessageText({
     required this.text,
@@ -370,6 +403,27 @@ class _MessageText extends StatefulWidget {
 class _MessageTextState extends State<_MessageText> {
   MarkdownStyleSheet? _styleSheet;
 
+  /// Built by the branch that has a source to hand back, and left null by the
+  /// other — a reply streams for the whole of a turn and never renders while it
+  /// does, so this is a delegate per finished text rather than per delta.
+  _MarkdownSource? _selection;
+
+  /// Raw while the reply streams or when it is an error: there is no markdown
+  /// to render yet, and an error is not the model's prose.
+  bool get _rendered => !widget.isWaiting && !widget.isError;
+
+  @override
+  void didUpdateWidget(_MessageText old) {
+    super.didUpdateWidget(old);
+    _selection?.source = widget.text;
+  }
+
+  @override
+  void dispose() {
+    _selection?.dispose();
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -387,23 +441,44 @@ class _MessageTextState extends State<_MessageText> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (widget.isWaiting || widget.isError) {
-      return SelectableText(
+    if (!_rendered) {
+      return Text(
         widget.text,
         style: widget.isError
             ? theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)
             : theme.textTheme.bodyMedium,
       );
     }
-    return MarkdownBody(
-      data: widget.text,
-      selectable: true,
-      styleSheet: _styleSheet,
-      onTapLink: (text, href, title) {
-        if (href != null) widget.onTapLink?.call(href);
-      },
+    return SelectionContainer(
+      delegate: _selection ??= _MarkdownSource(widget.text),
+      // `selectable` builds a `SelectableText` per element, which is what made
+      // a selection stop at the paragraph it started in. Plain `Text.rich`
+      // joins the region above instead.
+      child: MarkdownBody(
+        data: widget.text,
+        styleSheet: _styleSheet,
+        onTapLink: (text, href, title) {
+          if (href != null) widget.onTapLink?.call(href);
+        },
+      ),
     );
   }
+}
+
+/// What a selection of rendered markdown copies as. The renderer keeps no
+/// source offsets, so there is nothing to map a partial selection back through
+/// — anything selected inside a part copies the whole of that part's markdown,
+/// which is what makes the clipboard hold `**bold**` rather than `bold`.
+class _MarkdownSource extends StaticSelectionContainerDelegate {
+  _MarkdownSource(this.source);
+
+  String source;
+
+  // `super` walks every selectable and concatenates what each holds, only for
+  // the answer to be thrown away; the geometry already knows.
+  @override
+  SelectedContent? getSelectedContent() =>
+      value.hasSelection ? SelectedContent(plainText: source) : null;
 }
 
 /// Stands in for the reply until the first text arrives.
