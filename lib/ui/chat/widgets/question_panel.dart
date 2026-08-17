@@ -48,6 +48,11 @@ class _QuestionPanelState extends State<QuestionPanel> {
     final theme = Theme.of(context);
     final question = _questions[_at];
     final answeredNothing = _answers.every((a) => a == null);
+    // Asked one thing, there is nowhere to move and nothing to count: a
+    // `Question 1 of 1` over a single segment and two dead arrows is the `1/1`
+    // and the two dead thread arrows the message actions leave out for the
+    // same reason.
+    final several = _questions.length > 1;
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
@@ -60,19 +65,21 @@ class _QuestionPanelState extends State<QuestionPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              "Question ${_at + 1} of ${_questions.length}",
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 8),
-            _Segments(
-              questions: _questions,
-              answers: _answers,
-              at: _at,
-              onJump: _goTo,
-            ),
-            const SizedBox(height: 14),
+            if (several) ...[
+              Text(
+                "Question ${_at + 1} of ${_questions.length}",
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 8),
+              _Segments(
+                questions: _questions,
+                answers: _answers,
+                at: _at,
+                onJump: _goTo,
+              ),
+              const SizedBox(height: 14),
+            ],
             Text(question.question, style: theme.textTheme.titleMedium),
             if (question.summary != null) ...[
               const SizedBox(height: 4),
@@ -104,21 +111,23 @@ class _QuestionPanelState extends State<QuestionPanel> {
             const SizedBox(height: 8),
             Row(
               children: [
-                // Dead at either end rather than wrapping round, the way the
-                // arrows under a message with several threads are.
-                TextButton.icon(
-                  onPressed: _at > 0 ? () => _goTo(_at - 1) : null,
-                  icon: const Icon(Icons.arrow_back, size: 16),
-                  label: const Text("Back"),
-                  style: _compact,
-                ),
-                TextButton.icon(
-                  onPressed: _at < _questions.length - 1 ? () => _goTo(_at + 1) : null,
-                  iconAlignment: IconAlignment.end,
-                  icon: const Icon(Icons.arrow_forward, size: 16),
-                  label: const Text("Next"),
-                  style: _compact,
-                ),
+                if (several) ...[
+                  // Dead at either end rather than wrapping round, the way the
+                  // arrows under a message with several threads are.
+                  TextButton.icon(
+                    onPressed: _at > 0 ? () => _goTo(_at - 1) : null,
+                    icon: const Icon(Icons.arrow_back, size: 16),
+                    label: const Text("Back"),
+                    style: _compact,
+                  ),
+                  TextButton.icon(
+                    onPressed: _at < _questions.length - 1 ? () => _goTo(_at + 1) : null,
+                    iconAlignment: IconAlignment.end,
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text("Next"),
+                    style: _compact,
+                  ),
+                ],
                 const Spacer(),
                 // One button, because there is one action: send what has been
                 // picked. Two names for it would be two promises, and only the

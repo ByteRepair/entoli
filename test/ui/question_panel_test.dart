@@ -72,7 +72,18 @@ void main() {
     expect(find.text("Both are already in the stack."), findsOneWidget);
     expect(find.text("Postgres"), findsOneWidget);
     expect(find.text("Already running in staging."), findsOneWidget);
-    expect(find.text("Question 1 of 1"), findsOneWidget);
+  });
+
+  // `Question 1 of 1` over a single segment, with two arrows that can only be
+  // dead, is the `1/1` the thread counter leaves out for the same reason.
+  testWidgets("one question is not counted, and has nowhere to move",
+      (tester) async {
+    await asking(tester, request([database]));
+
+    expect(find.text("Question 1 of 1"), findsNothing);
+    expect(find.text("Back"), findsNothing);
+    expect(find.text("Next"), findsNothing);
+    expect(find.text("Skip"), findsOneWidget);
   });
 
   testWidgets("the bar counts the questions, and picking one moves on",

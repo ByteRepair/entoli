@@ -193,6 +193,22 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
     });
 
+    // The list it was written against has just been replaced, which is also why
+    // switching clears the selected chat.
+    testWidgets("switching projects clears the search", (tester) async {
+      await io(tester, () => app.seedChat(title: "porting the shell"));
+      await io(tester, () => app.seedChat(title: "at work", project: "work"));
+      await pumpBeside(tester);
+      await tester.enterText(find.byType(TextField), "shell");
+      await tester.pump();
+
+      app.container.read(selectedProjectProvider.notifier).select("work");
+      await settleIo(tester);
+
+      expect(find.text("at work"), findsOneWidget);
+      expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+    });
+
     testWidgets("clearing the search puts the rest back", (tester) async {
       await io(tester, () => app.seedChat(title: "porting the shell"));
       await io(tester, () => app.seedChat(title: "the icon"));

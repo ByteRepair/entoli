@@ -79,6 +79,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
   Widget build(BuildContext context) {
     final async = ref.watch(chatListProvider);
     final project = ref.watch(selectedProjectProvider);
+    // The list the query was written against has just been replaced, the same
+    // reason switching clears the selected chat. Kept, it would answer a
+    // project the user has left with "nothing matches".
+    ref.listen(selectedProjectProvider, (_, _) => _search.clear());
     // Material, not Scaffold: the shell's Scaffold owns the drawer, and an
     // inner one would shadow it.
     return Material(

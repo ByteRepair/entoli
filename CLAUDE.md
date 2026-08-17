@@ -756,7 +756,10 @@ the model.
 
 Picking still moves on to the next question, which is the fast path through a
 batch; it stops at the last rather than submitting there. Back and Next go dead
-at the ends rather than wrapping, the way the thread arrows under a message do.
+at the ends rather than wrapping, the way the thread arrows under a message do
+— and asked one question, none of that is drawn at all: `Question 1 of 1` over
+a single segment with two arrows that can only be dead is the `1/1` the thread
+counter leaves out, for the same reason.
 
 #### Sub-agents (the `task` tool)
 
