@@ -1,5 +1,7 @@
 import "dart:convert";
 
+import "tool_arg.dart";
+
 /// The tool the agent asks with. Named here rather than beside the schema that
 /// defines it, because the chat draws an answered question back out of
 /// `conv.jsonl`, and what it has to recognise there is a tool call by this name.
@@ -56,7 +58,7 @@ class AskRequest {
 /// prompt left in its head. A question put plainly enough to render is worth
 /// putting on screen whatever it was called.
 List<AskQuestion> askQuestionsFrom(String? argumentsJson) {
-  final decoded = _decode(argumentsJson);
+  final decoded = decodeArgs(argumentsJson);
   if (decoded == null) return const [];
   final batch = decoded["questions"];
   if (batch is List) return batch.map(_question).nonNulls.toList();
@@ -84,7 +86,7 @@ String askAnswers(List<AskQuestion> questions, List<String?> answers) {
 /// What the user picked, read back out of what the tool returned, in the order
 /// the questions were asked. Null where they answered nothing.
 List<String?> askAnswersFrom(String? output) {
-  final answers = _decode(output)?["answers"];
+  final answers = decodeArgs(output)?["answers"];
   if (answers is! List) return const [];
   return [
     for (final answer in answers)
@@ -122,16 +124,6 @@ AskOption? _option(Object? raw) {
     value: _string(raw, const ["value", "query", "answer"]),
     detail: _string(raw, const ["detail", "rationale", "description", "reason"]),
   );
-}
-
-Map<String, dynamic>? _decode(String? source) {
-  if (source == null || source.trim().isEmpty) return null;
-  try {
-    final decoded = jsonDecode(source);
-    return decoded is Map<String, dynamic> ? decoded : null;
-  } catch (_) {
-    return null;
-  }
 }
 
 String? _string(Map raw, List<String> keys) {

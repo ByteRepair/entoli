@@ -72,10 +72,13 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
           ));
         case ToolResultPart():
         case FilePart():
+        case ArtifactPart():
         case ErrorPart():
           // Results are read off `results` by the call they answer. An error is
           // what the turn reported to the user; the model never saw it, so
-          // putting it back would be inventing an exchange.
+          // putting it back would be inventing an exchange. An artifact is
+          // view-only output; the model sees the call that produced it, not the
+          // page.
           break;
       }
     }

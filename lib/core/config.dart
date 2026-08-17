@@ -101,6 +101,16 @@ class AppConfig {
   String resourcesDir(String chatId, {String? project}) =>
       fs.path.join(chatDir(chatId, project: project), "resources");
 
+  /// Where artifacts live: one subdir per `artifactId`, each holding an
+  /// `index.html` and whatever supporting files the model sent. A sibling of
+  /// `resources/` and `workspace/` rather than under either, the way
+  /// `subagents/` is — each dir has one purpose and one access pattern.
+  String artifactsDir(String chatId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "artifacts");
+
+  String artifactDir(String chatId, String artifactId, {String? project}) =>
+      fs.path.join(artifactsDir(chatId, project: project), artifactId);
+
   String workspaceDir(String chatId, {String? project}) =>
       fs.path.join(chatDir(chatId, project: project), "workspace");
 
@@ -123,6 +133,7 @@ class AppConfig {
   Future<void> ensureChatDirs(String chatId, {String? project}) => _ensure([
         chatDir(chatId, project: project),
         resourcesDir(chatId, project: project),
+        artifactsDir(chatId, project: project),
         workspaceDir(chatId, project: project),
       ]);
 

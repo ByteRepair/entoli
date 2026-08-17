@@ -23,14 +23,16 @@ import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 
 /// The agent, wired to what this platform can reach and to whatever the
 /// settings page last wrote. [library] is Entoli's commands and agents, which
-/// the agent expands itself.
-AgentBackend createBackend(AppConfig config, PromptLibrary library) {
+/// the agent expands itself. [store] is the chat store, which the agent needs
+/// to write artifacts to the chat's `artifacts/` dir.
+AgentBackend createBackend(AppConfig config, PromptLibrary library, ChatStore store) {
   AppSettings settings() => AppSettings.load(config);
   return BuiltinBackend(
     config: config,
     library: library,
     shell: platformShell(environment: () => settings().environment),
     webSearch: platformWebSearch(),
+    store: store,
     registry: LlmRegistry(
       providers: () => settings().llmProviders,
       // Settings wins, but a key already exported is found without having to

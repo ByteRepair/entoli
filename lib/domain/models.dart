@@ -179,6 +179,17 @@ sealed class MessagePart with _$MessagePart {
   }) = FilePart;
   const factory MessagePart.error({required String message}) = ErrorPart;
 
+  /// An HTML page the model rendered, saved under the chat's `artifacts/` dir
+  /// and viewable in the app. The [artifactId] is the subdir name; [entryFile]
+  /// is the filename the viewer opens; [title] is what the label reads. The
+  /// HTML lives on disk, not in the log, so a big artifact does not bloat
+  /// `conv.jsonl`.
+  const factory MessagePart.artifact({
+    required String artifactId,
+    required String entryFile,
+    required String title,
+  }) = ArtifactPart;
+
   factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
 }
 

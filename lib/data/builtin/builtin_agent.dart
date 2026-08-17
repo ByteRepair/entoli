@@ -1,9 +1,12 @@
 import "dart:async";
 
+import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
+import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/profile.dart";
@@ -11,6 +14,8 @@ import "../../domain/shell.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "ask_tool.dart";
+import "artifact_tool.dart";
+import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "sub_agent.dart";
@@ -103,6 +108,7 @@ class BuiltinAgent {
     required this.session,
     required this.client,
     required this.shell,
+    required this.fs,
     required this.workspace,
     required this.projectWorkspace,
     required this.model,
@@ -119,11 +125,18 @@ class BuiltinAgent {
     this.offerAskTool = true,
     this.webSearch,
     this.profile,
+    this.saveArtifact,
   });
 
   final BuiltinSession session;
   final LlmClient client;
   final Shell shell;
+
+  /// The filesystem the file tools (`read`/`write`/`edit`) and the artifact
+  /// tool's path resolution operate on. The same one `AppConfig` holds, so it
+  /// is `fileSystemIo` on desktop and Android, `fileSystemWeb` (IndexedDB) in
+  /// a browser — and the file tools work everywhere, unlike `bash`.
+  final FileSystem fs;
 
   /// The chat's own directory, and where every command runs.
   final String workspace;
@@ -184,13 +197,25 @@ class BuiltinAgent {
   /// system prompt.
   final Profile? profile;
 
+  /// Publishes an artifact from a workspace path to the chat's `artifacts/`
+  /// dir and returns the id. Null where the agent is a sub-agent: sub-agents run
+  /// headless with no viewer surface, so the tool is dropped for them the way
+  /// `ask_user` is. The closure resolves the path (with `project:` prefix
+  /// support) and copies the dir; the agent just passes the args through.
+  final Future<String> Function(String path, {String? artifactId})? saveArtifact;
+
   /// What the model may call. `bash` is dropped where nothing can run it —
   /// offering a tool we could only ever answer with a failure invites one.
   /// `task` is dropped where there is no [subAgentRunner] (a sub-agent) or
   /// where the shell is unavailable. `ask_user` is dropped for sub-agents.
   /// `websearch`/`webfetch` are dropped where there is no [webSearch] or it is
-  /// unavailable (a browser).
+  /// unavailable (a browser). `artifact` is dropped where there is no
+  /// [saveArtifact] (a sub-agent). `read`/`write`/`edit` are always offered —
+  /// they work on the `FileSystem`, which exists on every platform.
   List<LlmTool> get _tools => [
+        file_tool_defs.readTool,
+        file_tool_defs.writeTool,
+        file_tool_defs.editTool,
         if (shell.canRunCommands) bashTool,
         if (offerAskTool) askTool,
         if (offerTaskTool && subAgentRunner != null && shell.canRunCommands) taskTool,
@@ -198,6 +223,7 @@ class BuiltinAgent {
           websearchTool,
           webfetchTool,
         ],
+        if (saveArtifact != null) artifactTool,
       ];
 
   bool _cancelled = false;
@@ -353,6 +379,21 @@ class BuiltinAgent {
 
       if (call.name == taskToolName) continue;
 
+      if (call.name == readToolName) {
+        yield* _read(call);
+        continue;
+      }
+
+      if (call.name == writeToolName) {
+        yield* _write(call);
+        continue;
+      }
+
+      if (call.name == editToolName) {
+        yield* _edit(call);
+        continue;
+      }
+
       if (call.name == askToolName) {
         yield* _ask(call);
         continue;
@@ -365,6 +406,11 @@ class BuiltinAgent {
 
       if (call.name == webfetchToolName) {
         yield* _webFetch(call);
+        continue;
+      }
+
+      if (call.name == artifactToolName && saveArtifact != null) {
+        yield* _artifact(call);
         continue;
       }
 
@@ -615,6 +661,175 @@ class BuiltinAgent {
       exceptionInfo: result.exceptionInfo,
     ));
     _answerRun(call, result);
+  }
+
+  /// Read a file from the workspace. No approval: the workspace is the
+  /// agent's own dir, and `bash` already reads from it without a banner in
+  /// `never` mode.
+  Stream<AgentEvent> _read(LlmToolCall call) async* {
+    final args = readArgsFrom(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call,
+          'The $readToolName tool takes {"path": "..."}; that argument was missing.');
+      return;
+    }
+    final resolved = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: args.path,
+    ));
+    final file = fs.file(resolved);
+    if (!await file.exists()) {
+      yield ToolResultEvent(ToolResult(
+        callId: call.id,
+        returnCode: -1,
+        output: "",
+        exceptionInfo: "File not found: ${args.path}",
+      ));
+      _answer(call, "File not found: ${args.path}");
+      return;
+    }
+    final content = await file.readAsString();
+    final lines = content.split("\n");
+    final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
+    final limit = args.limit ?? lines.length;
+    final end = (offset + limit - 1).clamp(1, lines.length);
+    final buf = StringBuffer();
+    for (var i = offset; i <= end; i++) {
+      buf.writeln("$i: ${lines[i - 1]}");
+    }
+    final result = buf.toString();
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: 0,
+      output: result.isEmpty ? "(empty)" : result,
+    ));
+    _answer(call, result.isEmpty ? "(empty file)" : result);
+  }
+
+  /// Write a file to the workspace, creating or overwriting. No approval:
+  /// the workspace is the agent's own dir.
+  Stream<AgentEvent> _write(LlmToolCall call) async* {
+    final args = writeArgsFrom(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call,
+          'The $writeToolName tool takes {"path": "...", "content": "..."}; '
+          "those arguments were missing.");
+      return;
+    }
+    final resolved = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: args.path,
+    ));
+    await fs.directory(fs.path.dirname(resolved)).create(recursive: true);
+    await fs.file(resolved).writeAsString(args.content);
+    final bytes = args.content.length;
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: 0,
+      output: "Wrote $bytes bytes to ${args.path}",
+    ));
+    _answer(call, "Wrote $bytes bytes to ${args.path}");
+  }
+
+  /// Edit a file by exact string replacement. No approval: the workspace is
+  /// the agent's own dir.
+  Stream<AgentEvent> _edit(LlmToolCall call) async* {
+    final args = editArgsFrom(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call,
+          'The $editToolName tool takes {"path": "...", "old_string": "...", '
+          '"new_string": "..."}; those arguments were missing.');
+      return;
+    }
+    final resolved = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: args.path,
+    ));
+    final file = fs.file(resolved);
+    if (!await file.exists()) {
+      yield ToolResultEvent(ToolResult(
+        callId: call.id,
+        returnCode: -1,
+        output: "",
+        exceptionInfo: "File not found: ${args.path}",
+      ));
+      _answer(call, "File not found: ${args.path}");
+      return;
+    }
+    final content = await file.readAsString();
+    final count = content.split(args.oldString).length - 1;
+    if (count == 0) {
+      yield ToolResultEvent(ToolResult(
+        callId: call.id,
+        returnCode: -1,
+        output: "",
+        exceptionInfo: "old_string not found in ${args.path}",
+      ));
+      _answer(call, "old_string not found in ${args.path}");
+      return;
+    }
+    if (!args.replaceAll && count > 1) {
+      yield ToolResultEvent(ToolResult(
+        callId: call.id,
+        returnCode: -1,
+        output: "",
+        exceptionInfo: "old_string appears $count times in ${args.path}; "
+            "add context to make it unique or set replace_all.",
+      ));
+      _answer(call, "old_string appears $count times in ${args.path}; "
+          "add context to make it unique or set replace_all.");
+      return;
+    }
+    final updated = args.replaceAll
+        ? content.replaceAll(args.oldString, args.newString)
+        : content.replaceFirst(args.oldString, args.newString);
+    await file.writeAsString(updated);
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: 0,
+      output: "Edited ${args.path}: replaced $count occurrence(s).",
+    ));
+    _answer(call, "Edited ${args.path}: replaced $count occurrence(s).");
+  }
+
+  /// Publish an artifact from a workspace path. Copies the dir (or the file's
+  /// parent) into the chat's `artifacts/` dir. No approval: like `websearch`,
+  /// it reaches nothing and runs nothing.
+  Stream<AgentEvent> _artifact(LlmToolCall call) async* {
+    final parsed = artifactArgsFrom(call.argumentsJson);
+    if (parsed == null) {
+      yield* _reject(call,
+          'The $artifactToolName tool takes {"path": "..."}; that argument was missing.');
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: parsed.title.isEmpty ? parsed.path : parsed.title,
+    ));
+    final artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
+    yield ArtifactEvent(artifactId: artifactId, entryFile: parsed.entryFile, title: parsed.title);
+    final label = parsed.title.isEmpty ? parsed.path : "'${parsed.title}'";
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: 0,
+      output: "Artifact $label published. The user can view it in the app. "
+          "artifact_id: $artifactId",
+    ));
+    _answer(call,
+        "Artifact published. The user can view it in the app. It is saved with "
+        "the chat. To update it, edit the files and call artifact again with "
+        "artifact_id: \"$artifactId\".");
   }
 
   /// A call that could not be run at all: the UI still sees the pair, and the

@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -225,6 +226,90 @@ LlmCompletion fetchCall(String url, {String id = "fetch-1", String text = ""}) =
             id: id,
             name: "webfetch",
             argumentsJson: jsonEncode({"url": url}),
+          ),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `artifact`.
+LlmCompletion artifactCall(String path, {String? title, String? artifactId, String id = "art-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: artifactToolName,
+            argumentsJson: jsonEncode({
+              "path": path,
+              "title": ?title,
+              "artifact_id": ?artifactId,
+            }),
+          ),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `read`.
+LlmCompletion readCall(String path, {int? offset, int? limit, String id = "read-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "read",
+            argumentsJson: jsonEncode({
+              "path": path,
+              "offset": ?offset,
+              "limit": ?limit,
+            }),
+          ),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `write`.
+LlmCompletion writeCall(String path, String content, {String id = "write-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "write",
+            argumentsJson: jsonEncode({"path": path, "content": content}),
+          ),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `edit`.
+LlmCompletion editCall(
+  String path,
+  String oldString,
+  String newString, {
+  bool replaceAll = false,
+  String id = "edit-1",
+  String text = "",
+}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "edit",
+            argumentsJson: jsonEncode({
+              "path": path,
+              "old_string": oldString,
+              "new_string": newString,
+              if (replaceAll) "replace_all": true,
+            }),
           ),
         ],
       ),

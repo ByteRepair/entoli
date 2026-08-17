@@ -300,6 +300,14 @@ class _MessageBubbleState extends State<MessageBubble> {
           rows.add(ToolLabel(result: result));
         case FilePart():
           continue;
+        case ArtifactPart(:final artifactId, :final entryFile, :final title):
+          closeBubble();
+          rows.add(ArtifactLabel(
+            chatId: widget.chatId,
+            artifactId: artifactId,
+            entryFile: entryFile,
+            title: title,
+          ));
         case TextPart(:final text):
           spoken.add((text: text, isError: false));
         case ErrorPart(:final message):

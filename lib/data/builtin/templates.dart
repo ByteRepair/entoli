@@ -25,18 +25,22 @@ String systemPrompt({
           )
         : _withoutShell(agentPrompt, profile: profile);
 
-/// Where there is no shell, the model cannot run anything. The turn ends when
-/// it replies with text and calls no tool — the same termination signal the
-/// shell path uses.
+/// Where there is no shell, the model cannot run commands. But it does have a
+/// filesystem: the `read`/`write`/`edit` tools work on the workspace via the
+/// same `FileSystem` the app uses, so a browser can still produce files and
+/// artifacts. The turn ends when it replies with text and calls no tool — the
+/// same termination signal the shell path uses.
 String _withoutShell(String? agentPrompt, {Profile? profile}) => """
 You are a helpful assistant.
 
-You are running in a browser, so you have no shell and no filesystem: you
-cannot run commands, read files, or change anything. Answer from what you know
-and from what the user tells you, and say plainly when something would need a
-machine you do not have.
+You are running in a browser, so you have no shell: you cannot run commands.
+You do have a filesystem in your workspace — use `read`, `write`, and `edit`
+to work with files there, and `artifact` to publish an HTML page the user can
+view. Prefix a path with `project:` to reach the project workspace.
 
+$_files
 $_asking
+$_artifacts
 ${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}${profileSection(profile)}""";
 
 /// The one thing both prompts say, because asking is the one thing the agent
@@ -49,6 +53,31 @@ const _asking = """
 Call the `$askToolName` tool when the answer is the user's to give and guessing
 it would waste the turn. Ask only where the answer changes what you do next, and
 never for something you could find out yourself.""";
+
+/// The one thing both prompts say about files, because the file tools are the
+/// one cross-platform way to reach the workspace — they work on every platform,
+/// unlike `bash`.
+const _files = """
+
+## Files
+
+Read, write, and edit files in your workspace with `read`, `write`, and `edit`.
+Paths are relative to your workspace. Prefix a path with `project:` to reach the
+project workspace instead. Use `write` to create or overwrite a file, `edit` for
+targeted changes, and `read` to look at what is there. The files survive between
+turns.""";
+
+/// The one thing both prompts say about artifacts, because the viewer is
+/// available with or without a shell — a browser can still open a page.
+const _artifacts = """
+
+## Artifacts
+
+Write the HTML and supporting files to your workspace with `write`/`edit`, then
+call `artifact` with the path to the entry point HTML file to publish it as a
+page the user can view. The viewer has no network, so inline or include
+everything the page needs in the files. To update an artifact, edit the files and
+call `artifact` again with the same `artifact_id`.""";
 
 String _withShell({
   required String workspace,
@@ -74,9 +103,11 @@ have to be in it.
 ## How you act
 
 1. You write reasoning text saying what you are doing and why.
-2. You call a tool when you need to: `bash` to run a command, `$taskToolName`
+2. You call a tool when you need to: `bash` to run a command, `read`/`write`/`edit`
+   to work with files in the workspace, `$taskToolName`
    to delegate a task to a sub-agent, `$askToolName` to put a question to the
-   user, `websearch` to search the web, or `webfetch` to read a page.
+   user, `websearch` to search the web, `webfetch` to read a page, or `artifact`
+   to publish an HTML page the user can view.
 3. The system runs the command and shows you the result.
 4. You continue, or you finish the turn.
 
@@ -104,6 +135,10 @@ one message run concurrently, so a fan-out of N is one step, not N.
 `webfetch` retrieves a URL and returns its text content with markup stripped.
 Use them together: `websearch` to find sources, then `webfetch` to read the
 ones that look relevant. Both are read-only, so they run without asking.
+
+$_files
+
+$_artifacts
 
 ## Finishing a turn
 

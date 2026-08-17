@@ -20,7 +20,7 @@ void main() async {
   final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
   final store = platform.createChatStore(config);
   final library = await PromptLibrary.from(platform.createPromptSources(config));
-  final backend = platform.createBackend(config, library);
+  final backend = platform.createBackend(config, library, store);
   final container = ProviderContainer(
     overrides: [
       chatStoreProvider.overrideWithValue(store),
@@ -29,7 +29,7 @@ void main() async {
       attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
       promptLibraryProvider.overrideWithValue(library),
       launcherIconsProvider.overrideWithValue(const LauncherAliases()),
-      linkOpenerProvider.overrideWithValue(const PlatformLinkOpener()),
+      linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
       backgroundWorkProvider.overrideWithValue(ForegroundService()),
       fileHandoffProvider.overrideWithValue(platform.createFileHandoff(config)),
     ],

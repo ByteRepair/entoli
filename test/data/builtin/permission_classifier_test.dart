@@ -2,6 +2,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "dart:convert";
 
+import "package:fs_shim/fs_io.dart" show fileSystemIo;
+
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/permission_classifier.dart";
@@ -121,6 +123,7 @@ void main() {
         session: session,
         client: client,
         shell: shell,
+        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -241,6 +244,7 @@ void main() {
         session: session,
         client: client,
         shell: shell,
+        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
@@ -268,6 +272,7 @@ void main() {
         session: session,
         client: client,
         shell: shell,
+        fs: fileSystemIo,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",

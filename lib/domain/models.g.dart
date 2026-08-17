@@ -147,6 +147,21 @@ Map<String, dynamic> _$ErrorPartToJson(ErrorPart instance) => <String, dynamic>{
   'runtimeType': instance.$type,
 };
 
+ArtifactPart _$ArtifactPartFromJson(Map<String, dynamic> json) => ArtifactPart(
+  artifactId: json['artifactId'] as String,
+  entryFile: json['entryFile'] as String,
+  title: json['title'] as String,
+  $type: json['runtimeType'] as String?,
+);
+
+Map<String, dynamic> _$ArtifactPartToJson(ArtifactPart instance) =>
+    <String, dynamic>{
+      'artifactId': instance.artifactId,
+      'entryFile': instance.entryFile,
+      'title': instance.title,
+      'runtimeType': instance.$type,
+    };
+
 _ToolCall _$ToolCallFromJson(Map<String, dynamic> json) => _ToolCall(
   id: json['id'] as String,
   name: json['name'] as String,

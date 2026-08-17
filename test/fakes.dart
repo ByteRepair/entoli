@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:convert";
 
 import "package:flutter/foundation.dart";
+import "package:flutter/widgets.dart";
 
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -11,8 +12,32 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/file_handoff.dart";
+import "package:agent_chat/domain/link_opener.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:uuid/uuid.dart";
+
+/// A [LinkOpener] that records what it was asked to open, for UI tests that
+/// assert on the call rather than on a browser opening.
+class FakeLinkOpener implements LinkOpener {
+  FakeLinkOpener();
+
+  final List<Uri> opened = [];
+  final List<({String chatId, String artifactId, String entryFile, String? title})> openedArtifacts = [];
+
+  @override
+  Future<void> open(BuildContext context, Uri url) async => opened.add(url);
+
+  @override
+  Future<void> openArtifact(
+    BuildContext context,
+    String chatId,
+    String artifactId, {
+    required String entryFile,
+    String? title,
+  }) async =>
+      openedArtifacts.add((chatId: chatId, artifactId: artifactId, entryFile: entryFile, title: title));
+}
 
 /// Two providers, two models each, deliberately not in alphabetical order so
 /// tests can assert the UI sorts them.
@@ -300,6 +325,8 @@ class FakeChatStore implements ChatStore {
   final Map<String, List<ChatRecord>> _logs = {};
   final Map<String, ChatMeta> _metas = {};
   final Map<String, Map<String, Uint8List>> _resources = {};
+  /// artifactId → relativePath → bytes, per chat.
+  final Map<String, Map<String, Map<String, Uint8List>>> _artifacts = {};
   final Set<String> _projects = {};
 
   /// The chat's log, as it has been appended to. What the log tests assert on.
@@ -352,6 +379,7 @@ class FakeChatStore implements ChatStore {
     _logs.remove(id);
     _metas.remove(id);
     _resources.remove(id);
+    _artifacts.remove(id);
   }
 
   @override
@@ -364,6 +392,28 @@ class FakeChatStore implements ChatStore {
   @override
   Future<Uint8List?> readResource(String chatId, String resource) async =>
       _resources[chatId]?[resource];
+
+  @override
+  Future<String> createArtifact(String chatId, String sourceDir, {String? project}) async {
+    final artifactId = const Uuid().v4();
+    _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {"index.html": Uint8List.fromList(utf8.encode("<p>"))};
+    return artifactId;
+  }
+
+  @override
+  Future<void> updateArtifact(String chatId, String artifactId, String sourceDir, {String? project}) async {
+    // Record that an update happened; the fake doesn't actually copy.
+    _artifacts.putIfAbsent(chatId, () => {}).putIfAbsent(artifactId, () => {});
+  }
+
+  @override
+  Future<Uint8List?> readArtifactFile(
+    String chatId, String artifactId, String relativePath, {String? project}) async =>
+      _artifacts[chatId]?[artifactId]?[relativePath];
+
+  @override
+  Future<String> artifactPath(String chatId, String artifactId, {String? project}) async =>
+      "/tmp/test/$chatId/artifacts/$artifactId";
 
   @override
   Future<ChatMeta> loadMeta(String chatId) async => _metas[chatId] ?? ChatMeta();
