@@ -16,8 +16,8 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  Future<void> pumpSettings(WidgetTester tester) async {
-    await app.pump(tester, const SettingsPage());
+  Future<void> pumpAppearance(WidgetTester tester) async {
+    await pumpSettings(tester, app, SettingsCategory.general);
     await scrollTo(tester, find.text("Appearance"));
   }
 
@@ -35,7 +35,7 @@ void main() {
     testWidgets("a fresh install wears Cookie", (tester) async {
       final semantics = tester.ensureSemantics();
       expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
-      await pumpSettings(tester);
+      await pumpAppearance(tester);
 
       expectSelected(tester, AppIcon.cookie, selected: true);
       expectSelected(tester, AppIcon.prompt, selected: false);
@@ -43,7 +43,7 @@ void main() {
     });
 
     testWidgets("the default is offered first", (tester) async {
-      await pumpSettings(tester);
+      await pumpAppearance(tester);
       expect(
         tester.getTopLeft(choice(AppIcon.cookie)).dx,
         lessThan(tester.getTopLeft(choice(AppIcon.prompt)).dx),
@@ -52,7 +52,7 @@ void main() {
 
     testWidgets("picking one persists it and tells the launcher", (tester) async {
       final semantics = tester.ensureSemantics();
-      await pumpSettings(tester);
+      await pumpAppearance(tester);
 
       await tester.tap(choice(AppIcon.prompt));
       await settleIo(tester);
@@ -71,7 +71,7 @@ void main() {
     testWidgets("the choice survives a restart", (tester) async {
       final semantics = tester.ensureSemantics();
       app.seedSettings(AppSettings(appIcon: AppIcon.prompt));
-      await pumpSettings(tester);
+      await pumpAppearance(tester);
 
       expectSelected(tester, AppIcon.prompt, selected: true);
       // Nothing was tapped, so the launcher was not told to do anything: it
@@ -81,7 +81,7 @@ void main() {
     });
 
     testWidgets("the section says the home screen follows", (tester) async {
-      await pumpSettings(tester);
+      await pumpAppearance(tester);
       expect(find.textContaining("on the home screen"), findsOneWidget);
     });
   });
@@ -91,7 +91,7 @@ void main() {
 
     testWidgets("the setting still applies, and says what it cannot do",
         (tester) async {
-      await pumpSettings(tester);
+      await pumpAppearance(tester);
       expect(find.textContaining("does not follow this"), findsOneWidget);
 
       await tester.tap(choice(AppIcon.prompt));
