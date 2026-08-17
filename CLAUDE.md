@@ -1441,19 +1441,28 @@ exported is found without having to be pasted in. Old files with the former
 next save.
 
 The settings page is three categories, picked from a panel beside it or, below
-`navBreakpoint`, from the same `NavDrawer` the chat's sidebar becomes.
-**General** is the app itself: the default project's workspace (which has
-nowhere else to be reached from), the app icon, the **Agent** — command approval
-mode and the classifier model, which travel together because auto mode is
-unusable without one — the environment, and deleting every chat. **Providers**
-is the endpoints. **LLMs** is what a new chat is answered by and what names it.
+`navBreakpoint`, from a page of their own. **General** is the app itself: the
+default project's workspace (which has nowhere else to be reached from), the app
+icon, the **Agent** — command approval mode and the classifier model, which
+travel together because auto mode is unusable without one — the environment, and
+deleting every chat. **Providers** is the endpoints. **LLMs** is what a new chat
+is answered by and what names it.
 
-The drawer takes the bar's leading slot, so leaving the page is an action on the
-right rather than the back arrow it displaced. Which category is showing is the
-page's own state; picking one calls `closeNavDrawer` from the tile's context,
-since the page builds the Scaffold and cannot reach it from above. That is the
-same call the sidebar's `openChat` makes — "picking something reveals it" is one
-rule, and it lives beside `NavDrawer` rather than once per panel.
+**Narrow, the categories are the page rather than its drawer**, and each one is
+pushed over the list. That is the one place this and the chat page differ about
+what a panel becomes, and the difference is what is underneath: the sidebar
+opens over a conversation, which is what the user came for, while a drawer here
+opened over General with the other two categories behind a hamburger — the
+structure of the page, reachable only by knowing it was there. As a page it is
+the first thing settings shows. Two levels also means leaving a category is the
+back gesture, so nothing takes the bar's leading slot and the `Close settings`
+action that stood in for the back arrow goes with the drawer.
+
+`_sectionsOf` is what both layouts draw, so a category is the same list of
+sections whether it is beside the panel or on a `_CategoryPage`. The page keeps
+`_category` in either layout, and a `_CategoryPage` pops itself once the window
+is wide: widening puts the category the user was reading beside the panel rather
+than under a full-screen copy of itself.
 
 ### Shared UI
 

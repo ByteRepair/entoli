@@ -409,7 +409,7 @@ void main() {
     testWidgets("the settings page opens the default workspace", (tester) async {
       seed(files: ["shared.md"]);
 
-      await app.pump(tester, const SettingsPage());
+      await pumpSettings(tester, app, SettingsCategory.general);
       await tester.tap(find.text("Workspace"));
       await settleIo(tester);
 

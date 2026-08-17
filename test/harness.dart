@@ -306,18 +306,16 @@ Future<void> pumpSettings(
   SettingsCategory category,
 ) async {
   await app.pump(tester, const SettingsPage());
-  // The page opens on General, so only the other two have to be reached.
-  if (category != SettingsCategory.general) await openCategory(tester, category);
+  await openCategory(tester, category);
 }
 
-/// Move the settings page to [category]. The categories are a panel beside the
-/// page where there is room and its drawer where there is not, and a test
-/// window is narrow — so this opens the drawer when there is one.
+/// Move the settings page to [category]. Wide, the categories are a panel and
+/// the tap only swaps what is beside it; narrow, they are the page and each
+/// category is pushed over it — so getting to another one means going back to
+/// the list first, which is what the bar's title says.
 Future<void> openCategory(WidgetTester tester, SettingsCategory category) async {
-  final menu = find.byIcon(Icons.menu);
-  if (menu.evaluate().isNotEmpty) {
-    await tester.tap(menu);
-    await settleIo(tester);
+  if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
+    await pressBack(tester);
   }
   await tester.tap(find.widgetWithText(ListTile, category.label));
   await settleIo(tester);

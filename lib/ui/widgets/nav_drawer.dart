@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 
-/// Where a panel beside the content stops fitting and becomes a drawer. The
-/// chat's sidebar and the settings page's categories both turn here.
+/// Where a panel beside the content stops fitting. The chat's sidebar becomes a
+/// drawer here; the settings page's categories become a page of their own.
 const double navBreakpoint = 900.0;
 
 /// A docked panel's width, the same for both of them.
