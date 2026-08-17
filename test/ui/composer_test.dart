@@ -352,19 +352,5 @@ void main() {
       expect(menuItems(tester), ["/init", "/revert", "/review"]);
       expect(tester.testTextInput.isVisible, isFalse);
     });
-
-    // Android closes it on a back gesture and says nothing; the field would
-    // otherwise go on blinking over a conversation nobody is typing in.
-    testWidgets("takes the caret with it when it closes", (tester) async {
-      await pump(tester);
-      await tester.tap(find.byType(TextField));
-      await softKeyboard(tester, up: true);
-      expect(holdsCaret(tester, find.byType(TextField)), isTrue);
-
-      await softKeyboard(tester, up: false);
-
-      expect(holdsCaret(tester, find.byType(TextField)), isFalse);
-      expect(tester.testTextInput.isVisible, isFalse);
-    });
   });
 }

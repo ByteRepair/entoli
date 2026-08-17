@@ -1379,18 +1379,29 @@ field has no `FocusNode` of its own any more, since nothing was left to point on
 at.
 
 Giving focus away is the composer's rule; taking it back when the keyboard goes
-is the app's. Android closes the keyboard on a back gesture and says nothing
-about it but that the view insets fell — and on touch the framework deliberately
-never unfocuses a field for a tap outside it — so a field tapped once goes on
-holding the caret over a conversation nobody is typing in.
-`FocusFollowsKeyboard` wraps the app in `main` and is the whole of the answer: it
-remembers what held focus while the insets were up and drops it when they fall to
-nothing.
+is the app's, and is the next section.
+
+The sidebar's new-chat button is a `FloatingActionButton` over the profile and
+settings tiles, which is the one part of the sidebar that is not a list of
+chats and has room to its right. Not `Scaffold.floatingActionButton`: the
+sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
+the one holding the drawer.
+
+### The keyboard and the caret
+
+Android closes the keyboard on a back gesture and says nothing about it but that
+the view insets fell — and on touch the framework deliberately never unfocuses a
+field for a tap outside it — so a field tapped once goes on holding the caret
+over a conversation nobody is typing in. `FocusFollowsKeyboard` wraps the app in
+`main` and is the whole of the answer: it remembers what held focus while the
+insets were up and drops it when they fall to nothing. It is app-level because
+both halves already are, `MediaQuery` and the `FocusManager`, so every field
+gets it and the composer keeps no focus code at all.
 
 It reads `MediaQuery.viewInsetsOf`, so it has to be above every `Scaffold`, which
 is what takes the bottom inset out of what it lays out. Being at the root is also
-what makes it survive. This was in `_ComposerState` first, whose state goes every
-time the `QuestionPanel` takes the composer's place — so its "the keyboard is up"
+what makes it survive: this was in `_ComposerState` first, whose state goes every
+time the `QuestionPanel` takes the composer's place, so its "the keyboard is up"
 flag could be false with the keyboard up. Then it was deleted outright, read as a
 mechanism that existed only to undo the focus requests going away. It was not:
 the insets are the only report of the keyboard closing there is, and the caret
@@ -1405,12 +1416,6 @@ the node the keyboard was up for is the whole of the test. The gap it leaves is
 focus moving straight from one field to another, where the insets never fall and
 the second field keeps its caret; closing that means watching every focus change,
 which is how a reply's selection would get dropped.
-
-The sidebar's new-chat button is a `FloatingActionButton` over the profile and
-settings tiles, which is the one part of the sidebar that is not a list of
-chats and has room to its right. Not `Scaffold.floatingActionButton`: the
-sidebar is deliberately a `Material`, since an inner `Scaffold` would shadow
-the one holding the drawer.
 
 ## Releasing
 

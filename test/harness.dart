@@ -107,10 +107,7 @@ class TestApp {
 
   /// Pump [child] as the whole app. [settle] is for a widget that never comes
   /// to rest — a spinner runs forever, and settling on one times out.
-  ///
-  /// `FocusFollowsKeyboard` is here because `main` puts it in the same place:
-  /// what the keyboard does to a field is the app's answer, so a test of a page
-  /// gets it too.
+  /// It wraps in `FocusFollowsKeyboard` because `main` does.
   Future<void> pump(WidgetTester tester, Widget child, {bool settle = true}) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(

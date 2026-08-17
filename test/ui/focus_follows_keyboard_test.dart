@@ -18,10 +18,7 @@ void main() {
         tester,
         Scaffold(
           body: Column(
-            children: [
-              const SelectableText("a reply"),
-              TextField(controller: TextEditingController()),
-            ],
+            children: const [SelectableText("a reply"), TextField()],
           ),
         ),
       );
@@ -41,7 +38,7 @@ void main() {
   testWidgets("a field the keyboard was never up for is left alone", (tester) async {
     await pump(tester);
     await tester.tap(field);
-    await settleIo(tester);
+    await tester.pumpAndSettle();
     expect(holdsCaret(tester, field), isTrue);
 
     // Insets that were never raised: nothing was taken away, so there is nothing
@@ -59,7 +56,7 @@ void main() {
     // Selecting text in a reply takes the focus and so closes the keyboard. What
     // it took is not the keyboard's to give back.
     await tester.tap(reply);
-    await settleIo(tester);
+    await tester.pumpAndSettle();
     await softKeyboard(tester, up: false);
 
     expect(holdsCaret(tester, reply), isTrue);
