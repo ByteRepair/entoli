@@ -13,36 +13,28 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileNotFoundException
 
-// Entoli's workspaces in the Files app, and in any picker that asks for a file
-// or a folder — the way a cloud drive puts itself there. What the user picks is
-// what gets read: the system grants the chosen app a URI, so nothing here is
-// exposed to an app the user did not point at it.
+// The workspaces in the Files app and in every picker that asks for a file or a
+// folder. See "The workspaces in the Files app" in CLAUDE.md.
 //
-// Read-only. A workspace is where the agent's output lands and this is the way
-// out to whatever reads it; files come the other way through the share sheet,
-// which already has a page for asking which workspace they belong in. Adding
-// writes means FLAG_SUPPORTS_CREATE plus createDocument/deleteDocument, not a
-// change to any of this.
-//
-// Nothing of Dart is running when this is queried — the Files app starts the
-// process by asking — so the layout is read off the disk here. What has to
-// agree with `AppConfig` is the shape of it, and `workspaceDepth` with
-// `projectOf` is the whole of that.
+// Queried with no Flutter engine running — the Files app starts the process by
+// asking — so the layout `AppConfig` composes is read off the disk here, and
+// `workspaceDepth` with `projectOf` is the whole of that agreement.
 class WorkspaceProvider : DocumentsProvider() {
     override fun onCreate() = true
 
     override fun queryRoots(projection: Array<String>?): Cursor {
         val cursor = MatrixCursor(ROOT_COLUMNS)
+        val info = app.applicationInfo
         cursor.newRow().apply {
             add(Root.COLUMN_ROOT_ID, "workspaces")
-            // The default project, which is the data directory itself — so the
-            // top of this tree is the top of that one, and a named project is a
-            // folder in it exactly as it is on disk.
+            // The default project, which is the data directory itself.
             add(Root.COLUMN_DOCUMENT_ID, PROJECT)
-            add(Root.COLUMN_TITLE, app.applicationInfo.loadLabel(app.packageManager).toString())
+            add(Root.COLUMN_TITLE, info.loadLabel(app.packageManager).toString())
             add(Root.COLUMN_SUMMARY, "Workspaces")
             add(Root.COLUMN_FLAGS, Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD)
-            add(Root.COLUMN_ICON, R.mipmap.ic_cookie)
+            // `<application android:icon>`, so this does not follow the user's
+            // icon setting: a root is the app's, like AgentService's.
+            add(Root.COLUMN_ICON, info.icon)
         }
         return cursor
     }
@@ -51,10 +43,11 @@ class WorkspaceProvider : DocumentsProvider() {
         val cursor = MatrixCursor(DOCUMENT_COLUMNS)
         if (documentId.startsWith(PROJECT)) {
             cursor.addProject(projectOf(documentId))
-        } else {
-            val found = locate(documentId)
-            cursor.addFile(documentId, found.file, nameOf(found))
+            return cursor
         }
+        val found = locate(documentId)
+        val name = if (found.file == found.workspace) workspaceName(found.file) else found.file.name
+        cursor.addFile(documentId, found.file, name)
         return cursor
     }
 
@@ -69,10 +62,10 @@ class WorkspaceProvider : DocumentsProvider() {
             return cursor
         }
         val parent = locate(parentDocumentId)
-        parent.file.listFiles()?.sortedBy { it.name.lowercase() }?.forEach { child ->
+        parent.file.listFiles()?.sortedWith(BY_NAME)?.forEach { child ->
             // Resolved rather than trusted: the agent's own commands run in
             // these directories, so a link out of one is something it can have
-            // left behind, and following it would hand out the data directory.
+            // been told to leave behind.
             if (contains(parent.workspace, child.canonicalFile)) {
                 cursor.addFile("$parentDocumentId/${child.name}", child, child.name)
             }
@@ -94,39 +87,37 @@ class WorkspaceProvider : DocumentsProvider() {
         )
     }
 
-    // What FLAG_SUPPORTS_IS_CHILD promises, and what a picker asking for a whole
-    // folder needs answered.
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean = when {
         parentDocumentId == PROJECT -> documentId != PROJECT
         parentDocumentId.startsWith(PROJECT) ->
-            documentId.startsWith("projects/${parentDocumentId.substring(PROJECT.length)}/")
+            documentId.startsWith(prefixOf(projectOf(parentDocumentId)))
         else -> documentId.startsWith("$parentDocumentId/")
     }
 
-    /** A document id resolved to a file, and the workspace it had to stay in. */
-    private class Found(val segments: List<String>, val depth: Int, val file: File, val workspace: File)
+    private class Found(val file: File, val workspace: File)
 
     /**
-     * A document id that is not a project is a path relative to the data
-     * directory, and only the workspaces are reachable through one: the file
-     * has to resolve inside `[projects/<name>/]workspace` or
-     * `[projects/<name>/]chats/<id>/workspace`, and anything else is not there.
+     * Only the workspaces are reachable: a document id has to name one before
+     * anything under it resolves, and has to still be inside it once every link
+     * in it has been followed.
      */
     private fun locate(documentId: String): Found {
         val segments = documentId.split('/')
         if (segments.any { it.isEmpty() || it == "." || it == ".." }) throw notFound(documentId)
         val depth = workspaceDepth(segments) ?: throw notFound(documentId)
-        val workspace = File(dataDir, segments.take(depth).joinToString(File.separator)).canonicalFile
         val file = File(dataDir, segments.joinToString(File.separator)).canonicalFile
+        val workspace = if (depth == segments.size) file else {
+            File(dataDir, segments.take(depth).joinToString(File.separator)).canonicalFile
+        }
         if (!contains(workspace, file)) throw notFound(documentId)
-        return Found(segments, depth, file, workspace)
+        return Found(file, workspace)
     }
 
     /**
-     * The project a project document id names — empty for the default one. It
-     * has to be one directory under `projects/`, which is `AppConfig.projectDir`'s
-     * rule and is here for the same reason: everything scoped to a project is a
-     * path built through it.
+     * The project a project document id names, empty for the default one. Held
+     * to `AppConfig.projectDir`'s rule of one directory under `projects/`,
+     * because a tree grant lets the app holding it compose ids of its own: `:..`
+     * is one that arrives rather than one that was handed out.
      */
     private fun projectOf(documentId: String): String {
         val name = documentId.substring(PROJECT.length)
@@ -136,9 +127,8 @@ class WorkspaceProvider : DocumentsProvider() {
 
     /**
      * How many leading segments of a document id are the workspace it is in, or
-     * null if it names no workspace at all. This is the whole of what the tree
-     * exposes; `resources/`, `subagents/` and the conversation itself are not
-     * in it, and neither is anything beside a project's `chats/`.
+     * null if it names none — so `resources/`, `subagents/` and the conversation
+     * itself are not in the tree and cannot be asked for.
      */
     private fun workspaceDepth(segments: List<String>): Int? {
         val start = if (segments.firstOrNull() == "projects") 2 else 0
@@ -149,23 +139,25 @@ class WorkspaceProvider : DocumentsProvider() {
         }
     }
 
+    private fun prefixOf(project: String) = if (project.isEmpty()) "" else "projects/$project/"
+
     private fun MatrixCursor.addProjectChildren(project: String) {
         val dir = if (project.isEmpty()) dataDir else File(dataDir, "projects/$project")
-        val prefix = if (project.isEmpty()) "" else "projects/$project/"
+        val prefix = prefixOf(project)
 
         File(dir, "workspace").takeIf { it.isDirectory }?.let {
-            addFile("${prefix}workspace", it, SHARED)
+            addFile("${prefix}workspace", it, workspaceName(it))
         }
-        File(dir, "chats").listFiles()?.sorted()?.forEach { chat ->
+        File(dir, "chats").listFiles()?.sortedWith(BY_NAME)?.forEach { chat ->
             val workspace = File(chat, "workspace")
             if (workspace.isDirectory) {
-                addFile("${prefix}chats/${chat.name}/workspace", workspace, chatTitle(chat))
+                addFile("${prefix}chats/${chat.name}/workspace", workspace, workspaceName(workspace))
             }
         }
         // Only the default project has any: `projects/` is a directory in it,
         // and a project of its own would be one nested in another.
         if (project.isEmpty()) {
-            File(dataDir, "projects").listFiles()?.sorted()
+            File(dataDir, "projects").listFiles()?.sortedWith(BY_NAME)
                 ?.filter { it.isDirectory && isProjectName(it.name) }
                 ?.forEach { addProject(it.name) }
         }
@@ -192,25 +184,16 @@ class WorkspaceProvider : DocumentsProvider() {
         }
     }
 
-    /**
-     * Every workspace is a directory called `workspace`, so one is named after
-     * whatever owns it: a chat by its title, a project's shared one by the word
-     * the app already uses for it.
-     */
-    private fun nameOf(found: Found): String {
-        if (found.segments.size != found.depth) return found.file.name
-        val chats = found.segments.size >= 3 && found.segments[found.segments.size - 3] == "chats"
-        if (!chats) return SHARED
-        return chatTitle(File(dataDir, found.segments.dropLast(1).joinToString(File.separator)))
+    // Every workspace is a directory called `workspace`, so one is named after
+    // whatever owns it: a chat by its title, a project's shared one by the word
+    // the explorer uses.
+    private fun workspaceName(workspace: File): String {
+        val owner = workspace.parentFile ?: return "Workspace"
+        return if (owner.parentFile?.name == "chats") chatTitle(owner) else "Workspace"
     }
 
-    /**
-     * The chat's own name. Read out of `state.json` here rather than handed
-     * over by Dart, which is not running: a document written by a rename is
-     * either the old one whole or the new one, so there is no half of it to
-     * read. Untitled, it falls back to the id, which is what its directory is
-     * called.
-     */
+    // Read behind the app's back, which is safe for the reason the documents are
+    // written through a rename: there is no half-written `state.json` to catch.
     private fun chatTitle(chatDir: File): String = try {
         JSONObject(File(chatDir, "state.json").readText())
             .optString("title").ifBlank { chatDir.name }
@@ -218,16 +201,17 @@ class WorkspaceProvider : DocumentsProvider() {
         chatDir.name
     }
 
-    // `isProjectName`, in lib/domain/project.dart: one directory under
-    // `projects/`, and not a hidden one — so a stray `.git` beside them is not
-    // a project with nothing in it, and `..` is not a project at all.
+    // `isProjectName`, in lib/domain/project.dart.
     private fun isProjectName(name: String) =
         name.isNotEmpty() && !name.startsWith(".") && !name.contains('/')
 
+    // `viewerMime`, in lib/data/mime.dart: octet-stream throws away the one fact
+    // that decides whether anything opens the file at all, so an unrecognised
+    // one is offered as text, which is what most of a workspace is.
     private fun mimeOf(file: File): String = when {
         file.isDirectory -> Document.MIME_TYPE_DIR
         else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
-            ?: "application/octet-stream"
+            ?: "text/plain"
     }
 
     private fun contains(dir: File, file: File) =
@@ -236,11 +220,11 @@ class WorkspaceProvider : DocumentsProvider() {
     private fun notFound(documentId: String) =
         FileNotFoundException("No workspace document at $documentId")
 
-    // The same call path_provider's getApplicationDocumentsDirectory makes, so
-    // this is where `platformDataDir` put the data directory rather than a
-    // guess at where it might be.
-    private val dataDir: File
-        get() = File(PathUtils.getDataDirectory(app), "agent-chat")
+    // The call path_provider's getApplicationDocumentsDirectory makes, so this
+    // is where `platformDataDir` put the data directory rather than a guess at
+    // it. Lazy, not eager: a provider is constructed during process start, and
+    // nothing about this belongs there.
+    private val dataDir by lazy { File(PathUtils.getDataDirectory(app), "agent-chat") }
 
     private val app get() = context!!
 
@@ -252,9 +236,10 @@ class WorkspaceProvider : DocumentsProvider() {
         // starts `workspace`, `chats` or `projects`.
         const val PROJECT = ":"
 
-        // What the workspace explorer calls a workspace whose owner is already
-        // named by what it is sitting under.
-        const val SHARED = "Workspace"
+        // `listWorkspace`'s order, in lib/domain/workspace.dart, minus the
+        // folders-first half: DocumentsUI re-sorts by whatever the user picked,
+        // so a second stat per row to group them buys nothing.
+        val BY_NAME: Comparator<File> = compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }
 
         val ROOT_COLUMNS = arrayOf(
             Root.COLUMN_ROOT_ID,

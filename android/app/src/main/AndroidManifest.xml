@@ -98,11 +98,9 @@
                 android:resource="@xml/file_paths"/>
         </provider>
 
-        <!-- The workspaces in the Files app and in every file picker, the way a
-             cloud drive puts itself there. Exported behind MANAGE_DOCUMENTS,
-             which only the system's document UI holds: it is what queries this,
-             and an app only ever gets the URI the user picked through it. See
-             WorkspaceProvider.kt. -->
+        <!-- The workspaces in the Files app and in every file picker. Exported
+             behind MANAGE_DOCUMENTS, which only the system's document UI holds.
+             See WorkspaceProvider.kt. -->
         <provider
             android:name=".WorkspaceProvider"
             android:authorities="${applicationId}.workspaces"

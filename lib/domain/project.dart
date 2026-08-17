@@ -16,6 +16,7 @@ List<String?> everyProject(List<String> named) => [null, ...named];
 
 /// One directory under `projects/` and nothing else. Anything else is a name
 /// that would reach outside it, and `projects/.hidden` is not a project either.
+/// Restated in Kotlin by `WorkspaceProvider`, which cannot call this.
 bool isProjectName(String name) =>
     name.isNotEmpty && !name.startsWith(".") && name == p.basename(name);
 
