@@ -14,6 +14,7 @@ import "providers.dart";
 import "ui/app_shell.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/share/incoming_shares.dart";
+import "ui/theme.dart";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,17 +44,17 @@ void main() async {
   ));
 }
 
-class AgentChatApp extends StatefulWidget {
+class AgentChatApp extends ConsumerStatefulWidget {
   const AgentChatApp({super.key, required this.onExit});
 
   /// A running turn holds a subprocess; exiting without this leaves it behind.
   final Future<void> Function() onExit;
 
   @override
-  State<AgentChatApp> createState() => _AgentChatAppState();
+  ConsumerState<AgentChatApp> createState() => _AgentChatAppState();
 }
 
-class _AgentChatAppState extends State<AgentChatApp> {
+class _AgentChatAppState extends ConsumerState<AgentChatApp> {
   late final AppLifecycleListener _lifecycle;
 
   @override
@@ -75,9 +76,12 @@ class _AgentChatAppState extends State<AgentChatApp> {
 
   @override
   Widget build(BuildContext context) {
+    final mode = ref.watch(appSettingsProvider.select((s) => s.appTheme.mode));
     return MaterialApp(
       title: "Entoli",
-      theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo)),
+      theme: entoliTheme(Brightness.light),
+      darkTheme: entoliTheme(Brightness.dark),
+      themeMode: mode,
       // Both wrapped rather than folded into the shell: what another app shared
       // has to be offered a workspace over whatever is on screen, and a
       // Navigator to push that onto only exists below here; and the keyboard is
