@@ -20,9 +20,15 @@ moved with it.
 
 ## Architecture
 
-One backend, `MinisweBackend` — mini-swe-agent's loop ported to Dart and running
-in this process. No server, no Python, nothing to install. `AgentBackend` stays
-as an interface so the UI and repository can be tested against `FakeBackend`.
+One backend, `BuiltinBackend` — the built-in agent, running in this process. No
+server, no Python, nothing to install. `AgentBackend` stays as an interface so
+the UI and repository can be tested against `FakeBackend`.
+
+It is called *builtin* rather than *miniswe* because the loop is no longer
+mini-swe-agent's in any sense a name should claim: see "The agent loop" for what
+is still shared and what is not. `built-in` was the word when there were two
+backends and one of them was an OpenCode server; with one backend it contrasts
+with nothing either, which is why nothing user-facing names it at all.
 
 - `conv.jsonl` is the source of truth, and it is a log rather than a document.
   `ChatController` appends a turn's events to it as they arrive;
@@ -261,7 +267,7 @@ calls. Handing a response's thinking back with a later response's tool calls is
 rejected, so the split has to be right. Named `projectionOf` rather than
 `project`, which everywhere else here is the directory a chat lives in.
 
-That is what `responseId` is for. `MinisweAgent` names each step before it runs
+That is what `responseId` is for. `BuiltinAgent` names each step before it runs
 and emits `ResponseStart`; every part the controller writes while it is set
 carries it, so the grouping is read out of the log rather than guessed from the
 order parts happen to be in. A part naming no response — a result, an error —
@@ -370,7 +376,7 @@ message rather than the first — and why `_outcome` is turn-scoped rather than
 read off the reply's parts, which is what it used to be. One message was one turn
 until this landed.
 
-`MinisweAgent.resume` is `run` without the task, over a session rebuilt from
+`BuiltinAgent.resume` is `run` without the task, over a session rebuilt from
 `projectionOf` the conversation **whether or not one is already held**. Not
 because a held session would double anything — it holds those messages exactly
 once — but so that carrying on in the same process and carrying on after a
@@ -470,9 +476,18 @@ prefix, an explanation on the next line, thirty words instead of twenty.
 
 ### The agent loop
 
-`MinisweAgent` is mini-swe-agent's control flow in Dart: render the system and
+`BuiltinAgent` is mini-swe-agent's control flow in Dart: render the system and
 task prompts, ask the model, run the tool calls it made, show it the results,
-repeat. It exits when the model replies with no tool calls — the reply text is
+repeat. What is still upstream's, and it is worth knowing which parts are: that
+skeleton (`DefaultAgent.run`/`step`/`query`/`execute_actions`), the one `bash`
+tool and its schema, the observation JSON `observation()` writes — key for key,
+including the 10,000-character threshold and the 5,000-character head and tail —
+and the shell contract `LocalShell` keeps, which is `local.py`'s; see "Running
+the commands". Prompt furniture too: the `cd` prefix rule, the
+`<system_information>` block, the `cat <<'EOF'` and `sed -i` examples.
+
+Everything else has diverged, and one divergence is the protocol rather than a
+detail. It exits when the model replies with no tool calls — the reply text is
 the answer — or when it hits the step limit. This is the native API contract
 models are trained on (text-only message = finished answer, tool calls =
 continue), which works reliably across model sizes. The codebase previously
@@ -480,7 +495,16 @@ used mini-swe-agent's `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` marker as the
 termination signal, but that protocol was a forcing function for weak models on
 SWE-bench and failed on exactly the small models this app targets: they called
 the marker without writing answer text, leaving the sub-agent runner with an
-empty buffer.
+empty buffer. Upstream still holds the opposite rule — a reply with no tool call
+is a format error it retries — so the one behaviour the old name would have
+predicted is the one this does backwards.
+
+What is not upstream's at all, and it is most of this directory: cost tracking
+and the cost limit that is upstream's real budget (this counts steps instead),
+the format-error machinery, the trajectory serialization, and litellm — `llm/`
+is a thousand lines of streaming HTTP clients where upstream makes one blocking
+call. Nor sub-agents, `ask_user`, web search, approval modes, sessions that
+outlive a turn, resume, or the projection.
 
 Ported rather than embedded because none of the ways of running the real Python
 meet "no external setup": `flutter_python_bridge` shells out to the system
@@ -505,7 +529,7 @@ for a tool that does not exist. A provider that sees a
 `tool_use` with no matching result rejects the *next* turn, so padding them with
 "this command was not executed" is what keeps the session usable.
 
-`MinisweSession` holds the conversation as the model sees it, per chat, for as
+`BuiltinSession` holds the conversation as the model sees it, per chat, for as
 long as the app runs — which is the whole of its lifetime, so `resetSession` and
 an empty one at the head of a turn are filled from the log through
 `projectionOf`. See "The projection".
@@ -535,9 +559,9 @@ client per provider and rebuilds it when the URL or key changes; a provider that
 lists no models is asked, and one that cannot answer contributes nothing rather
 than failing the whole list.
 
-A `RateLimitGate` is built per turn in `MinisweBackend.sendPrompt` and shared by
-the parent `MinisweAgent` and every sub-agent it spawns: it bounds in-flight
-`LlmClient.stream` calls to `MinisweOptions.maxConcurrentLlmRequests` (4
+A `RateLimitGate` is built per turn in `BuiltinBackend.sendPrompt` and shared by
+the parent `BuiltinAgent` and every sub-agent it spawns: it bounds in-flight
+`LlmClient.stream` calls to `BuiltinOptions.maxConcurrentLlmRequests` (4
 default) through a `GatedLlmClient` wrapper, and coordinates 429 backoff so a
 75-vote fan-out doesn't each-retry-into the same rate limit. When any one
 request gets a 429, the gate sets a shared cooldown that every other in-flight
@@ -556,7 +580,7 @@ that never opened) emits `RetryEvent` the instant it fails. Four attempts with
 ~7s. A 429 takes a different path: a `RateLimitGate` shared across the parent
 and every sub-agent coordinates backoff so a fan-out pauses as one rather than
 each-retry-into the same limit (see "Reaching a provider"). 429 retries
-continue for `MinisweOptions.rateLimitRetryBudget` (5 min default) with
+continue for `BuiltinOptions.rateLimitRetryBudget` (5 min default) with
 exponential backoff capped at 60s; other retryables keep the per-agent
 `maxAttempts` budget. Where no gate is present (tests against a raw
 `FakeLlmClient`), 429s fall back to the per-agent path.
@@ -587,7 +611,7 @@ something else wanted the space. A browser that refuses leaves the app working,
 just evictable again. Everywhere else it is a no-op, because a directory on a
 disk is already as durable as the app is.
 
-`MinisweBackend.webSearch` is required rather than defaulted for that reason —
+`BuiltinBackend.webSearch` is required rather than defaulted for that reason —
 a default of `DuckDuckGoSearch()` puts its HTML parser in the web bundle
 (~280 KB) where CORS means it can never be called.
 
@@ -607,8 +631,8 @@ Whether `setsid` is there is learned by trying it, not by probing first.
 #### Approvals
 
 `approveMode` (`meta.json` over `settings.json`) is resolved once in
-`ChatRepository` and arrives with the prompt, so it is a `MinisweAgent`
-parameter beside `approve` rather than part of `MinisweOptions`, which holds
+`ChatRepository` and arrives with the prompt, so it is a `BuiltinAgent`
+parameter beside `approve` rather than part of `BuiltinOptions`, which holds
 only what is genuinely per-agent. Three modes: `ask` (every command waits for
 the banner), `auto` (a classifier model decides allow/ask/deny per command),
 `never` (run everything). An older file's `approveCommands` bool migrates:
@@ -681,7 +705,7 @@ one stops on a banner.
 `SubAgentRunner` holds the running agents so `cancel` reaches them — a turn
 aborted while sub-agents are running kills every one, not just the parent's
 loop. The parent's `_executeTasks` runs the calls concurrently, capped by
-`MinisweOptions.maxConcurrentSubAgents` (8 by default — deep-research can fan
+`BuiltinOptions.maxConcurrentSubAgents` (8 by default — deep-research can fan
 out to 75, and 8 concurrent keeps provider rate limits in view). Events
 stream out as each sub-agent resolves, but the session messages are answered
 in the calls' original order, so the tool results pair up with the calls.
@@ -726,10 +750,10 @@ controller that writes `conv.jsonl`, so the store's owner never has them.
 
 ##### Carrying one on
 
-`MinisweBackend._reviveSubAgents` runs before the resumed session is built. A
+`BuiltinBackend._reviveSubAgents` runs before the resumed session is built. A
 `task` call in the interrupted reply whose result never landed is answered by
 running its sub-agent on, over a session rebuilt from its own transcript — which
-is `MinisweAgent.resume` and `projectionOf`, the same three steps the user's
+is `BuiltinAgent.resume` and `projectionOf`, the same three steps the user's
 Continue takes one level up, so there is one mechanism and not two.
 
 **Nothing asks, and nobody is told.** "Carrying on an interrupted turn" says
@@ -772,7 +796,7 @@ the same way it words a command's — the model reads one shape, whatever ran.
 Android kills a process nobody is looking at, and a turn is minutes of a model's
 time and a half-written reply. `AgentService` is a `dataSync` foreground service
 that says the process is busy; `TurnKeepAlive` starts and stops it from
-`AgentBackend.runningTurns`, which is the chats `MinisweBackend` has an agent
+`AgentBackend.runningTurns`, which is the chats `BuiltinBackend` has an agent
 running for. It is a `ValueListenable` of ids rather than a count so that Stop
 can abort each one, which is also why there is no `abortAll` — one way to stop a
 turn.
@@ -983,7 +1007,7 @@ A prompt file is YAML frontmatter, then the template a command expands to or the
 system prompt an agent runs under. `PromptDocument` reads only the top-level
 scalars — `description` is all the menu needs.
 
-The syntax is parsed in `MinisweBackend` (`_command` / `_mention`), not in the
+The syntax is parsed in `BuiltinBackend` (`_command` / `_mention`), not in the
 repository or the UI: `conv.jsonl` stores the message as typed, so a regenerated
 turn re-parses to the same thing. `activeCompletionToken` in the composer has to
 agree with those two patterns — anything the menu offers has to dispatch.

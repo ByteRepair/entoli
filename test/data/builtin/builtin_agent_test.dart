@@ -1,35 +1,35 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
-import "package:agent_chat/data/miniswe/miniswe_agent.dart";
+import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 
-import "miniswe_fakes.dart";
+import "builtin_fakes.dart";
 
 void main() {
-  late MinisweSession session;
+  late BuiltinSession session;
   late FakeShell shell;
 
-  setUp(() => session = MinisweSession());
+  setUp(() => session = BuiltinSession());
 
   /// The agent under test. [approvals] answers each request in order; without
   /// one, commands run unasked.
-  MinisweAgent agentOver(
+  BuiltinAgent agentOver(
     FakeLlmClient client, {
     ShellResult Function(String)? respond,
     List<ApprovalResponse> approvals = const [],
     List<String?>? answers,
-    MinisweOptions options = const MinisweOptions(),
+    BuiltinOptions options = const BuiltinOptions(),
     ApproveMode approveMode = ApproveMode.never,
     bool canRunCommands = true,
   }) {
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
     final allowed = [...approvals];
-    return MinisweAgent(
+    return BuiltinAgent(
       session: session,
       client: client,
       shell: shell,
@@ -413,7 +413,7 @@ void main() {
     test("a turn that never finishes stops at the step limit", () async {
       final client = FakeLlmClient(List.filled(3, [bashCall("sleep 1")]));
       final events = await agentOver(client,
-              options: const MinisweOptions(stepLimit: 3))
+              options: const BuiltinOptions(stepLimit: 3))
           .run("hi")
           .toList();
 
@@ -427,7 +427,7 @@ void main() {
         [finish],
       ])..failures[0] = const LlmException("rate limited", statusCode: 429, retryable: true);
       final events = await agentOver(client,
-              options: const MinisweOptions(retryBackoff: Duration.zero))
+              options: const BuiltinOptions(retryBackoff: Duration.zero))
           .run("hi")
           .toList();
 
@@ -451,7 +451,7 @@ void main() {
         client.failures[i] = const LlmException("busy", statusCode: 503, retryable: true);
       }
       final events = await agentOver(client,
-              options: const MinisweOptions(maxAttempts: 3, retryBackoff: Duration.zero))
+              options: const BuiltinOptions(maxAttempts: 3, retryBackoff: Duration.zero))
           .run("hi")
           .toList();
 

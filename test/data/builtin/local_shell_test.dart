@@ -3,7 +3,7 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-import "package:agent_chat/data/miniswe/local_shell.dart";
+import "package:agent_chat/data/builtin/local_shell.dart";
 
 void main() {
   late Directory workspace;

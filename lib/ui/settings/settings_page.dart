@@ -239,8 +239,8 @@ class _AgentSection extends ConsumerWidget {
       children: [
         const _SectionHeader(
           "Agent",
-          description: "mini-swe-agent, running inside Entoli. It calls the model "
-              "itself and runs its commands in the chat's workspace.",
+          description: "The built-in agent, running inside Entoli. It calls the "
+              "model itself and runs its commands in the chat's workspace.",
         ),
         LabelledField(
           label: "Running commands",

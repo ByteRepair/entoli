@@ -1,8 +1,8 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
-import "package:agent_chat/data/miniswe/projection.dart";
-import "package:agent_chat/data/miniswe/templates.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/projection.dart";
+import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 

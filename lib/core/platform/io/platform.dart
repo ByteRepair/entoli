@@ -7,8 +7,8 @@ import "package:path_provider/path_provider.dart";
 
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/desktop_file_handoff.dart";
-import "../../../data/miniswe/duckduckgo_search.dart";
-import "../../../data/miniswe/local_shell.dart";
+import "../../../data/builtin/duckduckgo_search.dart";
+import "../../../data/builtin/local_shell.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/web_search.dart";

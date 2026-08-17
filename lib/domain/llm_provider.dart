@@ -2,7 +2,7 @@
 /// `/chat/completions` is [openai]; Anthropic's `/messages` is its own.
 enum LlmApi { openai, anthropic }
 
-/// An endpoint mini-swe-agent can call, as the user configured it. Held in
+/// An endpoint the agent can call, as the user configured it. Held in
 /// `settings.json` rather than guessed from environment variables: the same
 /// key reaches half a dozen gateways, and only the base URL says which one.
 class LlmProviderConfig {

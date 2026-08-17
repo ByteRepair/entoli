@@ -27,7 +27,7 @@ typedef CompletionToken = ({CompletionKind kind, int start, String query});
 
 /// The word the caret sits in, when it is a trigger token. `/` only counts at
 /// the very start of a message; `@` counts wherever a word begins. Anything
-/// offered here has to dispatch, so this matches `MinisweBackend`'s patterns.
+/// offered here has to dispatch, so this matches `BuiltinBackend`'s patterns.
 CompletionToken? activeCompletionToken(TextEditingValue value) {
   final selection = value.selection;
   if (!selection.isValid || !selection.isCollapsed) return null;

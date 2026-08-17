@@ -9,13 +9,13 @@ import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
+import "builtin_agent.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
-import "miniswe_agent.dart";
 import "projection.dart";
 
 /// Spawns sub-agents for `task` tool calls. Each sub-agent gets a fresh
-/// [MinisweSession], the named `@agent`'s body as its system-prompt overlay,
+/// [BuiltinSession], the named `@agent`'s body as its system-prompt overlay,
 /// and runs to completion headless — no `ask_user`, no `task` (sub-agents do
 /// not spawn their own sub-agents), no per-command approval banners. The
 /// parent's approval setting gates the parent's own commands; a sub-agent's
@@ -28,7 +28,7 @@ class SubAgentRunner {
     required this.projectWorkspace,
     required this.model,
     required this.library,
-    this.options = const MinisweOptions(),
+    this.options = const BuiltinOptions(),
     this.temperature,
     this.reasoningEffort,
     this.webSearch,
@@ -42,7 +42,7 @@ class SubAgentRunner {
   final String projectWorkspace;
   final String model;
   final PromptLibrary? library;
-  final MinisweOptions options;
+  final BuiltinOptions options;
   final double? temperature;
   final String? reasoningEffort;
   final WebSearch? webSearch;
@@ -58,7 +58,7 @@ class SubAgentRunner {
   /// on rather than lose the work. See [SubAgentLog].
   final SubAgentLog log;
 
-  final Set<MinisweAgent> _active = {};
+  final Set<BuiltinAgent> _active = {};
 
   /// Run one sub-agent. The [agentName] is looked up in the [library]; a name
   /// that is not found falls back to `general`, and a missing `general` runs
@@ -69,7 +69,7 @@ class SubAgentRunner {
         library?.find(CompletionKind.agent, "general");
     final agentPrompt = document?.body;
 
-    final session = MinisweSession();
+    final session = BuiltinSession();
     return _drive(session, agentPrompt, callId,
         (agent) => agent.run(prompt, agentPrompt: agentPrompt));
   }
@@ -82,22 +82,22 @@ class SubAgentRunner {
         library?.find(CompletionKind.agent, "general");
     final agentPrompt = document?.body;
 
-    final session = MinisweSession()..replaceWith(projectionOf(await log.read(callId)));
+    final session = BuiltinSession()..replaceWith(projectionOf(await log.read(callId)));
     return _drive(session, agentPrompt, callId, (agent) => agent.resume(agentPrompt: agentPrompt));
   }
 
   /// What running and carrying on have in common: the agent, its transcript,
   /// and reading a final answer out of what it said.
   Future<ShellResult> _drive(
-    MinisweSession session,
+    BuiltinSession session,
     String? agentPrompt,
     String? callId,
-    Stream<AgentEvent> Function(MinisweAgent) start,
+    Stream<AgentEvent> Function(BuiltinAgent) start,
   ) async {
     final buffer = StringBuffer();
     String? error;
 
-    final agent = MinisweAgent(
+    final agent = BuiltinAgent(
       session: session,
       client: client,
       shell: shell,
@@ -186,7 +186,7 @@ class SubAgentRunner {
     return recorder;
   }
 
-  /// Cancel every running sub-agent. Called by the parent's [MinisweAgent.cancel].
+  /// Cancel every running sub-agent. Called by the parent's [BuiltinAgent.cancel].
   Future<void> cancel() async {
     await Future.wait(_active.map((a) => a.cancel()));
     _active.clear();

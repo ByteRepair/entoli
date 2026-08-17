@@ -19,8 +19,8 @@ drive: a scripted turn is over the moment its events are yielded, so
 `TurnKeepAlive` does with them. `abort` takes one back out, which is what makes
 the Stop path end-to-end rather than two assertions. What the real one promises
 — that a chat stays listed until its event stream has closed, not until the
-agent stops — is pinned on `MinisweBackend` instead, in
-`miniswe_backend_test.dart`.
+agent stops — is pinned on `BuiltinBackend` instead, in
+`builtin_backend_test.dart`.
 
 `FakeFileHandoff` is which platform the workspace explorer thinks it is on, and
 its three named constructors are the three answers — `desktop()` has a file
@@ -59,7 +59,7 @@ avoid the pumping below.
 `sub_agent_log_test.dart` seeds a killed sub-agent the way a kill leaves one:
 `recordsOf` a message with something in it and no `turnEnd` after it. The
 message is named after the call, since that is the only id a sub-agent
-transcript has. `miniswe_backend_test.dart` does the same one level up, where
+transcript has. `builtin_backend_test.dart` does the same one level up, where
 the subject is the parent carrying it on.
 
 `web_filesystem_test.dart` is the other half. `newFileSystemMemory()` is the
@@ -109,7 +109,7 @@ it hangs on a disk. `runAsync` is the only answer.
 
 ## The live test
 
-`test/live/miniswe_live.dart` drives a real provider through the production
+`test/live/builtin_live.dart` drives a real provider through the production
 path. It deliberately does **not** call
 `TestWidgetsFlutterBinding.ensureInitialized()`: that installs an `HttpOverrides`
 answering every request with a 400, which is the whole of what a live test is

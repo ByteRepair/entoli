@@ -146,7 +146,7 @@ class TurnSettings {
   final Profile? profile;
 }
 
-/// What runs a turn, and the app's one route to a provider. `MinisweBackend`
+/// What runs a turn, and the app's one route to a provider. `BuiltinBackend`
 /// is the implementation; this exists as a seam so the UI and the repository
 /// can be tested without one.
 abstract class AgentBackend {
