@@ -12,6 +12,7 @@ import "data/local/file_selector_picker.dart";
 import "domain/prompt_library.dart";
 import "providers.dart";
 import "ui/app_shell.dart";
+import "ui/focus_follows_keyboard.dart";
 import "ui/share/incoming_shares.dart";
 
 void main() async {
@@ -77,10 +78,11 @@ class _AgentChatAppState extends State<AgentChatApp> {
     return MaterialApp(
       title: "Entoli",
       theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo)),
-      // Wrapped rather than folded into the shell: what another app shared has
-      // to be offered a workspace over whatever is on screen, and a Navigator
-      // to push that onto only exists below here.
-      home: const IncomingShares(child: AppShell()),
+      // Both wrapped rather than folded into the shell: what another app shared
+      // has to be offered a workspace over whatever is on screen, and a
+      // Navigator to push that onto only exists below here; and the keyboard is
+      // the app's to answer for, over whichever field had it.
+      home: const FocusFollowsKeyboard(child: IncomingShares(child: AppShell())),
     );
   }
 }

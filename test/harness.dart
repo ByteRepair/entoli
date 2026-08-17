@@ -17,6 +17,7 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
+import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/widgets/provider_model_selector.dart";
 
 import "fakes.dart";
@@ -106,9 +107,16 @@ class TestApp {
 
   /// Pump [child] as the whole app. [settle] is for a widget that never comes
   /// to rest — a spinner runs forever, and settling on one times out.
+  ///
+  /// `FocusFollowsKeyboard` is here because `main` puts it in the same place:
+  /// what the keyboard does to a field is the app's answer, so a test of a page
+  /// gets it too.
   Future<void> pump(WidgetTester tester, Widget child, {bool settle = true}) async {
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: MaterialApp(home: child)),
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(home: FocusFollowsKeyboard(child: child)),
+      ),
     );
     if (settle) await settleIo(tester);
   }
@@ -242,6 +250,23 @@ List<bool> frameworkHandlesBack(WidgetTester tester) {
   );
   return answers;
 }
+
+/// The soft keyboard, the way the platform reports one: insets over the bottom
+/// of the window, and nothing else. [up] false is it going away — which on
+/// Android is the whole of what a back gesture says about it.
+Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
+  addTearDown(tester.view.resetViewInsets);
+  tester.view.viewInsets = FakeViewPadding(bottom: up ? 300 : 0);
+  await tester.pump();
+}
+
+/// Whether [field] holds the caret. A `TextField` here has no `FocusNode` of its
+/// own, so the node to ask is the `EditableText`'s inside it — which is also
+/// what a `SelectableText` is built out of.
+bool holdsCaret(WidgetTester tester, Finder field) => tester
+    .widget<EditableText>(find.descendant(of: field, matching: find.byType(EditableText)))
+    .focusNode
+    .hasFocus;
 
 /// The app under system bars, the way Android draws it: the window is the whole
 /// screen and what the status and navigation bars cover is [padding].
