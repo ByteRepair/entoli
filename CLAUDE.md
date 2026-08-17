@@ -51,6 +51,9 @@ title model, the classifier model, `approveMode`, `environment`, `appIcon`, and
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android), and `/agent-chat` in a browser — where it is a
 name in IndexedDB rather than a path, and load-bearing all the same.
+`AppConfig` is not the only thing that knows this layout: `WorkspaceProvider`
+reads the workspace half of it in Kotlin, because Android's Files app asks with
+no engine running. See "The workspaces in the Files app".
 
 The filesystem is a port, and it is `fs_shim`'s `FileSystem` rather than one of
 ours: `fileSystemIo` on desktop and Android, `fileSystemWeb` (IndexedDB) in a
@@ -1097,7 +1100,10 @@ every future member too.
 - **Android** has the share sheet, both ways. `export` sends a selection through
   `Intent.createChooser`, so every app on the device is on offer rather than a
   default winning silently; `open` is an `ACTION_VIEW`. Files come back in the
-  same way, and only that way: another app shares to Entoli. See below.
+  same way, and only that way: another app shares to Entoli. It is not the only
+  route out any more — a `DocumentsProvider` puts the workspaces in the Files
+  app, for the other app to browse rather than be handed something. Both are
+  below.
 - **A browser** opens a file as a blob in a new tab, which is what lets the
   browser preview it, downloads a selection, and takes files in through the
   chooser `<input type="file">` already is — `webkitdirectory` for a folder,
@@ -1205,6 +1211,57 @@ second share arriving while that page is open would delete the paths the page is
 still pointing at. At `takeShare` there is no such hazard: only one batch is ever
 offered at a time, so anything left beside the batch being handed over is an
 earlier one nobody claimed.
+
+#### The workspaces in the Files app
+
+`WorkspaceProvider` is a `DocumentsProvider`, which puts Entoli in the Files app
+and in every picker that asks for a file or a folder — the mechanism a cloud
+drive uses to appear there. Exported behind `MANAGE_DOCUMENTS`, a permission
+only the system's document UI holds, so nothing queries it directly: an app gets
+the URI the user picked through that UI and nothing besides, and
+`FLAG_SUPPORTS_IS_CHILD` is what lets them pick a whole workspace rather than one
+file at a time.
+
+**Read-only**, because this is the route out and the other direction already has
+a better one: a file coming in has to be told which workspace it belongs in, and
+"Sharing to Entoli" above is the page that asks. Writing would be
+`FLAG_SUPPORTS_CREATE` and `createDocument`/`deleteDocument` beside what is there
+rather than a change to any of it.
+
+**The tree is the on-disk layout, not a view of it.** The root is the default
+project — which *is* the data directory — so its children are that project's
+shared `workspace/`, a folder per chat in it, and a folder per named project,
+which is where `projects/` already puts them; a named project holds the same two
+kinds of thing. Each is named after whatever owns it, since every workspace is a
+directory called `workspace`: a chat by its title, a project's shared one by the
+word the explorer uses.
+
+A document id is either a project — `:` for the default one, `:<name>` for a
+named one — or a path relative to the data directory, which is what every file
+in a workspace is. Neither can be read as the other: a project name is never
+empty and a real path always starts `workspace`, `chats` or `projects`.
+`workspaceDepth` is the whole of what a path can reach — it has to name
+`[projects/<name>/]workspace` or `[projects/<name>/]chats/<id>/workspace` before
+anything under it resolves, so `resources/`, `subagents/`, `conv.jsonl` and
+`settings.json` are not in the tree and cannot be asked for. `projectOf` holds a
+project id to `AppConfig.projectDir`'s rule for the same reason, and why both
+are needed is worth saying: a tree grant lets the app holding it compose ids of
+its own, so `:..` is an id that arrives rather than one that was handed out.
+
+Paths are then resolved canonically and checked against the workspace they came
+out of, on a listing as well as on an open. The agent's own commands run in these
+directories, so a link to the data directory is something it can be told to leave
+behind, and following one would hand over exactly what the shape check exists to
+keep out of reach.
+
+**Nothing of Dart is running when any of this is asked** — the Files app starts
+the process by querying — so the data directory is found with
+`PathUtils.getDataDirectory`, the call `getApplicationDocumentsDirectory` itself
+makes, and a chat's name is read out of its own `state.json`. Reading those
+behind the app's back is safe for the reason the documents are written through a
+rename: there is no half-written one to catch. It is also why the layout is read
+rather than indexed: a `workspaces.json` beside it would be a copy to keep in
+step, and a chat moved by hand would stop being in the project it was moved to.
 
 ### The app icon
 
