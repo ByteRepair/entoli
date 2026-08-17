@@ -25,29 +25,76 @@ void main() {
   void seedSettings(String providerId, String modelId) =>
       app.seedGlobalDefault(providerId: providerId, modelId: modelId);
 
-  Future<void> pumpSettings(WidgetTester tester) => app.pump(tester, const SettingsPage());
+  group("the categories", () {
+    Finder tile(String label) => find.widgetWithText(ListTile, label);
 
-  testWidgets("renders a section per thing that can be configured", (tester) async {
-    await pumpSettings(tester);
-    expect(find.text("Settings"), findsOneWidget);
-    expect(find.text("New chats"), findsOneWidget);
+    testWidgets("sit beside the page where there is room for them", (tester) async {
+      useWindow(tester, const Size(1200, 800));
+      await app.pump(tester, const SettingsPage());
+
+      expect(find.byIcon(Icons.menu), findsNothing);
+      expect(tile("Providers"), findsOneWidget);
+    });
+
+    // The same drawer the chat's sidebar becomes, back key and all.
+    testWidgets("and are the page's drawer where there is not", (tester) async {
+      await app.pump(tester, const SettingsPage());
+      expect(tile("Providers"), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.menu));
+      await settleIo(tester);
+      expect(tile("Providers"), findsOneWidget);
+
+      await tester.tap(tile("Providers"));
+      await settleIo(tester);
+
+      expect(find.byType(Drawer), findsNothing);
+      expect(find.text("Add provider"), findsOneWidget);
+    });
+
+    testWidgets("are offered General, Providers, LLMs, in that order", (tester) async {
+      useWindow(tester, const Size(1200, 800));
+      await app.pump(tester, const SettingsPage());
+
+      // Scoped to the panel: the settings beside it are tiles of their own.
+      final panel = find.ancestor(of: tile("General"), matching: find.byType(ListView));
+      expect(
+        tester
+            .widgetList<ListTile>(find.descendant(of: panel, matching: find.byType(ListTile)))
+            .map((t) => (t.title! as Text).data),
+        ["General", "Providers", "LLMs"],
+      );
+    });
+  });
+
+  testWidgets("each category holds the settings filed under it", (tester) async {
+    await pumpSettings(tester, app, SettingsCategory.general);
 
     // scrollTo ends in ensureVisible, which throws unless the finder matches
     // exactly one widget — reaching each section is the assertion.
     await scrollTo(tester, find.text("Default workspace"));
+    await scrollTo(tester, find.text("Appearance"));
     await scrollTo(tester, find.text("Agent"));
     await scrollTo(tester, find.text("Environment"));
     await scrollTo(tester, find.text("Delete all chats"));
+
+    await openCategory(tester, SettingsCategory.llms);
+    expect(find.text("New chats"), findsOneWidget);
+    expect(find.text("Default workspace"), findsNothing);
+
+    await openCategory(tester, SettingsCategory.providers);
+    expect(find.text("Add provider"), findsOneWidget);
+    expect(find.text("New chats"), findsNothing);
   });
 
   testWidgets("shows both provider and model form fields", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
     expect(find.text("Provider"), findsOneWidget);
     expect(find.text("Model"), findsOneWidget);
   });
 
   testWidgets("with nothing persisted, Default offers no models to guess from", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
     expect(find.byType(DropdownButtonFormField<String?>), findsNWidgets(2));
     expect(find.text(defaultOptionLabel), findsNWidgets(2));
 
@@ -59,7 +106,7 @@ void main() {
   });
 
   testWidgets("choosing a provider populates the models", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
 
     await openDropdown(tester, model: false);
     await tester.tap(find.text(firstProvider).last);
@@ -70,7 +117,7 @@ void main() {
   });
 
   testWidgets("selecting a model persists default in settings", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
     await openDropdown(tester, model: false);
     await tester.tap(find.text(firstProvider).last);
     await settleIo(tester);
@@ -89,7 +136,7 @@ void main() {
   });
 
   testWidgets("switching provider updates model list", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
     await openDropdown(tester, model: false);
 
     await tester.tap(find.text(otherProvider));
@@ -105,7 +152,7 @@ void main() {
 
   testWidgets("persisted default is preselected and cleared when provider changes", (tester) async {
     seedSettings(otherProvider, "qwen-2.5");
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
 
     expect(find.text(otherProvider), findsOneWidget);
     expect(find.text("Qwen 2.5"), findsOneWidget);
@@ -121,7 +168,7 @@ void main() {
 
   testWidgets("a saved model the backend no longer offers does not break the page", (tester) async {
     seedSettings(otherProvider, "");
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
 
     expect(tester.takeException(), isNull);
     expect(find.text(otherProvider), findsOneWidget);
@@ -130,9 +177,8 @@ void main() {
 
   group("the title model", () {
     Future<void> openTitleDropdown(WidgetTester tester) async {
-      // The title picker is the first OptionalModelPicker on the page; the
-      // classifier picker is the second. Both are the same type, so scope by
-      // the label that precedes it.
+      // Scoped by the label that precedes it: the model picker above it is a
+      // dropdown of the same type.
       final label = find.text("Title LLM");
       await scrollTo(tester, label);
       final field = find.descendant(
@@ -144,7 +190,7 @@ void main() {
     }
 
     testWidgets("is off until one is picked, and every model is offered", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       await openTitleDropdown(tester);
 
       // Off, then all four models by name: nothing inherits from this, so
@@ -159,7 +205,7 @@ void main() {
     });
 
     testWidgets("picking one stores the provider with it", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       await openTitleDropdown(tester);
 
       await tester.tap(find.text("Claude Haiku 3").last);
@@ -174,7 +220,7 @@ void main() {
     testWidgets("turning it off drops both halves", (tester) async {
       app.seedSettings(
           AppSettings(titleProviderId: otherProvider, titleModelId: "qwen-2.5"));
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.llms);
       expect(find.text("Qwen 2.5"), findsOneWidget);
 
       await openTitleDropdown(tester);
@@ -188,11 +234,9 @@ void main() {
 
     testWidgets("a model the backend no longer offers reads as off", (tester) async {
       app.seedSettings(AppSettings(titleProviderId: "gone", titleModelId: "vanished"));
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.llms);
 
       expect(tester.takeException(), isNull);
-      // The title LLM reads as off; the classifier LLM is also off, so scope
-      // to the title field.
       final titleLabel = find.text("Title LLM");
       final titleField = find.ancestor(
         of: titleLabel,
@@ -203,7 +247,7 @@ void main() {
   });
 
   testWidgets("delete all chats asks first and then clears them", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.general);
     final repo = app.repo;
     await io(tester, () => app.seedChat(title: "one"));
     await io(tester, () => app.seedChat(title: "two"));
@@ -220,7 +264,7 @@ void main() {
   });
 
   testWidgets("cancelling the confirmation keeps the chats", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.general);
     final repo = app.repo;
     await io(tester, () => app.seedChat(title: "one"));
 
@@ -234,7 +278,7 @@ void main() {
   });
 
   testWidgets("with no chats there is nothing to confirm", (tester) async {
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.general);
 
     await scrollTo(tester, find.text("Delete all chats"));
     await tester.tap(find.text("Delete all chats"));
@@ -246,7 +290,7 @@ void main() {
 
   testWidgets("the reset button puts a pinned model back on Default", (tester) async {
     seedSettings(otherProvider, "qwen-2.5");
-    await pumpSettings(tester);
+    await pumpSettings(tester, app, SettingsCategory.llms);
     expect(find.text("Qwen 2.5"), findsOneWidget);
 
     await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
@@ -268,7 +312,7 @@ void main() {
     }
 
     testWidgets("a variable added here reaches the next server", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.general);
 
       await addVariable(tester, "ANTHROPIC_API_KEY", "sk-test");
 
@@ -277,7 +321,7 @@ void main() {
     });
 
     testWidgets("the value is masked, so settings can be shown to someone", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.general);
       await addVariable(tester, "OPENAI_API_KEY", "sk-secret");
 
       expect(find.text("OPENAI_API_KEY"), findsOneWidget);
@@ -285,7 +329,7 @@ void main() {
     });
 
     testWidgets("editing a variable's name does not leave the old one behind", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.general);
       await addVariable(tester, "OLD_NAME", "value");
 
       await tester.tap(find.text("OLD_NAME"));
@@ -298,7 +342,7 @@ void main() {
     });
 
     testWidgets("removing one leaves the rest", (tester) async {
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.general);
       await addVariable(tester, "KEEP", "1");
       await addVariable(tester, "DROP", "2");
 
@@ -310,7 +354,7 @@ void main() {
 
     testWidgets("the model default survives an environment edit", (tester) async {
       seedSettings(otherProvider, "qwen-2.5");
-      await pumpSettings(tester);
+      await pumpSettings(tester, app, SettingsCategory.general);
 
       await addVariable(tester, "TOKEN", "abc");
 

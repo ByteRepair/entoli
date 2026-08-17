@@ -896,6 +896,14 @@ those is a part of the assistant message and the chat draws it as a frameless
 label above the bubble, in the order it happened, with the detail behind a
 bottom drawer. The bubble holds only what the model said.
 
+**Only the prompt is a bubble.** A reply is drawn full width with nothing tinted
+behind it — it is the page rather than something said to one side of it — and a
+prompt keeps its container, capped at four fifths of the line and pushed right.
+That cap reads the constraints it is given rather than the window, since the
+conversation is a centred column on a monitor and the window is no longer what
+the message has to fit in. Which of the two a role gets is the null in the
+`(name, bg)` switch, so there is one place that decides.
+
 `durationMs` is what the label reads ("Thought for 12 seconds") and is null
 while the block is still being written — which is also how the UI knows to say
 "Thinking…", and how the controller finds the block a delta or a close belongs
@@ -919,10 +927,45 @@ seven tenths of the height, which is a tool's output cut short and a third of th
 screen left empty under it. It is a route, so the back key closes it and nothing
 had to be written for that.
 
+#### Selecting a reply, and copying it
+
+The **message** is one `SelectionArea` and the markdown inside it is not
+selectable of its own accord. `MarkdownBody(selectable: true)` builds a
+`SelectableText` per element, and each of those is a selection region to itself
+— so a drag stopped at the paragraph it started in, which is the whole
+complaint. Plain `Text.rich` under one region selects across the lot.
+
+The region is around all of `_rows` rather than inside `_bubble`, and that is
+the whole point rather than a detail: `_rows` closes the bubble at every
+reasoning part and every tool call, so a region per bubble would have stopped
+the drag at the first tool label — which is most of the replies this app makes.
+It also cost a `SelectableRegion` per bubble on every streamed delta, since a
+message is one list item and rebuilds whole.
+
+What that puts inside the region is the labels, which are not what the message
+said, so each is wrapped in `SelectionContainer.disabled` — dragging past one
+must not put "Thought for 12 seconds" on the clipboard. The `SelectableText` in
+a label's drawer is on its own route, so nothing nests.
+
+What a selection copies is the **markdown that was rendered**, not the text it
+rendered to: `_MarkdownSource` is a `SelectionContainer` delegate per text part
+that answers `getSelectedContent` with the part's source. There is no finer
+granularity available — the renderer keeps no source offsets, so there is
+nothing to map a partial selection back through — so anything selected inside a
+part copies the whole of that part. That is what puts `**bold**` on the
+clipboard rather than `bold`, and it is why the copy button below is the same
+answer at message scale rather than a second mechanism. The delegate answers
+from `value.hasSelection` rather than from `super.getSelectedContent()`, which
+would walk every selectable and concatenate what each holds only for the answer
+to be thrown away.
+
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
-it. Left to right: which thread this is and the arrows between them, delete,
-then Edit and Regenerate. The counter and the arrows are there only where there
+it. Left to right: which thread this is and the arrows between them, copy,
+delete, then Edit and Regenerate. Copy takes the message's `plainText`, which is
+every text part and no thinking — the same rule a rewound session is seeded by.
+It is offered only where something was said, since a message of tool calls alone
+would copy nothing. The counter and the arrows are there only where there
 is more than one thread — `1/1` and two dead arrows say nothing — while delete
 is offered whatever the count, since deleting the last thread at a point is the
 conversation being cut off there and is worth being able to do. The arrows stop
@@ -934,10 +977,9 @@ to be agreeing to.
 The row keeps its height whether or not anything is in it, so the conversation
 does not shift under the pointer the moment the icons appear. The reveal is a
 `Listener` rather than a `GestureDetector`: a raw pointer listener sidesteps the
-gesture arena, so one touch both places the caret in the bubble's
-`SelectableText` and shows the actions. It writes a `ValueNotifier` rather than
-calling `setState`, so uncovering the icons does not rebuild the message's
-labels behind them.
+gesture arena, so one touch both starts a selection in the bubble and shows the
+actions. It writes a `ValueNotifier` rather than calling `setState`, so
+uncovering the icons does not rebuild the message's labels behind them.
 
 ### The chat page
 
@@ -947,11 +989,26 @@ chat's, saying nothing twice. What it shows follows the conversation: the mark
 and "Entoli" while the list is at its top, the chat's title and project once it
 is not. A chat too short to scroll is always at the top, so it keeps the mark.
 
-`_SidebarDrawer` is that drawer, and the only thing it says is a width: below
+The conversation is a column of `_readableWidth`, centred. A phone gets the
+whole screen and a monitor gets a line that can be read back to the start of.
+The composer is inside that column rather than under it: a centred conversation
+over a full-width field is a field twice the width of what it is answering.
+
+With nothing selected the pane is two buttons — New Chat and Open Chat — and
+nothing else. Open Chat is the drawer, so it is drawn only where there is one:
+beside a sidebar that is already out it would open what is on screen. It asks
+the `Scaffold` above it rather than taking a flag beside the one that built that
+Scaffold, since two answers to "is there a drawer here" can disagree. New Chat
+is `startChat`, which the sidebar's own button also calls, so there is one
+answer to what a new chat is and which project it lands in.
+
+`NavDrawer` is that drawer, and the only thing it says is a width: below
 Material's compact breakpoint it takes the whole screen, since 304dp of panel on
 a phone leaves a strip of chat nobody can read and nothing else. A width rather
 than a platform check, which is how every other question of room is answered
-here — the shell's own 900 above it, the bubble's share of the line below.
+here — `navBreakpoint` above it, the bubble's share of the line below. It is
+shared with the settings page's categories, which is worth it for the back key
+alone: the paragraphs below are what a second copy would have to get right.
 
 The back key takes two halves, and a `Drawer` only brings one. An open one puts a
 `LocalHistoryEntry` on the route it sits in, and a route holding one answers a
@@ -1383,10 +1440,20 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is five sections plus deleting everything: **New chats**
-(default model, title model), **Workspace** (the default project's, which has
-nowhere else to be reached from), **Appearance** (app icon), **Agent** (command
-approval mode, classifier model, providers), **Environment**.
+The settings page is three categories, picked from a panel beside it or, below
+`navBreakpoint`, from the same `NavDrawer` the chat's sidebar becomes.
+**General** is the app itself: the default project's workspace (which has
+nowhere else to be reached from), the app icon, the **Agent** — command approval
+mode and the classifier model, which travel together because auto mode is
+unusable without one — the environment, and deleting every chat. **Providers**
+is the endpoints. **LLMs** is what a new chat is answered by and what names it.
+
+The drawer takes the bar's leading slot, so leaving the page is an action on the
+right rather than the back arrow it displaced. Which category is showing is the
+page's own state; picking one calls `closeNavDrawer` from the tile's context,
+since the page builds the Scaffold and cannot reach it from above. That is the
+same call the sidebar's `openChat` makes — "picking something reveals it" is one
+rule, and it lives beside `NavDrawer` rather than once per panel.
 
 ### Shared UI
 
@@ -1397,8 +1464,8 @@ failure states every page would otherwise spell out) over
 `Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs, `showAnchoredMenu`, and `AttachmentChip` /
-`AttachmentStrip`.
+`pickProject` dialogs, `showAnchoredMenu`, `NavDrawer` and `navBreakpoint`, and
+`AttachmentChip` / `AttachmentStrip`.
 
 `showAnchoredMenu` is a menu under a button, as a **route**. A `MenuAnchor`
 draws into an overlay instead, and an overlay is not popped by anything: the

@@ -10,46 +10,133 @@ import "../sidebar/sidebar.dart";
 import "../widgets/anchored_menu.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
 import "../workspace/workspace_page.dart";
 
-class SettingsPage extends ConsumerWidget {
+/// The page's categories, in the order they are offered. Everything an
+/// endpoint is is Providers, everything a model is asked to do is LLMs, and
+/// General is the app itself.
+enum SettingsCategory {
+  general("General", Icons.tune),
+  providers("Providers", Icons.cloud_outlined),
+  llms("LLMs", Icons.auto_awesome_outlined);
+
+  const SettingsCategory(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  SettingsCategory _category = SettingsCategory.general;
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = _Categories(
+      selected: _category,
+      onSelect: (category) => setState(() => _category = category),
+    );
+    final body = ListView(key: ValueKey(_category), children: _sections);
+
+    // The page is the whole window, so its width is the window's — no
+    // `LayoutBuilder`, which would run the Scaffold's build during layout.
+    if (MediaQuery.sizeOf(context).width >= navBreakpoint) {
+      return Scaffold(
+        appBar: AppBar(title: const Text("Settings")),
+        body: Row(
+          children: [
+            SizedBox(width: navPanelWidth, child: categories),
+            const VerticalDivider(width: 1),
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
+    // The drawer takes the bar's leading slot, so leaving the page is an
+    // action of its own rather than the back arrow it displaced.
     return Scaffold(
-      appBar: AppBar(title: const Text("Settings")),
-      body: ListView(
-        children: const [
-          _DefaultsSection(),
-          Divider(),
-          _WorkspaceSection(),
-          Divider(),
-          _AppearanceSection(),
-          Divider(),
-          _AgentSection(),
-          Divider(),
-          _EnvironmentSection(),
-          Divider(),
-          _DeleteAllChats(),
+      drawer: NavDrawer(child: categories),
+      appBar: AppBar(
+        title: Text(_category.label),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: "Close settings",
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
         ],
       ),
+      body: body,
     );
   }
+
+  List<Widget> get _sections => switch (_category) {
+        // The agent's own settings are here rather than under LLMs: the mode is
+        // a behaviour, and the classifier picker travels with it because auto
+        // mode is unusable without one.
+        SettingsCategory.general => const [
+            _WorkspaceSection(),
+            Divider(),
+            _AppearanceSection(),
+            Divider(),
+            _AgentSection(),
+            Divider(),
+            _EnvironmentSection(),
+            Divider(),
+            _DeleteAllChats(),
+          ],
+        SettingsCategory.providers => const [_ProvidersEditor()],
+        SettingsCategory.llms => const [_DefaultsSection()],
+      };
+}
+
+/// The categories as a list, beside the page or in its drawer. Material, not
+/// Scaffold: the page's own owns the drawer this sits in.
+class _Categories extends StatelessWidget {
+  const _Categories({required this.selected, required this.onSelect});
+
+  final SettingsCategory selected;
+  final ValueChanged<SettingsCategory> onSelect;
+
+  void _tap(BuildContext context, SettingsCategory category) {
+    onSelect(category);
+    closeNavDrawer(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => Material(
+        child: SafeArea(
+          child: ListView(
+            children: [
+              for (final category in SettingsCategory.values)
+                ListTile(
+                  selected: category == selected,
+                  leading: Icon(category.icon),
+                  title: Text(category.label),
+                  onTap: () => _tap(context, category),
+                ),
+            ],
+          ),
+        ),
+      );
 }
 
 /// A section heading and, under it, a line saying what the section is for.
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.title, {this.description, this.minor = false});
+  const _SectionHeader(this.title, {this.description});
 
   final String title;
   final String? description;
-
-  /// A heading inside a section rather than one of its own.
-  final bool minor;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +146,7 @@ class _SectionHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: minor ? theme.textTheme.titleSmall : theme.textTheme.titleMedium),
+          Text(title, style: theme.textTheme.titleMedium),
           if (description != null) ...[
             const SizedBox(height: 4),
             Text(
@@ -282,7 +369,6 @@ class _AgentSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
           ),
         ),
-        const _ProvidersEditor(),
       ],
     );
   }
@@ -325,10 +411,10 @@ class _ProvidersEditor extends ConsumerWidget {
       children: [
         _SectionHeader(
           "Providers",
-          minor: true,
           description: providers.isEmpty
               ? "None yet. The agent cannot answer until one is added."
-              : null,
+              : "Where the models come from. Each is an endpoint, a key, and "
+                  "the models it offers.",
         ),
         for (final provider in providers)
           _EditableRow(

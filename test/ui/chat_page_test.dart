@@ -48,6 +48,48 @@ void main() {
         return full;
       });
 
+  group("with nothing selected", () {
+    Future<void> openEmpty(WidgetTester tester) =>
+        app.pump(tester, const ChatPage(withDrawer: true));
+
+    testWidgets("the two ways to have a conversation are offered", (tester) async {
+      await openEmpty(tester);
+
+      expect(find.text("New Chat"), findsOneWidget);
+      expect(find.text("Open Chat"), findsOneWidget);
+    });
+
+    testWidgets("New Chat opens one", (tester) async {
+      await openEmpty(tester);
+
+      await tester.tap(find.text("New Chat"));
+      await settleIo(tester);
+
+      expect(app.container.read(selectedChatIdProvider), isNotNull);
+      expect(find.byType(Composer), findsOneWidget);
+    });
+
+    testWidgets("Open Chat slides the sidebar out", (tester) async {
+      await io(tester, () => app.seedChat(title: "old chat"));
+      await openEmpty(tester);
+
+      await tester.tap(find.text("Open Chat"));
+      await settleIo(tester);
+
+      expect(find.byType(Sidebar), findsOneWidget);
+      expect(find.text("old chat"), findsOneWidget);
+    });
+
+    // The sidebar is already beside the pane there, so there is nothing to open.
+    testWidgets("and there is nothing to open where the sidebar is already out",
+        (tester) async {
+      await app.pump(tester, const ChatPage());
+
+      expect(find.text("New Chat"), findsOneWidget);
+      expect(find.text("Open Chat"), findsNothing);
+    });
+  });
+
   ScrollPosition position(WidgetTester tester) =>
       tester.widget<Scrollable>(find.byType(Scrollable).first).controller!.position;
 
