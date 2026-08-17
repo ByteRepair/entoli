@@ -111,13 +111,20 @@ class TestApp {
   /// to rest — a spinner runs forever, and settling on one times out.
   /// It wraps in `FocusFollowsKeyboard` because `main` does, and draws under the
   /// app's own palette because `main` does — a page that paints itself a colour
-  /// of its own is only visible against the real one.
-  Future<void> pump(WidgetTester tester, Widget child, {bool settle = true}) async {
+  /// of its own is only visible against the real one. [brightness] is for the
+  /// widgets that pick a colour per palette rather than reading one out of the
+  /// scheme.
+  Future<void> pump(
+    WidgetTester tester,
+    Widget child, {
+    bool settle = true,
+    Brightness brightness = Brightness.light,
+  }) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          theme: entoliTheme(Brightness.light),
+          theme: entoliTheme(brightness),
           home: FocusFollowsKeyboard(child: child),
         ),
       ),
@@ -253,6 +260,22 @@ List<bool> frameworkHandlesBack(WidgetTester tester) {
     (_) {},
   );
   return answers;
+}
+
+/// Everything the app put on the clipboard, in order. Takes
+/// `SystemChannels.platform` over for the test, the same way
+/// [frameworkHandlesBack] does — so a test wanting both wants one of them.
+List<String> clipboard(WidgetTester tester) {
+  final copied = <String>[];
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+    if (call.method == "Clipboard.setData") {
+      copied.add((call.arguments as Map)["text"] as String);
+    }
+    return null;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  return copied;
 }
 
 /// The soft keyboard, the way the platform reports one: insets over the bottom
