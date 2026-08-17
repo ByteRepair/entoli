@@ -9,6 +9,7 @@ import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -56,6 +57,7 @@ void main() {
       library: library,
       shell: shell,
       webSearch: FakeWebSearch(),
+      store: FileChatStore(config),
       options: options,
       registry: LlmRegistry(
         providers: () => providers,

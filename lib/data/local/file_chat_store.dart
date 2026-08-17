@@ -2,6 +2,7 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "package:fs_shim/fs.dart";
+import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../domain/chat_log.dart";
@@ -9,6 +10,7 @@ import "../../domain/chat_meta.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../domain/workspace.dart";
 
 /// The `ChatStore`, on whatever filesystem this platform was given: real
 /// directories on desktop and Android, IndexedDB in a browser. One
@@ -202,5 +204,69 @@ class FileChatStore implements ChatStore {
     final project = await _projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
     await _write(config.metaFile(chatId, project: project), meta.encode());
+  }
+
+  @override
+  Future<String> createArtifact(String chatId, String sourceDir, {String? project}) async {
+    project = project ?? await _projectOf(chatId);
+    await config.ensureChatDirs(chatId, project: project);
+    final artifactId = const Uuid().v4();
+    final target = config.artifactDir(chatId, artifactId, project: project);
+    await _copyDir(_fs, sourceDir, target);
+    return artifactId;
+  }
+
+  @override
+  Future<void> updateArtifact(
+      String chatId, String artifactId, String sourceDir, {String? project}) async {
+    project = project ?? await _projectOf(chatId);
+    final target = config.artifactDir(chatId, artifactId, project: project);
+    // Clear the old contents, then copy the new. `_copyDir` recreates the
+    // target directory.
+    final dir = _fs.directory(target);
+    if (await dir.exists()) await dir.delete(recursive: true);
+    await _copyDir(_fs, sourceDir, target);
+  }
+
+  @override
+  Future<Uint8List?> readArtifactFile(
+    String chatId, String artifactId, String relativePath, {String? project}) async {
+    project = project ?? await _projectOf(chatId);
+    final dir = config.artifactDir(chatId, artifactId, project: project);
+    final safe = safeRelativePath(_fs, relativePath);
+    final file = _fs.file(_fs.path.join(dir, safe));
+    return await file.exists() ? file.readAsBytes() : null;
+  }
+
+  @override
+  Future<String> artifactPath(String chatId, String artifactId, {String? project}) async {
+    project = project ?? await _projectOf(chatId);
+    return config.artifactDir(chatId, artifactId, project: project);
+  }
+}
+
+/// Copy a directory's contents from [source] to [target]. If [source] is a
+/// file rather than a directory, its parent is copied instead — the artifact
+/// tool accepts either a dir path or a single `.html` file path. Subdirectories
+/// are copied recursively. Works on any `FileSystem`, including IndexedDB.
+Future<void> _copyDir(FileSystem fs, String source, String target) async {
+  var dir = source;
+  if (await fs.file(source).exists()) {
+    dir = fs.path.dirname(source);
+  }
+  await fs.directory(target).create(recursive: true);
+  await _copyDirContents(fs, dir, target);
+}
+
+Future<void> _copyDirContents(FileSystem fs, String source, String target) async {
+  await for (final entity in fs.directory(source).list()) {
+    final name = fs.path.basename(entity.path);
+    final dest = fs.path.join(target, name);
+    if (entity is File) {
+      await fs.file(dest).writeAsBytes(await entity.readAsBytes());
+    } else if (entity is Directory) {
+      await fs.directory(dest).create(recursive: true);
+      await _copyDirContents(fs, entity.path, dest);
+    }
   }
 }

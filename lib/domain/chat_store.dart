@@ -52,6 +52,25 @@ abstract class ChatStore {
   /// Read back what [saveResource] stored. Null once the file is gone.
   Future<Uint8List?> readResource(String chatId, String resource);
 
+  /// Copy a workspace directory (or a single file's parent) into a new
+  /// `artifacts/<id>/` and return the generated id. The [sourceDir] is an
+  /// absolute path already resolved by the caller — the backend resolves
+  /// `project:` prefixes and workspace paths before reaching here.
+  Future<String> createArtifact(String chatId, String sourceDir, {String? project});
+
+  /// Replace the contents of an existing `artifacts/<id>/` with the files at
+  /// [sourceDir]. Used when the model re-publishes with an `artifact_id`.
+  Future<void> updateArtifact(String chatId, String artifactId, String sourceDir, {String? project});
+
+  /// Read a file out of an artifact's directory. Null once the file is gone.
+  Future<Uint8List?> readArtifactFile(
+    String chatId, String artifactId, String relativePath, {String? project});
+
+  /// The artifact's directory, for building a `file://` URL or serving over
+  /// HTTP. Returns the path whether or not the directory exists — callers that
+  /// need to verify it exists should use [readArtifactFile] instead.
+  Future<String> artifactPath(String chatId, String artifactId, {String? project});
+
   Future<ChatMeta> loadMeta(String chatId);
 
   Future<void> saveMeta(String chatId, ChatMeta meta);

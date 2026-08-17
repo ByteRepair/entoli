@@ -54,6 +54,18 @@ class ToolResultEvent extends AgentEvent {
   final ToolResult result;
 }
 
+/// An HTML artifact was rendered and saved. Persisted as a [MessagePart] rather
+/// than turn-scoped view state: the artifact is durable, and a reloaded chat
+/// has to redraw the label and re-open it. The tool call/result pair that
+/// produced it is what the conversation keeps, and this is the one extra part
+/// that carries the artifact identity.
+class ArtifactEvent extends AgentEvent {
+  const ArtifactEvent({required this.artifactId, required this.entryFile, required this.title});
+  final String artifactId;
+  final String entryFile;
+  final String title;
+}
+
 class ApprovalRequestEvent extends AgentEvent {
   const ApprovalRequestEvent(this.approval);
   final ToolApproval approval;

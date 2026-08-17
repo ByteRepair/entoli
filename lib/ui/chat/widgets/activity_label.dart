@@ -1,9 +1,11 @@
 import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../fonts.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
 import "../../../domain/tool_arg.dart";
+import "../../../providers.dart";
 
 /// What the model did before it answered, on a line of its own above the
 /// reply: thinking, and tool runs. Frameless, so it reads as a label until it
@@ -236,6 +238,37 @@ class WebFetchLabel extends StatelessWidget {
           (label: "Error", body: result?.exceptionInfo, isError: true),
         ],
       ),
+    );
+  }
+}
+
+/// An `artifact` call, once it is history: the title the model gave it and a
+/// tap to open it in the app's viewer. The artifact's identity is in the part,
+/// not the tool call — so this reads an [ArtifactPart] rather than a
+/// [ToolCall].
+class ArtifactLabel extends ConsumerWidget {
+  const ArtifactLabel({
+    super.key,
+    required this.chatId,
+    required this.artifactId,
+    required this.entryFile,
+    required this.title,
+  });
+
+  final String chatId;
+  final String artifactId;
+  final String entryFile;
+  final String title;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final label = title.isEmpty ? "View artifact" : title;
+    return _Label(
+      icon: Icons.insert_chart_outlined,
+      text: label,
+      onTap: () => ref
+          .read(linkOpenerProvider)
+          .openArtifact(context, chatId, artifactId, entryFile: entryFile, title: title),
     );
   }
 }

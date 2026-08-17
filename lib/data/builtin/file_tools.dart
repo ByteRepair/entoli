@@ -1,0 +1,91 @@
+import "../../domain/file_tools.dart";
+import "llm/llm_client.dart";
+
+/// Read a file from the workspace. Returns the contents with line numbers.
+/// Use `offset` and `limit` (1-indexed line numbers) to read a slice.
+const readTool = LlmTool(
+  name: readToolName,
+  description: "Read a file from the workspace and return its contents with "
+      "line numbers. Paths are relative to the workspace; prefix with "
+      "`project:` to read from the project workspace. Use `offset` and "
+      "`limit` (1-indexed) to read a slice of a large file.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Workspace-relative path, or `project:` + path for "
+            "the project workspace.",
+      },
+      "offset": {
+        "type": "integer",
+        "description": "Line number to start reading from (1-indexed). "
+            "Defaults to 1.",
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of lines to read.",
+      },
+    },
+    "required": ["path"],
+  },
+);
+
+/// Write a file to the workspace. Creates or overwrites. No append or merge.
+const writeTool = LlmTool(
+  name: writeToolName,
+  description: "Write a file to the workspace, creating or overwriting it. "
+      "Paths are relative to the workspace; prefix with `project:` to write "
+      "to the project workspace. The content is the full file — no append "
+      "or merge. Use `edit` for partial changes to an existing file.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Workspace-relative path, or `project:` + path for "
+            "the project workspace.",
+      },
+      "content": {
+        "type": "string",
+        "description": "The full file content.",
+      },
+    },
+    "required": ["path", "content"],
+  },
+);
+
+/// Edit a file by exact string replacement. `old_string` must appear exactly
+/// once unless `replace_all` is true.
+const editTool = LlmTool(
+  name: editToolName,
+  description: "Edit a file by replacing `old_string` with `new_string`. The "
+      "`old_string` must appear exactly once in the file, or set "
+      "`replace_all` to replace every occurrence. Paths are relative to the "
+      "workspace; prefix with `project:` to edit in the project workspace. "
+      "Use `write` to create a new file or overwrite one entirely.",
+  schema: {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Workspace-relative path, or `project:` + path for "
+            "the project workspace.",
+      },
+      "old_string": {
+        "type": "string",
+        "description": "The exact string to find in the file.",
+      },
+      "new_string": {
+        "type": "string",
+        "description": "The string to replace it with.",
+      },
+      "replace_all": {
+        "type": "boolean",
+        "description": "Replace every occurrence of `old_string` instead of "
+            "requiring it to be unique. Defaults to false.",
+      },
+    },
+    "required": ["path", "old_string", "new_string"],
+  },
+);

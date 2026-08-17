@@ -346,4 +346,75 @@ void main() {
     expect(loaded.messages[1].parts.first, isA<ToolResultPart>());
     expect((loaded.messages[1].parts.first as ToolResultPart).result.output, "total 0");
   });
+
+  group("artifacts", () {
+    test("createArtifact copies a workspace dir and returns an id", () async {
+      await store.saveState(makeState("a1"));
+      // Write a workspace dir with files to copy from.
+      final ws = config.workspaceDir("a1");
+      final src = p.join(ws, "report");
+      await Directory(src).create(recursive: true);
+      await File(p.join(src, "index.html")).writeAsString("<h1>hi</h1>");
+      await Directory(p.join(src, "css")).create();
+      await File(p.join(src, "css", "style.css")).writeAsString("body{color:red}");
+
+      final id = await store.createArtifact("a1", src);
+      expect(id, isNotEmpty);
+      final dir = Directory(config.artifactDir("a1", id));
+      expect(dir.existsSync(), isTrue);
+      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), "<h1>hi</h1>");
+      expect(File(p.join(dir.path, "css", "style.css")).readAsStringSync(), "body{color:red}");
+    });
+
+    test("createArtifact accepts a single file (copies parent dir)", () async {
+      await store.saveState(makeState("a1"));
+      final ws = config.workspaceDir("a1");
+      await Directory(p.join(ws, "page")).create();
+      final filePath = p.join(ws, "page", "index.html");
+      await File(filePath).writeAsString("<p>page</p>");
+
+      final id = await store.createArtifact("a1", filePath);
+      final dir = Directory(config.artifactDir("a1", id));
+      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), "<p>page</p>");
+    });
+
+    test("updateArtifact replaces the contents", () async {
+      await store.saveState(makeState("a1"));
+      final ws = config.workspaceDir("a1");
+      final src1 = p.join(ws, "v1");
+      await Directory(src1).create(recursive: true);
+      await File(p.join(src1, "index.html")).writeAsString("v1");
+      await File(p.join(src1, "old.txt")).writeAsString("old");
+
+      final id = await store.createArtifact("a1", src1);
+      final dir = Directory(config.artifactDir("a1", id));
+      expect(File(p.join(dir.path, "old.txt")).existsSync(), isTrue);
+
+      // Update with a new version.
+      final src2 = p.join(ws, "v2");
+      await Directory(src2).create(recursive: true);
+      await File(p.join(src2, "index.html")).writeAsString("v2");
+      await File(p.join(src2, "new.txt")).writeAsString("new");
+
+      await store.updateArtifact("a1", id, src2);
+      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), "v2");
+      expect(File(p.join(dir.path, "new.txt")).readAsStringSync(), "new");
+      expect(File(p.join(dir.path, "old.txt")).existsSync(), isFalse);
+    });
+
+    test("readArtifactFile reads back what was copied", () async {
+      await store.saveState(makeState("a1"));
+      final ws = config.workspaceDir("a1");
+      final src = p.join(ws, "report");
+      await Directory(src).create(recursive: true);
+      final png = Uint8List.fromList([1, 2, 3, 4]);
+      await Directory(p.join(src, "assets")).create();
+      await File(p.join(src, "assets", "logo.png")).writeAsBytes(png);
+      await File(p.join(src, "index.html")).writeAsString("<p>");
+
+      final id = await store.createArtifact("a1", src);
+      expect(await store.readArtifactFile("a1", id, "assets/logo.png"), png);
+      expect(await store.readArtifactFile("a1", id, "missing.txt"), isNull);
+    });
+  });
 }

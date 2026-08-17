@@ -20,6 +20,7 @@ import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/duckduckgo_search.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/llm_provider.dart";
@@ -59,6 +60,7 @@ void main() {
         library: library,
         shell: LocalShell(environment: () => const {}),
         webSearch: DuckDuckGoSearch(),
+        store: FileChatStore(config),
         // Live means live: it runs what the model asks for.
         options: const BuiltinOptions(stepLimit: 12),
         registry: LlmRegistry(
@@ -122,6 +124,8 @@ void main() {
           log("bash: ${call.argumentsText}");
         case ToolResultEvent(:final result):
           log("  -> rc=${result.returnCode} ${_oneLine(result.output)}");
+        case ArtifactEvent(:final title, :final entryFile):
+          log("artifact: $title (entry: $entryFile)");
         case RetryEvent(:final attempt, :final message):
           log("retry $attempt: $message");
         case ErrorEvent(:final message):

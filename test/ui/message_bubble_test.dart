@@ -892,4 +892,35 @@ void main() {
 
     expect(tapped, "https://flutter.dev");
   });
+
+  testWidgets("an artifact part shows a label that opens it on tap", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [
+        const MessagePart.artifact(artifactId: "art-1", entryFile: "index.html", title: "Demo"),
+      ]),
+    );
+
+    expect(find.textContaining("Demo"), findsOneWidget);
+
+    await tester.tap(find.textContaining("Demo"));
+    await tester.pumpAndSettle();
+
+    expect(app.linkOpener.openedArtifacts, hasLength(1));
+    expect(app.linkOpener.openedArtifacts.single.chatId, "chat-1");
+    expect(app.linkOpener.openedArtifacts.single.artifactId, "art-1");
+    expect(app.linkOpener.openedArtifacts.single.entryFile, "index.html");
+    expect(app.linkOpener.openedArtifacts.single.title, "Demo");
+  });
+
+  testWidgets("an artifact with no title says View artifact", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [
+        const MessagePart.artifact(artifactId: "art-2", entryFile: "chart.html", title: ""),
+      ]),
+    );
+
+    expect(find.text("View artifact"), findsOneWidget);
+  });
 }
