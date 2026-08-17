@@ -1,6 +1,20 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 
 import "../../domain/project.dart";
+
+/// Put [text] on the clipboard and say so. Copying is silent otherwise — the
+/// button that did it looks the same afterwards — so what was copied is
+/// [said] in a snack bar.
+Future<void> copyToClipboard(
+  BuildContext context,
+  String text, {
+  required String said,
+}) async {
+  await Clipboard.setData(ClipboardData(text: text));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
+}
 
 /// Ask which project something belongs under. The answer is wrapped because
 /// the default project is null as well, and a dismissed dialog must not read

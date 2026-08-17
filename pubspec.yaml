@@ -41,8 +41,14 @@ dependencies:
   flutter_svg: ^2.3.0
 
   # Markdown rendering for finished message bubbles. Continuation of the
-  # discontinued flutter_markdown; same API.
+  # discontinued flutter_markdown; same API. `markdown` is its parser, direct
+  # here because a `MarkdownElementBuilder` is handed the elements it produces.
   flutter_markdown_plus: ^1.0.12
+  markdown: ^7.3.1
+  # Highlighting for fenced code blocks: highlight.js's grammars and themes in
+  # pure Dart, so nothing native joins any of the three platforms. Which
+  # grammars are registered is in `code_block.dart`.
+  re_highlight: ^0.0.3
 
   # Opening links from rendered markdown: external browser on desktop and
   # web, in-app webview on Android.

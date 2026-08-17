@@ -982,6 +982,75 @@ gesture arena, so one touch both starts a selection in the bubble and shows the
 actions. It writes a `ValueNotifier` rather than calling `setState`, so
 uncovering the icons does not rebuild the message's labels behind them.
 
+#### Code blocks
+
+A fenced block is `code_block.dart`'s: a bar naming what it was fenced as with
+a button that copies it, and the code highlighted underneath, scrolling
+sideways rather than wrapping — a wrapped line is no longer the code that was
+written.
+
+It is a `MarkdownElementBuilder` for `pre` rather than
+`MarkdownBody.syntaxHighlighter`, which is handed the code and nothing else.
+The language is not in the code: the parser puts the fence's info string on the
+`code` element inside the `pre` as `language-<name>`, so only something holding
+the element can read it. The copy button needs somewhere of its own to sit
+besides.
+
+Highlighting happens **while the markdown is parsed**, not while the block is
+drawn. `MarkdownBody` builds its widgets once per `data` or style sheet change
+and keeps them, so a builder that returns a finished `TextSpan` runs a grammar
+once per parse, where a `CodeBlock` that highlighted in `build` would run one
+per scroll frame.
+
+That is not once per block, though, which is why the spans are also **kept**.
+A parse happens whenever the style sheet changes, and a palette change lerps
+`ThemeData` across every frame of a cross-fade — so switching to dark re-runs
+every grammar on screen a dozen times over, and scrolling a block out of the
+list and back rebuilds it from nothing. The cache is keyed on the code, the
+language, the style and the brightness, and bounded at sixteen entries evicted
+oldest-first: what it holds is the text of every block in it, so one that grew
+with the conversation would be a second copy of the chat in a process that
+already has one.
+
+`re_highlight` is highlight.js's grammars and themes in pure Dart, which is the
+whole reason it is the one here: the alternative with the more recent commits,
+`syntax_highlight`, pulls `super_clipboard` and so a Rust toolchain into the
+build of an app whose claim is that there is nothing to install.
+**Thirty-one grammars are registered rather than all 197.** A grammar is data
+and nothing tree-shakes an unnamed one, so all of them cost 359 KB gzipped in
+the web bundle against 56 KB for these — measured, both. A fence naming
+anything else is drawn plain, which is what every fence did before this
+existed, so the cost of an omission is the behaviour it replaces and nothing
+worse. That is also the answer for a grammar that throws or breaks off
+part-way: the partial render would be *less* code than was written, and half a
+command is worse than an uncoloured whole one.
+
+The token colours are github and github-dark, picked by the palette. What is
+dropped from each is its `root` entry — the one thing in a highlight theme that
+is not a token colour. The surface comes from the app's own scheme instead, so
+a block belongs to the page it is on rather than to highlight.js, and dark mode
+does not have to be told about it twice. `codeblockDecoration` is where that
+surface goes rather than the block itself, because `pre` is wrapped in the
+style sheet's decoration whether or not a builder drew what is inside; the
+default is `cardColor`, which M3 resolves to `colorScheme.surface`, and a code
+block the colour of the page is why this was worth doing at all.
+
+The bar is `SelectionContainer.disabled`, the same rule the labels above the
+bubble keep: a drag across the reply copies the markdown behind it, and the
+language name is not something the model said. Its copy button is `ActionIcon`
+and reports through `copyToClipboard`, which is the same button and the same
+snack bar the row under a message uses — the other idiom, an icon that turns
+into a tick for a second, is a second answer to one event and a timer for this
+widget to own.
+
+`codeblockDecoration` is the **only** thing the style sheet still decides about
+a `pre`. Registering a builder for it makes the package's own `visitText` arm
+unreachable, and `codeblockPadding` is read nowhere else, so setting it would
+be configuring a path that no longer runs. The font is the exception in the
+other direction: `code` is set from the same `codeFont` the block is built on,
+so bundling a monospace reaches an inline span and a block together rather than
+one of them.
+
 ### The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
@@ -1505,8 +1574,17 @@ failure states every page would otherwise spell out) over
 `Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
-`pickProject` dialogs, `showAnchoredMenu`, `NavDrawer` and `navBreakpoint`, and
-`AttachmentChip` / `AttachmentStrip`.
+`pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
+`NavDrawer` and `navBreakpoint`, `ActionIcon`, and `AttachmentChip` /
+`AttachmentStrip`.
+
+`ActionIcon` is the small icon button, and it carries the height the actions
+row keeps whether or not anything is in it — the row and the buttons in it have
+to agree on that, and a code block's bar now uses the same button. Its null
+`onPressed` is the dead form, which is a thread arrow at either end of the
+list. `copyToClipboard` is the other half of the same pairing: copying looks
+identical afterwards whatever did it, so what was taken is said in a snack bar
+from one place rather than each caller's own.
 
 `showAnchoredMenu` is a menu under a button, as a **route**. A `MenuAnchor`
 draws into an overlay instead, and an overlay is not popped by anything: the
