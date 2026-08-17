@@ -6,6 +6,7 @@ import "package:uuid/uuid.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
+import "../../domain/chat_repository.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
@@ -125,10 +126,20 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: chat);
   }
 
-  Future<void> send(String text, {List<Attachment> attachments = const []}) async {
+  Future<void> send(String text, {List<Attachment> attachments = const []}) =>
+      _prompt(text, attachments: attachments);
+
+  /// Say [text] and run the turn it starts. [replacing] makes it another thread
+  /// beside a prompt already in the conversation — an edit — rather than the
+  /// next thing said.
+  Future<void> _prompt(String text,
+      {List<Attachment> attachments = const [], Message? replacing}) async {
     final repo = ref.read(chatRepositoryProvider);
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
+    final at =
+        replacing == null ? chat.messages.length : chat.messages.indexOf(replacing);
+    if (at < 0) return;
 
     final userMsg = Message(
       id: _uuid.v4(),
@@ -137,24 +148,46 @@ class ChatController extends Notifier<ChatViewState> {
       // Files first, the order they are sent in and the order a resend rebuilds.
       parts: [...await repo.saveAttachments(chatId, attachments), MessagePart.text(text: text)],
     );
-    final assistantMsg = Message(
-      id: _uuid.v4(),
-      role: MessageRole.assistant,
-      createdAt: DateTime.now(),
-      parts: [],
+    await _turn(
+      chat: chat,
+      text: text,
+      attachments: attachments,
+      history: chat.messages.take(at).toList(),
+      opening: [userMsg, _newReply()],
+      replacing: replacing,
     );
+  }
 
-    final updatedChat = Chat(
-      state: chat.state.copyWith(updatedAt: DateTime.now()),
-      messages: [...chat.messages, userMsg, assistantMsg],
-    );
+  /// Open a turn: put the messages it starts with in the conversation and in
+  /// the log, then hand the prompt to the backend.
+  ///
+  /// [opening] is what the turn writes — the prompt and its empty reply, or the
+  /// reply alone where the prompt is already there. [history] is the
+  /// conversation the model is answering, which does not include the prompt:
+  /// `sendPrompt` adds that itself. [replacing] is the message [opening] is an
+  /// alternative to, and null when this is simply the next thing said.
+  Future<void> _turn({
+    required Chat chat,
+    required String text,
+    required List<Attachment> attachments,
+    required List<Message> history,
+    required List<Message> opening,
+    Message? replacing,
+  }) async {
+    final repo = ref.read(chatRepositoryProvider);
+    final updated = chat
+        .withTurn(opening, replacing: replacing)
+        .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
+
     final isFirst = chat.messages.isEmpty;
-    state = state.copyWith(chat: updatedChat, isRunning: true, clearRetry: true);
+    state = state.copyWith(chat: updated, isRunning: true, clearRetry: true);
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked.
-    await repo.saveState(updatedChat.state);
-    _recorder.open(assistantMsg.id);
-    await _recorder.write(recordsOf([userMsg, assistantMsg]));
+    await repo.saveState(updated.state);
+    _recorder.open(opening.last.id);
+    await _recorder.write(recordsOf(opening,
+        siblingOf: replacing?.id,
+        replacing: replacing != null && !chat.worthAThread(replacing)));
     // Only the first: a later message changes nothing the sidebar shows, and
     // refreshing it re-reads every chat off disk.
     if (isFirst) {
@@ -162,11 +195,16 @@ class ChatController extends Notifier<ChatViewState> {
       unawaited(_nameChat(text));
     }
 
-    // `chat` is the conversation before this turn was added to it, which is
-    // what a backend holding no session for the chat needs to be told.
     _listen(repo.sendPrompt(chatId, text,
-        attachments: attachments, history: chat.messages));
+        attachments: attachments, history: history, replaces: replacing != null));
   }
+
+  Message _newReply() => Message(
+        id: _uuid.v4(),
+        role: MessageRole.assistant,
+        createdAt: DateTime.now(),
+        parts: const [],
+      );
 
   /// Carry on the turn the chat was cut off in. What this produces goes on the
   /// end of the reply that is already there, closed by a second [TurnEndRecord]
@@ -197,34 +235,83 @@ class ChatController extends Notifier<ChatViewState> {
     return at < 0 ? null : chat.messages[at];
   }
 
-  /// Drop the turn starting at [prompt] and run it again with [text]. What it
-  /// carried goes with it: rewinding forgets the message, not its resources.
-  Future<void> _resend(Message prompt, String text) async {
-    final chat = state.chat;
-    if (chat == null || state.isRunning) return;
-    final index = chat.messages.indexOf(prompt);
-    if (index < 0) return;
-
-    final repo = ref.read(chatRepositoryProvider);
-    final attachments = await repo.loadAttachments(chatId, prompt);
-    state = state.copyWith(chat: await repo.rewind(chat, index));
-    await send(text, attachments: attachments);
+  /// The reply [messageId] names — itself when it is one, otherwise the first
+  /// one under it. Null where the turn has none, which is a prompt whose only
+  /// reply has been deleted.
+  Message? _replyFor(Chat chat, String messageId) {
+    final from = chat.messages.indexWhere((m) => m.id == messageId);
+    if (from < 0) return null;
+    final at = chat.messages.indexWhere((m) => m.role == MessageRole.assistant, from);
+    return at < 0 ? null : chat.messages[at];
   }
 
-  /// Resend a message with new text, discarding the replies it drew.
+  /// Resend a message with new text, as another thread beside it. What it
+  /// carried comes with it: the resources are named by the parts, and branching
+  /// leaves the message they belong to where it is.
   Future<void> editAndResend(String messageId, String text) async {
     final chat = state.chat;
-    if (chat == null) return;
+    if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
-    if (prompt != null) await _resend(prompt, text);
+    if (prompt == null) return;
+    final attachments =
+        await ref.read(chatRepositoryProvider).loadAttachments(chatId, prompt);
+    await _prompt(text, attachments: attachments, replacing: prompt);
   }
 
-  /// Run the turn again unchanged. Works from either side of the exchange.
+  /// Run the turn again, as another thread beside the reply already there.
+  ///
+  /// The prompt is not written a second time: it is the branch point, so the
+  /// counter lands under the reply — which is the message the arrows move
+  /// between. Works from either side of the exchange, and carries on the end
+  /// where the reply it would have branched from has been deleted.
   Future<void> regenerate(String messageId) async {
     final chat = state.chat;
-    if (chat == null) return;
+    if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
-    if (prompt != null) await _resend(prompt, prompt.plainText);
+    if (prompt == null) return;
+    final repo = ref.read(chatRepositoryProvider);
+    await _turn(
+      chat: chat,
+      text: prompt.plainText,
+      attachments: await repo.loadAttachments(chatId, prompt),
+      history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
+      opening: [_newReply()],
+      replacing: _replyFor(chat, messageId),
+    );
+  }
+
+  /// Read the thread beside the one [messageId] is on. [step] is -1 or 1 — the
+  /// arrows under the message.
+  Future<void> stepThread(String messageId, int step) async {
+    final chat = _rethreadable;
+    final to = chat?.threadBeside(messageId, step);
+    if (chat == null || to == null) return;
+    await _rethread((repo) => repo.selectThread(chat, to));
+  }
+
+  /// Delete the thread [messageId] heads, and everything below it.
+  Future<void> deleteThread(String messageId) async {
+    final chat = _rethreadable;
+    if (chat == null) return;
+    await _rethread((repo) => repo.deleteThread(chat, messageId));
+  }
+
+  /// The conversation a thread change can be worked out from, or null where
+  /// there is none to make. An earlier change still in flight is one of those:
+  /// it is about to replace the conversation this one would be computed from,
+  /// so a held-down arrow would issue a reload per frame against state that no
+  /// longer holds.
+  Chat? get _rethreadable => state.isRunning || _rethreading ? null : state.chat;
+  bool _rethreading = false;
+
+  Future<void> _rethread(Future<Chat> Function(ChatRepository repo) change) async {
+    _rethreading = true;
+    try {
+      final now = await change(ref.read(chatRepositoryProvider));
+      if (ref.mounted) state = state.copyWith(chat: now);
+    } finally {
+      _rethreading = false;
+    }
   }
 
   void _onEvent(AgentEvent event) {

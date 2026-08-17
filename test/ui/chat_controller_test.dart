@@ -59,9 +59,11 @@ void main() {
     return (id, controller);
   }
 
-  List<Message> messagesOf(String id) => app.container.read(chatControllerProvider(id)).chat!.messages;
+  Chat chatOf(String id) => app.container.read(chatControllerProvider(id)).chat!;
 
-  String titleOf(String id) => app.container.read(chatControllerProvider(id)).chat!.state.title;
+  List<Message> messagesOf(String id) => chatOf(id).messages;
+
+  String titleOf(String id) => chatOf(id).state.title;
 
   String textOf(Message m) => m.parts.whereType<TextPart>().map((p) => p.text).join();
 
@@ -295,7 +297,7 @@ void main() {
     expect(stored.messages.last.parts.whereType<ErrorPart>(), hasLength(1));
   });
 
-  test("regenerate resends the same text and drops the old reply", () async {
+  test("regenerate resends the same text as another thread", () async {
     final (id, controller) = await chatWithOneTurn("hello");
     final userId = messagesOf(id).first.id;
 
@@ -401,7 +403,7 @@ void main() {
     expect(app.backend.prompts.last.attachments.single.filename, "notes.txt");
   });
 
-  test("the truncated conversation is persisted, not just held in memory", () async {
+  test("the branched conversation is persisted, not just held in memory", () async {
     final (id, controller) = await chatWithOneTurn("hello");
     final userId = messagesOf(id).first.id;
 
@@ -411,6 +413,184 @@ void main() {
     final stored = await app.repo.openChat(id);
     expect(stored.messages, hasLength(2));
     expect(textOf(stored.messages.first), "goodbye");
+  });
+
+  group("threads", () {
+    /// A chat whose one prompt has two replies: the first, and a regenerate
+    /// beside it. Hands back the ids of both, oldest first.
+    Future<(String, ChatController, String, String)> twoReplies() async {
+      app.backend.scriptedEvents = const [TextDelta("first answer"), DoneEvent()];
+      final (id, controller) = await chatWithOneTurn("hello");
+      final first = messagesOf(id).last.id;
+
+      app.backend.scriptedEvents = const [TextDelta("second answer"), DoneEvent()];
+      await controller.regenerate(first);
+      await waitIdle(id);
+      return (id, controller, first, messagesOf(id).last.id);
+    }
+
+    test("regenerate puts the reply beside the old one, and keeps the prompt", () async {
+      final (id, _, first, second) = await twoReplies();
+
+      final chat = chatOf(id);
+      expect(chat.messages, hasLength(2));
+      expect(textOf(chat.messages.last), "second answer");
+      expect(chat.threadsAt(second), [first, second]);
+      expect(chat.threadIndex(second), 1);
+      // The prompt is the branch point rather than something written again, so
+      // the counter is under the reply and there is nothing under the prompt.
+      expect(chat.threadsAt(chat.messages.first.id), [chat.messages.first.id]);
+    });
+
+    test("an edit puts the new prompt beside the old one", () async {
+      final (id, controller) = await chatWithOneTurn("helo");
+      final first = messagesOf(id).first.id;
+
+      await controller.editAndResend(first, "hello");
+      await waitIdle(id);
+
+      final chat = chatOf(id);
+      expect(chat.messages, hasLength(2));
+      expect(textOf(chat.messages.first), "hello");
+      expect(chat.threadsAt(chat.messages.first.id), [first, chat.messages.first.id]);
+    });
+
+    test("stepping back reads the thread that was replaced", () async {
+      final (id, controller, first, second) = await twoReplies();
+
+      await controller.stepThread(second, -1);
+
+      final chat = chatOf(id);
+      expect(textOf(chat.messages.last), "first answer");
+      expect(chat.threadIndex(first), 0);
+      // Which thread was being read survives a reload, since it is a record.
+      expect(textOf((await app.repo.openChat(id)).messages.last), "first answer");
+    });
+
+    test("stepping back and on again comes back to the newer thread", () async {
+      final (id, controller, first, second) = await twoReplies();
+
+      await controller.stepThread(second, -1);
+      await controller.stepThread(first, 1);
+
+      expect(textOf(messagesOf(id).last), "second answer");
+    });
+
+    test("moving between threads gives the model the one being read", () async {
+      final (id, controller, _, second) = await twoReplies();
+      app.backend.resets.clear();
+
+      await controller.stepThread(second, -1);
+
+      expect(app.backend.resets.single.map((m) => m.plainText), contains("first answer"));
+    });
+
+    test("deleting a thread leaves the one beside it", () async {
+      final (id, controller, _, second) = await twoReplies();
+
+      await controller.deleteThread(second);
+
+      final chat = chatOf(id);
+      expect(textOf(chat.messages.last), "first answer");
+      expect(chat.branches, isEmpty);
+      expect((await app.repo.openChat(id)).messages, hasLength(2));
+    });
+
+    test("deleting the last thread cuts the conversation off there", () async {
+      final (id, controller) = await chatWithOneTurn("hello");
+
+      await controller.deleteThread(messagesOf(id).last.id);
+
+      expect(messagesOf(id), hasLength(1));
+      expect((await app.repo.openChat(id)).messages, hasLength(1));
+    });
+
+    /// A turn the user stopped before the model said anything, and the id of
+    /// the empty reply it left on the end of the conversation. The `expect` is
+    /// the fixture's own precondition: without it a test asserting the reply
+    /// was kept would pass for the wrong reason.
+    Future<(String, ChatController, String)> chatWithNothingSaid() async {
+      app.backend.scriptedEvents = const [DoneEvent(aborted: true)];
+      final (id, controller) = await chatWithOneTurn("hello");
+      final empty = messagesOf(id).last;
+      expect(empty.parts, isEmpty);
+      app.backend.scriptedEvents = const [TextDelta("an answer"), DoneEvent()];
+      return (id, controller, empty.id);
+    }
+
+    test("a turn that said nothing is replaced rather than kept beside", () async {
+      final (id, controller, empty) = await chatWithNothingSaid();
+
+      await controller.regenerate(empty);
+      await waitIdle(id);
+
+      expect(chatOf(id).messages.map(textOf), ["hello", "an answer"]);
+      // No counter to press: the thread it replaced offered a blank page.
+      expect(chatOf(id).branches, isEmpty);
+      expect((await app.repo.openChat(id)).branches, isEmpty);
+    });
+
+    // The replacement joins the siblings and takes one of them away in the same
+    // record, so the threads either side of the emptied one are untouched.
+    test("replacing an empty thread leaves the ones beside it alone", () async {
+      final (id, controller, first, second) = await twoReplies();
+      app.backend.scriptedEvents = const [DoneEvent(aborted: true)];
+      await controller.regenerate(second);
+      await waitIdle(id);
+      final empty = messagesOf(id).last.id;
+      expect(messagesOf(id).last.parts, isEmpty);
+
+      app.backend.scriptedEvents = const [TextDelta("third answer"), DoneEvent()];
+      await controller.regenerate(empty);
+      await waitIdle(id);
+
+      final third = messagesOf(id).last.id;
+      expect(textOf(messagesOf(id).last), "third answer");
+      expect(chatOf(id).threadsAt(third), [first, second, third]);
+      expect((await app.repo.openChat(id)).branches, chatOf(id).branches);
+    });
+
+    test("a turn that said nothing but was written under is kept", () async {
+      final (id, controller, empty) = await chatWithNothingSaid();
+      await controller.send("are you there?");
+      await waitIdle(id);
+
+      await controller.regenerate(empty);
+      await waitIdle(id);
+
+      // The reply stayed empty, but a conversation happened under it and that
+      // is not something to delete for the sake of a counter.
+      final chat = chatOf(id);
+      expect(chat.threadsAt(chat.messages.last.id), [empty, chat.messages.last.id]);
+    });
+
+    test("regenerating an older thread joins them rather than nesting", () async {
+      final (id, controller, first, second) = await twoReplies();
+      await controller.stepThread(second, -1);
+
+      app.backend.scriptedEvents = const [TextDelta("third answer"), DoneEvent()];
+      await controller.regenerate(first);
+      await waitIdle(id);
+
+      final chat = chatOf(id);
+      final third = chat.messages.last.id;
+      expect(textOf(chat.messages.last), "third answer");
+      expect(chat.threadsAt(third), [first, second, third]);
+      expect(chat.threadIndex(third), 2);
+    });
+
+    test("carrying on from an older thread adds to that one", () async {
+      final (id, controller, _, second) = await twoReplies();
+      await controller.stepThread(second, -1);
+
+      app.backend.scriptedEvents = const [TextDelta("and then"), DoneEvent()];
+      await controller.send("go on");
+      await waitIdle(id);
+
+      final messages = messagesOf(id).map(textOf);
+      expect(messages, ["hello", "first answer", "go on", "and then"]);
+      expect((await app.repo.openChat(id)).messages.map(textOf), messages);
+    });
   });
 
   group("the log", () {
@@ -539,18 +719,33 @@ void main() {
           .having((r) => r.reason, "reason", TurnEnd.error));
     });
 
-    test("a rewind is written as a record, and the log is only added to", () async {
+    test("a branch is written as a record, and the log is only added to", () async {
       final (id, controller) = await chatWithOneTurn("hello");
-      final before = records(id).length;
+      final before = [...records(id)];
       final userId = messagesOf(id).first.id;
 
       await controller.editAndResend(userId, "goodbye");
       await waitIdle(id);
 
       final after = records(id);
-      expect(after.length, greaterThan(before));
-      expect(after.whereType<RewindRecord>(), hasLength(1));
+      expect(after.take(before.length), before);
+      expect(after.length, greaterThan(before.length));
+      // The thread it replaces is still readable, so nothing was forgotten.
+      expect(after.whereType<RewindRecord>(), isEmpty);
+      expect(after.whereType<MessageRecord>().map((r) => r.siblingOf).nonNulls,
+          [userId]);
       expect(reloaded(id), messagesOf(id));
+    });
+
+    test("what a branch puts on screen is what a reload reads back", () async {
+      final (id, controller) = await chatWithOneTurn("hello");
+      await controller.regenerate(messagesOf(id).last.id);
+      await waitIdle(id);
+
+      final chat = chatOf(id);
+      final reload = chatFrom(chat.state, records(id));
+      expect(reload.messages, chat.messages);
+      expect(reload.branches, chat.branches);
     });
 
     group("carrying on an interrupted turn", () {
@@ -586,7 +781,7 @@ void main() {
       }
 
       bool offeredIn(String id) =>
-          app.container.read(chatControllerProvider(id)).chat!.unfinished;
+          chatOf(id).unfinished;
 
       test("a reply nothing closed is offered", () async {
         final (id, _) = await killedChat();

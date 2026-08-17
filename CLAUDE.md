@@ -98,11 +98,14 @@ written, so the only thing a kill can now cost is whatever had not been appended
 yet. That is what makes an interrupted turn something to offer to continue
 rather than something to apologise for.
 
-Five records. `message` opens one — before it holds anything, which is what the
-empty assistant message at the head of a turn is. `part` is one part of it, at
-an index. `append` is more text on the end of the part at an index. `turnEnd`
-closes the turn and says why: `done`, `aborted`, or `error`. `rewind` forgets a
-message and everything after it.
+Six records. `message` opens one — before it holds anything, which is what the
+empty assistant message at the head of a turn is — and its `siblingOf` names
+what it is an alternative to, or nothing at all, which puts it on the end of the
+thread being read; `replacesSibling` takes that one away rather than joining it.
+`part` is one part of it, at an index. `append` is more text
+on the end of the part at an index. `turnEnd` closes the turn and says why:
+`done`, `aborted`, or `error`. `select` says which of a message's alternatives
+to read. `rewind` forgets a message and everything below it.
 
 Nothing is mutable, so a part that changed is **superseded**: the same index
 written again wins, and `replay` applies records in order, so the last one
@@ -127,7 +130,9 @@ someone chose to stop is not one to offer to resume. See "Carrying on an
 interrupted turn" for what reads all this.
 
 Rewinding is a record rather than a truncation because shortening a log means
-rewriting it, which is the one thing the format exists to avoid.
+rewriting it, which is the one thing the format exists to avoid. It is also the
+one record whose meaning did not have to change when the log became a tree: in a
+conversation of one thread, everything below a message is everything after it.
 
 `replay` is deliberately liberal: a part naming a message that is not there, or
 an index past the end of one, is skipped. The reader's job is to salvage a file
@@ -161,8 +166,89 @@ next delta, not periodic: a timer that rearms itself forever is a widget test
 that never settles.
 
 One thing the format still wants: nothing compacts. A chat regenerated ten times
-carries eleven copies of that turn's records and pays for them on every open, so
-`load` will want to rewrite the log once the dead records outweigh the live ones.
+carries eleven copies of that turn's records and pays for them on every open.
+Threads make that harder rather than easier: the copies are no longer dead
+records to drop, they are alternatives the user can still read. So compaction
+now starts with deleting threads, which is a thing to offer rather than to do.
+
+#### Threads
+
+The log describes a tree, and `replayTree` walks the one path through it that is
+on screen. An edit or a regenerate no longer discards the turn it replaces: it
+opens a message naming the one it stands beside, and the two are threads at that
+point in the conversation. `Chat.messages` is the thread being read;
+`Chat.branches` is, for each message on it that has any, the alternatives
+written there — which is the `2/3` under the message and what its arrows move
+between.
+
+**The tree edge is `siblingOf`, not a parent.** `MessageRecord` carried an
+unused `parentId` from the first version until this landed, and naming a parent
+there cannot express the case that matters: editing the *first* message of a
+chat produces an alternative whose parent is nothing, which is the same null a
+message written before threads uses to mean "on the end of what is already
+there". Naming the **sibling** has no such collision at any depth, including the
+root, and it leaves every existing log exactly as it was — naming nothing, each
+of its messages continues the one thread it has, which is what they meant when
+they were written. There is no migration and nothing to version. `parentId` went
+with it, having never been written or read; the parent is `replayTree`'s to
+compute, and a `Message` on its own cannot answer which thread it is on.
+
+It is a field rather than a record of its own, which is what this was first
+built as. A separate `branch` record written before the message it introduces
+splits one fact across two lines, and the format's whole claim is that a line is
+complete the moment it is written — so it needed a pending map in the reader, an
+ordering contract in the writer, and a comment at each end saying so. A field
+has no order to get wrong.
+
+Which thread is being read is itself a record. `select` is appended as the user
+cycles, so what they were reading survives a reload; the last one written wins,
+the way a superseded part does. With none, a branch point shows its newest
+thread — a regenerate just asked for is the one to be looking at.
+
+**A turn that said nothing is replaced rather than kept beside.** Stop a turn
+before the model has written a word and regenerate it, and there is nothing on
+the thread it would leave behind: a `1/2` whose first page is blank is worse
+than no counter. `Chat.worthAThread` is the rule, and it asks two things —
+whether the reply holds any parts, and whether it is still the end of its
+thread. The second is what stops the tidy-up eating a conversation: kill a turn,
+type something else, and the empty reply now has everything said since hanging
+under it, which is not something to delete for a counter. An edit never meets
+this, since the message it branches at is a prompt the user typed.
+
+Replacing is `replacesSibling` on the same record rather than a `rewind` written
+after it, for the reason `siblingOf` is a field at all: a turn standing in place
+of another is one fact, and one fact is one line. Written as two records it
+worked, and only in that order — the new message has to join its siblings while
+they are all still there, or it lands on the end of whichever was left instead
+of beside them. That is a write-order contract, which is what this format is for
+not having. `replayTree` does the same two steps in the one arm that reads the
+record, and the order lives in the four lines that do them.
+
+`replayTree` stays as liberal as `replay` was. A `branch` of a message that has
+since been deleted is not an error: the message it introduces goes on the end of
+the thread instead, which is where it would have gone had the record never been
+written at all.
+
+What a branch does to the conversation is said twice, deliberately.
+`Chat.withTurn` is what `replayTree` will make of the records once they are on
+disk, worked out in memory so that pressing Regenerate does not cost a reload of
+the log to draw. The two have to agree, and what keeps them honest is a test
+asserting that the chat on screen and the chat a reload reads are the same one,
+branches included.
+
+Moving between threads is deliberately *not* worked out in memory, and that is
+the split. `selectThread` and `deleteThread` append their record and load the
+chat back, because which messages another thread leaves live is `replayTree`'s
+to answer, and a second version of that walk is a second version to disagree.
+That reload is why `ChatController` refuses a thread change while one is still
+in flight: a held-down arrow would otherwise compute each move from a
+conversation the previous load is about to replace.
+
+Starting a turn on a thread the model has not been down is where the session
+has to be forgotten, and that rides on `sendPrompt` as `replaces` rather than
+being a `resetSession` the caller makes first. Same reason `history` does — see
+"The projection": a separate call is one a caller can forget, and forgetting it
+is silent, the model answering fluently from the thread the user has just left.
 
 #### The projection
 
@@ -227,14 +313,14 @@ tidy up a turn the user walked away from. Three routes out of an interrupted
 turn, all the user's: press Continue, press Regenerate, or say something else
 and carry on with the incomplete reply still in the conversation.
 
-`endsUnfinished` is the whole of the classifier: the log's last message, if it is
-a reply, and the last record naming it. `TurnEnd.resumable` decides — missing
-means the process was killed and `error` means the turn gave up, and nobody chose
-either; `done` finished and `aborted` is the one case where the user has already
-said to stop. It is on the enum because two places ask, the log's reader and the
-controller closing a turn, and they have to agree or the offer flickers on the
-next reload. `chatFrom` is the classifier and `replay` together, and it is what
-both stores load through.
+`endsUnfinished` is the whole of the classifier: the last message of the thread
+being read, if it is a reply, and the last record naming it. `TurnEnd.resumable`
+decides — missing means the process was killed and `error` means the turn gave
+up, and nobody chose either; `done` finished and `aborted` is the one case where
+the user has already said to stop. It is on the enum because two places ask, the
+log's reader and the controller closing a turn, and they have to agree or the
+offer flickers on the next reload. `chatFrom` is the classifier and `replayTree`
+together, and it is what both stores load through.
 
 Only the **last** reply is asked about, and that is the rule rather than a
 shortcut. Every turn is marked, so a reply in the middle of a conversation can be
@@ -243,6 +329,22 @@ one stays open for good. It is still not resumable: resuming appends to a
 message, so continuing one from the middle would put new work before turns that
 already happened and that the model has since built on. Nothing reads it either,
 so nothing closes it; a tidy-up record would be written for no reader.
+
+**"Last" is now the last of the thread being read**, which means the offer moves
+as the user cycles. Kill a turn, regenerate, and step back: the reply that was
+killed is the end of *its* thread, so it is offered again and carrying it on
+still only ever appends. That is the same rule and not an exception to it — the
+reason the middle of a conversation is refused is that there are turns below it,
+and on that thread there are none. It does mean `Chat.unfinished` is answered per
+thread rather than per chat, so the `ResumeBar` can appear and go as the arrows
+are pressed.
+
+A turn killed before the model said anything is the one case with nothing to
+step back to: it is offered to be carried on *and* it is what
+`Chat.worthAThread` refuses, so pressing Regenerate takes away the reply
+Continue would have appended to. Both are right — there is nothing in it either
+way — and they are on screen together only because the offer is about the turn
+while the counter is about what the turn produced.
 
 One assumption is worth naming because it is invisible: an open log means nothing
 is running only because a turn cannot outlive the process running it. The
@@ -790,15 +892,25 @@ seven tenths of the height, which is a tool's output cut short and a third of th
 screen left empty under it. It is a route, so the back key closes it and nothing
 had to be written for that.
 
-What can be done to a message — Edit, Regenerate — is a row of icons under it
-rather than a menu, uncovered by hovering the message or, where there is no
-pointer to hover with, by touching it. The row keeps its height whether or not
-anything is in it, so the conversation does not shift under the pointer the
-moment the icons appear. The reveal is a `Listener` rather than a
-`GestureDetector`: a raw pointer listener sidesteps the gesture arena, so one
-touch both places the caret in the bubble's `SelectableText` and shows the
-actions. It writes a `ValueNotifier` rather than calling `setState`, so
-uncovering the icons does not rebuild the message's labels behind them.
+What can be done to a message is a row under it rather than a menu, uncovered by
+hovering the message or, where there is no pointer to hover with, by touching
+it. Left to right: which thread this is and the arrows between them, delete,
+then Edit and Regenerate. The counter and the arrows are there only where there
+is more than one thread — `1/1` and two dead arrows say nothing — while delete
+is offered whatever the count, since deleting the last thread at a point is the
+conversation being cut off there and is worth being able to do. The arrows stop
+at either end rather than wrapping: one that comes back round to where the
+reader started reads as having done nothing. Deleting asks first, and the
+question says whether anything is left, because those are two different things
+to be agreeing to.
+
+The row keeps its height whether or not anything is in it, so the conversation
+does not shift under the pointer the moment the icons appear. The reveal is a
+`Listener` rather than a `GestureDetector`: a raw pointer listener sidesteps the
+gesture arena, so one touch both places the caret in the bubble's
+`SelectableText` and shows the actions. It writes a `ValueNotifier` rather than
+calling `setState`, so uncovering the icons does not rebuild the message's
+labels behind them.
 
 ### The chat page
 
@@ -885,13 +997,26 @@ reads the library directly and is synchronous.
 
 ### Resending a message
 
-Edit and regenerate discard the turn and everything after it, then re-run it.
-The live session still holds the discarded exchange, so `resetSession` drops it
-and puts back `projectionOf` the kept messages — thinking, calls and results and
-all. This is where the "conv.jsonl is the source of truth, re-inject context"
-rule is exercised, and the projection is what makes it true rather than
-approximate. Only the turn being replayed carries its own attachments back; the
-kept messages name theirs.
+Edit and regenerate run the turn again as another thread beside it, rather than
+discarding what was there. The live session still holds the thread being left,
+so `resetSession` drops it and puts back `projectionOf` the messages above the
+branch — thinking, calls and results and all. This is where the "conv.jsonl is
+the source of truth, re-inject context" rule is exercised, and the projection is
+what makes it true rather than approximate. Only the turn being replayed carries
+its own attachments back; the messages above it name theirs.
+
+**They branch at different messages, and that is what decides where the counter
+lands.** An edit is a new prompt, so it is a thread beside the prompt it
+replaces and the `2/3` is under the user's message. A regenerate is a new reply
+to a prompt that has not changed, so the prompt is the branch point and is not
+written a second time — the counter is under the reply, which is the message the
+arrows actually move between. That is why `regenerate` no longer goes through
+`_promptFor` to rewrite the exchange from the top: it did, and it would have put
+the counter on the wrong message.
+
+Continuing an interrupted turn is deliberately neither of these. It adds to a
+reply that is already there, so there is nothing to branch — see "Carrying on an
+interrupted turn".
 
 ### Attachments
 
