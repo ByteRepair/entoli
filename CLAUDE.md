@@ -1175,9 +1175,13 @@ could not see, and it passed against a build that closed the app on a phone.
 Anything asserting about the back key needs `frameworkHandlesBack` beside the
 press.
 
-A chat opens at its latest message. `_openAtBottom` jumps and then jumps again
-until the extent stops moving: a builder lays out only what shows, so the extent
-the first frame reports is an estimate and one jump lands short of the end. Not
+A chat opens at its latest message. `_settleAtBottom` jumps and then jumps
+again until the extent stops moving: a builder lays out only what shows, so the
+extent any one frame reports is an estimate and a single jump lands short of the
+end. **Jump to latest goes through it too**, after its animation — the extent it
+read when the button was pressed was that same estimate, so on its own the
+button left the reader a little above the last message, by an amount that
+depended on how tall the messages happened to be. Not
 `reverse: true`, which would land at the end exactly and for free — in a
 reversed viewport the offsets of older messages shift as the newest one grows,
 so a reader scrolled up during a turn would watch the text move.
