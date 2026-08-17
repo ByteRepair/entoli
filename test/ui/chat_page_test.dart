@@ -174,6 +174,32 @@ void main() {
       expect(holdsCaret(tester, find.byType(TextField)), isFalse);
     });
 
+    // Appended wherever the caret was, a `/command` is text nothing expands:
+    // `BuiltinBackend._command` only reads one at the start of the message,
+    // and the composer's own menu gates `/` on the same rule.
+    testWidgets("a command lands where a command is read from", (tester) async {
+      await openBlank(tester);
+      await tester.enterText(find.byType(TextField), "about the parser");
+      await tester.pump();
+
+      await tester.tap(find.text("/review"));
+      await tester.pump();
+
+      expect(typed(tester), "/review about the parser");
+    });
+
+    // A mention is read anywhere a word starts, so it goes where the caret is.
+    testWidgets("an agent lands at the caret", (tester) async {
+      await openBlank(tester);
+      await tester.enterText(find.byType(TextField), "look here");
+      await tester.pump();
+
+      await tester.tap(find.text("@explore"));
+      await tester.pump();
+
+      expect(typed(tester), "look here @explore ");
+    });
+
     testWidgets("with nothing to offer it says how to reach them",
         (tester) async {
       app.dispose();

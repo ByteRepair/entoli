@@ -476,7 +476,15 @@ itself.
 
 The query is a `ValueNotifier` the list listens to rather than `setState` on the
 sidebar: a keystroke changes the list, and the project switcher above it has no
-business rebuilding to answer one.
+business rebuilding to answer one. It holds the *text* rather than the field's
+`TextEditingController`, which is a `ValueListenable` and would have done — its
+value is the text and the caret together, so moving the caret in the search box
+would regroup the whole list for nothing. Same reason `Composer` keeps
+`_canSend`.
+
+Switching projects clears it, for the reason switching clears the selected chat:
+the list the query was written against has just been replaced, and kept it would
+answer a project the user has only just arrived in with "nothing matches".
 
 ### Starting a chat, and naming it
 
@@ -691,14 +699,19 @@ with one outstanding denies it.
 `ApprovalBanner` shows **the call, not the tool**. It named the tool and put the
 arguments JSON under it at two lines and an ellipsis, which is a consent dialog
 asking to be waved through: what is being agreed to is the command, and the
-command was the half that got cut. `approvalDetail` digs it out — `command`,
-`url`, whichever single argument a tool named something else, falling back to
-the JSON re-indented and then to the string as it came. Liberal in the same way
-and for the same reason `askQuestionsFrom` is: these are arguments the model
-wrote, and one this cannot read is still better shown than hidden. It sits in
-mono on a plain surface inside the tinted banner, capped at
-`ApprovalBanner.mostHeight` and scrolling past it, so a command of any length is
-readable without the banner burying the conversation it is asking about.
+command was the half that got cut. It sits in mono on a plain surface inside the
+tinted banner, capped at `ApprovalBanner.mostHeight` and scrolling past it, so a
+command of any length is readable without the banner burying the conversation it
+is asking about.
+
+What it shows is `ToolApproval.argumentsText`, which is the field `ToolCall`
+already carried and is now on both. The banner does not parse: `_bash` has the
+command in a local and `_webfetch` has the URL, both one line above the
+`_runGated` call that raises the approval, so the wording rides with it. Digging
+it back out of the JSON in the widget was the first version, and it meant a list
+of argument names — `command`, `url` — kept in a widget file, describing tools
+it is nowhere near. The raw JSON stays as the fallback for a tool that words
+nothing, which is what `ToolLabel` does with the same field.
 
 It is its own file rather than the end of `message_bubble.dart`, where it used
 to live: it is not a message, and the turn is what is asking.
@@ -1238,10 +1251,17 @@ so a user who does not know they exist never finds out. Six at most, because
 everything the user has written is a menu and `/` is what opens the menu; with
 nothing at all in the library it says how to reach them instead.
 
-Tapping one types it into the composer and **does not ask for the focus**. That
-is the composer's own rule read from the outside — see "The keyboard and the
-caret": on Android focus is the keyboard, and a chip that raises one over a
-conversation nobody was typing in is exactly what that rule exists to stop.
+Tapping one types it into the composer through `insertCompletion`, which is the
+composer's own insertion lifted out of its `State` so both callers reach it.
+Both halves of that mattered. **Where** it lands is a rule: a command goes to
+offset 0, because `BuiltinBackend._command` is anchored there and
+`activeCompletionToken` gates `/` on `start == 0` — appended at the caret it
+would be text that looks like a command, dispatches as none, and is not even
+offered a menu. A mention goes at the caret, since `_mention` reads one wherever
+a word starts. And it **does not ask for the focus**, which is the composer's
+other rule — see "The keyboard and the caret": on Android focus is the keyboard,
+and a chip that raises one over a conversation nobody was typing in is exactly
+what that rule exists to stop.
 
 `NavDrawer` is that drawer, and the only thing it says is a width: below
 Material's compact breakpoint it takes the whole screen, since 304dp of panel on

@@ -30,9 +30,9 @@ List<ChatGroup> groupChatsByDate(Iterable<ChatState> chats, {required DateTime n
 /// looks at. Searching what was *said* means reading every `conv.jsonl` off
 /// disk on every keystroke; the titles are already in memory, since they are
 /// what the list draws.
+/// An empty query needs no arm of its own: every string holds the empty one.
 List<ChatState> chatsMatching(Iterable<ChatState> chats, String query) {
   final needle = query.trim().toLowerCase();
-  if (needle.isEmpty) return chats.toList();
   return chats.where((c) => c.title.orUntitled.toLowerCase().contains(needle)).toList();
 }
 

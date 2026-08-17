@@ -2139,7 +2139,11 @@ as String?,
 /// @nodoc
 mixin _$ToolApproval {
 
- String get id; String get toolName; String? get argumentsJson;
+ String get id; String get toolName; String? get argumentsJson;/// What the call actually does — the command for a `bash`, the URL for a
+/// `webfetch`. The same field [ToolCall] carries and for the same reason:
+/// the site that builds the call has it in hand, and a reader digging it
+/// back out of the JSON is guessing at which key this tool used.
+ String? get argumentsText;
 /// Create a copy of ToolApproval
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2152,16 +2156,16 @@ $ToolApprovalCopyWith<ToolApproval> get copyWith => _$ToolApprovalCopyWithImpl<T
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolApproval&&(identical(other.id, id) || other.id == id)&&(identical(other.toolName, toolName) || other.toolName == toolName)&&(identical(other.argumentsJson, argumentsJson) || other.argumentsJson == argumentsJson));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ToolApproval&&(identical(other.id, id) || other.id == id)&&(identical(other.toolName, toolName) || other.toolName == toolName)&&(identical(other.argumentsJson, argumentsJson) || other.argumentsJson == argumentsJson)&&(identical(other.argumentsText, argumentsText) || other.argumentsText == argumentsText));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,toolName,argumentsJson);
+int get hashCode => Object.hash(runtimeType,id,toolName,argumentsJson,argumentsText);
 
 @override
 String toString() {
-  return 'ToolApproval(id: $id, toolName: $toolName, argumentsJson: $argumentsJson)';
+  return 'ToolApproval(id: $id, toolName: $toolName, argumentsJson: $argumentsJson, argumentsText: $argumentsText)';
 }
 
 
@@ -2172,7 +2176,7 @@ abstract mixin class $ToolApprovalCopyWith<$Res>  {
   factory $ToolApprovalCopyWith(ToolApproval value, $Res Function(ToolApproval) _then) = _$ToolApprovalCopyWithImpl;
 @useResult
 $Res call({
- String id, String toolName, String? argumentsJson
+ String id, String toolName, String? argumentsJson, String? argumentsText
 });
 
 
@@ -2189,11 +2193,12 @@ class _$ToolApprovalCopyWithImpl<$Res>
 
 /// Create a copy of ToolApproval
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? toolName = null,Object? argumentsJson = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? toolName = null,Object? argumentsJson = freezed,Object? argumentsText = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,toolName: null == toolName ? _self.toolName : toolName // ignore: cast_nullable_to_non_nullable
 as String,argumentsJson: freezed == argumentsJson ? _self.argumentsJson : argumentsJson // ignore: cast_nullable_to_non_nullable
+as String?,argumentsText: freezed == argumentsText ? _self.argumentsText : argumentsText // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -2279,10 +2284,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String toolName,  String? argumentsJson)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String toolName,  String? argumentsJson,  String? argumentsText)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ToolApproval() when $default != null:
-return $default(_that.id,_that.toolName,_that.argumentsJson);case _:
+return $default(_that.id,_that.toolName,_that.argumentsJson,_that.argumentsText);case _:
   return orElse();
 
 }
@@ -2300,10 +2305,10 @@ return $default(_that.id,_that.toolName,_that.argumentsJson);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String toolName,  String? argumentsJson)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String toolName,  String? argumentsJson,  String? argumentsText)  $default,) {final _that = this;
 switch (_that) {
 case _ToolApproval():
-return $default(_that.id,_that.toolName,_that.argumentsJson);case _:
+return $default(_that.id,_that.toolName,_that.argumentsJson,_that.argumentsText);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -2320,10 +2325,10 @@ return $default(_that.id,_that.toolName,_that.argumentsJson);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String toolName,  String? argumentsJson)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String toolName,  String? argumentsJson,  String? argumentsText)?  $default,) {final _that = this;
 switch (_that) {
 case _ToolApproval() when $default != null:
-return $default(_that.id,_that.toolName,_that.argumentsJson);case _:
+return $default(_that.id,_that.toolName,_that.argumentsJson,_that.argumentsText);case _:
   return null;
 
 }
@@ -2335,12 +2340,17 @@ return $default(_that.id,_that.toolName,_that.argumentsJson);case _:
 @JsonSerializable()
 
 class _ToolApproval implements ToolApproval {
-  const _ToolApproval({required this.id, required this.toolName, this.argumentsJson});
+  const _ToolApproval({required this.id, required this.toolName, this.argumentsJson, this.argumentsText});
   factory _ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);
 
 @override final  String id;
 @override final  String toolName;
 @override final  String? argumentsJson;
+/// What the call actually does — the command for a `bash`, the URL for a
+/// `webfetch`. The same field [ToolCall] carries and for the same reason:
+/// the site that builds the call has it in hand, and a reader digging it
+/// back out of the JSON is guessing at which key this tool used.
+@override final  String? argumentsText;
 
 /// Create a copy of ToolApproval
 /// with the given fields replaced by the non-null parameter values.
@@ -2355,16 +2365,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ToolApproval&&(identical(other.id, id) || other.id == id)&&(identical(other.toolName, toolName) || other.toolName == toolName)&&(identical(other.argumentsJson, argumentsJson) || other.argumentsJson == argumentsJson));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ToolApproval&&(identical(other.id, id) || other.id == id)&&(identical(other.toolName, toolName) || other.toolName == toolName)&&(identical(other.argumentsJson, argumentsJson) || other.argumentsJson == argumentsJson)&&(identical(other.argumentsText, argumentsText) || other.argumentsText == argumentsText));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,toolName,argumentsJson);
+int get hashCode => Object.hash(runtimeType,id,toolName,argumentsJson,argumentsText);
 
 @override
 String toString() {
-  return 'ToolApproval(id: $id, toolName: $toolName, argumentsJson: $argumentsJson)';
+  return 'ToolApproval(id: $id, toolName: $toolName, argumentsJson: $argumentsJson, argumentsText: $argumentsText)';
 }
 
 
@@ -2375,7 +2385,7 @@ abstract mixin class _$ToolApprovalCopyWith<$Res> implements $ToolApprovalCopyWi
   factory _$ToolApprovalCopyWith(_ToolApproval value, $Res Function(_ToolApproval) _then) = __$ToolApprovalCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String toolName, String? argumentsJson
+ String id, String toolName, String? argumentsJson, String? argumentsText
 });
 
 
@@ -2392,11 +2402,12 @@ class __$ToolApprovalCopyWithImpl<$Res>
 
 /// Create a copy of ToolApproval
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? toolName = null,Object? argumentsJson = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? toolName = null,Object? argumentsJson = freezed,Object? argumentsText = freezed,}) {
   return _then(_ToolApproval(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,toolName: null == toolName ? _self.toolName : toolName // ignore: cast_nullable_to_non_nullable
 as String,argumentsJson: freezed == argumentsJson ? _self.argumentsJson : argumentsJson // ignore: cast_nullable_to_non_nullable
+as String?,argumentsText: freezed == argumentsText ? _self.argumentsText : argumentsText // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

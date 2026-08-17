@@ -1,15 +1,11 @@
-import "dart:async";
-
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
-import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/question_panel.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
 
 import "../harness.dart";
 
@@ -35,26 +31,19 @@ void main() {
     options: [AskOption(label: "Yes"), AskOption(label: "No")],
   );
 
-  /// A chat mid-turn, with [asked] on screen. The turn is held open, the way a
-  /// real one is while the agent waits to be told.
   Future<String> asking(
     WidgetTester tester,
     AskRequest asked, {
     EdgeInsets bars = EdgeInsets.zero,
-  }) async {
-    app.backend.scriptedEvents = [QuestionRequestEvent(asked)];
-    app.backend.hold = Completer<void>();
-    addTearDown(() => app.backend.hold?.complete());
-
-    final chat = await io(tester, () => app.repo.createChat());
-    final id = chat.state.id;
-    app.container.read(selectedChatIdProvider.notifier).state = id;
-    await app.pump(tester, underSystemBars(bars, const ChatPage()), settle: false);
-    await pumpUntil(tester, find.byType(Composer));
-    await io(tester, () => app.container.read(chatControllerProvider(id).notifier).send("set up storage"));
-    await pumpUntil(tester, find.byType(QuestionPanel));
-    return id;
-  }
+  }) =>
+      heldTurn(
+        tester,
+        app,
+        event: QuestionRequestEvent(asked),
+        until: find.byType(QuestionPanel),
+        prompt: "set up storage",
+        bars: bars,
+      );
 
   /// Let the held turn finish — the composer goes back to offering `send` when
   /// it has.

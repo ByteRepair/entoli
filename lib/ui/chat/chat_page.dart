@@ -81,7 +81,7 @@ class _NoChat extends ConsumerWidget {
 class _EmptyChat extends ConsumerWidget {
   const _EmptyChat({required this.onStart});
 
-  final ValueChanged<String> onStart;
+  final void Function(CompletionKind kind, String name) onStart;
 
   /// Enough to say what is on offer. Everything the user has written is a menu,
   /// and `/` is what opens the menu.
@@ -91,11 +91,10 @@ class _EmptyChat extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final starters = [
-      for (final c in ref.watch(completionsProvider(CompletionKind.command)))
-        (trigger: "/${c.name}", description: c.description),
-      for (final a in ref.watch(completionsProvider(CompletionKind.agent)))
-        (trigger: "@${a.name}", description: a.description),
-    ].take(_most);
+      for (final kind in CompletionKind.values)
+        for (final option in ref.watch(completionsProvider(kind)))
+          (kind: kind, option: option),
+    ].take(_most).toList();
 
     return Center(
       child: SingleChildScrollView(
@@ -125,14 +124,14 @@ class _EmptyChat extends ConsumerWidget {
                 children: [
                   for (final starter in starters)
                     ActionChip(
-                      label: Text(starter.trigger),
+                      label: Text("${starter.kind.trigger}${starter.option.name}"),
                       labelStyle:
                           theme.textTheme.bodySmall?.copyWith(fontFamily: monoFamily),
                       // Null rather than the empty string: `Chip` builds a
                       // `Tooltip` for whatever it is given, and an empty one is
                       // a blank box on a long press.
-                      tooltip: starter.description,
-                      onPressed: () => onStart(starter.trigger),
+                      tooltip: starter.option.description,
+                      onPressed: () => onStart(starter.kind, starter.option.name),
                     ),
                 ],
               ),
@@ -360,22 +359,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
-  /// Put a `/command` or an `@agent` in the composer, ready to be typed after.
-  /// It deliberately does not ask for the focus: on Android that is the
-  /// keyboard coming up over a conversation nobody was typing in — see the
-  /// composer, which never asks either.
-  void _startWith(String trigger) {
-    final typed = _controller.text;
-    final before = typed.isEmpty || typed.endsWith(" ") ? typed : "$typed ";
-    final text = "$before$trigger ";
-    _controller.value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
-  }
-
   Widget _conversation(Chat chat, ChatViewState view, ChatController notifier) {
-    if (chat.messages.isEmpty) return _EmptyChat(onStart: _startWith);
+    // `insertCompletion` rather than writing the field here: where a trigger
+    // lands is the composer's rule, and a `/command` appended at the caret is
+    // text nothing would ever expand. It does not ask for the focus, which is
+    // the composer's other rule — see "The keyboard and the caret".
+    if (chat.messages.isEmpty) {
+      return _EmptyChat(
+        onStart: (kind, name) => insertCompletion(_controller, kind, name),
+      );
+    }
     return Stack(
       children: [
         ListView.builder(

@@ -301,6 +301,24 @@ void main() {
       expect(shell.ran, contains("rm -rf build"));
     });
 
+    // The banner asks about the command, not about `bash`, so the wording has
+    // to travel with the approval — dug back out of the JSON by whoever draws
+    // it, it is a guess at which key this tool used.
+    test("the approval says what the call actually does", () async {
+      final client = FakeLlmClient([
+        [bashCall("rm -rf build")],
+        [finish],
+      ]);
+      final events = await agentOver(client,
+              approveMode: ApproveMode.ask,
+              approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
+          .run("clean up")
+          .toList();
+
+      final approval = events.whereType<ApprovalRequestEvent>().first.approval;
+      expect(approval.argumentsText, "rm -rf build");
+    });
+
     test("a denied command is not run, and the model is told why", () async {
       final client = FakeLlmClient([
         [bashCall("rm -rf /")],

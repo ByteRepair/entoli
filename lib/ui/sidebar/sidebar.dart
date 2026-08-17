@@ -60,6 +60,13 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   /// A notifier rather than `setState`: the list is what a keystroke changes,
   /// and the project switcher above it has no business rebuilding to answer one.
+  ///
+  /// Rather than listening to `_search` directly, which is a
+  /// `ValueListenable<TextEditingValue>` and would do — but the value it
+  /// carries is the text *and the caret*, so moving the caret in the field
+  /// would rebuild and regroup the whole list. This holds the text alone, and
+  /// so only fires when the text is what changed. Same reason `Composer` keeps
+  /// `_canSend`.
   final ValueNotifier<String> _query = ValueNotifier("");
 
   @override
