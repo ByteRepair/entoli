@@ -60,6 +60,8 @@ typedef SendCallback = void Function(String text, List<Attachment> attachments);
 ///
 /// Nothing here asks for the field's focus. On Android that is the keyboard
 /// coming up, and it comes up when the field is tapped and at no other time.
+/// Dropping it again when the keyboard goes is `FocusFollowsKeyboard`'s, at the
+/// root of the app.
 class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,

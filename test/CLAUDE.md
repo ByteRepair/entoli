@@ -130,3 +130,10 @@ holds, and a file written behind it is not seen.
 The composer's keyboard is asserted as `tester.testTextInput.isVisible` rather
 than as which node holds focus. The rule the composer keeps is about the
 keyboard, and the field has no `FocusNode` to reach for anyway.
+
+Where the caret is the subject rather than the keyboard, `holdsCaret` asks the
+`EditableText` inside the field — which is also what a `SelectableText` is built
+out of, so a reply answers the same call. `softKeyboard` is the keyboard itself:
+the view insets, which are all the platform ever says about one. `TestApp.pump`
+wraps what it pumps in `FocusFollowsKeyboard` because `main` does, so a page under
+test answers a keyboard closing the way the app would.
