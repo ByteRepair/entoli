@@ -23,6 +23,10 @@ import "../domain/project.dart";
 /// Every path but the first three is a project's: `null` is the default
 /// project, and it is the data directory itself, so a chat written before
 /// there were projects is already in it.
+///
+/// The workspace half of this layout is spoken a second time, in Kotlin, by
+/// `WorkspaceProvider` — it answers Android's Files app with no engine running,
+/// so moving `workspace/` or `chats/` has to move there too.
 class AppConfig {
   AppConfig._(this.dataDir, this.fs) : documents = Documents(fs);
 
