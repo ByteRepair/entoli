@@ -1,6 +1,8 @@
 import "dart:convert";
 
+import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
@@ -73,8 +75,8 @@ void main() {
     await pump(tester, _message(MessageRole.assistant, [const ErrorPart(message: "usage limit reached")]));
 
     final rendered = tester
-        .widgetList<SelectableText>(find.byType(SelectableText))
-        .firstWhere((t) => t.data!.contains("usage limit reached"));
+        .widgetList<Text>(find.byType(Text))
+        .firstWhere((t) => t.data?.contains("usage limit reached") ?? false);
     final context = tester.element(find.byType(MessageBubble));
     expect(rendered.style?.color, Theme.of(context).colorScheme.error);
   });
@@ -709,6 +711,129 @@ void main() {
 
     expect(find.byType(MarkdownBody), findsNothing);
     expect(find.text("here is **bold** code"), findsOneWidget);
+  });
+
+  group("the message as text", () {
+    /// Everything the app put on the clipboard, in order.
+    List<String> clipboard(WidgetTester tester) {
+      final copied = <String>[];
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == "Clipboard.setData") {
+          copied.add((call.arguments as Map)["text"] as String);
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      return copied;
+    }
+
+    testWidgets("the copy button takes the whole message, markdown and all",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const ReasoningPart(text: "thinking", durationMs: 12000),
+          const TextPart(text: "here is **bold** code"),
+        ]),
+      );
+      await reveal(tester, find.textContaining("bold"));
+
+      await tester.tap(find.byTooltip("Copy message"));
+      await tester.pumpAndSettle();
+
+      // What was said, not what was thought.
+      expect(copied, ["here is **bold** code"]);
+    });
+
+    testWidgets("a message with nothing said in it has nothing to copy", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const ToolCallPart(toolCall: ToolCall(id: "1", name: "bash")),
+        ]),
+      );
+      await reveal(tester, find.byType(MessageBubble));
+
+      expect(find.byTooltip("Copy message"), findsNothing);
+    });
+
+    // A selection used to stop at the element it started in, and copied what
+    // the markdown rendered to rather than the markdown itself.
+    testWidgets("selecting a rendered reply copies the markdown behind it",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant,
+            [const TextPart(text: "# Heading\n\nhere is **bold** code")]),
+      );
+
+      final rendered = find.byType(MarkdownBody);
+      final gesture = await tester.startGesture(
+        tester.getTopLeft(rendered) + const Offset(2, 4),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await gesture.moveTo(tester.getBottomRight(rendered) - const Offset(2, 4));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(copied, ["# Heading\n\nhere is **bold** code"]);
+    });
+
+    // The bubble closes at every tool call, so a region per bubble would stop
+    // the drag at the first one — which is most of the replies this app makes.
+    testWidgets("a drag crosses a tool label without picking it up", (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(text: "before **the** call"),
+          const ToolCallPart(toolCall: ToolCall(id: "1", name: "bash")),
+          const TextPart(text: "after *it*"),
+        ]),
+      );
+
+      final said = find.byType(MarkdownBody);
+      final gesture = await tester.startGesture(
+        tester.getTopLeft(said.first) + const Offset(2, 4),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await gesture.moveTo(tester.getBottomRight(said.last) - const Offset(2, 4));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(copied.single, contains("before **the** call"));
+      expect(copied.single, contains("after *it*"));
+      expect(copied.single, isNot(contains("bash")));
+    });
+  });
+
+  // The reply is the page; the prompt is something said to one side of it.
+  testWidgets("only the prompt has a bubble drawn behind it", (tester) async {
+    Finder tint() =>
+        find.ancestor(of: find.byType(MarkdownBody), matching: find.byType(Container));
+
+    await pump(tester, _message(MessageRole.assistant, [const TextPart(text: "hello")]));
+    expect(tint(), findsNothing);
+
+    await pump(tester, _message(MessageRole.user, [const TextPart(text: "hello")]));
+    expect(tint(), findsOneWidget);
   });
 
   testWidgets("tapping a rendered link fires onTapLink with the href", (tester) async {

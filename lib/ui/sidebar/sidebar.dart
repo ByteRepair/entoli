@@ -8,6 +8,7 @@ import "../chat/chat_controller.dart";
 import "../profile/profile_page.dart";
 import "../settings/settings_page.dart";
 import "../widgets/anchored_menu.dart";
+import "../widgets/nav_drawer.dart";
 import "../widgets/dialogs.dart";
 import "project_settings_page.dart";
 
@@ -32,16 +33,22 @@ class SelectedProject extends Notifier<String?> {
 final selectedProjectProvider =
     NotifierProvider<SelectedProject, String?>(SelectedProject.new);
 
+void openChat(BuildContext context, WidgetRef ref, String chatId) {
+  ref.read(selectedChatIdProvider.notifier).select(chatId);
+  closeNavDrawer(context);
+}
+
+/// A new chat in the project being shown, opened. Nothing is listed here yet:
+/// an empty chat is not on disk, and joins the list when its first message is
+/// saved. The sidebar's button and the empty pane's are the same action.
+Future<void> startChat(BuildContext context, WidgetRef ref) async {
+  final project = ref.read(selectedProjectProvider);
+  final chat = await ref.read(chatRepositoryProvider).createChat(project: project);
+  if (context.mounted) openChat(context, ref, chat.state.id);
+}
+
 class Sidebar extends ConsumerWidget {
   const Sidebar({super.key});
-
-  /// Selecting a chat should reveal it. On narrow layouts the sidebar is a
-  /// drawer sitting over the chat, so it has to get out of the way.
-  void _open(BuildContext context, WidgetRef ref, String chatId) {
-    ref.read(selectedChatIdProvider.notifier).select(chatId);
-    final scaffold = Scaffold.maybeOf(context);
-    if (scaffold?.isDrawerOpen ?? false) scaffold!.closeDrawer();
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -85,7 +92,7 @@ class Sidebar extends ConsumerWidget {
                         selected: selected,
                         title: Text(c.title.orUntitled),
                         subtitle: Text(_formatTimestamp(c.updatedAt)),
-                        onTap: () => _open(context, ref, c.id),
+                        onTap: () => openChat(context, ref, c.id),
                         trailing: PopupMenuButton<String>(
                           icon: const Icon(Icons.more_vert),
                           onSelected: (value) async {
@@ -161,13 +168,7 @@ class Sidebar extends ConsumerWidget {
                   child: FloatingActionButton(
                     heroTag: null,
                     tooltip: "New chat",
-                    // Nothing is listed here yet: an empty chat is not on disk,
-                    // and joins the list when its first message is saved.
-                    onPressed: () async {
-                      final chat =
-                          await ref.read(chatRepositoryProvider).createChat(project: project);
-                      if (context.mounted) _open(context, ref, chat.state.id);
-                    },
+                    onPressed: () => startChat(context, ref),
                     child: const Icon(Icons.add),
                   ),
                 ),
