@@ -294,6 +294,8 @@ void main() {
     app.picker.scripted = [testAttachment("notes.txt")];
     await pump(tester);
 
+    // The button is dead here, so this taps a live pixel that does nothing.
+    // `_submit`'s own guard is what Ctrl+Enter still meets.
     await tester.tap(find.byIcon(Icons.send));
     await settleIo(tester);
     expect(sent, isEmpty);
@@ -304,6 +306,32 @@ void main() {
 
     expect(sent, [""]);
     expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
+  });
+
+  group("the send button", () {
+    Finder send() => find.widgetWithIcon(IconButton, Icons.send);
+
+    testWidgets("is dead until there is something to send, and after it goes",
+        (tester) async {
+      await pump(tester);
+      expect(enabled(tester, send()), isFalse);
+
+      await type(tester, "hello");
+      expect(enabled(tester, send()), isTrue);
+
+      await tester.tap(send());
+      await settleIo(tester);
+
+      expect(enabled(tester, send()), isFalse);
+    });
+
+    testWidgets("counts whitespace as nothing", (tester) async {
+      await pump(tester);
+
+      await type(tester, "   ");
+
+      expect(enabled(tester, send()), isFalse);
+    });
   });
 
   testWidgets("a cancelled chooser attaches nothing", (tester) async {
