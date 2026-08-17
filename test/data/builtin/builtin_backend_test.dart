@@ -5,13 +5,13 @@ import "package:flutter_test/flutter_test.dart";
 import "dart:convert";
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/builtin_backend.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
-import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
-import "package:agent_chat/data/miniswe/llm/llm_registry.dart";
-import "package:agent_chat/data/miniswe/miniswe_agent.dart";
-import "package:agent_chat/data/miniswe/miniswe_backend.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -19,7 +19,7 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
 
 import "../../harness.dart";
-import "miniswe_fakes.dart";
+import "builtin_fakes.dart";
 
 void main() {
   const chatId = "chat-1";
@@ -32,7 +32,7 @@ void main() {
   ShellResult okEmpty(String command) => ok("");
 
   setUp(() {
-    config = tempConfig("agent_chat_miniswe_");
+    config = tempConfig("agent_chat_builtin_");
     providers = const [
       LlmProviderConfig(
         id: "fake",
@@ -43,15 +43,15 @@ void main() {
     ];
   });
 
-  MinisweBackend backendOver(
+  BuiltinBackend backendOver(
     List<List<LlmChunk>> turns, {
     ShellResult Function(String)? respond,
     PromptLibrary? library,
-    MinisweOptions options = const MinisweOptions(),
+    BuiltinOptions options = const BuiltinOptions(),
   }) {
     client = FakeLlmClient(turns);
     shell = FakeShell(respond ?? okEmpty);
-    return MinisweBackend(
+    return BuiltinBackend(
       config: config,
       library: library,
       shell: shell,
@@ -68,7 +68,7 @@ void main() {
   /// Most of these are not about approvals, so the default here is the chat
   /// setting that does not stop to ask.
   Future<List<AgentEvent>> send(
-    MinisweBackend backend,
+    BuiltinBackend backend,
     String text, {
     String? model = "fake-model",
     String? provider = "fake",
@@ -83,7 +83,7 @@ void main() {
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
   /// uses.
-  Future<List<AgentEvent>> resuming(MinisweBackend backend, List<Message> history) =>
+  Future<List<AgentEvent>> resuming(BuiltinBackend backend, List<Message> history) =>
       backend
           .resumeTurn(chatId,
               history: history,
@@ -93,7 +93,7 @@ void main() {
 
   /// A turn left running for the test to answer, whether what it stops on is a
   /// command to approve or a question to pick from.
-  Stream<AgentEvent> asking(MinisweBackend backend, String text,
+  Stream<AgentEvent> asking(BuiltinBackend backend, String text,
           {ApproveMode approveMode = ApproveMode.ask}) =>
       backend.sendPrompt(chatId, text,
           settings: TurnSettings(

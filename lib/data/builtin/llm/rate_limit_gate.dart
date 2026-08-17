@@ -4,15 +4,15 @@ import "dart:async";
 /// 429 backoff so a fan-out of sub-agents doesn't each-retry-into the same
 /// rate limit.
 ///
-/// One gate is shared by the parent [MinisweAgent] and every sub-agent it
-/// spawns, built per turn in `MinisweBackend.sendPrompt`. A request acquires
+/// One gate is shared by the parent [BuiltinAgent] and every sub-agent it
+/// spawns, built per turn in `BuiltinBackend.sendPrompt`. A request acquires
 /// a concurrency slot (capped at [maxConcurrent]) and waits out any active
 /// cooldown before it starts. When a 429 is observed, [onRateLimited] advances
 /// the shared cooldown; every other in-flight or queued request honours it via
 /// [awaitReady]. Backoff grows across successive 429 episodes and resets on
 /// any successful request. A wall-clock budget ([maxRetryBudget]) caps how
 /// long 429 retries continue before the agent gives up; other retryables
-/// keep the per-agent [MinisweOptions.maxAttempts] path.
+/// keep the per-agent [BuiltinOptions.maxAttempts] path.
 class RateLimitGate {
   RateLimitGate({
     required this.maxConcurrent,
@@ -28,7 +28,7 @@ class RateLimitGate {
   final Duration maxBackoff;
   final Duration maxRetryBudget;
 
-  // Concurrency slot pool, mirroring the one in miniswe_agent._executeTasks.
+  // Concurrency slot pool, mirroring the one in builtin_agent._executeTasks.
   final List<Completer<void>> _slots = [];
   int _inFlight = 0;
 

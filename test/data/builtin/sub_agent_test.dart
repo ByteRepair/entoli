@@ -2,24 +2,24 @@ import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/miniswe/llm/gated_client.dart";
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
-import "package:agent_chat/data/miniswe/llm/rate_limit_gate.dart";
-import "package:agent_chat/data/miniswe/miniswe_agent.dart";
-import "package:agent_chat/data/miniswe/sub_agent.dart";
+import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/llm/gated_client.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/rate_limit_gate.dart";
+import "package:agent_chat/data/builtin/sub_agent.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
 
-import "miniswe_fakes.dart";
+import "builtin_fakes.dart";
 
 void main() {
-  late MinisweSession session;
+  late BuiltinSession session;
   late FakeShell shell;
 
-  setUp(() => session = MinisweSession());
+  setUp(() => session = BuiltinSession());
 
   PromptLibrary libraryWithGeneral() => PromptLibrary([
         PromptDocument.parse(
@@ -106,13 +106,13 @@ void main() {
     });
   });
 
-  group("MinisweAgent with task tool", () {
+  group("BuiltinAgent with task tool", () {
     const done = LlmCompletion(
       message: LlmMessage(role: LlmRole.assistant, text: "done"),
     );
 
     /// Parent agent with a [SubAgentRunner] backed by [subClient].
-    MinisweAgent agentOver(
+    BuiltinAgent agentOver(
       FakeLlmClient parentClient,
       FakeLlmClient subClient, {
       ShellResult Function(String)? respond,
@@ -126,14 +126,14 @@ void main() {
         model: "fake-model",
         library: libraryWithGeneral(),
       );
-      return MinisweAgent(
+      return BuiltinAgent(
         session: session,
         client: parentClient,
         shell: shell,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
-        options: const MinisweOptions(),
+        options: const BuiltinOptions(),
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
@@ -290,14 +290,14 @@ void main() {
         model: "fake-model",
         library: libraryWithGeneral(),
       );
-      final agent = MinisweAgent(
+      final agent = BuiltinAgent(
         session: session,
         client: parent,
         shell: shell,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
-        options: const MinisweOptions(maxConcurrentSubAgents: 2),
+        options: const BuiltinOptions(maxConcurrentSubAgents: 2),
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
@@ -328,7 +328,7 @@ void main() {
         model: "fake-model",
         library: libraryWithGeneral(),
       );
-      final agent = MinisweAgent(
+      final agent = BuiltinAgent(
         session: session,
         client: parent,
         shell: shell,
@@ -360,14 +360,14 @@ void main() {
 
     /// A parent + sub-agent pair sharing one gate, both talking through
     /// [ConcurrentFakeLlmClient] so the test can assert the in-flight cap.
-    ({MinisweAgent agent, ConcurrentFakeLlmClient parentTrack, ConcurrentFakeLlmClient subTrack, RateLimitGate gate})
+    ({BuiltinAgent agent, ConcurrentFakeLlmClient parentTrack, ConcurrentFakeLlmClient subTrack, RateLimitGate gate})
         gatedAgent(
       FakeLlmClient parentClient,
       FakeLlmClient subClient, {
       int maxConcurrent = 2,
       Duration initialBackoff = const Duration(seconds: 1),
       Duration maxRetryBudget = const Duration(minutes: 5),
-      MinisweOptions options = const MinisweOptions(),
+      BuiltinOptions options = const BuiltinOptions(),
       ShellResult Function(String)? respond,
     }) {
       shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: true);
@@ -390,7 +390,7 @@ void main() {
         options: options,
         rateLimitGate: gate,
       );
-      final agent = MinisweAgent(
+      final agent = BuiltinAgent(
         session: session,
         client: gatedParent,
         shell: shell,
@@ -430,7 +430,7 @@ void main() {
       ]);
       final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
           maxConcurrent: 2,
-          options: const MinisweOptions(maxConcurrentSubAgents: 5));
+          options: const BuiltinOptions(maxConcurrentSubAgents: 5));
 
       await agent.run("fan out").toList();
 
@@ -473,7 +473,7 @@ void main() {
       final (:agent, :subTrack, :parentTrack, :gate) = gatedAgent(parent, sub,
           maxConcurrent: 1,
           initialBackoff: const Duration(milliseconds: 50),
-          options: const MinisweOptions(maxConcurrentSubAgents: 3));
+          options: const BuiltinOptions(maxConcurrentSubAgents: 3));
 
       final events = await agent.run("fan out").toList();
 
@@ -554,7 +554,7 @@ void main() {
         model: "fake-model",
         library: libraryWithGeneral(),
       );
-      final agent = MinisweAgent(
+      final agent = BuiltinAgent(
         session: session,
         client: parent,
         shell: shell,

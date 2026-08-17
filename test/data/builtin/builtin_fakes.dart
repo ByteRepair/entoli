@@ -1,7 +1,7 @@
 import "dart:async";
 import "dart:convert";
 
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";

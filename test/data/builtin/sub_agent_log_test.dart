@@ -4,14 +4,14 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
-import "package:agent_chat/data/miniswe/sub_agent.dart";
+import "package:agent_chat/data/builtin/sub_agent.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
 
 import "../../harness.dart";
-import "miniswe_fakes.dart";
+import "builtin_fakes.dart";
 
 void main() {
   const chatId = "chat-1";

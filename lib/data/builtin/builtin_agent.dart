@@ -18,8 +18,8 @@ import "task_tool.dart";
 import "templates.dart";
 import "websearch_tool.dart";
 
-/// The only tool mini-swe-agent gives a model. Everything else — reading a
-/// file, editing it, running the tests — is a command.
+/// The only tool for doing anything to the machine. Everything else — reading
+/// a file, editing it, running the tests — is a command.
 const bashTool = LlmTool(
   name: "bash",
   description: "Execute a bash command in the workspace directory.",
@@ -32,8 +32,8 @@ const bashTool = LlmTool(
   },
 );
 
-class MinisweOptions {
-  const MinisweOptions({
+class BuiltinOptions {
+  const BuiltinOptions({
     this.stepLimit = 40,
     this.commandTimeout = const Duration(seconds: 60),
     this.maxAttempts = 4,
@@ -80,7 +80,7 @@ class MinisweOptions {
 /// A chat's conversation as the model sees it. Held per chat and outliving a
 /// turn, which is what makes the next prompt a continuation rather than a
 /// fresh task.
-class MinisweSession {
+class BuiltinSession {
   final List<LlmMessage> messages = [];
 
   bool get isFresh => messages.isEmpty;
@@ -93,10 +93,13 @@ class MinisweSession {
     ..addAll(conversation);
 }
 
-/// mini-swe-agent's control flow, in Dart: ask the model, run the command it
-/// asked for, show it the result, repeat until it says it is done.
-class MinisweAgent {
-  MinisweAgent({
+/// The agent loop: ask the model, run the command it asked for, show it the
+/// result, repeat until it says it is done.
+///
+/// The skeleton is mini-swe-agent's `DefaultAgent`, ported; the termination
+/// protocol is deliberately not — see CLAUDE.md, "The agent loop".
+class BuiltinAgent {
+  BuiltinAgent({
     required this.session,
     required this.client,
     required this.shell,
@@ -105,7 +108,7 @@ class MinisweAgent {
     required this.model,
     required this.approve,
     required this.answer,
-    this.options = const MinisweOptions(),
+    this.options = const BuiltinOptions(),
     this.approveMode = ApproveMode.ask,
     this.classifier,
     this.temperature,
@@ -118,7 +121,7 @@ class MinisweAgent {
     this.profile,
   });
 
-  final MinisweSession session;
+  final BuiltinSession session;
   final LlmClient client;
   final Shell shell;
 
@@ -130,7 +133,7 @@ class MinisweAgent {
   final String projectWorkspace;
 
   final String model;
-  final MinisweOptions options;
+  final BuiltinOptions options;
   final double? temperature;
   final String? reasoningEffort;
 
@@ -160,7 +163,7 @@ class MinisweAgent {
   /// Bounds in-flight `LlmClient.stream` calls across the parent and its
   /// sub-agents and coordinates 429 backoff. Null where the agent is built
   /// directly against a raw [LlmClient] (tests); the per-agent
-  /// [MinisweOptions.maxAttempts] path then governs 429s too.
+  /// [BuiltinOptions.maxAttempts] path then governs 429s too.
   final RateLimitGate? rateLimitGate;
 
   /// Whether to offer the `task` tool. Sub-agents run headless and do not
@@ -323,7 +326,7 @@ class MinisweAgent {
   /// a provider that sees a tool call with no result rejects the next turn.
   ///
   /// `task` calls run concurrently — the deep-research prompt fans out up to
-  /// 75 at once — capped by [MinisweOptions.maxConcurrentSubAgents]. Every
+  /// 75 at once — capped by [BuiltinOptions.maxConcurrentSubAgents]. Every
   /// other call runs in order, so a `bash` before a `task` is done first and
   /// a `bash` after waits for the fan-out. The session messages are answered
   /// in the calls' original order regardless, so the tool results pair up.
@@ -413,7 +416,7 @@ class MinisweAgent {
   }
 
   /// Run a batch of `task` calls concurrently, capped to
-  /// [MinisweOptions.maxConcurrentSubAgents]. Events stream as each sub-agent
+  /// [BuiltinOptions.maxConcurrentSubAgents]. Events stream as each sub-agent
   /// resolves; session messages are answered in the calls' original order so
   /// the tool results pair up with the calls.
   Stream<AgentEvent> _executeTasks(List<LlmToolCall> calls) async* {
@@ -724,7 +727,7 @@ class MinisweAgent {
   /// the per-agent backoff below, every 429 advances the shared cooldown and
   /// every retry waits it out together — so a fan-out of sub-agents pauses as
   /// one rather than each-retry-into the same limit. 429 retries are bounded by
-  /// the gate's wall-clock budget, not [MinisweOptions.maxAttempts]; other
+  /// the gate's wall-clock budget, not [BuiltinOptions.maxAttempts]; other
   /// retryables (503, connection drops) keep the per-agent path.
   Stream<AgentEvent> _query() async* {
     var attempt = 1;
