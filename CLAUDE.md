@@ -204,6 +204,24 @@ cycles, so what they were reading survives a reload; the last one written wins,
 the way a superseded part does. With none, a branch point shows its newest
 thread — a regenerate just asked for is the one to be looking at.
 
+**A turn that said nothing is replaced rather than kept beside.** Stop a turn
+before the model has written a word and regenerate it, and there is nothing on
+the thread it would leave behind: a `1/2` whose first page is blank is worse
+than no counter. `Chat.worthAThread` is the rule, and it asks two things —
+whether the reply holds any parts, and whether it is still the end of its
+thread. The second is what stops the tidy-up eating a conversation: kill a turn,
+type something else, and the empty reply now has everything said since hanging
+under it, which is not something to delete for a counter. An edit never meets
+this, since the message it branches at is a prompt the user typed.
+
+The **rewind is written after the message replacing it**, which looks backwards
+and is not. A new thread names one of its siblings to join them, so all of them
+have to still be there when it is written; rewinding first leaves it naming
+nothing, which puts it on the end of whichever sibling was left rather than
+beside them. That only shows up where the emptied thread is one of several, and
+`chat_controller_test.dart`'s "replacing an empty thread leaves the ones beside
+it alone" is what fails if the two are swapped.
+
 `replayTree` stays as liberal as `replay` was. A `branch` of a message that has
 since been deleted is not an error: the message it introduces goes on the end of
 the thread instead, which is where it would have gone had the record never been

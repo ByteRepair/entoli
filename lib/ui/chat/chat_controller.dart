@@ -176,7 +176,7 @@ class ChatController extends Notifier<ChatViewState> {
   }) async {
     final repo = ref.read(chatRepositoryProvider);
     final updated = chat
-        .withTurn(opening, siblingOf: replacing?.id)
+        .withTurn(opening, replacing: replacing)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
@@ -185,7 +185,15 @@ class ChatController extends Notifier<ChatViewState> {
     // killed before the model says anything still shows what was asked.
     await repo.saveState(updated.state);
     _recorder.open(opening.last.id);
-    await _recorder.write(recordsOf(opening, siblingOf: replacing?.id));
+    await _recorder.write([
+      ...recordsOf(opening, siblingOf: replacing?.id),
+      // Dropped after the message that replaces it rather than before, so there
+      // are still threads there for the new one to name and join. Rewinding
+      // first would leave it naming nothing, which puts it on the end of
+      // whichever sibling was left instead of beside them.
+      if (replacing != null && !chat.worthAThread(replacing))
+        ChatRecord.rewind(messageId: replacing.id),
+    ]);
     // Only the first: a later message changes nothing the sidebar shows, and
     // refreshing it re-reads every chat off disk.
     if (isFirst) {
@@ -194,7 +202,7 @@ class ChatController extends Notifier<ChatViewState> {
     }
 
     _listen(repo.sendPrompt(chatId, text,
-        attachments: attachments, history: history, branched: replacing != null));
+        attachments: attachments, history: history, replaces: replacing != null));
   }
 
   Message _newReply() => Message(

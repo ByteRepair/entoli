@@ -66,29 +66,49 @@ extension Threads on Chat {
     return to < 0 || to >= threads.length ? null : threads[to];
   }
 
-  /// What this becomes when a turn opening with [turn] starts: on the end of
-  /// the conversation, or — where [siblingOf] names a message — as an
-  /// alternative to that one, which cuts the thread back to where it branches
-  /// and counts the first new message among the threads it has joined.
+  /// Whether replacing [message] should leave it behind as a thread to go back
+  /// to. A turn stopped before it said anything is not one: the counter under
+  /// the answer would offer a blank page. Anything said after it is worth
+  /// keeping even so — the reply stayed empty, but the conversation went on
+  /// under it, and that is not something to delete for the sake of a counter.
   ///
-  /// For a branch this is what `replayTree` will make of the records the turn
-  /// writes, said here as well so an edit or a regenerate does not cost a
-  /// reload of the log to draw. The two have to agree, and what pins that is
+  /// Two places ask, [withTurn] and the controller writing the records, and
+  /// they have to agree or the log and the screen part company. Here rather
+  /// than at either, for the reason `TurnEnd.resumable` is on the enum.
+  bool worthAThread(Message message) =>
+      message.parts.isNotEmpty || messages.lastOrNull?.id != message.id;
+
+  /// What this becomes when a turn opening with [turn] starts: on the end of
+  /// the conversation, or — where [replacing] names a message — in place of
+  /// that one, which cuts the thread back to it and counts the first new
+  /// message among the threads there.
+  ///
+  /// A [replacing] that is not [worthAThread] is *replaced* rather than kept
+  /// beside its replacement, so it leaves no counter behind.
+  ///
+  /// This is what `replayTree` will make of the records the turn writes, said
+  /// here as well so an edit or a regenerate does not cost a reload of the log
+  /// to draw. The two have to agree, and what pins that is
   /// `chat_controller_test.dart`'s "what a branch puts on screen is what a
   /// reload reads back", which compares both the messages and the branches.
-  Chat withTurn(List<Message> turn, {String? siblingOf}) {
-    if (siblingOf == null) {
+  Chat withTurn(List<Message> turn, {Message? replacing}) {
+    if (replacing == null) {
       return copyWith(messages: [...messages, ...turn], unfinished: false);
     }
-    final at = messages.indexWhere((m) => m.id == siblingOf);
-    assert(at >= 0, "$siblingOf is not on the thread being read");
+    final at = messages.indexWhere((m) => m.id == replacing.id);
+    assert(at >= 0, "${replacing.id} is not on the thread being read");
     final kept = messages.take(at).toList();
+    final threads = [
+      for (final id in threadsAt(replacing.id))
+        if (worthAThread(replacing) || id != replacing.id) id,
+      turn.first.id,
+    ];
     return copyWith(
       messages: [...kept, ...turn],
       branches: {
         // A branch below this one went with the thread it was on.
         for (final message in kept) message.id: ?branches[message.id],
-        turn.first.id: [...threadsAt(siblingOf), turn.first.id],
+        if (threads.length > 1) turn.first.id: threads,
       },
       unfinished: false,
     );

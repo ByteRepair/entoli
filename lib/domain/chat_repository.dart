@@ -129,17 +129,17 @@ class ChatRepository {
   /// the caller rather than being read back here: the turn's own records are
   /// still on their way to the store.
   ///
-  /// [branched] says the turn opens a thread beside the one that was being
-  /// read, so the session the backend holds is a conversation this prompt is
-  /// not a continuation of. It rides with the prompt for the reason [history]
-  /// does: a separate "forget what you were told" call is one a caller can
-  /// forget, and forgetting it is silent — the model answers fluently from the
-  /// thread the user has just left.
+  /// [replaces] says the turn stands in for one already in the conversation —
+  /// beside it as a thread, or in place of it — so the session the backend
+  /// holds is a conversation this prompt does not continue. It rides with the
+  /// prompt for the reason [history] does: a separate "forget what you were
+  /// told" call is one a caller can forget, and forgetting it is silent, the
+  /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
       List<Message> history = const [],
-      bool branched = false}) async* {
-    if (branched) await _backend.resetSession(chatId, history: history);
+      bool replaces = false}) async* {
+    if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
         history: history,

@@ -503,6 +503,66 @@ void main() {
       expect((await app.repo.openChat(id)).messages, hasLength(1));
     });
 
+    /// A turn the user stopped before the model said anything, which is what
+    /// leaves an empty reply on the end of the conversation.
+    Future<(String, ChatController)> chatWithNothingSaid() async {
+      app.backend.scriptedEvents = const [DoneEvent(aborted: true)];
+      final (id, controller) = await chatWithOneTurn("hello");
+      expect(messagesOf(id).last.parts, isEmpty);
+      app.backend.scriptedEvents = const [TextDelta("an answer"), DoneEvent()];
+      return (id, controller);
+    }
+
+    test("a turn that said nothing is replaced rather than kept beside", () async {
+      final (id, controller) = await chatWithNothingSaid();
+
+      await controller.regenerate(messagesOf(id).last.id);
+      await waitIdle(id);
+
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      expect(chat.messages.map(textOf), ["hello", "an answer"]);
+      // No counter to press: the thread it replaced offered a blank page.
+      expect(chat.branches, isEmpty);
+      expect((await app.repo.openChat(id)).branches, isEmpty);
+    });
+
+    // The reason the rewind is written after the message replacing it: the new
+    // thread has to name one of the siblings while they are all still there, or
+    // it lands under whichever was left rather than beside them.
+    test("replacing an empty thread leaves the ones beside it alone", () async {
+      final (id, controller, first, second) = await twoReplies();
+      app.backend.scriptedEvents = const [DoneEvent(aborted: true)];
+      await controller.regenerate(second);
+      await waitIdle(id);
+      final empty = messagesOf(id).last.id;
+      expect(messagesOf(id).last.parts, isEmpty);
+
+      app.backend.scriptedEvents = const [TextDelta("third answer"), DoneEvent()];
+      await controller.regenerate(empty);
+      await waitIdle(id);
+
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final third = chat.messages.last.id;
+      expect(textOf(chat.messages.last), "third answer");
+      expect(chat.threadsAt(third), [first, second, third]);
+      expect((await app.repo.openChat(id)).branches, chat.branches);
+    });
+
+    test("a turn that said nothing but was written under is kept", () async {
+      final (id, controller) = await chatWithNothingSaid();
+      final empty = messagesOf(id).last.id;
+      await controller.send("are you there?");
+      await waitIdle(id);
+
+      await controller.regenerate(empty);
+      await waitIdle(id);
+
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      // The reply stayed empty, but a conversation happened under it and that
+      // is not something to delete for the sake of a counter.
+      expect(chat.threadsAt(chat.messages.last.id), [empty, chat.messages.last.id]);
+    });
+
     test("regenerating an older thread joins them rather than nesting", () async {
       final (id, controller, first, second) = await twoReplies();
       await controller.stepThread(second, -1);
