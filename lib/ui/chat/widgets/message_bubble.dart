@@ -17,6 +17,9 @@ class MessageBubble extends StatefulWidget {
     required this.message,
     this.isWaiting = false,
     this.waitingNotice,
+    this.threads,
+    this.onThreadStep,
+    this.onDelete,
     this.onEdit,
     this.onRegenerate,
     this.onTapLink,
@@ -33,6 +36,18 @@ class MessageBubble extends StatefulWidget {
   /// Trouble reported while the turn is still running, e.g. a retry after a
   /// rate limit. Shown in red beside the spinner.
   final String? waitingNotice;
+
+  /// The threads written where this message is, oldest first and including it.
+  /// Null where nothing was branched here, which shows no counter and no
+  /// arrows: one thread is nothing to say and nowhere to go. One value rather
+  /// than a position and a count, which could disagree.
+  final List<String>? threads;
+
+  /// Read the thread this many along, -1 or 1.
+  final ValueChanged<int>? onThreadStep;
+
+  /// Delete this message and everything below it — the thread it heads.
+  final VoidCallback? onDelete;
 
   /// Resend this message with different text. User messages only.
   final ValueChanged<String>? onEdit;
@@ -82,6 +97,23 @@ class _MessageBubbleState extends State<MessageBubble> {
       maxLines: 8,
     );
     if (edited != null) widget.onEdit!(edited);
+  }
+
+  Future<void> _delete() async {
+    final others = _threads - 1;
+    final ok = await confirm(
+      context,
+      title: "Delete thread",
+      // The last thread at a branch takes the rest of the conversation with it,
+      // which is a different thing to be agreeing to.
+      message: others > 0
+          ? "This thread and everything below it will be removed. The other "
+              "${others == 1 ? "one stays" : "$others stay"}."
+          : "This message and everything below it will be removed.",
+      confirmLabel: "Delete",
+      destructive: true,
+    );
+    if (ok) widget.onDelete!();
   }
 
   bool get _hasError => widget.message.parts.whereType<ErrorPart>().isNotEmpty;
@@ -146,6 +178,20 @@ class _MessageBubbleState extends State<MessageBubble> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_threads > 1) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  "${_thread + 1}/$_threads",
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+              _step(theme, Icons.chevron_left, "Previous thread", -1),
+              _step(theme, Icons.chevron_right, "Next thread", 1),
+            ],
+            if (widget.onDelete != null)
+              _action(theme, Icons.delete_outline, "Delete thread", _delete),
             if (widget.onEdit != null) _action(theme, Icons.edit_outlined, "Edit", _edit),
             if (widget.onRegenerate != null)
               _action(theme, Icons.refresh, "Regenerate", widget.onRegenerate!),
@@ -161,7 +207,22 @@ class _MessageBubbleState extends State<MessageBubble> {
         ),
       );
 
-  Widget _action(ThemeData theme, IconData icon, String tooltip, VoidCallback onPressed) =>
+  /// How many threads were written where this message is, and which of them it
+  /// is. A message with none is a thread of one, and the only one.
+  int get _threads => widget.threads?.length ?? 1;
+  int get _thread => widget.threads?.indexOf(widget.message.id) ?? 0;
+
+  /// An arrow to the thread [step] along, dead at either end of the list and
+  /// while nothing is listening — the row is uncovered during a turn, when
+  /// moving between threads is refused.
+  Widget _step(ThemeData theme, IconData icon, String tooltip, int step) {
+    final onStep = widget.onThreadStep;
+    final to = _thread + step;
+    return _action(theme, icon, tooltip,
+        onStep == null || to < 0 || to >= _threads ? null : () => onStep(step));
+  }
+
+  Widget _action(ThemeData theme, IconData icon, String tooltip, VoidCallback? onPressed) =>
       IconButton(
         icon: Icon(icon, size: 16),
         tooltip: tooltip,

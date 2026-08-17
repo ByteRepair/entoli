@@ -11,8 +11,8 @@ import "../domain/models.dart";
 import "../domain/project_settings.dart";
 
 /// The UI's door to storage and the agent. Resolves which model a chat runs
-/// on, and owns rewinding a conversation. The turn itself is accumulated and
-/// saved by `ChatController` as events arrive.
+/// on, and owns which thread of a conversation is being read. The turn itself
+/// is accumulated and saved by `ChatController` as events arrive.
 class ChatRepository {
   ChatRepository(this._store, this._backend, this._settings, this._config);
 
@@ -128,9 +128,18 @@ class ChatRepository {
   /// holding the chat's session — see `AgentBackend.sendPrompt`. It comes from
   /// the caller rather than being read back here: the turn's own records are
   /// still on their way to the store.
+  ///
+  /// [replaces] says the turn stands in for one already in the conversation —
+  /// beside it as a thread, or in place of it — so the session the backend
+  /// holds is a conversation this prompt does not continue. It rides with the
+  /// prompt for the reason [history] does: a separate "forget what you were
+  /// told" call is one a caller can forget, and forgetting it is silent, the
+  /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
-      List<Message> history = const []}) async* {
+      List<Message> history = const [],
+      bool replaces = false}) async* {
+    if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
         history: history,
@@ -205,17 +214,27 @@ class ChatRepository {
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);
 
-  /// Forget the message at [index] and everything after it, then give the
-  /// backend a session that never saw them. Written as a record rather than by
-  /// cutting the log: the log is only ever appended to, and shortening it would
-  /// mean rewriting the whole thing.
-  Future<Chat> rewind(Chat chat, int index) async {
-    final kept = chat.messages.sublist(0, index);
-    await append(chat.state.id, [ChatRecord.rewind(messageId: chat.messages[index].id)]);
-    await _backend.resetSession(chat.state.id, history: kept);
-    // Whatever turn was left open is one of the things being forgotten, even
-    // where the rewind cuts above it.
-    return chat.copyWith(messages: kept, unfinished: false);
+  /// Read [messageId] rather than the thread beside it that is on screen.
+  Future<Chat> selectThread(Chat chat, String messageId) =>
+      _rethread(chat, ChatRecord.select(messageId: messageId));
+
+  /// Delete the thread [messageId] heads, and everything below it. The last one
+  /// at a branch can go too: what is left is the conversation cut off there,
+  /// which is what this record meant before there were threads.
+  Future<Chat> deleteThread(Chat chat, String messageId) =>
+      _rethread(chat, ChatRecord.rewind(messageId: messageId));
+
+  /// Append a record that changes which thread is being read, and load back
+  /// what the log now says. Reading it again rather than working it out here:
+  /// which messages a branch leaves live is `replayTree`'s to answer, and a
+  /// second version of that walk is a second version to disagree.
+  Future<Chat> _rethread(Chat chat, ChatRecord record) async {
+    await append(chat.state.id, [record]);
+    final now = await openChat(chat.state.id);
+    // A session is the conversation the model has seen, and which conversation
+    // that is has just changed.
+    await _backend.resetSession(chat.state.id, history: now.messages);
+    return now;
   }
 
   Future<void> abort(String chatId) => _backend.abort(chatId);

@@ -29,7 +29,15 @@ abstract class ChatState with _$ChatState {
 abstract class Chat with _$Chat {
   const factory Chat({
     required ChatState state,
+
+    /// The thread being read, which is one path through the tree the log holds.
     @Default([]) List<Message> messages,
+
+    /// For each message in [messages] that has any, the alternatives written
+    /// beside it — oldest first, including the one being read. Derived by
+    /// `replayTree` rather than persisted, like [unfinished]: the tree is in
+    /// the records, and a message on its own says nothing about it.
+    @Default({}) Map<String, List<String>> branches,
 
     /// The last message is a reply whose turn never finished, and so is one to
     /// offer to carry on. Derived from the log by `endsUnfinished` rather than
@@ -40,9 +48,83 @@ abstract class Chat with _$Chat {
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
 }
 
+/// Where a message sits among the threads written at its point in the
+/// conversation. The counter under a message, and what its arrows move between.
+extension Threads on Chat {
+  /// Every thread written where [messageId] is, oldest first. One entry — the
+  /// message itself — where nothing was ever branched there.
+  List<String> threadsAt(String messageId) => branches[messageId] ?? [messageId];
+
+  /// Which of [threadsAt] is being read, counting from zero.
+  int threadIndex(String messageId) => threadsAt(messageId).indexOf(messageId);
+
+  /// The thread to move to, or null at either end. Deliberately does not wrap:
+  /// an arrow that comes back to where it started reads as having done nothing.
+  String? threadBeside(String messageId, int step) {
+    final to = threadIndex(messageId) + step;
+    final threads = threadsAt(messageId);
+    return to < 0 || to >= threads.length ? null : threads[to];
+  }
+
+  /// Whether replacing [message] should leave it behind as a thread to go back
+  /// to. A turn stopped before it said anything is not one: the counter under
+  /// the answer would offer a blank page. Anything said after it is worth
+  /// keeping even so — the reply stayed empty, but the conversation went on
+  /// under it, and that is not something to delete for the sake of a counter.
+  /// That second half is also what makes deleting safe: nothing is below a
+  /// message this refuses.
+  ///
+  /// Both askers are writers — [withTurn] for the conversation on screen, the
+  /// controller for the record that says the same thing. `replayTree` never
+  /// asks, because the record already carries what was decided. So this is not
+  /// `TurnEnd.resumable`, which a reader and a writer have to agree on; it is
+  /// on [Chat] because a message alone cannot answer the second half.
+  ///
+  /// It only ever decides about a reply. A prompt always carries a `TextPart`,
+  /// empty text and all — see `ChatController._prompt` — so an edit branches
+  /// whatever was typed.
+  bool worthAThread(Message message) =>
+      message.parts.isNotEmpty || messages.lastOrNull?.id != message.id;
+
+  /// What this becomes when a turn opening with [turn] starts: on the end of
+  /// the conversation, or — where [replacing] names a message — in place of
+  /// that one, which cuts the thread back to it and counts the first new
+  /// message among the threads there.
+  ///
+  /// A [replacing] that is not [worthAThread] is *replaced* rather than kept
+  /// beside its replacement, so it leaves no counter behind.
+  ///
+  /// This is what `replayTree` will make of the records the turn writes, said
+  /// here as well so an edit or a regenerate does not cost a reload of the log
+  /// to draw. The two have to agree, and what pins that is
+  /// `chat_controller_test.dart`'s "what a branch puts on screen is what a
+  /// reload reads back", which compares both the messages and the branches.
+  Chat withTurn(List<Message> turn, {Message? replacing}) {
+    if (replacing == null) {
+      return copyWith(messages: [...messages, ...turn], unfinished: false);
+    }
+    final at = messages.indexWhere((m) => m.id == replacing.id);
+    assert(at >= 0, "${replacing.id} is not on the thread being read");
+    final kept = messages.take(at).toList();
+    final threads = [...threadsAt(replacing.id), turn.first.id];
+    if (!worthAThread(replacing)) threads.remove(replacing.id);
+    return copyWith(
+      messages: [...kept, ...turn],
+      branches: {
+        // A branch below this one went with the thread it was on.
+        for (final message in kept) message.id: ?branches[message.id],
+        if (threads.length > 1) turn.first.id: threads,
+      },
+      unfinished: false,
+    );
+  }
+}
+
 enum MessageRole { system, user, assistant, tool }
 
-/// A node in the conversation tree. Linear in v1; tree-structured later.
+/// One message of a conversation. Which thread it is on, and what it was
+/// written as an alternative to, are in the log rather than here — see
+/// `replayTree`, which is the only thing that can answer either.
 @freezed
 abstract class Message with _$Message {
   const factory Message({
@@ -50,7 +132,6 @@ abstract class Message with _$Message {
     required MessageRole role,
     required DateTime createdAt,
     @Default([]) List<MessagePart> parts,
-    String? parentId,
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
