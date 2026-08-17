@@ -5,8 +5,8 @@ import "dart:io";
 import "../../domain/shell.dart";
 
 /// Runs commands on the machine the app is on. Every command is a fresh
-/// subshell: mini-swe-agent's contract is that `cd` and exports do not carry
-/// over, which is why the agent is told to prefix them instead.
+/// subshell — the contract inherited from mini-swe-agent — so `cd` and exports
+/// do not carry over, which is why the agent is told to prefix them instead.
 class LocalShell extends Shell {
   LocalShell({Map<String, String> Function()? environment})
       : _environment = environment ?? _none;

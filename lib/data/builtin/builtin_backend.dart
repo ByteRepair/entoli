@@ -5,7 +5,6 @@ import "package:flutter/foundation.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
-import "../local/file_sub_agent_log.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
@@ -15,28 +14,29 @@ import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
+import "../local/file_sub_agent_log.dart";
+import "builtin_agent.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/llm_registry.dart";
 import "llm/rate_limit_gate.dart";
-import "miniswe_agent.dart";
 import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
 
-/// mini-swe-agent, running in this process. The loop is [MinisweAgent]; this
-/// is what Entoli talks to: it holds a session per chat, resolves which
+/// The built-in agent, running in this process. The loop is [BuiltinAgent];
+/// this is what Entoli talks to: it holds a session per chat, resolves which
 /// endpoint a turn runs against, and turns the composer's `/` and `@` syntax
 /// into a task and a system prompt before the agent ever sees it.
-class MinisweBackend implements AgentBackend {
-  MinisweBackend({
+class BuiltinBackend implements AgentBackend {
+  BuiltinBackend({
     required this.config,
     required this.registry,
     required this.shell,
     required this.webSearch,
     this.library,
-    this.options = const MinisweOptions(),
+    this.options = const BuiltinOptions(),
   });
 
   final AppConfig config;
@@ -55,12 +55,12 @@ class MinisweBackend implements AgentBackend {
   final WebSearch webSearch;
 
   /// Limits and timeouts for every turn.
-  final MinisweOptions options;
+  final BuiltinOptions options;
 
   @override
   ValueListenable<Set<String>> get runningTurns => _running;
 
-  final Map<String, MinisweSession> _sessions = {};
+  final Map<String, BuiltinSession> _sessions = {};
   final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
   final Map<String, List<ToolApproval>> _approvals = {};
@@ -186,7 +186,7 @@ class MinisweBackend implements AgentBackend {
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
-      final session = _sessions.putIfAbsent(chatId, MinisweSession.new);
+      final session = _sessions.putIfAbsent(chatId, BuiltinSession.new);
       // A session the app was not already holding is the one after a restart,
       // and it is empty. Filling it from the conversation is what keeps the
       // chat going rather than starting it over. A resume rebuilds it either
@@ -201,7 +201,7 @@ class MinisweBackend implements AgentBackend {
       if (text == null || session.isFresh) {
         session.replaceWith(projectionOf(history));
       }
-      final agent = MinisweAgent(
+      final agent = BuiltinAgent(
         session: session,
         client: gatedClient,
         shell: shell,
@@ -476,7 +476,7 @@ class MinisweBackend implements AgentBackend {
   @override
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
     await _running.remove(chatId)?.cancel();
-    _sessions.putIfAbsent(chatId, MinisweSession.new).replaceWith(projectionOf(history));
+    _sessions.putIfAbsent(chatId, BuiltinSession.new).replaceWith(projectionOf(history));
   }
 
   @override
@@ -506,9 +506,9 @@ class MinisweBackend implements AgentBackend {
 class _RunningTurns extends ValueNotifier<Set<String>> {
   _RunningTurns() : super(const {});
 
-  final Map<String, MinisweAgent> _agents = {};
+  final Map<String, BuiltinAgent> _agents = {};
 
-  void add(String chatId, MinisweAgent agent) {
+  void add(String chatId, BuiltinAgent agent) {
     _agents[chatId] = agent;
     value = _agents.keys.toSet();
   }
@@ -517,7 +517,7 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
   /// with nothing running — deleting one does — and a `Set` compares by
   /// identity, so a fresh one would notify every time and cost a round trip to
   /// the platform to stop a service that was never started.
-  MinisweAgent? remove(String chatId) {
+  BuiltinAgent? remove(String chatId) {
     final agent = _agents.remove(chatId);
     if (agent != null) value = _agents.keys.toSet();
     return agent;

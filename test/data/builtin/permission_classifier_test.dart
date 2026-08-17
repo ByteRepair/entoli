@@ -2,15 +2,15 @@ import "package:flutter_test/flutter_test.dart";
 
 import "dart:convert";
 
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
-import "package:agent_chat/data/miniswe/miniswe_agent.dart";
-import "package:agent_chat/data/miniswe/permission_classifier.dart";
+import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/permission_classifier.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 
-import "miniswe_fakes.dart";
+import "builtin_fakes.dart";
 
 void main() {
   group("LlmClassifier", () {
@@ -97,19 +97,19 @@ void main() {
   });
 
   group("auto mode in the agent", () {
-    late MinisweSession session;
+    late BuiltinSession session;
     late FakeShell shell;
     late FakeClassifier classifier;
 
     setUp(() {
-      session = MinisweSession();
+      session = BuiltinSession();
       classifier = FakeClassifier();
     });
 
     final finish = saidOnly("done");
     ShellResult okEmpty(String command) => ok("");
 
-    MinisweAgent agentWith(
+    BuiltinAgent agentWith(
       FakeLlmClient client, {
       List<ApprovalResponse> approvals = const [],
       PermissionDecision Function(String, String)? decide,
@@ -117,14 +117,14 @@ void main() {
       shell = FakeShell(okEmpty, canRunCommands: true);
       final allowed = [...approvals];
       if (decide != null) classifier.decide = decide;
-      return MinisweAgent(
+      return BuiltinAgent(
         session: session,
         client: client,
         shell: shell,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
-        options: const MinisweOptions(),
+        options: const BuiltinOptions(),
         approveMode: ApproveMode.auto,
         classifier: classifier,
         approve: (_) async => allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
@@ -237,14 +237,14 @@ void main() {
         [finish],
       ]);
       shell = FakeShell(okEmpty, canRunCommands: true);
-      final agent = MinisweAgent(
+      final agent = BuiltinAgent(
         session: session,
         client: client,
         shell: shell,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
-        options: const MinisweOptions(),
+        options: const BuiltinOptions(),
         approveMode: ApproveMode.auto,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
@@ -264,14 +264,14 @@ void main() {
           const ShellResult(returnCode: 0, output: "page"));
       shell = FakeShell(okEmpty, canRunCommands: true);
       classifier.decide = (_, _) => PermissionDecision.deny;
-      final agent = MinisweAgent(
+      final agent = BuiltinAgent(
         session: session,
         client: client,
         shell: shell,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
-        options: const MinisweOptions(),
+        options: const BuiltinOptions(),
         approveMode: ApproveMode.auto,
         classifier: classifier,
         approve: (_) async => ApprovalResponse.allow,

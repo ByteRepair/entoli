@@ -4,8 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 
-import "package:agent_chat/data/miniswe/llm/anthropic_client.dart";
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/anthropic_client.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
 
 import "sse.dart";
 

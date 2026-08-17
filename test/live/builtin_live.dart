@@ -1,13 +1,13 @@
 // Not part of `flutter test` (no _test.dart suffix): calls a real provider and
 // runs real commands. Run it explicitly, having said where to call:
 //
-//   MINISWE_BASE_URL=https://ollama.com/v1 \
-//   MINISWE_MODEL=kimi-k3 \
+//   BUILTIN_BASE_URL=https://ollama.com/v1 \
+//   BUILTIN_MODEL=kimi-k3 \
 //   OLLAMA_API_KEY=... \
-//   flutter test test/live/miniswe_live.dart
+//   flutter test test/live/builtin_live.dart
 //
-// MINISWE_API is `openai` (the default) or `anthropic`. The key is read from
-// MINISWE_API_KEY, or from whichever of the usual variables the base URL
+// BUILTIN_API is `openai` (the default) or `anthropic`. The key is read from
+// BUILTIN_API_KEY, or from whichever of the usual variables the base URL
 // suggests.
 import "dart:io";
 
@@ -15,11 +15,11 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
-import "package:agent_chat/data/miniswe/duckduckgo_search.dart";
-import "package:agent_chat/data/miniswe/llm/llm_registry.dart";
-import "package:agent_chat/data/miniswe/local_shell.dart";
-import "package:agent_chat/data/miniswe/miniswe_agent.dart";
-import "package:agent_chat/data/miniswe/miniswe_backend.dart";
+import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/builtin_backend.dart";
+import "package:agent_chat/data/builtin/duckduckgo_search.dart";
+import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/llm_provider.dart";
@@ -37,30 +37,30 @@ void main() {
   // of what this file exists to avoid. That rules out `rootBundle`, so the
   // presets are copied off disk below rather than read out of the bundle.
   final env = Platform.environment;
-  final baseUrl = env["MINISWE_BASE_URL"] ?? "https://ollama.com/v1";
-  final model = env["MINISWE_MODEL"];
-  final api = env["MINISWE_API"] == "anthropic" ? LlmApi.anthropic : LlmApi.openai;
+  final baseUrl = env["BUILTIN_BASE_URL"] ?? "https://ollama.com/v1";
+  final model = env["BUILTIN_MODEL"];
+  final api = env["BUILTIN_API"] == "anthropic" ? LlmApi.anthropic : LlmApi.openai;
 
   final provider = LlmProviderConfig(
     id: _providerId,
     api: api,
     baseUrl: baseUrl,
-    apiKey: env["MINISWE_API_KEY"] ?? "",
+    apiKey: env["BUILTIN_API_KEY"] ?? "",
     apiKeyEnv: _keyVariableFor(baseUrl),
   );
 
-  Future<(MinisweBackend, AppConfig)> liveBackend() async {
-    final config = tempConfig("live_miniswe_");
+  Future<(BuiltinBackend, AppConfig)> liveBackend() async {
+    final config = tempConfig("live_builtin_");
     _copyPresetsInto(config);
     final library = await PromptLibrary.from([DirectoryPrompts(config)]);
     return (
-      MinisweBackend(
+      BuiltinBackend(
         config: config,
         library: library,
         shell: LocalShell(environment: () => const {}),
         webSearch: DuckDuckGoSearch(),
         // Live means live: it runs what the model asks for.
-        options: const MinisweOptions(stepLimit: 12),
+        options: const BuiltinOptions(stepLimit: 12),
         registry: LlmRegistry(
           providers: () => [provider],
           lookupEnv: (name) => Platform.environment[name],
@@ -83,7 +83,7 @@ void main() {
 
   test("a real turn, through the production path", () async {
     if (model == null) {
-      stdout.writeln("Set MINISWE_MODEL to run this. Skipping.");
+      stdout.writeln("Set BUILTIN_MODEL to run this. Skipping.");
       return;
     }
     final (backend, config) = await liveBackend();
@@ -172,7 +172,7 @@ String _oneLine(String output) {
 }
 
 /// Which variable a given host usually keeps its key in, so the common cases
-/// need no MINISWE_API_KEY of their own.
+/// need no BUILTIN_API_KEY of their own.
 String _keyVariableFor(String baseUrl) {
   if (baseUrl.contains("anthropic.com")) return "ANTHROPIC_API_KEY";
   if (baseUrl.contains("openai.com")) return "OPENAI_API_KEY";

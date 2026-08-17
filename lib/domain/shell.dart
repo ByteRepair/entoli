@@ -1,6 +1,6 @@
 /// Where the agent's commands run. Desktop and Android have a real shell; a
 /// browser does not, and that is the whole of the difference between the
-/// platforms' mini-swe-agent.
+/// platforms' agent.
 library;
 
 /// What a command produced. Mirrors mini-swe-agent's observation shape: a

@@ -1,8 +1,8 @@
 import "package:fs_shim/fs.dart";
 
+import "../../data/builtin/builtin_backend.dart";
+import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/local/file_chat_store.dart";
-import "../../data/miniswe/llm/llm_registry.dart";
-import "../../data/miniswe/miniswe_backend.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/app_settings.dart";
@@ -26,7 +26,7 @@ import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 /// the agent expands itself.
 AgentBackend createBackend(AppConfig config, PromptLibrary library) {
   AppSettings settings() => AppSettings.load(config);
-  return MinisweBackend(
+  return BuiltinBackend(
     config: config,
     library: library,
     shell: platformShell(environment: () => settings().environment),

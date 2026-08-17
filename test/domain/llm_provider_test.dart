@@ -3,13 +3,13 @@ import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/miniswe/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 
-import "../data/miniswe/miniswe_fakes.dart";
+import "../data/builtin/builtin_fakes.dart";
 import "../harness.dart";
 
 void main() {

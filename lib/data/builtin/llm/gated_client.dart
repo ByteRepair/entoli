@@ -6,7 +6,7 @@ import "rate_limit_gate.dart";
 /// Wraps an [LlmClient] so every [stream] call passes through a shared
 /// [RateLimitGate]: bounded concurrency and a coordinated 429 cooldown.
 ///
-/// One [GatedLlmClient] is built per turn in `MinisweBackend.sendPrompt` and
+/// One [GatedLlmClient] is built per turn in `BuiltinBackend.sendPrompt` and
 /// handed to the parent agent and the [SubAgentRunner], so the two share one
 /// gate. The [finally] block releases the slot on normal completion, a thrown
 /// [LlmException], or cancel (the consumer stops listening).

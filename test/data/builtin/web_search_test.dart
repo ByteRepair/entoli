@@ -2,47 +2,47 @@ import "dart:convert";
 
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/data/miniswe/llm/llm_client.dart";
-import "package:agent_chat/data/miniswe/miniswe_agent.dart";
+import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/web_search.dart";
 
-import "miniswe_fakes.dart";
+import "builtin_fakes.dart";
 
 void main() {
-  late MinisweSession session;
+  late BuiltinSession session;
   late FakeShell shell;
   late FakeWebSearch web;
 
   setUp(() {
-    session = MinisweSession();
+    session = BuiltinSession();
     shell = FakeShell((_) => ok(""), canRunCommands: true);
     web = FakeWebSearch();
   });
 
-  MinisweAgent agentWith(
+  BuiltinAgent agentWith(
     FakeLlmClient client, {
     WebSearch? webSearch,
     bool useDefaultWeb = true,
   }) =>
-      MinisweAgent(
+      BuiltinAgent(
         session: session,
         client: client,
         shell: shell,
         workspace: "/tmp/workspace",
         projectWorkspace: "/tmp/project",
         model: "fake-model",
-        options: const MinisweOptions(),
+        options: const BuiltinOptions(),
         approveMode: ApproveMode.never,
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
         webSearch: useDefaultWeb ? (webSearch ?? web) : webSearch,
       );
 
-  group("MinisweAgent with websearch/webfetch", () {
+  group("BuiltinAgent with websearch/webfetch", () {
     final finish = saidOnly("done");
 
     test("websearch and webfetch are offered alongside bash", () async {
