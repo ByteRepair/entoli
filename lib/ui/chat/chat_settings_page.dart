@@ -6,7 +6,7 @@ import "../../domain/chat_meta.dart";
 import "../../domain/permission.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
-import "../theme.dart";
+import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";

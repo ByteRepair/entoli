@@ -4,7 +4,7 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/chat/widgets/reply_style.dart";
-import "package:agent_chat/ui/theme.dart";
+import "package:agent_chat/ui/fonts.dart";
 
 import "../harness.dart";
 
@@ -26,39 +26,18 @@ void main() {
     return replyStyleSheet(Theme.of(tester.element(find.byType(SizedBox))));
   }
 
-  ColorScheme schemeOf(WidgetTester tester) =>
-      Theme.of(tester.element(find.byType(SizedBox))).colorScheme;
+  // `fromTheme` sets the face from `monospace` and asks for `cardTheme.color`
+  // as a background, which M3 leaves null — so inline code was the sentence in
+  // another face and nothing else. Mono also runs wider than the prose beside
+  // it, so an equal size reads as a larger one.
+  testWidgets("inline code is a bundled face on a surface, set smaller",
+      (tester) async {
+    final sheet = await sheetOf(tester);
+    final scheme = Theme.of(tester.element(find.byType(SizedBox))).colorScheme;
 
-  group("code", () {
-    testWidgets("inline code is set in the bundled face, not the platform's",
-        (tester) async {
-      expect((await sheetOf(tester)).code?.fontFamily, monoFamily);
-    });
-
-    // `fromTheme` asks for `cardTheme.color`, which M3 leaves null, so inline
-    // code used to be prose in another face and nothing else.
-    testWidgets("inline code sits on a surface of its own", (tester) async {
-      final sheet = await sheetOf(tester);
-      final scheme = schemeOf(tester);
-
-      expect(sheet.code?.backgroundColor, scheme.surfaceContainerHighest);
-      expect(sheet.code?.backgroundColor, isNot(scheme.surface));
-    });
-
-    testWidgets("that surface follows the palette", (tester) async {
-      final light = (await sheetOf(tester)).code?.backgroundColor;
-      final dark =
-          (await sheetOf(tester, brightness: Brightness.dark)).code?.backgroundColor;
-
-      expect(dark, isNot(light));
-    });
-
-    // Mono runs wider than the prose around it, so equal sizes read unequal.
-    testWidgets("code is set smaller than the sentence holding it", (tester) async {
-      final sheet = await sheetOf(tester);
-
-      expect(sheet.code!.fontSize, lessThan(sheet.p!.fontSize!));
-    });
+    expect(sheet.code?.fontFamily, monoFamily);
+    expect(sheet.code?.backgroundColor, scheme.surfaceContainerHighest);
+    expect(sheet.code!.fontSize, lessThan(sheet.p!.fontSize!));
   });
 
   group("headings", () {
@@ -109,8 +88,15 @@ void main() {
     expect(rule.border!.top.width, lessThanOrEqualTo(1));
   });
 
-  testWidgets("prose is looser than Material's default", (tester) async {
-    expect((await sheetOf(tester)).p!.height, greaterThan(1.43));
+  // A list is as much prose as a paragraph, and is the shape a reply most
+  // often takes. `fromTheme` hands all four of these plain `bodyMedium`.
+  testWidgets("every prose element is looser than Material's default",
+      (tester) async {
+    final sheet = await sheetOf(tester);
+
+    for (final style in [sheet.p!, sheet.listBullet!, sheet.blockquote!, sheet.tableBody!]) {
+      expect(style.height, greaterThan(1.43));
+    }
   });
 
   // The OFL asks for the licence to travel with the font. It is registered off

@@ -8,7 +8,7 @@ import "package:re_highlight/styles/github.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/widgets/code_block.dart";
-import "package:agent_chat/ui/theme.dart";
+import "package:agent_chat/ui/fonts.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
 import "../harness.dart";

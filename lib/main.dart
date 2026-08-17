@@ -13,6 +13,7 @@ import "domain/prompt_library.dart";
 import "providers.dart";
 import "ui/app_shell.dart";
 import "ui/focus_follows_keyboard.dart";
+import "ui/fonts.dart";
 import "ui/share/incoming_shares.dart";
 import "ui/theme.dart";
 

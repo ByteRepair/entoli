@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../providers.dart";
 import "../profile/profile_page.dart";
-import "../theme.dart";
+import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
 import "../workspace/workspace_page.dart";

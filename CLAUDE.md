@@ -1007,18 +1007,50 @@ against the paragraph before it. And a horizontal rule was five pixels of
 `dividerColor`, which is a slab across the page rather than a rule.
 
 Prose is set looser than Material's 1.43, since a reply is read as prose in a
-column where the line you want next is the one below.
+column where the line you want next is the one below. That goes to `p`,
+`listBullet`, `blockquote` and `tableBody` rather than to `p` alone — the rule
+is about the reply, not about the `<p>` element, and `fromTheme` hands all four
+the same plain `bodyMedium`. A list is the shape a reply most often takes.
 
-**Code is set in a bundled face, `monoFamily`.** `monospace` is an alias the
-platform resolves, so the same reply was Roboto Mono on one Android, Droid Sans
-Mono on another, DejaVu on this desktop and whatever a browser prefers on the
-web — and the four things this app shows verbatim are shown that way precisely
-because their exact characters matter. Roboto Mono is the mono companion to the
-face Material already uses, it is OFL, and `assets/fonts/OFL.txt` ships beside
-it. Bold is bundled as well as regular because the highlight themes set a weight
-on some scopes and synthesised bold in a code block is mush. The family name
-lives in `ui/theme.dart` beside the seed colour, and has to stay in step with
-the `family` in pubspec's `fonts:` block.
+**Code is set in a bundled face**, and `ui/fonts.dart` is the whole of what
+Dart knows about it. `monospace` is an alias the platform resolves, so the same
+reply was Roboto Mono on one Android, Droid Sans Mono on another, DejaVu on
+this desktop and whatever a browser prefers on the web — and the five things
+this app shows verbatim (code, a tool's command and its output, a chat id, a
+config value) are shown that way precisely because their characters line up.
+Roboto Mono is the mono companion to the face Material already uses.
+
+`monoFamily` and `registerBundledFontLicences` are in a file of their own
+rather than in `ui/theme.dart`, which owns the palette and could not read an
+asset if it wanted to. Five facts have to move together — the `family` and the
+two `.ttf` entries in pubspec's `fonts:` block, the `OFL.txt` asset, and those
+two — so they are one file and one section here rather than scattered by
+proximity.
+
+**Both faces are subset to Latin.** Text fonts are not tree-shaken the way icon
+fonts are, so the full files shipped 876 codepoints of which nearly half were
+Cyrillic, Greek and Latin-Extended — and on the web the engine blocks the first
+frame on every font in the manifest, so that was 148 KB gzipped before anything
+painted. Subset it is 58 KB. Anything outside the subset falls back to a system
+face, which is what already happened to arrows and box-drawing: Roboto Mono has
+never had them. Regenerating, which nothing automates:
+
+```sh
+uv tool run --from fonttools pyftsubset RobotoMono-Regular.ttf \
+  --output-file=assets/fonts/RobotoMono-Regular.ttf --layout-features='*' \
+  --name-IDs='*' \
+  --unicodes="U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,\
+U+2000-206F,U+2070-209F,U+20A0-20BF,U+2100-214F,U+2190-21FF,U+2200-22FF,\
+U+2500-257F,U+2580-259F,U+25A0-25FF,U+2713-2717,U+FFFD"
+```
+
+`--name-IDs='*'` is not decoration: it keeps the copyright and licence records
+in the file, which is half of what the OFL asks for. The other half is
+`assets/fonts/OFL.txt`, an asset rather than only a file in the repo, read into
+`LicenseRegistry` lazily — so Flutter's own licence page has it whether or not
+this app grows one. Bold is bundled beside regular because inline code inherits
+the weight of what holds it, and a heading with a `` `name` `` in it is a shape
+this app's replies take constantly.
 
 #### Code blocks
 

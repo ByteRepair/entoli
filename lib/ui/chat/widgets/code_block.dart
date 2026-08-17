@@ -37,7 +37,7 @@ import "package:re_highlight/languages/typescript.dart";
 import "package:re_highlight/languages/xml.dart";
 import "package:re_highlight/languages/yaml.dart";
 
-import "../../theme.dart";
+import "../../fonts.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/dialogs.dart";
 
@@ -199,19 +199,14 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
   }
 }
 
-/// The font code is set in, a block and an inline span alike — the style sheet
-/// is given this too, so the face reaches both rather than one of them.
-///
-/// Bundled rather than `monospace`, which names whatever the platform decides:
-/// Roboto Mono on one Android, Droid Sans Mono on another, DejaVu on this
-/// desktop, and per-browser on the web. Code is the one thing in a reply whose
-/// columns are load-bearing, and it should not line up differently depending on
-/// where the app was opened.
-TextStyle codeFont(ThemeData theme) => TextStyle(
+/// What both code styles below are built on, so the two can only differ in
+/// what each of them adds. See `monoFamily` for why the face is bundled.
+TextStyle _codeFont(ThemeData theme) => TextStyle(
       fontFamily: monoFamily,
       // Mono faces run wider than the prose beside them, so matching the body
       // size makes inline code look larger than the sentence holding it.
-      fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * 0.85,
+      fontSize: theme.textTheme.bodyMedium!.fontSize! * 0.85,
+      color: theme.colorScheme.onSurface,
     );
 
 /// What inline `code` adds: a surface, so a word in a sentence reads as code
@@ -223,19 +218,13 @@ TextStyle codeFont(ThemeData theme) => TextStyle(
 /// which is what a block gets — but a block is one thing on a line of its own,
 /// while inline code has to wrap with the sentence, and a `WidgetSpan` cannot
 /// break across lines.
-TextStyle inlineCodeStyle(ThemeData theme) => codeFont(theme).copyWith(
+TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(theme).copyWith(
       backgroundColor: theme.colorScheme.surfaceContainerHighest,
-      color: theme.colorScheme.onSurface,
     );
 
-/// A block adds two things to that. Room between the lines, because a block is
-/// read as lines where an inline span is read as part of a sentence; and a
-/// colour, which is what every token the highlight theme does not name falls
-/// back to.
-TextStyle _blockStyle(ThemeData theme) => codeFont(theme).copyWith(
-      height: 1.45,
-      color: theme.colorScheme.onSurface,
-    );
+/// What a block adds: room between the lines, because a block is read as lines
+/// where an inline span is read as part of a sentence.
+TextStyle _blockStyle(ThemeData theme) => _codeFont(theme).copyWith(height: 1.45);
 
 /// The surface a code block sits on, above the page behind it. It belongs to
 /// the markdown style sheet rather than to the block: `pre` is wrapped in the
