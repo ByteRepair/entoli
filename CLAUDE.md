@@ -1206,6 +1206,61 @@ still pointing at. At `takeShare` there is no such hazard: only one batch is eve
 offered at a time, so anything left beside the batch being handed over is an
 earlier one nobody claimed.
 
+#### The workspaces in the Files app
+
+`WorkspaceProvider` is a `DocumentsProvider`, which puts Entoli in the Files app
+and in every picker that asks for a file or a folder — the mechanism a cloud
+drive uses to appear there. It is the way out that the share sheet is not: the
+other app browses to what it wants, rather than the user selecting files here
+and pushing them somewhere.
+
+Exported behind `MANAGE_DOCUMENTS`, a permission only the system's document UI
+holds, so nothing queries this directly. An app gets the URI the user picked
+through that UI and nothing besides, and `FLAG_SUPPORTS_IS_CHILD` is what lets
+them pick a whole workspace instead of one file at a time.
+
+**Read-only**, because the other direction already exists and is better at it: a
+file coming in has to be told which workspace it belongs in, and "Sharing to
+Entoli" above is the page that asks. Writing would be `FLAG_SUPPORTS_CREATE` and
+`createDocument`/`deleteDocument` beside what is there rather than a change to
+any of it.
+
+**The tree is the on-disk layout, not a view of it.** The root is the default
+project — which *is* the data directory — so its children are that project's
+shared `workspace/`, a folder per chat in it, and a folder per named project,
+which is where `projects/` already puts them; a named project holds the same two
+kinds of thing. Each workspace is named after whatever owns it, since every one
+of them is a directory called `workspace`: a chat by its title, a project's
+shared one by the word the explorer uses. That this comes out looking like the
+share target page's list is not an arrangement — both are reading the same
+layout.
+
+A document id is either a project — `:` for the default one, `:<name>` for a
+named one — or a path relative to the data directory, which is what every file
+in a workspace is. Neither can be read as the other: a project name is never
+empty and a real path always starts `workspace`, `chats` or `projects`.
+`workspaceDepth` is then the whole of what a path can reach — it has to name
+`[projects/<name>/]workspace` or `[projects/<name>/]chats/<id>/workspace` before
+anything under it is reachable, so `resources/`, `subagents/`, `conv.jsonl` and
+`settings.json` are not in the tree and cannot be asked for. A project id is
+checked by `AppConfig.projectDir`'s rule, one directory under `projects/`,
+because it is the other half of the same job: a tree grant lets the app holding
+it name a document itself, so `:../..` is an id that arrives rather than one
+that was handed out.
+
+Paths are resolved canonically and checked against the workspace they came out
+of, on a listing as well as on an open. The agent's own commands run in these
+directories, so a link to the data directory is something it can be told to
+leave behind, and following one would hand over exactly what the shape check
+above exists to keep out of reach.
+
+**Nothing of Dart is running when any of this is asked** — the Files app starts
+the process by querying — so the data directory is found with
+`PathUtils.getDataDirectory`, the call `getApplicationDocumentsDirectory` itself
+makes, and a chat's name is read out of its own `state.json`. Reading that
+behind the app's back is safe for the reason the documents are written through a
+rename: there is no half-written one to catch.
+
 ### The app icon
 
 Two icons, `AppIcon.cookie` (the default) and `AppIcon.prompt`. The enum's
