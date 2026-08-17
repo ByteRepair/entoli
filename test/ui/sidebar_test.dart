@@ -135,6 +135,79 @@ void main() {
     expect(find.byType(Sidebar), findsOneWidget);
   });
 
+  group("what the list looks like", () {
+    /// A chat last touched [daysAgo], which is what decides the heading it
+    /// lands under. Written straight to the store: the repository stamps
+    /// `updatedAt` itself, and the date is the whole subject here.
+    Future<void> seedDated(WidgetTester tester, String title, int daysAgo) =>
+        io(tester, () async {
+          final chat = await app.repo.createChat(title: title);
+          await app.repo.saveState(chat.state.copyWith(
+            updatedAt: DateTime.now().subtract(Duration(days: daysAgo)),
+          ));
+        });
+
+    testWidgets("chats sit under a heading for when they were last touched",
+        (tester) async {
+      await seedDated(tester, "this one", 0);
+      await seedDated(tester, "that one", 1);
+      await seedDated(tester, "the old one", 12);
+      await pumpBeside(tester);
+
+      expect(find.text("Today"), findsOneWidget);
+      expect(find.text("Yesterday"), findsOneWidget);
+      expect(find.text("Previous 30 days"), findsOneWidget);
+    });
+
+    testWidgets("a project with nothing in it says so and offers no search",
+        (tester) async {
+      await pumpBeside(tester);
+
+      expect(find.text("No chats in this project yet."), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets("typing in the search box leaves only what matches",
+        (tester) async {
+      await io(tester, () => app.seedChat(title: "porting the shell"));
+      await io(tester, () => app.seedChat(title: "the icon"));
+      await pumpBeside(tester);
+
+      await tester.enterText(find.byType(TextField), "shell");
+      await tester.pump();
+
+      expect(find.text("porting the shell"), findsOneWidget);
+      expect(find.text("the icon"), findsNothing);
+    });
+
+    testWidgets("a search nothing answers says so rather than going blank",
+        (tester) async {
+      await io(tester, () => app.seedChat(title: "the icon"));
+      await pumpBeside(tester);
+
+      await tester.enterText(find.byType(TextField), "compiler");
+      await tester.pump();
+
+      expect(find.text("No chat's title matches that."), findsOneWidget);
+      // The field stays, or there would be no way to undo the search.
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets("clearing the search puts the rest back", (tester) async {
+      await io(tester, () => app.seedChat(title: "porting the shell"));
+      await io(tester, () => app.seedChat(title: "the icon"));
+      await pumpBeside(tester);
+      await tester.enterText(find.byType(TextField), "shell");
+      await tester.pump();
+
+      await tester.tap(find.byTooltip("Clear search"));
+      await tester.pump();
+
+      expect(find.text("the icon"), findsOneWidget);
+      expect(find.text("porting the shell"), findsOneWidget);
+    });
+  });
+
   const bars = EdgeInsets.only(top: 40, bottom: 48);
 
   /// Nothing at either end of the sidebar is under a system bar.

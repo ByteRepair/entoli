@@ -6,7 +6,6 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
-import "../../fonts.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
@@ -601,56 +600,3 @@ class _Spinner extends StatelessWidget {
   }
 }
 
-/// Inline approval banner shown above the composer when a tool awaits approval.
-class ApprovalBanner extends StatelessWidget {
-  const ApprovalBanner({
-    super.key,
-    required this.approval,
-    required this.onAllow,
-    required this.onDeny,
-  });
-
-  final ToolApproval approval;
-  final VoidCallback onAllow;
-  final VoidCallback onDeny;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.colorScheme.tertiary),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.shield, size: 18, color: theme.colorScheme.onTertiaryContainer),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Approve ${approval.toolName}?",
-                  style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                if (approval.argumentsJson != null)
-                  Text(
-                    approval.argumentsJson!,
-                    style: theme.textTheme.bodySmall?.copyWith(fontFamily: monoFamily),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-          ),
-          TextButton(onPressed: onDeny, child: const Text("Deny")),
-          FilledButton(onPressed: onAllow, child: const Text("Allow")),
-        ],
-      ),
-    );
-  }
-}

@@ -449,6 +449,35 @@ the other way: a directory that could not have been created as a project is not
 listed as one, so a stray `.git` beside them is not a project with no chats in
 it.
 
+### The sidebar's list
+
+Chats sit under a heading — Today, Yesterday, Previous 7 days, Previous 30 days,
+then the month, with the year on it where that is not this one. Each row was a
+title over its own timestamp, which is a date the reader has to compare against
+eleven others to place; the heading places all of them at once, and the row is
+the title and nothing else.
+
+`groupChatsByDate` is the whole of it, in `chat_groups.dart` and away from the
+widget so the boundaries can be tested at a date of the test's choosing —
+`now` is a parameter for that reason. It takes the headings in the order the
+chats come in rather than ranking them, which is sound because the list is
+sorted newest first: from there a chat can only ever land in the group it is
+already in or one further down. Days are counted on a UTC calendar, since a
+local day either side of a clock change is 23 or 25 hours and yesterday would
+round to today.
+
+**Search reads the titles and nothing else.** Searching what was *said* means
+reading every `conv.jsonl` off disk on every keystroke; the titles are already
+in memory, being what the list draws. What is matched is the title as shown, so
+a chat the title model never named is found under `(untitled)`. The field is
+there whenever the project has chats in it — it goes with them, not with the
+results, or a search that matched nothing would take away the only way to undo
+itself.
+
+The query is a `ValueNotifier` the list listens to rather than `setState` on the
+sidebar: a keystroke changes the list, and the project switcher above it has no
+business rebuilding to answer one.
+
 ### Starting a chat, and naming it
 
 `createChat` writes nothing. The chat is held in `ChatRepository` as its one
@@ -659,6 +688,21 @@ in place rather than removing it — a user who clicks faster than the loop asks
 would otherwise leave it waiting on a completer nobody holds. A turn that ends
 with one outstanding denies it.
 
+`ApprovalBanner` shows **the call, not the tool**. It named the tool and put the
+arguments JSON under it at two lines and an ellipsis, which is a consent dialog
+asking to be waved through: what is being agreed to is the command, and the
+command was the half that got cut. `approvalDetail` digs it out — `command`,
+`url`, whichever single argument a tool named something else, falling back to
+the JSON re-indented and then to the string as it came. Liberal in the same way
+and for the same reason `askQuestionsFrom` is: these are arguments the model
+wrote, and one this cannot read is still better shown than hidden. It sits in
+mono on a plain surface inside the tinted banner, capped at
+`ApprovalBanner.mostHeight` and scrolling past it, so a command of any length is
+readable without the banner burying the conversation it is asking about.
+
+It is its own file rather than the end of `message_bubble.dart`, where it used
+to live: it is not a message, and the turn is what is asking.
+
 #### Questions
 
 `ask_user` is the one tool that runs nothing: the model puts questions to the
@@ -690,11 +734,29 @@ question comes back to the model whether or not it was answered: one that asked
 three and got two needs to know which one it is still missing.
 
 `QuestionPanel` takes the composer's place while a request is up — including its
-stop button, which is why `Skip` is on the panel: it answers with nothing so the
-turn can carry on, and it is the only way out. The rest mirrors approvals
-exactly: turn-scoped view state, `_clearQuestions` beside `_clearApprovals` so an
-abandoned turn answers its own questions, the completer created when the event is
-forwarded rather than when it is awaited.
+stop button, which is why the panel carries the only way out of it. The rest
+mirrors approvals exactly: turn-scoped view state, `_clearQuestions` beside
+`_clearApprovals` so an abandoned turn answers its own questions, the completer
+created when the event is forwarded rather than when it is awaited.
+
+**Nothing is sent until the user says so.** Picking the last option used to
+submit the batch, which made the panel a form with no review: an answer given
+two questions ago could only be reached by pressing Back through the ones after
+it, and reaching it at all was impossible once the last one was picked, because
+picking it was the send. `_Segments` is the fix and the whole of the
+navigation — one bar per question, tappable, so any of them is one press away.
+Which one you are on and which have been answered are on two channels, height
+and colour, so neither is read out of the other.
+
+There is **one button, because there is one action**: send what has been picked.
+It reads `Skip` while nothing has been and `Send` after, since those are the two
+things the same action amounts to. Two buttons would be two promises, and the
+turn cannot be left any other way — `askAnswers` already words an empty set for
+the model.
+
+Picking still moves on to the next question, which is the fast path through a
+batch; it stops at the last rather than submitting there. Back and Next go dead
+at the ends rather than wrapping, the way the thread arrows under a message do.
 
 #### Sub-agents (the `task` tool)
 
@@ -1163,6 +1225,20 @@ the `Scaffold` above it rather than taking a flag beside the one that built that
 Scaffold, since two answers to "is there a drawer here" can disagree. New Chat
 is `startChat`, which the sidebar's own button also calls, so there is one
 answer to what a new chat is and which project it lands in.
+
+A chat with nothing *said* in it is `_EmptyChat`, and it is a different question
+— the chat is open, so what is missing is the first thing to say. It draws the
+mark, the question, and a chip per `/command` and `@agent` the library holds.
+That list is the point of it: the composer's menus are the only place those are
+named, and nothing names them until the character that opens one has been typed,
+so a user who does not know they exist never finds out. Six at most, because
+everything the user has written is a menu and `/` is what opens the menu; with
+nothing at all in the library it says how to reach them instead.
+
+Tapping one types it into the composer and **does not ask for the focus**. That
+is the composer's own rule read from the outside — see "The keyboard and the
+caret": on Android focus is the keyboard, and a chip that raises one over a
+conversation nobody was typing in is exactly what that rule exists to stop.
 
 `NavDrawer` is that drawer, and the only thing it says is a width: below
 Material's compact breakpoint it takes the whole screen, since 304dp of panel on

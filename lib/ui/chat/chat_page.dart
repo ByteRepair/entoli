@@ -3,11 +3,13 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
 import "../../providers.dart";
+import "../fonts.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/nav_drawer.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
+import "widgets/approval_banner.dart";
 import "widgets/composer.dart";
 import "widgets/message_bubble.dart";
 import "widgets/question_panel.dart";
@@ -66,6 +68,74 @@ class _NoChat extends ConsumerWidget {
                 child: const Text("Open Chat"),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A chat with nothing said in it yet. The mark, the question, and what the
+/// composer's `/` and `@` menus hold — which is the only place those are named
+/// before the user has typed the character that opens them.
+class _EmptyChat extends ConsumerWidget {
+  const _EmptyChat({required this.onStart});
+
+  final ValueChanged<String> onStart;
+
+  /// Enough to say what is on offer. Everything the user has written is a menu,
+  /// and `/` is what opens the menu.
+  static const _most = 6;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final starters = [
+      for (final c in ref.watch(completionsProvider(CompletionKind.command)))
+        (trigger: "/${c.name}", description: c.description),
+      for (final a in ref.watch(completionsProvider(CompletionKind.agent)))
+        (trigger: "@${a.name}", description: a.description),
+    ].take(_most);
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const AppMark(size: 56),
+            const SizedBox(height: 20),
+            Text(
+              "What would you like to discuss?",
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 20),
+            if (starters.isEmpty)
+              Text(
+                "Type / for commands, @ for agents.",
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              )
+            else
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final starter in starters)
+                    ActionChip(
+                      label: Text(starter.trigger),
+                      labelStyle:
+                          theme.textTheme.bodySmall?.copyWith(fontFamily: monoFamily),
+                      // Null rather than the empty string: `Chip` builds a
+                      // `Tooltip` for whatever it is given, and an empty one is
+                      // a blank box on a long press.
+                      tooltip: starter.description,
+                      onPressed: () => onStart(starter.trigger),
+                    ),
+                ],
+              ),
           ],
         ),
       ),
@@ -290,10 +360,22 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
+  /// Put a `/command` or an `@agent` in the composer, ready to be typed after.
+  /// It deliberately does not ask for the focus: on Android that is the
+  /// keyboard coming up over a conversation nobody was typing in — see the
+  /// composer, which never asks either.
+  void _startWith(String trigger) {
+    final typed = _controller.text;
+    final before = typed.isEmpty || typed.endsWith(" ") ? typed : "$typed ";
+    final text = "$before$trigger ";
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
   Widget _conversation(Chat chat, ChatViewState view, ChatController notifier) {
-    if (chat.messages.isEmpty) {
-      return const Center(child: Text("What would you like to discuss?"));
-    }
+    if (chat.messages.isEmpty) return _EmptyChat(onStart: _startWith);
     return Stack(
       children: [
         ListView.builder(

@@ -289,8 +289,13 @@ Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
 
 /// Whether [button] would do anything if it were pressed. A dead one is still
 /// drawn and still hit by a tap, so its callback is the only thing that says so.
-bool enabled(WidgetTester tester, Finder button) =>
-    tester.widget<IconButton>(button).onPressed != null;
+///
+/// `IconButton` is not a `ButtonStyleButton`, which is why this asks twice.
+bool enabled(WidgetTester tester, Finder button) => switch (tester.widget(button)) {
+      IconButton(:final onPressed) => onPressed != null,
+      ButtonStyleButton(:final onPressed) => onPressed != null,
+      final other => throw ArgumentError("not a button: ${other.runtimeType}"),
+    };
 
 /// An icon button by the tooltip on it, which is how most of them are named.
 Finder buttonTipped(String tooltip) =>

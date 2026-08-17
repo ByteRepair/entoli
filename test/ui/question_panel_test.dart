@@ -89,13 +89,20 @@ void main() {
     expect(app.backend.answered, isEmpty);
   });
 
-  testWidgets("answering the last one sends them all and gives the composer back",
+  // Picking the last option used to submit the lot, which left no moment in
+  // which an answer already given could be looked at again.
+  testWidgets("answering every question sends nothing until Send is pressed",
       (tester) async {
     final id = await asking(tester, request([database, migrate]));
 
     await tester.tap(find.text("SQLite"));
     await tester.pump();
     await tester.tap(find.text("No"));
+    await tester.pump();
+    expect(app.backend.answered, isEmpty);
+    expect(find.byType(QuestionPanel), findsOneWidget);
+
+    await tester.tap(find.text("Send"));
     await tester.pump();
 
     // The option's own value, not the label it was read under.
@@ -105,6 +112,87 @@ void main() {
     expect(find.byType(QuestionPanel), findsNothing);
     expect(find.byType(Composer), findsOneWidget);
     await endTurn(tester);
+  });
+
+  // One button and one action. Two names for it would be two promises, and
+  // which one it is is the whole of what "nothing picked" changes.
+  testWidgets("the button offers to skip until something is picked",
+      (tester) async {
+    await asking(tester, request([database, migrate]));
+    expect(find.text("Skip"), findsOneWidget);
+    expect(find.text("Send"), findsNothing);
+
+    await tester.tap(find.text("Postgres"));
+    await tester.pump();
+
+    expect(find.text("Send"), findsOneWidget);
+    expect(find.text("Skip"), findsNothing);
+  });
+
+  group("moving between them", () {
+    /// The segment standing for [question], which is the way to jump straight
+    /// to one rather than stepping through what is in between.
+    Finder segmentFor(String question) => find.byTooltip(question);
+
+    Finder step(String label) => find.widgetWithText(TextButton, label);
+
+    testWidgets("a segment jumps straight to its question", (tester) async {
+      await asking(tester, request([database, migrate]));
+
+      await tester.tap(segmentFor("Migrate the old rows?"));
+      await tester.pump();
+
+      expect(find.text("Question 2 of 2"), findsOneWidget);
+      expect(app.backend.answered, isEmpty);
+    });
+
+    testWidgets("Next moves on without answering, and Back comes back",
+        (tester) async {
+      await asking(tester, request([database, migrate]));
+
+      await tester.tap(find.text("Next"));
+      await tester.pump();
+      expect(find.text("Question 2 of 2"), findsOneWidget);
+
+      await tester.tap(find.text("Back"));
+      await tester.pump();
+      expect(find.text("Question 1 of 2"), findsOneWidget);
+      expect(app.backend.answered, isEmpty);
+    });
+
+    // They stop rather than wrapping round, the way the thread arrows under a
+    // message do: one that comes back to where the reader started has done
+    // nothing they can see.
+    testWidgets("they are dead at either end", (tester) async {
+      await asking(tester, request([database, migrate]));
+      expect(enabled(tester, step("Back")), isFalse);
+      expect(enabled(tester, step("Next")), isTrue);
+
+      await tester.tap(find.text("Next"));
+      await tester.pump();
+
+      expect(enabled(tester, step("Back")), isTrue);
+      expect(enabled(tester, step("Next")), isFalse);
+    });
+
+    testWidgets("an answer given earlier can be changed before sending",
+        (tester) async {
+      await asking(tester, request([database, migrate]));
+      await tester.tap(find.text("Postgres"));
+      await tester.pump();
+      await tester.tap(find.text("No"));
+      await tester.pump();
+
+      await tester.tap(segmentFor("Which database?"));
+      await tester.pump();
+      await tester.tap(find.text("SQLite"));
+      await tester.pump();
+      await tester.tap(find.text("Send"));
+      await tester.pump();
+
+      expect(app.backend.answered.single.answers, ["sqlite", "No"]);
+      await endTurn(tester);
+    });
   });
 
   testWidgets("going back re-asks a question that was already answered",
@@ -117,6 +205,7 @@ void main() {
     await tester.pump();
 
     expect(find.text("Question 1 of 2"), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsOneWidget);
     expect(app.backend.answered, isEmpty);
   });
 
