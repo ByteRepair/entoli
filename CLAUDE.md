@@ -46,7 +46,8 @@ them.
 `<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
-title model, the classifier model, `approveMode`, `environment`, `appIcon`, and
+title model, the classifier model, `approveMode`, `environment`, `appIcon`,
+`appTheme`, and
 `llmProviders`.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android), and `/agent-chat` in a browser — where it is a
@@ -1320,6 +1321,36 @@ rename: there is no half-written one to catch. It is also why the layout is read
 rather than indexed: a `workspaces.json` beside it would be a copy to keep in
 step, and a chat moved by hand would stop being in the project it was moved to.
 
+### The theme
+
+One palette, seeded from `entoliIndigo` — the colour the icon sits on, which the
+seed used to miss by being `Colors.indigo` instead — and built in each
+brightness by `entoliTheme`. `MaterialApp` gets both as `theme` and `darkTheme`
+whichever is in use, so a system that turns dark at sunset turns the app with it
+without anything being told. `AppTheme` — `system`, `light`, `dark` — says
+which, and is app-level with no per-chat override for the same reason the icon
+is.
+
+Android's splash has followed the system since `minSdk` went to 26 and the
+pre-Lollipop `launch_background.xml` could go. Until this landed the app did not
+agree with it: a dark phone showed a dark splash and then a white app.
+
+`AppTheme` mirrors material's `ThemeMode` rather than holding one. Nothing in
+`domain/` imports material — `core/config.dart` does reach `foundation`, so this
+is about the framework's UI half rather than about Flutter at all — and the name
+in `settings.json` should not be pinned to a framework enum's, which would make
+the file unreadable if that enum were ever renamed. `ui/theme.dart` is the one
+place that maps between them, and the label the settings page draws is on the
+enum, the arrangement `AppIcon` and `ApproveMode` already have.
+
+`entoliTheme` is a function rather than two `ThemeData` literals in `main`:
+light and dark differ by a `Brightness` and nothing else, and a second literal
+is a second thing to keep in step.
+
+`main` watches the one field rather than the settings object. Without the
+`select`, adding a provider or editing an environment variable would rebuild the
+whole app under the user.
+
 ### The app icon
 
 Two icons, `AppIcon.cookie` (the default) and `AppIcon.prompt`. The enum's
@@ -1442,11 +1473,12 @@ next save.
 
 The settings page is three categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself: the
-default project's workspace (which has nowhere else to be reached from), the app
-icon, the **Agent** — command approval mode and the classifier model, which
-travel together because auto mode is unusable without one — the environment, and
-deleting every chat. **Providers** is the endpoints. **LLMs** is what a new chat
-is answered by and what names it.
+default project's workspace (which has nowhere else to be reached from),
+**Appearance** — the theme and the app icon, which are the two things the app
+looks like — the **Agent** — command approval mode and the classifier model,
+which travel together because auto mode is unusable without one — the
+environment, and deleting every chat. **Providers** is the endpoints. **LLMs**
+is what a new chat is answered by and what names it.
 
 **Narrow, the categories are the page rather than its drawer**, and each one is
 pushed over the list. That is the one place this and the chat page differ about

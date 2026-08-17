@@ -5,7 +5,6 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/widgets/app_mark.dart";
 
 import "../harness.dart";
@@ -15,11 +14,6 @@ void main() {
 
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
-
-  Future<void> pumpAppearance(WidgetTester tester) async {
-    await pumpSettings(tester, app, SettingsCategory.general);
-    await scrollTo(tester, find.text("Appearance"));
-  }
 
   Finder choice(AppIcon icon) => find.ancestor(
         of: find.text(icon.label),
@@ -35,7 +29,7 @@ void main() {
     testWidgets("a fresh install wears Cookie", (tester) async {
       final semantics = tester.ensureSemantics();
       expect(AppSettings.load(app.config).appIcon, AppIcon.cookie);
-      await pumpAppearance(tester);
+      await pumpAppearance(tester, app);
 
       expectSelected(tester, AppIcon.cookie, selected: true);
       expectSelected(tester, AppIcon.prompt, selected: false);
@@ -43,7 +37,7 @@ void main() {
     });
 
     testWidgets("the default is offered first", (tester) async {
-      await pumpAppearance(tester);
+      await pumpAppearance(tester, app);
       expect(
         tester.getTopLeft(choice(AppIcon.cookie)).dx,
         lessThan(tester.getTopLeft(choice(AppIcon.prompt)).dx),
@@ -52,7 +46,7 @@ void main() {
 
     testWidgets("picking one persists it and tells the launcher", (tester) async {
       final semantics = tester.ensureSemantics();
-      await pumpAppearance(tester);
+      await pumpAppearance(tester, app);
 
       await tester.tap(choice(AppIcon.prompt));
       await settleIo(tester);
@@ -71,7 +65,7 @@ void main() {
     testWidgets("the choice survives a restart", (tester) async {
       final semantics = tester.ensureSemantics();
       app.seedSettings(AppSettings(appIcon: AppIcon.prompt));
-      await pumpAppearance(tester);
+      await pumpAppearance(tester, app);
 
       expectSelected(tester, AppIcon.prompt, selected: true);
       // Nothing was tapped, so the launcher was not told to do anything: it
@@ -81,7 +75,7 @@ void main() {
     });
 
     testWidgets("the section says the home screen follows", (tester) async {
-      await pumpAppearance(tester);
+      await pumpAppearance(tester, app);
       expect(find.textContaining("on the home screen"), findsOneWidget);
     });
   });
@@ -91,7 +85,7 @@ void main() {
 
     testWidgets("the setting still applies, and says what it cannot do",
         (tester) async {
-      await pumpAppearance(tester);
+      await pumpAppearance(tester, app);
       expect(find.textContaining("does not follow this"), findsOneWidget);
 
       await tester.tap(choice(AppIcon.prompt));

@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_icon.dart";
+import "../../domain/app_theme.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project.dart";
@@ -214,7 +215,7 @@ class _AppearanceSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(appSettingsProvider).appIcon;
+    final settings = ref.watch(appSettingsProvider);
     final switchesLauncher = ref.watch(launcherIconsProvider).available;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,19 +223,33 @@ class _AppearanceSection extends ConsumerWidget {
         _SectionHeader(
           "Appearance",
           description: switchesLauncher
-              ? "The app icon, here and on the home screen."
-              : "The app icon. The launcher's own icon is set when the app is "
-                  "installed, so it does not follow this.",
+              ? "How the app looks, and the icon it wears here and on the home "
+                  "screen."
+              : "How the app looks, and the icon it wears. The launcher's own "
+                  "icon is set when the app is installed, so it does not "
+                  "follow this.",
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        LabelledField(
+          label: "Theme",
+          child: SegmentedButton<AppTheme>(
+            segments: [
+              for (final theme in AppTheme.values)
+                ButtonSegment(value: theme, label: Text(theme.label)),
+            ],
+            selected: {settings.appTheme},
+            onSelectionChanged: (picked) =>
+                ref.read(appSettingsProvider.notifier).setAppTheme(picked.first),
+          ),
+        ),
+        LabelledField(
+          label: "Icon",
           child: Row(
             spacing: 12,
             children: [
               for (final icon in AppIcon.values)
                 _IconChoice(
                   icon: icon,
-                  selected: icon == selected,
+                  selected: icon == settings.appIcon,
                   onTap: () =>
                       ref.read(appSettingsProvider.notifier).setAppIcon(icon),
                 ),

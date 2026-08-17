@@ -136,9 +136,16 @@ made the same call mean different pages depending on which file was being read.
 test either side of `navBreakpoint` needs one, and a copy that forgets the reset
 breaks a *later* test rather than itself.
 
+`TestApp.pump` supplies the `MaterialApp` itself, so nothing pumped through it
+can say anything about the app's own theme. `theme_test.dart` pumps
+`AgentChatApp` directly for that, and is the only place the real one is built.
+
 A test that writes `settings.json` has to go through `config.documents.write`,
 not the file: the app reads settings from the synchronous copy `Documents`
-holds, and a file written behind it is not seen.
+holds, and a file written behind it is not seen. `seedSettings` is that write,
+and is deliberately not awaited: the copy is updated on its first line, so a
+load on the next one already sees it, and awaiting real file I/O from a
+`testWidgets` body hangs on the fake clock.
 
 The composer's keyboard is asserted as `tester.testTextInput.isVisible` rather
 than as which node holds focus. The rule the composer keeps is about the
