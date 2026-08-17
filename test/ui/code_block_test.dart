@@ -8,6 +8,7 @@ import "package:re_highlight/styles/github.dart";
 
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/ui/chat/widgets/code_block.dart";
+import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 
 import "../harness.dart";
@@ -168,9 +169,9 @@ void main() {
       // A token span carries a colour and nothing else, so anything else it is
       // drawn with has to come from the span above it.
       final span = block(tester).span;
-      expect(span.style?.fontFamily, "monospace");
+      expect(span.style?.fontFamily, monoFamily);
       for (final child in span.children ?? const <InlineSpan>[]) {
-        expect(child.style?.fontFamily, anyOf(isNull, "monospace"));
+        expect(child.style?.fontFamily, anyOf(isNull, monoFamily));
       }
     });
   });

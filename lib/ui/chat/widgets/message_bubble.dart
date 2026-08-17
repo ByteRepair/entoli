@@ -6,11 +6,13 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
+import "../../theme.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
 import "code_block.dart";
+import "reply_style.dart";
 
 /// Renders a single message. The bubble holds what the model said; thinking
 /// and tool runs sit above it as labels, in the order they happened.
@@ -421,22 +423,7 @@ class _MessageTextState extends State<_MessageText> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final theme = Theme.of(context);
-    _styleSheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
-      p: theme.textTheme.bodyMedium,
-      a: theme.textTheme.bodyMedium?.copyWith(
-        color: theme.colorScheme.primary,
-        decoration: TextDecoration.underline,
-        decorationColor: theme.colorScheme.primary,
-      ),
-      // Inline `code`, which the block reads too — one definition of the font.
-      code: codeFont(theme),
-      // `fromTheme` paints this in `cardColor`, which M3 defaults to
-      // `colorScheme.surface` — the colour of the page the block is drawn on.
-      // It is the one thing the sheet still decides about a `pre`, since the
-      // builder draws everything inside the wrapper this decorates.
-      codeblockDecoration: codeBlockDecoration(theme),
-    );
+    _styleSheet = replyStyleSheet(Theme.of(context));
   }
 
   @override
@@ -557,7 +544,7 @@ class ApprovalBanner extends StatelessWidget {
                 if (approval.argumentsJson != null)
                   Text(
                     approval.argumentsJson!,
-                    style: theme.textTheme.bodySmall?.copyWith(fontFamily: "monospace"),
+                    style: theme.textTheme.bodySmall?.copyWith(fontFamily: monoFamily),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),

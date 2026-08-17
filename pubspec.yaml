@@ -77,3 +77,19 @@ flutter:
     - assets/prompts/commands/
     - assets/prompts/agents/
     - assets/icons/
+    # The font's licence, read into `LicenseRegistry` at startup. An asset
+    # rather than only a file in the repo, since the OFL asks for it to travel
+    # with the font.
+    - assets/fonts/OFL.txt
+
+  # Code is set in this rather than in `monospace`, which is a different face on
+  # every platform the app runs on. Roboto Mono is the mono companion to the
+  # face Material already uses, and it is OFL — `assets/fonts/OFL.txt` ships
+  # with it. Bold is here because the highlight themes set a weight on some
+  # scopes and synthesised bold in a code block is mush.
+  fonts:
+    - family: RobotoMono
+      fonts:
+        - asset: assets/fonts/RobotoMono-Regular.ttf
+        - asset: assets/fonts/RobotoMono-Bold.ttf
+          weight: 700

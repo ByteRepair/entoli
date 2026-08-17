@@ -37,6 +37,7 @@ import "package:re_highlight/languages/typescript.dart";
 import "package:re_highlight/languages/xml.dart";
 import "package:re_highlight/languages/yaml.dart";
 
+import "../../theme.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/dialogs.dart";
 
@@ -199,12 +200,32 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
 }
 
 /// The font code is set in, a block and an inline span alike — the style sheet
-/// is given this too, so bundling a monospace reaches both rather than one of
-/// them. What inline `code` still wants is a background, which is a separate
-/// thing and not this.
+/// is given this too, so the face reaches both rather than one of them.
+///
+/// Bundled rather than `monospace`, which names whatever the platform decides:
+/// Roboto Mono on one Android, Droid Sans Mono on another, DejaVu on this
+/// desktop, and per-browser on the web. Code is the one thing in a reply whose
+/// columns are load-bearing, and it should not line up differently depending on
+/// where the app was opened.
 TextStyle codeFont(ThemeData theme) => TextStyle(
-      fontFamily: "monospace",
+      fontFamily: monoFamily,
+      // Mono faces run wider than the prose beside them, so matching the body
+      // size makes inline code look larger than the sentence holding it.
       fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * 0.85,
+    );
+
+/// What inline `code` adds: a surface, so a word in a sentence reads as code
+/// rather than as the same sentence in another face. `fromTheme` asks for
+/// `cardTheme.color`, which M3 leaves null, so until now it added nothing.
+///
+/// A `backgroundColor` paints tight to the glyphs with no room either side.
+/// The alternative is a builder for `code` returning a padded `WidgetSpan`,
+/// which is what a block gets — but a block is one thing on a line of its own,
+/// while inline code has to wrap with the sentence, and a `WidgetSpan` cannot
+/// break across lines.
+TextStyle inlineCodeStyle(ThemeData theme) => codeFont(theme).copyWith(
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+      color: theme.colorScheme.onSurface,
     );
 
 /// A block adds two things to that. Room between the lines, because a block is

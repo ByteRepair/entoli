@@ -982,6 +982,44 @@ gesture arena, so one touch both starts a selection in the bubble and shows the
 actions. It writes a `ValueNotifier` rather than calling `setState`, so
 uncovering the icons does not rebuild the message's labels behind them.
 
+#### How a reply is set
+
+`replyStyleSheet` is the whole of it, and it starts from
+`MarkdownStyleSheet.fromTheme` because most of what that answers is right. What
+gets overridden is where the defaults were written for a document rather than a
+chat, or where they read a Material 2 field that M3 leaves null.
+
+The null-reading ones are bugs rather than taste. Inline `code` asks for
+`cardTheme.color`, which is null here, so a `` `word` `` in a sentence was that
+word in another face and nothing else. It sits on a surface now. A
+`backgroundColor` paints tight to the glyphs with no room either side, which is
+not as good as the padded container a block gets — but a block is one thing on a
+line of its own, while inline code has to wrap with the sentence, and a
+`WidgetSpan` cannot break across lines.
+
+The document-shaped ones are the headings and the rule. `fromTheme` gives h1
+`headlineSmall` and h4 down `bodyLarge`, which is body size carrying no weight,
+so the bottom three levels did not read as headings at all; they now step 21,
+18, 16 and then sit at the body size with weight to tell them apart. Every level
+is given room **above** and none below, since a heading belongs to the paragraph
+it introduces — the default is `EdgeInsets.zero` everywhere, which put a heading
+against the paragraph before it. And a horizontal rule was five pixels of
+`dividerColor`, which is a slab across the page rather than a rule.
+
+Prose is set looser than Material's 1.43, since a reply is read as prose in a
+column where the line you want next is the one below.
+
+**Code is set in a bundled face, `monoFamily`.** `monospace` is an alias the
+platform resolves, so the same reply was Roboto Mono on one Android, Droid Sans
+Mono on another, DejaVu on this desktop and whatever a browser prefers on the
+web — and the four things this app shows verbatim are shown that way precisely
+because their exact characters matter. Roboto Mono is the mono companion to the
+face Material already uses, it is OFL, and `assets/fonts/OFL.txt` ships beside
+it. Bold is bundled as well as regular because the highlight themes set a weight
+on some scopes and synthesised bold in a code block is mush. The family name
+lives in `ui/theme.dart` beside the seed colour, and has to stay in step with
+the `family` in pubspec's `fonts:` block.
+
 #### Code blocks
 
 A fenced block is `code_block.dart`'s: a bar naming what it was fenced as with
@@ -1047,9 +1085,8 @@ widget to own.
 a `pre`. Registering a builder for it makes the package's own `visitText` arm
 unreachable, and `codeblockPadding` is read nowhere else, so setting it would
 be configuring a path that no longer runs. The font is the exception in the
-other direction: `code` is set from the same `codeFont` the block is built on,
-so bundling a monospace reaches an inline span and a block together rather than
-one of them.
+other direction: the sheet's inline `code` and the block are both built on
+`codeFont`, so the bundled face reaches the two of them rather than one.
 
 ### The chat page
 

@@ -18,6 +18,7 @@ import "ui/theme.dart";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerBundledFontLicences();
   await platform.persist();
   final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
   final store = platform.createChatStore(config);
