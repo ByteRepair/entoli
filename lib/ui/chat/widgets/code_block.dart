@@ -1,5 +1,4 @@
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:markdown/markdown.dart" as md;
 import "package:re_highlight/re_highlight.dart";
@@ -37,6 +36,9 @@ import "package:re_highlight/languages/sql.dart";
 import "package:re_highlight/languages/typescript.dart";
 import "package:re_highlight/languages/xml.dart";
 import "package:re_highlight/languages/yaml.dart";
+
+import "../../widgets/action_icon.dart";
+import "../../widgets/dialogs.dart";
 
 /// The grammars a fence can name. `re_highlight` ships 197, and registering
 /// all of them costs 359 KB gzipped in the web bundle where these thirty-one
@@ -87,6 +89,25 @@ final _grammars = <String, Mode>{
 /// it never compiles a grammar.
 final _highlight = Highlight()..registerLanguages(_grammars);
 
+/// What `MarkdownBody` is given. One for the app rather than one per message:
+/// the builder holds nothing and is read only while markdown is parsed, and
+/// sharing it is also what lets the highlighted spans below be shared.
+final codeBlockBuilders = <String, MarkdownElementBuilder>{"pre": CodeBlockBuilder()};
+
+/// Highlighted spans, kept because the same block is highlighted again far
+/// more often than it changes. `MarkdownBody` re-parses whenever its style
+/// sheet does, so switching palette re-runs every grammar on screen once per
+/// frame of the theme's cross-fade, and scrolling a block out of the list and
+/// back rebuilds it from scratch.
+///
+/// Bounded by count and evicted oldest-first, since what it holds is the text
+/// of every block in it: a cache that grew with the conversation would be a
+/// second copy of the chat, in a process that already holds one.
+final _spans = <
+    ({String code, String? language, TextStyle style, Brightness brightness}),
+    TextSpan>{};
+const _spanCacheLimit = 16;
+
 /// Draws a fenced code block: what it was fenced as, a button that copies it,
 /// and the code highlighted underneath.
 ///
@@ -109,8 +130,27 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
     return CodeBlock(
       code: code,
       language: language,
-      span: _spanOf(code, language, _codeTextStyle(theme), theme.brightness),
+      span: _cachedSpanOf(code, language, theme),
     );
+  }
+
+  /// Keyed on everything the span is a function of, [style] included rather
+  /// than only the brightness that picks it: a `TextStyle` is value-equal, so
+  /// naming it is what stops a palette that changed anything else from being
+  /// answered out of the cache.
+  static TextSpan _cachedSpanOf(String code, String? language, ThemeData theme) {
+    final style = _blockStyle(theme);
+    final key = (
+      code: code,
+      language: language,
+      style: style,
+      brightness: theme.brightness,
+    );
+    final cached = _spans[key];
+    if (cached != null) return cached;
+
+    if (_spans.length >= _spanCacheLimit) _spans.remove(_spans.keys.first);
+    return _spans[key] = _spanOf(code, language, style, theme.brightness);
   }
 
   /// The fence's info string, which the parser writes onto the `code` element
@@ -130,6 +170,8 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
   /// highlighter throws on a name it was not given — and plain again for a run
   /// that broke off, where what was emitted is only the code up to the break
   /// and showing part of a command is worse than showing all of it uncoloured.
+  /// `result.illegal` is not the second of those: it is only ever set behind
+  /// `ignoreIllegals`, which is on.
   static TextSpan _spanOf(
     String code,
     String? language,
@@ -140,7 +182,7 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
     if (language == null || _highlight.getLanguage(language) == null) return plain;
 
     final result = _highlight.highlight(code: code, language: language);
-    if (result.illegal || result.errorRaised != null) return plain;
+    if (result.errorRaised != null) return plain;
 
     // github and github-dark for their token colours. Their `root` entry, the
     // one thing in a highlight theme that is not a token colour, is ignored by
@@ -156,12 +198,20 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
   }
 }
 
-/// What a block is set in. Inline `code` is the style sheet's own and stays
-/// that way: it wants a background rather than a size, which is a different
-/// change to a different thing.
-TextStyle _codeTextStyle(ThemeData theme) => TextStyle(
+/// The font code is set in, a block and an inline span alike — the style sheet
+/// is given this too, so bundling a monospace reaches both rather than one of
+/// them. What inline `code` still wants is a background, which is a separate
+/// thing and not this.
+TextStyle codeFont(ThemeData theme) => TextStyle(
       fontFamily: "monospace",
-      fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * 0.9,
+      fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) * 0.85,
+    );
+
+/// A block adds two things to that. Room between the lines, because a block is
+/// read as lines where an inline span is read as part of a sentence; and a
+/// colour, which is what every token the highlight theme does not name falls
+/// back to.
+TextStyle _blockStyle(ThemeData theme) => codeFont(theme).copyWith(
       height: 1.45,
       color: theme.colorScheme.onSurface,
     );
@@ -191,38 +241,45 @@ class CodeBlock extends StatelessWidget {
   final TextSpan span;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The bar is the block's chrome rather than anything the model said,
+          // so a drag across the reply must not put the language name on the
+          // clipboard — the rule the labels above the bubble already keep.
+          SelectionContainer.disabled(child: _bar(context)),
+          _CodeScroll(child: Text.rich(span)),
+        ],
+      );
+
+  Widget _bar(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // The bar is the block's chrome rather than anything the model said,
-        // so a drag across the reply must not put the language name on the
-        // clipboard — the rule the labels above the bubble already keep.
-        SelectionContainer.disabled(child: _bar(theme)),
-        _CodeScroll(child: Text.rich(span)),
-      ],
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.only(left: 12, right: 4),
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              language ?? "",
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+          // The snack bar copying a message already shows, rather than an icon
+          // that turns into a tick: one answer to the one event, and no timer
+          // for this to own.
+          ActionIcon(
+            icon: Icons.copy_outlined,
+            tooltip: "Copy code",
+            onPressed: () => copyToClipboard(context, code, said: "Code copied"),
+          ),
+        ],
+      ),
     );
   }
-
-  Widget _bar(ThemeData theme) => Container(
-        height: 32,
-        padding: const EdgeInsets.only(left: 12, right: 4),
-        color: theme.colorScheme.surfaceContainerHighest,
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                language ?? "",
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ),
-            _CopyButton(code: code),
-          ],
-        ),
-      );
 }
 
 /// A long line scrolls rather than wrapping, since a wrapped one is no longer
@@ -256,35 +313,4 @@ class _CodeScrollState extends State<_CodeScroll> {
           child: widget.child,
         ),
       );
-}
-
-/// Copies the block, and reports it the way copying a message already does.
-/// An icon that turns into a tick for a second is the other idiom and would be
-/// a second answer to the one event, on a timer this widget would then have to
-/// own.
-class _CopyButton extends StatelessWidget {
-  const _CopyButton({required this.code});
-
-  final String code;
-
-  Future<void> _copy(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: code));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Code copied")));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return IconButton(
-      icon: const Icon(Icons.copy_outlined, size: 16),
-      tooltip: "Copy code",
-      onPressed: () => _copy(context),
-      color: theme.colorScheme.onSurfaceVariant,
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 28),
-    );
-  }
 }

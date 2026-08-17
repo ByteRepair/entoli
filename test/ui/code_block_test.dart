@@ -59,20 +59,6 @@ void main() {
     return found;
   }
 
-  /// Everything the app put on the clipboard, in order.
-  List<String> clipboard(WidgetTester tester) {
-    final copied = <String>[];
-    final messenger = tester.binding.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == "Clipboard.setData") {
-        copied.add((call.arguments as Map)["text"] as String);
-      }
-      return null;
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
-    return copied;
-  }
-
   group("what a fence draws", () {
     testWidgets("the code, without the newline that closed the fence",
         (tester) async {
@@ -151,6 +137,29 @@ void main() {
       final painted = colours(block(tester).span).toSet();
       expect(painted, contains(githubDarkTheme["keyword"]!.color));
       expect(painted, isNot(contains(githubTheme["keyword"]!.color)));
+    });
+
+    // Highlighting the same block again is far more common than it changing:
+    // the markdown re-parses on every frame of a palette cross-fade, and
+    // scrolling one out of the list and back rebuilds it.
+    testWidgets("the same block twice is highlighted once", (tester) async {
+      const fence = "```dart\nfinal remembered = 1;\n```";
+      await pump(tester, fence);
+      final first = block(tester).span;
+
+      await pump(tester, fence);
+
+      expect(identical(block(tester).span, first), isTrue);
+    });
+
+    testWidgets("the other palette is not answered out of that", (tester) async {
+      const fence = "```dart\nfinal repainted = 1;\n```";
+      await pump(tester, fence);
+      final light = colours(block(tester).span).toSet();
+
+      await pump(tester, fence, brightness: Brightness.dark);
+
+      expect(colours(block(tester).span).toSet(), isNot(light));
     });
 
     testWidgets("the code keeps one font whatever it is coloured", (tester) async {

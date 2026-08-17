@@ -143,6 +143,10 @@ Its `brightness` is for the few widgets that pick a colour per palette instead
 of reading one out of the scheme — a code block's token colours are the only
 ones so far, and they are wrong in exactly one direction, so both are asserted.
 
+`clipboard` collects what the app copied. It takes `SystemChannels.platform`
+over for the test the same way `frameworkHandlesBack` does, so a test wanting
+both wants one of them — which is why neither is written out per file.
+
 A test that writes `settings.json` has to go through `config.documents.write`,
 not the file: the app reads settings from the synchronous copy `Documents`
 holds, and a file written behind it is not seen. `seedSettings` is that write,

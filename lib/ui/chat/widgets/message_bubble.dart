@@ -2,11 +2,11 @@ import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 // `SelectedContent`, which material does not re-export.
 import "package:flutter/rendering.dart";
-import "package:flutter/services.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
+import "../../widgets/action_icon.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
@@ -67,10 +67,6 @@ class MessageBubble extends StatefulWidget {
 }
 
 class _MessageBubbleState extends State<MessageBubble> {
-  /// Kept whether or not there is anything to show, so a message does not shift
-  /// under the pointer the moment the actions appear.
-  static const _actionsHeight = 28.0;
-
   bool _hovered = false;
   bool _tapped = false;
   Offset? _pressedAt;
@@ -120,12 +116,8 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (ok) widget.onDelete!();
   }
 
-  Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.message.plainText));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Message copied")));
-  }
+  Future<void> _copy() =>
+      copyToClipboard(context, widget.message.plainText, said: "Message copied");
 
   bool get _hasError => widget.message.parts.whereType<ErrorPart>().isNotEmpty;
 
@@ -209,20 +201,28 @@ class _MessageBubbleState extends State<MessageBubble> {
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
-              _step(theme, Icons.chevron_left, "Previous thread", -1),
-              _step(theme, Icons.chevron_right, "Next thread", 1),
+              _step(Icons.chevron_left, "Previous thread", -1),
+              _step(Icons.chevron_right, "Next thread", 1),
             ],
             if (widget.message.hasText)
-              _action(theme, Icons.copy_outlined, "Copy message", _copy),
+              ActionIcon(
+                  icon: Icons.copy_outlined, tooltip: "Copy message", onPressed: _copy),
             if (widget.onDelete != null)
-              _action(theme, Icons.delete_outline, "Delete thread", _delete),
-            if (widget.onEdit != null) _action(theme, Icons.edit_outlined, "Edit", _edit),
+              ActionIcon(
+                  icon: Icons.delete_outline, tooltip: "Delete thread", onPressed: _delete),
+            if (widget.onEdit != null)
+              ActionIcon(icon: Icons.edit_outlined, tooltip: "Edit", onPressed: _edit),
             if (widget.onRegenerate != null)
-              _action(theme, Icons.refresh, "Regenerate", widget.onRegenerate!),
+              ActionIcon(
+                  icon: Icons.refresh,
+                  tooltip: "Regenerate",
+                  onPressed: widget.onRegenerate!),
           ],
         ),
+        // Kept whether or not there is anything to show, so a message does not
+        // shift under the pointer the moment the actions appear.
         builder: (context, shown, child) => SizedBox(
-          height: _actionsHeight,
+          height: ActionIcon.height,
           child: AnimatedOpacity(
             opacity: shown ? 1 : 0,
             duration: const Duration(milliseconds: 120),
@@ -239,23 +239,16 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// An arrow to the thread [step] along, dead at either end of the list and
   /// while nothing is listening — the row is uncovered during a turn, when
   /// moving between threads is refused.
-  Widget _step(ThemeData theme, IconData icon, String tooltip, int step) {
+  Widget _step(IconData icon, String tooltip, int step) {
     final onStep = widget.onThreadStep;
     final to = _thread + step;
-    return _action(theme, icon, tooltip,
-        onStep == null || to < 0 || to >= _threads ? null : () => onStep(step));
+    return ActionIcon(
+      icon: icon,
+      tooltip: tooltip,
+      onPressed:
+          onStep == null || to < 0 || to >= _threads ? null : () => onStep(step),
+    );
   }
-
-  Widget _action(ThemeData theme, IconData icon, String tooltip, VoidCallback? onPressed) =>
-      IconButton(
-        icon: Icon(icon, size: 16),
-        tooltip: tooltip,
-        onPressed: onPressed,
-        color: theme.colorScheme.onSurfaceVariant,
-        padding: EdgeInsets.zero,
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints.tightFor(width: 32, height: _actionsHeight),
-      );
 
   /// The message split the way it reads: everything the model did on labels of
   /// its own, everything it said in a bubble, in the order it happened.
@@ -404,10 +397,6 @@ class _MessageText extends StatefulWidget {
 class _MessageTextState extends State<_MessageText> {
   MarkdownStyleSheet? _styleSheet;
 
-  /// Stateless and read only while the markdown is being parsed, so one is
-  /// enough for every block this message holds.
-  final _codeBlocks = CodeBlockBuilder();
-
   /// Built by the branch that has a source to hand back, and left null by the
   /// other — a reply streams for the whole of a turn and never renders while it
   /// does, so this is a delegate per finished text rather than per delta.
@@ -440,12 +429,13 @@ class _MessageTextState extends State<_MessageText> {
         decoration: TextDecoration.underline,
         decorationColor: theme.colorScheme.primary,
       ),
+      // Inline `code`, which the block reads too — one definition of the font.
+      code: codeFont(theme),
       // `fromTheme` paints this in `cardColor`, which M3 defaults to
       // `colorScheme.surface` — the colour of the page the block is drawn on.
+      // It is the one thing the sheet still decides about a `pre`, since the
+      // builder draws everything inside the wrapper this decorates.
       codeblockDecoration: codeBlockDecoration(theme),
-      // The block draws its own, around a bar the padding would push in with
-      // the code.
-      codeblockPadding: EdgeInsets.zero,
     );
   }
 
@@ -468,7 +458,7 @@ class _MessageTextState extends State<_MessageText> {
       child: MarkdownBody(
         data: widget.text,
         styleSheet: _styleSheet,
-        builders: {"pre": _codeBlocks},
+        builders: codeBlockBuilders,
         onTapLink: (text, href, title) {
           if (href != null) widget.onTapLink?.call(href);
         },

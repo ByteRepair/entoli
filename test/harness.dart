@@ -262,6 +262,22 @@ List<bool> frameworkHandlesBack(WidgetTester tester) {
   return answers;
 }
 
+/// Everything the app put on the clipboard, in order. Takes
+/// `SystemChannels.platform` over for the test, the same way
+/// [frameworkHandlesBack] does — so a test wanting both wants one of them.
+List<String> clipboard(WidgetTester tester) {
+  final copied = <String>[];
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+    if (call.method == "Clipboard.setData") {
+      copied.add((call.arguments as Map)["text"] as String);
+    }
+    return null;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  return copied;
+}
+
 /// The soft keyboard, the way the platform reports one: insets over the bottom
 /// of the window, and nothing else. [up] false is it going away — which on
 /// Android is the whole of what a back gesture says about it.

@@ -714,20 +714,6 @@ void main() {
   });
 
   group("the message as text", () {
-    /// Everything the app put on the clipboard, in order.
-    List<String> clipboard(WidgetTester tester) {
-      final copied = <String>[];
-      final messenger = tester.binding.defaultBinaryMessenger;
-      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-        if (call.method == "Clipboard.setData") {
-          copied.add((call.arguments as Map)["text"] as String);
-        }
-        return null;
-      });
-      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
-      return copied;
-    }
-
     testWidgets("the copy button takes the whole message, markdown and all",
         (tester) async {
       final copied = clipboard(tester);
