@@ -19,6 +19,7 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
+import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/provider_model_selector.dart";
 
 import "fakes.dart";
@@ -108,12 +109,17 @@ class TestApp {
 
   /// Pump [child] as the whole app. [settle] is for a widget that never comes
   /// to rest — a spinner runs forever, and settling on one times out.
-  /// It wraps in `FocusFollowsKeyboard` because `main` does.
+  /// It wraps in `FocusFollowsKeyboard` because `main` does, and draws under the
+  /// app's own palette because `main` does — a page that paints itself a colour
+  /// of its own is only visible against the real one.
   Future<void> pump(WidgetTester tester, Widget child, {bool settle = true}) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(home: FocusFollowsKeyboard(child: child)),
+        child: MaterialApp(
+          theme: entoliTheme(Brightness.light),
+          home: FocusFollowsKeyboard(child: child),
+        ),
       ),
     );
     if (settle) await settleIo(tester);
@@ -307,6 +313,14 @@ Future<void> pumpSettings(
 ) async {
   await app.pump(tester, const SettingsPage());
   await openCategory(tester, category);
+}
+
+/// The settings page at its Appearance section, which is in General and far
+/// enough down a test window to need scrolling to. Shared by the two files that
+/// test what is in it.
+Future<void> pumpAppearance(WidgetTester tester, TestApp app) async {
+  await pumpSettings(tester, app, SettingsCategory.general);
+  await scrollTo(tester, find.text("Appearance"));
 }
 
 /// Move the settings page to [category]. Wide, the categories are a panel and

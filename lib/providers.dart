@@ -8,6 +8,7 @@ import "domain/agent_backend.dart";
 import "domain/attachment_picker.dart";
 import "domain/background_work.dart";
 import "domain/app_settings.dart";
+import "domain/app_theme.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
@@ -74,6 +75,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     await _update((s) => s.appIcon = icon);
     await ref.read(launcherIconsProvider).use(icon);
   }
+
+  Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
 
   /// The endpoints the agent can call. The model list is rebuilt from them, so
   /// it is invalidated here rather than left showing the old one.

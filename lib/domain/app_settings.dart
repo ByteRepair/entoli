@@ -2,6 +2,7 @@ import "dart:convert";
 
 import "../core/config.dart";
 import "app_icon.dart";
+import "app_theme.dart";
 import "llm_provider.dart";
 import "permission.dart";
 import "profile.dart";
@@ -20,6 +21,7 @@ class AppSettings {
     this.llmProviders = const [],
     this.profile,
     this.appIcon = AppIcon.cookie,
+    this.appTheme = AppTheme.system,
   });
 
   String? defaultModelId;
@@ -57,6 +59,9 @@ class AppSettings {
   /// App-level only: an icon is the app's, not a chat's.
   AppIcon appIcon;
 
+  /// Which palette the app draws. App-level only, for the same reason.
+  AppTheme appTheme;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -78,6 +83,7 @@ class AppSettings {
         llmProviders: _providers(json["llmProviders"]),
         profile: Profile.fromJson(json["profile"]),
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
+        appTheme: AppTheme.fromName(json["appTheme"] as String?),
       );
     } catch (_) {
       return AppSettings();
@@ -124,6 +130,7 @@ class AppSettings {
         llmProviders: llmProviders,
         profile: profile,
         appIcon: appIcon,
+        appTheme: appTheme,
       );
 
   Future<void> save(AppConfig config) async {
@@ -140,6 +147,7 @@ class AppSettings {
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
       "appIcon": appIcon.name,
+      "appTheme": appTheme.name,
     }));
   }
 }
