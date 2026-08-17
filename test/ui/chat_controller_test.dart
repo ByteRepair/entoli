@@ -59,9 +59,11 @@ void main() {
     return (id, controller);
   }
 
-  List<Message> messagesOf(String id) => app.container.read(chatControllerProvider(id)).chat!.messages;
+  Chat chatOf(String id) => app.container.read(chatControllerProvider(id)).chat!;
 
-  String titleOf(String id) => app.container.read(chatControllerProvider(id)).chat!.state.title;
+  List<Message> messagesOf(String id) => chatOf(id).messages;
+
+  String titleOf(String id) => chatOf(id).state.title;
 
   String textOf(Message m) => m.parts.whereType<TextPart>().map((p) => p.text).join();
 
@@ -430,7 +432,7 @@ void main() {
     test("regenerate puts the reply beside the old one, and keeps the prompt", () async {
       final (id, _, first, second) = await twoReplies();
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final chat = chatOf(id);
       expect(chat.messages, hasLength(2));
       expect(textOf(chat.messages.last), "second answer");
       expect(chat.threadsAt(second), [first, second]);
@@ -447,7 +449,7 @@ void main() {
       await controller.editAndResend(first, "hello");
       await waitIdle(id);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final chat = chatOf(id);
       expect(chat.messages, hasLength(2));
       expect(textOf(chat.messages.first), "hello");
       expect(chat.threadsAt(chat.messages.first.id), [first, chat.messages.first.id]);
@@ -458,7 +460,7 @@ void main() {
 
       await controller.stepThread(second, -1);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final chat = chatOf(id);
       expect(textOf(chat.messages.last), "first answer");
       expect(chat.threadIndex(first), 0);
       // Which thread was being read survives a reload, since it is a record.
@@ -488,7 +490,7 @@ void main() {
 
       await controller.deleteThread(second);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final chat = chatOf(id);
       expect(textOf(chat.messages.last), "first answer");
       expect(chat.branches, isEmpty);
       expect((await app.repo.openChat(id)).messages, hasLength(2));
@@ -503,32 +505,33 @@ void main() {
       expect((await app.repo.openChat(id)).messages, hasLength(1));
     });
 
-    /// A turn the user stopped before the model said anything, which is what
-    /// leaves an empty reply on the end of the conversation.
-    Future<(String, ChatController)> chatWithNothingSaid() async {
+    /// A turn the user stopped before the model said anything, and the id of
+    /// the empty reply it left on the end of the conversation. The `expect` is
+    /// the fixture's own precondition: without it a test asserting the reply
+    /// was kept would pass for the wrong reason.
+    Future<(String, ChatController, String)> chatWithNothingSaid() async {
       app.backend.scriptedEvents = const [DoneEvent(aborted: true)];
       final (id, controller) = await chatWithOneTurn("hello");
-      expect(messagesOf(id).last.parts, isEmpty);
+      final empty = messagesOf(id).last;
+      expect(empty.parts, isEmpty);
       app.backend.scriptedEvents = const [TextDelta("an answer"), DoneEvent()];
-      return (id, controller);
+      return (id, controller, empty.id);
     }
 
     test("a turn that said nothing is replaced rather than kept beside", () async {
-      final (id, controller) = await chatWithNothingSaid();
+      final (id, controller, empty) = await chatWithNothingSaid();
 
-      await controller.regenerate(messagesOf(id).last.id);
+      await controller.regenerate(empty);
       await waitIdle(id);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
-      expect(chat.messages.map(textOf), ["hello", "an answer"]);
+      expect(chatOf(id).messages.map(textOf), ["hello", "an answer"]);
       // No counter to press: the thread it replaced offered a blank page.
-      expect(chat.branches, isEmpty);
+      expect(chatOf(id).branches, isEmpty);
       expect((await app.repo.openChat(id)).branches, isEmpty);
     });
 
-    // The reason the rewind is written after the message replacing it: the new
-    // thread has to name one of the siblings while they are all still there, or
-    // it lands under whichever was left rather than beside them.
+    // The replacement joins the siblings and takes one of them away in the same
+    // record, so the threads either side of the emptied one are untouched.
     test("replacing an empty thread leaves the ones beside it alone", () async {
       final (id, controller, first, second) = await twoReplies();
       app.backend.scriptedEvents = const [DoneEvent(aborted: true)];
@@ -541,25 +544,23 @@ void main() {
       await controller.regenerate(empty);
       await waitIdle(id);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
-      final third = chat.messages.last.id;
-      expect(textOf(chat.messages.last), "third answer");
-      expect(chat.threadsAt(third), [first, second, third]);
-      expect((await app.repo.openChat(id)).branches, chat.branches);
+      final third = messagesOf(id).last.id;
+      expect(textOf(messagesOf(id).last), "third answer");
+      expect(chatOf(id).threadsAt(third), [first, second, third]);
+      expect((await app.repo.openChat(id)).branches, chatOf(id).branches);
     });
 
     test("a turn that said nothing but was written under is kept", () async {
-      final (id, controller) = await chatWithNothingSaid();
-      final empty = messagesOf(id).last.id;
+      final (id, controller, empty) = await chatWithNothingSaid();
       await controller.send("are you there?");
       await waitIdle(id);
 
       await controller.regenerate(empty);
       await waitIdle(id);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
       // The reply stayed empty, but a conversation happened under it and that
       // is not something to delete for the sake of a counter.
+      final chat = chatOf(id);
       expect(chat.threadsAt(chat.messages.last.id), [empty, chat.messages.last.id]);
     });
 
@@ -571,7 +572,7 @@ void main() {
       await controller.regenerate(first);
       await waitIdle(id);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final chat = chatOf(id);
       final third = chat.messages.last.id;
       expect(textOf(chat.messages.last), "third answer");
       expect(chat.threadsAt(third), [first, second, third]);
@@ -741,7 +742,7 @@ void main() {
       await controller.regenerate(messagesOf(id).last.id);
       await waitIdle(id);
 
-      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final chat = chatOf(id);
       final reload = chatFrom(chat.state, records(id));
       expect(reload.messages, chat.messages);
       expect(reload.branches, chat.branches);
@@ -780,7 +781,7 @@ void main() {
       }
 
       bool offeredIn(String id) =>
-          app.container.read(chatControllerProvider(id)).chat!.unfinished;
+          chatOf(id).unfinished;
 
       test("a reply nothing closed is offered", () async {
         final (id, _) = await killedChat();

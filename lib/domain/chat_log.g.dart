@@ -12,6 +12,7 @@ MessageRecord _$MessageRecordFromJson(Map<String, dynamic> json) =>
       role: $enumDecode(_$MessageRoleEnumMap, json['role']),
       createdAt: DateTime.parse(json['createdAt'] as String),
       siblingOf: json['siblingOf'] as String?,
+      replacesSibling: json['replacesSibling'] as bool? ?? false,
       $type: json['runtimeType'] as String?,
     );
 
@@ -21,6 +22,7 @@ Map<String, dynamic> _$MessageRecordToJson(MessageRecord instance) =>
       'role': _$MessageRoleEnumMap[instance.role]!,
       'createdAt': instance.createdAt.toIso8601String(),
       'siblingOf': instance.siblingOf,
+      'replacesSibling': instance.replacesSibling,
       'runtimeType': instance.$type,
     };
 

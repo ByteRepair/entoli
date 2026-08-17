@@ -58,11 +58,17 @@ sealed class ChatRecord with _$ChatRecord {
   /// [siblingOf] names the message this one is an alternative to — an edit, or
   /// a regenerate. Null goes on the end of the thread being read, which is what
   /// every message in a log written before there were threads does.
+  ///
+  /// [replacesSibling] takes that one away rather than sitting beside it, which
+  /// is what a turn stopped before it said anything gets: see
+  /// `Chat.worthAThread`. It forgets whatever hangs below it, like a
+  /// [RewindRecord] does, and is only ever written where nothing does.
   const factory ChatRecord.message({
     required String id,
     required MessageRole role,
     required DateTime createdAt,
     String? siblingOf,
+    @Default(false) bool replacesSibling,
   }) = MessageRecord;
 
   /// One part of a message. Written again with the same [index] to supersede
@@ -172,18 +178,27 @@ Replayed replayTree(Iterable<ChatRecord> records) {
 
   for (final record in records) {
     switch (record) {
-      case MessageRecord(:final id, :final role, :final createdAt, :final siblingOf):
+      case MessageRecord(
+          :final id,
+          :final role,
+          :final createdAt,
+          :final siblingOf,
+          :final replacesSibling
+        ):
         // A branch of a message that has since been deleted goes on the end
         // instead, which is where it would have gone naming nothing at all.
-        final under = siblingOf != null && nodes.containsKey(siblingOf)
-            ? parent[siblingOf]
-            : thread().lastOrNull;
+        final beside = siblingOf != null && nodes.containsKey(siblingOf) ? siblingOf : null;
+        final under = beside == null ? thread().lastOrNull : parent[beside];
         parent[id] = under;
         (children[under] ??= []).add(id);
         // A thread just written is the one being read, until a [SelectRecord]
         // further down the log says the user cycled off it.
         shown[under] = id;
         nodes[id] = Message(id: id, role: role, createdAt: createdAt);
+        // After this one has joined them, so what it replaces is still there to
+        // be found — and so that one record says the whole of where a message
+        // goes, with no second line to arrive in the right order.
+        if (beside != null && replacesSibling) forget(beside);
 
       case SelectRecord(:final messageId):
         if (!nodes.containsKey(messageId)) continue;
@@ -295,16 +310,19 @@ String? _growingText(MessagePart part) => switch (part) {
 /// through here.
 ///
 /// [siblingOf] names what the first of them stands beside, which is the whole
-/// of what makes a turn a thread rather than a continuation. Left out, this
-/// describes one thread and no branches — which is all a conversation held as a
-/// list can say.
-List<ChatRecord> recordsOf(List<Message> messages, {String? siblingOf}) => [
+/// of what makes a turn a thread rather than a continuation, and [replacing]
+/// takes that one away rather than joining it. Left out, this describes one
+/// thread and no branches — which is all a conversation held as a list can say.
+List<ChatRecord> recordsOf(List<Message> messages,
+        {String? siblingOf, bool replacing = false}) =>
+    [
       for (final (at, message) in messages.indexed) ...[
         ChatRecord.message(
           id: message.id,
           role: message.role,
           createdAt: message.createdAt,
           siblingOf: at == 0 ? siblingOf : null,
+          replacesSibling: at == 0 && replacing,
         ),
         for (final (index, part) in message.parts.indexed)
           ChatRecord.part(messageId: message.id, index: index, part: part),

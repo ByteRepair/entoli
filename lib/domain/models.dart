@@ -71,10 +71,18 @@ extension Threads on Chat {
   /// the answer would offer a blank page. Anything said after it is worth
   /// keeping even so — the reply stayed empty, but the conversation went on
   /// under it, and that is not something to delete for the sake of a counter.
+  /// That second half is also what makes deleting safe: nothing is below a
+  /// message this refuses.
   ///
-  /// Two places ask, [withTurn] and the controller writing the records, and
-  /// they have to agree or the log and the screen part company. Here rather
-  /// than at either, for the reason `TurnEnd.resumable` is on the enum.
+  /// Both askers are writers — [withTurn] for the conversation on screen, the
+  /// controller for the record that says the same thing. `replayTree` never
+  /// asks, because the record already carries what was decided. So this is not
+  /// `TurnEnd.resumable`, which a reader and a writer have to agree on; it is
+  /// on [Chat] because a message alone cannot answer the second half.
+  ///
+  /// It only ever decides about a reply. A prompt always carries a `TextPart`,
+  /// empty text and all — see `ChatController._prompt` — so an edit branches
+  /// whatever was typed.
   bool worthAThread(Message message) =>
       message.parts.isNotEmpty || messages.lastOrNull?.id != message.id;
 
@@ -98,11 +106,8 @@ extension Threads on Chat {
     final at = messages.indexWhere((m) => m.id == replacing.id);
     assert(at >= 0, "${replacing.id} is not on the thread being read");
     final kept = messages.take(at).toList();
-    final threads = [
-      for (final id in threadsAt(replacing.id))
-        if (worthAThread(replacing) || id != replacing.id) id,
-      turn.first.id,
-    ];
+    final threads = [...threadsAt(replacing.id), turn.first.id];
+    if (!worthAThread(replacing)) threads.remove(replacing.id);
     return copyWith(
       messages: [...kept, ...turn],
       branches: {

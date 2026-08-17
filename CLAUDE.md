@@ -101,7 +101,8 @@ rather than something to apologise for.
 Six records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
-thread being read. `part` is one part of it, at an index. `append` is more text
+thread being read; `replacesSibling` takes that one away rather than joining it.
+`part` is one part of it, at an index. `append` is more text
 on the end of the part at an index. `turnEnd` closes the turn and says why:
 `done`, `aborted`, or `error`. `select` says which of a message's alternatives
 to read. `rewind` forgets a message and everything below it.
@@ -214,13 +215,14 @@ type something else, and the empty reply now has everything said since hanging
 under it, which is not something to delete for a counter. An edit never meets
 this, since the message it branches at is a prompt the user typed.
 
-The **rewind is written after the message replacing it**, which looks backwards
-and is not. A new thread names one of its siblings to join them, so all of them
-have to still be there when it is written; rewinding first leaves it naming
-nothing, which puts it on the end of whichever sibling was left rather than
-beside them. That only shows up where the emptied thread is one of several, and
-`chat_controller_test.dart`'s "replacing an empty thread leaves the ones beside
-it alone" is what fails if the two are swapped.
+Replacing is `replacesSibling` on the same record rather than a `rewind` written
+after it, for the reason `siblingOf` is a field at all: a turn standing in place
+of another is one fact, and one fact is one line. Written as two records it
+worked, and only in that order — the new message has to join its siblings while
+they are all still there, or it lands on the end of whichever was left instead
+of beside them. That is a write-order contract, which is what this format is for
+not having. `replayTree` does the same two steps in the one arm that reads the
+record, and the order lives in the four lines that do them.
 
 `replayTree` stays as liberal as `replay` was. A `branch` of a message that has
 since been deleted is not an error: the message it introduces goes on the end of
@@ -228,7 +230,7 @@ the thread instead, which is where it would have gone had the record never been
 written at all.
 
 What a branch does to the conversation is said twice, deliberately.
-`Chat.withBranch` is what `replayTree` will make of the records once they are on
+`Chat.withTurn` is what `replayTree` will make of the records once they are on
 disk, worked out in memory so that pressing Regenerate does not cost a reload of
 the log to draw. The two have to agree, and what keeps them honest is a test
 asserting that the chat on screen and the chat a reload reads are the same one,
@@ -243,7 +245,7 @@ in flight: a held-down arrow would otherwise compute each move from a
 conversation the previous load is about to replace.
 
 Starting a turn on a thread the model has not been down is where the session
-has to be forgotten, and that rides on `sendPrompt` as `branched` rather than
+has to be forgotten, and that rides on `sendPrompt` as `replaces` rather than
 being a `resetSession` the caller makes first. Same reason `history` does — see
 "The projection": a separate call is one a caller can forget, and forgetting it
 is silent, the model answering fluently from the thread the user has just left.
@@ -336,6 +338,13 @@ reason the middle of a conversation is refused is that there are turns below it,
 and on that thread there are none. It does mean `Chat.unfinished` is answered per
 thread rather than per chat, so the `ResumeBar` can appear and go as the arrows
 are pressed.
+
+A turn killed before the model said anything is the one case with nothing to
+step back to: it is offered to be carried on *and* it is what
+`Chat.worthAThread` refuses, so pressing Regenerate takes away the reply
+Continue would have appended to. Both are right — there is nothing in it either
+way — and they are on screen together only because the offer is about the turn
+while the counter is about what the turn produced.
 
 One assumption is worth naming because it is invisible: an open log means nothing
 is running only because a turn cannot outlive the process running it. The
