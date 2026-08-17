@@ -111,13 +111,20 @@ class TestApp {
   /// to rest — a spinner runs forever, and settling on one times out.
   /// It wraps in `FocusFollowsKeyboard` because `main` does, and draws under the
   /// app's own palette because `main` does — a page that paints itself a colour
-  /// of its own is only visible against the real one.
-  Future<void> pump(WidgetTester tester, Widget child, {bool settle = true}) async {
+  /// of its own is only visible against the real one. [brightness] is for the
+  /// widgets that pick a colour per palette rather than reading one out of the
+  /// scheme.
+  Future<void> pump(
+    WidgetTester tester,
+    Widget child, {
+    bool settle = true,
+    Brightness brightness = Brightness.light,
+  }) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          theme: entoliTheme(Brightness.light),
+          theme: entoliTheme(brightness),
           home: FocusFollowsKeyboard(child: child),
         ),
       ),

@@ -10,6 +10,7 @@ import "../../../domain/models.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
+import "code_block.dart";
 
 /// Renders a single message. The bubble holds what the model said; thinking
 /// and tool runs sit above it as labels, in the order they happened.
@@ -403,6 +404,10 @@ class _MessageText extends StatefulWidget {
 class _MessageTextState extends State<_MessageText> {
   MarkdownStyleSheet? _styleSheet;
 
+  /// Stateless and read only while the markdown is being parsed, so one is
+  /// enough for every block this message holds.
+  final _codeBlocks = CodeBlockBuilder();
+
   /// Built by the branch that has a source to hand back, and left null by the
   /// other — a reply streams for the whole of a turn and never renders while it
   /// does, so this is a delegate per finished text rather than per delta.
@@ -435,6 +440,12 @@ class _MessageTextState extends State<_MessageText> {
         decoration: TextDecoration.underline,
         decorationColor: theme.colorScheme.primary,
       ),
+      // `fromTheme` paints this in `cardColor`, which M3 defaults to
+      // `colorScheme.surface` — the colour of the page the block is drawn on.
+      codeblockDecoration: codeBlockDecoration(theme),
+      // The block draws its own, around a bar the padding would push in with
+      // the code.
+      codeblockPadding: EdgeInsets.zero,
     );
   }
 
@@ -457,6 +468,7 @@ class _MessageTextState extends State<_MessageText> {
       child: MarkdownBody(
         data: widget.text,
         styleSheet: _styleSheet,
+        builders: {"pre": _codeBlocks},
         onTapLink: (text, href, title) {
           if (href != null) widget.onTapLink?.call(href);
         },

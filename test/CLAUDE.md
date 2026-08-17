@@ -139,6 +139,9 @@ breaks a *later* test rather than itself.
 `TestApp.pump` supplies the `MaterialApp` itself, so nothing pumped through it
 can say anything about the app's own theme. `theme_test.dart` pumps
 `AgentChatApp` directly for that, and is the only place the real one is built.
+Its `brightness` is for the few widgets that pick a colour per palette instead
+of reading one out of the scheme — a code block's token colours are the only
+ones so far, and they are wrong in exactly one direction, so both are asserted.
 
 A test that writes `settings.json` has to go through `config.documents.write`,
 not the file: the app reads settings from the synchronous copy `Documents`
