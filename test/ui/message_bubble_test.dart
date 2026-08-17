@@ -95,7 +95,69 @@ void main() {
     );
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text("Hel"), findsOneWidget);
+    // Not `find.text`: a reply still being written ends in a caret, so it is a
+    // span, and the caret's placeholder is part of what that span reads as.
+    expect(find.textContaining("Hel", findRichText: true), findsOneWidget);
+  });
+
+  group("the streaming caret", () {
+    testWidgets("sits at the end of a reply still being written", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "Hel")]),
+        isWaiting: true,
+      );
+
+      expect(find.byType(StreamingCaret), findsOneWidget);
+    });
+
+    testWidgets("goes when the turn is over", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "done")]),
+      );
+
+      expect(find.byType(StreamingCaret), findsNothing);
+    });
+
+    // Text with a tool call under it finished arriving before the call
+    // started, so a caret there would point at nothing.
+    testWidgets("is not left on text a tool call has since followed",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(text: "running it now"),
+          const ToolCallPart(toolCall: ToolCall(id: "1", name: "bash")),
+        ]),
+        isWaiting: true,
+      );
+
+      expect(find.byType(StreamingCaret), findsNothing);
+    });
+
+    // The spinner answers for a reply that has said nothing; the caret answers
+    // once there are words. Never both, or a turn reports itself twice.
+    testWidgets("stands in for the spinner rather than beside it", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "Hel")]),
+        isWaiting: true,
+      );
+
+      expect(find.byType(StreamingCaret), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets("an error is not something still being written", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const ErrorPart(message: "gave up")]),
+        isWaiting: true,
+      );
+
+      expect(find.byType(StreamingCaret), findsNothing);
+    });
   });
 
   testWidgets("a tool call with no text yet still spins", (tester) async {
@@ -710,7 +772,8 @@ void main() {
     );
 
     expect(find.byType(MarkdownBody), findsNothing);
-    expect(find.text("here is **bold** code"), findsOneWidget);
+    expect(find.textContaining("here is **bold** code", findRichText: true),
+        findsOneWidget);
   });
 
   group("the message as text", () {
@@ -820,6 +883,16 @@ void main() {
 
     await pump(tester, _message(MessageRole.user, [const TextPart(text: "hello")]));
     expect(tint(), findsOneWidget);
+  });
+
+  // The reply is the page, and nothing else is drawn full width and unbubbled,
+  // so a byline over it only said what the layout already had.
+  testWidgets("only the prompt is named above it", (tester) async {
+    await pump(tester, _message(MessageRole.assistant, [const TextPart(text: "hello")]));
+    expect(find.text("Assistant"), findsNothing);
+
+    await pump(tester, _message(MessageRole.user, [const TextPart(text: "hello")]));
+    expect(find.text("You"), findsOneWidget);
   });
 
   testWidgets("tapping a rendered link fires onTapLink with the href", (tester) async {

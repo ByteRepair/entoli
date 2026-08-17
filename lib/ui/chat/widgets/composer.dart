@@ -179,9 +179,13 @@ class _ComposerState extends ConsumerState<Composer> {
     setState(() => _attachments.addAll(picked));
   }
 
+  /// A file on its own is worth sending, and whitespace on its own is not.
+  bool _worthSending(String text) => text.trim().isNotEmpty || _attachments.isNotEmpty;
+
   void _submit() {
     final text = widget.controller.text.trim();
-    if (text.isEmpty && _attachments.isEmpty) return;
+    // The button is dead when this is false; Enter can still reach it.
+    if (!_worthSending(text)) return;
     widget.onSend(text, List.of(_attachments));
     widget.controller.clear();
     setState(_attachments.clear);
@@ -299,10 +303,17 @@ class _ComposerState extends ConsumerState<Composer> {
                         icon: const Icon(Icons.stop),
                         tooltip: "Stop",
                       )
-                    : IconButton.filled(
-                        onPressed: _submit,
-                        icon: const Icon(Icons.send),
-                        tooltip: "Send",
+                    // Listening to the field rather than rebuilding the whole
+                    // composer per keystroke, which would re-run the completion
+                    // menu behind it. Attachments arrive through `setState`, so
+                    // the builder is rebuilt with everything else for those.
+                    : ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: widget.controller,
+                        builder: (context, value, _) => IconButton.filled(
+                          onPressed: _worthSending(value.text) ? _submit : null,
+                          icon: const Icon(Icons.send),
+                          tooltip: "Send",
+                        ),
                       ),
               ],
             ),

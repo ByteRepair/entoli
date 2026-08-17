@@ -905,6 +905,23 @@ conversation is a centred column on a monitor and the window is no longer what
 the message has to fit in. Which of the two a role gets is the null in the
 `(name, bg)` switch, so there is one place that decides.
 
+**It has no name over it either**, which is the other null in that same pair.
+Nothing else in a conversation is drawn full width and unbubbled, so
+"Assistant" over every reply was the layout said a second time, once per turn,
+all the way down the page. The other three keep theirs: a name is what makes a
+prompt something said and a tool run something reported, and neither of those
+is the page.
+
+While a reply is still being written it ends in a `StreamingCaret`, which is
+the other half of what the spinner does — the spinner answers for a turn that
+has said nothing yet, the caret for one that has, and never both at once. It
+goes on the last text part **only when that part is the last part of the
+message**: text with a tool call under it stopped arriving before the call
+started, so a caret left there points at nothing while the label below is what
+is actually busy. It is a `WidgetSpan` so that it sits after the last word
+rather than under the paragraph, and that costs the exact `find.text` in a
+test, since a placeholder is part of what the span reads as.
+
 `durationMs` is what the label reads ("Thought for 12 seconds") and is null
 while the block is still being written — which is also how the UI knows to say
 "Thinking…", and how the controller finds the block a delta or a close belongs
@@ -1612,6 +1629,14 @@ while the menu has a match — the rest of the time they have to keep doing what
 they do in a text box. The `+` button left of the field is a second way in: for
 a command or an agent it types the trigger character rather than opening its own
 list, so both routes share one code path; for a file it opens the chooser.
+
+Send is dead while there is nothing to send, which `_worthSending` decides —
+whitespace is nothing, a file on its own is something. `_submit` asks the same
+question rather than trusting the button, since Enter reaches it directly. The
+button is under a `ValueListenableBuilder` on the field rather than a
+`setState` per keystroke: the composer's own build resolves the completion menu
+and its matches, and that has no business re-running because a letter was
+typed.
 
 It never asks for the field's focus, and that is the whole rule. On Android focus
 is the keyboard, so a composer that reaches for it is a keyboard rising over a

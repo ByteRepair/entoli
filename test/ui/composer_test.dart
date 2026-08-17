@@ -306,6 +306,51 @@ void main() {
     expect(sentAttachments.single.map((a) => a.filename), ["notes.txt"]);
   });
 
+  group("the send button", () {
+    /// Whether Send would do anything if it were pressed.
+    bool enabled(WidgetTester tester) => tester
+            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.send))
+            .onPressed !=
+        null;
+
+    testWidgets("is dead until there is something to send", (tester) async {
+      await pump(tester);
+      expect(enabled(tester), isFalse);
+
+      await type(tester, "hello");
+
+      expect(enabled(tester), isTrue);
+    });
+
+    testWidgets("counts whitespace as nothing", (tester) async {
+      await pump(tester);
+
+      await type(tester, "   ");
+
+      expect(enabled(tester), isFalse);
+    });
+
+    testWidgets("an attachment on its own is enough", (tester) async {
+      app.picker.scripted = [testAttachment("notes.txt")];
+      await pump(tester);
+
+      await insertVia(tester, "File");
+
+      expect(enabled(tester), isTrue);
+    });
+
+    testWidgets("goes dead again once the message is away", (tester) async {
+      await pump(tester);
+      await type(tester, "hello");
+
+      await tester.tap(find.byIcon(Icons.send));
+      await settleIo(tester);
+
+      expect(sent, ["hello"]);
+      expect(enabled(tester), isFalse);
+    });
+  });
+
   testWidgets("a cancelled chooser attaches nothing", (tester) async {
     await pump(tester);
     await insertVia(tester, "Image");
