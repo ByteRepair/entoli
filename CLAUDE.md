@@ -1724,6 +1724,9 @@ default's — a browser cannot be told to switch, so the other icon has no copy
 there. `Icon-*` is the file as it stands and `Icon-maskable-*` is the same file
 with the squircle `clip-path` dropped, which is what makes it the full-bleed
 square a maskable icon has to be. `favicon.png` is the clipped one at 32.
+`Icon-512.png` is load-bearing off the web as well: the AppImage takes its icon
+from it, a Linux desktop being no more switchable than a browser. See "The
+Linux AppImage".
 
 `minSdk` is pinned to 26 rather than following `flutter.minSdkVersion`, which
 is 24. Adaptive icons start at 26; below it every icon needs a full set of
@@ -2101,22 +2104,33 @@ which is how a reply's selection would get dropped.
 ## Releasing
 
 Publishing a release starts two workflows that share nothing but the event:
-`release.yml` builds and attaches the Android APK, and `pages.yml` deploys the
-web app from the same tag. Either can fail without the other, and only the
-first checks the tag against pubspec — a version disagreement stops the APK and
-deploys the site anyway. Linux is built by `debug-build.yml` on request and is
-not part of a release at all.
+`release.yml` attaches the binaries, and `pages.yml` deploys the web app from
+the same tag. Either can fail without the other, and only the first checks the
+tag against pubspec — a version disagreement stops the binaries and deploys the
+site anyway.
 
-`release.yml` attaches one signed APK with a provenance attestation beside it.
-There is no Play channel and so no App Bundle: the file on the release is the
-file that gets installed. It is named `entoli-<version>.apk` — a person
-downloads it, so it carries the app's name rather than the package's, and the
-name is composed once in the build job because the attestation records its
-subject by name.
+Two files are attached, each with a provenance attestation beside it: a signed
+`entoli-<version>.apk` and a `entoli-<version>-x86_64.AppImage`. There is no
+Play channel and so no App Bundle: the file on the release is the file that
+gets installed. Both carry the app's name rather than the package's, since a
+person is what downloads them.
 
-**The version is `pubspec.yaml`'s `version:` and nothing else.** The workflow
-refuses to build when the tag disagrees with it, since an APK reporting a
-version nobody released cannot be talked out of it afterwards.
+**`release.yml` builds none of it.** The builds are `release-build.yml`'s,
+which it calls with the tag and which is dispatchable on its own, so whether a
+tag builds can be found out without publishing a release to ask. What the two
+Linux builds then share is one composite action,
+`.github/actions/linux-appimage`; they differ in the mode they pass it and in
+what they do with what comes back, which is a bundle and an AppImage either
+way. The four signing secrets are named at the call site rather than
+`inherit`ed, since only one of the two jobs signs anything.
+
+**The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
+job of its own before either build. Both file names are composed there, because
+an attestation records its subject by name and the file attested is uploaded
+from a different job than the one that built it. A tag disagreeing with pubspec
+fails that job, since a binary reporting a version nobody released cannot be
+talked out of it afterwards — and failing there costs seconds rather than two
+toolchain installs.
 
 **The Android version code is derived from that version rather than stored**,
 as `major * 10000 + minor * 100 + patch` — 1.0.0 is 10000, 1.2.3 is 10203. So
@@ -2165,16 +2179,17 @@ gh secret set ANDROID_KEY_ALIAS
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
-**Two jobs, because the one holding the keystore should not also hold
-`contents: write`.** The publisher attests the APK with
-`actions/attest-build-provenance` and attaches both files, so a download can be
-checked against the build that made it:
+**The publisher is a job of its own, so the one holding the keystore never also
+holds `contents: write`.** It attests each binary with
+`actions/attest-build-provenance` — one attestation per file rather than one
+naming both, so a bundle on the release is about the file it sits beside — and
+attaches the four, so a download can be checked against the build that made it:
 
 ```sh
 gh attestation verify entoli-1.0.0.apk --repo Yiannis128/agent-chat
 ```
 
-Splitting also means a failed upload re-runs against the artifact that was
+Splitting also means a failed upload re-runs against the artifacts that were
 already built and checked rather than a rebuild that would have to be trusted
 to match. **A job that never checks out has no git remote**, which is the trap
 in that split: `gh release upload` reads the repository from it and fails with
@@ -2185,6 +2200,40 @@ repository explicitly.
 reason: recreating a release to retry a publish changes its timestamp and
 notifies every watcher a second time.
 
+### The Linux AppImage
+
+`flutter build linux` produces a directory that has to move together — the
+launcher resolves `lib/` through an `$ORIGIN/lib` rpath and finds `data/`
+beside itself — and a release asset is one file someone runs. So the bundle
+goes into the AppDir whole and unrearranged, under `usr/bin`, and `AppRun`
+execs it where it lies. Anything lifted out of it is a file the app cannot
+open.
+
+**The packaging is `linux/packaging/make-appimage.sh`, not a step of the
+workflow**, and it takes a bundle and an output path. It is the only genuinely
+new thing in the release machinery, and left inside a YAML step the only way to
+try a change to it would have been to push and dispatch. The action builds and
+then calls it; `linux/packaging/` holds what it assembles — `AppRun` and the
+desktop entry, named for the application id the way everything else on Linux
+is. The icon it takes is `web/icons/Icon-512.png` and its file name comes from
+the entry's own `Icon=`, so there is one authority for that string.
+
+**Nothing of GTK is bundled.** The AppImage carries the Flutter engine and the
+plugins and links against the system's GTK 3, exactly as the bundle already
+did.
+
+`appimagetool` is pinned to a release rather than tracking `continuous`, and to
+a SHA-256 beside it: it builds the file the release is attested by, and a
+release tag can be moved. It is run with `APPIMAGE_EXTRACT_AND_RUN=1` because
+it is itself an AppImage and a CI runner has no FUSE to mount one with. The
+runtime it embeds is static, so the AppImage it produces does not send anyone
+looking for `libfuse2`.
+
+The debug one is uploaded beside the bundle rather than instead of it, and is
+`entoli-debug-x86_64.AppImage` with no version in the name: it is dispatched
+from a branch rather than cut from a tag, so pubspec's version would name a
+build nobody released.
+
 ## Development
 
 - Build/test Linux desktop inside the `flutter-dev` toolbox (host lacks
@@ -2193,6 +2242,9 @@ notifies every watcher a second time.
 - Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
   Nothing runs the app in a browser here, so a web-only regression in the UI is
   caught by reloading the page.
+- Package the Linux build:
+  `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
+  Needs no toolbox; it downloads `appimagetool` itself.
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you

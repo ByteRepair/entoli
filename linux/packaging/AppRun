@@ -1,0 +1,5 @@
+#!/bin/sh
+# The bundle is mounted whole under usr/bin, so the launcher finds lib/ and
+# data/ where it expects them.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/agent_chat" "$@"

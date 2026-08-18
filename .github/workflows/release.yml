@@ -1,8 +1,10 @@
 name: Release
 
-# Builds the APK a published release is downloaded from, signs it, attests it
-# and attaches it to the tag it was built from. `pages.yml` answers the same
-# event for the web app. See "Releasing" in CLAUDE.md.
+# Attaches the binaries a published release is downloaded from — a signed APK
+# and a Linux AppImage — to the tag they were built from, each with a
+# provenance attestation beside it. `release-build.yml` is what builds them and
+# can be run on its own; `pages.yml` answers the same event for the web app.
+# See "Releasing" in CLAUDE.md.
 on:
   release:
     types: [published]
@@ -12,8 +14,8 @@ on:
         description: Tag of an existing release to build and attach to
         required: true
 
-# Queue rather than cancel: a superseded run leaves a release published with no
-# APK on it.
+# Queue rather than cancel: a superseded run leaves a release published with
+# nothing on it.
 concurrency:
   group: release-${{ inputs.tag || github.event.release.tag_name }}
   cancel-in-progress: false
@@ -23,146 +25,16 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      apk: ${{ steps.version.outputs.apk }}
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          # A release event already points GITHUB_REF at the tag, but a manual
-          # run would otherwise build whichever branch the UI defaulted to.
-          ref: ${{ env.TAG }}
-
-      # This and the check below come before the SDKs, so the two failures a
-      # release actually has cost seconds rather than a toolchain install.
-      - name: Decode the release keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Secret ANDROID_$name is not available to this repository"
-              exit 1
-            fi
-          done
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-
-      # A tag disagreeing with pubspec would ship an APK reporting a version
-      # nobody released. The version code is derived from it; see CLAUDE.md.
-      - name: Check the tag matches pubspec
-        id: version
-        run: |
-          set -euo pipefail
-          version="$(sed -n 's/^version: *\([^+ ]*\).*/\1/p' pubspec.yaml)"
-          if [ "$version" != "${TAG#v}" ]; then
-            echo "::error::Release $TAG does not match pubspec version $version"
-            exit 1
-          fi
-
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Version $version is not three dot-separated numbers"
-            exit 1
-          fi
-          IFS=. read -r major minor patch <<<"$version"
-
-          # 10# so a patch of 08 is eight, not a bad octal literal. The bound
-          # keeps the mapping one-to-one.
-          if [ "$((10#$minor))" -ge 100 ] || [ "$((10#$patch))" -ge 100 ]; then
-            echo "::error::Version $version overflows the version code; minor and patch must stay below 100"
-            exit 1
-          fi
-          code="$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))"
-
-          # The name is composed once here: the attestation records its subject
-          # by name, so the file attested and the file uploaded have to be the
-          # same string, and they are built in different jobs.
-          echo "apk=entoli-$version.apk" >> "$GITHUB_OUTPUT"
-          {
-            echo "APK=entoli-$version.apk"
-            echo "VERSION=$version"
-            echo "VERSION_CODE=$code"
-          } >> "$GITHUB_ENV"
-
-      # Java 17 to match android/app/build.gradle.kts, rather than whichever
-      # JDK the runner image currently defaults to. No `cache: gradle`: a tag
-      # run can only ever write a cache scope no later run can read.
-      - uses: actions/setup-java@v5.7.0
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - uses: subosito/flutter-action@v2.23.0
-        with:
-          flutter-version: 3.44.8
-          channel: stable
-          cache: true
-
-      - run: flutter pub get
-
-      # Cheap on a job that already has the SDK warm, and this is the one build
-      # whose output cannot be quietly replaced once people have downloaded it.
-      - run: flutter test
-
-      # Scoped to this step rather than the whole job. Without the environment
-      # build.gradle.kts falls back to the debug key, which the next step
-      # catches.
-      - name: Build the APK
-        env:
-          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release --build-number="$VERSION_CODE"
-
-      # A debug-signed release installs fine and is caught only at the next
-      # release, which will not install over it.
-      - name: Check the APK is signed with the release key
-        run: |
-          set -euo pipefail
-          apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
-          certs="$("$apksigner" verify --print-certs \
-            build/app/outputs/flutter-apk/app-release.apk)"
-          echo "$certs"
-          if grep -q 'CN=Android Debug' <<<"$certs"; then
-            echo "::error::The release APK is signed with the debug key"
-            exit 1
-          fi
-          echo "SIGNER=$(grep -m1 'SHA-256 digest' <<<"$certs" | awk '{print $NF}')" \
-            >> "$GITHUB_ENV"
-
-      - name: Name the APK after the release
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/$APK"
-
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: apk
-          path: dist/${{ env.APK }}
-          if-no-files-found: error
-          compression-level: 0
-          # Long enough to re-run the publisher by hand after a failure.
-          retention-days: 7
-
-      - name: Report what was built
-        run: |
-          set -euo pipefail
-          {
-            echo "### $APK"
-            echo
-            echo '```'
-            (cd dist && sha256sum "$APK")
-            echo "signing certificate  $SIGNER"
-            echo "version code         $VERSION_CODE"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+    # The tag is spelled out again rather than read from `env.TAG`: a called
+    # workflow's `with` cannot see the env context.
+    uses: ./.github/workflows/release-build.yml
+    with:
+      tag: ${{ inputs.tag || github.event.release.tag_name }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one.
@@ -175,28 +47,45 @@ jobs:
       attestations: write # record the attestation against the repository
     env:
       APK: ${{ needs.build.outputs.apk }}
+      APPIMAGE: ${{ needs.build.outputs.appimage }}
     steps:
       - uses: actions/download-artifact@v8.0.1
         with:
           name: apk
           path: dist
 
-      - id: attest
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: appimage
+          path: dist
+
+      # One each, so a bundle on the release is about the file beside it.
+      - id: attest-apk
         uses: actions/attest-build-provenance@v4.2.2
         with:
           subject-path: dist/${{ env.APK }}
 
-      - name: Attach the APK and its attestation to the release
+      - id: attest-appimage
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: dist/${{ env.APPIMAGE }}
+
+      - name: Attach the binaries and their attestations to the release
         env:
           GH_TOKEN: ${{ github.token }}
+          APK_BUNDLE: ${{ steps.attest-apk.outputs.bundle-path }}
+          APPIMAGE_BUNDLE: ${{ steps.attest-appimage.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          cp "${{ steps.attest.outputs.bundle-path }}" "dist/$APK.sigstore.json"
+          cp "$APK_BUNDLE" "dist/$APK.sigstore.json"
+          cp "$APPIMAGE_BUNDLE" "dist/$APPIMAGE.sigstore.json"
           # --repo because gh reads it off the git remote otherwise, and this
           # job never checks out. --clobber so a re-run replaces the assets.
           gh release upload "$TAG" \
             "dist/$APK" \
             "dist/$APK.sigstore.json" \
+            "dist/$APPIMAGE" \
+            "dist/$APPIMAGE.sigstore.json" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
@@ -206,9 +95,10 @@ jobs:
           {
             echo "### GitHub release $TAG"
             echo
-            echo 'Check the download against this build:'
+            echo 'Check a download against this build:'
             echo
             echo '```'
             echo "gh attestation verify $APK --repo $GITHUB_REPOSITORY"
+            echo "gh attestation verify $APPIMAGE --repo $GITHUB_REPOSITORY"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
