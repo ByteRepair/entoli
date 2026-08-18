@@ -1024,6 +1024,18 @@ A tool call and the result answering it are one label. The parts stay separate
 in `conv.jsonl` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
+A run of two or more non-important activity labels collapses behind a single
+centered "Expand activities" toggle (`ActivityGroup`), default collapsed. What
+is important and so stays visible, breaking a run: an artifact button, a failed
+tool run, an `ask_user` question, and the live label a running turn is working
+on. Text, errors and files are not labels and break a run too. A lone label is
+left where it is — a toggle for one label is noise. The decision is per-part in
+`_rows` (buffer into a pending run, flush at any break), and the length check
+lives at flush time so a run is never half-collapsed. State is per-run and
+in-memory: `ValueKey`ed on the run's first part index so a per-delta rebuild
+keeps the same expanded/collapsed state, but a reload starts collapsed the way
+every fresh view does.
+
 The drawer is sized by what is in it, up to the whole screen. It used to stop at
 seven tenths of the height, which is a tool's output cut short and a third of the
 screen left empty under it. It is a route, so the back key closes it and nothing
