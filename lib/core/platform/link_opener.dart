@@ -9,6 +9,9 @@ import "../../domain/link_opener.dart";
 import "io/artifact_server_factory.dart"
     if (dart.library.js_interop) "web/artifact_server_factory.dart"
     show startArtifactServer;
+import "io/desktop_artifact_opener.dart"
+    if (dart.library.js_interop) "web/desktop_artifact_opener.dart"
+    show writeArtifactTemp;
 import "io/web_artifact_opener.dart"
     if (dart.library.js_interop) "web/web_artifact_opener.dart"
     show WebArtifactOpenerImpl;
@@ -60,8 +63,7 @@ class PlatformLinkOpener implements LinkOpener {
     }
     final dir = await _store.artifactPath(chatId, artifactId);
     if (!_isAndroid) {
-      final file = Uri.directory(dir).resolve(entryFile);
-      await launchUrl(file, mode: LaunchMode.externalApplication);
+      await _openDesktopArtifact(dir, entryFile);
       return;
     }
     if (!context.mounted) return;
@@ -70,6 +72,18 @@ class PlatformLinkOpener implements LinkOpener {
         builder: (_) => _ArtifactWebViewPage(dir: dir, entryFile: entryFile, title: title),
       ),
     );
+  }
+
+  /// Desktop opens the entry HTML in the system browser. The base stylesheet
+  /// is injected into a temp copy of the entry file (built by the conditional
+  /// `writeArtifactTemp`, which carries `dart:io` only on native), so desktop
+  /// artifacts get the same look the Android webview and the web blob path do,
+  /// without mutating the artifact dir the model's `read` tool sees.
+  Future<void> _openDesktopArtifact(String dir, String entryFile) async {
+    final tempPath = await writeArtifactTemp(dir, entryFile);
+    if (tempPath == null) return;
+    final url = Uri.file(tempPath);
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 }
 

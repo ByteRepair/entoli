@@ -242,10 +242,12 @@ class WebFetchLabel extends StatelessWidget {
   }
 }
 
-/// An `artifact` call, once it is history: the title the model gave it and a
-/// tap to open it in the app's viewer. The artifact's identity is in the part,
-/// not the tool call — so this reads an [ArtifactPart] rather than a
-/// [ToolCall].
+/// An `artifact` call, once it is history: a prominent card the user taps to
+/// open the page the model rendered. Not a slim [ToolLabel] the way the
+/// original was: an artifact is output the user came for, not background
+/// activity, so it is drawn as the one thing in the conversation worth
+/// reaching for. The artifact's identity is in the part, not the tool call,
+/// so this reads an [ArtifactPart] rather than a [ToolCall].
 class ArtifactLabel extends ConsumerWidget {
   const ArtifactLabel({
     super.key,
@@ -262,13 +264,78 @@ class ArtifactLabel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final label = title.isEmpty ? "View artifact" : title;
-    return _Label(
-      icon: Icons.insert_chart_outlined,
-      text: label,
-      onTap: () => ref
-          .read(linkOpenerProvider)
-          .openArtifact(context, chatId, artifactId, entryFile: entryFile, title: title),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Material(
+          color: scheme.primaryContainer,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => ref
+                .read(linkOpenerProvider)
+                .openArtifact(context, chatId, artifactId, entryFile: entryFile, title: title),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: scheme.onPrimaryContainer.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.insert_chart_outlined,
+                      size: 20,
+                      color: scheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Artifact",
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onPrimaryContainer.withValues(alpha: 0.75),
+                            letterSpacing: 0.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: scheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.open_in_new,
+                    size: 18,
+                    color: scheme.onPrimaryContainer.withValues(alpha: 0.7),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
