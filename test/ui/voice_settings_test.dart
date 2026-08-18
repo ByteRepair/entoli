@@ -108,13 +108,16 @@ void main() {
         matching: find.text("Voice"),
       );
 
-  testWidgets("a model with one voice has nothing to pick between",
-      (tester) async {
+  testWidgets("a model with one voice still has the field", (tester) async {
     app = TestApp.create(voiceModels: const {"piper-en_US-amy"});
     await pick(tester, speech: "piper-en_US-amy");
     await pumpVoice(tester);
 
-    expect(voicePicker(), findsNothing);
+    // A list of one, so that picking a speech model is not also a change to
+    // which fields the page has.
+    expect(voicePicker(), findsOneWidget);
+    expect(find.text("Voice 1"), findsOneWidget);
+    expect(find.text("Voice 2"), findsNothing);
   });
 
   testWidgets("a model with several offers them", (tester) async {
@@ -123,5 +126,32 @@ void main() {
     await pumpVoice(tester);
 
     expect(voicePicker(), findsOneWidget);
+  });
+
+  testWidgets("the preview reads one line in the voice picked", (tester) async {
+    app = TestApp.create(voiceModels: const {"piper-en_US-amy"});
+    await pick(tester, speech: "piper-en_US-amy");
+    await pumpVoice(tester);
+
+    await tester.tap(find.byIcon(Icons.play_circle_outline));
+    await tester.pumpAndSettle();
+
+    expect(app.voice.session!.spoken.join(" "), contains("how are you"));
+    // No microphone: this is a preview of a voice, not voice mode.
+    expect(app.voice.listeningWith, isNull);
+    expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
+  });
+
+  testWidgets("the preview is dead until the model is downloaded",
+      (tester) async {
+    app = TestApp.create();
+    await pick(tester, speech: "piper-en_US-amy");
+    await pumpVoice(tester);
+
+    final button = tester.widget<IconButton>(find.ancestor(
+      of: find.byIcon(Icons.play_circle_outline),
+      matching: find.byType(IconButton),
+    ));
+    expect(button.onPressed, isNull);
   });
 }

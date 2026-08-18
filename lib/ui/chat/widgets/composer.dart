@@ -341,14 +341,33 @@ class _ComposerState extends ConsumerState<Composer> {
                     ),
                   ),
                 ),
-                if (widget.onVoice != null && !widget.isRunning) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    onPressed: widget.onVoice,
-                    icon: const Icon(Icons.circle_outlined),
-                    tooltip: "Voice mode",
+                // The voice button and the field share the row, so the field
+                // gets the width back the moment there is a message in it:
+                // something typed is something to send rather than to say.
+                // `AnimatedSize` is the whole of the animation — the row is
+                // laid out again on every frame of it, and `Expanded` above
+                // takes whatever this gives up.
+                ValueListenableBuilder<bool>(
+                  valueListenable: _canSend,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: widget.onVoice,
+                        icon: const Icon(Icons.circle_outlined),
+                        tooltip: "Voice mode",
+                      ),
+                    ],
                   ),
-                ],
+                  builder: (context, canSend, child) => AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    child: widget.onVoice == null || widget.isRunning || canSend
+                        ? const SizedBox.shrink()
+                        : child,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 widget.isRunning
                     ? IconButton.filled(

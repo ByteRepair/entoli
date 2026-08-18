@@ -8,6 +8,8 @@ import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/voice/read_aloud.dart";
 import "package:agent_chat/ui/voice/transcript.dart";
 import "package:agent_chat/ui/voice/voice_controller.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
@@ -322,6 +324,145 @@ void main() {
     await tester.pump();
     expect(tester.getSize(find.byType(Container).first).width,
         greaterThan(small.width));
+  });
+
+  group("pausing", () {
+    test("shuts the microphone, and opens it again", () async {
+      final id = await startVoice();
+      final voice = app.container.read(voiceControllerProvider(id).notifier);
+
+      await voice.setPaused(true);
+      expect(app.voice.session!.listening, isFalse,
+          reason: "paused has to mean the device has stopped recording");
+      expect(app.container.read(voiceControllerProvider(id)).paused, isTrue);
+
+      await voice.setPaused(false);
+      expect(app.voice.session!.listening, isTrue);
+      expect(app.container.read(voiceControllerProvider(id)).paused, isFalse);
+    });
+
+    test("a fresh session is listening, whatever the last one was doing",
+        () async {
+      final id = await startVoice();
+      final voice = app.container.read(voiceControllerProvider(id).notifier);
+      await voice.setPaused(true);
+      await voice.stop();
+
+      await voice.start();
+      expect(app.container.read(voiceControllerProvider(id)).paused, isFalse);
+    });
+  });
+
+  group("reading one message out", () {
+    Future<void> pickSpeech() => app.container
+        .read(appSettingsProvider.notifier)
+        .setVoiceSpeechModel("piper-en_US-amy");
+
+    test("speaks it with no microphone open", () async {
+      await pickSpeech();
+      final failed = await app.container
+          .read(readAloudProvider.notifier)
+          .toggle("m1", "Hello there. How are you?");
+
+      expect(failed, isNull);
+      // The whole of what makes this not voice mode.
+      expect(app.voice.listeningWith, isNull);
+      expect(app.voice.session!.spoken.join(" "),
+          "Hello there. How are you?");
+      expect(app.container.read(readAloudProvider), "m1");
+    });
+
+    test("pressing the same one again stops it", () async {
+      await pickSpeech();
+      final reader = app.container.read(readAloudProvider.notifier);
+      await reader.toggle("m1", "One.");
+      final session = app.voice.session!;
+
+      await reader.toggle("m1", "One.");
+      expect(app.container.read(readAloudProvider), isNull);
+      expect(session.disposed, isTrue);
+    });
+
+    test("the model is let go once the message has been read", () async {
+      await pickSpeech();
+      await app.container.read(readAloudProvider.notifier).toggle("m1", "One.");
+      final session = app.voice.session!;
+
+      session.fallSilent();
+      await waitFor(() => session.disposed, what: "the session to be let go");
+      expect(app.container.read(readAloudProvider), isNull);
+    });
+
+    test("with no speech model picked it says so rather than opening silent",
+        () async {
+      final failed =
+          await app.container.read(readAloudProvider.notifier).toggle("m1", "One.");
+
+      expect(failed, isNotNull);
+      expect(app.voice.session, isNull);
+    });
+  });
+
+  testWidgets("a paused circle is the microphone shut, and does not follow it",
+      (tester) async {
+    final level = ValueNotifier(0.0);
+    addTearDown(level.dispose);
+    await app.pump(
+      tester,
+      Scaffold(
+        body: VoiceCircle(
+          state: VoiceViewState(
+              status: VoiceStatus.listening, level: level, paused: true),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.mic_off_outlined), findsOneWidget);
+    final size = tester.getSize(find.byType(Container).first);
+    level.value = 1;
+    await tester.pump();
+    expect(tester.getSize(find.byType(Container).first), size);
+  });
+
+  group("the composer's voice button", () {
+    Future<void> pumpComposer(WidgetTester tester, TextEditingController text) =>
+        app.pump(
+          tester,
+          Scaffold(
+            body: Composer(
+              controller: text,
+              isRunning: false,
+              onSend: (_, _) {},
+              onAbort: () {},
+              onVoice: () {},
+            ),
+          ),
+        );
+
+    testWidgets("goes when there is a message to send instead", (tester) async {
+      final text = TextEditingController();
+      addTearDown(text.dispose);
+      await pumpComposer(tester, text);
+      expect(find.byTooltip("Voice mode"), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), "hello");
+      await tester.pumpAndSettle();
+      expect(find.byTooltip("Voice mode"), findsNothing);
+
+      await tester.enterText(find.byType(TextField), "");
+      await tester.pumpAndSettle();
+      expect(find.byTooltip("Voice mode"), findsOneWidget);
+    });
+
+    testWidgets("whitespace is not a message", (tester) async {
+      final text = TextEditingController();
+      addTearDown(text.dispose);
+      await pumpComposer(tester, text);
+
+      await tester.enterText(find.byType(TextField), "   ");
+      await tester.pumpAndSettle();
+      expect(find.byTooltip("Voice mode"), findsOneWidget);
+    });
   });
 
   testWidgets("with no models picked the page says so rather than opening silent",

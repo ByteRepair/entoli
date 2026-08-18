@@ -16,11 +16,15 @@ abstract class Voice {
 
   bool get available => true;
 
-  /// Load the models and open the microphone. Throws if either model is not
+  /// Load the models and open the microphone. Throws if a model is not
   /// installed or will not load, which the caller shows rather than swallows —
   /// a voice screen that opens silent is worse than one that says why.
+  ///
+  /// **With no [recognition] model there is nothing to listen with**: no
+  /// microphone is opened and the session only speaks. That is the button
+  /// under a message, which reads one message out and is not voice mode.
   Future<VoiceSession> start({
-    required RecognitionModel recognition,
+    RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
   });
@@ -36,6 +40,12 @@ abstract class VoiceSession {
   /// rather than an event because it changes every audio frame, and the
   /// transcript above the circle has no business rebuilding for it.
   ValueListenable<double> get level;
+
+  /// Open or shut the microphone, which is what pausing is. A release rather
+  /// than a stream left running and thrown away: paused has to mean the device
+  /// is no longer recording, which is what the system's own microphone
+  /// indicator will say either way. Nothing to listen with makes it a no-op.
+  Future<void> setListening(bool on);
 
   /// Say [text], after anything already queued. Sentence-sized chunks: the
   /// first is being read while the rest of the reply is still being written.
@@ -91,7 +101,7 @@ class UnavailableVoice extends Voice {
 
   @override
   Future<VoiceSession> start({
-    required RecognitionModel recognition,
+    RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
   }) async =>

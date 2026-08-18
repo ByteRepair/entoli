@@ -68,7 +68,16 @@ class _VoicePageState extends ConsumerState<VoicePage> {
               child: Center(
                 child: VoiceCircle(
                   state: voice,
-                  onTap: voice.status == VoiceStatus.speaking ? _voice.hush : null,
+                  // One button, and what it does is whatever stopping means
+                  // here: shut the reply up if it is talking, otherwise shut
+                  // the microphone — or open it again.
+                  onTap: switch (voice.status) {
+                    VoiceStatus.speaking => _voice.hush,
+                    VoiceStatus.listening ||
+                    VoiceStatus.thinking =>
+                      () => _voice.setPaused(!voice.paused),
+                    _ => null,
+                  },
                 ),
               ),
             ),

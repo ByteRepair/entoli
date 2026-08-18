@@ -486,13 +486,18 @@ class FakeVoice extends Voice {
 
   FakeVoiceSession? session;
 
+  /// What the last [start] was asked to listen with. Null is a session that
+  /// only speaks, which is what reading one message out asks for.
+  RecognitionModel? listeningWith;
+
   @override
   Future<VoiceSession> start({
-    required RecognitionModel recognition,
+    RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
   }) async {
     if (refusal != null) throw StateError(refusal!);
+    listeningWith = recognition;
     return session = FakeVoiceSession();
   }
 }
@@ -503,6 +508,9 @@ class FakeVoiceSession implements VoiceSession {
 
   var hushed = 0;
   var disposed = false;
+
+  /// Whether the microphone is open, which pausing shuts.
+  var listening = true;
 
   @override
   final ValueNotifier<double> level = ValueNotifier(0);
@@ -515,6 +523,9 @@ class FakeVoiceSession implements VoiceSession {
 
   @override
   Future<void> stopSpeaking() async => hushed++;
+
+  @override
+  Future<void> setListening(bool on) async => listening = on;
 
   @override
   Future<void> dispose() async {

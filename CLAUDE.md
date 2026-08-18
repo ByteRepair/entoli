@@ -1626,7 +1626,13 @@ is exactly when the user is most likely to talk over the reply, and exactly the
 moment the detector would be deaf.
 
 Audio in is `record` at 16 kHz mono PCM, chunked to Silero's 512-sample window
-before it is handed over. Audio out is `audioplayers` over a WAV written per
+before it is handed over. `Pcm16Reader` is what does the chunking, and it is a
+class of its own because both things it gets right are invisible: a chunk is a
+*view* into the buffer the platform channel decoded into, starting at byte 5 of
+it on Android, and `asInt16List` refuses an odd offset outright — every frame of
+every session threw, so voice mode listened to nothing at all. The other is that
+a chunk does not have to end on a sample, and a byte dropped there shifts every
+sample after it. Audio out is `audioplayers` over a WAV written per
 sentence, into the system's temporary directory rather than the model one —
 which on Android is deliberately the directory that is *not* evicted, and is
 the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
@@ -1647,6 +1653,13 @@ is what the controller has; it refuses to split on `3.14`, `main.dart` and
 `e.g.`, and breaks a run-on paragraph at a comma rather than hold up the first
 sound the user hears.
 
+A sentence is generated ahead of being heard, so **the queue running dry is not
+the end** — the session only says it has fallen silent once nothing is still in
+the worker. Without that count a fast model reports silence between every two
+sentences, which in voice mode flickers the circle and in a message being read
+out would stop it after the first sentence. The WAV of what is playing is kept
+until something else is: `play` returns when playback *starts*.
+
 **Talking over the reply stops the turn as well as the speech.** The session
 goes quiet the moment the detector fires, before the controller has decided
 anything; the controller then aborts the turn, because interrupting means stop
@@ -1655,11 +1668,40 @@ same aborted turn in the log. That rides on the platform's echo cancellation,
 without which the model hears itself and every sentence is a barge-in; tapping
 the circle is the fallback, and stops the speech without leaving voice mode.
 
+#### Reading one message out
+
+The row under a message has a speaker button, and it is **not voice mode**: no
+microphone, no recognition model, nothing said back into the conversation. That
+is `recognition` being null on `Voice.start` — a session with nothing to listen
+with — rather than a second port, since what it does is the half of a session
+that already existed.
+
+`ReadAloud` owns it, and owns exactly one thing being read at a time. The
+preview beside the voice picker in settings goes through the same notifier
+under the id `preview`, so the two can never talk over each other and a second
+copy of the model is never loaded to do it. The session is let go the moment
+the message has been read — a speech model is a hundred megabytes of a phone's
+memory to hold for a button nobody may press again — and what says it has been
+read is the session falling silent, since nothing above it can tell generating
+from playing.
+
+The button stays up while it reads, uncovered or not: stopping must not mean
+going looking for the button that started it.
+
 #### The screen
 
 The circle grows with the microphone while it listens, breathes while a turn
 runs, and holds still while the reply is read — three states to tell apart
 across a room, which is the point of a screen nobody is looking at closely.
+
+**Tapping it is the one way to stop whatever it is doing**: the reply if it is
+talking, and otherwise the microphone. Pausing is a *release* rather than a
+stream left running and thrown away — the device stops recording, which is what
+the system's own microphone indicator will say either way. It is a flag beside
+the status rather than one of its values, because a turn can be running and its
+reply being read out while the microphone is shut, and those are what the status
+is for. Starting a session clears it: a fresh one listens whatever the last one
+was doing.
 
 **The transcript is a five-line window that scrolls**, not five lines that roll
 past and are gone: it is a viewport over every line said, so the start of the
@@ -1680,7 +1722,10 @@ does reads as a broken app rather than a working one.
 The way in is a circle left of the composer's send button, drawn wherever the
 platform can listen rather than only where models are installed — with none
 picked it leads to the settings that pick them, which is a better answer than a
-button nobody can find.
+button nobody can find. **It gives the field its width back the moment there is
+a message in it**: something typed is something to send rather than to say. That
+is an `AnimatedSize` around the button and nothing else — the row is laid out
+again on every frame of it, and the `Expanded` field takes whatever it gives up.
 
 ### The workspace explorer
 

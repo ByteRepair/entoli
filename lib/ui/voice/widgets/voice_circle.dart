@@ -5,9 +5,10 @@ import "../voice_controller.dart";
 
 /// The circle voice mode is mostly made of: it grows with the microphone while
 /// it listens, breathes while a turn runs, and holds still while the reply is
-/// read out. Tapping it while it is speaking shuts it up, which is the fallback
-/// wherever the platform's echo cancellation is not good enough to hear the
-/// user over the reply.
+/// read out. Tapping it is the one way to stop whatever it is doing — the reply
+/// if it is talking, which is the fallback wherever the platform's echo
+/// cancellation is not good enough to hear the user over it, and otherwise the
+/// microphone.
 class VoiceCircle extends StatefulWidget {
   const VoiceCircle({super.key, required this.state, this.onTap});
 
@@ -40,7 +41,8 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
     super.didUpdateWidget(old);
     if (widget.state.status != old.state.status) _breathe();
     if (widget.state.level != old.state.level ||
-        widget.state.status != old.state.status) {
+        widget.state.status != old.state.status ||
+        widget.state.paused != old.state.paused) {
       _driven = _driver();
     }
   }
@@ -54,7 +56,7 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
   /// reply is spoken, so following it there would repaint the circle thirty
   /// times a second to draw the same frame.
   Listenable _driver() => switch (widget.state.status) {
-        VoiceStatus.listening => _level,
+        VoiceStatus.listening when !widget.state.paused => _level,
         VoiceStatus.thinking || VoiceStatus.starting => _breath,
         _ => const AlwaysStoppedAnimation(0.0),
       };
@@ -79,8 +81,12 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final status = widget.state.status;
+    // Paused reads as off rather than as a state of listening, since that is
+    // what it is: the device has stopped recording.
+    final hushed = _hushed;
     final colour = switch (status) {
       VoiceStatus.failed => theme.colorScheme.error,
+      _ when hushed => theme.colorScheme.onSurfaceVariant,
       VoiceStatus.speaking => theme.colorScheme.tertiary,
       _ => theme.colorScheme.primary,
     };
@@ -98,6 +104,7 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
             // Listening follows the voice; thinking has nothing to follow, so
             // it breathes instead of sitting dead still.
             final grown = switch (status) {
+              _ when hushed => 0.0,
               VoiceStatus.listening => _level.value * 0.35,
               VoiceStatus.thinking || VoiceStatus.starting => _breath.value * 0.12,
               VoiceStatus.speaking => 0.08,
@@ -127,7 +134,13 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
 
   static const _size = 160.0;
 
-  static IconData _icon(VoiceStatus status) => switch (status) {
+  /// The microphone is shut and nothing is being said, which is the one look
+  /// that is about the state rather than the status.
+  bool get _hushed =>
+      widget.state.paused && widget.state.status != VoiceStatus.speaking;
+
+  IconData _icon(VoiceStatus status) => switch (status) {
+        _ when _hushed => Icons.mic_off_outlined,
         VoiceStatus.failed => Icons.error_outline,
         VoiceStatus.speaking => Icons.volume_up_outlined,
         VoiceStatus.thinking => Icons.more_horiz,
@@ -135,10 +148,11 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
         _ => Icons.mic_none,
       };
 
-  static String _describe(VoiceStatus status) => switch (status) {
+  String _describe(VoiceStatus status) => switch (status) {
+        _ when _hushed => "Paused. Tap to listen.",
         VoiceStatus.off => "Voice mode off",
         VoiceStatus.starting => "Starting voice mode",
-        VoiceStatus.listening => "Listening",
+        VoiceStatus.listening => "Listening. Tap to pause.",
         VoiceStatus.thinking => "Thinking",
         VoiceStatus.speaking => "Speaking. Tap to stop.",
         VoiceStatus.failed => "Voice mode failed",

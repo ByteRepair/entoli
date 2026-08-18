@@ -31,10 +31,20 @@ enum VoiceStatus {
 }
 
 class VoiceViewState {
-  const VoiceViewState({this.status = VoiceStatus.off, this.error, this.level});
+  const VoiceViewState({
+    this.status = VoiceStatus.off,
+    this.error,
+    this.level,
+    this.paused = false,
+  });
 
   final VoiceStatus status;
   final String? error;
+
+  /// The microphone is shut. Not one of the [status] values: a turn can be
+  /// running and its reply being read out while the microphone is off, and
+  /// those are what the status is for.
+  final bool paused;
 
   /// How loud the microphone is. Held here rather than folded into [status] so
   /// the circle can follow it without the transcript rebuilding for every
@@ -62,6 +72,10 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// Held rather than read when it is needed: [_shutdown] runs from
   /// `ref.onDispose`, where the ref is already gone.
   late BackgroundWork _work;
+
+  /// Whether the user has shut the microphone. Held rather than read back off
+  /// [state], which every `_show` would otherwise have to remember to carry.
+  var _paused = false;
 
   /// The reply being read out, so a new one starts the splitter over rather
   /// than carrying on from where the last one stopped, and the parts it was
@@ -92,8 +106,12 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// Every state write goes through here. Written out at each call site, the
   /// two `failed` arms silently omitted the level, which is the sort of
   /// difference nobody sees until the circle stops moving.
-  void _show(VoiceStatus status, {String? error}) =>
-      state = VoiceViewState(status: status, error: error, level: _session?.level);
+  void _show(VoiceStatus status, {String? error}) => state = VoiceViewState(
+        status: status,
+        error: error,
+        level: _session?.level,
+        paused: _paused,
+      );
 
   Future<void> start() async {
     if (state.isOn) return;
@@ -106,6 +124,7 @@ class VoiceController extends Notifier<VoiceViewState> {
           error: "Pick a recognition model and a speech model in Settings first.");
     }
 
+    _paused = false;
     _show(VoiceStatus.starting);
     try {
       final session = await ref.read(voiceProvider).start(
@@ -135,6 +154,16 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (!ref.mounted || state.status == VoiceStatus.off) return;
     await _shutdown();
     if (ref.mounted) _show(VoiceStatus.off);
+  }
+
+  /// Shut the microphone, or open it again. The circle is the button for it:
+  /// voice mode listens for as long as it is on screen, and until this there
+  /// was no way to stop it short of leaving.
+  Future<void> setPaused(bool paused) async {
+    if (!ref.mounted || !state.isOn || paused == _paused) return;
+    _paused = paused;
+    await _session?.setListening(!paused);
+    if (ref.mounted) _show(state.status);
   }
 
   /// Shut the microphone up without leaving voice mode — the circle is a button

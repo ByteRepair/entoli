@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
+import "../voice/read_aloud.dart";
 import "voice_models.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
@@ -256,21 +257,48 @@ class _SpeakerField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
-    if (speech == null || speech.speakers < 2) return const SizedBox.shrink();
+    if (speech == null) return const SizedBox.shrink();
+    // Drawn even where the model has one voice, which is most of them: a field
+    // that comes and goes with the model above it makes picking a model a
+    // change of what the page is, and a list of one still says which voice
+    // this is.
     final value = settings.voiceSpeaker.clamp(0, speech.speakers - 1);
+    final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
       label: "Voice",
-      child: DropdownButton<int>(
-        isExpanded: true,
-        value: value,
-        items: [
-          for (var i = 0; i < speech.speakers; i++)
-            DropdownMenuItem(value: i, child: Text("Voice ${i + 1}")),
+      child: Row(
+        children: [
+          Expanded(
+            child: DropdownButton<int>(
+              isExpanded: true,
+              value: value,
+              items: [
+                for (var i = 0; i < speech.speakers; i++)
+                  DropdownMenuItem(value: i, child: Text("Voice ${i + 1}")),
+              ],
+              onChanged: (picked) =>
+                  ref.read(appSettingsProvider.notifier).setVoiceSpeaker(picked ?? 0),
+            ),
+          ),
+          IconButton(
+            // Dead until the model is on disk: the picker offers what the
+            // catalog has, and a preview of something not downloaded could
+            // only apologise.
+            onPressed: ref.watch(speechReadyProvider) ? () => _preview(context, ref) : null,
+            icon: Icon(
+                playing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
+            tooltip: playing ? "Stop" : "Hear this voice",
+          ),
         ],
-        onChanged: (picked) =>
-            ref.read(appSettingsProvider.notifier).setVoiceSpeaker(picked ?? 0),
       ),
     );
+  }
+
+  Future<void> _preview(BuildContext context, WidgetRef ref) async {
+    final failed =
+        await ref.read(readAloudProvider.notifier).toggle(previewId, previewSpeech);
+    if (failed == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failed)));
   }
 }
 

@@ -40,25 +40,27 @@ class SherpaVoice extends Voice {
 
   @override
   Future<VoiceSession> start({
-    required RecognitionModel recognition,
+    RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
   }) async {
-    final listenDir = await _store.directoryOf(recognition);
     final speakDir = await _store.directoryOf(speech);
-    if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
+    final speaking = await _Worker.spawn(_speakWorker, (speech, speakDir, speaker));
+    if (recognition == null) return _SherpaSession(null, null, speaking, scratchDir);
 
+    final listenDir = await _store.directoryOf(recognition);
+    if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
     final recorder = AudioRecorder();
     if (!await recorder.hasPermission()) {
       recorder.dispose();
+      speaking.close();
       throw StateError("Entoli was not allowed to use the microphone.");
     }
 
     final vad = await _vadPath();
-    final listener = await _Worker.spawn(_listenWorker, (vad, recognition, listenDir));
-    final speaker0 = await _Worker.spawn(_speakWorker, (speech, speakDir, speaker));
-    return _SherpaSession(recorder, listener, speaker0, scratchDir);
+    final listening = await _Worker.spawn(_listenWorker, (vad, recognition, listenDir));
+    return _SherpaSession(recorder, listening, speaking, scratchDir);
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
@@ -78,14 +80,16 @@ class SherpaVoice extends Voice {
 /// The microphone, the two workers, and whatever is queued to be said.
 class _SherpaSession implements VoiceSession {
   _SherpaSession(this._recorder, this._listener, this._speaker, this._speechDir) {
-    _listener.messages.listen(_fromListener);
+    _listener?.messages.listen(_fromListener);
     _speaker.messages.listen(_fromSpeaker);
     _player.onPlayerComplete.listen((_) => _playNext());
     unawaited(_open());
   }
 
-  final AudioRecorder _recorder;
-  final _Worker _listener;
+  /// Null where there is nothing to listen with: a session reading one message
+  /// out opens no microphone and loads no recogniser.
+  final AudioRecorder? _recorder;
+  final _Worker? _listener;
   final _Worker _speaker;
   final String _speechDir;
   final _player = AudioPlayer();
@@ -111,9 +115,18 @@ class _SherpaSession implements VoiceSession {
   final _queue = <String>[];
   var _playing = false;
 
+  /// The file being played, kept until something else is. `play` returns when
+  /// playback *starts*, so deleting it there deleted a file still being read.
+  String? _played;
+
   /// Bumped by [stopSpeaking]. Audio generated before it is dropped rather than
   /// played into a silence the user asked for.
   var _generation = 0;
+
+  /// Sentences handed to the worker that have not come back as audio yet.
+  /// Speech is generated a sentence ahead of being heard, so a queue that has
+  /// run dry with one of these outstanding has not finished — it is waiting.
+  var _pending = 0;
 
   var _closed = false;
 
@@ -130,8 +143,25 @@ class _SherpaSession implements VoiceSession {
     final speech = Directory(_speechDir);
     if (await speech.exists()) await speech.delete(recursive: true);
     await speech.create(recursive: true);
+    await setListening(true);
+  }
+
+  @override
+  Future<void> setListening(bool on) async {
+    final recorder = _recorder;
+    if (_closed || recorder == null || on == (_mic != null)) return;
+    if (!on) {
+      await _mic?.cancel();
+      _mic = null;
+      await recorder.stop();
+      // Whatever the window held is half an utterance from before the pause,
+      // and the level is what the circle draws.
+      _filled = 0;
+      _levelOf.value = 0;
+      return;
+    }
     try {
-      final stream = await _recorder.startStream(const RecordConfig(
+      final stream = await recorder.startStream(const RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: sampleRate,
         numChannels: 1,
@@ -156,7 +186,7 @@ class _SherpaSession implements VoiceSession {
       if (_filled < _windowSize) continue;
       // Handed over rather than copied: `send` copies for us, so the buffer is
       // the worker's now and this side starts a fresh one.
-      _listener.send(("audio", _window));
+      _listener?.send(("audio", _window));
       _window = Float32List(_windowSize);
       _filled = 0;
     }
@@ -191,8 +221,12 @@ class _SherpaSession implements VoiceSession {
     switch (message) {
       case ("audio", final int generation, final Float32List samples, final int rate):
         if (generation != _generation || _closed) return;
+        _pending--;
         unawaited(_enqueue(samples, rate));
       case ("failed", final String message):
+        // Whatever was outstanding is not coming: left counted, the session
+        // would never say it had finished.
+        _pending = 0;
         _fail(message);
     }
   }
@@ -200,6 +234,7 @@ class _SherpaSession implements VoiceSession {
   @override
   Future<void> speak(String text) async {
     if (_closed || text.trim().isEmpty) return;
+    _pending++;
     _speaker.send(("speak", _generation, text));
   }
 
@@ -213,22 +248,29 @@ class _SherpaSession implements VoiceSession {
 
   Future<void> _playNext() async {
     if (_closed) return;
+    await _discardPlayed();
     if (_queue.isEmpty) {
       if (_playing) {
         _playing = false;
-        _events.add(const VoiceFellSilent());
+        if (_pending == 0) _events.add(const VoiceFellSilent());
       }
       return;
     }
     final next = _queue.removeAt(0);
     _playing = true;
+    _played = next;
     try {
       await _player.play(DeviceFileSource(next));
     } catch (e) {
       _playing = false;
       _fail("$e");
     }
-    unawaited(_discard(next));
+  }
+
+  Future<void> _discardPlayed() async {
+    final done = _played;
+    _played = null;
+    if (done != null) await _discard(done);
   }
 
   @override
@@ -236,6 +278,7 @@ class _SherpaSession implements VoiceSession {
     // Before the stop, so audio already generated is dropped rather than
     // arriving into the silence and starting the queue up again.
     _generation++;
+    _pending = 0;
     // Deleted rather than dropped: only `_playNext` removes a file it played,
     // so a barge-in used to leave every unsaid sentence in the cache with
     // nothing that would ever come back for it.
@@ -245,6 +288,7 @@ class _SherpaSession implements VoiceSession {
     _queue.clear();
     _playing = false;
     await _player.stop();
+    await _discardPlayed();
   }
 
   Future<void> _discard(String path) async {
@@ -261,11 +305,11 @@ class _SherpaSession implements VoiceSession {
   Future<void> dispose() async {
     _closed = true;
     await _mic?.cancel();
-    await _recorder.stop();
-    _recorder.dispose();
+    await _recorder?.stop();
+    _recorder?.dispose();
     await _player.stop();
     await _player.dispose();
-    _listener.close();
+    _listener?.close();
     _speaker.close();
     await _events.close();
     _levelOf.dispose();

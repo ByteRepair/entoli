@@ -44,18 +44,26 @@ final voiceModelStoreProvider =
 final installedVoiceModelsProvider = FutureProvider<Set<String>>(
     (ref) => ref.watch(voiceModelStoreProvider).installed());
 
+/// Whether a message can be read out: a platform that can speak, and a speech
+/// model picked and installed. Half of [voiceReadyProvider], because reading a
+/// message out needs nothing to hear with.
+final speechReadyProvider = Provider<bool>((ref) {
+  if (!ref.watch(voiceProvider).available) return false;
+  final settings = ref.watch(appSettingsProvider);
+  // `contains` takes an `Object?`, so a setting naming nothing is simply not
+  // in the set.
+  return (ref.watch(installedVoiceModelsProvider).value ?? const <String>{})
+      .contains(voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
+});
+
 /// Whether the composer draws its voice button: a platform that can listen, and
 /// two models picked and installed. Anything less and pressing it could only
 /// lead to an apology.
 final voiceReadyProvider = Provider<bool>((ref) {
-  if (!ref.watch(voiceProvider).available) return false;
+  if (!ref.watch(speechReadyProvider)) return false;
   final settings = ref.watch(appSettingsProvider);
-  final installed = ref.watch(installedVoiceModelsProvider).value ?? const <String>{};
-  // `contains` takes an `Object?`, so a setting naming nothing is simply not
-  // in the set.
-  return installed
-          .contains(voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id) &&
-      installed.contains(voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
+  return (ref.watch(installedVoiceModelsProvider).value ?? const <String>{})
+      .contains(voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
 });
 
 /// Loaded once, before the app is built, because assets are read

@@ -8,6 +8,7 @@ import "../../providers.dart";
 import "../fonts.dart";
 import "../settings/settings_page.dart";
 import "../sidebar/sidebar.dart";
+import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
@@ -451,7 +452,18 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
+  /// Read one message out, which is not voice mode: no microphone, no
+  /// recognition model, and nothing said back into the conversation.
+  Future<void> _read(BuildContext context, Message message) async {
+    final failed =
+        await ref.read(readAloudProvider.notifier).toggle(message.id, message.plainText);
+    if (failed == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failed)));
+  }
+
   Widget _conversation(Chat chat, ChatViewState view, ChatController notifier) {
+    final speechReady = ref.watch(speechReadyProvider);
+    final reading = ref.watch(readAloudProvider);
     // `insertCompletion` rather than writing the field here: where a trigger
     // lands is the composer's rule, and a `/command` appended at the caret is
     // text nothing would ever expand. It does not ask for the focus, which is
@@ -487,6 +499,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   ? (text) => notifier.editAndResend(m.id, text)
                   : null,
               onRegenerate: view.isRunning ? null : () => notifier.regenerate(m.id),
+              onSpeak: speechReady && m.hasText ? () => _read(context, m) : null,
+              isSpeaking: reading == m.id,
             );
           },
         ),

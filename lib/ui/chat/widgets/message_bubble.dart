@@ -27,6 +27,8 @@ class MessageBubble extends StatefulWidget {
     this.onDelete,
     this.onEdit,
     this.onRegenerate,
+    this.onSpeak,
+    this.isSpeaking = false,
     this.onTapLink,
   });
 
@@ -59,6 +61,15 @@ class MessageBubble extends StatefulWidget {
 
   /// Run the turn this message belongs to again, unchanged.
   final VoidCallback? onRegenerate;
+
+  /// Read this message out, or stop reading it. Null where there is no speech
+  /// model to read it with.
+  final VoidCallback? onSpeak;
+
+  /// This is the message being read out. The button then offers to stop, and
+  /// the row stays up while it reads — otherwise stopping would mean going
+  /// looking for the button that started it.
+  final bool isSpeaking;
 
   /// Open a link tapped in the rendered markdown. Receives the `href`.
   final ValueChanged<String>? onTapLink;
@@ -212,6 +223,14 @@ class _MessageBubbleState extends State<MessageBubble> {
             if (widget.message.hasText)
               ActionIcon(
                   icon: Icons.copy_outlined, tooltip: "Copy message", onPressed: _copy),
+            if (widget.onSpeak != null)
+              ActionIcon(
+                icon: widget.isSpeaking
+                    ? Icons.stop_circle_outlined
+                    : Icons.volume_up_outlined,
+                tooltip: widget.isSpeaking ? "Stop reading" : "Read aloud",
+                onPressed: widget.onSpeak!,
+              ),
             if (widget.onDelete != null)
               ActionIcon(
                   icon: Icons.delete_outline, tooltip: "Delete thread", onPressed: _delete),
@@ -226,14 +245,17 @@ class _MessageBubbleState extends State<MessageBubble> {
         ),
         // Kept whether or not there is anything to show, so a message does not
         // shift under the pointer the moment the actions appear.
-        builder: (context, shown, child) => SizedBox(
-          height: ActionIcon.height,
-          child: AnimatedOpacity(
-            opacity: shown ? 1 : 0,
-            duration: const Duration(milliseconds: 120),
-            child: IgnorePointer(ignoring: !shown, child: child),
-          ),
-        ),
+        builder: (context, shown, child) {
+          final up = shown || widget.isSpeaking;
+          return SizedBox(
+            height: ActionIcon.height,
+            child: AnimatedOpacity(
+              opacity: up ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              child: IgnorePointer(ignoring: !up, child: child),
+            ),
+          );
+        },
       );
 
   /// How many threads were written where this message is, and which of them it
