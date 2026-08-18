@@ -10,6 +10,7 @@ import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/theme.dart";
 
 import "../harness.dart";
 
@@ -195,14 +196,14 @@ void main() {
         findsOneWidget);
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("work")),
         findsOneWidget);
-    expect(find.text("Entoli"), findsNothing);
+    expect(find.text(appTitle), findsNothing);
 
     await tester.drag(find.byType(ListView), const Offset(0, 4000));
     await tester.pumpAndSettle();
 
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("at work")),
         findsOneWidget);
-    expect(find.text("Entoli"), findsNothing);
+    expect(find.text(appTitle), findsNothing);
   });
 
   // Every chat is in one, so naming the default on all of them says nothing.
@@ -226,7 +227,7 @@ void main() {
 
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("brand new")),
         findsOneWidget);
-    expect(find.text("Entoli"), findsNothing);
+    expect(find.text(appTitle), findsNothing);
   });
 
   // Three lines — a title, a project and a countdown — do not fit the 56dp bar
