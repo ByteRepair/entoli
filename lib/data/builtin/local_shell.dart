@@ -84,13 +84,19 @@ class _LocalRun implements ShellRun {
       // Merged in the shell rather than here: two Dart streams arrive in
       // whatever order the pipes flush, and a compiler's errors interleaved
       // with its progress is the whole value of reading them.
-      final drained = process.stdout
+      final reading = process.stdout
           .transform(const Utf8Decoder(allowMalformed: true))
-          .forEach(output.write);
+          .listen(output.write);
+      // Asked for here rather than below: `asFuture` replaces the done handler,
+      // so one asked for after the pipe has closed never completes at all.
+      final drained = reading.asFuture<void>();
 
       timer = Timer(timeout, _killTree);
       final code = await process.exitCode;
-      await drained;
+      // A child in a session of its own goes on holding stdout after the group
+      // is killed, so waiting for the rest of it has to be bounded.
+      await drained.timeout(_drainGrace, onTimeout: () {});
+      await reading.cancel();
       if (_killed) {
         return ShellResult(
           returnCode: -1,
@@ -158,6 +164,10 @@ class _LocalRun implements ShellRun {
     }
     process.kill(ProcessSignal.sigkill);
   }
+
+  /// What the flush of a pipe whose writers have gone is worth waiting for. A
+  /// command that left one holding it pays this in full, once.
+  static const _drainGrace = Duration(seconds: 2);
 
   static final _shell = File("/bin/bash").existsSync() ? "/bin/bash" : "/bin/sh";
 }
