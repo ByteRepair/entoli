@@ -9,6 +9,7 @@ import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
 import "../domain/project_settings.dart";
+import "../domain/temp_chat_ttl.dart";
 
 /// The UI's door to storage and the agent. Resolves which model a chat runs
 /// on, and owns which thread of a conversation is being read. The turn itself
@@ -78,10 +79,28 @@ class ChatRepository {
   /// still is one — which is where whatever was pinned on it gets written too.
   /// Called at the head of every turn, not only the first. The conversation is
   /// deliberately not written here: it arrives as records, through [append].
+  ///
+  /// Also maintains the chat's TTL anchor: the resolved TTL is recomputed on
+  /// every save so widening the app/project window extends an existing chat
+  /// from its original anchor. `tempTtlSince` is set once when the TTL is
+  /// enabled and cleared when it goes back to off; `tempTtlExpiresAt` is
+  /// `since + duration`, recomputed each save.
   Future<void> saveState(ChatState state) async {
     final pinned = _isDraft(state.id) ? _draftMeta : null;
     _forgetDraft(state.id);
-    await _store.saveState(state);
+    final ttl = await _resolveTempTtl(state.id, project: state.project);
+    final dur = tempChatTtlDuration(ttl);
+    DateTime? since = state.tempTtlSince;
+    DateTime? expiresAt = state.tempTtlExpiresAt;
+    if (dur == null) {
+      since = null;
+      expiresAt = null;
+    } else {
+      since ??= DateTime.now();
+      expiresAt = since.add(dur);
+    }
+    final anchored = state.copyWith(tempTtlSince: since, tempTtlExpiresAt: expiresAt);
+    await _store.saveState(anchored);
     if (pinned != null) await _store.saveMeta(state.id, pinned);
   }
 
@@ -179,6 +198,18 @@ class ChatRepository {
   Future<ProjectSettings> projectSettingsOf(String? project) async =>
       ProjectSettings.load(_config, project: project);
 
+  /// Which TTL applies to a chat: its own choice wins, else the project's, else
+  /// the app default. [project] is passed in for the draft case, which has no
+  /// disk location to be found from; for a stored chat it is read back.
+  Future<TempChatTtl> _resolveTempTtl(String chatId, {String? project}) async {
+    final meta = await loadMeta(chatId);
+    if (meta.tempChatTtl != null) return meta.tempChatTtl!;
+    final proj = project ?? await projectOf(chatId);
+    final projectSettings = await projectSettingsOf(proj);
+    if (projectSettings.tempChatTtl != null) return projectSettings.tempChatTtl!;
+    return _settings().tempChatTtl;
+  }
+
   /// Which project a chat's files are in. A draft is not on disk to be found,
   /// so it answers for itself.
   Future<String?> projectOf(String chatId) async =>
@@ -254,6 +285,28 @@ class ChatRepository {
   Future<void> deleteAllChats() async {
     final chats = await listChats();
     await Future.wait(chats.map((c) => deleteChat(c.id)));
+  }
+
+  /// Delete every expired chat except [exceptId] (the one currently open, which
+  /// is handled by the on-open prompt). Called at startup and on a 30-minute
+  /// timer. Drafts are never swept — they are not on disk and have no state.
+  Future<void> sweepExpired({String? exceptId}) async {
+    final chats = await listChats();
+    await Future.wait([
+      for (final c in chats)
+        if (c.id != exceptId && c.isExpired()) deleteChat(c.id),
+    ]);
+  }
+
+  /// Keep an expired chat by turning its TTL off — overriding any project/app
+  /// setting — and clearing the anchor and expiry. The on-open prompt's "keep"
+  /// answer; the "delete" answer is [deleteChat]. The TTL override lives here
+  /// beside [saveState]'s anchoring, so the rules about it stay in one place.
+  Future<void> keepExpiredChat(String chatId, ChatState state) async {
+    final meta = await loadMeta(chatId);
+    meta.tempChatTtl = TempChatTtl.off;
+    await saveMeta(chatId, meta);
+    await saveState(state.copyWith(tempTtlSince: null, tempTtlExpiresAt: null));
   }
 
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse r) =>

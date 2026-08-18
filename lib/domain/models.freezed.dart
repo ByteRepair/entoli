@@ -19,7 +19,15 @@ mixin _$ChatState {
 /// the data directory itself, where every chat was before there were any.
 /// The directory a chat is found in wins over this: a chat moved by hand
 /// is in the project it was moved to.
- String? get project;
+ String? get project;/// When this chat's temporary TTL was enabled. Set once when the resolved
+/// TTL becomes non-off, cleared when it goes back to off. Maintained by
+/// `ChatRepository.saveState`, which sees the resolved TTL; the sidebar
+/// and the sweep read [tempTtlExpiresAt] rather than computing from this.
+ DateTime? get tempTtlSince;/// When this chat expires, denormalized as [tempTtlSince] + the resolved
+/// duration. Recomputed on every save so widening the app/project window
+/// extends an existing chat from its original anchor. The sidebar hides a
+/// chat once this is in the past; the background sweep deletes it.
+ DateTime? get tempTtlExpiresAt;
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -32,16 +40,16 @@ $ChatStateCopyWith<ChatState> get copyWith => _$ChatStateCopyWithImpl<ChatState>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.project, project) || other.project == project));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.project, project) || other.project == project)&&(identical(other.tempTtlSince, tempTtlSince) || other.tempTtlSince == tempTtlSince)&&(identical(other.tempTtlExpiresAt, tempTtlExpiresAt) || other.tempTtlExpiresAt == tempTtlExpiresAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,project);
+int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,project,tempTtlSince,tempTtlExpiresAt);
 
 @override
 String toString() {
-  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, project: $project)';
+  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, project: $project, tempTtlSince: $tempTtlSince, tempTtlExpiresAt: $tempTtlExpiresAt)';
 }
 
 
@@ -52,7 +60,7 @@ abstract mixin class $ChatStateCopyWith<$Res>  {
   factory $ChatStateCopyWith(ChatState value, $Res Function(ChatState) _then) = _$ChatStateCopyWithImpl;
 @useResult
 $Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, String? project
+ String id, String title, DateTime createdAt, DateTime updatedAt, String? project, DateTime? tempTtlSince, DateTime? tempTtlExpiresAt
 });
 
 
@@ -69,14 +77,16 @@ class _$ChatStateCopyWithImpl<$Res>
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? project = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? project = freezed,Object? tempTtlSince = freezed,Object? tempTtlExpiresAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
 as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime,project: freezed == project ? _self.project : project // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,tempTtlSince: freezed == tempTtlSince ? _self.tempTtlSince : tempTtlSince // ignore: cast_nullable_to_non_nullable
+as DateTime?,tempTtlExpiresAt: freezed == tempTtlExpiresAt ? _self.tempTtlExpiresAt : tempTtlExpiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -161,10 +171,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project,  DateTime? tempTtlSince,  DateTime? tempTtlExpiresAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ChatState() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project,_that.tempTtlSince,_that.tempTtlExpiresAt);case _:
   return orElse();
 
 }
@@ -182,10 +192,10 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.proje
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project,  DateTime? tempTtlSince,  DateTime? tempTtlExpiresAt)  $default,) {final _that = this;
 switch (_that) {
 case _ChatState():
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project,_that.tempTtlSince,_that.tempTtlExpiresAt);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -202,10 +212,10 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.proje
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  DateTime createdAt,  DateTime updatedAt,  String? project,  DateTime? tempTtlSince,  DateTime? tempTtlExpiresAt)?  $default,) {final _that = this;
 switch (_that) {
 case _ChatState() when $default != null:
-return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project);case _:
+return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.project,_that.tempTtlSince,_that.tempTtlExpiresAt);case _:
   return null;
 
 }
@@ -217,7 +227,7 @@ return $default(_that.id,_that.title,_that.createdAt,_that.updatedAt,_that.proje
 @JsonSerializable()
 
 class _ChatState implements ChatState {
-  const _ChatState({required this.id, required this.title, required this.createdAt, required this.updatedAt, this.project});
+  const _ChatState({required this.id, required this.title, required this.createdAt, required this.updatedAt, this.project, this.tempTtlSince, this.tempTtlExpiresAt});
   factory _ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
 
 @override final  String id;
@@ -229,6 +239,16 @@ class _ChatState implements ChatState {
 /// The directory a chat is found in wins over this: a chat moved by hand
 /// is in the project it was moved to.
 @override final  String? project;
+/// When this chat's temporary TTL was enabled. Set once when the resolved
+/// TTL becomes non-off, cleared when it goes back to off. Maintained by
+/// `ChatRepository.saveState`, which sees the resolved TTL; the sidebar
+/// and the sweep read [tempTtlExpiresAt] rather than computing from this.
+@override final  DateTime? tempTtlSince;
+/// When this chat expires, denormalized as [tempTtlSince] + the resolved
+/// duration. Recomputed on every save so widening the app/project window
+/// extends an existing chat from its original anchor. The sidebar hides a
+/// chat once this is in the past; the background sweep deletes it.
+@override final  DateTime? tempTtlExpiresAt;
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
@@ -243,16 +263,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.project, project) || other.project == project));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ChatState&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.project, project) || other.project == project)&&(identical(other.tempTtlSince, tempTtlSince) || other.tempTtlSince == tempTtlSince)&&(identical(other.tempTtlExpiresAt, tempTtlExpiresAt) || other.tempTtlExpiresAt == tempTtlExpiresAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,project);
+int get hashCode => Object.hash(runtimeType,id,title,createdAt,updatedAt,project,tempTtlSince,tempTtlExpiresAt);
 
 @override
 String toString() {
-  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, project: $project)';
+  return 'ChatState(id: $id, title: $title, createdAt: $createdAt, updatedAt: $updatedAt, project: $project, tempTtlSince: $tempTtlSince, tempTtlExpiresAt: $tempTtlExpiresAt)';
 }
 
 
@@ -263,7 +283,7 @@ abstract mixin class _$ChatStateCopyWith<$Res> implements $ChatStateCopyWith<$Re
   factory _$ChatStateCopyWith(_ChatState value, $Res Function(_ChatState) _then) = __$ChatStateCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String title, DateTime createdAt, DateTime updatedAt, String? project
+ String id, String title, DateTime createdAt, DateTime updatedAt, String? project, DateTime? tempTtlSince, DateTime? tempTtlExpiresAt
 });
 
 
@@ -280,14 +300,16 @@ class __$ChatStateCopyWithImpl<$Res>
 
 /// Create a copy of ChatState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? project = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? createdAt = null,Object? updatedAt = null,Object? project = freezed,Object? tempTtlSince = freezed,Object? tempTtlExpiresAt = freezed,}) {
   return _then(_ChatState(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
 as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,updatedAt: null == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime,project: freezed == project ? _self.project : project // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,tempTtlSince: freezed == tempTtlSince ? _self.tempTtlSince : tempTtlSince // ignore: cast_nullable_to_non_nullable
+as DateTime?,tempTtlExpiresAt: freezed == tempTtlExpiresAt ? _self.tempTtlExpiresAt : tempTtlExpiresAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 

@@ -19,9 +19,31 @@ abstract class ChatState with _$ChatState {
     /// The directory a chat is found in wins over this: a chat moved by hand
     /// is in the project it was moved to.
     String? project,
+
+    /// When this chat's temporary TTL was enabled. Set once when the resolved
+    /// TTL becomes non-off, cleared when it goes back to off. Maintained by
+    /// `ChatRepository.saveState`, which sees the resolved TTL; the sidebar
+    /// and the sweep read [tempTtlExpiresAt] rather than computing from this.
+    DateTime? tempTtlSince,
+
+    /// When this chat expires, denormalized as [tempTtlSince] + the resolved
+    /// duration. Recomputed on every save so widening the app/project window
+    /// extends an existing chat from its original anchor. The sidebar hides a
+    /// chat once this is in the past; the background sweep deletes it.
+    DateTime? tempTtlExpiresAt,
   }) = _ChatState;
 
   factory ChatState.fromJson(Map<String, dynamic> json) => _$ChatStateFromJson(json);
+}
+
+/// Whether this chat's TTL window has passed. The one place the sidebar
+/// filter, the background sweep and the on-open prompt ask it from, so they
+/// agree. Null [ChatState.tempTtlExpiresAt] means the chat is not temporary.
+extension ChatStateTtl on ChatState {
+  bool isExpired({DateTime? now}) {
+    final expiresAt = tempTtlExpiresAt;
+    return expiresAt != null && !expiresAt.isAfter(now ?? DateTime.now());
+  }
 }
 
 /// A full chat: state + message tree. Persisted across `state.json` + `conv.jsonl`.

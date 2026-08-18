@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:ui" show AppExitResponse;
 
 import "package:flutter/material.dart";
@@ -15,6 +16,7 @@ import "ui/app_shell.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
 import "ui/share/incoming_shares.dart";
+import "ui/sidebar/sidebar.dart";
 import "ui/theme.dart";
 
 void main() async {
@@ -40,6 +42,18 @@ void main() async {
   );
   container.read(availableModelsProvider);
   container.read(turnKeepAliveProvider);
+  // Sweep expired temporary chats on startup, then every 30 minutes. The timer
+  // is in-process and dies with the app: a chat expiring while the app is
+  // closed is caught at the next launch. Skips the currently-open chat, which
+  // is handled by the on-open prompt.
+  await container.read(chatRepositoryProvider).sweepExpired(
+        exceptId: container.read(selectedChatIdProvider),
+      );
+  Timer.periodic(const Duration(minutes: 30), (_) {
+    container.read(chatRepositoryProvider).sweepExpired(
+          exceptId: container.read(selectedChatIdProvider),
+        );
+  });
   runApp(UncontrolledProviderScope(
     container: container,
     child: AgentChatApp(onExit: backend.shutdown),

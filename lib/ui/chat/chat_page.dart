@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -11,6 +13,7 @@ import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "widgets/approval_banner.dart";
 import "widgets/composer.dart";
+import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
 import "widgets/question_panel.dart";
 import "widgets/resume_bar.dart";
@@ -195,6 +198,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// The chat the view has already been dropped to the bottom of.
   String? _opened;
 
+  /// Chats we have already asked about since they were opened. Keeps a rebuild
+  /// from re-prompting for the same expired chat.
+  String? _expiryChecked;
+
   @override
   void initState() {
     super.initState();
@@ -255,6 +262,44 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   Future<void> _abort() => ref.read(chatControllerProvider(widget.chatId).notifier).abort();
 
+  /// Ask whether to keep an expired temporary chat (turning its TTL off) or
+  /// delete it. The sweep handles non-open chats silently; this is the one
+  /// case where the chat being deleted is the one the user is looking at.
+  Future<void> _checkExpiry(BuildContext context, ChatState state) async {
+    if (!state.isExpired()) return;
+    if (!mounted) return;
+    final keep = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("Temporary chat expired"),
+        content: const Text(
+          "This temporary chat has passed its expiry. Turn temporary chat off "
+          "to keep it, or delete it now.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text("Keep"),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    final repo = ref.read(chatRepositoryProvider);
+    if (keep == true) {
+      await repo.keepExpiredChat(widget.chatId, state);
+    } else {
+      ref.read(selectedChatIdProvider.notifier).select(null);
+      await repo.deleteChat(widget.chatId);
+    }
+    ref.invalidate(chatListProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final view = ref.watch(chatControllerProvider(widget.chatId));
@@ -270,6 +315,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     if (_opened != widget.chatId) {
       _opened = widget.chatId;
       _settleAtBottom();
+    }
+    // Check expiry once per open: a temporary chat whose window has passed is
+    // offered a choice between keeping it (turning its TTL off) and deleting it.
+    if (_expiryChecked != widget.chatId) {
+      _expiryChecked = widget.chatId;
+      _checkExpiry(context, chat.state);
     }
 
     return Scaffold(
@@ -440,6 +491,61 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   .bodySmall
                   ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
+          if (state.tempTtlExpiresAt != null)
+            _TtlLine(expiresAt: state.tempTtlExpiresAt!),
         ],
       );
+}
+
+/// The hourglass and time-remaining shown in the title bar of a temporary
+/// chat. Ticks once a minute on its own timer so the countdown stays accurate
+/// without re-rendering the rest of the app bar; the timer lives only while the
+/// title is showing, which is while the user is reading the chat.
+class _TtlLine extends StatefulWidget {
+  const _TtlLine({required this.expiresAt});
+
+  final DateTime expiresAt;
+
+  @override
+  State<_TtlLine> createState() => _TtlLineState();
+}
+
+class _TtlLineState extends State<_TtlLine> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final remaining = widget.expiresAt.difference(DateTime.now());
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.hourglass_empty,
+          size: 14,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          formatRemaining(remaining),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
 }

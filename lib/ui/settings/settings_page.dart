@@ -6,6 +6,7 @@ import "../../domain/app_theme.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project.dart";
+import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/anchored_menu.dart";
@@ -118,6 +119,8 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           _AppearanceSection(),
           Divider(),
           _AgentSection(),
+          Divider(),
+          _TempChatSection(),
           Divider(),
           _EnvironmentSection(),
           Divider(),
@@ -405,6 +408,43 @@ class _AgentSection extends ConsumerWidget {
             ),
             onChanged: (choice) =>
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TempChatSection extends ConsumerWidget {
+  const _TempChatSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(
+          "Temporary chats",
+          description: "Chats that are hidden and then deleted after a delay "
+              "from when their TTL was enabled. A project or an individual chat "
+              "can override this.",
+        ),
+        LabelledField(
+          label: "Delete chats after",
+          child: DropdownButtonFormField<TempChatTtl>(
+            initialValue: settings.tempChatTtl,
+            isExpanded: true,
+            decoration: const InputDecoration(border: OutlineInputBorder()),
+            items: [
+              for (final entry in tempChatTtlLabels.entries)
+                DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                ref.read(appSettingsProvider.notifier).setTempChatTtl(value);
+              }
+            },
           ),
         ),
       ],

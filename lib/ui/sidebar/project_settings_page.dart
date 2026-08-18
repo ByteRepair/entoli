@@ -2,11 +2,13 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../profile/profile_page.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/resettable_field.dart";
 import "../workspace/workspace_page.dart";
 import "sidebar.dart";
 
@@ -86,6 +88,8 @@ class ProjectSettingsPage extends ConsumerWidget {
           const Divider(),
           _ProfileRow(project: project),
           const Divider(),
+          _TempChatTtlRow(project: project),
+          const Divider(),
           DestructiveButton(
             icon: Icons.delete,
             label: "Delete project",
@@ -155,6 +159,28 @@ class _ProfileRow extends ConsumerWidget {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => ProfilePage(project: project)),
       ),
+    );
+  }
+}
+
+/// The project's temporary-chat TTL override. Null means inherit the app
+/// default; the inherited value is named in the Default entry.
+class _TempChatTtlRow extends ConsumerWidget {
+  const _TempChatTtlRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    final appTtl = ref.watch(appSettingsProvider).tempChatTtl;
+    return InheritableDropdown<TempChatTtl>(
+      label: "Temporary chats",
+      value: settings.tempChatTtl,
+      inherited: appTtl.label,
+      options: tempChatTtlLabels,
+      onChanged: (v) =>
+          ref.read(projectSettingsProvider(project).notifier).setTempChatTtl(v),
     );
   }
 }

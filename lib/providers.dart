@@ -19,6 +19,7 @@ import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
+import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
 import "ui/widgets/provider_model_selector.dart";
 
@@ -77,6 +78,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
+
+  /// How long a temporary chat lives. App-level default; a project and a chat
+  /// can override it.
+  Future<void> setTempChatTtl(TempChatTtl ttl) =>
+      _update((s) => s.tempChatTtl = ttl);
 
   /// The endpoints the agent can call. The model list is rebuilt from them, so
   /// it is invalidated here rather than left showing the old one.
@@ -183,6 +189,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
 
   Future<void> setProfile(Profile? profile) async {
     final next = state.copy()..profile = profile;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Override the app-level temporary-chat TTL for this project. Null means
+  /// inherit the app default.
+  Future<void> setTempChatTtl(TempChatTtl? ttl) async {
+    final next = state.copy()..tempChatTtl = ttl;
     state = next;
     await next.save(_config, project: project);
   }
