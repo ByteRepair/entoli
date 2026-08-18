@@ -5,6 +5,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 
 import "package:agent_chat/domain/app_icon.dart";
+import "package:agent_chat/domain/app_restart.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
 import "package:agent_chat/domain/backup_handoff.dart";
@@ -117,6 +118,17 @@ class FakeAttachmentPicker implements AttachmentPicker {
     picks.add(kind);
     return scripted;
   }
+}
+
+/// The app building itself again, which a test has no `AppRoot` to do. Counted
+/// rather than performed: what a restore has to reach is everything read out of
+/// the data directory at startup, and a test asserting on that would be
+/// asserting on `AppSession`.
+class FakeAppRestart implements AppRestart {
+  var restarts = 0;
+
+  @override
+  Future<void> restart() async => restarts++;
 }
 
 /// The save dialog and the chooser a backup leaves and arrives through, neither

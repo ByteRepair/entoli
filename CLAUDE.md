@@ -1776,9 +1776,9 @@ than under a full-screen copy of itself.
 ### Backing it all up
 
 The Data category is two buttons: Export writes the whole data directory as one
-zip, Import replaces the whole data directory with one. `domain/backup.dart` is
-the format, `BackupHandoff` is how the file leaves and arrives, and
-`ChatRepository` is where the two meet what the app is already holding.
+zip, Import replaces the whole data directory with one and starts the app again
+on what was restored. `domain/backup.dart` is the format, `BackupHandoff` is how
+the file leaves and arrives, and `AppRestart` is what makes a restore land.
 
 **The members are the files.** Each one is at the path it has under the data
 directory, in its own bytes, so a backup opens in any file manager and a
@@ -1795,12 +1795,13 @@ which a workspace the agent has run `npm install` in is not. Deflate takes
 while it is being written out. The one thing JSON was better at, saying what the
 document is before anything is deleted for it, a member gives back.
 
-That member is `entoli-backup.json`, holding the format name, the version and
-when the backup was made. ZIP's own comment field would have carried it —
-`archive` writes one — but reading it back means reaching into
-`ZipDecoder.directory` and it is decoded as latin-1, while a member is read
-through the same API as everything else and is there for whoever opens the file.
-A data directory holding a file of that name would have it shadowed; nothing
+That member is `backup-meta.json`, holding the format name, the version and when
+the backup was made — meta about the backup rather than a file of the data
+directory, which is what the name says. ZIP's own comment field would have
+carried it, and `archive` writes one, but reading it back means reaching into
+`ZipDecoder.directory` and it is decoded as latin-1; a member is read through
+the same API as everything else and is there for whoever opens the file. A data
+directory holding a file of that name would have it shadowed, and nothing
 creates one.
 
 **A restore replaces.** A merge would leave a chat deleted before the backup was
@@ -1808,22 +1809,34 @@ made alive again beside one written after it, which is not what "restore" means.
 So the parse comes first and refuses everything it can — not a zip, no manifest,
 another format, a newer version — before `restoreBackup` has deleted anything,
 and a member's name goes through `safeRelativePath` for the reason a shared
-file's path does.
+file's path does. A turn still running is refused rather than restored over: it
+would go on appending to a log that is gone.
 
-What the app holds in memory is the other half, and it is why this goes through
-`ChatRepository.importBackup` rather than straight at the filesystem. The chats
-are dropped with `deleteAllChats`, which is what takes each one's live session
-with it and clears the store's idea of which project it is in — both would
-otherwise answer for a chat the restore has just replaced. `Documents` is
-re-read by `AppConfig.hydrateDocuments`, since `settings.json` is served from
-memory and would otherwise be the one that was just overwritten;
-`Documents.hydrate` clears before it reads, so a setting the backup does not
-hold stops being answered rather than lingering. The page then clears the
-selection and invalidates the providers that read through the config. A turn
-still running is refused rather than restored over — it would go on appending to
-a log that is gone. Only the `PromptLibrary` cannot be rebuilt, being read once
-at startup, so the confirmation says the user's own commands and agents appear
-after a restart.
+**Then the app is built again, and that is the whole of the other half.** The
+app is full of things read out of the data directory exactly once — settings
+served from memory by `Documents`, the `PromptLibrary`, a live session per chat,
+the store's idea of which project each chat is in, the draft the repository
+holds. Telling each of those to look afresh was the first version, and it is a
+list that has to grow every time something new is read at startup and is
+silently wrong when it does not: the reload the user notices missing is the one
+nobody remembered to add. So `AppRestart` rebuilds instead, and everything that
+was reading the old files is thrown away with the container that held them.
+
+Nothing in Flutter re-runs `main` — hot restart is the VM's, and only where
+there is a VM service to ask — so `AppSession` is `main`'s work made into a
+thing that can be done twice, and `AppRoot` is the widget that does it: build
+the next session while the old one is still on screen, swap it in under a key of
+its own so nothing below is reused, and drop the old one in a post-frame
+callback, since disposing a container the widgets reading it are still mounted
+against is disposing it under them. `AppRelaunch` is the mutable relay in
+between, because the first session is built before there is a root to ask — and
+that is `main`'s doing rather than an accident, since a root that booted itself
+would hand the platform's splash a blank frame to cover.
+
+What a restart costs is worth knowing: every `LlmClient`, every session and the
+prompt library are built again, and the sidebar reopens with nothing selected.
+That is the price of not maintaining the list, and it is paid once, by someone
+who has just asked for their data to be replaced.
 
 `BackupHandoff` is a port of its own rather than two more members on
 `FileHandoff`: that one is the workspace explorer's, and its per-platform

@@ -47,17 +47,13 @@ class AppConfig {
   static Future<AppConfig> load(FileSystem fs, String dataDir) async {
     final config = AppConfig._(dataDir, fs);
     await config.ensureDirs();
-    await config.hydrateDocuments();
+    await config.documents.hydrate([
+      config.settingsFile,
+      for (final project in everyProject(await config.projectNames()))
+        config.projectSettingsFile(project: project),
+    ]);
     return config;
   }
-
-  /// Read the synchronously-served documents in. Once at startup, and again
-  /// after a restore has replaced the files under them.
-  Future<void> hydrateDocuments() async => documents.hydrate([
-        settingsFile,
-        for (final project in everyProject(await projectNames()))
-          projectSettingsFile(project: project),
-      ]);
 
   String get projectsDir => fs.path.join(dataDir, "projects");
 

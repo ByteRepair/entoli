@@ -4,9 +4,11 @@ import "dart:typed_data";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/backup.dart";
+import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
-import "package:agent_chat/ui/sidebar/sidebar.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -34,10 +36,16 @@ void main() {
     await settle(tester);
   }
 
+  /// The chats a restarted app would find, read through a store of their own:
+  /// the one the page is holding was built before the restore and caches which
+  /// project each chat is in, which is exactly what the restart replaces.
+  Future<List<ChatState>> onDisk(WidgetTester tester) =>
+      io(tester, () => FileChatStore(app.config).list());
+
   /// A backup of everything the app has on disk right now, made the way Export
   /// makes one.
   Future<Uint8List> exported(WidgetTester tester) =>
-      io(tester, () => app.repo.exportBackup());
+      io(tester, () => writeBackup(app.container.read(appConfigProvider)));
 
   testWidgets("Export hands the whole data directory over as a zip", (tester) async {
     await io(tester, () => app.seedChat(title: "kept"));
@@ -64,24 +72,35 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, "Cancel"));
     await settle(tester);
 
-    expect(await io(tester, () => app.repo.listChats()), hasLength(2));
+    expect(await onDisk(tester), hasLength(2));
+    expect(app.restart.restarts, 0);
   });
 
   testWidgets("and replaces them once it has been told to", (tester) async {
     await io(tester, () => app.seedChat(title: "in the backup"));
     app.backups.scripted = await exported(tester);
-    final since = await io(tester, () => app.seedChat(title: "added since"));
-    app.container.read(selectedChatIdProvider.notifier).select(since.state.id);
+    await io(tester, () => app.seedChat(title: "added since"));
     await openData(tester);
 
     await press(tester, "Import");
     await tester.tap(find.widgetWithText(TextButton, "Restore"));
     await settle(tester);
 
-    final chats = await io(tester, () => app.repo.listChats());
-    expect(chats.map((c) => c.title), ["in the backup"]);
-    // The chat that was open is not in the restored conversation list.
-    expect(app.container.read(selectedChatIdProvider), isNull);
+    expect((await onDisk(tester)).map((c) => c.title), ["in the backup"]);
+  });
+
+  // Everything the app read out of the data directory at startup is a restore
+  // behind it, and rebuilding is what puts that right rather than a list of
+  // things to invalidate.
+  testWidgets("and then builds the app again", (tester) async {
+    app.backups.scripted = await exported(tester);
+    await openData(tester);
+
+    await press(tester, "Import");
+    await tester.tap(find.widgetWithText(TextButton, "Restore"));
+    await settle(tester);
+
+    expect(app.restart.restarts, 1);
   });
 
   testWidgets("a file that is not a backup is refused, and nothing is lost",
@@ -94,7 +113,8 @@ void main() {
 
     expect(find.text("Restore this backup?"), findsNothing);
     expect(find.textContaining("cannot be restored"), findsOneWidget);
-    expect(await io(tester, () => app.repo.listChats()), hasLength(1));
+    expect(await onDisk(tester), hasLength(1));
+    expect(app.restart.restarts, 0);
   });
 
   // A turn appends to the log of a chat a restore is about to delete, and it
@@ -126,8 +146,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, "Restore"));
     await settle(tester);
 
-    final restored = await io(tester, () => app.repo.listChats());
-    expect(restored.single.title, "with a file");
+    expect((await onDisk(tester)).single.title, "with a file");
     final resources = Directory(app.config.resourcesDir(chat.state.id));
     expect(resources.listSync(), hasLength(1));
     expect((resources.listSync().single as File).readAsBytesSync(), onePixelPng);

@@ -3,7 +3,6 @@ import "dart:typed_data";
 import "../core/config.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
-import "../domain/backup.dart";
 import "../domain/chat_log.dart";
 import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
@@ -311,24 +310,6 @@ class ChatRepository {
   Future<void> deleteAllChats() async {
     final chats = await listChats();
     await Future.wait(chats.map((c) => deleteChat(c.id)));
-  }
-
-  /// Everything under the data directory as one JSON document — see
-  /// `domain/backup.dart` for what is in it.
-  Future<Uint8List> exportBackup() => writeBackup(_config);
-
-  /// Put one back, replacing what is here. It takes a parsed [Backup] rather
-  /// than the file's bytes so that a document that cannot be read is refused by
-  /// the caller, before this has deleted anything for it.
-  ///
-  /// The chats go through [deleteAllChats] rather than being unlinked from
-  /// underneath the app: that is what drops each one's live session and the
-  /// store's idea of which project it is in, both of which would otherwise
-  /// answer for a chat the restore has just replaced.
-  Future<void> importBackup(Backup backup) async {
-    await deleteAllChats();
-    if (_draft != null) await _dropSession(_draft!.state.id);
-    await restoreBackup(_config, backup);
   }
 
   /// Delete every expired chat except [exceptId] (the one currently open, which

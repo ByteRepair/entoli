@@ -711,7 +711,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   var _busy = false;
 
   Future<void> _export() => _guard(() async {
-        final bytes = await ref.read(chatRepositoryProvider).exportBackup();
+        final bytes = await writeBackup(ref.read(appConfigProvider));
         await ref.read(backupHandoffProvider).save(backupFilename(DateTime.now()), bytes);
         _say("Backup written — ${formatSize(bytes.length)}.");
       });
@@ -738,28 +738,19 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
       context,
       title: "Restore this backup?",
       message: "${_describe(backup)}\n\nEverything here now — every chat, "
-          "project, workspace and setting — is replaced by what is in it. Your "
-          "own commands and agents come back too, but only appear after the "
-          "app is restarted.",
+          "project, workspace and setting — is replaced by what is in it, and "
+          "Entoli starts again on what was restored.",
       confirmLabel: "Restore",
       destructive: true,
     );
     if (!confirmed) return;
 
     await _guard(() async {
-      await ref.read(chatRepositoryProvider).importBackup(backup);
-      if (!mounted) return;
-      // What the app is holding was read out of the files that have just been
-      // replaced: the selection points at a chat that may be gone, and every
-      // provider below reads through the config.
-      ref.read(selectedChatIdProvider.notifier).select(null);
-      ref.read(selectedProjectProvider.notifier).select(null);
-      ref.invalidate(appSettingsProvider);
-      ref.invalidate(projectSettingsProvider);
-      ref.invalidate(chatListProvider);
-      ref.invalidate(projectListProvider);
-      ref.invalidate(availableModelsProvider);
-      _say("Restored ${backup.chats} ${backup.chats == 1 ? "chat" : "chats"}.");
+      await restoreBackup(ref.read(appConfigProvider), backup);
+      // Everything the app read out of those files at startup is now a restore
+      // behind them, so it is built again rather than told to look afresh —
+      // this widget goes with it, which is why nothing is said afterwards.
+      await ref.read(appRestartProvider).restart();
     });
   }
 

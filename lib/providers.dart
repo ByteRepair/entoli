@@ -8,6 +8,7 @@ import "domain/agent_backend.dart";
 import "domain/attachment_picker.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
+import "domain/app_restart.dart";
 import "domain/app_settings.dart";
 import "domain/app_theme.dart";
 import "domain/chat_repository.dart";
@@ -30,6 +31,7 @@ final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError(
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
 final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
 final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
+final appRestartProvider = Provider<AppRestart>((ref) => throw UnimplementedError());
 
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.

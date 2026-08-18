@@ -102,27 +102,6 @@ void main() {
     expect(Directory("${config.dataDir}/chats/later").existsSync(), isFalse);
   });
 
-  // The documents are served from memory, so a restore that did not re-read
-  // them would answer every command with the settings it just replaced.
-  test("the settings held in memory are re-read", () async {
-    write("settings.json", '{"appTheme":"dark"}');
-    final backup = await roundTrip();
-    await config.documents.write(config.settingsFile, '{"appTheme":"light"}');
-
-    await restoreBackup(config, backup);
-
-    expect(config.documents.read(config.settingsFile), '{"appTheme":"dark"}');
-  });
-
-  test("a backup with no settings in it forgets the ones held", () async {
-    final backup = await roundTrip();
-    await config.documents.write(config.settingsFile, '{"appTheme":"light"}');
-
-    await restoreBackup(config, backup);
-
-    expect(config.documents.read(config.settingsFile), isNull);
-  });
-
   test("the directories the app needs are there whatever the backup held",
       () async {
     final backup = await roundTrip();

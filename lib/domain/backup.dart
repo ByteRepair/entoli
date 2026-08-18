@@ -29,6 +29,10 @@ import "workspace.dart";
 /// means reaching into `ZipDecoder.directory`, and it is decoded as latin-1. A
 /// member is read through the same API as everything else, and is there for
 /// whoever opens the file to read.
+///
+/// Restoring is only half of putting a backup back: what the app has already
+/// read out of the data directory is the other half, and `AppRestart` is what
+/// answers for it.
 
 /// What the manifest says this is. A zip without one is refused before anything
 /// has been deleted for it.
@@ -38,10 +42,11 @@ const backupFormat = "entoli-backup";
 /// claiming a higher one is refused rather than half-restored.
 const backupVersion = 1;
 
-/// The manifest's name in the archive. A data directory does not hold a file
-/// called this; one that did would be shadowed by the manifest and left out of
-/// its own backup.
-const manifestName = "entoli-backup.json";
+/// The manifest's name in the archive — meta about the backup rather than a
+/// file of the data directory, which is what the name says. Nothing creates a
+/// file called this under the data directory; one that existed would be
+/// shadowed by the manifest and left out of its own backup.
+const manifestName = "backup-meta.json";
 
 /// A backup that cannot be read. The message is shown to the user, so it says
 /// what is wrong with the file rather than where the read gave up.
@@ -186,10 +191,8 @@ Future<void> restoreBackup(AppConfig config, Backup backup) async {
     entry.key.clear();
   }
 
-  // A backup holding none of them is still a working app afterwards, and the
-  // documents held in memory are now a restore behind the files under them.
+  // A backup holding none of them is still a working app afterwards.
   await config.ensureDirs();
-  await config.hydrateDocuments();
 }
 
 /// What the export writes the file as. The time is in it because two backups in
