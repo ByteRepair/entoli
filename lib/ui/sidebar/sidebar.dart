@@ -39,10 +39,10 @@ void openChat(BuildContext context, WidgetRef ref, String chatId) {
   closeNavDrawer(context);
 }
 
-/// Show a project, and put a new chat in it. A chat of the project being left
-/// is not in the list any more, so keeping it selected would leave the pane
-/// showing something the sidebar denies. The switcher and the empty pane's
-/// badges are the same action.
+/// Switch to a project. A chat of the one being left is not in the list any
+/// more, so keeping it selected would leave the pane showing something the
+/// sidebar denies. The switcher, the empty pane's badges and deleting a project
+/// are all this.
 void selectProject(WidgetRef ref, String? project) {
   ref.read(selectedProjectProvider.notifier).select(project);
   ref.read(selectedChatIdProvider.notifier).select(null);

@@ -1259,10 +1259,11 @@ Above them are the projects, as badges, and that is the same discovery
 `_EmptyChat` does for commands: the switcher at the top of the sidebar is the
 only place a project is named, and the sidebar is what this pane is drawn
 instead of. Picking one is `selectProject` — the switcher's own action, lifted
-out of `_ProjectMenu` so the two cannot come to disagree about what switching
-means. **The badge is where the project changes, not either button**: New Chat
-and Open Chat act on what is already picked out, so pressing one is never also a
-choice about where it lands.
+out of `_ProjectMenu` so that nothing that switches projects can come to
+disagree about what switching means. Deleting one goes through it too. **The
+badge is where the project changes, not either button**: New Chat and Open Chat
+act on what is already picked out, so pressing one is never also a choice about
+where it lands.
 
 **The default project is nothing selected**, and so has no badge. It is not a
 project beside the others — it is the absence of one, which is what `null`

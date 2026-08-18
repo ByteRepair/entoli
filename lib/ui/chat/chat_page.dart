@@ -81,23 +81,15 @@ class _NoChat extends ConsumerWidget {
 }
 
 /// The named projects, as badges, with the one a new chat would land in picked
-/// out. Both buttons below act on it, so it is chosen here rather than by
-/// either of them — the same rule the sidebar's switcher keeps.
-///
-/// **The default project is nothing selected**, so it has no badge of its own:
-/// it is not a project beside the others but the absence of one, and a badge
-/// saying so would be a fourth thing to press to get back to where the app
-/// opens. Pressing the selected badge is what leaves a project, which is what
-/// makes the row a set of toggles rather than a set with one always down.
-///
-/// With no named projects there is nothing here at all, which is the whole of
-/// what a user who has never made one sees.
+/// out. The default project is nothing selected, so it has no badge — see
+/// "The chat page" in CLAUDE.md.
 class _ProjectBadges extends ConsumerWidget {
   const _ProjectBadges();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final named = ref.watch(projectListProvider).value ?? const [];
+    // The padding would otherwise be a gap under nothing.
     if (named.isEmpty) return const SizedBox.shrink();
     final selected = ref.watch(selectedProjectProvider);
     return Padding(
