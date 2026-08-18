@@ -3,8 +3,11 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/project.dart";
+import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 
 import "../harness.dart";
@@ -396,6 +399,121 @@ void main() {
 
         expect(find.byType(Sidebar), findsNothing);
       });
+    });
+  });
+
+  group("pinning", () {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await settleIo(tester);
+    }
+
+    testWidgets("the context menu offers Pin on an unpinned chat", (tester) async {
+      await io(tester, () => app.seedChat(title: "a chat"));
+      await pumpBeside(tester);
+
+      await openMenu(tester);
+
+      expect(find.text("Pin"), findsOneWidget);
+      expect(find.text("Unpin"), findsNothing);
+    });
+
+    testWidgets("pinning moves the chat under the Pinned heading", (tester) async {
+      await io(tester, () => app.seedChat(title: "to pin"));
+      await pumpBeside(tester);
+
+      await openMenu(tester);
+      await tester.tap(find.text("Pin"));
+      await pumpUntil(tester, find.text(pinnedHeading));
+
+      expect(find.text(pinnedHeading), findsOneWidget);
+      expect(find.text("to pin"), findsOneWidget);
+      // The date group it was in is gone — the chat left it.
+      expect(find.text("Today"), findsNothing);
+    });
+
+    testWidgets("the menu offers Unpin once it is pinned", (tester) async {
+      await io(tester, () => app.seedChat(title: "to pin"));
+      await pumpBeside(tester);
+      await openMenu(tester);
+      await tester.tap(find.text("Pin"));
+      await pumpUntil(tester, find.text(pinnedHeading));
+      await settleIo(tester);
+
+      await openMenu(tester);
+
+      expect(find.text("Unpin"), findsOneWidget);
+      expect(find.text("Pin"), findsNothing);
+    });
+
+    testWidgets("unpinning moves the chat back to its date group", (tester) async {
+      await io(tester, () => app.seedChat(title: "to pin"));
+      await pumpBeside(tester);
+      await openMenu(tester);
+      await tester.tap(find.text("Pin"));
+      await pumpUntil(tester, find.text(pinnedHeading));
+      await settleIo(tester);
+
+      await openMenu(tester);
+      await tester.tap(find.text("Unpin"));
+      await pumpUntil(tester, find.text("Today"));
+
+      expect(find.text(pinnedHeading), findsNothing);
+      expect(find.text("Today"), findsOneWidget);
+      expect(find.text("to pin"), findsOneWidget);
+    });
+
+    testWidgets("pinning a temporary chat clears its expiry", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "temp"));
+      // Make it temporary at the chat level: an off→non-off change re-anchors.
+      await io(tester, () => app.seedChatMeta(chat.state.id,
+          ChatMeta(tempChatTtl: TempChatTtl.hours24)));
+      await io(tester, () => app.repo.saveState(chat.state, reanchor: true));
+      await pumpBeside(tester);
+      // The hourglass says it is temporary.
+      expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);
+
+      await openMenu(tester);
+      await tester.tap(find.text("Pin"));
+      await pumpUntil(tester, find.text(pinnedHeading));
+      await settleIo(tester);
+
+      expect(find.byIcon(Icons.hourglass_empty), findsNothing);
+      final saved = await io(tester, () => app.repo.openChat(chat.state.id));
+      expect(saved.state.pinned, isTrue);
+      expect(saved.state.tempTtlExpiresAt, isNull);
+      expect(saved.state.tempTtlSince, isNull);
+    });
+
+    testWidgets("pinning sets the chat's TTL override to off", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "to pin"));
+      await io(tester, () => app.seedChatMeta(chat.state.id,
+          ChatMeta(tempChatTtl: TempChatTtl.hours24)));
+
+      await pumpBeside(tester);
+      await openMenu(tester);
+      await tester.tap(find.text("Pin"));
+      await pumpUntil(tester, find.text(pinnedHeading));
+      await settleIo(tester);
+
+      final meta = await io(tester, () => app.savedMeta(chat.state.id));
+      expect(meta.tempChatTtl, TempChatTtl.off);
+    });
+
+    testWidgets("unpinning leaves the TTL override at off", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "to pin"));
+      await pumpBeside(tester);
+      await openMenu(tester);
+      await tester.tap(find.text("Pin"));
+      await pumpUntil(tester, find.text(pinnedHeading));
+      await settleIo(tester);
+      await openMenu(tester);
+      await tester.tap(find.text("Unpin"));
+      await pumpUntil(tester, find.text("Today"));
+      await settleIo(tester);
+
+      final meta = await io(tester, () => app.savedMeta(chat.state.id));
+      expect(meta.tempChatTtl, TempChatTtl.off);
     });
   });
 }

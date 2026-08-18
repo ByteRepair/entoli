@@ -20,6 +20,13 @@ abstract class ChatState with _$ChatState {
     /// is in the project it was moved to.
     String? project,
 
+    /// Whether this chat is pinned. Pinned chats sit under a "Pinned" heading
+    /// ahead of the date groups in the sidebar, show a pin in the chat title
+    /// bar, and cannot be temporary — pinning clears the TTL anchor and
+    /// overrides `meta.tempChatTtl` to off. Set by `ChatRepository.pinChat`,
+    /// cleared by `unpinChat`.
+    @Default(false) bool pinned,
+
     /// When this chat's temporary TTL was enabled. Set once when the resolved
     /// TTL becomes non-off, cleared when it goes back to off. Maintained by
     /// `ChatRepository.saveState`, which sees the resolved TTL; the sidebar
