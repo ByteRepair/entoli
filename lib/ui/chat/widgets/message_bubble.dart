@@ -319,33 +319,81 @@ class _MessageBubbleState extends State<MessageBubble> {
       spoken.clear();
     }
 
+    // A run of consecutive non-important activity labels, gathered so two or
+    // more of them can sit behind one centered "Expand activities" toggle
+    // rather than stacking above the reply. What is important and so breaks a
+    // run: an artifact button, a failed tool run, an `ask_user` question, and
+    // the live label a running turn is working on. Text, errors and files are
+    // not labels and break a run too. A `ToolResultPart` whose call is present
+    // is drawn by that call's label, so it neither joins nor breaks a run.
+    List<Widget> run = [];
+    var runStart = -1;
+
+    bool isLive(int i) => i == liveAt;
+    bool failedResult(String? callId) =>
+        callId != null && (results[callId]?.returnCode ?? 0) != 0;
+
+    void flushRun() {
+      if (run.isEmpty) return;
+      closeBubble();
+      if (run.length >= 2) {
+        rows.add(ActivityGroup(key: ValueKey(runStart), children: run));
+      } else {
+        rows.addAll(run);
+      }
+      run = [];
+      runStart = -1;
+    }
+
     for (var i = 0; i < parts.length; i++) {
       final part = parts[i];
       switch (part) {
         case ReasoningPart():
-          closeBubble();
-          rows.add(_label(ThinkingLabel(
-            part: part,
-            isLive: i == liveAt && part.durationMs == null,
-          )));
+          // The block being written right now is what the turn is busy with.
+          if (isLive(i) && part.durationMs == null) {
+            flushRun();
+            rows.add(_label(ThinkingLabel(part: part, isLive: true)));
+            break;
+          }
+          if (runStart == -1) runStart = i;
+          run.add(_label(ThinkingLabel(part: part)));
         case ToolCallPart(:final toolCall):
-          closeBubble();
-          rows.add(_label(switch (toolCall.name) {
-            askToolName => AskLabel(call: toolCall, result: results[toolCall.id]),
+          // A question to the user is important; so is a live call and a call
+          // that came back non-zero. The rest join the run.
+          if (toolCall.name == askToolName || isLive(i) || failedResult(toolCall.id)) {
+            flushRun();
+            rows.add(_label(switch (toolCall.name) {
+              askToolName => AskLabel(call: toolCall, result: results[toolCall.id]),
+              "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
+              "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
+              "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
+              _ => ToolLabel(call: toolCall, result: results[toolCall.id]),
+            }));
+            break;
+          }
+          if (runStart == -1) runStart = i;
+          run.add(_label(switch (toolCall.name) {
             "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
             "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
             "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
             _ => ToolLabel(call: toolCall, result: results[toolCall.id]),
           }));
         case ToolResultPart(:final result):
-          // Already drawn by the call it answers, unless the call is gone.
+          // Already drawn by the call it answers, unless the call is gone. An
+          // orphaned failed result is important; an orphaned success joins the
+          // run for the same reason any other success would.
           if (calls.contains(result.callId)) continue;
-          closeBubble();
-          rows.add(_label(ToolLabel(result: result)));
+          if (result.returnCode != 0) {
+            flushRun();
+            rows.add(_label(ToolLabel(result: result)));
+          } else {
+            if (runStart == -1) runStart = i;
+            run.add(_label(ToolLabel(result: result)));
+          }
         case FilePart():
           continue;
         case ArtifactPart(:final artifactId, :final entryFile, :final title):
-          closeBubble();
+          flushRun();
           rows.add(ArtifactLabel(
             chatId: widget.chatId,
             artifactId: artifactId,
@@ -356,11 +404,14 @@ class _MessageBubbleState extends State<MessageBubble> {
           // Text with a tool call under it stopped arriving before the call
           // started, so a caret there would point at nothing while the label
           // below it is what is busy.
+          flushRun();
           spoken.add(said(text, caret: i == liveAt));
         case ErrorPart(:final message):
+          flushRun();
           spoken.add(said("Error: $message", isError: true));
       }
     }
+    flushRun();
     closeBubble(trailing: extras);
     return rows;
   }

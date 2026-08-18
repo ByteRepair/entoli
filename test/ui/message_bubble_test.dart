@@ -437,6 +437,8 @@ void main() {
   });
 
   // The turn as it happened: thinking, a tool, thinking again, then the reply.
+  // Three non-important activities in a row collapse behind a single toggle, so
+  // the ordering is only visible once it is expanded.
   testWidgets("labels stack above the bubble in the order they happened", (tester) async {
     await pump(
       tester,
@@ -449,11 +451,162 @@ void main() {
       ]),
     );
 
+    expect(find.text("Expand activities"), findsOneWidget);
+    await tester.tap(find.text("Expand activities"));
+    await tester.pumpAndSettle();
+
     double y(String text) => tester.getTopLeft(find.text(text)).dy;
 
     expect(y("Thought for 4 seconds"), lessThan(y("Used tool: bash")));
     expect(y("Used tool: bash"), lessThan(y("Thought for 2 seconds")));
     expect(y("Thought for 2 seconds"), lessThan(y("you are in /workspace")));
+  });
+
+  testWidgets("two or more activities collapse behind an Expand activities toggle",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "hmm", durationMs: 1000),
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "pwd")),
+        ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "/w")),
+        TextPart(text: "done"),
+      ]),
+    );
+
+    expect(find.text("Expand activities"), findsOneWidget);
+    expect(find.text("Thought for 1 second"), findsNothing);
+    expect(find.text("Used tool: bash"), findsNothing);
+
+    await tester.tap(find.text("Expand activities"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Collapse activities"), findsOneWidget);
+    expect(find.text("Thought for 1 second"), findsOneWidget);
+    expect(find.text("Used tool: bash"), findsOneWidget);
+
+    await tester.tap(find.text("Collapse activities"));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Expand activities"), findsOneWidget);
+    expect(find.text("Thought for 1 second"), findsNothing);
+    expect(find.text("Used tool: bash"), findsNothing);
+  });
+
+  testWidgets("a single activity label renders no toggle", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "pwd")),
+        ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "/w")),
+        TextPart(text: "done"),
+      ]),
+    );
+
+    expect(find.text("Expand activities"), findsNothing);
+    expect(find.text("Used tool: bash"), findsOneWidget);
+  });
+
+  testWidgets("an artifact between two runs keeps each run collapsed on its own",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "hmm", durationMs: 1000),
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "pwd")),
+        ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "/w")),
+        MessagePart.artifact(artifactId: "a1", entryFile: "index.html", title: "Demo"),
+        ReasoningPart(text: "more", durationMs: 1000),
+        ToolCallPart(toolCall: ToolCall(id: "c2", name: "bash", argumentsText: "ls")),
+        ToolResultPart(result: ToolResult(callId: "c2", returnCode: 0, output: "x")),
+        TextPart(text: "done"),
+      ]),
+    );
+
+    expect(find.text("Expand activities"), findsNWidgets(2));
+    expect(find.text("Demo"), findsOneWidget);
+  });
+
+  testWidgets("a failed tool run inside a sequence stays visible and breaks the run",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "hmm", durationMs: 1000),
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "nope")),
+        ToolResultPart(result: ToolResult(callId: "c1", returnCode: 1, output: "", exceptionInfo: "boom")),
+        ReasoningPart(text: "more", durationMs: 1000),
+        ToolCallPart(toolCall: ToolCall(id: "c2", name: "bash", argumentsText: "ls")),
+        ToolResultPart(result: ToolResult(callId: "c2", returnCode: 0, output: "x")),
+        TextPart(text: "done"),
+      ]),
+    );
+
+    // The failed call is out in the open; the thinking before it is a lone
+    // label (no toggle); the two after it collapse.
+    expect(find.text("Used tool: bash"), findsOneWidget);
+    expect(find.text("Expand activities"), findsOneWidget);
+    expect(find.text("Thought for 1 second"), findsOneWidget);
+  });
+
+  testWidgets("an ask_user question inside a sequence stays visible", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [
+        const ReasoningPart(text: "hmm", durationMs: 1000),
+        ToolCallPart(
+          toolCall: ToolCall(
+            id: "a1",
+            name: askToolName,
+            argumentsJson: jsonEncode({
+              "questions": [
+                {"question": "Which?", "options": [{"label": "A"}, {"label": "B"}]},
+              ],
+            }),
+          ),
+        ),
+        ToolResultPart(
+          result: ToolResult(callId: "a1", returnCode: 0, output: askAnswers(const [AskQuestion(question: "Which?", options: [AskOption(label: "A")])], ["A"])),
+        ),
+        const ReasoningPart(text: "ok", durationMs: 1000),
+        const ToolCallPart(toolCall: ToolCall(id: "c2", name: "bash", argumentsText: "ls")),
+        const ToolResultPart(result: ToolResult(callId: "c2", returnCode: 0, output: "x")),
+        const TextPart(text: "done"),
+      ]),
+    );
+
+    expect(find.text("Which?"), findsOneWidget);
+    // The thinking before the question is a lone label; the two after collapse.
+    expect(find.text("Expand activities"), findsOneWidget);
+  });
+
+  testWidgets("a live thinking block is not collapsed", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "earlier", durationMs: 1000),
+        ReasoningPart(text: "now"),
+      ]),
+      isWaiting: true,
+    );
+
+    expect(find.text("Thinking…"), findsOneWidget);
+    expect(find.text("Thought for 1 second"), findsOneWidget);
+    expect(find.text("Expand activities"), findsNothing);
+  });
+
+  testWidgets("a live tool call is not collapsed", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ReasoningPart(text: "earlier", durationMs: 1000),
+        ToolCallPart(toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "sleep 60")),
+      ]),
+      isWaiting: true,
+    );
+
+    expect(find.text("Using tool: bash"), findsOneWidget);
+    expect(find.text("Expand activities"), findsNothing);
   });
 
   testWidgets("text before a tool call keeps its own bubble", (tester) async {

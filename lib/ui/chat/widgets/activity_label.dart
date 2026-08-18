@@ -242,6 +242,59 @@ class WebFetchLabel extends StatelessWidget {
   }
 }
 
+/// A run of consecutive non-important activity labels (thinking and tool runs
+/// that are not artifacts, not failed, not [AskLabel], and not the live label of
+/// a running turn), gathered by [MessageBubble._rows] and shown behind a single
+/// centered toggle. Two or more such labels in a row are worth hiding behind it;
+/// one on its own is not, and `_rows` leaves a lone label where it is.
+///
+/// State is per-run and in-memory: a run is [ValueKey]ed on its first part's
+/// index so a per-delta rebuild of the message keeps the same [_collapsed]
+/// across the rebuilds the streamer triggers, but a reload or a thread switch
+/// starts collapsed again, the way every fresh view does.
+class ActivityGroup extends StatefulWidget {
+  const ActivityGroup({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  State<ActivityGroup> createState() => _ActivityGroupState();
+}
+
+class _ActivityGroupState extends State<ActivityGroup> {
+  bool _collapsed = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SelectionContainer.disabled(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.center,
+            child: TextButton.icon(
+              onPressed: () => setState(() => _collapsed = !_collapsed),
+              icon: Icon(_collapsed ? Icons.expand_more : Icons.expand_less, size: 16),
+              label: Text(_collapsed ? "Expand activities" : "Collapse activities"),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.onSurfaceVariant,
+                textStyle: (theme.textTheme.labelMedium ?? const TextStyle())
+                    .copyWith(fontWeight: FontWeight.w600),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+          if (!_collapsed) ...widget.children,
+        ],
+      ),
+    );
+  }
+}
+
 /// An `artifact` call, once it is history: a prominent card the user taps to
 /// open the page the model rendered. Not a slim [ToolLabel] the way the
 /// original was: an artifact is output the user came for, not background
