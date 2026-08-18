@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -88,6 +89,86 @@ void main() {
 
       expect(find.text("New Chat"), findsOneWidget);
       expect(find.text("Open Chat"), findsNothing);
+    });
+
+    Future<void> openWithProject(WidgetTester tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await openEmpty(tester);
+    }
+
+    Future<void> pick(WidgetTester tester, String project) async {
+      await tester.tap(find.widgetWithText(ChoiceChip, project));
+      await settleIo(tester);
+    }
+
+    bool selectedOf(WidgetTester tester, String label) =>
+        tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label)).selected;
+
+    Future<String?> projectOfNewChat(WidgetTester tester) async {
+      await tester.tap(find.text("New Chat"));
+      await settleIo(tester);
+      return io(tester, () => app.repo.projectOf(app.container.read(selectedChatIdProvider)!));
+    }
+
+    // The default project has no badge: it is nothing selected.
+    testWidgets("the named projects are badges", (tester) async {
+      await openWithProject(tester);
+
+      expect(find.widgetWithText(ChoiceChip, "work"), findsOneWidget);
+      expect(find.text(defaultProjectLabel), findsNothing);
+      expect(selectedOf(tester, "work"), isFalse);
+    });
+
+    testWidgets("and there are none until one is made", (tester) async {
+      await openEmpty(tester);
+
+      expect(find.byType(ChoiceChip), findsNothing);
+    });
+
+    testWidgets("picking one highlights it and takes the next chat with it",
+        (tester) async {
+      await openWithProject(tester);
+
+      await pick(tester, "work");
+
+      expect(selectedOf(tester, "work"), isTrue);
+      expect(app.container.read(selectedProjectProvider), "work");
+      expect(await projectOfNewChat(tester), "work");
+    });
+
+    // Nothing selected is the default project, so leaving one is pressing it
+    // again rather than finding a badge that stands for the way back.
+    testWidgets("pressing the picked one again goes back to the default",
+        (tester) async {
+      await openWithProject(tester);
+
+      await pick(tester, "work");
+      await pick(tester, "work");
+
+      expect(selectedOf(tester, "work"), isFalse);
+      expect(app.container.read(selectedProjectProvider), isNull);
+    });
+
+    // Pressing a button is not where the project changes — the badge is.
+    testWidgets("New Chat lands in the default until a badge is picked",
+        (tester) async {
+      await openWithProject(tester);
+
+      expect(await projectOfNewChat(tester), isNull);
+    });
+
+    testWidgets("Open Chat shows the picked project's chats", (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await io(tester, () => app.seedChat(title: "at work", project: "work"));
+      await io(tester, () => app.seedChat(title: "at home"));
+      await openEmpty(tester);
+
+      await pick(tester, "work");
+      await tester.tap(find.text("Open Chat"));
+      await settleIo(tester);
+
+      expect(find.text("at work"), findsOneWidget);
+      expect(find.text("at home"), findsNothing);
     });
   });
 

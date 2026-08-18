@@ -40,7 +40,8 @@ class ChatPage extends ConsumerWidget {
 /// text too long to track back to the start of.
 const double _readableWidth = 760;
 
-/// Nothing selected: the two ways to have a conversation, and nothing else.
+/// Nothing selected: the two ways to have a conversation, and which project
+/// they happen in.
 class _NoChat extends ConsumerWidget {
   const _NoChat();
 
@@ -60,6 +61,7 @@ class _NoChat extends ConsumerWidget {
           children: [
             const AppMark(size: 64),
             const SizedBox(height: 32),
+            const _ProjectBadges(),
             FilledButton(
               onPressed: () => startChat(context, ref),
               child: const Text("New Chat"),
@@ -73,6 +75,37 @@ class _NoChat extends ConsumerWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The named projects, as badges, with the one a new chat would land in picked
+/// out. The default project is nothing selected, so it has no badge — see
+/// "The chat page" in CLAUDE.md.
+class _ProjectBadges extends ConsumerWidget {
+  const _ProjectBadges();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final named = ref.watch(projectListProvider).value ?? const [];
+    // The padding would otherwise be a gap under nothing.
+    if (named.isEmpty) return const SizedBox.shrink();
+    final selected = ref.watch(selectedProjectProvider);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final project in named)
+            ChoiceChip(
+              label: Text(project),
+              selected: project == selected,
+              onSelected: (on) => selectProject(ref, on ? project : null),
+            ),
+        ],
       ),
     );
   }
