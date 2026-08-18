@@ -3,7 +3,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
 import "../chat/chat_controller.dart";
-import "../chat/widgets/question_panel.dart";
 import "../chat/widgets/turn_surface.dart";
 import "transcript.dart";
 import "voice_controller.dart";
@@ -24,11 +23,11 @@ class VoicePage extends ConsumerStatefulWidget {
 }
 
 class _VoicePageState extends ConsumerState<VoicePage> {
+  final _transcript = Transcript();
+
   /// Held rather than read in [dispose], where the ref is no longer safe to
   /// use — and the controller outlives this route anyway, being keyed on the
   /// chat rather than on the screen.
-  final _transcript = Transcript();
-
   late final VoiceController _voice =
       ref.read(voiceControllerProvider(widget.chatId).notifier);
 
@@ -89,12 +88,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
             const SizedBox(height: 12),
             TurnSurface(view: chat, notifier: notifier),
             if (chat.questions.isNotEmpty)
-              QuestionPanel(
-                key: ValueKey(chat.questions.first.id),
-                request: chat.questions.first,
-                onAnswered: (answers) =>
-                    notifier.answerQuestions(chat.questions.first.id, answers),
-              ),
+              TurnQuestions(view: chat, notifier: notifier),
             const SizedBox(height: 8),
           ],
         ),

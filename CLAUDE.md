@@ -1536,7 +1536,14 @@ dependency put 14 MB into a build that can never call it — measured: the web
 build went from 43 MB to 58 MB. `tool/sherpa_onnx_web_stub` is a local package
 of the same name, overridden in `dependency_overrides`, holding the two members
 the web plugin registrant reaches for and no assets at all. Nothing on the web
-imports `package:sherpa_onnx`, so none of the real API is ever wanted. The
+imports `package:sherpa_onnx`, so none of the real API is ever wanted.
+
+The trap in it is that a `dependency_overrides` entry replaces the package on
+**every** platform, not only the one it was written for. If a `sherpa_onnx`
+bump inside `^1.13.6` ever reaches a third member of `SherpaOnnxWeb`, the
+desktop and Android builds break for a web-only reason — so the stub is
+something to check when that constraint moves, which the espeak-ng note above
+means it eventually will. The
 Silero asset is kept out the ordinary way, with `platforms:` on its pubspec
 entry.
 
@@ -1620,8 +1627,10 @@ moment the detector would be deaf.
 
 Audio in is `record` at 16 kHz mono PCM, chunked to Silero's 512-sample window
 before it is handed over. Audio out is `audioplayers` over a WAV written per
-sentence; `flutter_pcm_sound` would be lower latency and has no Linux or
-Windows. **On Linux the microphone is `parecord`**, which `record` shells out
+sentence, into the system's temporary directory rather than the model one —
+which on Android is deliberately the directory that is *not* evicted, and is
+the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
+would be lower latency and has no Linux or Windows. **On Linux the microphone is `parecord`**, which `record` shells out
 to — `pulseaudio-utils`, which a PipeWire system has as well — so a machine
 without it gets a voice session that fails to start rather than one that hears
 nothing.

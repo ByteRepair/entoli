@@ -7,11 +7,11 @@ import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
 import "../../providers.dart";
 
-/// The model downloads in flight, and why any of them stopped. Held above the
-/// settings page rather than in it: a download outlives the page — closing
-/// settings must not cancel a hundred megabytes — and on Android it outlives
-/// the app being on screen, which is what the notification is for.
-class VoiceDownloads extends Notifier<VoiceDownloadState> {
+/// What the app has downloaded, is downloading, and is asked to remove. Held
+/// above the settings page rather than in it: a download outlives the page —
+/// closing settings must not cancel a hundred megabytes — and on Android it
+/// outlives the app being on screen, which is what the notification is for.
+class VoiceModels extends Notifier<VoiceDownloadState> {
   final _running = <String, StreamSubscription<VoiceModelProgress>>{};
 
   @override
@@ -68,13 +68,29 @@ class VoiceDownloads extends Notifier<VoiceDownloadState> {
     }
   }
 
+  /// Remove it from disk, and unpick it first. The unpick is the load-bearing
+  /// half: `voiceModelOf` reads the catalog rather than the disk, so a setting
+  /// left naming a deleted model gets all the way into `SherpaVoice.start`
+  /// before failing — which moves the complaint from choosing a model to
+  /// pressing the microphone. Here rather than in the widget so that a second
+  /// caller cannot skip it.
+  Future<void> delete(VoiceModel model) async {
+    final settings = ref.read(appSettingsProvider.notifier);
+    if (ref.read(appSettingsProvider).voiceRecognitionModelId == model.id) {
+      await settings.setVoiceRecognitionModel(null);
+    }
+    if (ref.read(appSettingsProvider).voiceSpeechModelId == model.id) {
+      await settings.setVoiceSpeechModel(null);
+    }
+    await ref.read(voiceModelStoreProvider).delete(model);
+    ref.invalidate(installedVoiceModelsProvider);
+  }
+
   void _finish(String modelId, {String? failure}) {
     _running.remove(modelId);
     _publish(
       active: {...state.active}..remove(modelId),
-      failures: failure == null
-          ? state.failures
-          : {...state.failures, modelId: failure},
+      failures: failure == null ? null : {...state.failures, modelId: failure},
     );
   }
 
@@ -118,5 +134,5 @@ class VoiceDownloadState {
   }
 }
 
-final voiceDownloadsProvider =
-    NotifierProvider<VoiceDownloads, VoiceDownloadState>(VoiceDownloads.new);
+final voiceModelsProvider =
+    NotifierProvider<VoiceModels, VoiceDownloadState>(VoiceModels.new);

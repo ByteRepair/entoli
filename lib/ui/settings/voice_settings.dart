@@ -4,7 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
-import "../voice/voice_downloads.dart";
+import "voice_models.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
 import "../widgets/resettable_field.dart";
@@ -99,11 +99,9 @@ class VoiceModelTile extends ConsumerWidget {
     // Its own row only: a progress event names one model, and taking the whole
     // state rebuilds all eight tiles for it.
     final progress =
-        ref.watch(voiceDownloadsProvider.select((s) => s.active[model.id]));
+        ref.watch(voiceModelsProvider.select((s) => s.active[model.id]));
     final failure =
-        ref.watch(voiceDownloadsProvider.select((s) => s.failures[model.id]));
-    final installed =
-        (ref.watch(installedVoiceModelsProvider).value ?? const <String>{}).contains(model.id);
+        ref.watch(voiceModelsProvider.select((s) => s.failures[model.id]));
 
     return ListTile(
       isThreeLine: model.note != null || progress != null || failure != null,
@@ -145,36 +143,29 @@ class VoiceModelTile extends ConsumerWidget {
           ],
         ],
       ),
-      trailing: _Action(
-        model: model,
-        installed: installed,
-        downloading: progress != null,
-        enabled: ref.watch(voiceProvider).available,
-      ),
+      trailing: _Action(model: model, downloading: progress != null),
     );
   }
 }
 
+/// Reads what it needs itself rather than being handed it: neither the
+/// installed set nor whether this platform can listen appears in the row above,
+/// and passing them down rebuilt the whole `ListTile` for a button.
 class _Action extends ConsumerWidget {
-  const _Action({
-    required this.model,
-    required this.installed,
-    required this.downloading,
-    required this.enabled,
-  });
+  const _Action({required this.model, required this.downloading});
 
   final VoiceModel model;
-  final bool installed;
   final bool downloading;
-  final bool enabled;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final installed = (ref.watch(installedVoiceModelsProvider).value ?? const <String>{})
+        .contains(model.id);
     if (downloading) {
       return IconButton(
         icon: const Icon(Icons.close),
         tooltip: "Cancel",
-        onPressed: () => ref.read(voiceDownloadsProvider.notifier).cancel(model.id),
+        onPressed: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
       );
     }
     if (installed) {
@@ -187,8 +178,9 @@ class _Action extends ConsumerWidget {
     return IconButton(
       icon: const Icon(Icons.download_outlined),
       tooltip: "Download",
-      onPressed:
-          enabled ? () => ref.read(voiceDownloadsProvider.notifier).install(model) : null,
+      onPressed: ref.watch(voiceProvider).available
+          ? () => ref.read(voiceModelsProvider.notifier).install(model)
+          : null,
     );
   }
 
@@ -201,17 +193,7 @@ class _Action extends ConsumerWidget {
       destructive: true,
     );
     if (!ok) return;
-    // Unpicked first: a setting naming a model that is no longer there is voice
-    // mode failing to start with nothing on screen to say why.
-    final settings = ref.read(appSettingsProvider.notifier);
-    if (ref.read(appSettingsProvider).voiceRecognitionModelId == model.id) {
-      await settings.setVoiceRecognitionModel(null);
-    }
-    if (ref.read(appSettingsProvider).voiceSpeechModelId == model.id) {
-      await settings.setVoiceSpeechModel(null);
-    }
-    await ref.read(voiceModelStoreProvider).delete(model);
-    ref.invalidate(installedVoiceModelsProvider);
+    await ref.read(voiceModelsProvider.notifier).delete(model);
   }
 }
 
@@ -273,8 +255,8 @@ class _SpeakerField extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final speech = voiceModelById(settings.voiceSpeechModelId);
-    if (speech is! SpeechModel || speech.speakers < 2) return const SizedBox.shrink();
+    final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
+    if (speech == null || speech.speakers < 2) return const SizedBox.shrink();
     final value = settings.voiceSpeaker.clamp(0, speech.speakers - 1);
     return LabelledField(
       label: "Voice",

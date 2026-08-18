@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 
 import "../voice_controller.dart";
@@ -23,10 +24,10 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
     duration: const Duration(milliseconds: 1400),
   );
 
-  /// Held rather than rebuilt in `build`: a fresh merge every frame makes
-  /// `AnimatedBuilder` detach and reattach both listeners, and this rebuilds
-  /// whenever the page does.
-  late Listenable _driven = _merge();
+  /// What the circle currently follows, held rather than rebuilt in `build`: a
+  /// fresh merge every frame makes `AnimatedBuilder` detach and reattach its
+  /// listeners, and this rebuilds whenever the page does.
+  late Listenable _driven = _driver();
 
   @override
   void initState() {
@@ -37,12 +38,26 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
   @override
   void didUpdateWidget(VoiceCircle old) {
     super.didUpdateWidget(old);
-    if (widget.state.level != old.state.level) _driven = _merge();
     if (widget.state.status != old.state.status) _breathe();
+    if (widget.state.level != old.state.level ||
+        widget.state.status != old.state.status) {
+      _driven = _driver();
+    }
   }
 
-  Listenable _merge() =>
-      Listenable.merge([_breath, widget.state.level ?? const AlwaysStoppedAnimation(0.0)]);
+  /// A `ValueListenable`, not an `Animation`: what a session hands over is a
+  /// notifier, and casting it was a crash waiting for the first device.
+  ValueListenable<double> get _level =>
+      widget.state.level ?? const AlwaysStoppedAnimation(0.0);
+
+  /// Only what this status actually reads. The microphone stays open while the
+  /// reply is spoken, so following it there would repaint the circle thirty
+  /// times a second to draw the same frame.
+  Listenable _driver() => switch (widget.state.status) {
+        VoiceStatus.listening => _level,
+        VoiceStatus.thinking || VoiceStatus.starting => _breath,
+        _ => const AlwaysStoppedAnimation(0.0),
+      };
 
   /// Only while there is nothing else to follow. Left running, the circle is
   /// laid out and repainted sixty times a second to draw the same frame, for a
@@ -69,8 +84,6 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
       VoiceStatus.speaking => theme.colorScheme.tertiary,
       _ => theme.colorScheme.primary,
     };
-    final level = widget.state.level ?? const AlwaysStoppedAnimation(0.0);
-
     return Semantics(
       label: _describe(status),
       button: widget.onTap != null,
@@ -85,7 +98,7 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
             // Listening follows the voice; thinking has nothing to follow, so
             // it breathes instead of sitting dead still.
             final grown = switch (status) {
-              VoiceStatus.listening => level.value * 0.35,
+              VoiceStatus.listening => _level.value * 0.35,
               VoiceStatus.thinking || VoiceStatus.starting => _breath.value * 0.12,
               VoiceStatus.speaking => 0.08,
               _ => 0.0,

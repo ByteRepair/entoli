@@ -28,6 +28,13 @@ class SherpaVoice extends Voice {
   /// to sherpa as bytes: every model it takes, it takes as a path.
   final String _cacheDir;
 
+  /// Where a spoken sentence is written on its way to the player. Genuinely
+  /// disposable, so the system's own temporary directory rather than
+  /// [_cacheDir] — which on Android is deliberately the *non*-evictable one, so
+  /// that a downloaded model is never thrown away, and is the wrong home for a
+  /// WAV that lives for a sentence.
+  static String get scratchDir => p.join(Directory.systemTemp.path, "entoli-speech");
+
   static const _vadAsset = "assets/models/silero_vad.onnx";
 
   @override
@@ -50,7 +57,7 @@ class SherpaVoice extends Voice {
     final vad = await _vadPath();
     final listener = await _Worker.spawn(_listenWorker, (vad, recognition, listenDir));
     final speaker0 = await _Worker.spawn(_speakWorker, (speech, speakDir, speaker));
-    return _SherpaSession(recorder, listener, speaker0, _cacheDir);
+    return _SherpaSession(recorder, listener, speaker0, scratchDir);
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
@@ -69,7 +76,7 @@ class SherpaVoice extends Voice {
 
 /// The microphone, the two workers, and whatever is queued to be said.
 class _SherpaSession implements VoiceSession {
-  _SherpaSession(this._recorder, this._listener, this._speaker, this._cacheDir) {
+  _SherpaSession(this._recorder, this._listener, this._speaker, this._speechDir) {
     _listener.messages.listen(_fromListener);
     _speaker.messages.listen(_fromSpeaker);
     _player.onPlayerComplete.listen((_) => _playNext());
@@ -79,7 +86,7 @@ class _SherpaSession implements VoiceSession {
   final AudioRecorder _recorder;
   final _Worker _listener;
   final _Worker _speaker;
-  final String _cacheDir;
+  final String _speechDir;
   final _player = AudioPlayer();
 
   final _events = StreamController<VoiceEvent>.broadcast();
@@ -108,8 +115,6 @@ class _SherpaSession implements VoiceSession {
 
   @override
   ValueListenable<double> get level => _levelOf;
-
-  String get _speechDir => p.join(_cacheDir, "speech");
 
   Future<void> _open() async {
     // Once per session rather than once per sentence, and emptied on the way
@@ -152,7 +157,11 @@ class _SherpaSession implements VoiceSession {
     // Root mean square, and it decays rather than tracking: the circle should
     // breathe with a voice rather than flicker with every frame's peak.
     final loudness = math.sqrt(sum / math.max(1, samples.length));
-    _levelOf.value = math.max(loudness * 3, _levelOf.value * 0.8).clamp(0.0, 1.0);
+    final level = math.max(loudness * 3, _levelOf.value * 0.8).clamp(0.0, 1.0);
+    // Snapped to zero rather than decaying towards it forever: a geometric
+    // decay never reaches its floor, so a silent room would go on notifying
+    // thirty times a second, and every one of those repaints the circle.
+    _levelOf.value = level < 0.005 ? 0 : level;
   }
 
   void _fromListener(Object? message) {

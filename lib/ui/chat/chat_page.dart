@@ -17,7 +17,6 @@ import "chat_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
-import "widgets/question_panel.dart";
 import "widgets/turn_surface.dart";
 
 class ChatPage extends ConsumerWidget {
@@ -355,6 +354,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   @override
   Widget build(BuildContext context) {
     final view = ref.watch(chatControllerProvider(widget.chatId));
+    // Watched rather than read when the button is pressed: it is a disk scan,
+    // and read lazily the first press answers "no models yet" while it is
+    // still running. Watching also keeps it warm.
+    final voiceReady = ref.watch(voiceReadyProvider);
     final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
     ref.listen(chatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
     final chat = view.chat;
@@ -435,20 +438,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   isRunning: view.isRunning,
                   onSend: _send,
                   onAbort: _abort,
-                  // The readiness is watched rather than read when the button is
-                  // pressed: it is a disk scan, and read lazily it answers the
-                  // first press with "no models yet" while still running.
                   onVoice: ref.watch(voiceProvider).available
-                      ? () => _openVoice(context, ref.read(voiceReadyProvider))
+                      ? () => _openVoice(context, voiceReady)
                       : null,
                 )
               else
-                QuestionPanel(
-                  key: ValueKey(view.questions.first.id),
-                  request: view.questions.first,
-                  onAnswered: (answers) =>
-                      notifier.answerQuestions(view.questions.first.id, answers),
-                ),
+                TurnQuestions(view: view, notifier: notifier),
             ],
           ),
         ),

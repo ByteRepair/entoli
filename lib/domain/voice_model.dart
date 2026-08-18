@@ -19,14 +19,17 @@ sealed class VoiceDownload {
   final int bytes;
 }
 
-/// Saved as [path] under the model's own directory. Recognition models are
-/// two to four of these, straight off HuggingFace — which skips the fp32 copies
-/// the release tarballs carry beside the int8 ones, and the SenseVoice tarball
-/// is 999 MB for a 228 MB model.
+/// Saved under the model's own directory, named after the file it came from.
+/// Recognition models are two to four of these, straight off HuggingFace —
+/// which skips the fp32 copies the release tarballs carry beside the int8
+/// ones, and the SenseVoice tarball is 999 MB for a 228 MB model.
 class VoiceFile extends VoiceDownload {
-  const VoiceFile({required super.url, required super.bytes, required this.path});
+  const VoiceFile({required super.url, required super.bytes});
 
-  final String path;
+  /// Derived rather than given: a name that disagreed with its URL would be a
+  /// model installed under something the engine then cannot find, and every
+  /// entry wrote the two out identically anyway.
+  String get path => url.split("/").last;
 }
 
 /// A `.tar.bz2` unpacked into the model's directory. Speech models are one of
@@ -168,7 +171,13 @@ class SpeechModel extends VoiceModel {
 }
 
 const _hf = "https://huggingface.co";
-const _release = "https://github.com/k2-fsa/sherpa-onnx/releases/download";
+const _release = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models";
+
+const _whisperTiny = "$_hf/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main";
+const _whisperBase = "$_hf/csukuangfj/sherpa-onnx-whisper-base/resolve/main";
+const _whisperSmall = "$_hf/csukuangfj/sherpa-onnx-whisper-small/resolve/main";
+const _moonshineTiny = "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main";
+const _senseVoice = "$_hf/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main";
 
 /// What listens, roughly smallest first. Whisper tiny is the default because
 /// it is the smallest thing that understands 99 languages.
@@ -183,21 +192,9 @@ const recognitionModels = <RecognitionModel>[
     decoder: "tiny-decoder.int8.onnx",
     tokens: "tiny-tokens.txt",
     downloads: [
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-encoder.int8.onnx",
-        bytes: 12937772,
-        path: "tiny-encoder.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-decoder.int8.onnx",
-        bytes: 89855401,
-        path: "tiny-decoder.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-tiny/resolve/main/tiny-tokens.txt",
-        bytes: 816730,
-        path: "tiny-tokens.txt",
-      ),
+      VoiceFile(url: "$_whisperTiny/tiny-encoder.int8.onnx", bytes: 12937772),
+      VoiceFile(url: "$_whisperTiny/tiny-decoder.int8.onnx", bytes: 89855401),
+      VoiceFile(url: "$_whisperTiny/tiny-tokens.txt", bytes: 816730),
     ],
   ),
   RecognitionModel(
@@ -214,31 +211,11 @@ const recognitionModels = <RecognitionModel>[
     cachedDecoder: "cached_decode.int8.onnx",
     tokens: "tokens.txt",
     downloads: [
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/preprocess.onnx",
-        bytes: 6800738,
-        path: "preprocess.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/encode.int8.onnx",
-        bytes: 18249187,
-        path: "encode.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/uncached_decode.int8.onnx",
-        bytes: 53216096,
-        path: "uncached_decode.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/cached_decode.int8.onnx",
-        bytes: 45264830,
-        path: "cached_decode.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-moonshine-tiny-en-int8/resolve/main/tokens.txt",
-        bytes: 436688,
-        path: "tokens.txt",
-      ),
+      VoiceFile(url: "$_moonshineTiny/preprocess.onnx", bytes: 6800738),
+      VoiceFile(url: "$_moonshineTiny/encode.int8.onnx", bytes: 18249187),
+      VoiceFile(url: "$_moonshineTiny/uncached_decode.int8.onnx", bytes: 53216096),
+      VoiceFile(url: "$_moonshineTiny/cached_decode.int8.onnx", bytes: 45264830),
+      VoiceFile(url: "$_moonshineTiny/tokens.txt", bytes: 436688),
     ],
   ),
   RecognitionModel(
@@ -252,21 +229,9 @@ const recognitionModels = <RecognitionModel>[
     decoder: "base-decoder.int8.onnx",
     tokens: "base-tokens.txt",
     downloads: [
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-encoder.int8.onnx",
-        bytes: 29120534,
-        path: "base-encoder.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-decoder.int8.onnx",
-        bytes: 130672026,
-        path: "base-decoder.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-base/resolve/main/base-tokens.txt",
-        bytes: 816730,
-        path: "base-tokens.txt",
-      ),
+      VoiceFile(url: "$_whisperBase/base-encoder.int8.onnx", bytes: 29120534),
+      VoiceFile(url: "$_whisperBase/base-decoder.int8.onnx", bytes: 130672026),
+      VoiceFile(url: "$_whisperBase/base-tokens.txt", bytes: 816730),
     ],
   ),
   RecognitionModel(
@@ -280,16 +245,8 @@ const recognitionModels = <RecognitionModel>[
     model: "model.int8.onnx",
     tokens: "tokens.txt",
     downloads: [
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx",
-        bytes: 239233841,
-        path: "model.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt",
-        bytes: 315894,
-        path: "tokens.txt",
-      ),
+      VoiceFile(url: "$_senseVoice/model.int8.onnx", bytes: 239233841),
+      VoiceFile(url: "$_senseVoice/tokens.txt", bytes: 315894),
     ],
   ),
   RecognitionModel(
@@ -303,21 +260,9 @@ const recognitionModels = <RecognitionModel>[
     decoder: "small-decoder.int8.onnx",
     tokens: "small-tokens.txt",
     downloads: [
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-encoder.int8.onnx",
-        bytes: 112442483,
-        path: "small-encoder.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-decoder.int8.onnx",
-        bytes: 262226114,
-        path: "small-decoder.int8.onnx",
-      ),
-      VoiceFile(
-        url: "$_hf/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-tokens.txt",
-        bytes: 816730,
-        path: "small-tokens.txt",
-      ),
+      VoiceFile(url: "$_whisperSmall/small-encoder.int8.onnx", bytes: 112442483),
+      VoiceFile(url: "$_whisperSmall/small-decoder.int8.onnx", bytes: 262226114),
+      VoiceFile(url: "$_whisperSmall/small-tokens.txt", bytes: 816730),
     ],
   ),
 ];
@@ -337,10 +282,7 @@ const speechModels = <SpeechModel>[
     tokens: "tokens.txt",
     dataDir: "espeak-ng-data",
     downloads: [
-      VoiceArchive(
-        url: "$_release/tts-models/vits-piper-en_US-amy-low-int8.tar.bz2",
-        bytes: 21099246,
-      ),
+      VoiceArchive(url: "$_release/vits-piper-en_US-amy-low-int8.tar.bz2", bytes: 21099246),
     ],
   ),
   SpeechModel(
@@ -356,10 +298,7 @@ const speechModels = <SpeechModel>[
     dataDir: "espeak-ng-data",
     speakers: 8,
     downloads: [
-      VoiceArchive(
-        url: "$_release/tts-models/kitten-nano-en-v0_8-int8.tar.bz2",
-        bytes: 31220690,
-      ),
+      VoiceArchive(url: "$_release/kitten-nano-en-v0_8-int8.tar.bz2", bytes: 31220690),
     ],
   ),
   SpeechModel(
@@ -378,10 +317,7 @@ const speechModels = <SpeechModel>[
     dictDir: "dict",
     speakers: 103,
     downloads: [
-      VoiceArchive(
-        url: "$_release/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2",
-        bytes: 147031220,
-      ),
+      VoiceArchive(url: "$_release/kokoro-int8-multi-lang-v1_1.tar.bz2", bytes: 147031220),
     ],
   ),
 ];
@@ -390,23 +326,13 @@ const speechModels = <SpeechModel>[
 /// is for looking one up by the id a setting holds.
 const voiceCatalog = <VoiceModel>[...recognitionModels, ...speechModels];
 
-/// The two models voice mode would use, as a settings file names them. Null
-/// where it names nothing, names something no longer in the catalog, or names
-/// the wrong kind — it is a file, and can say anything.
-({RecognitionModel? recognition, SpeechModel? speech}) voiceChoice(
-  String? recognitionId,
-  String? speechId,
-) =>
-    (
-      recognition: switch (voiceModelById(recognitionId)) {
-        final RecognitionModel model => model,
-        _ => null,
-      },
-      speech: switch (voiceModelById(speechId)) {
-        final SpeechModel model => model,
-        _ => null,
-      },
-    );
+/// The catalog model [id] names, if it is the kind asked for. Null where it
+/// names nothing, names something no longer in the catalog, or names the wrong
+/// kind — a settings file can say anything.
+T? voiceModelOf<T extends VoiceModel>(String? id) {
+  final model = voiceModelById(id);
+  return model is T ? model : null;
+}
 
 VoiceModel? voiceModelById(String? id) {
   if (id == null) return null;

@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "../../../domain/models.dart";
 import "../chat_controller.dart";
 import "approval_banner.dart";
+import "question_panel.dart";
 import "resume_bar.dart";
 import "sub_agent_strip.dart";
 
@@ -15,10 +16,10 @@ import "sub_agent_strip.dart";
 /// without a `ResumeBar` — the one screen where a turn is most likely to be cut
 /// off, since talking over a reply aborts it.
 ///
-/// The question panel is deliberately not here: the chat page swaps it for the
-/// composer, because there is nothing useful to type until it is answered,
-/// while the voice screen keeps the circle above it. Where it goes is the
-/// page's business; that these three appear is not.
+/// The question panel is [TurnQuestions], beside this rather than in it: where it
+/// goes differs — the chat page swaps it for the composer, because there is
+/// nothing useful to type until it is answered, while the voice screen keeps
+/// the circle above it — but how it is wired does not.
 class TurnSurface extends StatelessWidget {
   const TurnSurface({super.key, required this.view, required this.notifier});
 
@@ -47,6 +48,26 @@ class TurnSurface extends StatelessWidget {
             onDeny: () => notifier.respondApproval(approval.id, ApprovalResponse.deny),
           ),
       ],
+    );
+  }
+}
+
+/// What the turn is waiting to be told. Its own widget rather than five lines
+/// written out at each page, which is the wiring [TurnSurface] exists to stop
+/// being copied; only *where* it is drawn is the page's business.
+class TurnQuestions extends StatelessWidget {
+  const TurnQuestions({super.key, required this.view, required this.notifier});
+
+  final ChatViewState view;
+  final ChatController notifier;
+
+  @override
+  Widget build(BuildContext context) {
+    final asked = view.questions.first;
+    return QuestionPanel(
+      key: ValueKey(asked.id),
+      request: asked,
+      onAnswered: (answers) => notifier.answerQuestions(asked.id, answers),
     );
   }
 }

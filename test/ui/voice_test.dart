@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -116,6 +117,89 @@ void main() {
     expect(chat.messages.last.plainText.trim(), "A long answer.");
   });
 
+  test("a reply that was already written is not read out on the way in", () async {
+    await app.container.read(appSettingsProvider.notifier)
+        .setVoiceRecognitionModel("whisper-tiny");
+    await app.container.read(appSettingsProvider.notifier)
+        .setVoiceSpeechModel("piper-en_US-amy");
+    final made = await app.repo.createChat();
+    await app.writeChat(
+      made.copyWith(messages: [
+        Message(
+          id: "u",
+          role: MessageRole.user,
+          createdAt: DateTime(2026),
+          parts: const [MessagePart.text(text: "what is here")],
+        ),
+        Message(
+          id: "a",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026),
+          parts: const [MessagePart.text(text: "Two files. Both are Dart.")],
+        ),
+      ]),
+      finished: false,
+    );
+    final id = made.state.id;
+    await waitFor(() => app.container.read(chatControllerProvider(id)).chat != null,
+        what: "the chat to load");
+    await app.container.read(voiceControllerProvider(id).notifier).start();
+    await Future<void>.delayed(Duration.zero);
+
+    // Entering voice mode over a finished reply, or carrying on an interrupted
+    // turn, must not read what is already there back from the top.
+    expect(app.voice.session!.spoken, isEmpty);
+  });
+
+  test("the process is held open while listening, and let go after", () async {
+    final id = await startVoice();
+    expect(app.work.listened, [true]);
+
+    await app.container.read(voiceControllerProvider(id).notifier).stop();
+    // Released, not merely abandoned: a hold nobody lets go of leaves the
+    // notification up and the cached engine never evicted again.
+    expect(app.work.listened, [true, false]);
+  });
+
+  test("the notification's Stop leaves voice mode and nothing else", () async {
+    final id = await startVoice();
+
+    app.work.stop(BackgroundJob.voice);
+    await waitFor(
+        () => app.container.read(voiceControllerProvider(id)).status == VoiceStatus.off,
+        what: "voice mode to stop");
+    expect(app.voice.session!.disposed, isTrue);
+  });
+
+  test("hushing stops the speech without leaving voice mode", () async {
+    final id = await startVoice();
+    final voice = app.container.read(voiceControllerProvider(id).notifier);
+
+    await voice.hush();
+
+    expect(app.voice.session!.hushed, 1);
+    expect(app.container.read(voiceControllerProvider(id)).status, isNot(VoiceStatus.off));
+  });
+
+  test("falling silent goes back to listening", () async {
+    final id = await startVoice();
+    app.voice.session!.fallSilent();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(app.container.read(voiceControllerProvider(id)).status, VoiceStatus.listening);
+  });
+
+  test("a failure mid-session says what it was", () async {
+    final id = await startVoice();
+    app.voice.session!.fail("the microphone was taken");
+    await waitFor(
+        () => app.container.read(voiceControllerProvider(id)).status == VoiceStatus.failed,
+        what: "the failure");
+
+    expect(app.container.read(voiceControllerProvider(id)).error,
+        contains("microphone was taken"));
+  });
+
   test("leaving voice mode closes the session", () async {
     final id = await startVoice();
     final session = app.voice.session!;
@@ -219,6 +303,25 @@ void main() {
     // The screen where a turn is most likely to be cut off, since talking over
     // a reply aborts it.
     expect(find.byType(ResumeBar), findsOneWidget);
+  });
+
+  testWidgets("the circle follows a live level", (tester) async {
+    final level = ValueNotifier(0.0);
+    addTearDown(level.dispose);
+    await app.pump(
+      tester,
+      Scaffold(
+        body: VoiceCircle(
+          state: VoiceViewState(status: VoiceStatus.listening, level: level),
+        ),
+      ),
+    );
+
+    final small = tester.getSize(find.byType(Container).first);
+    level.value = 1;
+    await tester.pump();
+    expect(tester.getSize(find.byType(Container).first).width,
+        greaterThan(small.width));
   });
 
   testWidgets("with no models picked the page says so rather than opening silent",

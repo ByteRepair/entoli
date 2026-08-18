@@ -25,60 +25,65 @@ class VoiceLine {
 /// rebuilt whole with a fresh part list whenever anything in it changes, so
 /// the same list is the same lines.
 class Transcript {
-  final _cache = <String, ({List<MessagePart> parts, List<VoiceLine> lines})>{};
+  /// Keyed on the part rather than the message: a reply is rebuilt part-list
+  /// and all on every flush, but the parts themselves keep their identity, so
+  /// only the one still being written has to be turned into lines again — and
+  /// a reply with a tool call in it is several parts.
+  var _cache = Map<MessagePart, List<VoiceLine>>.identity();
+  List<Message>? _of;
+  var _lines = const <VoiceLine>[];
 
   List<VoiceLine> of(List<Message> messages) {
-    final kept = <String, ({List<MessagePart> parts, List<VoiceLine> lines})>{};
+    // The whole list, not only its pieces: the page rebuilds on every coalesced
+    // delta, and flattening a conversation to draw five lines of it is the cost
+    // this class exists to avoid.
+    if (identical(_of, messages)) return _lines;
+    final kept = Map<MessagePart, List<VoiceLine>>.identity();
     final out = <VoiceLine>[];
     for (final message in messages) {
-      final was = _cache[message.id];
-      final lines = was != null && identical(was.parts, message.parts)
-          ? was.lines
-          : linesOf(message);
-      kept[message.id] = (parts: message.parts, lines: lines);
-      out.addAll(lines);
+      for (final part in message.parts) {
+        final lines = _cache[part] ?? linesOf(message.role, part);
+        kept[part] = lines;
+        out.addAll(lines);
+      }
     }
-    // Rebuilt rather than added to, so a rewound or re-threaded conversation
-    // does not leave the messages it dropped in here for the session.
-    _cache
-      ..clear()
-      ..addAll(kept);
-    return out;
+    // Replaced rather than added to, so a rewound or re-threaded conversation
+    // does not leave the parts it dropped in here for the session.
+    _cache = kept;
+    _of = messages;
+    return _lines = out;
   }
 }
 
-/// What one message reads as. What was said and what was replied, in the words
+/// What one part reads as. What was said and what was replied, in the words
 /// they were said in, and a line for each thing the agent did in between.
 ///
 /// The reply is put through [speakable] rather than shown raw, so the lines on
 /// screen are the ones being read out — a heading's hashes and a fenced command
 /// belong to the chat page, which is still there.
-List<VoiceLine> linesOf(Message message) {
-  if (message.role == MessageRole.user) {
-    final text = message.plainText.trim();
-    return text.isEmpty ? const [] : [VoiceLine(VoiceLineKind.said, text)];
+List<VoiceLine> linesOf(MessageRole role, MessagePart part) {
+  if (role == MessageRole.user) {
+    if (part is! TextPart) return const [];
+    final said = part.text.trim();
+    return said.isEmpty ? const [] : [VoiceLine(VoiceLineKind.said, said)];
   }
-  if (message.role != MessageRole.assistant) return const [];
+  if (role != MessageRole.assistant) return const [];
 
-  final lines = <VoiceLine>[];
-  for (final part in message.parts) {
-    switch (part) {
-      case TextPart(:final text):
-        final spoken = speakable(text).trim();
-        if (spoken.isNotEmpty) lines.add(VoiceLine(VoiceLineKind.replied, spoken));
-      case ToolCallPart(:final toolCall):
-        final doing = _doing(toolCall.name);
-        if (doing != null) lines.add(VoiceLine(VoiceLineKind.activity, doing));
-      case ErrorPart(:final message):
-        lines.add(VoiceLine(VoiceLineKind.activity, message));
-      case ReasoningPart():
-      case ToolResultPart():
-      case FilePart():
-      case ArtifactPart():
-        break;
-    }
+  switch (part) {
+    case TextPart(:final text):
+      final spoken = speakable(text).trim();
+      return spoken.isEmpty ? const [] : [VoiceLine(VoiceLineKind.replied, spoken)];
+    case ToolCallPart(:final toolCall):
+      final doing = _doing(toolCall.name);
+      return doing == null ? const [] : [VoiceLine(VoiceLineKind.activity, doing)];
+    case ErrorPart(:final message):
+      return [VoiceLine(VoiceLineKind.activity, message)];
+    case ReasoningPart():
+    case ToolResultPart():
+    case FilePart():
+    case ArtifactPart():
+      return const [];
   }
-  return lines;
 }
 
 /// What a tool call reads as. The four spelled out are the agent's own, whose

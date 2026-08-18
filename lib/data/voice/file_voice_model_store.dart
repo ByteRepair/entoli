@@ -80,14 +80,13 @@ class FileVoiceModelStore extends VoiceModelStore {
           VoiceFile(:final path) => p.join(dir.path, path),
           VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
         };
-        await Directory(p.dirname(target)).create(recursive: true);
-        received = await _fetch(
+        final before = received;
+        received += await _fetch(
           client: client,
           url: download.url,
           to: target,
-          from: received,
-          report: (at) => out.add(
-              VoiceModelProgress(modelId: model.id, received: at, total: total)),
+          report: (at) => out.add(VoiceModelProgress(
+              modelId: model.id, received: before + at, total: total)),
           cancelled: () => cancelled,
         );
         if (cancelled) return;
@@ -127,13 +126,12 @@ class FileVoiceModelStore extends VoiceModelStore {
     return out.stream;
   }
 
-  /// One file, streamed to disk. Returns the running total across the model's
-  /// downloads, which is what the bar is measured against.
+  /// One file, streamed to disk, reporting and returning its own bytes. What
+  /// they add up to across a model is the caller's business.
   static Future<int> _fetch({
     required http.Client client,
     required String url,
     required String to,
-    required int from,
     required void Function(int) report,
     required bool Function() cancelled,
   }) async {
@@ -142,8 +140,8 @@ class FileVoiceModelStore extends VoiceModelStore {
       throw HttpException("${response.statusCode} for $url");
     }
     final sink = File(to).openWrite();
-    var at = from;
-    var told = from;
+    var at = 0;
+    var told = 0;
     try {
       // `addStream` rather than `add` per chunk: a phone whose flash is slower
       // than its radio would otherwise queue the difference on the heap, for

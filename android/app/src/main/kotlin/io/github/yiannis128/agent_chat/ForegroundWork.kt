@@ -164,7 +164,7 @@ abstract class ForegroundWork : Service() {
                         }
                         "listening" -> {
                             listening = call.arguments as? Boolean ?: false
-                            hold(appContext, VoiceService::class.java, listening) {}
+                            hold(appContext, VoiceService::class.java, listening)
                         }
                         "downloading" -> {
                             @Suppress("UNCHECKED_CAST")
@@ -190,7 +190,7 @@ abstract class ForegroundWork : Service() {
             context: Context,
             service: Class<out ForegroundWork>,
             wanted: Boolean,
-            describe: (Intent) -> Unit,
+            describe: (Intent) -> Unit = {},
         ) {
             val intent = Intent(context, service)
             if (!wanted) {

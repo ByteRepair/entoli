@@ -59,7 +59,9 @@ class SentenceSplitter {
   /// the reply so far; a shorter one than last time is a different reply, and
   /// starts this over.
   List<String> add(String text) {
-    if (!text.startsWith(_text)) _spoken = 0;
+    // Length first: `startsWith` walks the whole reply, and this is asked on
+    // every look at a reply that only ever grows.
+    if (text.length < _text.length || !text.startsWith(_text)) _spoken = 0;
     _text = text;
     final out = <String>[];
     for (var end = _endOfSentence(); end != null; end = _endOfSentence()) {
@@ -87,22 +89,28 @@ class SentenceSplitter {
   /// only before whitespace, so `3.14` and `file.dart` are not two sentences,
   /// and a line break ends one however it was punctuated — a heading and a
   /// bullet are sentences with no full stop.
+  /// Code units rather than characters: `_text[i]` allocates a one-character
+  /// string per character scanned, and this runs over the tail of a growing
+  /// reply every time one is looked at.
   int? _endOfSentence() {
     var lastBreak = -1;
+    var said = false;
     for (var i = _spoken; i < _text.length; i++) {
-      final c = _text[i];
-      if (c == "\n") {
-        if (_text.substring(_spoken, i).trim().isNotEmpty) return i + 1;
+      final c = _text.codeUnitAt(i);
+      if (c == _newline) {
+        if (said) return i + 1;
         continue;
       }
       if (_terminators.contains(c)) {
-        final next = i + 1 < _text.length ? _text[i + 1] : " ";
+        final next = i + 1 < _text.length ? _text.codeUnitAt(i + 1) : _space;
         if (_isSpace(next) && !_abbreviates(i)) return i + 1;
       }
+      final space = _isSpace(c);
+      if (!space) said = true;
       // Somewhere to break a sentence that has run on past what is worth
       // waiting for — a paragraph with no full stop in it should not hold up
       // the first sound the user hears.
-      if (c == "," || _isSpace(c)) lastBreak = i + 1;
+      if (c == _comma || space) lastBreak = i + 1;
     }
     if (_text.length - _spoken >= _most && lastBreak > _spoken) return lastBreak;
     return null;
@@ -112,19 +120,26 @@ class SentenceSplitter {
   /// Read back to the last space: a word of two letters or fewer before the
   /// stop is an initial, and one with a stop already inside it is `e.g.`.
   bool _abbreviates(int at) {
-    if (_text[at] != ".") return false;
+    if (_text.codeUnitAt(at) != _stop) return false;
     var start = at;
-    while (start > 0 && !_isSpace(_text[start - 1])) {
+    var inner = false;
+    while (start > 0 && !_isSpace(_text.codeUnitAt(start - 1))) {
       start--;
+      if (_text.codeUnitAt(start) == _stop) inner = true;
     }
-    final word = _text.substring(start, at);
-    return word.length <= 2 || word.contains(".");
+    return at - start <= 2 || inner;
   }
 
-  static const _terminators = ".!?…。！？";
+  static const _stop = 0x2E;
+  static const _comma = 0x2C;
+  static const _space = 0x20;
+  static const _newline = 0x0A;
+
+  /// `. ! ? … 。 ！ ？`
+  static const _terminators = {_stop, 0x21, 0x3F, 0x2026, 0x3002, 0xFF01, 0xFF1F};
 
   /// Past this, break at the last comma or space rather than wait.
   static const _most = 300;
 
-  static bool _isSpace(String c) => c == " " || c == "\n" || c == "\t" || c == "\r";
+  static bool _isSpace(int c) => c == _space || c == _newline || c == 0x09 || c == 0x0D;
 }

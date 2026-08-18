@@ -50,11 +50,12 @@ final installedVoiceModelsProvider = FutureProvider<Set<String>>(
 final voiceReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(voiceProvider).available) return false;
   final settings = ref.watch(appSettingsProvider);
-  final choice =
-      voiceChoice(settings.voiceRecognitionModelId, settings.voiceSpeechModelId);
   final installed = ref.watch(installedVoiceModelsProvider).value ?? const <String>{};
-  final picked = [choice.recognition?.id, choice.speech?.id];
-  return picked.every((id) => id != null && installed.contains(id));
+  // `contains` takes an `Object?`, so a setting naming nothing is simply not
+  // in the set.
+  return installed
+          .contains(voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id) &&
+      installed.contains(voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
 });
 
 /// Loaded once, before the app is built, because assets are read

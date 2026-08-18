@@ -54,8 +54,8 @@ void main() {
         model: "model.onnx",
         tokens: "tokens.txt",
         downloads: [
-          VoiceFile(url: url("/model.onnx"), bytes: 64, path: "model.onnx"),
-          VoiceFile(url: url("/tokens.txt"), bytes: 64, path: "tokens.txt"),
+          VoiceFile(url: url("/model.onnx"), bytes: 64),
+          VoiceFile(url: url("/tokens.txt"), bytes: 64),
         ],
       );
 
@@ -96,9 +96,9 @@ void main() {
       model: "model.onnx",
       tokens: "tokens.txt",
       downloads: [
-        VoiceFile(url: url("/model.onnx"), bytes: 64, path: "model.onnx"),
+        VoiceFile(url: url("/model.onnx"), bytes: 64),
         // Nothing is listening on this port.
-        const VoiceFile(url: "http://127.0.0.1:1/gone.onnx", bytes: 64, path: "gone.onnx"),
+        const VoiceFile(url: "http://127.0.0.1:1/gone.onnx", bytes: 64),
       ],
     );
 

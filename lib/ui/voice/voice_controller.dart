@@ -1,5 +1,6 @@
 import "dart:async";
 
+
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -69,6 +70,15 @@ class VoiceController extends Notifier<VoiceViewState> {
   String? _reading;
   List<MessagePart>? _read;
 
+  /// A turn flushes about sixty times a second, and each pass re-strips the
+  /// whole reply so far — which grows, so the cost over a turn is quadratic.
+  /// Speech is spoken at human pace and a sentence is only said once it is
+  /// whole, so reading it four times a second is inaudibly different and a
+  /// fifteenth of the work. One-shot and re-armed, never periodic: a timer
+  /// that rearms itself forever is a widget test that never settles.
+  Timer? _due;
+  static const _readEvery = Duration(milliseconds: 250);
+
   @override
   VoiceViewState build() {
     _work = ref.watch(backgroundWorkProvider);
@@ -88,10 +98,9 @@ class VoiceController extends Notifier<VoiceViewState> {
   Future<void> start() async {
     if (state.isOn) return;
     final settings = ref.read(appSettingsProvider);
-    final choice =
-        voiceChoice(settings.voiceRecognitionModelId, settings.voiceSpeechModelId);
-    final recognition = choice.recognition;
-    final speech = choice.speech;
+    final recognition =
+        voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId);
+    final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
     if (recognition == null || speech == null) {
       return _show(VoiceStatus.failed,
           error: "Pick a recognition model and a speech model in Settings first.");
@@ -141,6 +150,8 @@ class VoiceController extends Notifier<VoiceViewState> {
   }
 
   Future<void> _shutdown() async {
+    _due?.cancel();
+    _due = null;
     final session = _session;
     _session = null;
     await _events?.cancel();
@@ -194,18 +205,39 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (_reading != last.id) {
       _reading = last.id;
       _sentences.reset();
+      // Seeded, not spoken. A reply met for the first time may already be
+      // written — entering voice mode over a finished chat, or carrying on an
+      // interrupted turn, which is what the resume bar here is for — and only
+      // what arrives from now on is new. `add`'s return is what would have
+      // been said, and is dropped on purpose.
+      _sentences.add(speakable(last.plainText));
+      _read = last.parts;
     }
     // An approval, a question, a sub-agent starting: state changes that carry
     // no new words, and there are more of them than there are words. The reply
     // is rebuilt part-list and all on every flush, so identity is exact.
     if (!identical(_read, last.parts)) {
       _read = last.parts;
-      for (final sentence in _sentences.add(speakable(last.plainText))) {
-        _speak(sentence);
-      }
+      _due ??= Timer(_readEvery, _readOn);
     }
-    // The tail has no full stop to wait for, so it goes when the turn does.
-    if ((was?.isRunning ?? false) && !chat.isRunning) _speak(_sentences.flush());
+    // The tail has no full stop to wait for, so it goes when the turn does —
+    // and whatever the timer was still holding goes with it.
+    if ((was?.isRunning ?? false) && !chat.isRunning) {
+      _readOn();
+      _speak(_sentences.flush());
+    }
+  }
+
+  /// Whatever has become a whole sentence since the last look.
+  void _readOn() {
+    _due?.cancel();
+    _due = null;
+    final messages = ref.read(chatControllerProvider(chatId)).chat?.messages;
+    final last = messages == null || messages.isEmpty ? null : messages.last;
+    if (last == null || last.id != _reading) return;
+    for (final sentence in _sentences.add(speakable(last.plainText))) {
+      _speak(sentence);
+    }
   }
 
   void _speak(String text) {
