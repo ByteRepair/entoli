@@ -76,6 +76,24 @@ void main() {
     expect(File(marker).existsSync(), isFalse);
   });
 
+  test("a child that escaped the group does not hold the result open", () async {
+    final result = await run(
+      "setsid sleep 5 & echo started; sleep 5",
+      timeout: const Duration(milliseconds: 300),
+    ).timeout(const Duration(seconds: 4));
+
+    expect(result.exceptionInfo, contains("timed out"));
+    expect(result.output, "started\n");
+  });
+
+  test("nor does a daemon a command that exited left behind", () async {
+    final result =
+        await run("setsid sleep 5 & echo started").timeout(const Duration(seconds: 4));
+
+    expect(result.returnCode, 0);
+    expect(result.output, "started\n");
+  });
+
   test("killing it early reports the interruption rather than an exit code", () async {
     final run = LocalShell()
         .start("sleep 30", cwd: workspace.path, timeout: const Duration(seconds: 30));
