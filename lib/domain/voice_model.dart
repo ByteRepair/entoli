@@ -83,9 +83,14 @@ sealed class VoiceModel {
 
   int get bytes => downloads.fold(0, (sum, d) => sum + d.bytes);
 
-  /// Which half of the model directory it installs into.
+  /// Which half of the model directory it installs into: one of [voiceFolders].
   String get folder;
 }
+
+/// The two halves of the model directory. Listed here beside the getter that
+/// answers with them, so that a store walking both is walking what a model can
+/// actually say.
+const voiceFolders = ["stt", "tts"];
 
 /// What listens. [tokens] is every engine's; the rest are the union of what the
 /// three recognition families take, and each entry fills in its own.

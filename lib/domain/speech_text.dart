@@ -27,24 +27,85 @@ String speakable(String markdown) {
       inFence = !inFence;
       continue;
     }
-    if (inFence || _rule.hasMatch(line)) continue;
-    var text = line
-        .replaceAll(_quote, "")
-        .replaceAll(_heading, "")
-        .replaceAll(_bullet, "")
-        .replaceAll(_image, "")
-        .replaceAllMapped(_link, (m) => m[1] ?? "")
-        .replaceAllMapped(_emphasis, (m) => m[2] ?? "")
-        .replaceAll(_tag, "")
-        .replaceAll("`", "");
-    // A table row read aloud is a run of pipes; the cells are still words.
-    if (text.trimLeft().startsWith("|")) {
-      if (_tableRule.hasMatch(text)) continue;
-      text = text.split("|").map((c) => c.trim()).where((c) => c.isNotEmpty).join(", ");
-    }
-    out.add(text.trimRight());
+    final said = _spoken(line, inFence);
+    if (said != null) out.add(said);
   }
-  return out.join("\n").replaceAll(_blanks, "\n\n").trim();
+  return _joined(out);
+}
+
+/// One line as it should be read, or null where it is layout rather than
+/// words. Whether it is inside a fence is the caller's: it is the only thing
+/// that carries from one line to the next, and so the only thing
+/// [SpeakableText] has to keep.
+String? _spoken(String line, bool inFence) {
+  if (inFence || _rule.hasMatch(line)) return null;
+  var text = line
+      .replaceAll(_quote, "")
+      .replaceAll(_heading, "")
+      .replaceAll(_bullet, "")
+      .replaceAll(_image, "")
+      .replaceAllMapped(_link, (m) => m[1] ?? "")
+      .replaceAllMapped(_emphasis, (m) => m[2] ?? "")
+      .replaceAll(_tag, "")
+      .replaceAll("`", "");
+  // A table row read aloud is a run of pipes; the cells are still words.
+  if (text.trimLeft().startsWith("|")) {
+    if (_tableRule.hasMatch(text)) return null;
+    text = text.split("|").map((c) => c.trim()).where((c) => c.isNotEmpty).join(", ");
+  }
+  return text.trimRight();
+}
+
+String _joined(List<String> lines) =>
+    lines.join("\n").replaceAll(_blanks, "\n\n").trim();
+
+/// [speakable] over a reply that is still being written. Fed the whole text
+/// each time, like [SentenceSplitter] and for the same reason — that is what
+/// the caller has — and a shorter one than last time is a different reply.
+///
+/// What it saves is that a reply only ever grows: every line before the last
+/// break is settled, so it is stripped once instead of once per flush of the
+/// turn. Stripping is eight passes over each line, and the transcript is
+/// redrawn about sixty times a second, so on the whole reply each time the
+/// cost over a turn is quadratic.
+class SpeakableText {
+  final _said = <String>[];
+  var _text = "";
+
+  /// How much of [_text] the settled lines cover, and whether that point is
+  /// inside a fence.
+  var _done = 0;
+  var _inFence = false;
+
+  String of(String markdown) {
+    // Length first, for the reason [SentenceSplitter.add] checks it first.
+    if (markdown.length < _text.length || !markdown.startsWith(_text)) {
+      _said.clear();
+      _done = 0;
+      _inFence = false;
+    }
+    _text = markdown;
+
+    final settled = markdown.lastIndexOf("\n") + 1;
+    if (settled > _done) {
+      for (final line in markdown.substring(_done, settled - 1).split("\n")) {
+        if (_fence.hasMatch(line)) {
+          _inFence = !_inFence;
+          continue;
+        }
+        final said = _spoken(line, _inFence);
+        if (said != null) _said.add(said);
+      }
+      _done = settled;
+    }
+
+    // The line still being written: stripped afresh every time, and its fence
+    // not counted — an opening fence is not open until the line it is on ends.
+    final tail = markdown.substring(_done);
+    if (_fence.hasMatch(tail)) return _joined(_said);
+    final said = _spoken(tail, _inFence);
+    return _joined(said == null ? _said : [..._said, said]);
+  }
 }
 
 /// Sentence-sized pieces out of a reply that is still being written, so the

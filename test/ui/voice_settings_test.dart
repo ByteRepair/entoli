@@ -12,10 +12,8 @@ void main() {
 
   tearDown(() => app.dispose());
 
-  /// Settings are written to disk, and a write inside `testWidgets` only lands
-  /// on the real clock — `runAsync` is what gives it one.
   Future<void> pick(WidgetTester tester, {String? recognition, String? speech}) =>
-      tester.runAsync(() async {
+      io(tester, () async {
         final settings = app.container.read(appSettingsProvider.notifier);
         if (recognition != null) await settings.setVoiceRecognitionModel(recognition);
         if (speech != null) await settings.setVoiceSpeechModel(speech);
@@ -65,7 +63,7 @@ void main() {
     await tester.tap(find.descendant(of: row, matching: find.byTooltip("Download")));
     await settleIo(tester);
 
-    expect(app.container.read(installedVoiceModelsProvider).value,
+    expect(app.container.read(installedVoiceModelsProvider),
         contains("whisper-tiny"));
     expect(find.descendant(of: row, matching: find.byTooltip("Delete")),
         findsOneWidget);
@@ -148,10 +146,6 @@ void main() {
     await pick(tester, speech: "piper-en_US-amy");
     await pumpVoice(tester);
 
-    final button = tester.widget<IconButton>(find.ancestor(
-      of: find.byIcon(Icons.play_circle_outline),
-      matching: find.byType(IconButton),
-    ));
-    expect(button.onPressed, isNull);
+    expect(enabled(tester, buttonTipped("Hear this voice")), isFalse);
   });
 }

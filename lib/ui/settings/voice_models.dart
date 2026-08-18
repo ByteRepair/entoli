@@ -40,8 +40,7 @@ class VoiceModels extends Notifier<VoiceDownloadState> {
     _publish(
       active: {
         ...state.active,
-        model.id:
-            VoiceModelProgress(modelId: model.id, received: 0, total: model.bytes),
+        model.id: VoiceModelProgress(received: 0, total: model.bytes),
       },
       failures: {...state.failures}..remove(model.id),
     );
@@ -50,7 +49,7 @@ class VoiceModels extends Notifier<VoiceDownloadState> {
       onError: (Object e) => _finish(model.id, failure: "$e"),
       onDone: () {
         _finish(model.id);
-        ref.invalidate(installedVoiceModelsProvider);
+        unawaited(ref.read(installedVoiceModelsProvider.notifier).refresh());
       },
     );
   }
@@ -83,7 +82,7 @@ class VoiceModels extends Notifier<VoiceDownloadState> {
       await settings.setVoiceSpeechModel(null);
     }
     await ref.read(voiceModelStoreProvider).delete(model);
-    ref.invalidate(installedVoiceModelsProvider);
+    await ref.read(installedVoiceModelsProvider.notifier).refresh();
   }
 
   void _finish(String modelId, {String? failure}) {

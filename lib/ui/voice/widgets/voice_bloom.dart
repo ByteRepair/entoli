@@ -59,9 +59,9 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
     // Idempotent, so it is asked rather than guarded: a guard here would be a
     // second list of which fields matter, kept in step by hand.
     _run();
-    if (widget.state.status != old.state.status ||
-        widget.state.paused != old.state.paused ||
-        widget.state.level != old.state.level) {
+    // What [_driver] reads, asked of it rather than spelled out: naming the
+    // fields here is the same second list, one indirection along.
+    if (_mode != _modeOf(old.state) || widget.state.level != old.state.level) {
       _driven = _driver();
     }
   }
@@ -96,8 +96,10 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
     breathing ? _breath.repeat(reverse: true) : _breath.stop();
   }
 
-  BloomMode get _mode => switch (widget.state.status) {
-        _ when widget.state.hushed => BloomMode.still,
+  BloomMode get _mode => _modeOf(widget.state);
+
+  static BloomMode _modeOf(VoiceViewState state) => switch (state.status) {
+        _ when state.hushed => BloomMode.still,
         VoiceStatus.listening => BloomMode.listening,
         VoiceStatus.speaking => BloomMode.speaking,
         VoiceStatus.thinking || VoiceStatus.starting => BloomMode.thinking,

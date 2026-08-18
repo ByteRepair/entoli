@@ -18,7 +18,12 @@ beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
 user saying something and `spoken` is what the reply came out as, which is the
 pair every voice test is written against. `TestApp.create(voiceModels: …)` is
 what is downloaded, and the default is nothing — which is what takes the circle
-off the composer.
+off the composer. `voiceModelIds` is the pair to install and `voiceModelPair`
+the same two with their halves named, so that installing one id and picking
+another — which leaves voice mode reading "not ready" and every assertion under
+it taking the settings branch rather than failing — is not something a test can
+do by hand. `TestApp.pickVoiceModels` picks them, and wants a real clock:
+`io(tester, app.pickVoiceModels)`.
 
 **The turn-level voice tests are `test`, not `testWidgets`**, for the reason
 `chat_controller_test.dart` is: a turn is driven by real futures, and

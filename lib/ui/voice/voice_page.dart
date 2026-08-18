@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
+import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_page.dart";
@@ -17,36 +18,23 @@ import "widgets/voice_controls.dart";
 /// possible. Every way in goes through here — the composer's circle and the
 /// empty pane's New Voice Chat — so there is one answer to what pressing one
 /// means with the models not downloaded.
-///
-/// [ready] is `voiceReadyProvider`, and the caller has to have **watched** it:
-/// read inside a callback it is false until the installed-models future has
-/// resolved, so the first press would offer settings to someone who already
-/// has both models.
-Future<void> openVoice(
-  BuildContext context,
-  String chatId, {
-  required bool ready,
-}) async {
-  if (!await _haveModels(context, ready) || !context.mounted) return;
+Future<void> openVoice(BuildContext context, WidgetRef ref, String chatId) async {
+  if (!await _haveModels(context, ref) || !context.mounted) return;
   await _push(context, chatId);
 }
 
 /// A new chat, opened straight into voice mode. The models are asked about
 /// first: a chat created and then left on screen because there is nothing to
 /// say it with is a worse answer than not creating one.
-Future<void> startVoiceChat(
-  BuildContext context,
-  WidgetRef ref, {
-  required bool ready,
-}) async {
-  if (!await _haveModels(context, ready) || !context.mounted) return;
+Future<void> startVoiceChat(BuildContext context, WidgetRef ref) async {
+  if (!await _haveModels(context, ref) || !context.mounted) return;
   final chatId = await startChat(context, ref);
   if (chatId == null || !context.mounted) return;
   await _push(context, chatId);
 }
 
-Future<bool> _haveModels(BuildContext context, bool ready) async {
-  if (ready) return true;
+Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
+  if (ref.read(voiceReadyProvider)) return true;
   final go = await confirm(
     context,
     title: "Voice mode needs two models",

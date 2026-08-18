@@ -13,6 +13,7 @@ import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../theme.dart";
+import "read_aloud.dart";
 
 /// What voice mode is doing, which is what the orb draws.
 enum VoiceStatus {
@@ -106,10 +107,6 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// `ref.onDispose`, where the ref is already gone.
   late BackgroundWork _work;
 
-  /// Whether the user has shut the microphone. Held rather than read back off
-  /// [state], which every `_show` would otherwise have to remember to carry.
-  var _paused = false;
-
   /// The reply being read out, so a new one starts the splitter over rather
   /// than carrying on from where the last one stopped, and the parts it was
   /// last read from — a chat state change that touched no text has nothing new
@@ -139,11 +136,12 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// Every state write goes through here. Written out at each call site, the
   /// two `failed` arms silently omitted the level, which is the sort of
   /// difference nobody sees until the circle stops moving.
-  void _show(VoiceStatus status, {String? error}) => state = VoiceViewState(
+  void _show(VoiceStatus status, {String? error, bool? paused}) =>
+      state = VoiceViewState(
         status: status,
         error: error,
         level: _session?.level,
-        paused: _paused,
+        paused: paused ?? state.paused,
       );
 
   Future<void> start() async {
@@ -157,8 +155,13 @@ class VoiceController extends Notifier<VoiceViewState> {
           error: "Pick a recognition model and a speech model in Settings first.");
     }
 
-    _paused = false;
-    _show(VoiceStatus.starting);
+    // One session at a time. `ReadAloud` holds a speech model of its own, and
+    // a message still being read out would be a second copy of it and a second
+    // voice over this one.
+    await ref.read(readAloudProvider.notifier).stop();
+    if (!ref.mounted) return;
+
+    _show(VoiceStatus.starting, paused: false);
     try {
       final session = await ref.read(voiceProvider).start(
             recognition: recognition,
@@ -189,18 +192,16 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (ref.mounted) _show(VoiceStatus.off);
   }
 
-  /// Mute, in `VoiceControls` — which way it goes is this side's to work out,
-  /// since the flag it toggles is held here.
-  Future<void> togglePaused() => setPaused(!_paused);
+  /// Mute, in `VoiceControls`.
+  Future<void> togglePaused() => setPaused(!state.paused);
 
   /// Shut the microphone, or open it again. Voice mode listens for as long as
   /// it is on screen, and until this there was no way to stop it short of
   /// leaving.
   Future<void> setPaused(bool paused) async {
-    if (!ref.mounted || !state.isOn || paused == _paused) return;
-    _paused = paused;
+    if (!ref.mounted || !state.isOn || paused == state.paused) return;
     await _session?.setListening(!paused);
-    if (ref.mounted) _show(state.status);
+    if (ref.mounted) _show(state.status, paused: paused);
   }
 
   /// Shut the reply up without leaving voice mode — Stop, in `VoiceControls`,

@@ -37,7 +37,7 @@ BloomPainter _bloom(WidgetTester tester) => tester
 void main() {
   late TestApp app;
 
-  setUp(() => app = TestApp.create(voiceModels: voiceModelPair));
+  setUp(() => app = TestApp.create(voiceModels: voiceModelIds));
   tearDown(() => app.dispose());
 
   /// Voice mode running over a chat of its own, with the two models picked.
@@ -463,9 +463,7 @@ void main() {
   });
 
   group("reading one message out", () {
-    Future<void> pickSpeech() => app.container
-        .read(appSettingsProvider.notifier)
-        .setVoiceSpeechModel("piper-en_US-amy");
+    Future<void> pickSpeech() => app.pickVoiceModels();
 
     test("speaks it with no microphone open", () async {
       await pickSpeech();
@@ -575,12 +573,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip("Voice mode"), findsOneWidget);
     });
+
+    // Pressing it reads this rather than watching it, so an answer that is
+    // only right once a disk scan has finished is one the first press gets
+    // wrong. Read with nothing pumped, which is where that used to show.
+    test("is ready to be pressed before anything has been drawn", () async {
+      await app.pickVoiceModels();
+      expect(app.container.read(voiceReadyProvider), isTrue);
+    });
   });
 
   testWidgets("with no models picked the page says so rather than opening silent",
       (tester) async {
-    final chat = await tester.runAsync(app.seedChat);
-    await app.pump(tester, VoicePage(chatId: chat!.state.id), settle: false);
+    final chat = await io(tester, app.seedChat);
+    await app.pump(tester, VoicePage(chatId: chat.state.id), settle: false);
     await tester.pump();
 
     expect(find.byType(VoiceBloom), findsOneWidget);

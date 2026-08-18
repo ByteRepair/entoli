@@ -33,6 +33,10 @@ class Transcript {
   List<Message>? _of;
   var _lines = const <VoiceLine>[];
 
+  /// The one part identity cannot answer for: the part being written is a new
+  /// object on every flush, so it is the whole reply stripped again each time.
+  final _growing = SpeakableText();
+
   List<VoiceLine> of(List<Message> messages) {
     // The whole list, not only its pieces: the page rebuilds on every coalesced
     // delta, and flattening a conversation to draw five lines of it is the cost
@@ -40,9 +44,15 @@ class Transcript {
     if (identical(_of, messages)) return _lines;
     final kept = Map<MessagePart, List<VoiceLine>>.identity();
     final out = <VoiceLine>[];
+    final last = messages.isEmpty ? null : messages.last;
     for (final message in messages) {
+      final growing = identical(message, last) && message.parts.isNotEmpty
+          ? message.parts.last
+          : null;
       for (final part in message.parts) {
-        final lines = _cache[part] ?? linesOf(message.role, part);
+        final lines = identical(part, growing)
+            ? linesOf(message.role, part, _growing)
+            : _cache[part] ?? linesOf(message.role, part);
         kept[part] = lines;
         out.addAll(lines);
       }
@@ -61,7 +71,7 @@ class Transcript {
 /// The reply is put through [speakable] rather than shown raw, so the lines on
 /// screen are the ones being read out — a heading's hashes and a fenced command
 /// belong to the chat page, which is still there.
-List<VoiceLine> linesOf(MessageRole role, MessagePart part) {
+List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? growing]) {
   if (role == MessageRole.user) {
     if (part is! TextPart) return const [];
     final said = part.text.trim();
@@ -71,7 +81,7 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part) {
 
   switch (part) {
     case TextPart(:final text):
-      final spoken = speakable(text).trim();
+      final spoken = (growing?.of(text) ?? speakable(text)).trim();
       return spoken.isEmpty ? const [] : [VoiceLine(VoiceLineKind.replied, spoken)];
     case ToolCallPart(:final toolCall):
       final doing = _doing(toolCall.name);

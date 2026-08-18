@@ -11,6 +11,7 @@ import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/nav_drawer.dart";
+import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
 import "widgets/composer.dart";
@@ -50,10 +51,6 @@ class _NoChat extends ConsumerWidget {
     // out of sight. The Scaffold above already answers that, and a flag threaded
     // down beside it is a second answer that can disagree.
     final scaffold = Scaffold.maybeOf(context);
-    // Watched here rather than read in the button's callback: it turns on the
-    // installed-models future, which has not resolved on the first frame, so a
-    // callback that asks for itself offers settings to someone who has both.
-    final voiceReady = ref.watch(voiceReadyProvider);
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 420),
       child: Padding(
@@ -77,7 +74,7 @@ class _NoChat extends ConsumerWidget {
             if (ref.watch(voiceProvider).available) ...[
               const SizedBox(height: 12),
               FilledButton.tonal(
-                onPressed: () => startVoiceChat(context, ref, ready: voiceReady),
+                onPressed: () => startVoiceChat(context, ref),
                 child: const Text("New Voice Chat"),
               ),
             ],
@@ -264,8 +261,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   void _readPosition() {
     if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    _atBottom.value = position.maxScrollExtent - position.pixels <= _slack;
+    _atBottom.value = _scroll.position.nearBottom(_slack);
   }
 
   /// Once the list has been laid out, which is the first moment its extent is
@@ -281,9 +277,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// Streaming fires this every frame, so it jumps rather than starting a new
   /// 100ms animation each time.
   void _scrollToBottom() => _afterLayout((position) {
-        if (position.maxScrollExtent - position.pixels <= _slack) {
-          _scroll.jumpTo(position.maxScrollExtent);
-        }
+        if (position.nearBottom(_slack)) _scroll.jumpTo(position.maxScrollExtent);
       });
 
   /// Land at the end, and keep landing until the end stops moving. A builder
@@ -346,10 +340,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   @override
   Widget build(BuildContext context) {
     final view = ref.watch(chatControllerProvider(widget.chatId));
-    // Watched rather than read when the button is pressed: it is a disk scan,
-    // and read lazily the first press answers "no models yet" while it is
-    // still running. Watching also keeps it warm.
-    final voiceReady = ref.watch(voiceReadyProvider);
     final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
     ref.listen(chatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
     final chat = view.chat;
@@ -431,7 +421,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   onSend: _send,
                   onAbort: _abort,
                   onVoice: ref.watch(voiceProvider).available
-                      ? () => openVoice(context, widget.chatId, ready: voiceReady)
+                      ? () => openVoice(context, ref, widget.chatId)
                       : null,
                 )
               else
@@ -441,15 +431,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         ),
       ),
     );
-  }
-
-  /// Read one message out, which is not voice mode: no microphone, no
-  /// recognition model, and nothing said back into the conversation.
-  Future<void> _read(BuildContext context, Message message) async {
-    final failed =
-        await ref.read(readAloudProvider.notifier).toggle(message.id, message.plainText);
-    if (failed == null || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failed)));
   }
 
   Widget _conversation(Chat chat, ChatViewState view, ChatController notifier) {
@@ -490,7 +471,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   ? (text) => notifier.editAndResend(m.id, text)
                   : null,
               onRegenerate: view.isRunning ? null : () => notifier.regenerate(m.id),
-              onSpeak: speechReady && m.hasText ? () => _read(context, m) : null,
+              onSpeak: speechReady && m.hasText
+                  ? () => readAloud(context, ref, m.id, m.plainText)
+                  : null,
               isSpeaking: reading == m.id,
             );
           },

@@ -73,7 +73,7 @@ void main() {
     testWidgets("New Voice Chat makes one and opens it in voice mode",
         (tester) async {
       app.dispose();
-      app = TestApp.create(voiceModels: voiceModelPair);
+      app = TestApp.create(voiceModels: voiceModelIds);
       await io(tester, app.pickVoiceModels);
       await openEmpty(tester);
 

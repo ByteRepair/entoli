@@ -39,10 +39,32 @@ final voiceProvider = Provider<Voice>((ref) => throw UnimplementedError());
 final voiceModelStoreProvider =
     Provider<VoiceModelStore>((ref) => throw UnimplementedError());
 
-/// Which catalog models are on disk. Invalidated by whatever installs or
-/// deletes one, which is the only thing that changes the answer.
-final installedVoiceModelsProvider = FutureProvider<Set<String>>(
-    (ref) => ref.watch(voiceModelStoreProvider).installed());
+/// Which catalog models are on disk. Read once before the app is built and
+/// kept in step after that by whatever installs or deletes one — the bargain
+/// [promptLibraryProvider] makes, for the reason it makes it. Asked lazily
+/// this is a disk scan, and until it answered every reader would be told
+/// "none": a button drawn from it would be drawn wrong for those frames, and a
+/// button's callback, which reads rather than watches, would be wrong on the
+/// first press however long the app had been open.
+class InstalledVoiceModels extends Notifier<Set<String>> {
+  InstalledVoiceModels(this._seed);
+
+  final Set<String> _seed;
+
+  @override
+  Set<String> build() => _seed;
+
+  /// Read the store again. Whatever installs or deletes a model calls this,
+  /// which is the only thing that changes the answer.
+  Future<void> refresh() async {
+    final installed = await ref.read(voiceModelStoreProvider).installed();
+    if (ref.mounted) state = installed;
+  }
+}
+
+final installedVoiceModelsProvider =
+    NotifierProvider<InstalledVoiceModels, Set<String>>(
+        () => InstalledVoiceModels(const {}));
 
 /// Whether a message can be read out: a platform that can speak, and a speech
 /// model picked and installed. Half of [voiceReadyProvider], because reading a
@@ -52,7 +74,8 @@ final speechReadyProvider = Provider<bool>((ref) {
   final settings = ref.watch(appSettingsProvider);
   // `contains` takes an `Object?`, so a setting naming nothing is simply not
   // in the set.
-  return (ref.watch(installedVoiceModelsProvider).value ?? const <String>{})
+  return ref
+      .watch(installedVoiceModelsProvider)
       .contains(voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
 });
 
@@ -62,7 +85,8 @@ final speechReadyProvider = Provider<bool>((ref) {
 final voiceReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(speechReadyProvider)) return false;
   final settings = ref.watch(appSettingsProvider);
-  return (ref.watch(installedVoiceModelsProvider).value ?? const <String>{})
+  return ref
+      .watch(installedVoiceModelsProvider)
       .contains(voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
 });
 

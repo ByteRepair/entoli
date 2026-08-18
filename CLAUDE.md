@@ -1656,6 +1656,18 @@ is what the controller has; it refuses to split on `3.14`, `main.dart` and
 `e.g.`, and breaks a run-on paragraph at a comma rather than hold up the first
 sound the user hears.
 
+`SpeakableText` is the same bargain a second time, for the transcript rather
+than the speech: fed the whole reply, keeping what it has already worked out.
+Stripping is eight passes over each line and the transcript is redrawn on every
+flush of a turn, so re-stripping the whole reply each time costs more the longer
+it gets — the same growth the splitter is fed the whole text to avoid paying
+twice. What makes it possible is that a reply only ever grows, so every line
+before the last break is settled; only the line still being written is stripped
+again, and its fence is not counted, since an opening fence is not open until
+the line it is on ends. It is tested against `speakable` at *every* length a
+reply passes through, which is the only assertion that means anything about a
+thing whose whole job is to agree with something else.
+
 A sentence is generated ahead of being heard, so **the queue running dry is not
 the end** — the session only says it has fallen silent once nothing is still in
 the worker. Without that count a fast model reports silence between every two
@@ -1668,8 +1680,9 @@ goes quiet the moment the detector fires, before the controller has decided
 anything; the controller then aborts the turn, because interrupting means stop
 and listen to me — which is Stop and then type, in one gesture, and leaves the
 same aborted turn in the log. That rides on the platform's echo cancellation,
-without which the model hears itself and every sentence is a barge-in; tapping
-the circle is the fallback, and stops the speech without leaving voice mode.
+without which the model hears itself and every sentence is a barge-in; the Stop
+button under the orb is the fallback, and shuts the reply up without leaving
+voice mode.
 
 #### Reading one message out
 
@@ -1682,7 +1695,13 @@ that already existed.
 `ReadAloud` owns it, and owns exactly one thing being read at a time. The
 preview beside the voice picker in settings goes through the same notifier
 under the id `preview`, so the two can never talk over each other and a second
-copy of the model is never loaded to do it. The session is let go the moment
+copy of the model is never loaded to do it. Voice mode is the third thing that
+can speak and is *not* under it, so `VoiceController.start` stops it first: a
+message still being read out when the composer's circle is pressed would be a
+second speech model in a second isolate, and two voices at once. Both buttons
+that read something out go through `readAloud`, which is `toggle` plus the
+snack bar its failure needs — the notifier has no `Scaffold` to say it in,
+which is why it answers with a string. The session is let go the moment
 the message has been read — a speech model is a hundred megabytes of a phone's
 memory to hold for a button nobody may press again — and what says it has been
 read is the session falling silent, since nothing above it can tell generating
@@ -1775,8 +1794,9 @@ a *height* — five times the line height at the current text scale, held rather
 than measured, because a viewport cannot lay its content out to discover how
 tall it should be, which is the same answer `_TitleLine.height` gives the app
 bar. And it follows the newest line only while it is already at the bottom,
-which is `chat_page.dart`'s slack rule reused rather than decided again: a reply
-streaming in must not yank the reader out of what they scrolled back to.
+which is `chat_page.dart`'s slack rule reused rather than decided again —
+`ScrollPosition.nearBottom`, whose slack is the only part either caller decides:
+a reply streaming in must not yank the reader out of what they scrolled back to.
 
 **Its top fades out**, into the orb above it, so the line being read is the one
 at the bottom. A mask over the viewport rather than an opacity per line: what
@@ -1798,11 +1818,17 @@ picked it leads to the settings that pick them, which is a better answer than a
 button nobody can find. `openVoice` is that rule, and `startVoiceChat` beside it
 is the empty pane's New Voice Chat: it asks about the models *before* it makes
 the chat, since one created and then left on screen with nothing to say it with
-is a worse answer than not making one. Both take `ready` as a parameter rather
-than reading `voiceReadyProvider` themselves, which is what makes the caller
-watch it — read in a callback it is false until the installed-models future has
-resolved, and the first press then offers settings to someone who has both
-models. **It gives the field its width back the moment there is
+is a worse answer than not making one. Both read `voiceReadyProvider`
+themselves, which they can because **which models are installed is read before
+the app is built** — `AppSession.start` scans for them and seeds
+`InstalledVoiceModels` with what it found, the bargain `promptLibraryProvider`
+already makes and for the reason it makes it. Asked lazily it is a disk scan
+that answers "none" until it finishes, and a button's callback reads rather than
+watches, so the first press would have offered settings to someone who has both
+models however long the app had been open. That was first fixed by making it
+the caller's problem — a `ready` parameter, and two comments saying it had to be
+watched and not read — which is a contract every next way in has to be told
+about, and is silently wrong when it is not. **It gives the field its width back the moment there is
 a message in it**: something typed is something to send rather than to say. That
 is an `AnimatedSize` around the button and nothing else — the row is laid out
 again on every frame of it, and the `Expanded` field takes whatever it gives up.

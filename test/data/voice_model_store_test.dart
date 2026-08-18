@@ -45,7 +45,7 @@ void main() {
 
   String url(String path) => "http://${server.address.address}:${server.port}$path";
 
-  RecognitionModel plainModel() => RecognitionModel(
+  RecognitionModel plainModel({List<VoiceDownload>? downloads}) => RecognitionModel(
         id: "test-stt",
         name: "Test",
         engine: VoiceEngine.senseVoice,
@@ -53,10 +53,11 @@ void main() {
         multilingual: false,
         model: "model.onnx",
         tokens: "tokens.txt",
-        downloads: [
-          VoiceFile(url: url("/model.onnx"), bytes: 64),
-          VoiceFile(url: url("/tokens.txt"), bytes: 64),
-        ],
+        downloads: downloads ??
+            [
+              VoiceFile(url: url("/model.onnx"), bytes: 64),
+              VoiceFile(url: url("/tokens.txt"), bytes: 64),
+            ],
       );
 
   test("a finished download lands where the model says, and is marked whole", () async {
@@ -87,20 +88,11 @@ void main() {
   });
 
   test("a model that will not download is not left half-installed", () async {
-    final model = RecognitionModel(
-      id: "test-stt",
-      name: "Test",
-      engine: VoiceEngine.senseVoice,
-      languages: "English",
-      multilingual: false,
-      model: "model.onnx",
-      tokens: "tokens.txt",
-      downloads: [
-        VoiceFile(url: url("/model.onnx"), bytes: 64),
-        // Nothing is listening on this port.
-        const VoiceFile(url: "http://127.0.0.1:1/gone.onnx", bytes: 64),
-      ],
-    );
+    final model = plainModel(downloads: [
+      VoiceFile(url: url("/model.onnx"), bytes: 64),
+      // Nothing is listening on this port.
+      const VoiceFile(url: "http://127.0.0.1:1/gone.onnx", bytes: 64),
+    ]);
 
     await expectLater(store.install(model), emitsThrough(emitsError(isA<Object>())));
     expect(await store.installed(), isEmpty);

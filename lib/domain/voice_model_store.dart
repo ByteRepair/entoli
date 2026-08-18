@@ -33,13 +33,11 @@ abstract class VoiceModelStore {
 /// and a bar that stopped at 100% with nothing happening would read as a hang.
 class VoiceModelProgress {
   const VoiceModelProgress({
-    required this.modelId,
     required this.received,
     required this.total,
     this.extracting = false,
   });
 
-  final String modelId;
   final int received;
   final int total;
   final bool extracting;

@@ -23,7 +23,7 @@ class VoiceSection extends ConsumerWidget {
     // than of the store: two flags for "this is a browser" could disagree.
     final canListen = ref.watch(voiceProvider).available;
     final settings = ref.watch(appSettingsProvider);
-    final installed = ref.watch(installedVoiceModelsProvider).value ?? const <String>{};
+    final installed = ref.watch(installedVoiceModelsProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,8 +160,7 @@ class _Action extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final installed = (ref.watch(installedVoiceModelsProvider).value ?? const <String>{})
-        .contains(model.id);
+    final installed = ref.watch(installedVoiceModelsProvider).contains(model.id);
     if (downloading) {
       return IconButton(
         icon: const Icon(Icons.close),
@@ -247,8 +246,7 @@ class _ModelField extends StatelessWidget {
   }
 }
 
-/// Which of a speech model's voices is used. Only where there is a choice: a
-/// picker with one entry is a question with one answer.
+/// Which of a speech model's voices is used.
 class _SpeakerField extends ConsumerWidget {
   const _SpeakerField({required this.settings});
 
@@ -259,9 +257,8 @@ class _SpeakerField extends ConsumerWidget {
     final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
     if (speech == null) return const SizedBox.shrink();
     // Drawn even where the model has one voice, which is most of them: a field
-    // that comes and goes with the model above it makes picking a model a
-    // change of what the page is, and a list of one still says which voice
-    // this is.
+    // that came and went with the model above it would make picking a model a
+    // change of what the page is.
     final value = settings.voiceSpeaker.clamp(0, speech.speakers - 1);
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(
@@ -284,7 +281,9 @@ class _SpeakerField extends ConsumerWidget {
             // Dead until the model is on disk: the picker offers what the
             // catalog has, and a preview of something not downloaded could
             // only apologise.
-            onPressed: ref.watch(speechReadyProvider) ? () => _preview(context, ref) : null,
+            onPressed: ref.watch(speechReadyProvider)
+                ? () => readAloud(context, ref, previewId, previewSpeech)
+                : null,
             icon: Icon(
                 playing ? Icons.stop_circle_outlined : Icons.play_circle_outline),
             tooltip: playing ? "Stop" : "Hear this voice",
@@ -294,12 +293,6 @@ class _SpeakerField extends ConsumerWidget {
     );
   }
 
-  Future<void> _preview(BuildContext context, WidgetRef ref) async {
-    final failed =
-        await ref.read(readAloudProvider.notifier).toggle(previewId, previewSpeech);
-    if (failed == null || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failed)));
-  }
 }
 
 class _Badge extends StatelessWidget {

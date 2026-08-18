@@ -77,4 +77,35 @@ void main() {
       expect(splitter.add(long), isNotEmpty);
     });
   });
+
+  group("SpeakableText", () {
+    // Every prefix, not the whole text: what it keeps between calls is the
+    // point of it, so it has to agree with [speakable] at every length a reply
+    // is ever looked at.
+    void agreesGrowing(String reply) {
+      final growing = SpeakableText();
+      for (var i = 0; i <= reply.length; i++) {
+        final so = reply.substring(0, i);
+        expect(growing.of(so), speakable(so), reason: "at $i characters");
+      }
+    }
+
+    test("says what speakable says, at every length a reply passes through", () {
+      agreesGrowing("## What changed\n\n- one\n- two\n\nSee [the docs](x). Done.");
+    });
+
+    test("agrees while a fence is open, and once it has closed", () {
+      agreesGrowing("Try this:\n```sh\nrm -rf /tmp/x\n```\nThen check it.");
+    });
+
+    test("agrees over a table, whose rule line says nothing", () {
+      agreesGrowing("| a | b |\n| --- | --- |\n| 1 | 2 |\n\nAfter it.");
+    });
+
+    test("starts over when the text is a different one", () {
+      final growing = SpeakableText();
+      growing.of("The first reply, which was long.");
+      expect(growing.of("## A second"), "A second");
+    });
+  });
 }

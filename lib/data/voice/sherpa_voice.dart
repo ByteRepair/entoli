@@ -29,13 +29,6 @@ class SherpaVoice extends Voice {
   /// to sherpa as bytes: every model it takes, it takes as a path.
   final String _cacheDir;
 
-  /// Where a spoken sentence is written on its way to the player. Genuinely
-  /// disposable, so the system's own temporary directory rather than
-  /// [_cacheDir] — which on Android is deliberately the *non*-evictable one, so
-  /// that a downloaded model is never thrown away, and is the wrong home for a
-  /// WAV that lives for a sentence.
-  static String get scratchDir => p.join(Directory.systemTemp.path, "entoli-speech");
-
   static const _vadAsset = "assets/models/silero_vad.onnx";
 
   @override
@@ -46,21 +39,27 @@ class SherpaVoice extends Voice {
   }) async {
     final speakDir = await _store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
-    final speaking = await _Worker.spawn(_speakWorker, (speech, speakDir, speaker));
-    if (recognition == null) return _SherpaSession(null, null, speaking, scratchDir);
 
-    final listenDir = await _store.directoryOf(recognition);
-    if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
-    final recorder = AudioRecorder();
-    if (!await recorder.hasPermission()) {
-      recorder.dispose();
-      speaking.close();
-      throw StateError("Entoli was not allowed to use the microphone.");
+    AudioRecorder? recorder;
+    _Worker? listening;
+    if (recognition != null) {
+      final listenDir = await _store.directoryOf(recognition);
+      if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
+      // Everything that can refuse, before either worker is spawned: a spawn
+      // returns as soon as the isolate has sent its port back, which is before
+      // it has loaded its model, so a refusal after this point is a hundred
+      // megabytes read off a phone's disk and freed again.
+      recorder = AudioRecorder();
+      if (!await recorder.hasPermission()) {
+        recorder.dispose();
+        throw StateError("Entoli was not allowed to use the microphone.");
+      }
+      final vad = await _vadPath();
+      listening = await _Worker.spawn(_listenWorker, (vad, recognition, listenDir));
     }
 
-    final vad = await _vadPath();
-    final listening = await _Worker.spawn(_listenWorker, (vad, recognition, listenDir));
-    return _SherpaSession(recorder, listening, speaking, scratchDir);
+    final speaking = await _Worker.spawn(_speakWorker, (speech, speakDir, speaker));
+    return _SherpaSession(recorder, listening, speaking);
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
@@ -77,9 +76,16 @@ class SherpaVoice extends Voice {
   }
 }
 
+/// Where a spoken sentence is written on its way to the player. Genuinely
+/// disposable, so the system's own temporary directory rather than the cache
+/// the models are unpacked into — which on Android is deliberately the
+/// *non*-evictable one, so that a downloaded model is never thrown away, and is
+/// the wrong home for a WAV that lives for a sentence.
+String get _speechDir => p.join(Directory.systemTemp.path, "entoli-speech");
+
 /// The microphone, the two workers, and whatever is queued to be said.
 class _SherpaSession implements VoiceSession {
-  _SherpaSession(this._recorder, this._listener, this._speaker, this._speechDir) {
+  _SherpaSession(this._recorder, this._listener, this._speaker) {
     _listener?.messages.listen(_fromListener);
     _speaker.messages.listen(_fromSpeaker);
     _player.onPlayerComplete.listen((_) => _playNext());
@@ -91,7 +97,6 @@ class _SherpaSession implements VoiceSession {
   final AudioRecorder? _recorder;
   final _Worker? _listener;
   final _Worker _speaker;
-  final String _speechDir;
   final _player = AudioPlayer();
 
   /// Single-subscription, so what [_open] reports is *buffered* until the
@@ -105,7 +110,7 @@ class _SherpaSession implements VoiceSession {
 
   /// Whole VAD windows only: what the microphone hands over is however much it
   /// had, and the detector wants 512 samples at a time.
-  var _window = Float32List(_windowSize);
+  final _window = Float32List(_windowSize);
   var _filled = 0;
 
   final _pcm = Pcm16Reader();
@@ -184,10 +189,8 @@ class _SherpaSession implements VoiceSession {
       sum += value * value;
       _window[_filled++] = value;
       if (_filled < _windowSize) continue;
-      // Handed over rather than copied: `send` copies for us, so the buffer is
-      // the worker's now and this side starts a fresh one.
+      // Refilled rather than replaced: `send` copies, so the worker has its own.
       _listener?.send(("audio", _window));
-      _window = Float32List(_windowSize);
       _filled = 0;
     }
     // Root mean square, and it decays rather than tracking: the circle should

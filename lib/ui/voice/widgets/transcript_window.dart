@@ -2,6 +2,7 @@ import "dart:ui" as ui;
 
 import "package:flutter/material.dart";
 
+import "../../widgets/scrolling.dart";
 import "../transcript.dart";
 
 /// Five lines of the conversation, and it **scrolls**: a window onto every line
@@ -45,9 +46,7 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
   void _follow() => WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || !_scroll.hasClients) return;
         final position = _scroll.position;
-        if (position.maxScrollExtent - position.pixels <= _slack) {
-          _scroll.jumpTo(position.maxScrollExtent);
-        }
+        if (position.nearBottom(_slack)) _scroll.jumpTo(position.maxScrollExtent);
       });
 
   @override

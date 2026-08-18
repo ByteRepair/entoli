@@ -40,7 +40,7 @@ class FileVoiceModelStore extends VoiceModelStore {
   @override
   Future<Set<String>> installed() async {
     final out = <String>{};
-    for (final folder in const ["stt", "tts"]) {
+    for (final folder in voiceFolders) {
       final dir = Directory(p.join(root, folder));
       if (!await dir.exists()) continue;
       await for (final entry in dir.list()) {
@@ -73,7 +73,9 @@ class FileVoiceModelStore extends VoiceModelStore {
 
       var received = 0;
       final total = model.bytes;
-      out.add(VoiceModelProgress(modelId: model.id, received: 0, total: total));
+      void progress(int at, {bool extracting = false}) => out.add(
+          VoiceModelProgress(received: at, total: total, extracting: extracting));
+      progress(0);
 
       for (final download in model.downloads) {
         final target = switch (download) {
@@ -85,14 +87,12 @@ class FileVoiceModelStore extends VoiceModelStore {
           client: client,
           url: download.url,
           to: target,
-          report: (at) => out.add(VoiceModelProgress(
-              modelId: model.id, received: before + at, total: total)),
+          report: (at) => progress(before + at),
           cancelled: () => cancelled,
         );
         if (cancelled) return;
         if (download is VoiceArchive) {
-          out.add(VoiceModelProgress(
-              modelId: model.id, received: received, total: total, extracting: true));
+          progress(received, extracting: true);
           await _unpackOffThread(target, dir.path);
         }
       }
@@ -103,10 +103,10 @@ class FileVoiceModelStore extends VoiceModelStore {
     out = StreamController<VoiceModelProgress>(
       onListen: () => run().then(
         (_) async {
+          client.close();
           // Cancelling closes the stream from the other end, so there is
           // nobody left to tell — only the half-written directory to remove.
           if (cancelled) return delete(model);
-          client.close();
           await out.close();
         },
         onError: (Object e) async {

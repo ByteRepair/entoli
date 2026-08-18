@@ -550,8 +550,10 @@ class FakeVoiceModelStore extends VoiceModelStore {
 
   final List<String> deleted = [];
 
+  // A copy, the way a real store answers: the same set handed back twice is one
+  // a provider cannot tell has changed.
   @override
-  Future<Set<String>> installed() async => _installed;
+  Future<Set<String>> installed() async => {..._installed};
 
   @override
   Future<String?> directoryOf(VoiceModel model) async =>
@@ -559,8 +561,7 @@ class FakeVoiceModelStore extends VoiceModelStore {
 
   @override
   Stream<VoiceModelProgress> install(VoiceModel model) async* {
-    yield VoiceModelProgress(
-        modelId: model.id, received: model.bytes, total: model.bytes);
+    yield VoiceModelProgress(received: model.bytes, total: model.bytes);
     _installed.add(model.id);
   }
 
