@@ -1261,13 +1261,19 @@ only place a project is named, and the sidebar is what this pane is drawn
 instead of. Picking one is `selectProject` — the switcher's own action, lifted
 out of `_ProjectMenu` so the two cannot come to disagree about what switching
 means. **The badge is where the project changes, not either button**: New Chat
-and Open Chat act on what is already picked out, so pressing one is never also
-a choice about where it lands.
+and Open Chat act on what is already picked out, so pressing one is never also a
+choice about where it lands.
 
-They are drawn only where there is a choice. The default project is always
-there, so with no named ones beside it this is a single badge that is already
-selected and can lead nowhere — the switcher said again, for nothing. Same rule
-as the `1/1` thread counter.
+**The default project is nothing selected**, and so has no badge. It is not a
+project beside the others — it is the absence of one, which is what `null`
+already means everywhere else it is written down. A `Default` badge would say
+otherwise, and would be a thing to press to get back to where the app opens.
+Pressing the selected badge is that instead, which makes the row a set of
+toggles rather than a set with one always down.
+
+So a user who has never made a project sees nothing here, which is right: with
+none there is no choice to offer, and the row would be one badge that is always
+selected and can lead nowhere.
 
 A chat with nothing *said* in it is `_EmptyChat`, and it is a different question
 — the chat is open, so what is missing is the first thing to say. It draws the

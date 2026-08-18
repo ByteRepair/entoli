@@ -4,7 +4,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
-import "../../domain/project.dart";
 import "../../providers.dart";
 import "../fonts.dart";
 import "../sidebar/sidebar.dart";
@@ -81,14 +80,18 @@ class _NoChat extends ConsumerWidget {
   }
 }
 
-/// The projects there are, as badges, with the one a new chat would land in
-/// picked out. Both buttons below act on it, so it is chosen here rather than
-/// by either of them — the same rule the sidebar's switcher keeps.
+/// The named projects, as badges, with the one a new chat would land in picked
+/// out. Both buttons below act on it, so it is chosen here rather than by
+/// either of them — the same rule the sidebar's switcher keeps.
 ///
-/// Drawn only where there is a choice to make. The default project is always
-/// there, so with no named ones beside it this is a single badge that is
-/// already selected and can lead nowhere, which is the sidebar's switcher said
-/// again for nothing.
+/// **The default project is nothing selected**, so it has no badge of its own:
+/// it is not a project beside the others but the absence of one, and a badge
+/// saying so would be a fourth thing to press to get back to where the app
+/// opens. Pressing the selected badge is what leaves a project, which is what
+/// makes the row a set of toggles rather than a set with one always down.
+///
+/// With no named projects there is nothing here at all, which is the whole of
+/// what a user who has never made one sees.
 class _ProjectBadges extends ConsumerWidget {
   const _ProjectBadges();
 
@@ -104,11 +107,11 @@ class _ProjectBadges extends ConsumerWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (final project in everyProject(named))
+          for (final project in named)
             ChoiceChip(
-              label: Text(projectLabel(project)),
+              label: Text(project),
               selected: project == selected,
-              onSelected: (_) => selectProject(ref, project),
+              onSelected: (on) => selectProject(ref, on ? project : null),
             ),
         ],
       ),

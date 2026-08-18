@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -93,18 +94,17 @@ void main() {
     bool selectedOf(WidgetTester tester, String label) =>
         tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label)).selected;
 
-    testWidgets("the projects there are are badges", (tester) async {
+    // The default project has no badge: it is nothing selected.
+    testWidgets("the named projects are badges", (tester) async {
       await io(tester, () => app.repo.createProject("work"));
       await openEmpty(tester);
 
-      expect(find.widgetWithText(ChoiceChip, "Default"), findsOneWidget);
       expect(find.widgetWithText(ChoiceChip, "work"), findsOneWidget);
+      expect(find.text(defaultProjectLabel), findsNothing);
+      expect(selectedOf(tester, "work"), isFalse);
     });
 
-    // One badge is the switcher said again: it is already selected and there is
-    // nowhere it can go.
-    testWidgets("and are left off where the default project is the only one",
-        (tester) async {
+    testWidgets("and there are none until one is made", (tester) async {
       await openEmpty(tester);
 
       expect(find.byType(ChoiceChip), findsNothing);
@@ -119,7 +119,6 @@ void main() {
       await settleIo(tester);
 
       expect(selectedOf(tester, "work"), isTrue);
-      expect(selectedOf(tester, "Default"), isFalse);
       expect(app.container.read(selectedProjectProvider), "work");
 
       await tester.tap(find.text("New Chat"));
@@ -127,6 +126,28 @@ void main() {
 
       final id = app.container.read(selectedChatIdProvider)!;
       expect(await io(tester, () => app.repo.projectOf(id)), "work");
+    });
+
+    // Nothing selected is the default project, so leaving one is pressing it
+    // again rather than finding a badge that stands for the way back.
+    testWidgets("pressing the picked one again goes back to the default",
+        (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await openEmpty(tester);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, "work"));
+      await settleIo(tester);
+      await tester.tap(find.widgetWithText(ChoiceChip, "work"));
+      await settleIo(tester);
+
+      expect(selectedOf(tester, "work"), isFalse);
+      expect(app.container.read(selectedProjectProvider), isNull);
+
+      await tester.tap(find.text("New Chat"));
+      await settleIo(tester);
+
+      final id = app.container.read(selectedChatIdProvider)!;
+      expect(await io(tester, () => app.repo.projectOf(id)), isNull);
     });
 
     // Pressing a button is not where the project changes — the badge is.
