@@ -80,9 +80,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
 
   /// How long a temporary chat lives. App-level default; a project and a chat
-  /// can override it.
-  Future<void> setTempChatTtl(TempChatTtl ttl) =>
-      _update((s) => s.tempChatTtl = ttl);
+  /// can override it. Re-anchors every chat to now so the badges appear
+  /// immediately and the sidebar filter is current.
+  Future<void> setTempChatTtl(TempChatTtl ttl) async {
+    await _update((s) => s.tempChatTtl = ttl);
+    await ref.read(chatRepositoryProvider).reanchorAllTtl();
+    ref.invalidate(chatListProvider);
+  }
 
   /// The endpoints the agent can call. The model list is rebuilt from them, so
   /// it is invalidated here rather than left showing the old one.
@@ -194,10 +198,13 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   }
 
   /// Override the app-level temporary-chat TTL for this project. Null means
-  /// inherit the app default.
+  /// inherit the app default. Re-anchors the project's chats to now so the
+  /// badges appear immediately.
   Future<void> setTempChatTtl(TempChatTtl? ttl) async {
     final next = state.copy()..tempChatTtl = ttl;
     state = next;
     await next.save(_config, project: project);
+    await ref.read(chatRepositoryProvider).reanchorProjectTtl(project);
+    ref.invalidate(chatListProvider);
   }
 }

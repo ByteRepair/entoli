@@ -3,6 +3,7 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
+import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
@@ -33,6 +34,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   /// The project the chat's files are in, so the TTL field can name what null
   /// resolves to.
   String? _project;
+
+  /// The chat's state, loaded with the meta so the TTL anchor can be
+  /// re-written in [_save] without waiting for a turn.
+  ChatState? _state;
   bool _saving = false;
 
   @override
@@ -43,11 +48,20 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
 
   Future<void> _load() async {
     final repo = ref.read(chatRepositoryProvider);
-    // Together: neither answer needs the other, and both go to the store.
+    // Together: neither answer needs the other, and all go to the store.
     final (meta, project) = await (
       repo.loadMeta(widget.chatId),
       repo.projectOf(widget.chatId),
     ).wait;
+    // The state is needed only to re-anchor the TTL in [_save]. A chat with no
+    // `state.json` (seeded with meta only, or a draft) has none, and the
+    // re-anchor is skipped — the next turn's `saveState` will anchor it.
+    ChatState? state;
+    try {
+      state = (await repo.openChat(widget.chatId)).state;
+    } catch (_) {
+      state = null;
+    }
     final workspace =
         ref.read(appConfigProvider).workspaceDir(widget.chatId, project: project);
     if (mounted) {
@@ -55,6 +69,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
         _meta = meta;
         _workspace = workspace;
         _project = project;
+        _state = state;
       });
     }
   }
@@ -64,6 +79,11 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     setState(() => _saving = true);
     final repo = ref.read(chatRepositoryProvider);
     await repo.saveMeta(widget.chatId, _meta!);
+    // Re-anchor immediately so the sidebar hourglass and title-bar countdown
+    // appear without waiting for a turn. `reanchor: true` so flipping the
+    // chat's override on anchors to now, and off clears.
+    if (_state != null) await repo.saveState(_state!, reanchor: true);
+    ref.invalidate(chatListProvider);
     if (mounted) setState(() => _saving = false);
     if (mounted) Navigator.of(context).pop();
   }
