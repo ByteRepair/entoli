@@ -1,21 +1,27 @@
 import "dart:convert";
 
 import "permission.dart";
+import "temp_chat_ttl.dart";
 
 /// A chat's overrides of the app defaults, persisted to `meta.json`. Edited via
 /// the chat settings page. Distinct from `state.json` (chat metadata) and
 /// `conv.jsonl` (message tree). Null everywhere means "inherit".
 class ChatMeta {
-  ChatMeta({this.model, this.provider, this.approveMode});
+  ChatMeta({this.model, this.provider, this.approveMode, this.tempChatTtl});
 
   String? model;
   String? provider;
   ApproveMode? approveMode;
 
+  /// How long this chat lives once its TTL is enabled. Null means inherit the
+  /// project (if set) or app default.
+  TempChatTtl? tempChatTtl;
+
   factory ChatMeta.fromJson(Map<String, dynamic> json) => ChatMeta(
         model: json["model"] as String?,
         provider: json["provider"] as String?,
         approveMode: _approveMode(json),
+        tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?),
       );
 
   /// Null is a `meta.json` that was never written, which inherits everything —
@@ -39,6 +45,7 @@ class ChatMeta {
         if (model != null) "model": model,
         if (provider != null) "provider": provider,
         if (approveMode != null) "approveMode": approveMode!.name,
+        if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
       };
 
   String encode() => jsonEncode(toJson());
