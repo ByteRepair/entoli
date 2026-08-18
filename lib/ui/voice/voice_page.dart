@@ -4,10 +4,64 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/models.dart";
 import "../chat/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
+import "../settings/settings_page.dart";
+import "../sidebar/sidebar.dart";
+import "../widgets/dialogs.dart";
 import "transcript.dart";
 import "voice_controller.dart";
 import "widgets/transcript_window.dart";
 import "widgets/voice_circle.dart";
+
+/// Open voice mode over [chatId], or offer the settings that would make it
+/// possible. Every way in goes through here — the composer's circle and the
+/// empty pane's New Voice Chat — so there is one answer to what pressing one
+/// means with the models not downloaded.
+///
+/// [ready] is `voiceReadyProvider`, and the caller has to have **watched** it:
+/// read inside a callback it is false until the installed-models future has
+/// resolved, so the first press would offer settings to someone who already
+/// has both models.
+Future<void> openVoice(
+  BuildContext context,
+  String chatId, {
+  required bool ready,
+}) async {
+  if (!await _haveModels(context, ready) || !context.mounted) return;
+  await _push(context, chatId);
+}
+
+/// A new chat, opened straight into voice mode. The models are asked about
+/// first: a chat created and then left on screen because there is nothing to
+/// say it with is a worse answer than not creating one.
+Future<void> startVoiceChat(
+  BuildContext context,
+  WidgetRef ref, {
+  required bool ready,
+}) async {
+  if (!await _haveModels(context, ready) || !context.mounted) return;
+  final chatId = await startChat(context, ref);
+  if (chatId == null || !context.mounted) return;
+  await _push(context, chatId);
+}
+
+Future<bool> _haveModels(BuildContext context, bool ready) async {
+  if (ready) return true;
+  final go = await confirm(
+    context,
+    title: "Voice mode needs two models",
+    message: "One to hear you and one to answer, downloaded to this device. "
+        "Settings has the list.",
+    confirmLabel: "Open settings",
+  );
+  if (go && context.mounted) {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+  }
+  return false;
+}
+
+Future<void> _push(BuildContext context, String chatId) => Navigator.of(context)
+    .push(MaterialPageRoute(builder: (_) => VoicePage(chatId: chatId)));
 
 /// Voice mode: a circle for what the microphone hears and five scrolling lines
 /// of what has been said, over the chat that was already open. It is a view,

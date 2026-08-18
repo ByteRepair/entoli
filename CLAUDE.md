@@ -1319,8 +1319,11 @@ whole screen and a monitor gets a line that can be read back to the start of.
 The composer is inside that column rather than under it: a centred conversation
 over a full-width field is a field twice the width of what it is answering.
 
-With nothing selected the pane is the two ways to have a conversation — New Chat
-and Open Chat — over the project they happen in. Open Chat is the drawer, so it
+With nothing selected the pane is the ways to have a conversation — New Chat,
+New Voice Chat and Open Chat — over the project they happen in. The second is
+an extension of the first rather than a third thing: it makes a chat and opens
+it in voice mode, and it sits with New Chat rather than beside the way to open
+an old one. Open Chat is the drawer, so it
 is drawn only where there is one: beside a sidebar that is already out it would
 open what is on screen. It asks the `Scaffold` above it rather than taking a
 flag beside the one that built that Scaffold, since two answers to "is there a
@@ -1722,7 +1725,14 @@ does reads as a broken app rather than a working one.
 The way in is a circle left of the composer's send button, drawn wherever the
 platform can listen rather than only where models are installed — with none
 picked it leads to the settings that pick them, which is a better answer than a
-button nobody can find. **It gives the field its width back the moment there is
+button nobody can find. `openVoice` is that rule, and `startVoiceChat` beside it
+is the empty pane's New Voice Chat: it asks about the models *before* it makes
+the chat, since one created and then left on screen with nothing to say it with
+is a worse answer than not making one. Both take `ready` as a parameter rather
+than reading `voiceReadyProvider` themselves, which is what makes the caller
+watch it — read in a callback it is false until the installed-models future has
+resolved, and the first press then offers settings to someone who has both
+models. **It gives the field its width back the moment there is
 a message in it**: something typed is something to send rather than to say. That
 is an `AnimatedSize` around the button and nothing else — the row is laid out
 again on every frame of it, and the `Expanded` field takes whatever it gives up.

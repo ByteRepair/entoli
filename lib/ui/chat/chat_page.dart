@@ -6,12 +6,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../fonts.dart";
-import "../settings/settings_page.dart";
 import "../sidebar/sidebar.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
-import "../widgets/dialogs.dart";
 import "../widgets/nav_drawer.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
@@ -52,6 +50,10 @@ class _NoChat extends ConsumerWidget {
     // out of sight. The Scaffold above already answers that, and a flag threaded
     // down beside it is a second answer that can disagree.
     final scaffold = Scaffold.maybeOf(context);
+    // Watched here rather than read in the button's callback: it turns on the
+    // installed-models future, which has not resolved on the first frame, so a
+    // callback that asks for itself offers settings to someone who has both.
+    final voiceReady = ref.watch(voiceReadyProvider);
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 420),
       child: Padding(
@@ -67,6 +69,18 @@ class _NoChat extends ConsumerWidget {
               onPressed: () => startChat(context, ref),
               child: const Text("New Chat"),
             ),
+            // An extension of New Chat rather than a third thing: it makes one
+            // and opens it in voice mode. Drawn wherever the platform can
+            // listen rather than only where the models are, which is the rule
+            // the composer's circle keeps — with none downloaded it leads to
+            // the settings that download them.
+            if (ref.watch(voiceProvider).available) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                onPressed: () => startVoiceChat(context, ref, ready: voiceReady),
+                child: const Text("New Voice Chat"),
+              ),
+            ],
             if (scaffold?.hasDrawer ?? false) ...[
               const SizedBox(height: 12),
               OutlinedButton(
@@ -295,25 +309,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// is something to find rather than something to already know about. With no
   /// models picked it leads to the settings that pick them, which is a better
   /// answer than a button that is not drawn.
-  Future<void> _openVoice(BuildContext context, bool ready) async {
-    if (!ready) {
-      final go = await confirm(
-        context,
-        title: "Voice mode needs two models",
-        message: "One to hear you and one to answer, downloaded to this device. "
-            "Settings has the list.",
-        confirmLabel: "Open settings",
-      );
-      if (!go || !context.mounted) return;
-      await Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const SettingsPage()));
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => VoicePage(chatId: widget.chatId)),
-    );
-  }
-
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
   /// case where the chat being deleted is the one the user is looking at.
@@ -440,7 +435,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   onSend: _send,
                   onAbort: _abort,
                   onVoice: ref.watch(voiceProvider).available
-                      ? () => _openVoice(context, voiceReady)
+                      ? () => openVoice(context, widget.chatId, ready: voiceReady)
                       : null,
                 )
               else
