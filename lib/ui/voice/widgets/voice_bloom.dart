@@ -12,14 +12,12 @@ import "../voice_controller.dart";
 /// top of that, sheds rings as it goes, orbits while a turn runs, beats as the
 /// reply is read out, and sits dim and still while the microphone is shut.
 ///
-/// Tapping it is the one way to stop whatever it is doing — the reply if it is
-/// talking, which is the fallback wherever the platform's echo cancellation is
-/// not good enough to hear the user over it, and otherwise the microphone.
+/// It reports and nothing more: what there is to do about any of it is
+/// [VoiceControls] underneath, where each button says what it does.
 class VoiceBloom extends StatefulWidget {
-  const VoiceBloom({super.key, required this.state, this.onTap});
+  const VoiceBloom({super.key, required this.state});
 
   final VoiceViewState state;
-  final VoidCallback? onTap;
 
   /// The most the orb and the widest ring it sheds take together. Given less
   /// than this — a short screen, or one with a question panel under it — the
@@ -176,34 +174,30 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
         const SizedBox(height: 24),
         Flexible(
           child: Semantics(
-            label: _describe(widget.state.status),
-            button: widget.onTap != null,
-            child: GestureDetector(
-              onTap: widget.onTap,
-              child: RepaintBoundary(
-                child: LayoutBuilder(
-                  builder: (context, room) {
-                    final side =
-                        math.min(room.biggest.shortestSide, VoiceBloom.size);
-                    return AnimatedBuilder(
-                      animation: _driven,
-                      builder: (context, _) => CustomPaint(
-                        size: Size.square(side),
-                        painter: BloomPainter(
-                          mode: mode,
-                          light: light,
-                          side: side,
-                          phase: _cycle.value,
-                          breath: _breath.value,
-                          // Nothing follows it in the other modes, so a level
-                          // arriving from a microphone that is closing changes
-                          // nothing on screen.
-                          level: mode == BloomMode.listening ? _level.value : 0,
-                        ),
+            label: _word(widget.state.status),
+            child: RepaintBoundary(
+              child: LayoutBuilder(
+                builder: (context, room) {
+                  final side =
+                      math.min(room.biggest.shortestSide, VoiceBloom.size);
+                  return AnimatedBuilder(
+                    animation: _driven,
+                    builder: (context, _) => CustomPaint(
+                      size: Size.square(side),
+                      painter: BloomPainter(
+                        mode: mode,
+                        light: light,
+                        side: side,
+                        phase: _cycle.value,
+                        breath: _breath.value,
+                        // Nothing follows it in the other modes, so a level
+                        // arriving from a microphone that is closing changes
+                        // nothing on screen.
+                        level: mode == BloomMode.listening ? _level.value : 0,
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -221,18 +215,6 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
         VoiceStatus.speaking => "Speaking",
         VoiceStatus.failed => "Failed",
       };
-
-  /// The word again, with what tapping would do to it — which is the one thing
-  /// on this screen a reader cannot see.
-  String _describe(VoiceStatus status) {
-    final hint = switch (status) {
-      _ when _hushed => "Tap to listen.",
-      VoiceStatus.speaking => "Tap to stop.",
-      VoiceStatus.listening || VoiceStatus.thinking => "Tap to pause.",
-      _ => null,
-    };
-    return hint == null ? _word(status) : "${_word(status)}. $hint";
-  }
 }
 
 /// How the orb is drawn, which is not the same question as the status: a
@@ -351,12 +333,6 @@ class BloomPainter extends CustomPainter {
         ..color = light.glow.withValues(alpha: alpha),
     );
   }
-
-  /// The box is mostly the room the rings need, so only the orb and its glow
-  /// answer a tap. Stopping a reply from a hand's width away is a surprise.
-  @override
-  bool hitTest(Offset position) =>
-      (position - Offset(side / 2, side / 2)).distance <= core * 1.7;
 
   @override
   bool shouldRepaint(BloomPainter old) =>

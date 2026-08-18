@@ -156,9 +156,9 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (ref.mounted) _show(VoiceStatus.off);
   }
 
-  /// Shut the microphone, or open it again. The circle is the button for it:
-  /// voice mode listens for as long as it is on screen, and until this there
-  /// was no way to stop it short of leaving.
+  /// Shut the microphone, or open it again — Mute, in `VoiceControls`. Voice
+  /// mode listens for as long as it is on screen, and until this there was no
+  /// way to stop it short of leaving.
   Future<void> setPaused(bool paused) async {
     if (!ref.mounted || !state.isOn || paused == _paused) return;
     _paused = paused;
@@ -166,9 +166,9 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (ref.mounted) _show(state.status);
   }
 
-  /// Shut the microphone up without leaving voice mode — the circle is a button
-  /// for this, and it is the fallback wherever the platform's echo cancellation
-  /// is not good enough for the detector to hear the user over the reply.
+  /// Shut the reply up without leaving voice mode — Stop, in `VoiceControls`,
+  /// and the fallback wherever the platform's echo cancellation is not good
+  /// enough for the detector to hear the user over the reply.
   Future<void> hush() async {
     if (!ref.mounted) return;
     await _session?.stopSpeaking();

@@ -11,6 +11,7 @@ import "transcript.dart";
 import "voice_controller.dart";
 import "widgets/transcript_window.dart";
 import "widgets/voice_bloom.dart";
+import "widgets/voice_controls.dart";
 
 /// Open voice mode over [chatId], or offer the settings that would make it
 /// possible. Every way in goes through here — the composer's circle and the
@@ -118,23 +119,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(
-              child: Center(
-                child: VoiceBloom(
-                  state: voice,
-                  // One button, and what it does is whatever stopping means
-                  // here: shut the reply up if it is talking, otherwise shut
-                  // the microphone — or open it again.
-                  onTap: switch (voice.status) {
-                    VoiceStatus.speaking => _voice.hush,
-                    VoiceStatus.listening ||
-                    VoiceStatus.thinking =>
-                      () => _voice.setPaused(!voice.paused),
-                    _ => null,
-                  },
-                ),
-              ),
-            ),
+            Expanded(child: Center(child: VoiceBloom(state: voice))),
             if (voice.error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -152,7 +137,16 @@ class _VoicePageState extends ConsumerState<VoicePage> {
             TurnSurface(view: chat, notifier: notifier),
             if (chat.questions.isNotEmpty)
               TurnQuestions(view: chat, notifier: notifier),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
+            // Bottom-most, where the composer is on the page this stands in
+            // for: it is what there is to do here.
+            VoiceControls(
+              state: voice,
+              onMute: () => _voice.setPaused(!voice.paused),
+              onStop: _voice.hush,
+              onDone: () => Navigator.of(context).maybePop(),
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),

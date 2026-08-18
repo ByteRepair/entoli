@@ -1736,8 +1736,17 @@ stopping a reply from a hand's width away is a surprise.
 A screen with the orb on it **never falls still**, so a widget test that pumps
 one cannot `pumpAndSettle` — `pumpUntil` is what the tests reach for instead.
 
-**Tapping it is the one way to stop whatever it is doing**: the reply if it is
-talking, and otherwise the microphone. Pausing is a *release* rather than a
+**Three buttons under it, one promise each**: Mute shuts the microphone, Stop
+shuts the reply up and is dead unless there is one being read out, and Done
+goes back to typing. They were the orb at first — which of the three a tap
+meant depended on the status, so the same gesture stopped a reply, shut a
+microphone or did nothing at all, and nothing on screen said the orb could be
+tapped. So the orb now reports and nothing else. Stop is drawn in the reply's
+own colour while it is live, since it is the one button that comes and goes
+mid-turn. They sit bottom-most, where the composer is on the page this screen
+stands in for.
+
+Pausing is a *release* rather than a
 stream left running and thrown away — the device stops recording, which is what
 the system's own microphone indicator will say either way. It is a flag beside
 the status rather than one of its values, because a turn can be running and its

@@ -16,6 +16,7 @@ import "package:agent_chat/ui/voice/voice_page.dart";
 import "package:agent_chat/ui/voice/widgets/transcript_window.dart";
 import "package:agent_chat/ui/chat/widgets/resume_bar.dart";
 import "package:agent_chat/ui/voice/widgets/voice_bloom.dart";
+import "package:agent_chat/ui/voice/widgets/voice_controls.dart";
 
 import "../harness.dart";
 
@@ -332,6 +333,82 @@ void main() {
     level.value = 1;
     await tester.pump();
     expect(_bloom(tester).level, 1);
+  });
+
+  group("the controls", () {
+    Future<void> pumpControls(
+      WidgetTester tester,
+      VoiceViewState state, {
+      VoidCallback? onMute,
+      VoidCallback? onStop,
+      VoidCallback? onDone,
+    }) =>
+        app.pump(
+          tester,
+          Scaffold(
+            body: VoiceControls(
+              state: state,
+              onMute: onMute ?? () {},
+              onStop: onStop ?? () {},
+              onDone: onDone ?? () {},
+            ),
+          ),
+        );
+
+    IconButton keyOf(WidgetTester tester, String tooltip) =>
+        tester.widget<IconButton>(find.ancestor(
+            of: find.byTooltip(tooltip), matching: find.byType(IconButton)));
+
+    testWidgets("stop is dead unless there is a reply to stop", (tester) async {
+      await pumpControls(
+          tester, const VoiceViewState(status: VoiceStatus.listening));
+      expect(keyOf(tester, "Stop the reply").onPressed, isNull);
+
+      await pumpControls(
+          tester, const VoiceViewState(status: VoiceStatus.speaking));
+      expect(keyOf(tester, "Stop the reply").onPressed, isNotNull);
+    });
+
+    testWidgets("the microphone button says which way it goes", (tester) async {
+      await pumpControls(
+          tester, const VoiceViewState(status: VoiceStatus.listening));
+      expect(find.text("Mute"), findsOneWidget);
+      expect(find.byIcon(Icons.mic_none), findsOneWidget);
+
+      await pumpControls(tester,
+          const VoiceViewState(status: VoiceStatus.listening, paused: true));
+      expect(find.text("Listen"), findsOneWidget);
+      expect(find.byIcon(Icons.mic_off_outlined), findsOneWidget);
+    });
+
+    testWidgets("done is offered whatever the session is doing", (tester) async {
+      var left = 0;
+      // Off is the state a page that failed to start is left in, and leaving
+      // is the only thing there is to do about it.
+      await pumpControls(tester, const VoiceViewState(), onDone: () => left++);
+      expect(keyOf(tester, "Shut the microphone").onPressed, isNull);
+
+      await tester.tap(find.byIcon(Icons.keyboard_arrow_down_rounded));
+      await tester.pump();
+      expect(left, 1);
+    });
+  });
+
+  testWidgets("Mute shuts the microphone from the screen", (tester) async {
+    await io(tester, () async {
+      final settings = app.container.read(appSettingsProvider.notifier);
+      await settings.setVoiceRecognitionModel("whisper-tiny");
+      await settings.setVoiceSpeechModel("piper-en_US-amy");
+    });
+    final chat = await io(tester, app.seedChat);
+    await app.pump(tester, VoicePage(chatId: chat.state.id), settle: false);
+    await pumpUntil(tester, find.text("LISTENING"));
+
+    await tester.tap(find.byIcon(Icons.mic_none));
+    await pumpUntil(tester, find.text("Listen"));
+
+    expect(app.voice.session!.listening, isFalse);
+    expect(find.text("PAUSED"), findsOneWidget);
   });
 
   group("pausing", () {
