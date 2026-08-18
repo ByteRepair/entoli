@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
+import "package:flutter/rendering.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
@@ -240,6 +241,48 @@ void main() {
       );
       final box = tester.getSize(find.byType(TranscriptWindow));
       expect(box.height, TranscriptWindow.lineHeight * TranscriptWindow.visibleLines);
+    });
+
+    testWidgets("fades into the orb above it", (tester) async {
+      final lines = [
+        for (var i = 0; i < 5; i++)
+          const VoiceLine(VoiceLineKind.replied, "wwwwwwwwww"),
+      ];
+      await app.pump(
+        tester,
+        Center(
+          child: RepaintBoundary(
+            key: const ValueKey("window"),
+            child: SizedBox(width: 200, child: TranscriptWindow(lines: lines)),
+          ),
+        ),
+      );
+
+      // Painted rather than asserted about: what the mask is for is the top of
+      // the *view* being faint, and a blend mode on its own would pass with
+      // the gradient upside down.
+      final painted = await tester.runAsync(() async {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(const ValueKey("window")));
+        final image = await boundary.toImage();
+        return image.toByteData();
+      });
+      final width = 200;
+      int densest(int from, int to) {
+        var most = 0;
+        for (var y = from; y < to; y++) {
+          for (var x = 0; x < width; x++) {
+            final alpha = painted!.getUint8((y * width + x) * 4 + 3);
+            if (alpha > most) most = alpha;
+          }
+        }
+        return most;
+      }
+
+      final top = densest(2, 22);
+      final bottom = densest(98, 118);
+      expect(bottom, greaterThan(200), reason: "the newest line is the one being read");
+      expect(top, lessThan(bottom ~/ 2), reason: "the oldest fades out of the window");
     });
 
     testWidgets("scrolls back to what was said at the start", (tester) async {

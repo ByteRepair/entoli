@@ -54,33 +54,50 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
     final scaler = MediaQuery.textScalerOf(context);
     return SizedBox(
       height: scaler.scale(TranscriptWindow.lineHeight) * TranscriptWindow.visibleLines,
-      child: ListView.builder(
-        controller: _scroll,
-        padding: EdgeInsets.zero,
-        itemCount: widget.lines.length,
-        itemBuilder: (context, i) {
-          final line = widget.lines[i];
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(
-              line.text,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: switch (line.kind) {
-                  // What the user said sits back; what was said to them is the
-                  // page. The issue asks for grey and white, taken through the
-                  // scheme so light mode works too.
-                  VoiceLineKind.said => theme.colorScheme.onSurfaceVariant,
-                  VoiceLineKind.replied => theme.colorScheme.onSurface,
-                  VoiceLineKind.activity => theme.colorScheme.outline,
-                },
-                fontStyle:
-                    line.kind == VoiceLineKind.activity ? FontStyle.italic : null,
+      child: ShaderMask(
+        shaderCallback: (bounds) => _fade.createShader(bounds),
+        blendMode: BlendMode.dstIn,
+        child: ListView.builder(
+          controller: _scroll,
+          padding: EdgeInsets.zero,
+          itemCount: widget.lines.length,
+          itemBuilder: (context, i) {
+            final line = widget.lines[i];
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                line.text,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: switch (line.kind) {
+                    // What the user said sits back; what was said to them is the
+                    // page. The issue asks for grey and white, taken through the
+                    // scheme so light mode works too.
+                    VoiceLineKind.said => theme.colorScheme.onSurfaceVariant,
+                    VoiceLineKind.replied => theme.colorScheme.onSurface,
+                    VoiceLineKind.activity => theme.colorScheme.outline,
+                  },
+                  fontStyle: line.kind == VoiceLineKind.activity
+                      ? FontStyle.italic
+                      : null,
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
+
+  /// The top of the window fading into the orb above it, so the line being
+  /// read is the one at the bottom. A mask rather than an opacity per line,
+  /// because this is a viewport: what should be faint is whatever is at the
+  /// top of the *view*, and a line dimmed by its place in the list stays
+  /// dimmed once it has been scrolled back to.
+  static const _fade = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Colors.transparent, Colors.black],
+    stops: [0, 0.42],
+  );
 }

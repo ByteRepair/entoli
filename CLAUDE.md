@@ -1764,6 +1764,14 @@ bar. And it follows the newest line only while it is already at the bottom,
 which is `chat_page.dart`'s slack rule reused rather than decided again: a reply
 streaming in must not yank the reader out of what they scrolled back to.
 
+**Its top fades out**, into the orb above it, so the line being read is the one
+at the bottom. A mask over the viewport rather than an opacity per line: what
+should be faint is whatever is at the top of the *view*, and a line dimmed by
+its place in the list stays dim once it has been scrolled back to. It is also
+the one thing on this screen that finding a widget cannot check — a blend mode
+on its own passes with the gradient upside down — so the test paints it and
+samples what came out.
+
 What the user said is `onSurfaceVariant` and what was said back is `onSurface` —
 the issue asks for grey and white, taken through the scheme so light mode works
 too. **A tool run gets a line as well**, dimmer than either voice: a turn can
