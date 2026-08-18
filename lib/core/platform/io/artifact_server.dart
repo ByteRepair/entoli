@@ -42,7 +42,6 @@ class IoArtifactServer implements ArtifactServer {
       return;
     }
 
-    final bytes = await file.readAsBytes();
     final type = contentTypeFor(file.path);
     request.response
       ..statusCode = HttpStatus.ok
@@ -51,10 +50,9 @@ class IoArtifactServer implements ArtifactServer {
     // The base stylesheet rides under the model's own CSS, so it is injected
     // into HTML before serving. Other content types pass through unchanged.
     if (type == "text/html") {
-      final html = injectBaseStyles(utf8.decode(bytes));
-      request.response.add(utf8.encode(html));
+      request.response.add(utf8.encode(injectBaseStyles(await file.readAsString())));
     } else {
-      request.response.add(bytes);
+      request.response.add(await file.readAsBytes());
     }
     await request.response.close();
   }

@@ -1,8 +1,6 @@
-import "dart:convert";
 import "dart:io";
 
 import "../../../domain/artifact_style.dart";
-import "../../../domain/content_type.dart";
 
 /// Builds an injected temp copy of an artifact's entry HTML for desktop,
 /// where the system browser opens a `file://` URL directly. The base
@@ -16,11 +14,7 @@ import "../../../domain/content_type.dart";
 Future<String?> writeArtifactTemp(String dir, String entryFile) async {
   final source = File("$dir/$entryFile");
   if (!await source.exists()) return null;
-  final bytes = await source.readAsBytes();
-  final type = contentTypeFor(entryFile);
-  final html = type == "text/html"
-      ? injectBaseStyles(utf8.decode(bytes))
-      : utf8.decode(bytes);
+  final html = injectBaseStyles(await source.readAsString());
   final temp = await File(
     "${Directory.systemTemp.path}/entoli-artifact-${DateTime.now().microsecondsSinceEpoch}.html",
   ).create();
