@@ -669,6 +669,17 @@ spawns under `setsid` where that exists so a timeout can kill the process
 group: a timed-out `npm install` that only loses its shell keeps downloading.
 Whether `setsid` is there is learned by trying it, not by probing first.
 
+Killing the group is not the same as closing the pipe, and the pipe is what the
+run waits on. A command that puts a child in a session of its own — a daemon
+started with `setsid`, anything a `nohup` left behind — leaves that child
+holding stdout after the shell is gone, so the stream never ends. Waited on,
+that is a turn nothing can finish: the agent is inside `await run.result`, the
+timeout has already fired and killed everything it could reach, and there is no
+second timeout behind it. So the output is read for a moment longer and the
+subscription is then cancelled, which closes the read end. What that costs is
+whatever the escaped child had still to say, which is the right thing to lose —
+it is still saying it.
+
 #### Approvals
 
 `approveMode` (`meta.json` over `settings.json`) is resolved once in
