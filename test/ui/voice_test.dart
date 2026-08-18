@@ -15,7 +15,7 @@ import "package:agent_chat/ui/voice/voice_controller.dart";
 import "package:agent_chat/ui/voice/voice_page.dart";
 import "package:agent_chat/ui/voice/widgets/transcript_window.dart";
 import "package:agent_chat/ui/chat/widgets/resume_bar.dart";
-import "package:agent_chat/ui/voice/widgets/voice_circle.dart";
+import "package:agent_chat/ui/voice/widgets/voice_bloom.dart";
 
 import "../harness.dart";
 
@@ -25,6 +25,12 @@ bool _finished(TestApp app, String id) {
   final view = app.container.read(chatControllerProvider(id));
   return !view.isRunning && (view.chat?.messages.length ?? 0) >= 2;
 }
+
+/// What the orb is drawn from, which is where everything it is told ends up.
+BloomPainter _bloom(WidgetTester tester) => tester
+    .widget<CustomPaint>(find.byWidgetPredicate(
+        (widget) => widget is CustomPaint && widget.painter is BloomPainter))
+    .painter! as BloomPainter;
 
 void main() {
   late TestApp app;
@@ -307,23 +313,25 @@ void main() {
     expect(find.byType(ResumeBar), findsOneWidget);
   });
 
-  testWidgets("the circle follows a live level", (tester) async {
+  testWidgets("the orb follows a live level", (tester) async {
     final level = ValueNotifier(0.0);
     addTearDown(level.dispose);
     await app.pump(
       tester,
       Scaffold(
-        body: VoiceCircle(
+        body: VoiceBloom(
           state: VoiceViewState(status: VoiceStatus.listening, level: level),
         ),
       ),
+      settle: false,
     );
 
-    final small = tester.getSize(find.byType(Container).first);
+    await tester.pump();
+    expect(_bloom(tester).level, 0);
+
     level.value = 1;
     await tester.pump();
-    expect(tester.getSize(find.byType(Container).first).width,
-        greaterThan(small.width));
+    expect(_bloom(tester).level, 1);
   });
 
   group("pausing", () {
@@ -403,25 +411,28 @@ void main() {
     });
   });
 
-  testWidgets("a paused circle is the microphone shut, and does not follow it",
+  testWidgets("a paused orb is the microphone shut, and does not follow it",
       (tester) async {
     final level = ValueNotifier(0.0);
     addTearDown(level.dispose);
     await app.pump(
       tester,
       Scaffold(
-        body: VoiceCircle(
+        body: VoiceBloom(
           state: VoiceViewState(
               status: VoiceStatus.listening, level: level, paused: true),
         ),
       ),
     );
 
-    expect(find.byIcon(Icons.mic_off_outlined), findsOneWidget);
-    final size = tester.getSize(find.byType(Container).first);
+    expect(find.text("PAUSED"), findsOneWidget);
     level.value = 1;
     await tester.pump();
-    expect(tester.getSize(find.byType(Container).first), size);
+    expect(_bloom(tester).level, 0,
+        reason: "a shut microphone is not something to draw a voice from");
+    // Nothing is moving either, which is the whole of what a wake lock held
+    // over a shut microphone would otherwise be spent on.
+    expect(tester.binding.transientCallbackCount, 0);
   });
 
   group("the composer's voice button", () {
@@ -471,7 +482,7 @@ void main() {
     await app.pump(tester, VoicePage(chatId: chat!.state.id), settle: false);
     await tester.pump();
 
-    expect(find.byType(VoiceCircle), findsOneWidget);
+    expect(find.byType(VoiceBloom), findsOneWidget);
     expect(find.byType(TranscriptWindow), findsOneWidget);
     expect(find.textContaining("Settings"), findsOneWidget);
   });

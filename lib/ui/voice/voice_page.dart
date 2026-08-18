@@ -10,7 +10,7 @@ import "../widgets/dialogs.dart";
 import "transcript.dart";
 import "voice_controller.dart";
 import "widgets/transcript_window.dart";
-import "widgets/voice_circle.dart";
+import "widgets/voice_bloom.dart";
 
 /// Open voice mode over [chatId], or offer the settings that would make it
 /// possible. Every way in goes through here — the composer's circle and the
@@ -120,7 +120,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
           children: [
             Expanded(
               child: Center(
-                child: VoiceCircle(
+                child: VoiceBloom(
                   state: voice,
                   // One button, and what it does is whatever stopping means
                   // here: shut the reply up if it is talking, otherwise shut

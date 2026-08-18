@@ -1693,9 +1693,48 @@ going looking for the button that started it.
 
 #### The screen
 
-The circle grows with the microphone while it listens, breathes while a turn
-runs, and holds still while the reply is read — three states to tell apart
-across a room, which is the point of a screen nobody is looking at closely.
+An orb of light, under the word for what voice mode is doing. It breathes on a
+slow cycle while it listens and swells with the microphone on top of that,
+sheds rings as it goes, orbits while a turn runs, beats as the reply is read
+out, and sits dim and still while the microphone is shut — four looks to tell
+apart across a room, which is the point of a screen nobody is looking at
+closely. `VoiceBloom` decides what is running and `BloomPainter` draws it.
+
+**The word is there because motion cannot say `starting` or `failed`.** It
+replaced a Material glyph in the middle of the orb, which is a thing to decode
+and was the only thing telling those two apart from listening. `_word` is also
+what the semantics label is built from, so what a reader hears is what is on
+screen plus what tapping would do — the one thing they cannot see.
+
+**Two controllers, and only because of the periods.** The rings and the orbit
+are never on screen together, so they share `_cycle` and what a mode changes is
+its duration; the breath is 1.9s against the rings' 2.9s and reading it off the
+same controller would jump every time that one wrapped. Nothing runs at all in
+the still mode — a hushed microphone repainted sixty times a second to draw the
+same frame is a wake lock being spent on nothing.
+
+**The two voices are the one place the scheme is left behind.** `heardColour`
+and `spokenColour` in `ui/theme.dart` are flat indigo and teal rather than
+`colorScheme.primary` and `tertiary`: a scheme's tones are picked to be read
+*on* a surface, so the dark primary is nearly white and makes a pale smudge of
+something meant to be lit, and an indigo seed resolves `tertiary` to a rose
+that reads as a warning rather than as the other half of a conversation. The
+hot middle of the orb moves *away* from the page — lighter in the dark, deeper
+in the light — since a centre lightened on a white surface is a hole in the orb
+rather than a light in it.
+
+Three things about the drawing are worth knowing. The gradients are built once
+per colour and drawn as a **unit circle under a canvas scale**, because a
+shader is a native allocation and a radius that changes every frame would
+otherwise mean a shader every frame. A ring travels from the orb *as it is now*
+to the edge of the box, so a swollen orb does not push its own rings off the
+screen. And the box scales to the room the column is given, since the same
+screen also holds a resume bar and a question panel; the tap, though, is
+bounded to the orb and its glow, because most of that box is room for rings and
+stopping a reply from a hand's width away is a surprise.
+
+A screen with the orb on it **never falls still**, so a widget test that pumps
+one cannot `pumpAndSettle` — `pumpUntil` is what the tests reach for instead.
 
 **Tapping it is the one way to stop whatever it is doing**: the reply if it is
 talking, and otherwise the microphone. Pausing is a *release* rather than a
@@ -1951,6 +1990,9 @@ is.
 Android's splash has followed the system since `minSdk` went to 26 and the
 pre-Lollipop `launch_background.xml` could go. Until this landed the app did not
 agree with it: a dark phone showed a dark splash and then a white app.
+
+The exceptions are the two voice colours beside `entoliIndigo`, and why they
+are not seeded is in "The screen".
 
 `AppTheme` mirrors material's `ThemeMode` rather than holding one. Nothing in
 `domain/` imports material — `core/config.dart` does reach `foundation`, so this

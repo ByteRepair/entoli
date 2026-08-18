@@ -83,7 +83,9 @@ void main() {
       await openEmpty(tester);
 
       await tester.tap(find.text("New Voice Chat"));
-      await settleIo(tester);
+      // Not settled: the orb listens on, so a screen with one on it never
+      // falls still.
+      await pumpUntil(tester, find.byType(VoicePage));
 
       expect(app.container.read(selectedChatIdProvider), isNotNull);
       expect(find.byType(VoicePage), findsOneWidget);
