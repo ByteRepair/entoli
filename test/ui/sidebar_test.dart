@@ -465,10 +465,7 @@ void main() {
 
     testWidgets("pinning a temporary chat clears its expiry", (tester) async {
       final chat = await io(tester, () => app.seedChat(title: "temp"));
-      // Make it temporary at the chat level: an off→non-off change re-anchors.
-      await io(tester, () => app.seedChatMeta(chat.state.id,
-          ChatMeta(tempChatTtl: TempChatTtl.hours24)));
-      await io(tester, () => app.repo.saveState(chat.state, reanchor: true));
+      await io(tester, () => app.makeTemporary(chat.state));
       await pumpBeside(tester);
       // The hourglass says it is temporary.
       expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);

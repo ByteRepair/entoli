@@ -24,8 +24,8 @@ void main() {
     expect(find.byIcon(Icons.menu), findsNothing);
   });
 
-  // One bar, not the shell's and the chat's: the mark is where it can give way
-  // to the chat's title.
+  // One bar, not the shell's and the chat's. With no chat open it is the mark's,
+  // there being no title to draw in its place.
   testWidgets("narrow, there is one app bar and it opens the sidebar",
       (tester) async {
     await pumpAt(tester, const Size(500, 900));
