@@ -65,6 +65,8 @@ android {
 
     buildTypes {
         debug {
+            // The name and artwork that go with this suffix are in
+            // src/debug/res/.
             applicationIdSuffix = ".debug"
         }
         release {
