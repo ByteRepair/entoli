@@ -221,7 +221,7 @@ void main() {
       await scrollTo(tester, find.text("Running commands"));
       expect(find.textContaining("Run without asking"), findsOneWidget);
 
-      await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
+      await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").at(2));
       await settleIo(tester);
       await save(tester);
 

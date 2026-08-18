@@ -6,6 +6,7 @@ import "app_theme.dart";
 import "llm_provider.dart";
 import "permission.dart";
 import "profile.dart";
+import "temp_chat_ttl.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
@@ -22,6 +23,7 @@ class AppSettings {
     this.profile,
     this.appIcon = AppIcon.cookie,
     this.appTheme = AppTheme.system,
+    this.tempChatTtl = TempChatTtl.off,
   });
 
   String? defaultModelId;
@@ -62,6 +64,11 @@ class AppSettings {
   /// Which palette the app draws. App-level only, for the same reason.
   AppTheme appTheme;
 
+  /// How long a temporary chat lives once its TTL is enabled. App-level
+  /// default; a project and a chat can override it. [TempChatTtl.off] means
+  /// temporary chats are off — chats live forever.
+  TempChatTtl tempChatTtl;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -84,6 +91,7 @@ class AppSettings {
         profile: Profile.fromJson(json["profile"]),
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
         appTheme: AppTheme.fromName(json["appTheme"] as String?),
+        tempChatTtl: TempChatTtl.fromName(json["tempChatTtl"] as String?),
       );
     } catch (_) {
       return AppSettings();
@@ -131,6 +139,7 @@ class AppSettings {
         profile: profile,
         appIcon: appIcon,
         appTheme: appTheme,
+        tempChatTtl: tempChatTtl,
       );
 
   Future<void> save(AppConfig config) async {
@@ -148,6 +157,7 @@ class AppSettings {
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
       "appIcon": appIcon.name,
       "appTheme": appTheme.name,
+      "tempChatTtl": tempChatTtl.name,
     }));
   }
 }

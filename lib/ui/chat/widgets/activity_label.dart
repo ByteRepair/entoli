@@ -514,4 +514,14 @@ String formatAge(Duration age) {
   return "${_plural(age.inDays, "day")} ago";
 }
 
+/// "23m left", "5h left", "3d left" — how long before a temporary chat expires.
+/// Coarse like [formatAge]: the shortest TTL is 24 hours, so minute precision
+/// is enough. "expiring" is the brief edge state before the sweep hides it.
+String formatRemaining(Duration remaining) {
+  if (remaining.inMinutes <= 0) return "expiring";
+  if (remaining.inHours < 1) return "${_plural(remaining.inMinutes, "minute")} left";
+  if (remaining.inDays < 1) return "${_plural(remaining.inHours, "hour")} left";
+  return "${_plural(remaining.inDays, "day")} left";
+}
+
 String _plural(int count, String unit) => "$count $unit${count == 1 ? "" : "s"}";

@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
 import "../../domain/permission.dart";
+import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../fonts.dart";
@@ -28,6 +29,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   /// it can be named. Loaded with the meta rather than watched, since a chat
   /// does not move while its settings are open.
   String? _workspace;
+
+  /// The project the chat's files are in, so the TTL field can name what null
+  /// resolves to.
+  String? _project;
   bool _saving = false;
 
   @override
@@ -49,6 +54,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
       setState(() {
         _meta = meta;
         _workspace = workspace;
+        _project = project;
       });
     }
   }
@@ -91,6 +97,12 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                 _ApprovalField(
                   value: _meta!.approveMode,
                   onChanged: (v) => setState(() => _meta!.approveMode = v),
+                ),
+                const Divider(),
+                _TempChatTtlField(
+                  value: _meta!.tempChatTtl,
+                  onChanged: (v) => setState(() => _meta!.tempChatTtl = v),
+                  project: _project,
                 ),
                 const Divider(),
                 _DeleteButton(chatId: widget.chatId),
@@ -200,6 +212,34 @@ class _ApprovalField extends ConsumerWidget {
       inherited: approveModeLabels[settings.approveMode],
       options: approveModeLabels,
       disabled: {if (noClassifier) ApproveMode.auto},
+      onChanged: onChanged,
+    );
+  }
+}
+
+/// This chat's temporary-chat TTL override. Null means inherit the project (if
+/// set) or app default; the resolved value is named in the Default entry.
+class _TempChatTtlField extends ConsumerWidget {
+  const _TempChatTtlField({
+    required this.value,
+    required this.onChanged,
+    required this.project,
+  });
+
+  final TempChatTtl? value;
+  final ValueChanged<TempChatTtl?> onChanged;
+  final String? project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final projectTtl = ref.watch(projectSettingsProvider(project)).tempChatTtl;
+    final appTtl = ref.watch(appSettingsProvider).tempChatTtl;
+    final inherited = (projectTtl ?? appTtl).label;
+    return InheritableDropdown<TempChatTtl>(
+      label: "Temporary chat",
+      value: value,
+      inherited: inherited,
+      options: tempChatTtlLabels,
       onChanged: onChanged,
     );
   }

@@ -116,8 +116,14 @@ class _SidebarState extends ConsumerState<Sidebar> {
             ),
             Expanded(
               child: async.when(
-                data: (all) {
-                  final chats = all.where((c) => c.project == project).toList();
+                 data: (all) {
+                   // Expired chats are hidden here and deleted by the sweep;
+                   // showing one in the list that is about to vanish reads as a
+                   // deletion on the next refresh.
+                   final chats = all
+                       .where((c) =>
+                           c.project == project && !c.isExpired())
+                       .toList();
                   if (chats.isEmpty) {
                     return const _Nothing("No chats in this project yet.");
                   }
@@ -328,7 +334,16 @@ class _ChatTile extends ConsumerWidget {
         // The heading above says when, so the row is the title and nothing else.
         title: Text(chat.title.orUntitled, overflow: TextOverflow.ellipsis),
         onTap: () => openChat(context, ref, chat.id),
-        trailing: PopupMenuButton<String>(
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (chat.tempTtlExpiresAt != null)
+              Icon(
+                Icons.hourglass_empty,
+                size: 14,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert),
           onSelected: (value) async {
             switch (value) {
@@ -344,6 +359,8 @@ class _ChatTile extends ConsumerWidget {
             PopupMenuItem(value: "rename", child: Text("Rename")),
             PopupMenuItem(value: "move", child: Text("Move to project…")),
             PopupMenuItem(value: "delete", child: Text("Delete")),
+          ],
+        ),
           ],
         ),
       ),
