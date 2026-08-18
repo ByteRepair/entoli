@@ -27,6 +27,7 @@ void main() async {
   final store = platform.createChatStore(config);
   final library = await PromptLibrary.from(platform.createPromptSources(config));
   final backend = platform.createBackend(config, library, store);
+  final handoff = platform.createFileHandoff(config);
   final container = ProviderContainer(
     overrides: [
       chatStoreProvider.overrideWithValue(store),
@@ -37,7 +38,9 @@ void main() async {
       launcherIconsProvider.overrideWithValue(const LauncherAliases()),
       linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
       backgroundWorkProvider.overrideWithValue(ForegroundService()),
-      fileHandoffProvider.overrideWithValue(platform.createFileHandoff(config)),
+      fileHandoffProvider.overrideWithValue(handoff),
+      backupHandoffProvider
+          .overrideWithValue(platform.createBackupHandoff(config, handoff)),
     ],
   );
   container.read(availableModelsProvider);

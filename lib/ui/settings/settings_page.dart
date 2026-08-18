@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_icon.dart";
 import "../../domain/app_theme.dart";
+import "../../domain/backup.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project.dart";
@@ -19,12 +20,14 @@ import "../widgets/resettable_field.dart";
 import "../workspace/workspace_page.dart";
 
 /// The page's categories, in the order they are offered. Everything an
-/// endpoint is is Providers, everything a model is asked to do is LLMs, and
-/// General is the app itself.
+/// endpoint is is Providers, everything a model is asked to do is LLMs, General
+/// is the app itself, and Data is all of it at once — the chats, the settings
+/// and the workspaces as one file to keep.
 enum SettingsCategory {
   general("General", Icons.tune),
   providers("Providers", Icons.cloud_outlined),
-  llms("LLMs", Icons.auto_awesome_outlined);
+  llms("LLMs", Icons.auto_awesome_outlined),
+  data("Data", Icons.inventory_2_outlined);
 
   const SettingsCategory(this.label, this.icon);
 
@@ -128,6 +131,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
         ],
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],
+      SettingsCategory.data => const [_BackupSection()],
     };
 
 /// The categories as a list: beside the page where there is room for one, and
@@ -690,3 +694,144 @@ class _DeleteAllChats extends ConsumerWidget {
     );
   }
 }
+
+/// Everything the app holds, out as one file and back in. The format is
+/// `domain/backup.dart`'s; this is the two buttons, and what the second of them
+/// has to ask before it goes ahead.
+class _BackupSection extends ConsumerStatefulWidget {
+  const _BackupSection();
+
+  @override
+  ConsumerState<_BackupSection> createState() => _BackupSectionState();
+}
+
+class _BackupSectionState extends ConsumerState<_BackupSection> {
+  /// Both buttons and the bar read it, so it is state rather than a notifier —
+  /// the section is a heading and two buttons, and rebuilding it is nothing.
+  var _busy = false;
+
+  Future<void> _export() => _guard(() async {
+        final bytes = await ref.read(chatRepositoryProvider).exportBackup();
+        await ref.read(backupHandoffProvider).save(backupFilename(DateTime.now()), bytes);
+        _say("Backup written — ${formatSize(bytes.length)}.");
+      });
+
+  Future<void> _import() async {
+    if (_busy) return;
+    // Restoring under a turn would pull the chat it is writing to out from
+    // under it, and the turn would carry on appending to a log that is gone.
+    if (ref.read(agentBackendProvider).runningTurns.value.isNotEmpty) {
+      return _say("A turn is still running. Stop it first.");
+    }
+    final bytes = await ref.read(backupHandoffProvider).pick();
+    if (bytes == null || !mounted) return;
+
+    final Backup backup;
+    try {
+      backup = parseBackup(bytes);
+    } on BackupFormatException catch (e) {
+      return _say("That file cannot be restored: $e.");
+    }
+    if (!mounted) return;
+
+    final confirmed = await confirm(
+      context,
+      title: "Restore this backup?",
+      message: "${_describe(backup)}\n\nEverything here now — every chat, "
+          "project, workspace and setting — is replaced by what is in it. Your "
+          "own commands and agents come back too, but only appear after the "
+          "app is restarted.",
+      confirmLabel: "Restore",
+      destructive: true,
+    );
+    if (!confirmed) return;
+
+    await _guard(() async {
+      await ref.read(chatRepositoryProvider).importBackup(backup);
+      if (!mounted) return;
+      // What the app is holding was read out of the files that have just been
+      // replaced: the selection points at a chat that may be gone, and every
+      // provider below reads through the config.
+      ref.read(selectedChatIdProvider.notifier).select(null);
+      ref.read(selectedProjectProvider.notifier).select(null);
+      ref.invalidate(appSettingsProvider);
+      ref.invalidate(projectSettingsProvider);
+      ref.invalidate(chatListProvider);
+      ref.invalidate(projectListProvider);
+      ref.invalidate(availableModelsProvider);
+      _say("Restored ${backup.chats} ${backup.chats == 1 ? "chat" : "chats"}.");
+    });
+  }
+
+  /// One at a time, and a failure is said rather than thrown: both routes end
+  /// at a plugin — a save dialog, a share sheet, a chooser — and a platform
+  /// that refuses is the ordinary case rather than a bug.
+  Future<void> _guard(Future<void> Function() work) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await work();
+    } catch (e) {
+      _say("That did not work: $e");
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _describe(Backup backup) {
+    final made = backup.createdAt;
+    final when = made == null ? "A backup" : "A backup from ${_day(made.toLocal())}";
+    return "$when, holding ${backup.chats} "
+        "${backup.chats == 1 ? "chat" : "chats"} and ${formatSize(backup.size)}.";
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            "Backup",
+            description: "Every chat, project, workspace, prompt and setting as "
+                "one zip. Restoring one replaces what is here.",
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              spacing: 12,
+              children: [
+                FilledButton.icon(
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text("Export"),
+                  onPressed: _busy ? null : _export,
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.download),
+                  label: const Text("Import"),
+                  onPressed: _busy ? null : _import,
+                ),
+              ],
+            ),
+          ),
+          // Two logical pixels where the buttons are dead, rather than a
+          // spinner over the page: a big export takes a while and there is
+          // nothing to do in the meantime but watch it.
+          SizedBox(
+            height: 2,
+            child: _busy ? const LinearProgressIndicator(minHeight: 2) : null,
+          ),
+        ],
+      );
+}
+
+const _months = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+String _day(DateTime when) =>
+    "${when.day} ${_months[when.month - 1]} ${when.year}";

@@ -11,7 +11,7 @@ with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
 beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
-`FakeFileHandoff` and `testLibrary`.
+`FakeFileHandoff`, `FakeBackupHandoff` and `testLibrary`.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so
@@ -29,6 +29,14 @@ a download and a chooser. `TestApp.create(handoff: …)` takes one. The explorer
 draws a different toolbar for each, so the platform is the fixture rather than
 something to guess at with `defaultTargetPlatform`, which would not change what
 `kIsWeb` answers anyway.
+
+`FakeBackupHandoff` is the save dialog and the chooser a backup leaves and
+arrives through. What was saved is kept rather than counted, since reading the
+zip back is the only witness there is that Export did anything.
+`settings_data_test.dart` raises `settleIo`'s `tries` rather than its `least`:
+reading and writing the whole data directory outlasts the default cap of real
+rounds, and the busy bar animates until it is done — so a run that gave up early
+would land on `pumpAndSettle` with a running animation and time out.
 
 `heldTurn` is a chat parked mid-turn with one event delivered and the widget it
 raises on screen, over a backend whose `hold` keeps the turn open the way a real

@@ -7,6 +7,7 @@ import "package:flutter/widgets.dart";
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
+import "package:agent_chat/domain/backup_handoff.dart";
 import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -116,6 +117,23 @@ class FakeAttachmentPicker implements AttachmentPicker {
     picks.add(kind);
     return scripted;
   }
+}
+
+/// The save dialog and the chooser a backup leaves and arrives through, neither
+/// of which a test can answer. What was saved is kept so a test can read the
+/// document back, which is the only witness there is that Export did anything.
+class FakeBackupHandoff implements BackupHandoff {
+  final List<({String name, Uint8List bytes})> saved = [];
+
+  /// What the next pick answers. Null is a cancelled chooser.
+  Uint8List? scripted;
+
+  @override
+  Future<void> save(String name, Uint8List bytes) async =>
+      saved.add((name: name, bytes: bytes));
+
+  @override
+  Future<Uint8List?> pick() async => scripted;
 }
 
 /// What a workspace file can do outside the app, which no test can drive: no

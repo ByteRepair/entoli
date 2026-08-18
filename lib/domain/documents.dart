@@ -19,7 +19,12 @@ class Documents {
   final FileSystem _fs;
   final Map<String, String> _texts = {};
 
+  /// Read [paths] into memory, replacing whatever was held. Called once at
+  /// startup and again after a restore, where clearing is the point: a
+  /// settings file the backup did not hold has to stop being answered from a
+  /// copy of the one it replaced.
   Future<void> hydrate(Iterable<String> paths) async {
+    _texts.clear();
     for (final path in paths) {
       final file = _fs.file(path);
       if (await file.exists()) _texts[path] = await file.readAsString();

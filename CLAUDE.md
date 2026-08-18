@@ -1747,14 +1747,15 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is three categories, picked from a panel beside it or, below
+The settings page is four categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself: the
 default project's workspace (which has nowhere else to be reached from),
 **Appearance** — the theme and the app icon, which are the two things the app
 looks like — the **Agent** — command approval mode and the classifier model,
 which travel together because auto mode is unusable without one — the
 environment, and deleting every chat. **Providers** is the endpoints. **LLMs**
-is what a new chat is answered by and what names it.
+is what a new chat is answered by and what names it. **Data** is all of it at
+once, out as one file and back — see "Backing it all up".
 
 **Narrow, the categories are the page rather than its drawer**, and each one is
 pushed over the list. That is the one place this and the chat page differ about
@@ -1771,6 +1772,69 @@ sections whether it is beside the panel or on a `_CategoryPage`. The page keeps
 `_category` in either layout, and a `_CategoryPage` pops itself once the window
 is wide: widening puts the category the user was reading beside the panel rather
 than under a full-screen copy of itself.
+
+### Backing it all up
+
+The Data category is two buttons: Export writes the whole data directory as one
+zip, Import replaces the whole data directory with one. `domain/backup.dart` is
+the format, `BackupHandoff` is how the file leaves and arrives, and
+`ChatRepository` is where the two meet what the app is already holding.
+
+**The members are the files.** Each one is at the path it has under the data
+directory, in its own bytes, so a backup opens in any file manager and a
+conversation reads as itself. The layout is the format: a directory that grows a
+new kind of file is backed up without `backup.dart` being told about it, which
+is the same bargain `conv.jsonl` makes.
+
+It was one JSON document holding every file first, and that is worse on every
+count that matters. Text in JSON is escaped inside a string inside an array,
+binary costs a third more as base64, nothing compresses, and JSON is read whole
+— so an export would have been bounded by what the device can hold twice over,
+which a workspace the agent has run `npm install` in is not. Deflate takes
+`conv.jsonl` to a fraction of itself, and a zip member is decompressed only
+while it is being written out. The one thing JSON was better at, saying what the
+document is before anything is deleted for it, a member gives back.
+
+That member is `entoli-backup.json`, holding the format name, the version and
+when the backup was made. ZIP's own comment field would have carried it —
+`archive` writes one — but reading it back means reaching into
+`ZipDecoder.directory` and it is decoded as latin-1, while a member is read
+through the same API as everything else and is there for whoever opens the file.
+A data directory holding a file of that name would have it shadowed; nothing
+creates one.
+
+**A restore replaces.** A merge would leave a chat deleted before the backup was
+made alive again beside one written after it, which is not what "restore" means.
+So the parse comes first and refuses everything it can — not a zip, no manifest,
+another format, a newer version — before `restoreBackup` has deleted anything,
+and a member's name goes through `safeRelativePath` for the reason a shared
+file's path does.
+
+What the app holds in memory is the other half, and it is why this goes through
+`ChatRepository.importBackup` rather than straight at the filesystem. The chats
+are dropped with `deleteAllChats`, which is what takes each one's live session
+with it and clears the store's idea of which project it is in — both would
+otherwise answer for a chat the restore has just replaced. `Documents` is
+re-read by `AppConfig.hydrateDocuments`, since `settings.json` is served from
+memory and would otherwise be the one that was just overwritten;
+`Documents.hydrate` clears before it reads, so a setting the backup does not
+hold stops being answered rather than lingering. The page then clears the
+selection and invalidates the providers that read through the config. A turn
+still running is refused rather than restored over — it would go on appending to
+a log that is gone. Only the `PromptLibrary` cannot be rebuilt, being read once
+at startup, so the confirmation says the user's own commands and agents appear
+after a restart.
+
+`BackupHandoff` is a port of its own rather than two more members on
+`FileHandoff`: that one is the workspace explorer's, and its per-platform
+capability flags are what the explorer's toolbar draws itself from — a backup
+asks none of those questions, because every platform has somewhere to put a file
+and a chooser to get one back. `FileSelectorBackup` is the whole of it on the
+desktops and the web, `getSaveLocation` being a dialog on one and a download on
+the other. Android is the exception and `SharedBackup` is why: `file_selector`
+implements no save dialog there, so a backup leaves through the share sheet,
+which is `FileHandoff`'s — written to a temp path and handed over, since an
+intent carries a file rather than bytes.
 
 ### Shared UI
 
