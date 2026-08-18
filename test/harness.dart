@@ -18,6 +18,7 @@ import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -131,6 +132,16 @@ class TestApp {
   /// A chat's own overrides, written the way the chat settings page writes them.
   Future<void> seedChatMeta(String chatId, ChatMeta meta) =>
       container.read(chatStoreProvider).saveMeta(chatId, meta);
+
+  /// A seeded chat made temporary at the chat level. `reanchor` is the
+  /// load-bearing half: without it the TTL has nothing to count from and the
+  /// chat is silently not temporary, which every assertion about one then
+  /// passes for the wrong reason.
+  Future<void> makeTemporary(ChatState state,
+          {TempChatTtl ttl = TempChatTtl.hours24}) async {
+    await seedChatMeta(state.id, ChatMeta(tempChatTtl: ttl));
+    await repo.saveState(state, reanchor: true);
+  }
 
   Future<ChatMeta> savedMeta(String chatId) =>
       container.read(chatStoreProvider).loadMeta(chatId);
