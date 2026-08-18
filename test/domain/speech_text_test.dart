@@ -102,6 +102,16 @@ void main() {
       agreesGrowing("| a | b |\n| --- | --- |\n| 1 | 2 |\n\nAfter it.");
     });
 
+    // The `\n{3,}` collapse, which it does as the lines arrive rather than
+    // over the whole reply: every run length, at both ends and in the middle.
+    test("agrees however many blank lines a reply runs to", () {
+      agreesGrowing("\n\n\nOne.\n\n\n\nTwo.\n\n\n\n\n\nThree.\n\n\n");
+    });
+
+    test("agrees where a line is nothing but what was stripped off it", () {
+      agreesGrowing("# \n\n---\n\n> \n\nWords at last.\n\n***\n");
+    });
+
     test("starts over when the text is a different one", () {
       final growing = SpeakableText();
       growing.of("The first reply, which was long.");

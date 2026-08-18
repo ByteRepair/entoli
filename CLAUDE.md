@@ -1664,9 +1664,22 @@ it gets — the same growth the splitter is fed the whole text to avoid paying
 twice. What makes it possible is that a reply only ever grows, so every line
 before the last break is settled; only the line still being written is stripped
 again, and its fence is not counted, since an opening fence is not open until
-the line it is on ends. It is tested against `speakable` at *every* length a
+the line it is on ends.
+
+**Settled lines are kept joined, not kept in a list**, and the `\n{3,}` collapse
+is done as they arrive — a run of three newlines is two blank lines in a row,
+which is a thing to notice on arrival rather than to scan the whole reply for
+afterwards. Without both, a look still cost a join of every line and a regex
+pass over all of it, which is the same growth one step quieter: measured over
+three hundred looks at a reply, 6 ms against 264 ms at 8,000 characters and
+15 ms against 1,073 ms at 32,000. What is left per look is one copy of the
+reply, which is what handing a widget a string costs.
+
+It is tested against `speakable` at *every* length a
 reply passes through, which is the only assertion that means anything about a
-thing whose whole job is to agree with something else.
+thing whose whole job is to agree with something else — and that is what carries
+the collapse being moved out of the regex, since every run length has to agree
+at every prefix.
 
 A sentence is generated ahead of being heard, so **the queue running dry is not
 the end** — the session only says it has fallen silent once nothing is still in

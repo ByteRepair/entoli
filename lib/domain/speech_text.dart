@@ -69,8 +69,15 @@ String _joined(List<String> lines) =>
 /// redrawn about sixty times a second, so on the whole reply each time the
 /// cost over a turn is quadratic.
 class SpeakableText {
-  final _said = <String>[];
+  /// The settled lines, already joined. A string rather than the list of them,
+  /// so that a look costs one copy of it rather than a join of every line;
+  /// [_blank] is what the `\\n{3,}` collapse becomes when it is done as they
+  /// arrive, since a run of three newlines is two empty lines in a row.
+  var _prefix = "";
+  var _blank = false;
+
   var _text = "";
+  String? _was;
 
   /// How much of [_text] the settled lines cover, and whether that point is
   /// inside a fence.
@@ -80,9 +87,15 @@ class SpeakableText {
   String of(String markdown) {
     // Length first, for the reason [SentenceSplitter.add] checks it first.
     if (markdown.length < _text.length || !markdown.startsWith(_text)) {
-      _said.clear();
+      _prefix = "";
+      _blank = false;
+      _was = null;
       _done = 0;
       _inFence = false;
+    } else if (markdown.length == _text.length && _was != null) {
+      // The same reply again: a turn changes more than its text, and the
+      // transcript is redrawn for all of it.
+      return _was!;
     }
     _text = markdown;
 
@@ -94,7 +107,7 @@ class SpeakableText {
           continue;
         }
         final said = _spoken(line, _inFence);
-        if (said != null) _said.add(said);
+        if (said != null) _settle(said);
       }
       _done = settled;
     }
@@ -102,10 +115,22 @@ class SpeakableText {
     // The line still being written: stripped afresh every time, and its fence
     // not counted — an opening fence is not open until the line it is on ends.
     final tail = markdown.substring(_done);
-    if (_fence.hasMatch(tail)) return _joined(_said);
-    final said = _spoken(tail, _inFence);
-    return _joined(said == null ? _said : [..._said, said]);
+    final said = _fence.hasMatch(tail) ? null : _spoken(tail, _inFence);
+    final out = said == null || said.isEmpty ? _prefix : _with(said);
+    return _was = out.trim();
   }
+
+  void _settle(String line) {
+    if (line.isEmpty) {
+      if (_prefix.isEmpty || _blank) return;
+      _blank = true;
+    } else {
+      _blank = false;
+    }
+    _prefix = _with(line);
+  }
+
+  String _with(String line) => _prefix.isEmpty ? line : "$_prefix\n$line";
 }
 
 /// Sentence-sized pieces out of a reply that is still being written, so the
