@@ -1795,6 +1795,43 @@ when the engine is created rather than on each attach, and holds the application
 context. That is forced by the engine outliving the activity: see "Staying alive
 off screen".
 
+#### The debug build's own
+
+A debug build installs beside a release one — its application id is suffixed
+`.debug` — and until this landed the two were the same indigo cookie under the
+same name, which makes the pair unusable for the one thing installing both is
+for. So `src/debug/` overrides the label and the artwork: `@string/app_name` is
+`Entoli (Debug)` there, and three drawables are the same paths with the indigo
+turned black.
+
+**The black copies are checked in, not tinted at build time.** A `tint` is one
+colour over the whole layer, and the icon is a white cookie with the indigo
+showing through it as the field behind and the glyph on top, so tinting flattens
+it to a blob. Routing the two colours through a `@color` the debug source set
+overrode would have worked; checked-in copies are what the rest of this section
+already does, and the cost is the same one — the paths are duplicated, and
+editing the artwork means editing both.
+
+Both foregrounds, not only the cookie's, because the icon switcher still works
+in a debug build and `ic_icon_background` is shared: draining it and leaving
+`ic_prompt_foreground` alone would put indigo details on a black field. The
+monochrome layers are shared as they are, being a single colour already — so on
+a launcher with themed icons on, the two installs are the same silhouette again
+and only the name tells them apart. That is the one case this does not fix.
+
+`appTitle` in `ui/theme.dart` is the Dart half, beside `entoliIndigo` for the
+same reason: it is the app's identity written where the platform's copy cannot
+be read. It is not a second signal — `MaterialApp.title` *replaces* the launcher
+label in Android's recents, so without it a debug build would name itself
+"Entoli" there whatever `@string/app_name` said. `_AppBrand` reads it too, so
+the bar over an empty pane is not the one place left saying "Entoli"; it is
+`Flexible` now because the name is no longer a fixed width and the slot is a
+phone's toolbar. It reads `kDebugMode` rather than the platform, so a debug web
+build's tab says it as well, which is honest and free. Linux is left alone:
+`my_application.cc` hardcodes the window title, `MaterialApp.title` does nothing
+on GTK, and there is no second install to tell apart. Profile builds have no
+`res/` of their own and so carry the release name and artwork.
+
 ### Setting overrides
 
 A chat's `meta.json` overrides the app default in `settings.json`. Each level
@@ -2089,7 +2126,8 @@ not install over the one before it. **Minor and patch must stay below 100**, or
 1.0.100 and 1.1.0 compute the same code; the workflow fails rather than
 shipping the collision. The debug builds are a separate application id
 (`.debug`), so the run numbers `debug-build.yml` gives them are never compared
-against these.
+against these. They carry their own name and icon too: see
+"The debug build's own".
 
 **Signing material never enters the repository.** Four secrets —
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
