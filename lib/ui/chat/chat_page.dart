@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
+import "../../domain/project.dart";
 import "../../providers.dart";
 import "../fonts.dart";
 import "../sidebar/sidebar.dart";
@@ -40,7 +41,8 @@ class ChatPage extends ConsumerWidget {
 /// text too long to track back to the start of.
 const double _readableWidth = 760;
 
-/// Nothing selected: the two ways to have a conversation, and nothing else.
+/// Nothing selected: the two ways to have a conversation, and which project
+/// they happen in.
 class _NoChat extends ConsumerWidget {
   const _NoChat();
 
@@ -60,6 +62,7 @@ class _NoChat extends ConsumerWidget {
           children: [
             const AppMark(size: 64),
             const SizedBox(height: 32),
+            const _ProjectBadges(),
             FilledButton(
               onPressed: () => startChat(context, ref),
               child: const Text("New Chat"),
@@ -73,6 +76,41 @@ class _NoChat extends ConsumerWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The projects there are, as badges, with the one a new chat would land in
+/// picked out. Both buttons below act on it, so it is chosen here rather than
+/// by either of them — the same rule the sidebar's switcher keeps.
+///
+/// Drawn only where there is a choice to make. The default project is always
+/// there, so with no named ones beside it this is a single badge that is
+/// already selected and can lead nowhere, which is the sidebar's switcher said
+/// again for nothing.
+class _ProjectBadges extends ConsumerWidget {
+  const _ProjectBadges();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final named = ref.watch(projectListProvider).value ?? const [];
+    if (named.isEmpty) return const SizedBox.shrink();
+    final selected = ref.watch(selectedProjectProvider);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final project in everyProject(named))
+            ChoiceChip(
+              label: Text(projectLabel(project)),
+              selected: project == selected,
+              onSelected: (_) => selectProject(ref, project),
+            ),
+        ],
       ),
     );
   }

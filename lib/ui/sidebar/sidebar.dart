@@ -39,6 +39,15 @@ void openChat(BuildContext context, WidgetRef ref, String chatId) {
   closeNavDrawer(context);
 }
 
+/// Show a project, and put a new chat in it. A chat of the project being left
+/// is not in the list any more, so keeping it selected would leave the pane
+/// showing something the sidebar denies. The switcher and the empty pane's
+/// badges are the same action.
+void selectProject(WidgetRef ref, String? project) {
+  ref.read(selectedProjectProvider.notifier).select(project);
+  ref.read(selectedChatIdProvider.notifier).select(null);
+}
+
 /// A new chat in the project being shown, opened. Nothing is listed here yet:
 /// an empty chat is not on disk, and joins the list when its first message is
 /// saved. The sidebar's button and the empty pane's are the same action.
@@ -418,13 +427,6 @@ class _ChatTile extends ConsumerWidget {
 class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
-  /// A chat of the project being left is not in the list any more, so keeping
-  /// it selected would leave the pane showing something the sidebar denies.
-  void _select(WidgetRef ref, String? project) {
-    ref.read(selectedProjectProvider.notifier).select(project);
-    ref.read(selectedChatIdProvider.notifier).select(null);
-  }
-
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final typed = await promptForText(
       context,
@@ -437,7 +439,7 @@ class _ProjectMenu extends ConsumerWidget {
     if (name == null) return;
     await ref.read(chatRepositoryProvider).createProject(name);
     ref.invalidate(projectListProvider);
-    _select(ref, name);
+    selectProject(ref, name);
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref, String project) =>
@@ -474,7 +476,7 @@ class _ProjectMenu extends ConsumerWidget {
     final chosen = await showAnchoredMenu<VoidCallback>(context, [
       for (final project in everyProject(projects))
         PopupMenuItem(
-          value: () => _select(ref, project),
+          value: () => selectProject(ref, project),
           child: Row(
             children: [
               Icon(

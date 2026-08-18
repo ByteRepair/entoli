@@ -1246,13 +1246,28 @@ whole screen and a monitor gets a line that can be read back to the start of.
 The composer is inside that column rather than under it: a centred conversation
 over a full-width field is a field twice the width of what it is answering.
 
-With nothing selected the pane is two buttons — New Chat and Open Chat — and
-nothing else. Open Chat is the drawer, so it is drawn only where there is one:
-beside a sidebar that is already out it would open what is on screen. It asks
-the `Scaffold` above it rather than taking a flag beside the one that built that
-Scaffold, since two answers to "is there a drawer here" can disagree. New Chat
-is `startChat`, which the sidebar's own button also calls, so there is one
-answer to what a new chat is and which project it lands in.
+With nothing selected the pane is the two ways to have a conversation — New Chat
+and Open Chat — over the project they happen in. Open Chat is the drawer, so it
+is drawn only where there is one: beside a sidebar that is already out it would
+open what is on screen. It asks the `Scaffold` above it rather than taking a
+flag beside the one that built that Scaffold, since two answers to "is there a
+drawer here" can disagree. New Chat is `startChat`, which the sidebar's own
+button also calls, so there is one answer to what a new chat is and which
+project it lands in.
+
+Above them are the projects, as badges, and that is the same discovery
+`_EmptyChat` does for commands: the switcher at the top of the sidebar is the
+only place a project is named, and the sidebar is what this pane is drawn
+instead of. Picking one is `selectProject` — the switcher's own action, lifted
+out of `_ProjectMenu` so the two cannot come to disagree about what switching
+means. **The badge is where the project changes, not either button**: New Chat
+and Open Chat act on what is already picked out, so pressing one is never also
+a choice about where it lands.
+
+They are drawn only where there is a choice. The default project is always
+there, so with no named ones beside it this is a single badge that is already
+selected and can lead nowhere — the switcher said again, for nothing. Same rule
+as the `1/1` thread counter.
 
 A chat with nothing *said* in it is `_EmptyChat`, and it is a different question
 — the chat is open, so what is missing is the first thing to say. It draws the

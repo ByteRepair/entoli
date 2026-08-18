@@ -89,6 +89,72 @@ void main() {
       expect(find.text("New Chat"), findsOneWidget);
       expect(find.text("Open Chat"), findsNothing);
     });
+
+    bool selectedOf(WidgetTester tester, String label) =>
+        tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label)).selected;
+
+    testWidgets("the projects there are are badges", (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await openEmpty(tester);
+
+      expect(find.widgetWithText(ChoiceChip, "Default"), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, "work"), findsOneWidget);
+    });
+
+    // One badge is the switcher said again: it is already selected and there is
+    // nowhere it can go.
+    testWidgets("and are left off where the default project is the only one",
+        (tester) async {
+      await openEmpty(tester);
+
+      expect(find.byType(ChoiceChip), findsNothing);
+    });
+
+    testWidgets("picking one highlights it and takes the next chat with it",
+        (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await openEmpty(tester);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, "work"));
+      await settleIo(tester);
+
+      expect(selectedOf(tester, "work"), isTrue);
+      expect(selectedOf(tester, "Default"), isFalse);
+      expect(app.container.read(selectedProjectProvider), "work");
+
+      await tester.tap(find.text("New Chat"));
+      await settleIo(tester);
+
+      final id = app.container.read(selectedChatIdProvider)!;
+      expect(await io(tester, () => app.repo.projectOf(id)), "work");
+    });
+
+    // Pressing a button is not where the project changes — the badge is.
+    testWidgets("New Chat lands in the project already picked out", (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await openEmpty(tester);
+
+      await tester.tap(find.text("New Chat"));
+      await settleIo(tester);
+
+      final id = app.container.read(selectedChatIdProvider)!;
+      expect(await io(tester, () => app.repo.projectOf(id)), isNull);
+    });
+
+    testWidgets("Open Chat shows the picked project's chats", (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await io(tester, () => app.seedChat(title: "at home"));
+      await io(tester, () => app.seedChat(title: "at work", project: "work"));
+      await openEmpty(tester);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, "work"));
+      await settleIo(tester);
+      await tester.tap(find.text("Open Chat"));
+      await settleIo(tester);
+
+      expect(find.text("at work"), findsOneWidget);
+      expect(find.text("at home"), findsNothing);
+    });
   });
 
   ScrollPosition position(WidgetTester tester) =>
