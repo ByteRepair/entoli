@@ -6,8 +6,8 @@ import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../domain/chat_log.dart";
-import "../../domain/documents.dart";
 import "../../domain/chat_meta.dart";
+import "../../domain/documents.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
