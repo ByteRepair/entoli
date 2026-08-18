@@ -31,8 +31,7 @@ Future<void> deleteProject(
     if (!await _confirmDeleteProject(context, project, count)) return;
   }
   await ref.read(chatRepositoryProvider).deleteProject(project);
-  ref.read(selectedProjectProvider.notifier).select(null);
-  ref.read(selectedChatIdProvider.notifier).select(null);
+  selectProject(ref, null);
   ref.invalidate(projectListProvider);
   ref.invalidate(chatListProvider);
   if (context.mounted && popToRoot) Navigator.of(context).popUntil((r) => r.isFirst);
