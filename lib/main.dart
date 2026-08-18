@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:ui" show AppExitResponse;
 
 import "package:flutter/material.dart";
+import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
@@ -10,6 +11,7 @@ import "core/platform/background_work.dart";
 import "core/platform/link_opener.dart";
 import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
+import "domain/app_restart.dart";
 import "domain/prompt_library.dart";
 import "providers.dart";
 import "ui/app_shell.dart";
@@ -23,41 +25,154 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerBundledFontLicences();
   await platform.persist();
-  final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
-  final store = platform.createChatStore(config);
-  final library = await PromptLibrary.from(platform.createPromptSources(config));
-  final backend = platform.createBackend(config, library, store);
-  final container = ProviderContainer(
-    overrides: [
-      chatStoreProvider.overrideWithValue(store),
-      agentBackendProvider.overrideWithValue(backend),
-      appConfigProvider.overrideWithValue(config),
-      attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
-      promptLibraryProvider.overrideWithValue(library),
-      launcherIconsProvider.overrideWithValue(const LauncherAliases()),
-      linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
-      backgroundWorkProvider.overrideWithValue(ForegroundService()),
-      fileHandoffProvider.overrideWithValue(platform.createFileHandoff(config)),
-    ],
-  );
-  container.read(availableModelsProvider);
-  container.read(turnKeepAliveProvider);
-  // Sweep expired temporary chats on startup, then every 30 minutes. The timer
-  // is in-process and dies with the app: a chat expiring while the app is
-  // closed is caught at the next launch. Skips the currently-open chat, which
-  // is handled by the on-open prompt.
-  await container.read(chatRepositoryProvider).sweepExpired(
-        exceptId: container.read(selectedChatIdProvider),
+  // Built here rather than by the root, so the platform's splash covers the
+  // first read of the data directory instead of a blank frame.
+  final relaunch = AppRelaunch();
+  runApp(AppRoot(session: await AppSession.start(relaunch), relaunch: relaunch));
+}
+
+/// Everything the app reads out of the data directory, and the container it is
+/// all reached through. One per run of the app — and a second one when a backup
+/// is restored, which is what makes the restore land: see [AppRoot].
+class AppSession {
+  AppSession._(this.container, this._sweep);
+
+  final ProviderContainer container;
+  final Timer _sweep;
+
+  static Future<AppSession> start(AppRestart relaunch) async {
+    final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
+    final store = platform.createChatStore(config);
+    final library = await PromptLibrary.from(platform.createPromptSources(config));
+    final backend = platform.createBackend(config, library, store);
+    final handoff = platform.createFileHandoff(config);
+    final container = ProviderContainer(
+      overrides: [
+        chatStoreProvider.overrideWithValue(store),
+        agentBackendProvider.overrideWithValue(backend),
+        appConfigProvider.overrideWithValue(config),
+        attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
+        promptLibraryProvider.overrideWithValue(library),
+        launcherIconsProvider.overrideWithValue(const LauncherAliases()),
+        linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
+        backgroundWorkProvider.overrideWithValue(ForegroundService()),
+        fileHandoffProvider.overrideWithValue(handoff),
+        backupHandoffProvider
+            .overrideWithValue(platform.createBackupHandoff(config, handoff)),
+        appRestartProvider.overrideWithValue(relaunch),
+      ],
+    );
+    container.read(availableModelsProvider);
+    container.read(turnKeepAliveProvider);
+    // Sweep expired temporary chats on startup, then every 30 minutes. The
+    // timer is in-process and dies with the session: a chat expiring while the
+    // app is closed is caught at the next launch. Skips the currently-open
+    // chat, which is handled by the on-open prompt.
+    Future<void> sweep() => container
+        .read(chatRepositoryProvider)
+        .sweepExpired(exceptId: container.read(selectedChatIdProvider));
+    await sweep();
+    return AppSession._(
+      container,
+      Timer.periodic(const Duration(minutes: 30), (_) => sweep()),
+    );
+  }
+
+  /// Everything of this session that writes: a running turn holds a subprocess,
+  /// and the sweep deletes chats. Both stop before the container holding them
+  /// goes, which is what lets a restore replace the files underneath.
+  Future<void> dispose() async {
+    _sweep.cancel();
+    await container.read(agentBackendProvider).shutdown();
+    container.dispose();
+  }
+}
+
+/// What the container is handed in place of the root, which does not exist yet
+/// when the first session is built. Filled in on the root's first frame, and
+/// nothing can ask for a restart before there is a button to press.
+class AppRelaunch implements AppRestart {
+  Future<void> Function({Future<void> Function()? whileStopped})? onRestart;
+
+  /// Unwired, nothing happens — including [whileStopped], so a restore cannot
+  /// delete the data directory and then find there is nobody to rebuild it.
+  @override
+  Future<void> restart({Future<void> Function()? whileStopped}) async =>
+      onRestart?.call(whileStopped: whileStopped);
+}
+
+/// The app, and the ability to build it again. A restart here is a second
+/// [AppSession] swapped in and the first thrown away — which is what a restored
+/// backup needs and nothing else does. See `domain/app_restart.dart` for why
+/// that rather than telling each holder to look afresh.
+class AppRoot extends StatefulWidget {
+  const AppRoot({super.key, required this.session, required this.relaunch});
+
+  final AppSession session;
+  final AppRelaunch relaunch;
+
+  @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> {
+  late AppSession? _session = widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.relaunch.onRestart = _restart;
+  }
+
+  Future<void> _restart({Future<void> Function()? whileStopped}) async {
+    final old = _session!;
+    if (whileStopped != null) {
+      // Down to nothing first: what runs here replaces the files the session
+      // was built from, so a check that nothing is writing would be a check
+      // against writers it does not know about.
+      setState(() => _session = null);
+      await SchedulerBinding.instance.endOfFrame;
+      await old.dispose();
+      await whileStopped();
+    }
+    final next = await AppSession.start(widget.relaunch);
+    if (!mounted) return next.dispose();
+    setState(() => _session = next);
+    // After the frame that takes the old tree down: disposing a container the
+    // widgets reading it are still mounted against is disposing it under them.
+    if (whileStopped == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = _session;
+    // Only between stopping and starting, which is a restore replacing the
+    // files a session would be built from.
+    if (session == null) return const _Stopped();
+    return UncontrolledProviderScope(
+      // Keyed on the session, so a restart builds the tree again rather than
+      // reusing state that was reading the container being thrown away.
+      key: ObjectKey(session),
+      container: session.container,
+      child: AgentChatApp(onExit: session.dispose),
+    );
+  }
+}
+
+/// The app with no session behind it. Themed by hand: the palette is a setting,
+/// and reading it is what there is nothing to read from here.
+class _Stopped extends StatelessWidget {
+  const _Stopped();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        title: "Entoli",
+        theme: entoliTheme(Brightness.light),
+        darkTheme: entoliTheme(Brightness.dark),
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
-  Timer.periodic(const Duration(minutes: 30), (_) {
-    container.read(chatRepositoryProvider).sweepExpired(
-          exceptId: container.read(selectedChatIdProvider),
-        );
-  });
-  runApp(UncontrolledProviderScope(
-    container: container,
-    child: AgentChatApp(onExit: backend.shutdown),
-  ));
 }
 
 class AgentChatApp extends ConsumerStatefulWidget {

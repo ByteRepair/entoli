@@ -6,6 +6,7 @@ import "../../data/local/file_chat_store.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/prompt_library.dart";
@@ -61,6 +62,12 @@ ChatStore createChatStore(AppConfig config) => FileChatStore(config);
 /// ways rather than two, since desktop and Android disagree as much as either
 /// does with a browser.
 FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff(config.fs);
+
+/// Where a backup goes on its way out, and where one comes back from. Takes
+/// the [handoff] because Android's route out is the share sheet, which is
+/// already that port's.
+BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
+    platformBackupHandoff(config.fs, handoff);
 
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now.

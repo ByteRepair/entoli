@@ -3,15 +3,19 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_icon.dart";
 import "../../domain/app_theme.dart";
+import "../../data/backup.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
+import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/anchored_menu.dart";
+import "../widgets/busy.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
@@ -19,12 +23,14 @@ import "../widgets/resettable_field.dart";
 import "../workspace/workspace_page.dart";
 
 /// The page's categories, in the order they are offered. Everything an
-/// endpoint is is Providers, everything a model is asked to do is LLMs, and
-/// General is the app itself.
+/// endpoint is is Providers, everything a model is asked to do is LLMs, General
+/// is the app itself, and Data is all of it at once — the chats, the settings
+/// and the workspaces as one file to keep.
 enum SettingsCategory {
   general("General", Icons.tune),
   providers("Providers", Icons.cloud_outlined),
-  llms("LLMs", Icons.auto_awesome_outlined);
+  llms("LLMs", Icons.auto_awesome_outlined),
+  data("Data", Icons.inventory_2_outlined);
 
   const SettingsCategory(this.label, this.icon);
 
@@ -128,6 +134,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
         ],
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],
+      SettingsCategory.data => const [_BackupSection()],
     };
 
 /// The categories as a list: beside the page where there is room for one, and
@@ -661,7 +668,7 @@ class _DeleteAllChats extends ConsumerWidget {
       title: "Delete all chats?",
       message: count == 0
           ? "There are no chats to delete."
-          : "This permanently removes $count ${count == 1 ? "chat" : "chats"}, "
+          : "This permanently removes ${plural(count, "chat")}, "
               "including their workspaces. It cannot be undone.",
       confirmLabel: count == 0 ? null : "Delete all",
       destructive: true,
@@ -689,4 +696,120 @@ class _DeleteAllChats extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Everything the app holds, out as one file and back in. The format is
+/// `domain/backup.dart`'s; this is the two buttons, and what the second of them
+/// has to ask before it goes ahead.
+class _BackupSection extends ConsumerStatefulWidget {
+  const _BackupSection();
+
+  @override
+  ConsumerState<_BackupSection> createState() => _BackupSectionState();
+}
+
+class _BackupSectionState extends ConsumerState<_BackupSection> {
+  final _busy = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _busy.dispose();
+    super.dispose();
+  }
+
+  Future<void> _export() => _guard(() async {
+        final bytes = await writeBackup(ref.read(appConfigProvider));
+        await ref.read(backupHandoffProvider).save(backupFilename(DateTime.now()), bytes);
+        _say("Backup written — ${formatSize(bytes.length)}.");
+      });
+
+  Future<void> _import() async {
+    // A courtesy rather than a safeguard: the restart stops the turn either
+    // way, and killing someone's work without saying so is the rude version.
+    if (ref.read(agentBackendProvider).runningTurns.value.isNotEmpty) {
+      return _say("A turn is still running. Stop it first.");
+    }
+    final bytes = await ref.read(backupHandoffProvider).pick();
+    if (bytes == null || !mounted) return;
+
+    final Backup backup;
+    try {
+      backup = parseBackup(bytes);
+    } on BackupFormatException catch (e) {
+      return _say("That file cannot be restored: $e.");
+    }
+    if (!mounted) return;
+
+    final confirmed = await confirm(
+      context,
+      title: "Restore this backup?",
+      message: "${_describe(backup)}\n\nEverything here now — every chat, "
+          "project, workspace and setting — is replaced by what is in it, and "
+          "Entoli starts again on what was restored.",
+      confirmLabel: "Restore",
+      destructive: true,
+    );
+    if (!confirmed) return;
+
+    // The restore runs inside the restart, with no session over the files it
+    // replaces: everything that writes to them — a turn, the sweep, a
+    // checkpoint — belongs to the session, so stopping it is what a check
+    // against one writer could only approximate.
+    final config = ref.read(appConfigProvider);
+    await _guard(() => ref.read(appRestartProvider).restart(
+          whileStopped: () => restoreBackup(config, backup),
+        ));
+  }
+
+  Future<void> _guard(Future<void> Function() work) =>
+      whileBusy(context, _busy, work);
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _describe(Backup backup) {
+    final made = backup.createdAt;
+    final when = made == null
+        ? "A backup"
+        : "A backup from ${formatAge(DateTime.now().difference(made))}";
+    return "$when, holding ${plural(backup.chats, "chat")} and "
+        "${formatSize(backup.size)}.";
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionHeader(
+            "Backup",
+            description: "Every chat, project, workspace, prompt and setting as "
+                "one zip. Restoring one replaces what is here.",
+          ),
+          // The icons the explorer already uses for the same two directions:
+          // a download leaves the app, an upload arrives in it.
+          _AddButtonRow(
+            child: ValueListenableBuilder(
+              valueListenable: _busy,
+              builder: (context, busy, _) => Row(
+                spacing: 12,
+                children: [
+                  FilledButton.icon(
+                    icon: const Icon(Icons.download),
+                    label: const Text("Export"),
+                    onPressed: busy ? null : _export,
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text("Import"),
+                    onPressed: busy ? null : _import,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          BusyBar(_busy),
+        ],
+      );
 }

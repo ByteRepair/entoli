@@ -33,8 +33,18 @@ import "fakes.dart";
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
-  TestApp._(this.config, this.backend, this.picker, this.launcher, this.handoff,
-      this.store, this.linkOpener, this.container);
+  TestApp._({
+    required this.config,
+    required this.backend,
+    required this.picker,
+    required this.launcher,
+    required this.handoff,
+    required this.backups,
+    required this.restart,
+    required this.store,
+    required this.linkOpener,
+    required this.container,
+  });
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
@@ -54,17 +64,21 @@ class TestApp {
     final picker = FakeAttachmentPicker();
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
+    final backups = FakeBackupHandoff();
+    final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
     final linkOpener = FakeLinkOpener();
     return TestApp._(
-      config,
-      backend,
-      picker,
-      launcher,
-      files,
-      chats,
-      linkOpener,
-      ProviderContainer(
+      config: config,
+      backend: backend,
+      picker: picker,
+      launcher: launcher,
+      handoff: files,
+      backups: backups,
+      restart: restart,
+      store: chats,
+      linkOpener: linkOpener,
+      container: ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
@@ -73,6 +87,8 @@ class TestApp {
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           launcherIconsProvider.overrideWithValue(launcher),
           fileHandoffProvider.overrideWithValue(files),
+          backupHandoffProvider.overrideWithValue(backups),
+          appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
         ],
       ),
@@ -84,6 +100,8 @@ class TestApp {
   final FakeAttachmentPicker picker;
   final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
+  final FakeBackupHandoff backups;
+  final FakeAppRestart restart;
   final ChatStore store;
   final FakeLinkOpener linkOpener;
   final ProviderContainer container;

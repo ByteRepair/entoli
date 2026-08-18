@@ -5,10 +5,13 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 
+import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_file_handoff.dart";
+import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
+import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/web_search.dart";
@@ -23,6 +26,14 @@ WebSearch platformWebSearch() => DuckDuckGoSearch();
 /// here. Chosen once, so neither implementation carries a branch.
 FileHandoff platformFileHandoff(FileSystem fs) =>
     Platform.isAndroid ? AndroidFileHandoff(fs) : const DesktopFileHandoff();
+
+/// The same runtime choice again, and for a narrower reason: `file_selector`
+/// has a save dialog on the desktops and none on Android, where a backup goes
+/// out through the share sheet instead.
+BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
+    Platform.isAndroid
+        ? SharedBackup(fs, handoff)
+        : const FileSelectorBackup();
 
 FileSystem platformFileSystem() => fileSystemIo;
 

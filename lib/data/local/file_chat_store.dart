@@ -7,6 +7,7 @@ import "package:uuid/uuid.dart";
 import "../../core/config.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/chat_meta.dart";
+import "../../domain/documents.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -34,7 +35,7 @@ class FileChatStore implements ChatStore {
   /// for the documents beside the log: the log itself is appended to, where
   /// the same hazard is a torn last line the reader drops.
   Future<void> _write(String path, String text) async {
-    final temp = _fs.file("$path.writing");
+    final temp = _fs.file("$path$writingSuffix");
     await temp.writeAsString(text);
     await temp.rename(path);
   }

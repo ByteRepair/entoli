@@ -5,7 +5,9 @@ import "package:fs_shim/fs_browser.dart" show fileSystemWeb;
 import "package:fs_shim/fs_idb.dart" show FileSystemIdbExt, FileSystemIdbOptions;
 import "package:web/web.dart" as web;
 
+import "../../../data/backup_handoff.dart";
 import "../../../data/web/web_file_handoff.dart";
+import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/web_search.dart";
@@ -16,6 +18,12 @@ Shell platformShell({required Map<String, String> Function() environment}) =>
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 
 FileHandoff platformFileHandoff(FileSystem fs) => WebFileHandoff(fs);
+
+/// `file_selector` on the web is an `<input type="file">` in and an anchor with
+/// a `download` attribute out, which is what a browser has in place of a save
+/// dialog.
+BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
+    const FileSelectorBackup();
 
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.
