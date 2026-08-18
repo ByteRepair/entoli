@@ -1279,9 +1279,24 @@ other direction: the sheet's inline `code` and the block are both built on
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
 own drawer rather than a shell's — two bars stacked was the app's name over the
-chat's, saying nothing twice. What it shows follows the conversation: the mark
-and "Entoli" while the list is at its top, the chat's title and project once it
-is not. A chat too short to scroll is always at the top, so it keeps the mark.
+chat's, saying nothing twice. **It names the chat, always**: the title, the
+project, and the pin or the countdown. It followed the scroll position at
+first — the mark and "Entoli" at the top of the list, the title once past it —
+and that put the app's name where the chat's belongs for every conversation
+short enough not to scroll, which is most of the ones being started. The mark is
+still on the bar with no chat open, where there is no title to draw instead.
+
+**The bar grows with what it has to say.** One detail line fits under the title
+in Material's 56dp toolbar and two do not, so a chat that is both in a project
+and temporary was having its countdown clipped. The lines are counted rather
+than measured — a bar that sized itself to its text would have to lay the text
+out to know its own height, and a `Scaffold`'s `appBar` has to answer that
+before it is built — which makes the count a thing that can drift from what is
+drawn. So it is not a second list of conditions: `_details` is the only place
+they are written down and `_barHeight` counts what it returned. The per-line
+number is `_TitleLine.height` and the row is *held* to it rather than measured
+against it, so what the bar adds for a line is what the line takes, at any text
+scale.
 
 The conversation is a column of `_readableWidth`, centred. A phone gets the
 whole screen and a monitor gets a line that can be read back to the start of.

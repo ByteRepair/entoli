@@ -178,8 +178,8 @@ class _EmptyChat extends ConsumerWidget {
   }
 }
 
-class AppBrand extends StatelessWidget {
-  const AppBrand({super.key});
+class _AppBrand extends StatelessWidget {
+  const _AppBrand();
 
   @override
   Widget build(BuildContext context) => const Row(
@@ -199,7 +199,7 @@ class _Waiting extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         drawer: withDrawer ? const NavDrawer(child: Sidebar()) : null,
-        appBar: withDrawer ? AppBar(title: const AppBrand()) : null,
+        appBar: withDrawer ? AppBar(title: const _AppBrand()) : null,
         body: Center(child: child),
       );
 }
@@ -217,15 +217,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// How far off the end still counts as reading the latest: inside it a turn
   /// keeps the view pinned, outside it the jump button appears.
   static const _slack = 200.0;
-  static const _topSlack = 8.0;
 
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
-  /// Notifiers rather than fields: only the bar's title and the jump button
-  /// read these, and a `setState` mid-drag would rebuild every visible bubble
-  /// to swap one of them.
-  final ValueNotifier<bool> _atTop = ValueNotifier(true);
+  /// A notifier rather than a field: only the jump button reads it, and a
+  /// `setState` mid-drag would rebuild every visible bubble to swap it.
   final ValueNotifier<bool> _atBottom = ValueNotifier(true);
 
   /// The chat the view has already been dropped to the bottom of.
@@ -246,7 +243,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     _scroll.removeListener(_readPosition);
     _controller.dispose();
     _scroll.dispose();
-    _atTop.dispose();
     _atBottom.dispose();
     super.dispose();
   }
@@ -254,7 +250,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   void _readPosition() {
     if (!_scroll.hasClients) return;
     final position = _scroll.position;
-    _atTop.value = position.pixels <= _topSlack;
     _atBottom.value = position.maxScrollExtent - position.pixels <= _slack;
   }
 
@@ -356,10 +351,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       _checkExpiry(context, chat.state);
     }
 
+    final details = _details(chat.state);
+    final barHeight = _barHeight(context, details.length);
     return Scaffold(
       drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
       appBar: AppBar(
         titleSpacing: 0,
+        toolbarHeight: barHeight,
         title: InkWell(
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
@@ -367,18 +365,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           // Fills the bar between leading and actions so the whole strip opens
           // the chat's settings, not just the text.
           child: SizedBox(
-            height: kToolbarHeight,
+            height: barHeight,
             width: double.infinity,
             child: Align(
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: _atTop,
-                  builder: (context, atTop, _) => AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 150),
-                    child: atTop ? const AppBrand() : _title(context, chat.state),
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [Text(chat.state.title.orUntitled), ...details],
                 ),
               ),
             ),
@@ -509,60 +505,68 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
-  Widget _title(BuildContext context, ChatState state) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(state.title.orUntitled),
-          // Only where there is something to say: every chat is in a project,
-          // and naming the default one on every chat is noise.
-          if (state.project != null)
-            Text(
-              state.project!,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-          if (state.pinned)
-            _TitleLine(icon: Icons.push_pin, text: "Pinned"),
-          if (state.tempTtlExpiresAt != null)
-            _TtlLine(expiresAt: state.tempTtlExpiresAt!),
-        ],
-      );
+  /// What the bar says about the chat under its title, a line each. The
+  /// conditions are here and nowhere else: [_barHeight] counts what this
+  /// returns, so a line added here is one the bar makes room for.
+  List<Widget> _details(ChatState state) => [
+        // Every chat is in a project, so naming the default one says nothing.
+        if (state.project != null) _TitleLine(text: state.project!),
+        if (state.pinned) _TitleLine(icon: Icons.push_pin, text: "Pinned"),
+        if (state.tempTtlExpiresAt != null)
+          _TtlLine(expiresAt: state.tempTtlExpiresAt!),
+      ];
+
+  /// Tall enough for the title and its detail lines. One of those fits beside
+  /// the title in Material's toolbar and a second does not, so the bar buys a
+  /// line for every one past the first.
+  double _barHeight(BuildContext context, int details) => details > 1
+      ? kToolbarHeight +
+          (details - 1) * MediaQuery.textScalerOf(context).scale(_TitleLine.height)
+      : kToolbarHeight;
   }
 
-/// The pin glyph and label shown in the title bar of a pinned chat, and the
-/// shared layout the TTL line reuses: a small `onSurfaceVariant` icon, a
-/// 4px gap, and `bodySmall` text in the same colour.
+/// One line under the chat's title in the bar: the project it is in, the pin
+/// on a pinned chat, or the countdown on a temporary one. A small
+/// `onSurfaceVariant` icon where there is one, a 4px gap, and `bodySmall` text
+/// in the same colour.
 class _TitleLine extends StatelessWidget {
-  const _TitleLine({required this.icon, required this.text});
+  const _TitleLine({this.icon, required this.text});
 
-  final IconData icon;
+  /// What one of these takes, which the bar has to know before laying one out.
+  /// The row is held to it rather than measured against it, so the number the
+  /// bar adds per line is the number the line costs — and it is over the 16dp
+  /// `bodySmall` renders at so that the text still fits once scaled.
+  static const height = 18.0;
+
+  final IconData? icon;
   final String text;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      ],
+    return SizedBox(
+      height: MediaQuery.textScalerOf(context).scale(height),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            text,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
     );
   }
 }
 
 /// The hourglass and time-remaining shown in the title bar of a temporary
 /// chat. Ticks once a minute on its own timer so the countdown stays accurate
-/// without re-rendering the rest of the app bar; the timer lives only while the
-/// title is showing, which is while the user is reading the chat.
+/// without re-rendering the rest of the app bar.
 class _TtlLine extends StatefulWidget {
   const _TtlLine({required this.expiresAt});
 

@@ -185,7 +185,7 @@ void main() {
     expect(find.text("line 0"), findsNothing);
   });
 
-  testWidgets("the bar names the app at the top and the chat below it",
+  testWidgets("the bar names the chat wherever the list is scrolled to",
       (tester) async {
     final chat = await seedLongChat(tester, title: "at work", project: "work");
 
@@ -200,9 +200,9 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, 4000));
     await tester.pumpAndSettle();
 
-    expect(find.descendant(of: find.byType(AppBar), matching: find.text("Entoli")),
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text("at work")),
         findsOneWidget);
-    expect(find.text("at work"), findsNothing);
+    expect(find.text("Entoli"), findsNothing);
   });
 
   // Every chat is in one, so naming the default on all of them says nothing.
@@ -217,13 +217,34 @@ void main() {
     expect(find.text("Default"), findsNothing);
   });
 
-  // Nothing to scroll is the top, so a fresh chat is the app's own front page.
-  testWidgets("an empty chat keeps the app's name up", (tester) async {
+  // The case the scroll-position bar got wrong: nothing to scroll used to mean
+  // the app's name over every chat short enough to fit.
+  testWidgets("a chat with nothing to scroll is named too", (tester) async {
     final chat = await io(tester, () => app.seedChat(title: "brand new"));
 
     await open(tester, chat.state.id);
 
-    expect(find.text("Entoli"), findsOneWidget);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text("brand new")),
+        findsOneWidget);
+    expect(find.text("Entoli"), findsNothing);
+  });
+
+  // Three lines — a title, a project and a countdown — do not fit the 56dp bar
+  // every other chat gets, and the last of them was being clipped.
+  testWidgets("a chat that is both in a project and temporary fits its bar",
+      (tester) async {
+    final chat = await io(tester, () => app.seedChat(title: "at work", project: "work"));
+    await io(tester, () => app.makeTemporary(chat.state));
+
+    await open(tester, chat.state.id);
+
+    final bar = find.byType(AppBar);
+    expect(find.descendant(of: bar, matching: find.text("work")), findsOneWidget);
+    expect(find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
+        findsOneWidget);
+    // The lines are laid out inside the bar, so one too short to hold them
+    // overflows, which fails the test before this reads anything.
+    expect(tester.getSize(bar).height, greaterThan(kToolbarHeight));
   });
 
   // A pinned chat shows a pin in the title bar where a temporary chat's
