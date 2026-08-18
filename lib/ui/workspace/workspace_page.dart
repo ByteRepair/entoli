@@ -4,7 +4,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/workspace.dart";
 import "../../providers.dart";
+import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/formatting.dart";
 
 /// The row that opens the explorer, on the chat, project and app settings pages
 /// alike. All three hold a workspace and none has anything else to say about it.
@@ -109,20 +111,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     _goTo(ref.read(appConfigProvider).fs.path.dirname(_dir));
   }
 
-  Future<void> _guard(Future<void> Function() work) async {
-    if (_busy.value) return;
-    _busy.value = true;
-    try {
-      await work();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text("Could not do that: $e")));
-      }
-    } finally {
-      if (mounted) _busy.value = false;
-    }
-  }
+  Future<void> _guard(Future<void> Function() work) =>
+      whileBusy(context, _busy, work);
 
   Future<void> _open(WorkspaceEntry entry) async {
     if (entry.isDirectory) return _goTo(entry.path);
@@ -208,13 +198,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         children: [
           // The row is there either way: a bar that appears would push the
           // listing down under the finger that started the work.
-          ValueListenableBuilder(
-            valueListenable: _busy,
-            builder: (context, busy, _) => SizedBox(
-              height: 2,
-              child: busy ? const LinearProgressIndicator(minHeight: 2) : null,
-            ),
-          ),
+          BusyBar(_busy),
           Expanded(
             child: FutureBuilder<List<WorkspaceEntry>>(
               future: _entries,
@@ -320,21 +304,6 @@ const _exportIcons = {
   ExportKind.share: Icons.ios_share,
   ExportKind.download: Icons.download,
 };
-
-/// A size as the explorer shows it. Rounded hard on purpose: the column is
-/// there to tell an empty file from a big one, not to be added up.
-@visibleForTesting
-String formatSize(int bytes) {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  var size = bytes.toDouble();
-  var unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit++;
-  }
-  final rounded = unit == 0 || size >= 10 ? size.round().toString() : size.toStringAsFixed(1);
-  return "$rounded ${units[unit]}";
-}
 
 /// The folder's name over where it sits under the root. `AppBar` has one line
 /// to give, and losing the path is losing the only thing that says which of two

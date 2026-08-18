@@ -112,7 +112,7 @@ Future<void> deleteEntries(FileSystem fs, List<String> paths) async {
 /// left is kept, so a folder upload keeps its shape.
 String safeRelativePath(FileSystem fs, String path) {
   final segments = path
-      .split(RegExp(r"[/\\]"))
+      .split(_separator)
       .where((s) => s.isNotEmpty && s != "." && s != "..")
       .map(_safeSegment)
       .toList();
@@ -122,6 +122,11 @@ String safeRelativePath(FileSystem fs, String path) {
 /// A drive letter or a colon is a path on Windows and a filename everywhere
 /// else, so it goes with the rest of what a filesystem will not take.
 String _safeSegment(String segment) {
-  final safe = segment.replaceAll(RegExp(r'[\x00-\x1f<>:"|?*]'), "_").trim();
+  final safe = segment.replaceAll(_unsafe, "_").trim();
   return safe.isEmpty ? "file" : safe;
 }
+
+/// Both compiled once. A restore runs this per archive entry and per segment of
+/// each, where a pattern built per call is a compile per segment.
+final _separator = RegExp(r"[/\\]");
+final _unsafe = RegExp(r'[\x00-\x1f<>:"|?*]');

@@ -1,5 +1,10 @@
 import "package:fs_shim/fs.dart";
 
+/// What a document being written through a rename is called until the rename.
+/// Whoever writes one spells it, and a backup skips one — it is the half of a
+/// rename a kill landed in, not a file anything reads.
+const writingSuffix = ".writing";
+
 /// The two JSON documents that are read synchronously: `settings.json` and each
 /// project's `project.json`. Everything else on the filesystem is read as it is
 /// needed.
@@ -36,7 +41,7 @@ class Documents {
   /// line sees the new value whatever the filesystem is still doing.
   Future<void> write(String path, String text) async {
     _texts[path] = text;
-    final temp = _fs.file("$path.writing");
+    final temp = _fs.file("$path$writingSuffix");
     await temp.writeAsString(text);
     await temp.rename(path);
   }

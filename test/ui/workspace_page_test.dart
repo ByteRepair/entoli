@@ -6,6 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
+import "package:agent_chat/ui/widgets/formatting.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
 
 import "../fakes.dart";
