@@ -12,6 +12,7 @@ _ChatState _$ChatStateFromJson(Map<String, dynamic> json) => _ChatState(
   createdAt: DateTime.parse(json['createdAt'] as String),
   updatedAt: DateTime.parse(json['updatedAt'] as String),
   project: json['project'] as String?,
+  pinned: json['pinned'] as bool? ?? false,
   tempTtlSince: json['tempTtlSince'] == null
       ? null
       : DateTime.parse(json['tempTtlSince'] as String),
@@ -27,6 +28,7 @@ Map<String, dynamic> _$ChatStateToJson(_ChatState instance) =>
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
       'project': instance.project,
+      'pinned': instance.pinned,
       'tempTtlSince': instance.tempTtlSince?.toIso8601String(),
       'tempTtlExpiresAt': instance.tempTtlExpiresAt?.toIso8601String(),
     };

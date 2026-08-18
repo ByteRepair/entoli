@@ -524,11 +524,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   .bodySmall
                   ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
+          if (state.pinned)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.push_pin,
+                  size: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  "Pinned",
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
           if (state.tempTtlExpiresAt != null)
             _TtlLine(expiresAt: state.tempTtlExpiresAt!),
         ],
       );
-}
+  }
 
 /// The hourglass and time-remaining shown in the title bar of a temporary
 /// chat. Ticks once a minute on its own timer so the countdown stays accurate

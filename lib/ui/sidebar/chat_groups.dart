@@ -8,22 +8,34 @@ class ChatGroup {
   final List<ChatState> chats;
 }
 
+/// The heading pinned chats sit under, ahead of every date group. A category
+/// of one is still drawn — the pin is what the user asked to see, not a date.
+const pinnedHeading = "Pinned";
+
 /// [chats] newest first, under the heading their last change puts them in.
 ///
 /// [now] is a parameter rather than read here so a test can say where the
 /// boundaries fall; the sidebar passes the real clock.
 ///
-/// The headings come out in the order the chats do, which is what saves
-/// ranking them: sorted newest first, each chat lands in the group it is
-/// already in or one further down, and never one further up.
+/// Pinned chats come first under [pinnedHeading], newest first among
+/// themselves; the rest follow under the date headings, in the order the chats
+/// come in. The order the headings come out in is what saves ranking them:
+/// sorted newest first, each chat lands in the group it is already in or one
+/// further down, and never one further up — and the pinned group is always
+/// above the date groups because it is drawn before them.
 List<ChatGroup> groupChatsByDate(Iterable<ChatState> chats, {required DateTime now}) {
   final sorted = chats.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  final pinned = sorted.where((c) => c.pinned).toList();
+  final rest = sorted.where((c) => !c.pinned).toList();
   final groups = <String, List<ChatState>>{};
-  for (final chat in sorted) {
+  for (final chat in rest) {
     final heading = _heading(chat.updatedAt.toLocal(), now.toLocal());
     groups.putIfAbsent(heading, () => []).add(chat);
   }
-  return [for (final group in groups.entries) ChatGroup(group.key, group.value)];
+  return [
+    if (pinned.isNotEmpty) ChatGroup(pinnedHeading, pinned),
+    for (final group in groups.entries) ChatGroup(group.key, group.value),
+  ];
 }
 
 /// The chats whose title holds [query], which is the whole of what searching

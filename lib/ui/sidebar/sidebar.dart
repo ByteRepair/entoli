@@ -356,6 +356,10 @@ class _ChatTile extends ConsumerWidget {
           icon: const Icon(Icons.more_vert),
           onSelected: (value) async {
             switch (value) {
+              case "pin":
+                await _pin(context, ref);
+              case "unpin":
+                await _unpin(context, ref);
               case "rename":
                 await _rename(context, ref);
               case "move":
@@ -364,10 +368,14 @@ class _ChatTile extends ConsumerWidget {
                 await _delete(context, ref);
             }
           },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: "rename", child: Text("Rename")),
-            PopupMenuItem(value: "move", child: Text("Move to project…")),
-            PopupMenuItem(value: "delete", child: Text("Delete")),
+          itemBuilder: (context) => [
+            if (chat.pinned)
+              const PopupMenuItem(value: "unpin", child: Text("Unpin"))
+            else
+              const PopupMenuItem(value: "pin", child: Text("Pin")),
+            const PopupMenuItem(value: "rename", child: Text("Rename")),
+            const PopupMenuItem(value: "move", child: Text("Move to project…")),
+            const PopupMenuItem(value: "delete", child: Text("Delete")),
           ],
         ),
           ],
@@ -387,6 +395,16 @@ class _ChatTile extends ConsumerWidget {
     if (title == null) return;
     await ref.read(chatRepositoryProvider).retitle(chat, title);
     ref.read(chatControllerProvider(chat.id).notifier).applyTitle(title);
+    ref.invalidate(chatListProvider);
+  }
+
+  Future<void> _pin(BuildContext context, WidgetRef ref) async {
+    await ref.read(chatRepositoryProvider).pinChat(chat.id, chat);
+    ref.invalidate(chatListProvider);
+  }
+
+  Future<void> _unpin(BuildContext context, WidgetRef ref) async {
+    await ref.read(chatRepositoryProvider).unpinChat(chat.id, chat);
     ref.invalidate(chatListProvider);
   }
 

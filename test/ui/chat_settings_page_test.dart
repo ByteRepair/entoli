@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
@@ -19,6 +20,15 @@ void main() {
 
   Future<void> seedMeta(WidgetTester tester, ChatMeta meta) =>
       io(tester, () => app.seedChatMeta(_chatId, meta));
+
+  /// Write `state.json` for the fixed chat id, so the page can read `pinned`
+  /// off it. `seedChat` would use a generated id; the tests here are pinned
+  /// to `_chatId` because the page is constructed with it directly.
+  Future<void> seedState(WidgetTester tester, {bool pinned = false}) =>
+      io(tester, () async {
+        final chat = await app.repo.createChat(title: "chat");
+        await app.repo.saveState(chat.state.copyWith(id: _chatId, pinned: pinned));
+      });
 
   Future<void> seedGlobalDefault(WidgetTester tester, String providerId, String modelId) =>
       io(tester, () => app.seedGlobalDefault(providerId: providerId, modelId: modelId));
@@ -226,6 +236,29 @@ void main() {
       await save(tester);
 
       expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, isNull);
+    });
+  });
+
+  group("temporary chat, when pinned", () {
+    Future<void> scrollToTemporary(WidgetTester tester) =>
+        scrollTo(tester, find.text("Temporary chat"));
+
+    testWidgets("a pinned chat says so in place of the TTL combobox", (tester) async {
+      await seedState(tester, pinned: true);
+      await openPage(tester);
+      await scrollToTemporary(tester);
+
+      expect(find.text("This chat is pinned and cannot be temporary."), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<TempChatTtl?>), findsNothing);
+    });
+
+    testWidgets("an unpinned chat shows the TTL combobox", (tester) async {
+      await seedState(tester, pinned: false);
+      await openPage(tester);
+      await scrollToTemporary(tester);
+
+      expect(find.byType(DropdownButtonFormField<TempChatTtl?>), findsOneWidget);
+      expect(find.text("This chat is pinned and cannot be temporary."), findsNothing);
     });
   });
 }
