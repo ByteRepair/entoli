@@ -1,5 +1,5 @@
-/// Turning a reply into something worth hearing. Both halves are pure, so the
-/// rules about what gets said are tested rather than heard.
+/// Turning a reply into something worth hearing. Nothing here reaches a
+/// speaker, so the rules about what gets said are tested rather than heard.
 library;
 
 final _fence = RegExp(r"^\s*(```|~~~)");
@@ -69,15 +69,12 @@ String _joined(List<String> lines) =>
 /// redrawn about sixty times a second, so on the whole reply each time the
 /// cost over a turn is quadratic.
 class SpeakableText {
-  /// The settled lines, already joined. A string rather than the list of them,
-  /// so that a look costs one copy of it rather than a join of every line;
-  /// [_blank] is what the `\\n{3,}` collapse becomes when it is done as they
-  /// arrive, since a run of three newlines is two empty lines in a row.
+  /// The settled lines, already joined: a string rather than the list of them,
+  /// so that a look costs one copy of it rather than a join of every line.
   var _prefix = "";
-  var _blank = false;
 
   var _text = "";
-  String? _was;
+  var _was = "";
 
   /// How much of [_text] the settled lines cover, and whether that point is
   /// inside a fence.
@@ -85,17 +82,17 @@ class SpeakableText {
   var _inFence = false;
 
   String of(String markdown) {
+    // The same reply again, which is most looks: a turn changes more than its
+    // text and the transcript is redrawn for all of it. Identity first, since
+    // `startsWith` below walks the whole reply to answer the same question.
+    if (identical(markdown, _text)) return _was;
     // Length first, for the reason [SentenceSplitter.add] checks it first.
     if (markdown.length < _text.length || !markdown.startsWith(_text)) {
       _prefix = "";
-      _blank = false;
-      _was = null;
       _done = 0;
       _inFence = false;
-    } else if (markdown.length == _text.length && _was != null) {
-      // The same reply again: a turn changes more than its text, and the
-      // transcript is redrawn for all of it.
-      return _was!;
+    } else if (markdown.length == _text.length) {
+      return _was;
     }
     _text = markdown;
 
@@ -121,12 +118,10 @@ class SpeakableText {
   }
 
   void _settle(String line) {
-    if (line.isEmpty) {
-      if (_prefix.isEmpty || _blank) return;
-      _blank = true;
-    } else {
-      _blank = false;
-    }
+    // Two blank lines in a row is the `\n{3,}` collapse, done as they arrive.
+    // A settled line never ends in whitespace — [_spoken] trims its right — so
+    // a prefix ending in a break is one whose last line was blank.
+    if (line.isEmpty && (_prefix.isEmpty || _prefix.endsWith("\n"))) return;
     _prefix = _with(line);
   }
 

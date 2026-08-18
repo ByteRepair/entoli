@@ -81,7 +81,7 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
 
   switch (part) {
     case TextPart(:final text):
-      final spoken = (growing?.of(text) ?? speakable(text)).trim();
+      final spoken = growing?.of(text) ?? speakable(text);
       return spoken.isEmpty ? const [] : [VoiceLine(VoiceLineKind.replied, spoken)];
     case ToolCallPart(:final toolCall):
       final doing = _doing(toolCall.name);

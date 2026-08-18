@@ -1656,30 +1656,42 @@ is what the controller has; it refuses to split on `3.14`, `main.dart` and
 `e.g.`, and breaks a run-on paragraph at a comma rather than hold up the first
 sound the user hears.
 
-`SpeakableText` is the same bargain a second time, for the transcript rather
-than the speech: fed the whole reply, keeping what it has already worked out.
-Stripping is eight passes over each line and the transcript is redrawn on every
-flush of a turn, so re-stripping the whole reply each time costs more the longer
+`SpeakableText` is the same bargain a second time: fed the whole reply, keeping
+what it has already worked out. Stripping is eight passes over each line, the
+transcript is redrawn on every flush of a turn, and the speech path looks four
+times a second, so re-stripping the whole reply each time costs more the longer
 it gets — the same growth the splitter is fed the whole text to avoid paying
 twice. What makes it possible is that a reply only ever grows, so every line
 before the last break is settled; only the line still being written is stripped
 again, and its fence is not counted, since an opening fence is not open until
-the line it is on ends.
+the line it is on ends. Both readers of a streaming reply use it, and it is
+`speakable` that they still agree with.
 
 **Settled lines are kept joined, not kept in a list**, and the `\n{3,}` collapse
 is done as they arrive — a run of three newlines is two blank lines in a row,
 which is a thing to notice on arrival rather than to scan the whole reply for
 afterwards. Without both, a look still cost a join of every line and a regex
-pass over all of it, which is the same growth one step quieter: measured over
-three hundred looks at a reply, 6 ms against 264 ms at 8,000 characters and
-15 ms against 1,073 ms at 32,000. What is left per look is one copy of the
-reply, which is what handing a widget a string costs.
+pass over all of it, which is the same growth one step quieter. The same reply
+asked for twice is answered from the last answer, since a turn changes far more
+than its text and the transcript is redrawn for all of it.
 
-It is tested against `speakable` at *every* length a
-reply passes through, which is the only assertion that means anything about a
-thing whose whole job is to agree with something else — and that is what carries
-the collapse being moved out of the regex, since every run length has to agree
-at every prefix.
+**What a look costs is the paragraph, not the reply**, and that bound is worth
+knowing because it is not the one the class sounds like it gives. Nothing
+settles until a line break arrives, so a reply written as one unbroken paragraph
+is stripped whole every time, exactly as before. Measured over three hundred
+looks: line-broken, 3 ms against 88 ms at 3,900 characters and 4 ms against
+286 ms at 15,800; one paragraph, 54 ms against 65 ms at 4,100 and 211 ms against
+263 ms at 16,500. Settling inside a line would need a provably safe point in it,
+and markdown has none — a link, an emphasis or a tag can span any position, and
+the anchored rules cannot be decided until enough of the line has arrived to
+rule them out. Paragraphs in a reply that is being read aloud are a few hundred
+characters, so the bound holds in practice; a model that answers in one enormous
+paragraph is what would break it.
+
+It is tested against `speakable` at *every* length a reply passes through, which
+is the only assertion that means anything about a thing whose whole job is to
+agree with something else — and that is what carries the collapse being moved
+out of the regex, since every run length has to agree at every prefix.
 
 A sentence is generated ahead of being heard, so **the queue running dry is not
 the end** — the session only says it has fallen silent once nothing is still in

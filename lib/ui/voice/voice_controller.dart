@@ -103,6 +103,12 @@ class VoiceController extends Notifier<VoiceViewState> {
 
   final _sentences = SentenceSplitter();
 
+  /// The same reply, stripped. [SpeakableText] rather than [speakable]: this
+  /// runs over the whole reply so far, four times a second, for as long as one
+  /// streams. It answers what `speakable` answers at every length a reply
+  /// passes through, which is what its own test asserts.
+  final _speakable = SpeakableText();
+
   /// Held rather than read when it is needed: [_shutdown] runs from
   /// `ref.onDispose`, where the ref is already gone.
   late BackgroundWork _work;
@@ -277,7 +283,7 @@ class VoiceController extends Notifier<VoiceViewState> {
       // interrupted turn, which is what the resume bar here is for — and only
       // what arrives from now on is new. `add`'s return is what would have
       // been said, and is dropped on purpose.
-      _sentences.add(speakable(last.plainText));
+      _sentences.add(_speakable.of(last.plainText));
       _read = last.parts;
     }
     // An approval, a question, a sub-agent starting: state changes that carry
@@ -302,7 +308,7 @@ class VoiceController extends Notifier<VoiceViewState> {
     final messages = ref.read(chatControllerProvider(chatId)).chat?.messages;
     final last = messages == null || messages.isEmpty ? null : messages.last;
     if (last == null || last.id != _reading) return;
-    for (final sentence in _sentences.add(speakable(last.plainText))) {
+    for (final sentence in _sentences.add(_speakable.of(last.plainText))) {
       _speak(sentence);
     }
   }
