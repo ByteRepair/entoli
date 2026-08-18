@@ -305,10 +305,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   Future<void> _abort() => ref.read(chatControllerProvider(widget.chatId).notifier).abort();
 
-  /// The button is there wherever the platform can listen, so that voice mode
-  /// is something to find rather than something to already know about. With no
-  /// models picked it leads to the settings that pick them, which is a better
-  /// answer than a button that is not drawn.
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
   /// case where the chat being deleted is the one the user is looking at.

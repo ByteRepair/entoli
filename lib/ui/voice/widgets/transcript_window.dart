@@ -1,3 +1,5 @@
+import "dart:ui" as ui;
+
 import "package:flutter/material.dart";
 
 import "../transcript.dart";
@@ -55,7 +57,7 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
     return SizedBox(
       height: scaler.scale(TranscriptWindow.lineHeight) * TranscriptWindow.visibleLines,
       child: ShaderMask(
-        shaderCallback: (bounds) => _fade.createShader(bounds),
+        shaderCallback: _fadeShader,
         blendMode: BlendMode.dstIn,
         child: ListView.builder(
           controller: _scroll,
@@ -100,4 +102,18 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
     colors: [Colors.transparent, Colors.black],
     stops: [0, 0.42],
   );
+
+  /// Kept between paints, and a tear-off rather than a closure: `ShaderMask`
+  /// asks on every paint, a gradient is a native allocation, and a callback
+  /// that is a new object each build repaints the list for nothing.
+  static Rect? _madeFor;
+  static ui.Shader? _made;
+
+  static ui.Shader _fadeShader(Rect bounds) {
+    if (bounds != _madeFor) {
+      _madeFor = bounds;
+      _made = _fade.createShader(bounds);
+    }
+    return _made!;
+  }
 }

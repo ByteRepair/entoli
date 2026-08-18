@@ -1,10 +1,8 @@
 import "dart:math" as math;
-import "dart:ui" as ui;
 
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 
-import "../../theme.dart";
 import "../voice_controller.dart";
 
 /// What voice mode is mostly made of: an orb of light under the word for what
@@ -13,7 +11,7 @@ import "../voice_controller.dart";
 /// reply is read out, and sits dim and still while the microphone is shut.
 ///
 /// It reports and nothing more: what there is to do about any of it is
-/// [VoiceControls] underneath, where each button says what it does.
+/// `VoiceControls` underneath, where each button says what it does.
 class VoiceBloom extends StatefulWidget {
   const VoiceBloom({super.key, required this.state});
 
@@ -30,7 +28,7 @@ class VoiceBloom extends StatefulWidget {
 
 class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
   /// The rings and the orbit alike: they are never on screen together, so what
-  /// a status changes is its period.
+  /// a mode changes is its period.
   late final AnimationController _cycle = AnimationController(vsync: this);
 
   /// The orb's own slow breath, which is a different period from the rings and
@@ -58,13 +56,14 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(VoiceBloom old) {
     super.didUpdateWidget(old);
-    if (widget.state.status == old.state.status &&
-        widget.state.paused == old.state.paused &&
-        widget.state.level == old.state.level) {
-      return;
-    }
+    // Idempotent, so it is asked rather than guarded: a guard here would be a
+    // second list of which fields matter, kept in step by hand.
     _run();
-    _driven = _driver();
+    if (widget.state.status != old.state.status ||
+        widget.state.paused != old.state.paused ||
+        widget.state.level != old.state.level) {
+      _driven = _driver();
+    }
   }
 
   /// A `ValueListenable`, not an `Animation`: what a session hands over is a
@@ -72,20 +71,18 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
   ValueListenable<double> get _level =>
       widget.state.level ?? const AlwaysStoppedAnimation(0.0);
 
-  /// Only what this mode actually reads. The microphone stays open while the
-  /// reply is spoken, so following it there would repaint the orb thirty times
-  /// a second for a level nothing draws.
-  Listenable _driver() => switch (_mode) {
-        BloomMode.listening => Listenable.merge([_cycle, _breath, _level]),
-        BloomMode.speaking || BloomMode.thinking => _cycle,
-        BloomMode.still => const AlwaysStoppedAnimation(0.0),
-      };
+  /// The microphone stays open while the reply is spoken, so following it there
+  /// would repaint the orb thirty times a second for a level nothing draws.
+  /// Everywhere else [_cycle] is the whole of what moves, stopped included.
+  Listenable _driver() => _mode == BloomMode.listening
+      ? Listenable.merge([_cycle, _breath, _level])
+      : _cycle;
 
   /// Only what this mode has moving. Left running, a hushed microphone or a
   /// failed session is repainted sixty times a second to draw the same frame,
   /// with a wake lock held.
   void _run() {
-    final period = _period;
+    final period = _mode.period;
     if (period == null) {
       _cycle.stop();
     } else if (!_cycle.isAnimating || _cycle.duration != period) {
@@ -99,22 +96,8 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
     breathing ? _breath.repeat(reverse: true) : _breath.stop();
   }
 
-  /// How long one turn of what this mode is doing takes: a ring leaving the
-  /// orb, or the arcs going round once.
-  Duration? get _period => switch (_mode) {
-        BloomMode.listening => const Duration(milliseconds: 2900),
-        BloomMode.speaking => const Duration(milliseconds: 1250),
-        BloomMode.thinking => const Duration(milliseconds: 1500),
-        BloomMode.still => null,
-      };
-
-  /// The microphone is shut and nothing is being said, which is the one look
-  /// that is about the state rather than the status.
-  bool get _hushed =>
-      widget.state.paused && widget.state.status != VoiceStatus.speaking;
-
   BloomMode get _mode => switch (widget.state.status) {
-        _ when _hushed => BloomMode.still,
+        _ when widget.state.hushed => BloomMode.still,
         VoiceStatus.listening => BloomMode.listening,
         VoiceStatus.speaking => BloomMode.speaking,
         VoiceStatus.thinking || VoiceStatus.starting => BloomMode.thinking,
@@ -132,19 +115,15 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mode = _mode;
-    // Paused reads as off rather than as a state of listening, since that is
-    // what it is: the device has stopped recording.
-    final colour = switch (widget.state.status) {
-      VoiceStatus.failed => theme.colorScheme.error,
-      _ when _hushed => theme.colorScheme.onSurfaceVariant,
-      VoiceStatus.speaking => spokenColour(theme.brightness),
-      _ => heardColour(theme.brightness),
-    };
+    final colour = voiceColour(widget.state, theme);
     // A still orb is one nothing is happening in, so it is lit lower rather
     // than only being smaller.
     final lit = mode == BloomMode.still ? colour.withValues(alpha: 0.5) : colour;
-    final hot = _hot(lit, theme.brightness);
-    final light = _light = _light?.of(lit, hot) ?? BloomLight(lit, hot);
+    if (_light?.colour != lit) {
+      _light = BloomLight(lit, _hot(lit, theme.brightness));
+    }
+    final light = _light!;
+    final word = widget.state.word;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -162,7 +141,7 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
               ),
               const SizedBox(width: 8),
               Text(
-                _word(widget.state.status).toUpperCase(),
+                word.toUpperCase(),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   letterSpacing: 2.4,
@@ -174,30 +153,32 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
         const SizedBox(height: 24),
         Flexible(
           child: Semantics(
-            label: _word(widget.state.status),
+            label: word,
             child: RepaintBoundary(
-              child: LayoutBuilder(
-                builder: (context, room) {
-                  final side =
-                      math.min(room.biggest.shortestSide, VoiceBloom.size);
-                  return AnimatedBuilder(
+              // Laid out rather than measured: a `LayoutBuilder` here would put
+              // every frame of the orb inside a layout pass, since a build
+              // scope's rebuild reaches the render object as `needsLayout`.
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: VoiceBloom.size,
+                  maxHeight: VoiceBloom.size,
+                ),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: AnimatedBuilder(
                     animation: _driven,
                     builder: (context, _) => CustomPaint(
-                      size: Size.square(side),
                       painter: BloomPainter(
                         mode: mode,
                         light: light,
-                        side: side,
                         phase: _cycle.value,
                         breath: _breath.value,
-                        // Nothing follows it in the other modes, so a level
-                        // arriving from a microphone that is closing changes
-                        // nothing on screen.
                         level: mode == BloomMode.listening ? _level.value : 0,
                       ),
+                      child: const SizedBox.expand(),
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
             ),
           ),
@@ -205,29 +186,29 @@ class _VoiceBloomState extends State<VoiceBloom> with TickerProviderStateMixin {
       ],
     );
   }
-
-  String _word(VoiceStatus status) => switch (status) {
-        _ when _hushed => "Paused",
-        VoiceStatus.off => "Off",
-        VoiceStatus.starting => "Starting",
-        VoiceStatus.listening => "Listening",
-        VoiceStatus.thinking => "Thinking",
-        VoiceStatus.speaking => "Speaking",
-        VoiceStatus.failed => "Failed",
-      };
 }
 
 /// How the orb is drawn, which is not the same question as the status: a
 /// hushed microphone, a failed session and voice mode off all look alike, and
-/// a turn that is starting looks like one that is running.
-enum BloomMode { still, listening, thinking, speaking }
+/// a turn that is starting looks like one that is running. [period] is how long
+/// one turn of what it is doing takes — a ring leaving the orb, or the arcs
+/// going round once — and null is a mode with nothing moving.
+enum BloomMode {
+  still(null),
+  listening(Duration(milliseconds: 2900)),
+  thinking(Duration(milliseconds: 1500)),
+  speaking(Duration(milliseconds: 1250));
+
+  const BloomMode(this.period);
+
+  final Duration? period;
+}
 
 /// The orb, the rings leaving it and the arcs going round it.
 class BloomPainter extends CustomPainter {
   const BloomPainter({
     required this.mode,
     required this.light,
-    required this.side,
     required this.phase,
     required this.breath,
     required this.level,
@@ -235,9 +216,6 @@ class BloomPainter extends CustomPainter {
 
   final BloomMode mode;
   final BloomLight light;
-
-  /// The square this is drawn in, which is [reach] orbs across.
-  final double side;
 
   /// Where in its cycle whatever is moving has got to, 0 to 1.
   final double phase;
@@ -252,15 +230,19 @@ class BloomPainter extends CustomPainter {
   /// and so how much of the box is room for the rings.
   static const reach = 2.35;
 
-  /// The orb at rest.
-  double get core => side / (2 * reach);
-
   static const _rings = 3;
+
+  /// One paint for every stroke drawn here. A painter is built afresh each
+  /// frame and nothing holds a `Paint` past the draw it was handed to.
+  static final _stroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round;
 
   @override
   void paint(Canvas canvas, Size size) {
     final centre = size.center(Offset.zero);
-    final orb = core *
+    final rest = size.shortestSide / (2 * reach);
+    final orb = rest *
         switch (mode) {
           // The breath is what keeps a quiet room alive; the voice rides on
           // top of it.
@@ -274,7 +256,7 @@ class BloomPainter extends CustomPainter {
       // A ring is worth more when a voice shed it than when the room did.
       final shed = mode == BloomMode.listening ? 0.55 + 0.45 * level : 1.0;
       for (var i = 0; i < _rings; i++) {
-        _ring(canvas, centre, orb, (phase + i / _rings) % 1, shed);
+        _ring(canvas, centre, orb, rest * reach, (phase + i / _rings) % 1, shed);
       }
     }
     if (mode == BloomMode.thinking) {
@@ -284,7 +266,7 @@ class BloomPainter extends CustomPainter {
     }
 
     _lit(canvas, centre, orb * (1.3 + level * 0.4), light.halo);
-    _lit(canvas, centre, orb, light.core);
+    _lit(canvas, centre, orb, light.body);
   }
 
   /// How far into shedding the current ring the reply has got. Three leave per
@@ -294,25 +276,25 @@ class BloomPainter extends CustomPainter {
 
   /// Drawn as a unit circle under a scale, so the gradient is one that was
   /// made once rather than one made to fit this frame's radius.
-  void _lit(Canvas canvas, Offset centre, double radius, ui.Shader shader) {
+  void _lit(Canvas canvas, Offset centre, double radius, Paint paint) {
     canvas.save();
     canvas.translate(centre.dx, centre.dy);
     canvas.scale(radius);
-    canvas.drawCircle(Offset.zero, 1, Paint()..shader = shader);
+    canvas.drawCircle(Offset.zero, 1, paint);
     canvas.restore();
   }
 
   /// A ring slows as it widens and thins as it goes, which is what makes it
   /// read as something leaving rather than a circle being resized. It travels
-  /// from the orb as it is now to the edge of the box, so a swollen orb does
-  /// not push its own rings off the screen.
-  void _ring(Canvas canvas, Offset centre, double orb, double at, double shed) {
+  /// from the orb as it is now to [edge], so a swollen orb does not push its
+  /// own rings off the screen.
+  void _ring(Canvas canvas, Offset centre, double orb, double edge, double at,
+      double shed) {
     final out = Curves.easeOut.transform(at);
     canvas.drawCircle(
       centre,
-      orb + (core * reach - orb) * out,
-      Paint()
-        ..style = PaintingStyle.stroke
+      orb + (edge - orb) * out,
+      _stroke
         ..strokeWidth = 3 - 1.8 * out
         ..color = light.glow
             .withValues(alpha: 0.6 * math.pow(1 - out, 1.3) * shed),
@@ -326,9 +308,7 @@ class BloomPainter extends CustomPainter {
       from,
       sweep,
       false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
+      _stroke
         ..strokeWidth = 2.6
         ..color = light.glow.withValues(alpha: alpha),
     );
@@ -337,11 +317,16 @@ class BloomPainter extends CustomPainter {
   @override
   bool shouldRepaint(BloomPainter old) =>
       old.mode != mode ||
-      old.side != side ||
       old.phase != phase ||
       old.breath != breath ||
       old.level != level ||
       old.light != light;
+
+  /// Nothing here is labelled — the word above the orb is — so the default,
+  /// which is to answer [shouldRepaint], would invalidate a screen reader's
+  /// tree sixty times a second for no change.
+  @override
+  bool shouldRebuildSemantics(BloomPainter old) => false;
 }
 
 /// The hot middle of the orb, and what its rings are drawn in. Away from the
@@ -353,37 +338,35 @@ Color _hot(Color colour, Brightness brightness) {
   return hsl.withLightness((hsl.lightness + by).clamp(0.0, 1.0)).toColor();
 }
 
-/// The two gradients an orb is made of, over a unit circle so that one set
-/// serves every radius it is drawn at.
+/// The orb's two gradients, over a unit circle so that one set serves every
+/// radius it is drawn at, and in the paints they will be drawn with.
 class BloomLight {
   BloomLight(this.colour, this.glow)
-      : core = RadialGradient(
-          // Lit from a little above the middle, so it reads as a body of light
-          // rather than as a disc.
-          center: const Alignment(0, -0.16),
-          colors: [
-            glow.withValues(alpha: colour.a * 0.98),
-            colour.withValues(alpha: colour.a * 0.92),
-            colour.withValues(alpha: 0),
-          ],
-          stops: const [0, 0.5, 1],
-        ).createShader(_unit),
-        halo = RadialGradient(
-          colors: [
-            colour.withValues(alpha: colour.a * 0.26),
-            colour.withValues(alpha: 0),
-          ],
-          stops: const [0.3, 1],
-        ).createShader(_unit);
+      : body = Paint()
+          ..shader = RadialGradient(
+            // Lit from a little above the middle, so it reads as a body of
+            // light rather than as a disc.
+            center: const Alignment(0, -0.16),
+            colors: [
+              glow.withValues(alpha: colour.a * 0.98),
+              colour.withValues(alpha: colour.a * 0.92),
+              colour.withValues(alpha: 0),
+            ],
+            stops: const [0, 0.5, 1],
+          ).createShader(_unit),
+        halo = Paint()
+          ..shader = RadialGradient(
+            colors: [
+              colour.withValues(alpha: colour.a * 0.26),
+              colour.withValues(alpha: 0),
+            ],
+            stops: const [0.3, 1],
+          ).createShader(_unit);
 
   final Color colour;
   final Color glow;
-  final ui.Shader core;
-  final ui.Shader halo;
-
-  /// This set if it is the one asked for, and a new one if it is not.
-  BloomLight of(Color wanted, Color hot) =>
-      wanted == colour && hot == glow ? this : BloomLight(wanted, hot);
+  final Paint body;
+  final Paint halo;
 
   static final _unit = Rect.fromCircle(center: Offset.zero, radius: 1);
 }

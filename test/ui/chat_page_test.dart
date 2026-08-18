@@ -5,7 +5,6 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
-import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
@@ -74,12 +73,8 @@ void main() {
     testWidgets("New Voice Chat makes one and opens it in voice mode",
         (tester) async {
       app.dispose();
-      app = TestApp.create(voiceModels: const {"whisper-tiny", "piper-en_US-amy"});
-      await io(tester, () async {
-        final settings = app.container.read(appSettingsProvider.notifier);
-        await settings.setVoiceRecognitionModel("whisper-tiny");
-        await settings.setVoiceSpeechModel("piper-en_US-amy");
-      });
+      app = TestApp.create(voiceModels: voiceModelPair);
+      await io(tester, app.pickVoiceModels);
       await openEmpty(tester);
 
       await tester.tap(find.text("New Voice Chat"));

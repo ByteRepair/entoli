@@ -2,6 +2,7 @@ import "dart:async";
 
 
 import "package:flutter/foundation.dart";
+import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/background_work.dart";
@@ -11,8 +12,9 @@ import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
+import "../theme.dart";
 
-/// What voice mode is doing, which is what the circle draws.
+/// What voice mode is doing, which is what the orb draws.
 enum VoiceStatus {
   /// Not in voice mode. The state a controller is built in and returns to.
   off,
@@ -47,12 +49,43 @@ class VoiceViewState {
   final bool paused;
 
   /// How loud the microphone is. Held here rather than folded into [status] so
-  /// the circle can follow it without the transcript rebuilding for every
-  /// audio frame.
+  /// the orb can follow it without the transcript rebuilding for every audio
+  /// frame.
   final ValueListenable<double>? level;
 
   bool get isOn => status != VoiceStatus.off && status != VoiceStatus.failed;
+
+  /// The microphone is shut and nothing is being said, which is the one look
+  /// that is about the state rather than the status.
+  bool get hushed => paused && status != VoiceStatus.speaking;
+
+  /// What the screen says this is. "Paused" is the state's rather than the
+  /// status's, which is why it is not all on the enum.
+  String get word => hushed ? "Paused" : status.word;
 }
+
+extension VoiceStatusWord on VoiceStatus {
+  String get word => switch (this) {
+        VoiceStatus.off => "Off",
+        VoiceStatus.starting => "Starting",
+        VoiceStatus.listening => "Listening",
+        VoiceStatus.thinking => "Thinking",
+        VoiceStatus.speaking => "Speaking",
+        VoiceStatus.failed => "Failed",
+      };
+}
+
+/// What voice mode is drawn in, asked once by everything that draws it: the
+/// orb, the dot beside the word, and the button that stops a reply.
+Color voiceColour(VoiceViewState state, ThemeData theme) =>
+    switch (state.status) {
+      VoiceStatus.failed => theme.colorScheme.error,
+      // Paused reads as off rather than as a state of listening, since that is
+      // what it is: the device has stopped recording.
+      _ when state.hushed => theme.colorScheme.onSurfaceVariant,
+      VoiceStatus.speaking => spokenColour(theme.brightness),
+      _ => heardColour(theme.brightness),
+    };
 
 /// Voice mode over one chat. **It has no conversation of its own**: it hands
 /// what it heard to [ChatController.send] and reads the reply back out of the
@@ -156,9 +189,13 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (ref.mounted) _show(VoiceStatus.off);
   }
 
-  /// Shut the microphone, or open it again — Mute, in `VoiceControls`. Voice
-  /// mode listens for as long as it is on screen, and until this there was no
-  /// way to stop it short of leaving.
+  /// Mute, in `VoiceControls` — which way it goes is this side's to work out,
+  /// since the flag it toggles is held here.
+  Future<void> togglePaused() => setPaused(!_paused);
+
+  /// Shut the microphone, or open it again. Voice mode listens for as long as
+  /// it is on screen, and until this there was no way to stop it short of
+  /// leaving.
   Future<void> setPaused(bool paused) async {
     if (!ref.mounted || !state.isOn || paused == _paused) return;
     _paused = paused;

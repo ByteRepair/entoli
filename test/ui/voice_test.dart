@@ -37,9 +37,7 @@ BloomPainter _bloom(WidgetTester tester) => tester
 void main() {
   late TestApp app;
 
-  setUp(() => app = TestApp.create(
-        voiceModels: const {"whisper-tiny", "piper-en_US-amy"},
-      ));
+  setUp(() => app = TestApp.create(voiceModels: voiceModelPair));
   tearDown(() => app.dispose());
 
   /// Voice mode running over a chat of its own, with the two models picked.
@@ -47,9 +45,7 @@ void main() {
   /// the controller loads it asynchronously, and driving one that has not
   /// finished loading is a `send` that quietly does nothing.
   Future<String> startVoice() async {
-    final settings = app.container.read(appSettingsProvider.notifier);
-    await settings.setVoiceRecognitionModel("whisper-tiny");
-    await settings.setVoiceSpeechModel("piper-en_US-amy");
+    await app.pickVoiceModels();
     final chat = await app.seedChat();
     final id = chat.state.id;
     await waitFor(() => app.container.read(chatControllerProvider(id)).chat != null,
@@ -128,10 +124,7 @@ void main() {
   });
 
   test("a reply that was already written is not read out on the way in", () async {
-    await app.container.read(appSettingsProvider.notifier)
-        .setVoiceRecognitionModel("whisper-tiny");
-    await app.container.read(appSettingsProvider.notifier)
-        .setVoiceSpeechModel("piper-en_US-amy");
+    await app.pickVoiceModels();
     final made = await app.repo.createChat();
     await app.writeChat(
       made.copyWith(messages: [
@@ -267,10 +260,11 @@ void main() {
         final image = await boundary.toImage();
         return image.toByteData();
       });
-      final width = 200;
-      int densest(int from, int to) {
+      const width = 200;
+      const line = TranscriptWindow.lineHeight;
+      int densest(double from, double to) {
         var most = 0;
-        for (var y = from; y < to; y++) {
+        for (var y = from.round(); y < to.round(); y++) {
           for (var x = 0; x < width; x++) {
             final alpha = painted!.getUint8((y * width + x) * 4 + 3);
             if (alpha > most) most = alpha;
@@ -279,8 +273,8 @@ void main() {
         return most;
       }
 
-      final top = densest(2, 22);
-      final bottom = densest(98, 118);
+      final top = densest(2, line - 2);
+      final bottom = densest(line * 4 + 2, line * 5 - 2);
       expect(bottom, greaterThan(200), reason: "the newest line is the one being read");
       expect(top, lessThan(bottom ~/ 2), reason: "the oldest fades out of the window");
     });
@@ -379,37 +373,28 @@ void main() {
   });
 
   group("the controls", () {
-    Future<void> pumpControls(
-      WidgetTester tester,
-      VoiceViewState state, {
-      VoidCallback? onMute,
-      VoidCallback? onStop,
-      VoidCallback? onDone,
-    }) =>
+    Future<void> pumpControls(WidgetTester tester, VoiceViewState state,
+            {VoidCallback? onDone}) =>
         app.pump(
           tester,
           Scaffold(
             body: VoiceControls(
               state: state,
-              onMute: onMute ?? () {},
-              onStop: onStop ?? () {},
+              onMute: () {},
+              onStop: () {},
               onDone: onDone ?? () {},
             ),
           ),
         );
 
-    IconButton keyOf(WidgetTester tester, String tooltip) =>
-        tester.widget<IconButton>(find.ancestor(
-            of: find.byTooltip(tooltip), matching: find.byType(IconButton)));
-
     testWidgets("stop is dead unless there is a reply to stop", (tester) async {
       await pumpControls(
           tester, const VoiceViewState(status: VoiceStatus.listening));
-      expect(keyOf(tester, "Stop the reply").onPressed, isNull);
+      expect(enabled(tester, buttonTipped("Stop the reply")), isFalse);
 
       await pumpControls(
           tester, const VoiceViewState(status: VoiceStatus.speaking));
-      expect(keyOf(tester, "Stop the reply").onPressed, isNotNull);
+      expect(enabled(tester, buttonTipped("Stop the reply")), isTrue);
     });
 
     testWidgets("the microphone button says which way it goes", (tester) async {
@@ -429,7 +414,7 @@ void main() {
       // Off is the state a page that failed to start is left in, and leaving
       // is the only thing there is to do about it.
       await pumpControls(tester, const VoiceViewState(), onDone: () => left++);
-      expect(keyOf(tester, "Shut the microphone").onPressed, isNull);
+      expect(enabled(tester, buttonTipped("Shut the microphone")), isFalse);
 
       await tester.tap(find.byIcon(Icons.keyboard_arrow_down_rounded));
       await tester.pump();
@@ -438,11 +423,7 @@ void main() {
   });
 
   testWidgets("Mute shuts the microphone from the screen", (tester) async {
-    await io(tester, () async {
-      final settings = app.container.read(appSettingsProvider.notifier);
-      await settings.setVoiceRecognitionModel("whisper-tiny");
-      await settings.setVoiceSpeechModel("piper-en_US-amy");
-    });
+    await io(tester, app.pickVoiceModels);
     final chat = await io(tester, app.seedChat);
     await app.pump(tester, VoicePage(chatId: chat.state.id), settle: false);
     await pumpUntil(tester, find.text("LISTENING"));

@@ -64,7 +64,7 @@ Future<bool> _haveModels(BuildContext context, bool ready) async {
 Future<void> _push(BuildContext context, String chatId) => Navigator.of(context)
     .push(MaterialPageRoute(builder: (_) => VoicePage(chatId: chatId)));
 
-/// Voice mode: a circle for what the microphone hears and five scrolling lines
+/// Voice mode: an orb for what the microphone hears and five scrolling lines
 /// of what has been said, over the chat that was already open. It is a view,
 /// not a mode the conversation is in — which is why the turn's own surface and
 /// its question panel are the same widgets the chat page draws.
@@ -78,8 +78,6 @@ class VoicePage extends ConsumerStatefulWidget {
 }
 
 class _VoicePageState extends ConsumerState<VoicePage> {
-  final _transcript = Transcript();
-
   /// Held rather than read in [dispose], where the ref is no longer safe to
   /// use — and the controller outlives this route anyway, being keyed on the
   /// chat rather than on the screen.
@@ -107,15 +105,14 @@ class _VoicePageState extends ConsumerState<VoicePage> {
 
   @override
   Widget build(BuildContext context) {
+    // The session and nothing else: what the chat is doing changes sixty times
+    // a second while a reply streams, and none of it reaches this page.
     final voice = ref.watch(voiceControllerProvider(widget.chatId));
-    final chat = ref.watch(chatControllerProvider(widget.chatId));
-    final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
-    final lines = _transcript.of(chat.chat?.messages ?? const <Message>[]);
 
     return Scaffold(
       // Nothing in the actions: the bar's own back arrow already pops this
       // route, and leaving is what going back to typing is.
-      appBar: AppBar(title: Text(chat.chat?.state.title.orUntitled ?? "Voice")),
+      appBar: AppBar(title: _Title(chatId: widget.chatId)),
       body: SafeArea(
         child: Column(
           children: [
@@ -129,20 +126,13 @@ class _VoicePageState extends ConsumerState<VoicePage> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: TranscriptWindow(lines: lines),
-            ),
-            const SizedBox(height: 12),
-            TurnSurface(view: chat, notifier: notifier),
-            if (chat.questions.isNotEmpty)
-              TurnQuestions(view: chat, notifier: notifier),
+            _Script(chatId: widget.chatId),
             const SizedBox(height: 16),
             // Bottom-most, where the composer is on the page this stands in
             // for: it is what there is to do here.
             VoiceControls(
               state: voice,
-              onMute: () => _voice.setPaused(!voice.paused),
+              onMute: _voice.togglePaused,
               onStop: _voice.hush,
               onDone: () => Navigator.of(context).maybePop(),
             ),
@@ -150,6 +140,59 @@ class _VoicePageState extends ConsumerState<VoicePage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The chat's name, watched on its own so that a streaming reply does not
+/// rebuild the bar to draw the title it already had.
+class _Title extends ConsumerWidget {
+  const _Title({required this.chatId});
+
+  final String chatId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final title = ref.watch(chatControllerProvider(chatId)
+        .select((view) => view.chat?.state.title.orUntitled));
+    return Text(title ?? "Voice");
+  }
+}
+
+/// What has been said, and whatever the turn has put on screen above the
+/// buttons. Its own widget because it is the half that changes with every
+/// delta: the orb and the controls answer to the session, which moves a
+/// handful of times a turn, and both are expensive to build.
+class _Script extends ConsumerStatefulWidget {
+  const _Script({required this.chatId});
+
+  final String chatId;
+
+  @override
+  ConsumerState<_Script> createState() => _ScriptState();
+}
+
+class _ScriptState extends ConsumerState<_Script> {
+  final _transcript = Transcript();
+
+  @override
+  Widget build(BuildContext context) {
+    final chat = ref.watch(chatControllerProvider(widget.chatId));
+    final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
+    final lines = _transcript.of(chat.chat?.messages ?? const <Message>[]);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: TranscriptWindow(lines: lines),
+        ),
+        const SizedBox(height: 12),
+        TurnSurface(view: chat, notifier: notifier),
+        if (chat.questions.isNotEmpty)
+          TurnQuestions(view: chat, notifier: notifier),
+      ],
     );
   }
 }

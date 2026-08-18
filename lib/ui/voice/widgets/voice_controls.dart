@@ -1,6 +1,5 @@
 import "package:flutter/material.dart";
 
-import "../../theme.dart";
 import "../voice_controller.dart";
 
 /// The three things there are to do to a voice session: shut the microphone,
@@ -50,7 +49,7 @@ class VoiceControls extends StatelessWidget {
           tooltip: "Stop the reply",
           // The reply's own colour, so the one button that comes alive
           // mid-turn is lit in what is doing the talking.
-          accent: speaking ? spokenColour(Theme.of(context).brightness) : null,
+          accent: speaking ? voiceColour(state, Theme.of(context)) : null,
           onPressed: speaking ? onStop : null,
         ),
         _Key(

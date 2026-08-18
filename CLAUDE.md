@@ -1702,9 +1702,14 @@ closely. `VoiceBloom` decides what is running and `BloomPainter` draws it.
 
 **The word is there because motion cannot say `starting` or `failed`.** It
 replaced a Material glyph in the middle of the orb, which is a thing to decode
-and was the only thing telling those two apart from listening. `_word` is also
-what the semantics label is built from, so what a reader hears is what is on
-screen plus what tapping would do — the one thing they cannot see.
+and was the only thing telling those two apart from listening. It is also the
+semantics label, so what a reader hears is what is on screen.
+
+**What a voice state looks like is the state's own business**, not each
+widget's: `hushed`, `word` and `voiceColour` sit on `VoiceViewState` in
+`voice_controller.dart`, because the orb, the dot beside the word and the Stop
+button all have to agree, and the first version had the orb owning the four-arm
+colour switch while the button re-derived one arm of it.
 
 **Two controllers, and only because of the periods.** The rings and the orbit
 are never on screen together, so they share `_cycle` and what a mode changes is
@@ -1723,15 +1728,24 @@ hot middle of the orb moves *away* from the page — lighter in the dark, deeper
 in the light — since a centre lightened on a white surface is a hole in the orb
 rather than a light in it.
 
-Three things about the drawing are worth knowing. The gradients are built once
-per colour and drawn as a **unit circle under a canvas scale**, because a
-shader is a native allocation and a radius that changes every frame would
-otherwise mean a shader every frame. A ring travels from the orb *as it is now*
-to the edge of the box, so a swollen orb does not push its own rings off the
-screen. And the box scales to the room the column is given, since the same
-screen also holds a resume bar and a question panel; the tap, though, is
-bounded to the orb and its glow, because most of that box is room for rings and
-stopping a reply from a hand's width away is a surprise.
+Three things about the drawing are worth knowing. The gradients — and the
+paints holding them — are built once per colour and drawn as a **unit circle
+under a canvas scale**, because a shader is a native allocation and a radius
+that changes every frame would otherwise mean a shader every frame. A ring
+travels from the orb *as it is now* to the edge of the box, so a swollen orb
+does not push its own rings off the screen. And the box scales to the room the
+column is given, since the same screen also holds a resume bar and a question
+panel — by `AspectRatio` under a `ConstrainedBox` rather than by `LayoutBuilder`,
+which would put every frame of the orb inside a **layout** pass: a build scope's
+rebuild reaches its render object as `needsLayout`, and a `RepaintBoundary`
+isolates paint, not layout.
+
+**The page is split by what changes when.** `_Script` — the transcript, the
+turn's surface and its questions — watches the chat, which moves sixty times a
+second while a reply streams; the orb and the controls watch the session, which
+moves a handful of times a turn. Watched together, every delta rebuilt the orb's
+whole subtree and three `ButtonStyle`s with it. The bar's title is a third
+watcher, on a `select` of its own.
 
 A screen with the orb on it **never falls still**, so a widget test that pumps
 one cannot `pumpAndSettle` — `pumpUntil` is what the tests reach for instead.

@@ -138,6 +138,14 @@ class TestApp {
 
   /// A chat that is already in the sidebar. Creating one no longer puts it
   /// there: it is a draft until something is said in it.
+  /// Pick both of [voiceModelPair], which is what makes voice mode ready. From
+  /// a `testWidgets` body this wants a real clock: `io(tester, app.pickVoiceModels)`.
+  Future<void> pickVoiceModels() async {
+    final settings = container.read(appSettingsProvider.notifier);
+    await settings.setVoiceRecognitionModel(voiceModelPair.first);
+    await settings.setVoiceSpeechModel(voiceModelPair.last);
+  }
+
   Future<Chat> seedChat({String title = "old chat", String? project}) async {
     final chat = await repo.createChat(title: title, project: project);
     await repo.saveState(chat.state);
@@ -375,6 +383,13 @@ Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
   tester.view.viewInsets = FakeViewPadding(bottom: up ? 300 : 0);
   await tester.pump();
 }
+
+/// The two models a ready voice session needs — what `TestApp.create` installs
+/// by default and what [TestApp.pickVoiceModels] picks. One pair rather than a
+/// copy per test: a copy that installs one id and picks another leaves voice
+/// mode reading "not ready", and every assertion under it then takes the
+/// settings branch instead of failing.
+const voiceModelPair = {"whisper-tiny", "piper-en_US-amy"};
 
 /// Whether [button] would do anything if it were pressed. A dead one is still
 /// drawn and still hit by a tap, so its callback is the only thing that says so.
