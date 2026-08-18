@@ -77,15 +77,23 @@ class ChatRepository {
 
   /// Write `state.json` and the directories under it, promoting the draft if it
   /// still is one — which is where whatever was pinned on it gets written too.
-  /// Called at the head of every turn, not only the first. The conversation is
-  /// deliberately not written here: it arrives as records, through [append].
+  /// Called at the head of every turn, not only the first, and from the TTL
+  /// propagation helpers when a setting change re-anchors chats. The
+  /// conversation is deliberately not written here: it arrives as records,
+  /// through [append].
   ///
   /// Also maintains the chat's TTL anchor: the resolved TTL is recomputed on
   /// every save so widening the app/project window extends an existing chat
   /// from its original anchor. `tempTtlSince` is set once when the TTL is
   /// enabled and cleared when it goes back to off; `tempTtlExpiresAt` is
   /// `since + duration`, recomputed each save.
-  Future<void> saveState(ChatState state) async {
+  ///
+  /// [reanchor] resets `tempTtlSince` to now when the TTL is non-off, rather
+  /// than preserving an existing anchor. Used by the propagation helpers when a
+  /// setting change is the source of truth — flipping the app TTL on should
+  /// anchor every chat to now, not keep one from 23h ago. The turn path leaves
+  /// it false: a turn does not change the TTL, so the anchor is preserved.
+  Future<void> saveState(ChatState state, {bool reanchor = false}) async {
     final pinned = _isDraft(state.id) ? _draftMeta : null;
     _forgetDraft(state.id);
     final ttl = await _resolveTempTtl(state.id, project: state.project);
@@ -96,12 +104,29 @@ class ChatRepository {
       since = null;
       expiresAt = null;
     } else {
-      since ??= DateTime.now();
+      since = reanchor ? DateTime.now() : (since ?? DateTime.now());
       expiresAt = since.add(dur);
     }
     final anchored = state.copyWith(tempTtlSince: since, tempTtlExpiresAt: expiresAt);
     await _store.saveState(anchored);
     if (pinned != null) await _store.saveMeta(state.id, pinned);
+  }
+
+  /// Re-anchor every chat in a project to now, so a project-level TTL change
+  /// is reflected immediately. Null is the default project. Drafts are not on
+  /// disk and are skipped by [listChats].
+  Future<void> reanchorProjectTtl(String? project) async {
+    final chats = await listChats();
+    await Future.wait([
+      for (final c in chats.where((c) => c.project == project)) saveState(c, reanchor: true),
+    ]);
+  }
+
+  /// Re-anchor every chat, in every project, to now. Called when the app-level
+  /// TTL changes.
+  Future<void> reanchorAllTtl() async {
+    final chats = await listChats();
+    await Future.wait(chats.map((c) => saveState(c, reanchor: true)));
   }
 
   /// Add to a chat's log. What a running turn does with everything it produces,
