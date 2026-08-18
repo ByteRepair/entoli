@@ -6,18 +6,19 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../fonts.dart";
+import "../settings/settings_page.dart";
 import "../sidebar/sidebar.dart";
+import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
+import "../widgets/dialogs.dart";
 import "../widgets/nav_drawer.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
-import "widgets/approval_banner.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
 import "widgets/question_panel.dart";
-import "widgets/resume_bar.dart";
-import "widgets/sub_agent_strip.dart";
+import "widgets/turn_surface.dart";
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key, this.withDrawer = false});
@@ -290,6 +291,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   Future<void> _abort() => ref.read(chatControllerProvider(widget.chatId).notifier).abort();
 
+  /// The button is there wherever the platform can listen, so that voice mode
+  /// is something to find rather than something to already know about. With no
+  /// models picked it leads to the settings that pick them, which is a better
+  /// answer than a button that is not drawn.
+  Future<void> _openVoice(BuildContext context, bool ready) async {
+    if (!ready) {
+      final go = await confirm(
+        context,
+        title: "Voice mode needs two models",
+        message: "One to hear you and one to answer, downloaded to this device. "
+            "Settings has the list.",
+        confirmLabel: "Open settings",
+      );
+      if (!go || !context.mounted) return;
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => VoicePage(chatId: widget.chatId)),
+    );
+  }
+
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
   /// case where the chat being deleted is the one the user is looking at.
@@ -401,20 +425,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           child: Column(
             children: [
               Expanded(child: _conversation(chat, view, notifier)),
-              // Only while nothing is running: the turn being carried on is the one
-              // at the end, so the offer and the work are never both on screen.
-              if (chat.unfinished && !view.isRunning)
-                ResumeBar(
-                  startedAt: chat.messages.last.createdAt,
-                  onContinue: notifier.resume,
-                ),
-              SubAgentStrip(agents: view.runningSubAgents),
-              for (final a in view.approvals)
-                ApprovalBanner(
-                  approval: a,
-                  onAllow: () => notifier.respondApproval(a.id, ApprovalResponse.allow),
-                  onDeny: () => notifier.respondApproval(a.id, ApprovalResponse.deny),
-                ),
+              TurnSurface(view: view, notifier: notifier),
               // A question takes the composer's place rather than sitting above it:
               // the turn is waiting on this answer, and there is nothing useful to
               // type until it has it.
@@ -424,6 +435,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   isRunning: view.isRunning,
                   onSend: _send,
                   onAbort: _abort,
+                  // The readiness is watched rather than read when the button is
+                  // pressed: it is a disk scan, and read lazily it answers the
+                  // first press with "no models yet" while still running.
+                  onVoice: ref.watch(voiceProvider).available
+                      ? () => _openVoice(context, ref.read(voiceReadyProvider))
+                      : null,
                 )
               else
                 QuestionPanel(

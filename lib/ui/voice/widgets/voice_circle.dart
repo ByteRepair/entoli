@@ -1,0 +1,133 @@
+import "package:flutter/material.dart";
+
+import "../voice_controller.dart";
+
+/// The circle voice mode is mostly made of: it grows with the microphone while
+/// it listens, breathes while a turn runs, and holds still while the reply is
+/// read out. Tapping it while it is speaking shuts it up, which is the fallback
+/// wherever the platform's echo cancellation is not good enough to hear the
+/// user over the reply.
+class VoiceCircle extends StatefulWidget {
+  const VoiceCircle({super.key, required this.state, this.onTap});
+
+  final VoiceViewState state;
+  final VoidCallback? onTap;
+
+  @override
+  State<VoiceCircle> createState() => _VoiceCircleState();
+}
+
+class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStateMixin {
+  late final AnimationController _breath = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  /// Held rather than rebuilt in `build`: a fresh merge every frame makes
+  /// `AnimatedBuilder` detach and reattach both listeners, and this rebuilds
+  /// whenever the page does.
+  late Listenable _driven = _merge();
+
+  @override
+  void initState() {
+    super.initState();
+    _breathe();
+  }
+
+  @override
+  void didUpdateWidget(VoiceCircle old) {
+    super.didUpdateWidget(old);
+    if (widget.state.level != old.state.level) _driven = _merge();
+    if (widget.state.status != old.state.status) _breathe();
+  }
+
+  Listenable _merge() =>
+      Listenable.merge([_breath, widget.state.level ?? const AlwaysStoppedAnimation(0.0)]);
+
+  /// Only while there is nothing else to follow. Left running, the circle is
+  /// laid out and repainted sixty times a second to draw the same frame, for a
+  /// whole session with the microphone open and a wake lock held.
+  void _breathe() {
+    final wanted = widget.state.status == VoiceStatus.thinking ||
+        widget.state.status == VoiceStatus.starting;
+    if (wanted == _breath.isAnimating) return;
+    wanted ? _breath.repeat(reverse: true) : _breath.stop();
+  }
+
+  @override
+  void dispose() {
+    _breath.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final status = widget.state.status;
+    final colour = switch (status) {
+      VoiceStatus.failed => theme.colorScheme.error,
+      VoiceStatus.speaking => theme.colorScheme.tertiary,
+      _ => theme.colorScheme.primary,
+    };
+    final level = widget.state.level ?? const AlwaysStoppedAnimation(0.0);
+
+    return Semantics(
+      label: _describe(status),
+      button: widget.onTap != null,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _driven,
+          // The glyph follows neither animation, so it is built once and
+          // handed in rather than rebuilt per frame.
+          child: Icon(_icon(status), size: _size * 0.34, color: colour),
+          builder: (context, child) {
+            // Listening follows the voice; thinking has nothing to follow, so
+            // it breathes instead of sitting dead still.
+            final grown = switch (status) {
+              VoiceStatus.listening => level.value * 0.35,
+              VoiceStatus.thinking || VoiceStatus.starting => _breath.value * 0.12,
+              VoiceStatus.speaking => 0.08,
+              _ => 0.0,
+            };
+            return SizedBox(
+              width: _size * 1.4,
+              height: _size * 1.4,
+              child: Center(
+                child: Container(
+                  width: _size * (1 + grown),
+                  height: _size * (1 + grown),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: colour.withValues(alpha: 0.18),
+                    border: Border.all(color: colour, width: 2),
+                  ),
+                  child: child,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  static const _size = 160.0;
+
+  static IconData _icon(VoiceStatus status) => switch (status) {
+        VoiceStatus.failed => Icons.error_outline,
+        VoiceStatus.speaking => Icons.volume_up_outlined,
+        VoiceStatus.thinking => Icons.more_horiz,
+        VoiceStatus.starting => Icons.hourglass_empty,
+        _ => Icons.mic_none,
+      };
+
+  static String _describe(VoiceStatus status) => switch (status) {
+        VoiceStatus.off => "Voice mode off",
+        VoiceStatus.starting => "Starting voice mode",
+        VoiceStatus.listening => "Listening",
+        VoiceStatus.thinking => "Thinking",
+        VoiceStatus.speaking => "Speaking. Tap to stop.",
+        VoiceStatus.failed => "Voice mode failed",
+      };
+}

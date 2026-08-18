@@ -104,12 +104,17 @@ class Composer extends ConsumerStatefulWidget {
     required this.isRunning,
     required this.onSend,
     required this.onAbort,
+    this.onVoice,
   });
 
   final TextEditingController controller;
   final bool isRunning;
   final SendCallback onSend;
   final VoidCallback onAbort;
+
+  /// Opens voice mode. Null where the platform cannot listen at all, which is
+  /// the web — the same rule that takes `bash` off the agent there.
+  final VoidCallback? onVoice;
 
   @override
   ConsumerState<Composer> createState() => _ComposerState();
@@ -336,6 +341,14 @@ class _ComposerState extends ConsumerState<Composer> {
                     ),
                   ),
                 ),
+                if (widget.onVoice != null && !widget.isRunning) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: widget.onVoice,
+                    icon: const Icon(Icons.circle_outlined),
+                    tooltip: "Voice mode",
+                  ),
+                ],
                 const SizedBox(width: 8),
                 widget.isRunning
                     ? IconButton.filled(

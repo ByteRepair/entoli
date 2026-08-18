@@ -23,6 +23,9 @@ import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
+import "domain/voice.dart";
+import "domain/voice_model.dart";
+import "domain/voice_model_store.dart";
 import "ui/widgets/provider_model_selector.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
@@ -32,6 +35,27 @@ final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw Unimp
 final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
 final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
 final appRestartProvider = Provider<AppRestart>((ref) => throw UnimplementedError());
+final voiceProvider = Provider<Voice>((ref) => throw UnimplementedError());
+final voiceModelStoreProvider =
+    Provider<VoiceModelStore>((ref) => throw UnimplementedError());
+
+/// Which catalog models are on disk. Invalidated by whatever installs or
+/// deletes one, which is the only thing that changes the answer.
+final installedVoiceModelsProvider = FutureProvider<Set<String>>(
+    (ref) => ref.watch(voiceModelStoreProvider).installed());
+
+/// Whether the composer draws its voice button: a platform that can listen, and
+/// two models picked and installed. Anything less and pressing it could only
+/// lead to an apology.
+final voiceReadyProvider = Provider<bool>((ref) {
+  if (!ref.watch(voiceProvider).available) return false;
+  final settings = ref.watch(appSettingsProvider);
+  final choice =
+      voiceChoice(settings.voiceRecognitionModelId, settings.voiceSpeechModelId);
+  final installed = ref.watch(installedVoiceModelsProvider).value ?? const <String>{};
+  final picked = [choice.recognition?.id, choice.speech?.id];
+  return picked.every((id) => id != null && installed.contains(id));
+});
 
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.
@@ -82,6 +106,18 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
+
+  Future<void> setVoiceRecognitionModel(String? id) =>
+      _update((s) => s.voiceRecognitionModelId = id);
+
+  /// Picking a different voice resets which of its speakers is used: speaker 40
+  /// of Kokoro is nobody in a model with eight.
+  Future<void> setVoiceSpeechModel(String? id) => _update((s) => s
+    ..voiceSpeechModelId = id
+    ..voiceSpeaker = 0);
+
+  Future<void> setVoiceSpeaker(int speaker) =>
+      _update((s) => s.voiceSpeaker = speaker);
 
   /// How long a temporary chat lives. App-level default; a project and a chat
   /// can override it. Re-anchors every chat to now so the badges appear

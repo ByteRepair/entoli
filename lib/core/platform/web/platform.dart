@@ -10,12 +10,29 @@ import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/voice.dart";
+import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 
 Shell platformShell({required Map<String, String> Function() environment}) =>
     const UnavailableShell();
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
+
+/// Nominal, like [platformDataDir]: nothing here fetches a model, so nothing
+/// needs somewhere to keep one.
+Future<String> platformCacheDir() async => "/agent-chat-cache";
+
+/// Nothing to register: the Silero asset is not in this build.
+void platformRegisterVoiceLicences() {}
+
+VoiceModelStore platformVoiceModelStore(String cacheDir) =>
+    const UnavailableVoiceModelStore();
+
+/// See issue #58: the browser's own speech APIs are how this platform gets
+/// voice mode, rather than sherpa's WebAssembly.
+Voice platformVoice(VoiceModelStore store, String cacheDir) =>
+    const UnavailableVoice();
 
 FileHandoff platformFileHandoff(FileSystem fs) => WebFileHandoff(fs);
 
