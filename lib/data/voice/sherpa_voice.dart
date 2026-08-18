@@ -13,6 +13,7 @@ import "package:sherpa_onnx/sherpa_onnx.dart" as sherpa;
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
+import "pcm.dart";
 import "wav.dart";
 
 /// Listening and speaking through sherpa-onnx. Two worker isolates rather than
@@ -89,7 +90,11 @@ class _SherpaSession implements VoiceSession {
   final String _speechDir;
   final _player = AudioPlayer();
 
-  final _events = StreamController<VoiceEvent>.broadcast();
+  /// Single-subscription, so what [_open] reports is *buffered* until the
+  /// controller subscribes. Broadcast, a microphone that failed to open said so
+  /// into a stream nobody was listening to yet, and voice mode sat there
+  /// showing a microphone that was never going to hear anything.
+  final _events = StreamController<VoiceEvent>();
   final _levelOf = ValueNotifier(0.0);
 
   StreamSubscription<Uint8List>? _mic;
@@ -98,6 +103,8 @@ class _SherpaSession implements VoiceSession {
   /// had, and the detector wants 512 samples at a time.
   var _window = Float32List(_windowSize);
   var _filled = 0;
+
+  final _pcm = Pcm16Reader();
 
   /// Generated audio waiting its turn, and what is playing now. Speech is
   /// generated a sentence ahead of being heard, so there is always a queue.
@@ -141,10 +148,9 @@ class _SherpaSession implements VoiceSession {
 
   void _onAudio(Uint8List bytes) {
     if (_closed) return;
-    final samples = bytes.buffer.asInt16List(bytes.offsetInBytes, bytes.lengthInBytes ~/ 2);
+    final samples = _pcm.read(bytes);
     var sum = 0.0;
-    for (final sample in samples) {
-      final value = sample / 32768.0;
+    for (final value in samples) {
       sum += value * value;
       _window[_filled++] = value;
       if (_filled < _windowSize) continue;
