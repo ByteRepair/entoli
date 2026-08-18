@@ -524,10 +524,39 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   .bodySmall
                   ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
+          if (state.pinned)
+            _TitleLine(icon: Icons.push_pin, text: "Pinned"),
           if (state.tempTtlExpiresAt != null)
             _TtlLine(expiresAt: state.tempTtlExpiresAt!),
         ],
       );
+  }
+
+/// The pin glyph and label shown in the title bar of a pinned chat, and the
+/// shared layout the TTL line reuses: a small `onSurfaceVariant` icon, a
+/// 4px gap, and `bodySmall` text in the same colour.
+class _TitleLine extends StatelessWidget {
+  const _TitleLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
 }
 
 /// The hourglass and time-remaining shown in the title bar of a temporary
@@ -562,23 +591,7 @@ class _TtlLineState extends State<_TtlLine> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final remaining = widget.expiresAt.difference(DateTime.now());
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.hourglass_empty,
-          size: 14,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          formatRemaining(remaining),
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      ],
-    );
+    return _TitleLine(icon: Icons.hourglass_empty, text: formatRemaining(remaining));
   }
 }

@@ -334,6 +334,29 @@ class ChatRepository {
     await saveState(state.copyWith(tempTtlSince: null, tempTtlExpiresAt: null));
   }
 
+  /// Pin a chat. Pinned chats sit under a "Pinned" heading in the sidebar and
+  /// cannot be temporary: the TTL anchor is cleared and the chat's override is
+  /// set to off so `saveState`'s resolution keeps it that way. The chat-level
+  /// override is written even when it already resolved to off, so a later
+  /// app/project change cannot revive the expiry under a pinned chat.
+  Future<void> pinChat(String chatId, ChatState state) async {
+    final meta = await loadMeta(chatId);
+    meta.tempChatTtl = TempChatTtl.off;
+    await saveMeta(chatId, meta);
+    await saveState(state.copyWith(
+      pinned: true,
+      tempTtlSince: null,
+      tempTtlExpiresAt: null,
+    ));
+  }
+
+  /// Unpin a chat. The TTL override set by [pinChat] stays, so the chat remains
+  /// non-temporary; the chat settings page offers the TTL combobox again, with
+  /// `Off` selected, and the user can re-enable temporary from there.
+  Future<void> unpinChat(String chatId, ChatState state) async {
+    await saveState(state.copyWith(pinned: false));
+  }
+
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse r) =>
       _backend.respondApproval(chatId, approvalId, r);
 

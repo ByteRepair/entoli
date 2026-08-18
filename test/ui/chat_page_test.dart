@@ -226,6 +226,21 @@ void main() {
     expect(find.text("Entoli"), findsOneWidget);
   });
 
+  // A pinned chat shows a pin in the title bar where a temporary chat's
+  // hourglass would go. Pinning clears the TTL anchor, so the two never both
+  // appear — and a pin is plain text, so no timer is needed to keep it current.
+  testWidgets("a pinned chat shows a pin in the title bar", (tester) async {
+    final chat = await seedLongChat(tester, title: "kept");
+    await io(tester, () => app.repo.pinChat(chat.state.id, chat.state));
+
+    await open(tester, chat.state.id);
+
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text("Pinned")),
+        findsOneWidget);
+    expect(find.byIcon(Icons.push_pin), findsOneWidget);
+    expect(find.byIcon(Icons.hourglass_empty), findsNothing);
+  });
+
   group("a chat with nothing said in it", () {
     Future<void> openBlank(WidgetTester tester) async {
       final chat = await io(tester, () => app.seedChat(title: "brand new"));

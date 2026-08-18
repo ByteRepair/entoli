@@ -13,6 +13,11 @@ void main() {
         updatedAt: updatedAt,
       );
 
+  /// A pinned chat, which is the one shape `groupChatsByDate` reads the flag
+  /// from. Defaults to "now" so it lands at the top of the Pinned group.
+  ChatState pinnedChat(String title, {DateTime? updatedAt, bool pinned = true}) =>
+      chat(title, updatedAt ?? now).copyWith(pinned: pinned);
+
   /// The headings in the order they are drawn, which is the order the chats
   /// come in rather than a rank of their own.
   List<String> headingsOf(Iterable<ChatState> chats) =>
@@ -68,6 +73,46 @@ void main() {
 
     test("nothing groups to nothing", () {
       expect(groupChatsByDate(const [], now: now), isEmpty);
+    });
+
+    // Pinned chats are drawn under their own heading ahead of every date group,
+    // newest first among themselves. The category is a fact the user set, not
+    // a date the reader has to place, so a single pinned chat still gets it.
+    group("pinned", () {
+      test("a pinned chat sits under Pinned", () {
+        final groups = groupChatsByDate([pinnedChat("kept")], now: now);
+        expect(groups, hasLength(1));
+        expect(groups.first.heading, pinnedHeading);
+        expect(groups.first.chats.single.title, "kept");
+      });
+
+      test("Pinned comes before every date group", () {
+        final headings = headingsOf([
+          pinnedChat("kept", updatedAt: DateTime(2026, 4, 9)),
+          chat("today", now),
+        ]);
+        expect(headings.first, pinnedHeading);
+        expect(headings, [pinnedHeading, "Today"]);
+      });
+
+      test("pinned chats sort newest first within the group", () {
+        final groups = groupChatsByDate([
+          pinnedChat("older", updatedAt: DateTime(2026, 8, 17, 9)),
+          pinnedChat("newer", updatedAt: DateTime(2026, 8, 17, 13)),
+        ], now: now);
+        expect(groups, hasLength(1));
+        expect(groups.first.heading, pinnedHeading);
+        expect(groups.first.chats.map((c) => c.title), ["newer", "older"]);
+      });
+
+      test("unpinned chats keep their date grouping", () {
+        final groups = groupChatsByDate([
+          pinnedChat("kept"),
+          pinnedChat("released", pinned: false),
+        ], now: now);
+        expect(groups.map((g) => g.heading), [pinnedHeading, "Today"]);
+        expect(groups.last.chats.single.title, "released");
+      });
     });
   });
 

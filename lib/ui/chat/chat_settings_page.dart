@@ -119,11 +119,22 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                   onChanged: (v) => setState(() => _meta!.approveMode = v),
                 ),
                 const Divider(),
-                _TempChatTtlField(
-                  value: _meta!.tempChatTtl,
-                  onChanged: (v) => setState(() => _meta!.tempChatTtl = v),
-                  project: _project,
-                ),
+                if (_state?.pinned ?? false)
+                  LabelledField(
+                    label: "Temporary chat",
+                    child: Text(
+                      "This chat is pinned and cannot be temporary.",
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  )
+                else
+                  _TempChatTtlField(
+                    value: _meta!.tempChatTtl,
+                    onChanged: (v) => setState(() => _meta!.tempChatTtl = v),
+                    project: _project,
+                  ),
                 const Divider(),
                 _DeleteButton(chatId: widget.chatId),
               ],
