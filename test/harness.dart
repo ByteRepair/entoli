@@ -33,8 +33,18 @@ import "fakes.dart";
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
-  TestApp._(this.config, this.backend, this.picker, this.launcher, this.handoff,
-      this.backups, this.restart, this.store, this.linkOpener, this.container);
+  TestApp._({
+    required this.config,
+    required this.backend,
+    required this.picker,
+    required this.launcher,
+    required this.handoff,
+    required this.backups,
+    required this.restart,
+    required this.store,
+    required this.linkOpener,
+    required this.container,
+  });
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
@@ -59,16 +69,16 @@ class TestApp {
     final chats = store ?? FileChatStore(config);
     final linkOpener = FakeLinkOpener();
     return TestApp._(
-      config,
-      backend,
-      picker,
-      launcher,
-      files,
-      backups,
-      restart,
-      chats,
-      linkOpener,
-      ProviderContainer(
+      config: config,
+      backend: backend,
+      picker: picker,
+      launcher: launcher,
+      handoff: files,
+      backups: backups,
+      restart: restart,
+      store: chats,
+      linkOpener: linkOpener,
+      container: ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),

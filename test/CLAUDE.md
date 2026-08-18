@@ -41,12 +41,15 @@ the restored chats through a `FileChatStore` of its own rather than the app's,
 which caches which project each chat is in and was built before the restore —
 the store a restart would build is the honest one to ask.
 
-`FakeAppRestart` counts. **`AppRoot`'s own swap is not covered**, and that is a
-known gap rather than an oversight: `AppSession.start` reads the machine's data
-directory through `platform.dataDir()`, which a test cannot point elsewhere
-without an environment variable it cannot set, and pumping the real one would
-build the real backend and read `rootBundle` for the prompt library. What is
-pinned is that a restore asks for a restart and a refused one does not.
+`FakeAppRestart` counts, and runs the `whileStopped` work it is handed — that
+work *is* the restore, so a fake that swallowed it would leave every test
+asserting on a data directory nothing had touched. **`AppRoot`'s own swap is not
+covered**, and that is a known gap rather than an oversight: `AppSession.start`
+reads the machine's data directory through `platform.dataDir()`, which a test
+cannot point elsewhere without an environment variable it cannot set, and
+pumping the real one would build the real backend and read `rootBundle` for the
+prompt library. What is pinned is that a restore asks for a restart, that the
+restore happens inside it, and that a refused one does neither.
 
 `heldTurn` is a chat parked mid-turn with one event delivered and the widget it
 raises on screen, over a backend whose `hold` keeps the turn open the way a real

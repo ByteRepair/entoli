@@ -1788,12 +1788,17 @@ is the same bargain `conv.jsonl` makes.
 
 It was one JSON document holding every file first, and that is worse on every
 count that matters. Text in JSON is escaped inside a string inside an array,
-binary costs a third more as base64, nothing compresses, and JSON is read whole
-— so an export would have been bounded by what the device can hold twice over,
-which a workspace the agent has run `npm install` in is not. Deflate takes
-`conv.jsonl` to a fraction of itself, and a zip member is decompressed only
-while it is being written out. The one thing JSON was better at, saying what the
-document is before anything is deleted for it, a member gives back.
+binary costs a third more as base64, and nothing compresses, where deflate takes
+`conv.jsonl` to a fraction of itself. The one thing JSON was better at, saying
+what the document is before anything is deleted for it, a member gives back.
+
+Neither format streams its export: `writeBackup` builds the whole archive and
+encodes it in memory, so an export is still bounded by what the device can hold
+— `autoClose` frees each member as it is compressed, which is as much of that as
+can be given back without `archive_io`, which a browser cannot have. The restore
+side does stream, a member at a time. If a workspace ever makes that bound bite,
+the fix is encoding into an `OutputFileStream` off web and `BackupHandoff.save`
+taking a path rather than bytes.
 
 That member is `backup-meta.json`, holding the format name, the version and when
 the backup was made — meta about the backup rather than a file of the data
@@ -1807,10 +1812,20 @@ creates one.
 **A restore replaces.** A merge would leave a chat deleted before the backup was
 made alive again beside one written after it, which is not what "restore" means.
 So the parse comes first and refuses everything it can — not a zip, no manifest,
-another format, a newer version — before `restoreBackup` has deleted anything,
-and a member's name goes through `safeRelativePath` for the reason a shared
-file's path does. A turn still running is refused rather than restored over: it
-would go on appending to a log that is gone.
+another format, a newer version — before `restoreBackup` has deleted anything.
+The write itself is `writeIncoming`, which is where a path from outside is made
+safe to join onto a directory, and an archive member is an `IncomingFile` for
+real: bytes not read yet, read once, consumed by the write. That is what
+`IncomingFile` being abstract rather than sealed was for.
+
+**The restore runs with no session over the files**, which is why it rides
+inside the restart as `whileStopped` rather than happening before it. Everything
+that writes to the data directory belongs to the session — a turn, the
+half-hourly sweep that *deletes chats*, a checkpoint on its one-second timer —
+so stopping the session is the only thing that covers all of them, where a check
+against `runningTurns` covers one and goes stale the moment it is read. The
+running-turn refusal is still there, but as a courtesy: killing someone's turn
+without saying so is the rude way to do the same thing.
 
 **Then the app is built again, and that is the whole of the other half.** The
 app is full of things read out of the data directory exactly once — settings
@@ -1820,18 +1835,23 @@ holds. Telling each of those to look afresh was the first version, and it is a
 list that has to grow every time something new is read at startup and is
 silently wrong when it does not: the reload the user notices missing is the one
 nobody remembered to add. So `AppRestart` rebuilds instead, and everything that
-was reading the old files is thrown away with the container that held them.
+was reading the old files is thrown away with the container that held them. It
+is also what let `ChatRepository.importBackup` go — its body was
+`deleteAllChats` and a dropped draft, which is that list with two entries.
 
 Nothing in Flutter re-runs `main` — hot restart is the VM's, and only where
 there is a VM service to ask — so `AppSession` is `main`'s work made into a
-thing that can be done twice, and `AppRoot` is the widget that does it: build
-the next session while the old one is still on screen, swap it in under a key of
-its own so nothing below is reused, and drop the old one in a post-frame
-callback, since disposing a container the widgets reading it are still mounted
-against is disposing it under them. `AppRelaunch` is the mutable relay in
-between, because the first session is built before there is a root to ask — and
-that is `main`'s doing rather than an accident, since a root that booted itself
-would hand the platform's splash a blank frame to cover.
+thing that can be done twice, and `AppRoot` is the widget that does it. With
+work to do in between it goes down to nothing first and shows a spinner; with
+none it keeps the old session on screen until the next is ready and drops it in
+a post-frame callback, since disposing a container the widgets reading it are
+still mounted against is disposing it under them. Either way the scope is keyed
+on the session, so nothing below is reused. `AppRelaunch` is the mutable relay
+in between, because the first session is built before there is a root to ask —
+`main`'s doing rather than an accident, since a root that booted itself would
+hand the platform's splash a blank frame to cover. Unwired it does nothing at
+all, `whileStopped` included, so the failure mode is a restore that never starts
+rather than one with nobody left to finish it.
 
 What a restart costs is worth knowing: every `LlmClient`, every session and the
 prompt library are built again, and the sidebar reopens with nothing selected.
@@ -1846,8 +1866,11 @@ and a chooser to get one back. `FileSelectorBackup` is the whole of it on the
 desktops and the web, `getSaveLocation` being a dialog on one and a download on
 the other. Android is the exception and `SharedBackup` is why: `file_selector`
 implements no save dialog there, so a backup leaves through the share sheet,
-which is `FileHandoff`'s — written to a temp path and handed over, since an
-intent carries a file rather than bytes.
+which is `FileHandoff`'s. An intent carries a file rather than bytes, so the zip
+is written to the cache and `FileHandoff` then stages a copy of its own under
+the one path a `FileProvider` will mint URIs from — the archive is written
+twice, which is what reusing that route out costs rather than opening a second
+one.
 
 ### Shared UI
 

@@ -120,15 +120,17 @@ class FakeAttachmentPicker implements AttachmentPicker {
   }
 }
 
-/// The app building itself again, which a test has no `AppRoot` to do. Counted
-/// rather than performed: what a restore has to reach is everything read out of
-/// the data directory at startup, and a test asserting on that would be
-/// asserting on `AppSession`.
+/// The app building itself again, which a test has no `AppRoot` to do. The work
+/// handed to it still runs — that is a restore, and a fake that swallowed it
+/// would leave every test asserting on a data directory nothing had touched.
 class FakeAppRestart implements AppRestart {
   var restarts = 0;
 
   @override
-  Future<void> restart() async => restarts++;
+  Future<void> restart({Future<void> Function()? whileStopped}) async {
+    restarts++;
+    await whileStopped?.call();
+  }
 }
 
 /// The save dialog and the chooser a backup leaves and arrives through, neither

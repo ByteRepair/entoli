@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:ui" show AppExitResponse;
 
 import "package:flutter/material.dart";
+import "package:flutter/scheduler.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/config.dart";
@@ -10,7 +11,6 @@ import "core/platform/background_work.dart";
 import "core/platform/link_opener.dart";
 import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
-import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
 import "domain/prompt_library.dart";
 import "providers.dart";
@@ -35,10 +35,9 @@ void main() async {
 /// all reached through. One per run of the app — and a second one when a backup
 /// is restored, which is what makes the restore land: see [AppRoot].
 class AppSession {
-  AppSession._(this.container, this._backend, this._sweep);
+  AppSession._(this.container, this._sweep);
 
   final ProviderContainer container;
-  final AgentBackend _backend;
   final Timer _sweep;
 
   static Future<AppSession> start(AppRestart relaunch) async {
@@ -69,22 +68,22 @@ class AppSession {
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open
     // chat, which is handled by the on-open prompt.
-    await container.read(chatRepositoryProvider).sweepExpired(
-          exceptId: container.read(selectedChatIdProvider),
-        );
-    final sweep = Timer.periodic(const Duration(minutes: 30), (_) {
-      container.read(chatRepositoryProvider).sweepExpired(
-            exceptId: container.read(selectedChatIdProvider),
-          );
-    });
-    return AppSession._(container, backend, sweep);
+    Future<void> sweep() => container
+        .read(chatRepositoryProvider)
+        .sweepExpired(exceptId: container.read(selectedChatIdProvider));
+    await sweep();
+    return AppSession._(
+      container,
+      Timer.periodic(const Duration(minutes: 30), (_) => sweep()),
+    );
   }
 
-  /// A running turn holds a subprocess, so the backend is shut down before the
-  /// container that holds it goes.
+  /// Everything of this session that writes: a running turn holds a subprocess,
+  /// and the sweep deletes chats. Both stop before the container holding them
+  /// goes, which is what lets a restore replace the files underneath.
   Future<void> dispose() async {
     _sweep.cancel();
-    await _backend.shutdown();
+    await container.read(agentBackendProvider).shutdown();
     container.dispose();
   }
 }
@@ -93,10 +92,13 @@ class AppSession {
 /// when the first session is built. Filled in on the root's first frame, and
 /// nothing can ask for a restart before there is a button to press.
 class AppRelaunch implements AppRestart {
-  Future<void> Function()? onRestart;
+  Future<void> Function({Future<void> Function()? whileStopped})? onRestart;
 
+  /// Unwired, nothing happens — including [whileStopped], so a restore cannot
+  /// delete the data directory and then find there is nobody to rebuild it.
   @override
-  Future<void> restart() async => onRestart?.call();
+  Future<void> restart({Future<void> Function()? whileStopped}) async =>
+      onRestart?.call(whileStopped: whileStopped);
 }
 
 /// The app, and the ability to build it again. A restart here is a second
@@ -114,7 +116,7 @@ class AppRoot extends StatefulWidget {
 }
 
 class _AppRootState extends State<AppRoot> {
-  late AppSession _session = widget.session;
+  late AppSession? _session = widget.session;
 
   @override
   void initState() {
@@ -122,25 +124,54 @@ class _AppRootState extends State<AppRoot> {
     widget.relaunch.onRestart = _restart;
   }
 
-  Future<void> _restart() async {
-    final old = _session;
-    // The old session stays on screen while the new one reads the data
-    // directory, so what the user sees is one frame rather than a blank app.
+  Future<void> _restart({Future<void> Function()? whileStopped}) async {
+    final old = _session!;
+    if (whileStopped != null) {
+      // Down to nothing first: what runs here replaces the files the session
+      // was built from, so a check that nothing is writing would be a check
+      // against writers it does not know about.
+      setState(() => _session = null);
+      await SchedulerBinding.instance.endOfFrame;
+      await old.dispose();
+      await whileStopped();
+    }
     final next = await AppSession.start(widget.relaunch);
     if (!mounted) return next.dispose();
     setState(() => _session = next);
     // After the frame that takes the old tree down: disposing a container the
     // widgets reading it are still mounted against is disposing it under them.
-    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    if (whileStopped == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
   }
 
   @override
-  Widget build(BuildContext context) => UncontrolledProviderScope(
-        // Keyed on the session, so a restart builds the tree again rather than
-        // reusing state that was reading the container being thrown away.
-        key: ObjectKey(_session),
-        container: _session.container,
-        child: AgentChatApp(onExit: _session.dispose),
+  Widget build(BuildContext context) {
+    final session = _session;
+    // Only between stopping and starting, which is a restore replacing the
+    // files a session would be built from.
+    if (session == null) return const _Stopped();
+    return UncontrolledProviderScope(
+      // Keyed on the session, so a restart builds the tree again rather than
+      // reusing state that was reading the container being thrown away.
+      key: ObjectKey(session),
+      container: session.container,
+      child: AgentChatApp(onExit: session.dispose),
+    );
+  }
+}
+
+/// The app with no session behind it. Themed by hand: the palette is a setting,
+/// and reading it is what there is nothing to read from here.
+class _Stopped extends StatelessWidget {
+  const _Stopped();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        title: "Entoli",
+        theme: entoliTheme(Brightness.light),
+        darkTheme: entoliTheme(Brightness.dark),
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
 }
 

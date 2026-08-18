@@ -7,6 +7,7 @@ import "package:path_provider/path_provider.dart";
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_file_handoff.dart";
+import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
@@ -31,7 +32,7 @@ FileHandoff platformFileHandoff(FileSystem fs) =>
 /// out through the share sheet instead.
 BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
     Platform.isAndroid
-        ? SharedBackup(fs, handoff, () async => (await getTemporaryDirectory()).path)
+        ? SharedBackup(fs, handoff)
         : const FileSelectorBackup();
 
 FileSystem platformFileSystem() => fileSystemIo;

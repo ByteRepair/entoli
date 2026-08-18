@@ -10,17 +10,29 @@ import "package:fs_shim/fs.dart";
 /// Over the `FileSystem` rather than `dart:io` so there is one of these, and
 /// beside neither `local/` nor `web/` for the same reason: a browser downloads
 /// a zip of files it only ever had in IndexedDB.
-Future<Uint8List> zipEntries(FileSystem fs, List<String> paths) async {
+Future<Uint8List> zipEntries(FileSystem fs, List<String> paths) async =>
+    ZipEncoder().encodeBytes(await archiveOf(fs, paths));
+
+/// The archive [zipEntries] encodes, for a caller with something of its own to
+/// put in it. [base] is what entries are named relative to, defaulting to each
+/// path's own parent; [skip] drops a file by its path, and is never asked about
+/// a directory.
+Future<Archive> archiveOf(
+  FileSystem fs,
+  List<String> paths, {
+  String? base,
+  bool Function(String path)? skip,
+}) async {
   final archive = Archive();
   for (final path in paths) {
-    final base = fs.path.dirname(path);
+    final from = base ?? fs.path.dirname(path);
     if (await fs.isDirectory(path)) {
-      await _addDirectory(fs, archive, base, path);
-    } else {
-      await _addFile(fs, archive, base, path);
+      await _addDirectory(fs, archive, from, path, skip);
+    } else if (skip == null || !skip(path)) {
+      await _addFile(fs, archive, from, path);
     }
   }
-  return ZipEncoder().encodeBytes(archive);
+  return archive;
 }
 
 /// What the archive is called: the folder that was picked, or the one
@@ -38,14 +50,17 @@ Future<void> _addDirectory(
   Archive archive,
   String base,
   String path,
+  bool Function(String path)? skip,
 ) async {
   // Its own entry as well as its contents': an empty folder is otherwise
-  // nothing at all, and a zip of one alone would come out empty.
-  archive.add(ArchiveFile.directory(fs.path.relative(path, from: base)));
+  // nothing at all, and a zip of one alone would come out empty. The base
+  // itself is not one of its own entries — `.` names nothing to unzip.
+  final name = fs.path.relative(path, from: base);
+  if (name != ".") archive.add(ArchiveFile.directory(name));
   await for (final entity in fs.directory(path).list()) {
     if (entity is Directory) {
-      await _addDirectory(fs, archive, base, entity.path);
-    } else {
+      await _addDirectory(fs, archive, base, entity.path, skip);
+    } else if (skip == null || !skip(entity.path)) {
       await _addFile(fs, archive, base, entity.path);
     }
   }

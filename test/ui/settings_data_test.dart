@@ -5,9 +5,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/domain/backup.dart";
+import "package:agent_chat/data/backup.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../fakes.dart";
@@ -22,10 +21,8 @@ void main() {
   Future<void> openData(WidgetTester tester) =>
       pumpSettings(tester, app, SettingsCategory.data);
 
-  /// Reading and writing the whole data directory takes longer than the
-  /// default cap of real rounds allows, and the busy bar animates until it is
-  /// done — so a run that gave up early would land on `pumpAndSettle` with a
-  /// running animation and time out.
+  /// Whole-data-directory I/O outlasts the default cap of real rounds — see
+  /// `test/CLAUDE.md`.
   Future<void> settle(WidgetTester tester) =>
       settleIo(tester, least: 20, tries: 200);
 
@@ -37,15 +34,23 @@ void main() {
   }
 
   /// The chats a restarted app would find, read through a store of their own:
-  /// the one the page is holding was built before the restore and caches which
-  /// project each chat is in, which is exactly what the restart replaces.
+  /// the one the page holds was built before the restore and caches which
+  /// project each chat is in, which is what the restart replaces.
   Future<List<ChatState>> onDisk(WidgetTester tester) =>
       io(tester, () => FileChatStore(app.config).list());
 
-  /// A backup of everything the app has on disk right now, made the way Export
-  /// makes one.
+  /// A backup of everything on disk right now, made the way Export makes one.
   Future<Uint8List> exported(WidgetTester tester) =>
-      io(tester, () => writeBackup(app.container.read(appConfigProvider)));
+      io(tester, () => writeBackup(app.config));
+
+  /// A chat in the backup, another added since, and the confirmation up.
+  Future<void> offerRestore(WidgetTester tester) async {
+    await io(tester, () => app.seedChat(title: "in the backup"));
+    app.backups.scripted = await exported(tester);
+    await io(tester, () => app.seedChat(title: "added since"));
+    await openData(tester);
+    await press(tester, "Import");
+  }
 
   testWidgets("Export hands the whole data directory over as a zip", (tester) async {
     await io(tester, () => app.seedChat(title: "kept"));
@@ -61,12 +66,7 @@ void main() {
   });
 
   testWidgets("Import asks before it replaces anything", (tester) async {
-    await io(tester, () => app.seedChat(title: "in the backup"));
-    app.backups.scripted = await exported(tester);
-    await io(tester, () => app.seedChat(title: "added since"));
-    await openData(tester);
-
-    await press(tester, "Import");
+    await offerRestore(tester);
 
     expect(find.text("Restore this backup?"), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, "Cancel"));
@@ -77,12 +77,8 @@ void main() {
   });
 
   testWidgets("and replaces them once it has been told to", (tester) async {
-    await io(tester, () => app.seedChat(title: "in the backup"));
-    app.backups.scripted = await exported(tester);
-    await io(tester, () => app.seedChat(title: "added since"));
-    await openData(tester);
+    await offerRestore(tester);
 
-    await press(tester, "Import");
     await tester.tap(find.widgetWithText(TextButton, "Restore"));
     await settle(tester);
 

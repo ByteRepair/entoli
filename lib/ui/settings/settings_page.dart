@@ -3,16 +3,19 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_icon.dart";
 import "../../domain/app_theme.dart";
-import "../../domain/backup.dart";
+import "../../data/backup.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
+import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/anchored_menu.dart";
+import "../widgets/busy.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
@@ -665,7 +668,7 @@ class _DeleteAllChats extends ConsumerWidget {
       title: "Delete all chats?",
       message: count == 0
           ? "There are no chats to delete."
-          : "This permanently removes $count ${count == 1 ? "chat" : "chats"}, "
+          : "This permanently removes ${plural(count, "chat")}, "
               "including their workspaces. It cannot be undone.",
       confirmLabel: count == 0 ? null : "Delete all",
       destructive: true,
@@ -706,9 +709,13 @@ class _BackupSection extends ConsumerStatefulWidget {
 }
 
 class _BackupSectionState extends ConsumerState<_BackupSection> {
-  /// Both buttons and the bar read it, so it is state rather than a notifier —
-  /// the section is a heading and two buttons, and rebuilding it is nothing.
-  var _busy = false;
+  final _busy = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _busy.dispose();
+    super.dispose();
+  }
 
   Future<void> _export() => _guard(() async {
         final bytes = await writeBackup(ref.read(appConfigProvider));
@@ -717,9 +724,8 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
       });
 
   Future<void> _import() async {
-    if (_busy) return;
-    // Restoring under a turn would pull the chat it is writing to out from
-    // under it, and the turn would carry on appending to a log that is gone.
+    // A courtesy rather than a safeguard: the restart stops the turn either
+    // way, and killing someone's work without saying so is the rude version.
     if (ref.read(agentBackendProvider).runningTurns.value.isNotEmpty) {
       return _say("A turn is still running. Stop it first.");
     }
@@ -745,29 +751,18 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     );
     if (!confirmed) return;
 
-    await _guard(() async {
-      await restoreBackup(ref.read(appConfigProvider), backup);
-      // Everything the app read out of those files at startup is now a restore
-      // behind them, so it is built again rather than told to look afresh —
-      // this widget goes with it, which is why nothing is said afterwards.
-      await ref.read(appRestartProvider).restart();
-    });
+    // The restore runs inside the restart, with no session over the files it
+    // replaces: everything that writes to them — a turn, the sweep, a
+    // checkpoint — belongs to the session, so stopping it is what a check
+    // against one writer could only approximate.
+    final config = ref.read(appConfigProvider);
+    await _guard(() => ref.read(appRestartProvider).restart(
+          whileStopped: () => restoreBackup(config, backup),
+        ));
   }
 
-  /// One at a time, and a failure is said rather than thrown: both routes end
-  /// at a plugin — a save dialog, a share sheet, a chooser — and a platform
-  /// that refuses is the ordinary case rather than a bug.
-  Future<void> _guard(Future<void> Function() work) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await work();
-    } catch (e) {
-      _say("That did not work: $e");
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  Future<void> _guard(Future<void> Function() work) =>
+      whileBusy(context, _busy, work);
 
   void _say(String message) {
     if (!mounted) return;
@@ -776,9 +771,11 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
 
   String _describe(Backup backup) {
     final made = backup.createdAt;
-    final when = made == null ? "A backup" : "A backup from ${_day(made.toLocal())}";
-    return "$when, holding ${backup.chats} "
-        "${backup.chats == 1 ? "chat" : "chats"} and ${formatSize(backup.size)}.";
+    final when = made == null
+        ? "A backup"
+        : "A backup from ${formatAge(DateTime.now().difference(made))}";
+    return "$when, holding ${plural(backup.chats, "chat")} and "
+        "${formatSize(backup.size)}.";
   }
 
   @override
@@ -790,39 +787,29 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
             description: "Every chat, project, workspace, prompt and setting as "
                 "one zip. Restoring one replaces what is here.",
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Row(
-              spacing: 12,
-              children: [
-                FilledButton.icon(
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text("Export"),
-                  onPressed: _busy ? null : _export,
-                ),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.download),
-                  label: const Text("Import"),
-                  onPressed: _busy ? null : _import,
-                ),
-              ],
+          // The icons the explorer already uses for the same two directions:
+          // a download leaves the app, an upload arrives in it.
+          _AddButtonRow(
+            child: ValueListenableBuilder(
+              valueListenable: _busy,
+              builder: (context, busy, _) => Row(
+                spacing: 12,
+                children: [
+                  FilledButton.icon(
+                    icon: const Icon(Icons.download),
+                    label: const Text("Export"),
+                    onPressed: busy ? null : _export,
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text("Import"),
+                    onPressed: busy ? null : _import,
+                  ),
+                ],
+              ),
             ),
           ),
-          // Two logical pixels where the buttons are dead, rather than a
-          // spinner over the page: a big export takes a while and there is
-          // nothing to do in the meantime but watch it.
-          SizedBox(
-            height: 2,
-            child: _busy ? const LinearProgressIndicator(minHeight: 2) : null,
-          ),
+          BusyBar(_busy),
         ],
       );
 }
-
-const _months = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-String _day(DateTime when) =>
-    "${when.day} ${_months[when.month - 1]} ${when.year}";
