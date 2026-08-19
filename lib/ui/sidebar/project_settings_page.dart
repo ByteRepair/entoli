@@ -32,6 +32,14 @@ Future<void> deleteProject(
   }
   await ref.read(chatRepositoryProvider).deleteProject(project);
   selectProject(ref, null);
+  // The other reference to a project that no longer exists. Both ends resolve a
+  // dangling name to the default project anyway, but leaving it written down
+  // means the next save writes it back — and recreating a project of that name
+  // would silently re-arm the setting.
+  final settings = ref.read(appSettingsProvider);
+  if (settings.assistantProject == project) {
+    await ref.read(appSettingsProvider.notifier).setAssistantProject(null);
+  }
   ref.invalidate(projectListProvider);
   ref.invalidate(chatListProvider);
   if (context.mounted && popToRoot) Navigator.of(context).popUntil((r) => r.isFirst);

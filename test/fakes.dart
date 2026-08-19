@@ -13,6 +13,7 @@ import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_store.dart";
+import "package:agent_chat/domain/assistant_launch.dart";
 import "package:agent_chat/domain/file_handoff.dart";
 import "package:agent_chat/domain/link_opener.dart";
 import "package:agent_chat/domain/models.dart";
@@ -160,6 +161,31 @@ class FakeBackupHandoff implements BackupHandoff {
 
   @override
   Future<Uint8List?> pick() async => scripted;
+}
+
+/// The system's assistant gesture, as the app sees it. [pending] is a launch
+/// Kotlin noticed before Dart was listening — the gesture that started the app
+/// — and [launch] is one arriving while it is already up.
+class FakeAssistantLaunch implements AssistantLaunch {
+  /// A launch waiting to be claimed. Taken once, the way the real one is.
+  bool pending = false;
+
+  final _arrived = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get launched => _arrived.stream;
+
+  @override
+  Future<bool> take() async {
+    final had = pending;
+    pending = false;
+    return had;
+  }
+
+  void launch() {
+    pending = true;
+    _arrived.add(null);
+  }
 }
 
 /// What a workspace file can do outside the app, which no test can drive: no
