@@ -2,14 +2,25 @@ import "dart:async";
 import "dart:convert";
 import "dart:io";
 
+import "package:flutter/foundation.dart";
+
 import "../../domain/shell.dart";
 
 /// Runs commands on the machine the app is on. Every command is a fresh
 /// subshell — the contract inherited from mini-swe-agent — so `cd` and exports
 /// do not carry over, which is why the agent is told to prefix them instead.
 class LocalShell extends Shell {
-  LocalShell({Map<String, String> Function()? environment})
-      : _environment = environment ?? _none;
+  LocalShell({Map<String, String> Function()? environment, String? Function()? shell})
+      : _environment = environment ?? _none,
+        _shell = shell ?? _machineShell;
+
+  /// What lets a test say there is no shell here without the machine agreeing.
+  /// Not for the reason [_environment] is a callback: that one is re-read so a
+  /// variable added in settings reaches the next command, where this answers
+  /// [shellPath], resolved once for the life of the process.
+  final String? Function() _shell;
+
+  static String? _machineShell() => shellPath;
 
   /// Applied over the process's own environment. Read at each command rather
   /// than captured, so a variable added in settings reaches the next one.
@@ -23,16 +34,62 @@ class LocalShell extends Shell {
 
   @override
   String get platformDescription =>
-      "${Platform.operatingSystem} ${Platform.operatingSystemVersion}";
+      "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
+      "commands run under ${_shell() ?? "no shell"}";
+
+  /// False where the machine has no shell to offer. Android is why this is not
+  /// a constant: it has no `/bin` at all, and a device whose `PATH` turns up
+  /// nothing is one where every command would otherwise fail one at a time.
+  @override
+  bool get canRunCommands => _shell() != null;
 
   @override
   ShellRun start(String command, {required String cwd, required Duration timeout}) =>
       _LocalRun(
+        shell: _shell(),
         command: command,
         cwd: cwd,
         timeout: timeout,
         environment: {..._defaults, ..._environment()},
       );
+
+  /// The shell every command is run under, resolved once. `bash` is preferred
+  /// because the prompt's examples are written for it, and the fallbacks are
+  /// the two places a shell sits that `PATH` may not name: a stripped
+  /// environment on the desktops, and Android, where it is `/system/bin`.
+  static final String? shellPath = resolveShell();
+
+  @visibleForTesting
+  static String? resolveShell({String? path, bool Function(String)? isExecutable}) {
+    final executable = isExecutable ?? _executable;
+    final dirs = (path ?? Platform.environment["PATH"] ?? "")
+        .split(Platform.isWindows ? ";" : ":");
+    for (final name in const ["bash", "sh"]) {
+      for (final dir in dirs) {
+        if (dir.isEmpty) continue;
+        final candidate = "$dir${Platform.pathSeparator}$name";
+        if (executable(candidate)) return candidate;
+      }
+    }
+    for (final candidate in _fallbacks) {
+      if (executable(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  static const _fallbacks = ["/bin/bash", "/system/bin/sh", "/bin/sh"];
+
+  /// Windows reports no mode bits, so there the file being there is the whole
+  /// of the test.
+  static bool _executable(String path) {
+    final stat = FileStat.statSync(path);
+    if (stat.type != FileSystemEntityType.file) return false;
+    return Platform.isWindows || stat.mode & _anyExecuteBit != 0;
+  }
+
+  /// `0o111`: executable by anyone at all, which is as much as this can ask
+  /// without knowing which of the three the app is running as.
+  static const _anyExecuteBit = 0x49;
 
   /// What mini-swe-agent's own config sets: anything that would otherwise wait
   /// for a keypress or redraw a progress bar into the transcript.
@@ -49,6 +106,7 @@ class LocalShell extends Shell {
 
 class _LocalRun implements ShellRun {
   _LocalRun({
+    required this.shell,
     required this.command,
     required this.cwd,
     required this.timeout,
@@ -57,6 +115,7 @@ class _LocalRun implements ShellRun {
     result = _run();
   }
 
+  final String? shell;
   final String command;
   final String cwd;
   final Duration timeout;
@@ -76,10 +135,15 @@ class _LocalRun implements ShellRun {
   }
 
   Future<ShellResult> _run() async {
+    final shell = this.shell;
+    if (shell == null) {
+      return const ShellResult.failed(
+          "No shell was found on this device to execute commands in.");
+    }
     final output = StringBuffer();
     Timer? timer;
     try {
-      _process = await _spawn();
+      _process = await _spawn(shell);
       final process = _process!;
       // Merged in the shell rather than here: two Dart streams arrive in
       // whatever order the pipes flush, and a compiler's errors interleaved
@@ -126,13 +190,13 @@ class _LocalRun implements ShellRun {
   ///
   /// Whether `setsid` exists is learned by trying it rather than by probing
   /// first: a failed spawn says the same thing without costing a subprocess.
-  Future<Process> _spawn() async {
+  Future<Process> _spawn(String shell) async {
     final script = "exec 2>&1\n$command";
     if (LocalShell._hasSetsid != false) {
       try {
         final process = await Process.start(
           "setsid",
-          [_shell, "-c", script],
+          [shell, "-c", script],
           workingDirectory: cwd,
           environment: environment,
         );
@@ -145,7 +209,7 @@ class _LocalRun implements ShellRun {
       }
     }
     return Process.start(
-      _shell,
+      shell,
       ["-c", script],
       workingDirectory: cwd,
       environment: environment,
@@ -168,6 +232,4 @@ class _LocalRun implements ShellRun {
   /// What the flush of a pipe whose writers have gone is worth waiting for. A
   /// command that left one holding it pays this in full, once.
   static const _drainGrace = Duration(seconds: 2);
-
-  static final _shell = File("/bin/bash").existsSync() ? "/bin/bash" : "/bin/sh";
 }
