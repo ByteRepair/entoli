@@ -1675,18 +1675,34 @@ pass over all of it, which is the same growth one step quieter. The same reply
 asked for twice is answered from the last answer, since a turn changes far more
 than its text and the transcript is redrawn for all of it.
 
-**What a look costs is the paragraph, not the reply**, and that bound is worth
-knowing because it is not the one the class sounds like it gives. Nothing
-settles until a line break arrives, so a reply written as one unbroken paragraph
-is stripped whole every time, exactly as before. Measured over three hundred
-looks: line-broken, 3 ms against 88 ms at 3,900 characters and 4 ms against
-286 ms at 15,800; one paragraph, 54 ms against 65 ms at 4,100 and 211 ms against
-263 ms at 16,500. Settling inside a line would need a provably safe point in it,
-and markdown has none — a link, an emphasis or a tag can span any position, and
-the anchored rules cannot be decided until enough of the line has arrived to
-rule them out. Paragraphs in a reply that is being read aloud are a few hundred
-characters, so the bound holds in practice; a model that answers in one enormous
-paragraph is what would break it.
+**The line still being written is trimmed rather than stripped where no rule
+can reach it**, which is what settling cannot do anything about: nothing settles
+until a line break arrives, so a reply written as one unbroken paragraph was
+stripped whole on every look. The eleven patterns are two kinds. Six are
+anchored to the start of a line — the fence, the rule, the bullet, the quote,
+the heading, the table's own row, and the pipe handling with them — so they read
+only how the line *starts*, which is fixed as soon as it has a character that is
+not a space. The other five need one of ``* _ ~ ` [ <`` or `|` to fire at all.
+A line with neither is one all eight passes are about to hand back unchanged,
+so it is handed back unchanged. The markup is looked for once per character
+rather than once per look, since it only ever arrives: a line that has any has
+it for good, and falls back to being stripped for the rest of its length, which
+is where every line was before this.
+
+Measured over three hundred looks, microseconds per look, incremental against
+whole: one paragraph, 6 against 234 at 4,000 characters, 24 against 928 at
+16,000, 92 against 3,694 at 64,000; line-broken, 4 against 244, 10 against 973,
+52 against 3,855. What is left growing is the copy of the answer, which is
+what the answer is.
+
+**Settling inside a line is the other answer and is not worth its price.** A
+split point has to be outside every construct, and a sentence end is not one:
+`. ` falls inside `[Fig. 3](x)` and `*One. Two*` as readily as a space does, and
+the anchored rules re-fire on the tail, so `Words here. - not a bullet.` loses
+its dash. Of thirteen splits at a `. `, eight change what is said. Making it
+sound means a second, hand-written account of what those five patterns match,
+kept in agreement with them forever — where the guard above is a set of seven
+characters, and is wrong only in the direction of doing the work anyway.
 
 It is tested against `speakable` at *every* length a reply passes through, which
 is the only assertion that means anything about a thing whose whole job is to

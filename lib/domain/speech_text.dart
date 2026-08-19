@@ -14,6 +14,10 @@ final _tag = RegExp(r"<[^>\s][^>]*>");
 final _blanks = RegExp(r"\n{3,}");
 final _tableRule = RegExp(r"^[\s|:-]+$");
 
+/// How a line has to start for any of the anchored rules to reach it, or for
+/// it to be able to become a rule or a table's own row once it ends.
+final _marked = RegExp(r"^\s*([-*_+>#:|]|\d+[.)])");
+
 /// A reply as it should be read aloud: markdown is written to be looked at, and
 /// most of its punctuation is layout. **Fenced code is dropped whole** rather
 /// than flattened — a command read out character by character is unusable to
@@ -68,6 +72,14 @@ String _joined(List<String> lines) =>
 /// turn. Stripping is eight passes over each line, and the transcript is
 /// redrawn about sixty times a second, so on the whole reply each time the
 /// cost over a turn is quadratic.
+///
+/// That leaves the line being written, which is stripped afresh every look and
+/// so is quadratic in its own length — a reply written as one long paragraph
+/// settles nothing until it ends. So a line the rules cannot reach is trimmed
+/// rather than stripped: see [_plain]. Settling inside a line would be the
+/// other answer and is not worth its price — a split point has to be outside
+/// every construct, and a sentence end is not one. `. ` falls inside
+/// `[Fig. 3](x)` and `*One. Two*` as readily as a space does.
 class SpeakableText {
   /// The settled lines, already joined: a string rather than the list of them,
   /// so that a look costs one copy of it rather than a join of every line.
@@ -81,6 +93,13 @@ class SpeakableText {
   var _done = 0;
   var _inFence = false;
 
+  /// How much of the line being written has been looked at for markup, and
+  /// whether any was found. Markup only ever arrives, so a line that has some
+  /// has it for good — and a line that has none is one every unanchored rule
+  /// leaves alone.
+  var _scanned = 0;
+  var _dirty = false;
+
   String of(String markdown) {
     // The same reply again, which is most looks: a turn changes more than its
     // text and the transcript is redrawn for all of it. Identity first, since
@@ -91,6 +110,8 @@ class SpeakableText {
       _prefix = "";
       _done = 0;
       _inFence = false;
+      _scanned = 0;
+      _dirty = false;
     } else if (markdown.length == _text.length) {
       return _was;
     }
@@ -107,14 +128,36 @@ class SpeakableText {
         if (said != null) _settle(said);
       }
       _done = settled;
+      _scanned = settled;
+      _dirty = false;
     }
 
     // The line still being written: stripped afresh every time, and its fence
     // not counted — an opening fence is not open until the line it is on ends.
     final tail = markdown.substring(_done);
-    final said = _fence.hasMatch(tail) ? null : _spoken(tail, _inFence);
+    final String? said;
+    if (_plain(tail)) {
+      said = tail.trimRight();
+    } else {
+      said = _fence.hasMatch(tail) ? null : _spoken(tail, _inFence);
+    }
     final out = said == null || said.isEmpty ? _prefix : _with(said);
     return _was = out.trim();
+  }
+
+  /// Whether [_spoken] would do no more to the line being written than trim it,
+  /// which is what a paragraph of prose is. The anchored rules read only how
+  /// the line starts and the rest read only the characters in [_markup], so a
+  /// line with neither is one all eight passes are about to leave alone.
+  bool _plain(String tail) {
+    for (; _scanned < _text.length; _scanned++) {
+      if (_markup.contains(_text.codeUnitAt(_scanned))) {
+        _dirty = true;
+        _scanned = _text.length;
+        break;
+      }
+    }
+    return !_dirty && !_inFence && !_marked.hasMatch(tail);
   }
 
   void _settle(String line) {
@@ -126,6 +169,12 @@ class SpeakableText {
   }
 
   String _with(String line) => _prefix.isEmpty ? line : "$_prefix\n$line";
+
+  /// What the rules that are not anchored to the start of a line act on:
+  /// ``* _ ~ ` [ <`` and `|`. Code units rather than characters, for the reason
+  /// [SentenceSplitter._endOfSentence] reads them — this runs over each
+  /// character of a reply once.
+  static const _markup = {0x2A, 0x5F, 0x7E, 0x60, 0x5B, 0x3C, 0x7C};
 }
 
 /// Sentence-sized pieces out of a reply that is still being written, so the

@@ -112,6 +112,22 @@ void main() {
       agreesGrowing("# \n\n---\n\n> \n\nWords at last.\n\n***\n");
     });
 
+    // The line the rules cannot reach, trimmed rather than stripped. A dash, a
+    // digit and a stop are each a marker somewhere and none of them here: what
+    // makes a line plain is where they sit, not whether they are in it.
+    test("agrees over a paragraph that runs on, settling nothing", () {
+      agreesGrowing("A well-known result, e.g. 3.14 or file.dart, is that 1. is "
+          "not a list mid-line - and a dash is not a bullet there either.");
+    });
+
+    test("agrees where the markup arrives late in a line", () {
+      agreesGrowing("Prose for a while, and then **bold** turns up, then more.");
+    });
+
+    test("agrees where a line is still the whitespace before its bullet", () {
+      agreesGrowing("One.\n   - two\n");
+    });
+
     test("starts over when the text is a different one", () {
       final growing = SpeakableText();
       growing.of("The first reply, which was long.");
