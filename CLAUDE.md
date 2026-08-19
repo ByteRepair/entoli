@@ -738,21 +738,39 @@ the W^X rule that kept Termux pinned at `targetSdk` 28 and off Play. The
 library directory is not that, so a binary there runs. Two details follow from
 it and both are load-bearing: the files must be named `lib*.so`, since that is
 all the installer extracts out of an APK, and `useLegacyPackaging` has to be on
-or they are mapped from inside the APK and there is no file to run at all.
+or they are mapped from inside the APK and there is no file to run at all. That
+last one is APK-wide — AGP has no per-library lever — so every other native
+library, the Flutter engine included, is stored compressed and unpacked at
+install time as well. The APK shrinks and the installed app grows by what was
+previously read straight out of it.
 
-`filesDir/usr` is a tree of **symlinks** into that directory rather than
+`<cacheDir>/tools` is a tree of **symlinks** into that directory rather than
 copies. A copy would be another twelve megabytes, and — being in app storage —
 one nothing may execute; the link is followed at exec time, so what the kernel
 sees is the file where it is allowed to be. They are repointed on every install
 rather than kept, because the library path carries an install-specific segment
 and every link from before an update points at nothing.
 
+The cache directory rather than the data one, for the reason the voice models
+are there: `backup.dart` zips the data directory whole, and a backup carrying a
+tree of links into an install that no longer exists is worse than useless. On
+Android that is the support directory and so is not evictable — see "Where the
+models live".
+
 The environment is the rest of it: `PATH` with the system's own commands behind
 ours, `GIT_EXEC_PATH` (git resolves `git-remote-https` and friends by name, so
 the one helper is linked under each scheme it might be asked for), `HOME`,
 `TMPDIR`, and `SSL_CERT_DIR` pointed at Android's own trust store, which is a
-directory of hashed certificates rather than a bundle file. Settings win over
+directory of hashed certificates rather than a bundle file. It is layered in
+`LocalShell` beside the defaults that were already there, so the one place that
+decides what a command runs under decides this too, and settings still win over
 all of it — a variable the user set is the one that reaches the command.
+
+**What was laid out and what the model is told about it are one value**, the
+`Toolset` `install` answers with. They were a return value and a mutable global
+next to it, which is an ordering nothing in the types insisted on: get it wrong
+and git is on the `PATH` while the prompt never mentions it, which is the silent
+half-failure this file keeps arguing against elsewhere.
 
 **The toolset is frozen at build time, and cannot not be.** Nothing downloaded
 can ever be executed, so there is no package manager and there is no adding one

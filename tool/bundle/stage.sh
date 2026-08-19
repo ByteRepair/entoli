@@ -3,9 +3,9 @@
 #
 #   tool/bundle/stage.sh [source]
 #
-# `source` defaults to tool/bundle/dist and may hold either `<abi>/` directories
-# or the `tools-<abi>/` ones CI's artifacts unpack as. Anything already in
-# jniLibs for an ABI is replaced, so a stale build cannot ride along.
+# `source` defaults to tool/bundle/dist and holds one directory per ABI.
+# Anything already in jniLibs for an ABI is replaced, so a stale build cannot
+# ride along.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -21,7 +21,6 @@ fi
 staged=0
 for dir in "$src"/*/; do
   abi=$(basename "$dir")
-  abi=${abi#tools-}
   case "$abi" in
     arm64-v8a|armeabi-v7a|x86_64) ;;
     *) continue ;;

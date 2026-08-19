@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/local/bundled_tools.dart";
+import "package:agent_chat/domain/shell.dart";
 
 void main() {
   late Directory root;
@@ -21,7 +22,7 @@ void main() {
 
   void ship(String name) => File(p.join(libDir.path, name)).writeAsStringSync("elf");
 
-  Future<Map<String, String>?> install() =>
+  Future<Toolset?> install() =>
       BundledTools.install(root: root.path, libDir: libDir.path);
 
   test("a build that ships nothing changes nothing", () async {
@@ -29,22 +30,17 @@ void main() {
     expect(root.listSync(), isEmpty);
   });
 
-  test("git is on the PATH, as a link into the one directory it may run from",
-      () async {
+  test("git is on the PATH, ahead of the system's own commands and as a link "
+      "into the one directory it may run from", () async {
     ship("libgit.so");
 
-    final environment = (await install())!;
+    final environment = (await install())!.environment;
 
     final git = Link(p.join(root.path, "bin", "git"));
     expect(git.existsSync(), isTrue);
     expect(git.targetSync(), p.join(libDir.path, "libgit.so"));
-    expect(environment["PATH"], startsWith(p.join(root.path, "bin")));
-  });
-
-  test("the system's own commands stay on the PATH behind it", () async {
-    ship("libgit.so");
-
-    expect((await install())!["PATH"], contains(":"));
+    expect(environment["PATH"],
+        "${p.join(root.path, "bin")}:${Platform.environment["PATH"] ?? "/system/bin"}");
   });
 
   test("the https helper is linked under every scheme git looks it up by",
@@ -52,7 +48,7 @@ void main() {
     ship("libgit.so");
     ship("libgit-remote-http.so");
 
-    final environment = (await install())!;
+    final environment = (await install())!.environment;
 
     final execPath = environment["GIT_EXEC_PATH"]!;
     for (final scheme in const ["http", "https", "ftp", "ftps"]) {
@@ -64,7 +60,7 @@ void main() {
   test("a build without the helper still offers git", () async {
     ship("libgit.so");
 
-    final environment = (await install())!;
+    final environment = (await install())!.environment;
 
     expect(environment["GIT_EXEC_PATH"], isNotNull);
     expect(
@@ -75,7 +71,8 @@ void main() {
   test("certificates come from the system's own store", () async {
     ship("libgit.so");
 
-    expect((await install())!["SSL_CERT_DIR"], "/system/etc/security/cacerts");
+    expect((await install())!.environment["SSL_CERT_DIR"],
+        "/system/etc/security/cacerts");
   });
 
   test("a link left by the install before this one is repointed", () async {
@@ -97,7 +94,7 @@ void main() {
       () async {
     ship("libgit.so");
 
-    final tmp = (await install())!["TMPDIR"]!;
+    final tmp = (await install())!.environment["TMPDIR"]!;
     expect(Directory(tmp).existsSync(), isTrue);
   });
 }

@@ -47,11 +47,14 @@ class AppSession {
     // Started here and awaited below: on Android it is a channel round trip
     // that nothing between depends on.
     final cacheDir = platform.cacheDir();
+    // Started with it and awaited below for the same reason: laying the tools
+    // out is a channel round trip and a handful of symlinks, and nothing
+    // between depends on either.
+    final tools = cacheDir.then(platform.installBundledTools);
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
-    final tools = await platform.installBundledTools(await cacheDir);
-    final backend = platform.createBackend(config, library, store, tools: tools);
+    final backend = platform.createBackend(config, library, store, tools: await tools);
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final voiceModels = platform.createVoiceModelStore(cache);

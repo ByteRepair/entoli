@@ -1,5 +1,6 @@
-# What is bundled, and what it was checked to be. Bumping any of these means
-# running the build workflow again and updating tools.json with what came out.
+# What is bundled, and what it was checked to be. Bumping any of these is the
+# whole of an update: the CI cache is keyed on this file, so the next run
+# rebuilds.
 #
 # These are security-relevant: git, curl and OpenSSL are ours to rebuild when
 # one of them has a CVE, since nothing on the device updates them for us.

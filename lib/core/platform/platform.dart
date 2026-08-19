@@ -11,6 +11,7 @@ import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/shell.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model_store.dart";
 import "../config.dart";
@@ -33,16 +34,13 @@ AgentBackend createBackend(
   AppConfig config,
   PromptLibrary library,
   ChatStore store, {
-  Map<String, String> tools = const {},
+  Toolset? tools,
 }) {
   AppSettings settings() => AppSettings.load(config);
   return BuiltinBackend(
     config: config,
     library: library,
-    // Settings last, so a variable the user set wins over one the bundled
-    // tools want — including PATH, which is the only one they are likely to
-    // disagree about.
-    shell: platformShell(environment: () => {...tools, ...settings().environment}),
+    shell: platformShell(environment: () => settings().environment, tools: tools),
     webSearch: platformWebSearch(),
     store: store,
     registry: LlmRegistry(
@@ -54,10 +52,10 @@ AgentBackend createBackend(
   );
 }
 
-/// Lay out the tools this build ships for the device, and answer with the
-/// environment that finds them. Empty everywhere but Android. Called before
-/// the backend is built, since the shell is handed the result once.
-Future<Map<String, String>> installBundledTools(String cacheDir) =>
+/// Lay out the tools this build ships for the device, and answer with what
+/// finds them. Null everywhere but Android. Called before the backend is
+/// built, since the shell is handed the result once.
+Future<Toolset?> installBundledTools(String cacheDir) =>
     platformInstallTools(cacheDir);
 
 /// A real filesystem on desktop and Android, IndexedDB in a browser. What

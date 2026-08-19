@@ -17,10 +17,10 @@ class LocalShell extends Shell {
   })  : _environment = environment ?? _none,
         _shell = shell ?? _machineShell;
 
-  /// What this build ships beside the machine's own commands, named for the
-  /// model. Null where nothing is bundled, which is every platform but
-  /// Android — see "Bundled tools" in CLAUDE.md.
-  final String? tools;
+  /// What this build ships beside the machine's own commands. Null where
+  /// nothing is bundled, which is every platform but Android — see "Bundled
+  /// tools" in CLAUDE.md.
+  final Toolset? tools;
 
   /// What lets a test say there is no shell here without the machine agreeing.
   /// Not for the reason [_environment] is a callback: that one is re-read so a
@@ -44,7 +44,8 @@ class LocalShell extends Shell {
   String get platformDescription {
     final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
         "commands run under ${_shell() ?? "no shell"}";
-    return tools == null ? where : "$where, with $tools bundled with the app";
+    final bundled = tools?.names;
+    return bundled == null ? where : "$where, with $bundled bundled with the app";
   }
 
   /// False where the machine has no shell to offer. Android is why this is not
@@ -60,7 +61,10 @@ class LocalShell extends Shell {
         command: command,
         cwd: cwd,
         timeout: timeout,
-        environment: {..._defaults, ..._environment()},
+        // Settings last, so a variable the user set wins over both what the
+        // shell wants and what the bundled tools want — PATH being the one
+        // they are likely to disagree about.
+        environment: {..._defaults, ...?tools?.environment, ..._environment()},
       );
 
   /// The shell every command is run under, resolved once. `bash` is preferred

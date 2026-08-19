@@ -15,10 +15,13 @@ import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 
-Shell platformShell({required Map<String, String> Function() environment}) =>
+Shell platformShell({
+  required Map<String, String> Function() environment,
+  Toolset? tools,
+}) =>
     const UnavailableShell();
 
-Future<Map<String, String>> platformInstallTools(String cacheDir) async => const {};
+Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 
