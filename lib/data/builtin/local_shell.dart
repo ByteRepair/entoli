@@ -10,9 +10,17 @@ import "../../domain/shell.dart";
 /// subshell — the contract inherited from mini-swe-agent — so `cd` and exports
 /// do not carry over, which is why the agent is told to prefix them instead.
 class LocalShell extends Shell {
-  LocalShell({Map<String, String> Function()? environment, String? Function()? shell})
-      : _environment = environment ?? _none,
+  LocalShell({
+    Map<String, String> Function()? environment,
+    String? Function()? shell,
+    this.tools,
+  })  : _environment = environment ?? _none,
         _shell = shell ?? _machineShell;
+
+  /// What this build ships beside the machine's own commands. Null where
+  /// nothing is bundled, which is every platform but Android — see "Bundled
+  /// tools" in CLAUDE.md.
+  final Toolset? tools;
 
   /// What lets a test say there is no shell here without the machine agreeing.
   /// Not for the reason [_environment] is a callback: that one is re-read so a
@@ -33,9 +41,12 @@ class LocalShell extends Shell {
   static bool? _hasSetsid;
 
   @override
-  String get platformDescription =>
-      "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
-      "commands run under ${_shell() ?? "no shell"}";
+  String get platformDescription {
+    final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
+        "commands run under ${_shell() ?? "no shell"}";
+    final bundled = tools?.names;
+    return bundled == null ? where : "$where, with $bundled bundled with the app";
+  }
 
   /// False where the machine has no shell to offer. Android is why this is not
   /// a constant: it has no `/bin` at all, and a device whose `PATH` turns up
@@ -50,7 +61,10 @@ class LocalShell extends Shell {
         command: command,
         cwd: cwd,
         timeout: timeout,
-        environment: {..._defaults, ..._environment()},
+        // Settings last, so a variable the user set wins over both what the
+        // shell wants and what the bundled tools want — PATH being the one
+        // they are likely to disagree about.
+        environment: {..._defaults, ...?tools?.environment, ..._environment()},
       );
 
   /// The shell every command is run under, resolved once. `bash` is preferred

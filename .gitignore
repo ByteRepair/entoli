@@ -120,3 +120,9 @@ app.*.symbols
 # IntelliJ / Android Studio
 *.iml
 .idea/
+
+# Built by tool/bundle/build.sh and staged into the APK by tool/bundle/stage.sh.
+# Twelve megabytes an ABI of compiled git is not something to review in a diff.
+/tool/bundle/build/
+/tool/bundle/dist/
+/android/app/src/main/jniLibs/

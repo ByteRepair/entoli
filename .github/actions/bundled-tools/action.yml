@@ -1,0 +1,47 @@
+name: Bundled tools
+description: >
+  Build the tools Entoli ships inside the APK — git and its https helper — and
+  stage them where the Android build packages them from. Cached on what decides
+  the output, so a run that changes neither the versions nor the recipe pays
+  for a download rather than three cross-compiles.
+
+outputs:
+  abis:
+    description: The ABIs built, for a caller that has to check what shipped.
+    value: ${{ steps.abis.outputs.list }}
+
+runs:
+  using: composite
+  steps:
+    # One authority for the list: the build below and the release build's check
+    # that git actually made it into the APK both read it from here.
+    - id: abis
+      shell: bash
+      run: echo "list=arm64-v8a armeabi-v7a x86_64" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the built tools
+      id: cache
+      uses: actions/cache@v6.1.0
+      with:
+        path: tool/bundle/dist
+        # The recipe and the versions between them decide every byte of the
+        # output, so nothing else belongs in the key.
+        key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/bundle/versions.sh', 'tool/bundle/build.sh', 'tool/bundle/android-compat.h') }}
+
+    - name: Build the tools
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        # The runner image's own NDK. Pinning one here would be a second
+        # version to keep in step with the app's, for a compiler whose output
+        # this does not depend on.
+        ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
+      run: |
+        set -euo pipefail
+        for abi in ${{ steps.abis.outputs.list }}; do
+          tool/bundle/build.sh "$abi"
+        done
+
+    - name: Stage them into the APK's native libraries
+      shell: bash
+      run: tool/bundle/stage.sh
