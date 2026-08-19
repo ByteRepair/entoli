@@ -2,7 +2,6 @@ import "dart:async";
 import "dart:io";
 import "dart:isolate";
 import "dart:math" as math;
-
 import "package:audioplayers/audioplayers.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
@@ -14,12 +13,15 @@ import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
 import "pcm.dart";
+import "voice_strategies.dart";
 import "wav.dart";
 
-/// Listening and speaking through sherpa-onnx. Two worker isolates rather than
-/// one, which is the design rather than an optimisation — see "Hearing and
-/// speaking" in CLAUDE.md for why the microphone must not queue behind a
-/// sentence being generated.
+/// Listening and speaking through sherpa-onnx, which is the desktops' answer
+/// and only theirs — Android ships none of its native code and uses the system
+/// engines instead, so nothing constructs this there. `start` builds a
+/// [SherpaListener] and a [SherpaSpeaker] and hands them to a
+/// [ComposedVoiceSession], which wires barge-in and forwards the rest. See
+/// "Hearing and speaking" in CLAUDE.md for the two-worker design.
 class SherpaVoice extends Voice {
   SherpaVoice(this._store, this._cacheDir);
 
@@ -37,29 +39,25 @@ class SherpaVoice extends Voice {
     required SpeechModel speech,
     int speaker = 0,
   }) async {
-    final speakDir = await _store.directoryOf(speech);
-    if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
-
-    AudioRecorder? recorder;
-    _Worker? listening;
+    Listener? listener;
     if (recognition != null) {
       final listenDir = await _store.directoryOf(recognition);
       if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
-      // Everything that can refuse, before either worker is spawned: a spawn
-      // returns as soon as the isolate has sent its port back, which is before
-      // it has loaded its model, so a refusal after this point is a hundred
-      // megabytes read off a phone's disk and freed again.
-      recorder = AudioRecorder();
-      if (!await recorder.hasPermission()) {
-        recorder.dispose();
-        throw StateError("Entoli was not allowed to use the microphone.");
-      }
+      // Everything that can refuse, before the worker is spawned: a spawn
+      // returns as soon as the isolate has sent its port back, which is
+      // before it has loaded its model, so a refusal after this point is a
+      // hundred megabytes read off a disk and freed again.
+      final recorder = await openMicrophone();
       final vad = await _vadPath();
-      listening = await _Worker.spawn(_listenWorker, (vad, recognition, listenDir));
+      final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
+      listener = SherpaListener(recorder, worker);
     }
 
-    final speaking = await _Worker.spawn(_speakWorker, (speech, speakDir, speaker));
-    return _SherpaSession(recorder, listening, speaking);
+    final speakDir = await _store.directoryOf(speech);
+    if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
+    final worker = await Worker.spawn(_speakWorker, (speech, speakDir, speaker));
+
+    return ComposedVoiceSession(listener, SherpaSpeaker(worker));
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
@@ -83,21 +81,18 @@ class SherpaVoice extends Voice {
 /// the wrong home for a WAV that lives for a sentence.
 String get _speechDir => p.join(Directory.systemTemp.path, "entoli-speech");
 
-/// The microphone, the two workers, and whatever is queued to be said.
-class _SherpaSession implements VoiceSession {
-  _SherpaSession(this._recorder, this._listener, this._speaker) {
-    _listener?.messages.listen(_fromListener);
-    _speaker.messages.listen(_fromSpeaker);
-    _player.onPlayerComplete.listen((_) => _playNext());
+/// The sherpa listening half: a microphone, Silero VAD, and an offline
+/// recognizer, in one worker isolate. Emits [VoiceHeard] and
+/// [VoiceInterrupted]; the [ComposedVoiceSession] turns the latter into a
+/// speaker stop.
+class SherpaListener implements Listener {
+  SherpaListener(this._recorder, this._worker) {
+    _worker.messages.listen(_fromWorker);
     unawaited(_open());
   }
 
-  /// Null where there is nothing to listen with: a session reading one message
-  /// out opens no microphone and loads no recogniser.
-  final AudioRecorder? _recorder;
-  final _Worker? _listener;
-  final _Worker _speaker;
-  final _player = AudioPlayer();
+  final AudioRecorder _recorder;
+  final Worker _worker;
 
   /// Single-subscription, so what [_open] reports is *buffered* until the
   /// controller subscribes. Broadcast, a microphone that failed to open said so
@@ -114,26 +109,11 @@ class _SherpaSession implements VoiceSession {
   var _filled = 0;
 
   final _pcm = Pcm16Reader();
-
-  /// Generated audio waiting its turn, and what is playing now. Speech is
-  /// generated a sentence ahead of being heard, so there is always a queue.
-  final _queue = <String>[];
-  var _playing = false;
-
-  /// The file being played, kept until something else is. `play` returns when
-  /// playback *starts*, so deleting it there deleted a file still being read.
-  String? _played;
-
-  /// Bumped by [stopSpeaking]. Audio generated before it is dropped rather than
-  /// played into a silence the user asked for.
-  var _generation = 0;
-
-  /// Sentences handed to the worker that have not come back as audio yet.
-  /// Speech is generated a sentence ahead of being heard, so a queue that has
-  /// run dry with one of these outstanding has not finished — it is waiting.
-  var _pending = 0;
-
   var _closed = false;
+
+  Future<void> _open() async {
+    await setListening(true);
+  }
 
   @override
   Stream<VoiceEvent> get events => _events.stream;
@@ -141,32 +121,19 @@ class _SherpaSession implements VoiceSession {
   @override
   ValueListenable<double> get level => _levelOf;
 
-  Future<void> _open() async {
-    // Once per session rather than once per sentence, and emptied on the way
-    // in: a session killed mid-reply leaves its wavs behind, and nothing else
-    // ever comes back for them.
-    final speech = Directory(_speechDir);
-    if (await speech.exists()) await speech.delete(recursive: true);
-    await speech.create(recursive: true);
-    await setListening(true);
-  }
-
   @override
   Future<void> setListening(bool on) async {
-    final recorder = _recorder;
-    if (_closed || recorder == null || on == (_mic != null)) return;
+    if (_closed || on == (_mic != null)) return;
     if (!on) {
       await _mic?.cancel();
       _mic = null;
-      await recorder.stop();
-      // Whatever the window held is half an utterance from before the pause,
-      // and the level is what the circle draws.
+      await _recorder.stop();
       _filled = 0;
       _levelOf.value = 0;
       return;
     }
     try {
-      final stream = await recorder.startStream(const RecordConfig(
+      final stream = await _recorder.startStream(const RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: sampleRate,
         numChannels: 1,
@@ -189,38 +156,100 @@ class _SherpaSession implements VoiceSession {
       sum += value * value;
       _window[_filled++] = value;
       if (_filled < _windowSize) continue;
-      // Refilled rather than replaced: `send` copies, so the worker has its own.
-      _listener?.send(("audio", _window));
+      _worker.send(("audio", _window));
       _filled = 0;
     }
-    // Root mean square, and it decays rather than tracking: the circle should
-    // breathe with a voice rather than flicker with every frame's peak.
     final loudness = math.sqrt(sum / math.max(1, samples.length));
     final level = math.max(loudness * 3, _levelOf.value * 0.8).clamp(0.0, 1.0);
-    // Snapped to zero rather than decaying towards it forever: a geometric
-    // decay never reaches its floor, so a silent room would go on notifying
-    // thirty times a second, and every one of those repaints the circle.
     _levelOf.value = level < 0.005 ? 0 : level;
   }
 
-  void _fromListener(Object? message) {
+  void _fromWorker(Object? message) {
     switch (message) {
       case ("heard", final String text):
         _events.add(VoiceHeard(text));
       case ("detected",):
-        // Talking over the reply. The speech stops here rather than in the
-        // controller, so the moment the user starts is the moment it goes
-        // quiet — whatever the controller then decides about the turn.
-        if (_playing || _queue.isNotEmpty) {
-          unawaited(stopSpeaking());
-          _events.add(const VoiceInterrupted());
-        }
+        _events.add(const VoiceInterrupted());
       case ("failed", final String message):
         _fail(message);
     }
   }
 
-  void _fromSpeaker(Object? message) {
+  void _fail(String message) {
+    if (!_closed) _events.add(VoiceFailed(message));
+  }
+
+  @override
+  Future<void> dispose() async {
+    _closed = true;
+    await _mic?.cancel();
+    await _recorder.stop();
+    _recorder.dispose();
+    _worker.close();
+    await _events.close();
+    _levelOf.dispose();
+  }
+
+  /// Silero's window, and so the size of every frame handed to the worker.
+  static const _windowSize = 512;
+}
+
+/// The sherpa speaking half: an offline TTS in one worker isolate, WAVs written
+/// to a temp directory and played through `audioplayers`. [SpeechSilent] is
+/// emitted when the queue has drained and nothing is pending; [SpeechFailed]
+/// on a generation fault.
+class SherpaSpeaker implements Speaker {
+  SherpaSpeaker(this._worker) {
+    _worker.messages.listen(_fromWorker);
+    _player.onPlayerComplete.listen((_) => unawaited(_playNext()));
+    unawaited(_open());
+  }
+
+  final Worker _worker;
+  final _player = AudioPlayer();
+  final _signals = StreamController<SpeechSignal>();
+
+  /// Generated audio waiting its turn, and what is playing now. Speech is
+  /// generated a sentence ahead of being heard, so there is always a queue.
+  final _queue = <String>[];
+  var _playing = false;
+
+  /// The file being played, kept until something else is. `play` returns when
+  /// playback *starts*, so deleting it there deleted a file still being read.
+  String? _played;
+
+  /// Bumped by [stop]. Audio generated before it is dropped rather than played
+  /// into a silence the user asked for.
+  var _generation = 0;
+
+  /// Sentences handed to the worker that have not come back as audio yet.
+  var _pending = 0;
+
+  var _closed = false;
+
+  Future<void> _open() async {
+    // Once per session rather than once per sentence, and emptied on the way
+    // in: a session killed mid-reply leaves its wavs behind, and nothing else
+    // ever comes back for them.
+    final speech = Directory(_speechDir);
+    if (await speech.exists()) await speech.delete(recursive: true);
+    await speech.create(recursive: true);
+  }
+
+  @override
+  Stream<SpeechSignal> get signals => _signals.stream;
+
+  @override
+  bool get speaking => _playing || _queue.isNotEmpty;
+
+  @override
+  Future<void> speak(String text) async {
+    if (_closed || text.trim().isEmpty) return;
+    _pending++;
+    _worker.send(("speak", _generation, text));
+  }
+
+  void _fromWorker(Object? message) {
     switch (message) {
       case ("audio", final int generation, final Float32List samples, final int rate):
         if (generation != _generation || _closed) return;
@@ -230,20 +259,12 @@ class _SherpaSession implements VoiceSession {
         // Whatever was outstanding is not coming: left counted, the session
         // would never say it had finished.
         _pending = 0;
-        _fail(message);
+        _signals.add(SpeechFailed(message));
     }
   }
 
-  @override
-  Future<void> speak(String text) async {
-    if (_closed || text.trim().isEmpty) return;
-    _pending++;
-    _speaker.send(("speak", _generation, text));
-  }
-
   Future<void> _enqueue(Float32List samples, int rate) async {
-    final path =
-        p.join(_speechDir, "${DateTime.now().microsecondsSinceEpoch}.wav");
+    final path = p.join(_speechDir, "${DateTime.now().microsecondsSinceEpoch}.wav");
     await File(path).writeAsBytes(wavOf(samples, rate));
     _queue.add(path);
     if (!_playing) await _playNext();
@@ -255,7 +276,7 @@ class _SherpaSession implements VoiceSession {
     if (_queue.isEmpty) {
       if (_playing) {
         _playing = false;
-        if (_pending == 0) _events.add(const VoiceFellSilent());
+        if (_pending == 0) _signals.add(const SpeechSilent());
       }
       return;
     }
@@ -266,7 +287,7 @@ class _SherpaSession implements VoiceSession {
       await _player.play(DeviceFileSource(next));
     } catch (e) {
       _playing = false;
-      _fail("$e");
+      _signals.add(SpeechFailed("$e"));
     }
   }
 
@@ -277,14 +298,9 @@ class _SherpaSession implements VoiceSession {
   }
 
   @override
-  Future<void> stopSpeaking() async {
-    // Before the stop, so audio already generated is dropped rather than
-    // arriving into the silence and starting the queue up again.
+  Future<void> stop() async {
     _generation++;
     _pending = 0;
-    // Deleted rather than dropped: only `_playNext` removes a file it played,
-    // so a barge-in used to leave every unsaid sentence in the cache with
-    // nothing that would ever come back for it.
     for (final path in _queue) {
       unawaited(_discard(path));
     }
@@ -300,32 +316,20 @@ class _SherpaSession implements VoiceSession {
     } catch (_) {}
   }
 
-  void _fail(String message) {
-    if (!_closed) _events.add(VoiceFailed(message));
-  }
-
   @override
   Future<void> dispose() async {
     _closed = true;
-    await _mic?.cancel();
-    await _recorder?.stop();
-    _recorder?.dispose();
     await _player.stop();
     await _player.dispose();
-    _listener?.close();
-    _speaker.close();
-    await _events.close();
-    _levelOf.dispose();
+    _worker.close();
+    await _signals.close();
   }
-
-  /// Silero's window, and so the size of every frame handed to the worker.
-  static const _windowSize = 512;
 }
 
 /// One isolate and the port to it. Both workers talk the same way: records in,
 /// records out, `("close",)` to stop.
-class _Worker {
-  _Worker._(this._to, this._out);
+class Worker {
+  Worker._(this._to, this._out);
 
   final SendPort _to;
   final StreamController<Object?> _out;
@@ -337,7 +341,7 @@ class _Worker {
   /// its model says so.
   Stream<Object?> get messages => _out.stream;
 
-  static Future<_Worker> spawn<T>(
+  static Future<Worker> spawn<T>(
       void Function((SendPort, T)) entry, T argument) async {
     final port = ReceivePort();
     final out = StreamController<Object?>();
@@ -353,7 +357,7 @@ class _Worker {
       out.add(message);
     });
     await Isolate.spawn(entry, (port.sendPort, argument));
-    return _Worker._(await ready.future, out);
+    return Worker._(await ready.future, out);
   }
 
   void send(Object? message) => _to.send(message);

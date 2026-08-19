@@ -45,8 +45,18 @@ class VoiceArchive extends VoiceDownload {
 
 /// Which sherpa-onnx family a model belongs to. The adapter switches on this to
 /// build its config, and it is the one thing about a model that cannot be said
-/// as a file name.
-enum VoiceEngine { whisper, moonshine, senseVoice, vits, kokoro, kitten }
+/// as a file name. `androidRecognition`/`androidSpeech` are the system engines
+/// — not sherpa, and routed to a platform channel rather than the onnx adapter.
+enum VoiceEngine {
+  whisper,
+  moonshine,
+  senseVoice,
+  vits,
+  kokoro,
+  kitten,
+  androidRecognition,
+  androidSpeech,
+}
 
 /// A model in the catalog, installed or not.
 sealed class VoiceModel {
@@ -82,6 +92,13 @@ sealed class VoiceModel {
   final List<VoiceDownload> downloads;
 
   int get bytes => downloads.fold(0, (sum, d) => sum + d.bytes);
+
+  /// Whether this is one of the Android-system sentinels — a pick that means
+  /// "use the OS engine" rather than a downloaded model. Read off [engine],
+  /// which is already the one thing about a model that decides what runs it.
+  bool get isNative =>
+      engine == VoiceEngine.androidRecognition ||
+      engine == VoiceEngine.androidSpeech;
 
   /// Which half of the model directory it installs into: one of [voiceFolders].
   String get folder;
@@ -327,9 +344,42 @@ const speechModels = <SpeechModel>[
   ),
 ];
 
+/// The Android-system sentinels: picks that mean "use the OS engine" rather
+/// than a downloaded model. They are kept out of [recognitionModels] and
+/// [speechModels] — the two lists the download sections draw — so there is no
+/// row offering to fetch something that has nothing to fetch. The file fields
+/// are empty because the engine behind these is the platform's; nothing reads
+/// them, since `isNative` routes away before the sherpa config is built.
+const nativeRecognition = RecognitionModel(
+  id: "android-recognition",
+  name: "Android system",
+  engine: VoiceEngine.androidRecognition,
+  languages: "System languages",
+  multilingual: false,
+  tokens: "",
+  downloads: [],
+);
+
+const nativeSpeech = SpeechModel(
+  id: "android-speech",
+  name: "Android system",
+  engine: VoiceEngine.androidSpeech,
+  languages: "System languages",
+  multilingual: false,
+  model: "",
+  tokens: "",
+  downloads: [],
+);
+
 /// Every model, either kind. The settings page draws each kind's own list; this
-/// is for looking one up by the id a setting holds.
-const voiceCatalog = <VoiceModel>[...recognitionModels, ...speechModels];
+/// is for looking one up by the id a setting holds, which is why the sentinels
+/// are in here.
+const voiceCatalog = <VoiceModel>[
+  ...recognitionModels,
+  ...speechModels,
+  nativeRecognition,
+  nativeSpeech,
+];
 
 /// The catalog model [id] names, if it is the kind asked for. Null where it
 /// names nothing, names something no longer in the catalog, or names the wrong
