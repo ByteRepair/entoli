@@ -676,8 +676,10 @@ The chat store and the prompt sources used to be in that list and are not any
 more — one filesystem means one of each, built in `platform.dart` itself. What
 is left varying is the shell, the network, which `FileSystem`, where its root
 is, whether the process has an environment, `FileHandoff` (see "The workspace
-explorer" for why it is the one thing here with three implementations), and
-`platformPersist`: on the web that is `navigator.storage.persist()`, without
+explorer" for why it is the one thing here with three implementations),
+`AssistantLaunch` (Android's assistant gesture, and a stub that never fires
+anywhere else — see "Being the assistant"), and `platformPersist`: on the web
+that is `navigator.storage.persist()`, without
 which IndexedDB is evictable and a chat can be gone on the next visit because
 something else wanted the space. A browser that refuses leaves the app working,
 just evictable again. Everywhere else it is a no-op, because a directory on a
@@ -2075,6 +2077,56 @@ rename: there is no half-written one to catch. It is also why the layout is read
 rather than indexed: a `workspaces.json` beside it would be a copy to keep in
 step, and a chat moved by hand would stop being in the project it was moved to.
 
+### Being the assistant
+
+Picked as the system's assistant, Entoli is launched by the gesture that used to
+raise Google's — long-press home, or a swipe up from a corner — and opens a new
+chat, in the project and the view the Assistant settings name. Android's, and
+only Android's.
+
+The manifest half is an `ACTION_ASSIST` filter on `MainActivity` and on the
+`.PromptIcon` alias, for the reason the share filter is on both: whichever is
+enabled is the only component that can be started, and being the assistant must
+not stop working because the user changed the icon. `CATEGORY_DEFAULT` is
+load-bearing rather than boilerplate — the role is offered to whatever
+`queryIntentActivities(ACTION_ASSIST, MATCH_DEFAULT_ONLY)` finds exported, so
+without it the app is not in the picker at all. Nothing else is needed: no
+permission, and no `VoiceInteractionService`, which is the other way to hold the
+role and is a great deal more than a launch signal.
+
+**The launch is held rather than pushed**, which is the whole of what
+`AssistantChannel` does. The gesture is usually what starts the app, and Dart is
+not listening for a good while after that — so a launch waits in Kotlin until
+`AssistantLaunch.take` asks, and the invoke behind `launched` is only a nudge
+for an app that was already up. `FilesChannel` splits a share exactly this way,
+and both halves are needed for the same reason, the cached engine included: an
+activity whose engine was cached runs `onCreate` but not `main`, so the
+first-frame read never repeats and the nudge is what carries that case.
+
+`IncomingAssistant` wraps the app beside `IncomingShares` and is the same shape:
+the postFrame read, the stream, and a flag so two gestures do not leave two
+empty chats. It selects the project *before* it makes the chat, since
+`startChat` and `startVoiceChat` both read `selectedProjectProvider` — which is
+also what lets the view setting be nothing more than which of the two to call.
+`AssistantView.voice` therefore inherits voice mode's own answer to missing
+models: the settings prompt rather than a dead page.
+
+A launch always makes a **new** chat. The gesture is how a conversation is
+started, not how one is returned to, and the sidebar is still there for the
+other thing.
+
+The settings are app-level, with no per-chat override, for the reason the icon
+and the theme are: the assistant is the app's, and the chat it opens does not
+exist yet to have an opinion. Their category is drawn on every platform, the way
+the voice one is where `Voice.available` is false — the settings are the app's
+whatever it is running on, and hiding them would make the file's contents depend
+on where it was last opened. `assistantProject` is `null` for the default
+project, which is the null `selectedProjectProvider` already uses; a name that
+no longer resolves to a project reads back as the default one rather than as a
+missing entry in the dropdown, and a launch resolves it the same way. Both ends
+have to, or the field would say `Default` while the gesture landed in — and so
+recreated — the directory that had just been deleted.
+
 ### The theme
 
 One palette, seeded from `entoliIndigo` — the colour the icon sits on, which the
@@ -2195,10 +2247,10 @@ no-op `available` being false gives. So the app still has exactly one
 conditional import — `ForegroundService` is the second channel to be built this
 way.
 
-Every channel — this one, `ForegroundService` and `FilesChannel` — is registered
-when the engine is created rather than on each attach, and holds the application
-context. That is forced by the engine outliving the activity: see "Staying alive
-off screen".
+Every channel — this one, `ForegroundService`, `FilesChannel` and
+`AssistantChannel` — is registered when the engine is created rather than on
+each attach, and holds the application context. That is forced by the engine
+outliving the activity: see "Staying alive off screen".
 
 #### The debug build's own
 
@@ -2268,7 +2320,7 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is five categories, picked from a panel beside it or, below
+The settings page is six categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself: the
 default project's workspace (which has nowhere else to be reached from),
 **Appearance** — the theme and the app icon, which are the two things the app
@@ -2277,9 +2329,10 @@ which travel together because auto mode is unusable without one — the
 environment, and deleting every chat. **Voice** is what listens and what speaks,
 over the catalog they are downloaded from — its own category rather than a
 section under General because the two pickers are two lines and the catalog
-under them is the rest of the page. **Providers** is the endpoints. **LLMs**
-is what a new chat is answered by and what names it. **Data** is all of it at
-once, out as one file and back — see "Backing it all up".
+under them is the rest of the page. **Assistant** is where Android's assistant
+gesture lands — see "Being the assistant". **Providers** is the endpoints.
+**LLMs** is what a new chat is answered by and what names it. **Data** is all of
+it at once, out as one file and back — see "Backing it all up".
 
 **Narrow, the categories are the page rather than its drawer**, and each one is
 pushed over the list. That is the one place this and the chat page differ about

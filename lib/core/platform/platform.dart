@@ -6,6 +6,7 @@ import "../../data/local/file_chat_store.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
@@ -87,6 +88,11 @@ FileHandoff createFileHandoff(AppConfig config) => platformFileHandoff(config.fs
 /// already that port's.
 BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
     platformBackupHandoff(config.fs, handoff);
+
+/// The system's assistant gesture. Android forwards it as an `ACTION_ASSIST`
+/// intent; everywhere else nothing fires, which is what leaves the launch
+/// handler inert.
+AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now.
