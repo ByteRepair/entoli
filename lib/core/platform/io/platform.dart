@@ -10,6 +10,7 @@ import "package:path_provider/path_provider.dart";
 import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
+import "../../../data/local/bundled_tools.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
@@ -26,7 +27,34 @@ import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 
 Shell platformShell({required Map<String, String> Function() environment}) =>
-    LocalShell(environment: environment);
+    LocalShell(environment: environment, tools: _tools);
+
+/// Lay out whatever this build ships for the device's ABI, under [cacheDir]
+/// rather than the data directory: it is rebuilt from the APK on demand, so a
+/// backup carrying a tree of symlinks into an install that no longer exists
+/// would be worse than useless.
+///
+/// Answers with the environment a command needs to find them, which is empty
+/// where nothing is bundled — every platform but Android, and an Android whose
+/// ABI this build has no tools for.
+Future<Map<String, String>> platformInstallTools(String cacheDir) async {
+  if (!Platform.isAndroid) return const {};
+  final libDir = await BundledTools.nativeLibraryDir();
+  if (libDir == null) return const {};
+  final environment = await BundledTools.install(
+    root: p.join(cacheDir, "tools"),
+    libDir: libDir,
+  );
+  if (environment == null) return const {};
+  _tools = "git";
+  return environment;
+}
+
+/// What the model is told is on the machine, which is the whole point of
+/// bundling anything: a model that does not know git is there will not reach
+/// for it. Null until [platformInstallTools] has found something, which is
+/// before the app is built.
+String? _tools;
 
 WebSearch platformWebSearch() => DuckDuckGoSearch();
 

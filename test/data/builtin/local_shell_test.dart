@@ -112,6 +112,13 @@ void main() {
     expect(result.output, contains("not found"));
   });
 
+  test("what the model is told names the shell, and the tools beside it", () {
+    expect(LocalShell(shell: () => "/system/bin/sh").platformDescription,
+        contains("/system/bin/sh"));
+    expect(LocalShell(shell: () => "/system/bin/sh", tools: "git").platformDescription,
+        contains("git"));
+  });
+
   group("resolving the shell", () {
     String? resolve(String path, Set<String> present) => LocalShell.resolveShell(
         path: path, isExecutable: (candidate) => present.contains(candidate));

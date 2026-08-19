@@ -50,7 +50,8 @@ class AppSession {
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
-    final backend = platform.createBackend(config, library, store);
+    final tools = await platform.installBundledTools(await cacheDir);
+    final backend = platform.createBackend(config, library, store, tools: tools);
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final voiceModels = platform.createVoiceModelStore(cache);

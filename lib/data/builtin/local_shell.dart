@@ -10,9 +10,17 @@ import "../../domain/shell.dart";
 /// subshell — the contract inherited from mini-swe-agent — so `cd` and exports
 /// do not carry over, which is why the agent is told to prefix them instead.
 class LocalShell extends Shell {
-  LocalShell({Map<String, String> Function()? environment, String? Function()? shell})
-      : _environment = environment ?? _none,
+  LocalShell({
+    Map<String, String> Function()? environment,
+    String? Function()? shell,
+    this.tools,
+  })  : _environment = environment ?? _none,
         _shell = shell ?? _machineShell;
+
+  /// What this build ships beside the machine's own commands, named for the
+  /// model. Null where nothing is bundled, which is every platform but
+  /// Android — see "Bundled tools" in CLAUDE.md.
+  final String? tools;
 
   /// What lets a test say there is no shell here without the machine agreeing.
   /// Not for the reason [_environment] is a callback: that one is re-read so a
@@ -33,9 +41,11 @@ class LocalShell extends Shell {
   static bool? _hasSetsid;
 
   @override
-  String get platformDescription =>
-      "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
-      "commands run under ${_shell() ?? "no shell"}";
+  String get platformDescription {
+    final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
+        "commands run under ${_shell() ?? "no shell"}";
+    return tools == null ? where : "$where, with $tools bundled with the app";
+  }
 
   /// False where the machine has no shell to offer. Android is why this is not
   /// a constant: it has no `/bin` at all, and a device whose `PATH` turns up

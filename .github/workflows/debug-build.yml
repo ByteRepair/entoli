@@ -40,6 +40,8 @@ jobs:
       # names no build number, and an installer refuses to replace an installed
       # build with one no newer. The run number counts runs of *this* workflow,
       # so renaming the file restarts it at 1.
+      - uses: ./.github/actions/bundled-tools
+
       - run: flutter build apk --debug --build-number=${{ github.run_number }}
 
       - uses: actions/upload-artifact@v7.0.1

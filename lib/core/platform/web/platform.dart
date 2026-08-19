@@ -18,6 +18,8 @@ import "../../../domain/web_search.dart";
 Shell platformShell({required Map<String, String> Function() environment}) =>
     const UnavailableShell();
 
+Future<Map<String, String>> platformInstallTools(String cacheDir) async => const {};
+
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 
 /// Nominal, like [platformDataDir]: nothing here fetches a model, so nothing

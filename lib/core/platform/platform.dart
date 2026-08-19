@@ -29,12 +29,20 @@ import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 /// settings page last wrote. [library] is Entoli's commands and agents, which
 /// the agent expands itself. [store] is the chat store, which the agent needs
 /// to write artifacts to the chat's `artifacts/` dir.
-AgentBackend createBackend(AppConfig config, PromptLibrary library, ChatStore store) {
+AgentBackend createBackend(
+  AppConfig config,
+  PromptLibrary library,
+  ChatStore store, {
+  Map<String, String> tools = const {},
+}) {
   AppSettings settings() => AppSettings.load(config);
   return BuiltinBackend(
     config: config,
     library: library,
-    shell: platformShell(environment: () => settings().environment),
+    // Settings last, so a variable the user set wins over one the bundled
+    // tools want — including PATH, which is the only one they are likely to
+    // disagree about.
+    shell: platformShell(environment: () => {...tools, ...settings().environment}),
     webSearch: platformWebSearch(),
     store: store,
     registry: LlmRegistry(
@@ -45,6 +53,12 @@ AgentBackend createBackend(AppConfig config, PromptLibrary library, ChatStore st
     ),
   );
 }
+
+/// Lay out the tools this build ships for the device, and answer with the
+/// environment that finds them. Empty everywhere but Android. Called before
+/// the backend is built, since the shell is handed the result once.
+Future<Map<String, String>> installBundledTools(String cacheDir) =>
+    platformInstallTools(cacheDir);
 
 /// A real filesystem on desktop and Android, IndexedDB in a browser. What
 /// [AppConfig] is built on, so it is asked for first.
