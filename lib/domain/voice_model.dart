@@ -45,8 +45,25 @@ class VoiceArchive extends VoiceDownload {
 
 /// Which sherpa-onnx family a model belongs to. The adapter switches on this to
 /// build its config, and it is the one thing about a model that cannot be said
-/// as a file name.
-enum VoiceEngine { whisper, moonshine, senseVoice, vits, kokoro, kitten }
+/// as a file name. `androidRecognition`/`androidSpeech` are the system engines
+/// — not sherpa, and routed to a platform channel rather than the onnx adapter.
+enum VoiceEngine {
+  whisper,
+  moonshine,
+  senseVoice,
+  vits,
+  kokoro,
+  kitten,
+  androidRecognition,
+  androidSpeech,
+}
+
+/// The catalog ids of the two Android-system sentinels. Picking one is picking
+/// "use what the OS ships" — no download, no model file. They are always
+/// considered installed on Android (see `providers.dart`), and `SherpaVoice`
+/// routes them to the native strategies rather than the sherpa workers.
+const androidRecognitionId = "android-recognition";
+const androidSpeechId = "android-speech";
 
 /// A model in the catalog, installed or not.
 sealed class VoiceModel {
@@ -82,6 +99,12 @@ sealed class VoiceModel {
   final List<VoiceDownload> downloads;
 
   int get bytes => downloads.fold(0, (sum, d) => sum + d.bytes);
+
+  /// Whether this is one of the Android-system sentinels — a pick that means
+  /// "use the OS engine" rather than a downloaded model. Routed to the native
+  /// strategies in `SherpaVoice` and treated as always-installed on Android by
+  /// the ready providers.
+  bool get isNative => id == androidRecognitionId || id == androidSpeechId;
 
   /// Which half of the model directory it installs into: one of [voiceFolders].
   String get folder;
@@ -141,8 +164,8 @@ class SpeechModel extends VoiceModel {
     required super.languages,
     required super.multilingual,
     required super.downloads,
-    required this.model,
-    required this.tokens,
+    this.model,
+    this.tokens,
     super.note,
     this.voices,
     this.lexicons = const [],
@@ -154,8 +177,11 @@ class SpeechModel extends VoiceModel {
   @override
   String get folder => "tts";
 
-  final String model;
-  final String tokens;
+  /// The model file. Null on the Android-system sentinel, which has no file.
+  final String? model;
+
+  /// The tokens file. Null on the Android-system sentinel.
+  final String? tokens;
 
   /// Kokoro and Kitten keep their speakers in one file beside the model.
   final String? voices;
@@ -327,9 +353,45 @@ const speechModels = <SpeechModel>[
   ),
 ];
 
+/// The Android-system sentinels: picks that mean "use the OS engine" rather
+/// than a downloaded model. They have no downloads, so they never appear in the
+/// catalog sections that offer a download — `VoiceCatalogSection` filters on
+/// `downloads.isEmpty`. They are in [voiceCatalog] so `voiceModelOf` resolves a
+/// setting that names one, and treated as always-installed on Android by the
+/// ready providers in `providers.dart`.
+const nativeRecognition = RecognitionModel(
+  id: androidRecognitionId,
+  name: "Android system",
+  engine: VoiceEngine.androidRecognition,
+  languages: "System languages",
+  multilingual: false,
+  note: "The device's own speech recognition — nothing to download.",
+  tokens: "",
+  downloads: [],
+);
+
+const nativeSpeech = SpeechModel(
+  id: androidSpeechId,
+  name: "Android system",
+  engine: VoiceEngine.androidSpeech,
+  languages: "System languages",
+  multilingual: false,
+  note: "The device's own speech synthesis — nothing to download.",
+  downloads: [],
+);
+
+const nativeVoiceModels = <VoiceModel>[nativeRecognition, nativeSpeech];
+
 /// Every model, either kind. The settings page draws each kind's own list; this
-/// is for looking one up by the id a setting holds.
-const voiceCatalog = <VoiceModel>[...recognitionModels, ...speechModels];
+/// is for looking one up by the id a setting holds. The native sentinels are in
+/// here so a setting that names one resolves, but they are not in
+/// [recognitionModels] or [speechModels] and so do not appear as downloadable
+/// rows.
+const voiceCatalog = <VoiceModel>[
+  ...recognitionModels,
+  ...speechModels,
+  ...nativeVoiceModels,
+];
 
 /// The catalog model [id] names, if it is the kind asked for. Null where it
 /// names nothing, names something no longer in the catalog, or names the wrong

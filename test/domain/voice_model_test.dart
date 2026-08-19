@@ -12,6 +12,7 @@ void main() {
 
   test("every model has something to fetch, and says what it weighs", () {
     for (final model in voiceCatalog) {
+      if (model.isNative) continue;
       expect(model.downloads, isNotEmpty, reason: model.id);
       expect(model.bytes, greaterThan(0), reason: model.id);
       for (final download in model.downloads) {
@@ -23,6 +24,7 @@ void main() {
 
   test("a file the engine needs is a file something downloads", () {
     for (final model in voiceCatalog) {
+      if (model.isNative) continue;
       // An archive brings a directory with it, so its contents are its own
       // business; individual files have to be named by a download.
       if (model.downloads.any((d) => d is VoiceArchive)) continue;
@@ -38,6 +40,7 @@ void main() {
 
   test("each engine gets the files it takes", () {
     for (final model in voiceCatalog) {
+      if (model.isNative) continue;
       switch (model) {
         case RecognitionModel(engine: VoiceEngine.whisper):
           expect(model.encoder, isNotNull, reason: model.id);
@@ -92,5 +95,5 @@ Iterable<String> _needs(VoiceModel model) => switch (model) {
           ?model.uncachedDecoder,
           ?model.cachedDecoder,
         ],
-      SpeechModel() => [model.model, model.tokens, ?model.voices],
+      SpeechModel() => [?model.model, ?model.tokens, ?model.voices],
     };

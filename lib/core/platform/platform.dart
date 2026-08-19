@@ -14,6 +14,8 @@ import "../../domain/voice.dart";
 import "../../domain/voice_model_store.dart";
 import "../config.dart";
 import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
+export "io/platform.dart" if (dart.library.js_interop) "web/platform.dart"
+    show platformNativeVoiceEngines;
 
 /// What the app is given by the platform it is running on: a shell or none,
 /// the network or CORS, a directory on a disk or a database in a page. The
@@ -92,3 +94,7 @@ BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
 /// config's filesystem, so it exists on every platform now.
 List<PromptSource> createPromptSources(AppConfig config) =>
     [const BundledPrompts(), DirectoryPrompts(config)];
+
+// `platformNativeVoiceEngines` is defined in the io/web platform file brought
+// in by the conditional import above, and re-exported so consumers that are off
+// `dart:io` reach it from here like everything else.

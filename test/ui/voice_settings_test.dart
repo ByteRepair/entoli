@@ -1,10 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";
 
+import "../fakes.dart";
 import "../harness.dart";
 
 void main() {
@@ -147,5 +149,53 @@ void main() {
     await pumpVoice(tester);
 
     expect(enabled(tester, buttonTipped("Hear this voice")), isFalse);
+  });
+
+  group("on Android", () {
+    testWidgets("there is no catalog to download from", (tester) async {
+      app = TestApp.create(
+        voice: FakeVoice(downloadsModels: false),
+        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+      );
+      await pumpVoice(tester);
+
+      // The system engines are the whole of what there is, so a list of models
+      // to fetch would be a list of things this platform cannot run.
+      expect(find.text("Whisper tiny"), findsNothing);
+      expect(find.text("Kokoro"), findsNothing);
+      expect(find.byTooltip("Download"), findsNothing);
+      expect(find.text("Android system"), findsWidgets);
+    });
+
+    testWidgets("a missing engine is named, with somewhere to get one",
+        (tester) async {
+      app = TestApp.create(
+        voice: FakeVoice(downloadsModels: false),
+        nativeVoice: const NativeVoiceEngines(recognition: false, speech: true),
+      );
+      await pumpVoice(tester);
+
+      // Nothing to fall back on here, so an empty picker on its own would be a
+      // dead end rather than one install away from working.
+      expect(find.textContaining("nothing to hear with"), findsOneWidget);
+      final link = find.textContaining("FUTO Voice Input");
+      expect(link, findsOneWidget);
+      // The half it does have is not advertised as missing.
+      expect(find.textContaining("RHVoice"), findsNothing);
+
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(app.linkOpener.opened.single.host, "voiceinput.futo.tech");
+    });
+
+    testWidgets("with both engines there is nothing to explain", (tester) async {
+      app = TestApp.create(
+        voice: FakeVoice(downloadsModels: false),
+        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+      );
+      await pumpVoice(tester);
+
+      expect(find.textContaining("This device has nothing to"), findsNothing);
+    });
   });
 }

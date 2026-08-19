@@ -19,6 +19,7 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -59,6 +60,10 @@ class TestApp {
   /// every test that is not about the explorer.
   /// [voiceModels] is which voice models the app has downloaded. The default
   /// has none, which is what takes voice mode off the composer.
+  ///
+  /// [nativeVoice] is which of the device's own engines it has, the thing an
+  /// Android phone answers and nothing else does. The default has neither,
+  /// which is every platform a VM test would otherwise be pretending to be.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -66,6 +71,7 @@ class TestApp {
     FakeFileHandoff? handoff,
     FakeVoice? voice,
     Set<String> voiceModels = const {},
+    NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -111,6 +117,7 @@ class TestApp {
           installedVoiceModelsProvider
               .overrideWith(() => InstalledVoiceModels(voiceModels)),
           backgroundWorkProvider.overrideWithValue(work),
+          nativeVoiceEnginesProvider.overrideWithValue(nativeVoice),
         ],
       ),
     );

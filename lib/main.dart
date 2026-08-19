@@ -53,6 +53,7 @@ class AppSession {
     final cache = await cacheDir;
     final voiceModels = platform.createVoiceModelStore(cache);
     final installed = await voiceModels.installed();
+    final engines = await platform.platformNativeVoiceEngines();
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -71,6 +72,7 @@ class AppSession {
         voiceProvider.overrideWithValue(platform.createVoice(voiceModels, cache)),
         installedVoiceModelsProvider
             .overrideWith(() => InstalledVoiceModels(installed)),
+        nativeVoiceEnginesProvider.overrideWithValue(engines),
       ],
     );
     container.read(availableModelsProvider);

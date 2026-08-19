@@ -24,9 +24,10 @@ import "domain/prompt_library.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
-import "domain/voice_model.dart";
+import "domain/voice_model.dart" show androidRecognitionId, androidSpeechId, RecognitionModel, SpeechModel, voiceModelOf;
 import "domain/voice_model_store.dart";
 import "ui/widgets/provider_model_selector.dart";
+import "core/platform/platform.dart" show platformNativeVoiceEngines;
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
@@ -38,6 +39,16 @@ final appRestartProvider = Provider<AppRestart>((ref) => throw UnimplementedErro
 final voiceProvider = Provider<Voice>((ref) => throw UnimplementedError());
 final voiceModelStoreProvider =
     Provider<VoiceModelStore>((ref) => throw UnimplementedError());
+
+/// Which of the device's own voice engines are there. Seeded before the app is
+/// built from [platformNativeVoiceEngines], for the reason
+/// [installedVoiceModelsProvider] is: asked lazily it answers "neither" until
+/// the channel returns, and what reads it is a button deciding whether to
+/// exist. A provider is also the seam a test overrides — `Platform.isAndroid`
+/// is not something a VM test can make true, and the Android behaviour is the
+/// one worth testing.
+final nativeVoiceEnginesProvider =
+    Provider<NativeVoiceEngines>((ref) => NativeVoiceEngines.none);
 
 /// Which catalog models are on disk. Read once before the app is built and
 /// kept in step after that by whatever installs or deletes one — the bargain
@@ -72,11 +83,17 @@ final installedVoiceModelsProvider =
 final speechReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(voiceProvider).available) return false;
   final settings = ref.watch(appSettingsProvider);
+  final model = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
+  // The Android-system sentinel is "installed" where the engine behind it
+  // exists, and nowhere else — a desktop has none, and a phone with no Google
+  // apps on it may have none either. So a settings file carried off a phone
+  // does not light up read-aloud on a machine that cannot speak.
+  if (model != null && model.isNative) {
+    return ref.watch(nativeVoiceEnginesProvider).speech;
+  }
   // `contains` takes an `Object?`, so a setting naming nothing is simply not
   // in the set.
-  return ref
-      .watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
+  return ref.watch(installedVoiceModelsProvider).contains(model?.id);
 });
 
 /// Whether the composer draws its voice button: a platform that can listen, and
@@ -85,9 +102,11 @@ final speechReadyProvider = Provider<bool>((ref) {
 final voiceReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(speechReadyProvider)) return false;
   final settings = ref.watch(appSettingsProvider);
-  return ref
-      .watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
+  final model = voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId);
+  if (model != null && model.isNative) {
+    return ref.watch(nativeVoiceEnginesProvider).recognition;
+  }
+  return ref.watch(installedVoiceModelsProvider).contains(model?.id);
 });
 
 /// Loaded once, before the app is built, because assets are read
@@ -100,7 +119,25 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   @override
   AppSettings build() {
     _config = ref.watch(appConfigProvider);
-    return AppSettings.load(_config);
+    final loaded = AppSettings.load(_config);
+    // The device's own engines are the default where it has them — voice mode
+    // works the moment the app is installed, with nothing to download. Each
+    // side is defaulted on its own, so a phone with a synthesiser and no
+    // recognition service gets the half it can do and leaves the other
+    // unpicked, rather than a pick that fails when it is pressed.
+    //
+    // A settings file that already names a model, sherpa or native, is left as
+    // it is: this only fills a null, the way "no pick" used to read. Not saved
+    // either, so the file stays as it was until the user picks something and
+    // one carried to a machine without the engines means "no pick" again.
+    final engines = ref.watch(nativeVoiceEnginesProvider);
+    if (!engines.recognition && !engines.speech) return loaded;
+    final defaulted = loaded.copy();
+    if (engines.recognition) {
+      defaulted.voiceRecognitionModelId ??= androidRecognitionId;
+    }
+    if (engines.speech) defaulted.voiceSpeechModelId ??= androidSpeechId;
+    return defaulted;
   }
 
   /// The app-level default, stored exactly as shown: a pair, one half, or

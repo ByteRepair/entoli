@@ -68,3 +68,8 @@ Future<void> platformPersist() async {
 }
 
 String? processEnv(String name) => null;
+
+/// A browser has neither, so the sentinels are never installed here and never
+/// offered — voice mode stays as unavailable as it already was.
+Future<NativeVoiceEngines> platformNativeVoiceEngines() async =>
+    NativeVoiceEngines.none;

@@ -13,6 +13,7 @@ import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
+import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/backup_handoff.dart";
@@ -105,11 +106,23 @@ void platformRegisterVoiceLicences() {
 VoiceModelStore platformVoiceModelStore(String cacheDir) =>
     FileVoiceModelStore(p.join(cacheDir, "models"));
 
+/// The desktops run sherpa-onnx, which is the only engine they have. Android
+/// runs its own, and ships none of sherpa's native code at all — the `.so`
+/// files are excluded at packaging in `android/app/build.gradle.kts`, so
+/// constructing a [SherpaVoice] there would fail at the first FFI call.
 Voice platformVoice(VoiceModelStore store, String cacheDir) =>
-    SherpaVoice(store, cacheDir);
+    Platform.isAndroid ? const AndroidVoice() : SherpaVoice(store, cacheDir);
 
 /// Nothing to ask for: a directory on this machine is already as durable as
 /// the app is.
 Future<void> platformPersist() async {}
 
 String? processEnv(String name) => Platform.environment[name];
+
+/// Which of the device's own voice engines are there, which is what the
+/// sentinel catalog entries resolve to. Only Android has any, and having them
+/// is a question about the device rather than about the platform — so it is
+/// asked rather than assumed. The desktops answer without a channel: there is
+/// nothing registered on the other end of one.
+Future<NativeVoiceEngines> platformNativeVoiceEngines() async =>
+    Platform.isAndroid ? androidVoiceEngines() : NativeVoiceEngines.none;
