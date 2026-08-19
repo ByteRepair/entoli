@@ -2121,11 +2121,20 @@ exist yet to have an opinion. Their category is drawn on every platform, the way
 the voice one is where `Voice.available` is false — the settings are the app's
 whatever it is running on, and hiding them would make the file's contents depend
 on where it was last opened. `assistantProject` is `null` for the default
-project, which is the null `selectedProjectProvider` already uses; a name that
-no longer resolves to a project reads back as the default one rather than as a
-missing entry in the dropdown, and a launch resolves it the same way. Both ends
-have to, or the field would say `Default` while the gesture landed in — and so
-recreated — the directory that had just been deleted.
+project, which is the null `selectedProjectProvider` already uses.
+
+**It holds a name, so it is a weak reference**, and that is answered in two
+places rather than one because they answer different halves. `deleteProject`
+clears it, beside the `selectProject(ref, null)` already there — the setting is
+the other reference to a project that has just stopped existing, and left
+written down it is written *back* by the next save, so recreating a project of
+that name would silently re-arm it. And both ends read it through
+`projectOrDefault`, since a directory can also go behind the app's back: the
+field shows `Default` and the gesture lands there, rather than the field saying
+one thing while the gesture recreated the directory. One function in
+`domain/project.dart` rather than the same test spelled twice, which is what it
+was and which had already drifted — one end searched the list with the default
+project in it and the other the list without.
 
 ### The theme
 

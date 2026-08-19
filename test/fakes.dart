@@ -163,10 +163,6 @@ class FakeBackupHandoff implements BackupHandoff {
   Future<Uint8List?> pick() async => scripted;
 }
 
-/// What a workspace file can do outside the app, which no test can drive: no
-/// viewer opens, no share sheet appears, no chooser is answered. The capability
-/// flags are the point — the explorer draws a different toolbar on each of the
-/// three platforms, and the named constructors are those three.
 /// The system's assistant gesture, as the app sees it. [pending] is a launch
 /// Kotlin noticed before Dart was listening — the gesture that started the app
 /// — and [launch] is one arriving while it is already up.
@@ -192,6 +188,10 @@ class FakeAssistantLaunch implements AssistantLaunch {
   }
 }
 
+/// What a workspace file can do outside the app, which no test can drive: no
+/// viewer opens, no share sheet appears, no chooser is answered. The capability
+/// flags are the point — the explorer draws a different toolbar on each of the
+/// three platforms, and the named constructors are those three.
 class FakeFileHandoff implements FileHandoff {
   FakeFileHandoff({this.canReveal = false, this.exportKind, this.canImport = false});
 

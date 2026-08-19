@@ -25,7 +25,7 @@ object AssistantChannel {
         channel = MethodChannel(messenger, "agent_chat/assistant").apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "takeLaunch" -> result.success(take())
+                    "takeLaunch" -> result.success(pending.also { pending = false })
                     else -> result.notImplemented()
                 }
             }
@@ -39,11 +39,5 @@ object AssistantChannel {
         intent.action = Intent.ACTION_MAIN
         pending = true
         channel?.invokeMethod("assist", null)
-    }
-
-    private fun take(): Boolean {
-        val had = pending
-        pending = false
-        return had
     }
 }

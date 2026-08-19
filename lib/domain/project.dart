@@ -14,6 +14,13 @@ String projectLabel(String? project) => project ?? defaultProjectLabel;
 /// them in, and the order a chat is looked for in.
 List<String?> everyProject(List<String> named) => [null, ...named];
 
+/// A stored project name read against the projects there are: one that has
+/// since been deleted is the default project. A setting holds a name rather
+/// than a reference, so both ends of one have to resolve it the same way, or a
+/// field says `Default` while what it drives lands somewhere else.
+String? projectOrDefault(String? named, List<String> existing) =>
+    named != null && existing.contains(named) ? named : null;
+
 /// One directory under `projects/` and nothing else. Anything else is a name
 /// that would reach outside it, and `projects/.hidden` is not a project either.
 /// Restated in Kotlin by `WorkspaceProvider`, which cannot call this.

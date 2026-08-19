@@ -26,6 +26,20 @@ void main() {
     if (settle) await settleIo(tester);
   }
 
+  /// The app started with [settings] written down and a launch waiting, which
+  /// is the gesture that started the app. The order matters — the settings have
+  /// to be on disk before the first frame reads them — so it is established
+  /// once here rather than at each test.
+  Future<void> launchWith(
+    WidgetTester tester,
+    AppSettings settings, {
+    bool settle = true,
+  }) async {
+    await io(tester, () => app.seedSettings(settings));
+    app.assistant.pending = true;
+    await start(tester, settle: settle);
+  }
+
   String? openedChat() => app.container.read(selectedChatIdProvider);
   String? openedProject() => app.container.read(selectedProjectProvider);
 
@@ -59,12 +73,8 @@ void main() {
 
   testWidgets("the chat lands in the project the setting names", (tester) async {
     app = TestApp.create();
-    await io(tester, () async {
-      await app.repo.createProject("research");
-      await app.seedSettings(AppSettings(assistantProject: "research"));
-    });
-    app.assistant.pending = true;
-    await start(tester);
+    await io(tester, () => app.repo.createProject("research"));
+    await launchWith(tester, AppSettings(assistantProject: "research"));
 
     expect(openedProject(), "research");
     final chats = await io(tester, () => app.store.list());
@@ -74,9 +84,7 @@ void main() {
   testWidgets("a project that has since been deleted lands in the default one",
       (tester) async {
     app = TestApp.create();
-    await io(tester, () => app.seedSettings(AppSettings(assistantProject: "gone")));
-    app.assistant.pending = true;
-    await start(tester);
+    await launchWith(tester, AppSettings(assistantProject: "gone"));
 
     expect(openedProject(), isNull);
     expect(openedChat(), isNotNull);
@@ -87,13 +95,15 @@ void main() {
     app = TestApp.create(voiceModels: voiceModelIds);
     // Both models picked in the same write as the view: two writes would race,
     // since one goes through the notifier and the other straight to the file.
-    await io(tester, () => app.seedSettings(AppSettings(
-          voiceRecognitionModelId: voiceModelPair.recognition,
-          voiceSpeechModelId: voiceModelPair.speech,
-          assistantView: AssistantView.voice,
-        )));
-    app.assistant.pending = true;
-    await start(tester, settle: false);
+    await launchWith(
+      tester,
+      AppSettings(
+        voiceRecognitionModelId: voiceModelPair.recognition,
+        voiceSpeechModelId: voiceModelPair.speech,
+        assistantView: AssistantView.voice,
+      ),
+      settle: false,
+    );
 
     await pumpUntil(tester, find.byType(VoicePage));
     expect(find.byType(VoicePage), findsOneWidget);
@@ -103,10 +113,7 @@ void main() {
   testWidgets("the voice view with no models offers the settings instead",
       (tester) async {
     app = TestApp.create();
-    await io(tester,
-        () => app.seedSettings(AppSettings(assistantView: AssistantView.voice)));
-    app.assistant.pending = true;
-    await start(tester);
+    await launchWith(tester, AppSettings(assistantView: AssistantView.voice));
 
     expect(find.byType(VoicePage), findsNothing);
     expect(find.text("Voice mode needs two models"), findsOneWidget);

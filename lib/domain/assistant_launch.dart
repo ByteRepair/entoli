@@ -20,3 +20,17 @@ abstract interface class AssistantLaunch {
   /// whose engine was cached and whose `main` therefore does not run again.
   Stream<void> get launched;
 }
+
+/// The assistant gesture on a platform that has none. Nothing ever arrives,
+/// which is what leaves the launch handler inert everywhere but Android — the
+/// same answer `UnavailableShell` and `UnavailableWebSearch` give, kept beside
+/// its port the way those are.
+class UnavailableAssistantLaunch implements AssistantLaunch {
+  const UnavailableAssistantLaunch();
+
+  @override
+  Future<bool> take() async => false;
+
+  @override
+  Stream<void> get launched => const Stream<void>.empty();
+}

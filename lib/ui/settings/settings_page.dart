@@ -268,7 +268,7 @@ class _AssistantSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
-    final projects = everyProject(ref.watch(projectListProvider).value ?? const []);
+    final named = ref.watch(projectListProvider).value ?? const <String>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -281,12 +281,11 @@ class _AssistantSection extends ConsumerWidget {
         LabelledField(
           label: "Project",
           child: DropdownButtonFormField<String?>(
-            initialValue:
-                projects.contains(settings.assistantProject) ? settings.assistantProject : null,
+            initialValue: projectOrDefault(settings.assistantProject, named),
             isExpanded: true,
             decoration: const InputDecoration(border: OutlineInputBorder()),
             items: [
-              for (final project in projects)
+              for (final project in everyProject(named))
                 DropdownMenuItem(value: project, child: Text(projectLabel(project))),
             ],
             onChanged: (project) =>
@@ -303,9 +302,11 @@ class _AssistantSection extends ConsumerWidget {
               for (final view in AssistantView.values)
                 DropdownMenuItem(value: view, child: Text(view.label)),
             ],
-            onChanged: (view) => view == null
-                ? null
-                : ref.read(appSettingsProvider.notifier).setAssistantView(view),
+            onChanged: (view) {
+              if (view != null) {
+                ref.read(appSettingsProvider.notifier).setAssistantView(view);
+              }
+            },
           ),
         ),
       ],

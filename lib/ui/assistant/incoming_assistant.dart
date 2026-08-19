@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/assistant_view.dart";
+import "../../domain/project.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../voice/voice_page.dart";
@@ -32,10 +33,12 @@ class IncomingAssistant extends ConsumerStatefulWidget {
 class _IncomingAssistantState extends ConsumerState<IncomingAssistant> {
   StreamSubscription<void>? _launches;
 
-  /// One chat at a time: the gesture pressed twice while the first is still
-  /// being created would otherwise leave two empty chats, and only the second
-  /// on screen.
-  var _opening = false;
+  /// One claim at a time: the two routes in can both fire for one gesture, and
+  /// a launch taken twice is two empty chats. It covers the claim alone rather
+  /// than the whole of [_open] — held across the navigation it would still be
+  /// set minutes later, while voice mode is on screen, and the gesture arriving
+  /// then would be dropped instead of opening anything.
+  var _claiming = false;
 
   @override
   void initState() {
@@ -51,34 +54,27 @@ class _IncomingAssistantState extends ConsumerState<IncomingAssistant> {
   }
 
   Future<void> _open() async {
-    if (_opening) return;
-    _opening = true;
-    try {
-      if (!await ref.read(assistantLaunchProvider).take() || !mounted) return;
-      final settings = ref.read(appSettingsProvider);
-      selectProject(ref, await _project(settings.assistantProject));
-      if (!mounted) return;
-      switch (settings.assistantView) {
-        // Voice mode asks about its models first and lands on the settings
-        // rather than a dead page where they are missing, which is the answer
-        // every other way in already gets.
-        case AssistantView.voice:
-          await startVoiceChat(context, ref);
-        case AssistantView.chat:
-          await startChat(context, ref);
-      }
-    } finally {
-      _opening = false;
-    }
-  }
+    if (_claiming) return;
+    _claiming = true;
+    final launched = await ref.read(assistantLaunchProvider).take();
+    _claiming = false;
+    if (!launched || !mounted) return;
 
-  /// The setting, unless the project it names has since been deleted — in which
-  /// case the default one, which is what the settings page has been showing.
-  /// Selecting it as it stands would make the chat recreate the directory.
-  Future<String?> _project(String? named) async {
-    if (named == null) return null;
-    final projects = await ref.read(chatRepositoryProvider).listProjects();
-    return projects.contains(named) ? named : null;
+    final settings = ref.read(appSettingsProvider);
+    // Resolved rather than taken as read: the project it names may have been
+    // deleted, and selecting that would make the chat recreate the directory.
+    final projects = await ref.read(projectListProvider.future);
+    if (!mounted) return;
+    selectProject(ref, projectOrDefault(settings.assistantProject, projects));
+    switch (settings.assistantView) {
+      // Voice mode asks about its models first and lands on the settings rather
+      // than a dead page where they are missing, which is the answer every
+      // other way in already gets.
+      case AssistantView.voice:
+        await startVoiceChat(context, ref);
+      case AssistantView.chat:
+        await startChat(context, ref);
+    }
   }
 
   @override
