@@ -695,6 +695,14 @@ so `bashTool` is dropped from the request and a system prompt with no tool
 instructions is used; the turn ends when the model replies with text and no
 tool call, the same termination signal the shell path uses.
 
+**Which shell that is, is resolved rather than named.** `bash` then `sh` off
+`PATH`, then `/bin/bash`, `/system/bin/sh`, `/bin/sh` — the two places a shell
+sits that a `PATH` may not name, a stripped environment and Android, which has
+no `/bin` at all. It was `/bin/bash` or `/bin/sh`, which meant a phone was
+offered the `bash` tool and then failed every command it ran, one at a time.
+Nothing found is `canRunCommands: false`, which is the browser's answer and the
+honest one: the loop stops offering a tool there is nothing behind.
+
 `LocalShell` prepends `exec 2>&1` to the script rather than merging two Dart
 streams — a compiler's errors interleaved with its progress is the whole value
 of reading them, and separate pipes arrive in whatever order they flush. It
