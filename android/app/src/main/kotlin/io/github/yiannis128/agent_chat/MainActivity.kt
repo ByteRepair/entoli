@@ -40,6 +40,7 @@ class MainActivity : FlutterActivity() {
         ForegroundWork.register(appContext, engine.dartExecutor.binaryMessenger)
         FilesChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         AssistantChannel.register(engine.dartExecutor.binaryMessenger)
+        VoiceChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
         return engine
     }

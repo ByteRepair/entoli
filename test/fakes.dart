@@ -501,10 +501,15 @@ class FakeChatStore implements ChatStore {
 /// and [spoken] is what the reply came out as, which is the pair every voice
 /// test is written against.
 class FakeVoice extends Voice {
-  FakeVoice({this.available = true});
+  FakeVoice({this.available = true, this.downloadsModels = true});
 
   @override
   final bool available;
+
+  /// False is Android, where the engines are the system's: no catalog to draw,
+  /// and the pickers offer the sentinels or nothing.
+  @override
+  final bool downloadsModels;
 
   /// Set to make [start] throw, which is a model that will not load or a
   /// microphone the user said no to.

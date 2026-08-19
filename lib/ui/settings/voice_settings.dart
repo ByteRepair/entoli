@@ -21,7 +21,8 @@ class VoiceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // The one fact both halves of this page turn on, asked of the port rather
     // than of the store: two flags for "this is a browser" could disagree.
-    final canListen = ref.watch(voiceProvider).available;
+    final voice = ref.watch(voiceProvider);
+    final canListen = voice.available;
     final settings = ref.watch(appSettingsProvider);
     final installed = ref.watch(installedVoiceModelsProvider);
 
@@ -36,9 +37,12 @@ class VoiceSection extends ConsumerWidget {
               : "Voice mode needs a microphone and models on disk, and a "
                   "browser has neither.",
         ),
+        // The sentinel is in the list like any other model and filtered by the
+        // same `installed` set, which holds it only where the device has the
+        // engine — so nothing here knows which platform it is drawing on.
         _ModelField(
           label: "Recognition model",
-          models: recognitionModels,
+          models: const [nativeRecognition, ...recognitionModels],
           installed: installed,
           selected: settings.voiceRecognitionModelId,
           onPick: (id) =>
@@ -46,12 +50,35 @@ class VoiceSection extends ConsumerWidget {
         ),
         _ModelField(
           label: "Speech model",
-          models: speechModels,
+          models: const [nativeSpeech, ...speechModels],
           installed: installed,
           selected: settings.voiceSpeechModelId,
           onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
         ),
         _SpeakerField(settings: settings),
+        if (!voice.downloadsModels) _MissingEngines(installed: installed),
+      ],
+    );
+  }
+}
+
+/// Both catalogs, or neither. Android's voice mode is the system's own engines,
+/// so there is nothing to fetch and no list to draw — and the dividers belong
+/// here rather than around this at the call site, or a platform with no catalog
+/// would draw a line under the last thing on the page and stop.
+class VoiceCatalogSections extends ConsumerWidget {
+  const VoiceCatalogSections({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(voiceProvider).downloadsModels) return const SizedBox.shrink();
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(),
+        VoiceCatalogSection.recognition(),
+        Divider(),
+        VoiceCatalogSection.speech(),
       ],
     );
   }
@@ -197,9 +224,88 @@ class _Action extends ConsumerWidget {
   }
 }
 
-/// A dropdown over the installed models of one kind. Not the catalog: a picker
+/// What to do when the device has no engine for one half of voice mode. Only
+/// drawn where there is no catalog to fall back on — on Android, where the
+/// system's engines are the only ones there are, an empty picker is otherwise a
+/// dead end with nothing saying it is one install away from working.
+///
+/// Both named engines are ordinary apps that register with the platform, so
+/// installing either is the whole of the fix and nothing here has to be told
+/// about it: the next launch asks the device again. Each is named for the half
+/// it answers, since a phone is much more likely to be missing recognition
+/// than synthesis.
+class _MissingEngines extends StatelessWidget {
+  const _MissingEngines({required this.installed});
+
+  /// The usable set: a sentinel is in it only where its engine is there.
+  final Set<String> installed;
+
+  static final _rhVoice = Uri.parse(
+      "https://f-droid.org/packages/com.github.olga_yakovleva.rhvoice.android/");
+  static final _futo = Uri.parse("https://voiceinput.futo.tech/");
+
+  @override
+  Widget build(BuildContext context) {
+    final hears = installed.contains(nativeRecognition.id);
+    final speaks = installed.contains(nativeSpeech.id);
+    if (hears && speaks) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final missing = [if (!hears) "hear", if (!speaks) "speak"].join(" or ");
+    return Padding(
+      // The inset every other block on this page keeps: `SectionHeader` above
+      // and `LabelledField` between are both 16, and a paragraph flush to the
+      // edge reads as belonging to something else.
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "This device has nothing to $missing with. Voice mode uses the "
+            "engines Android provides, and a phone without Google's apps may "
+            "have none installed. Either of these adds one, and works for "
+            "every app rather than only this one:",
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          if (!speaks)
+            _EngineLink(label: "RHVoice — speech synthesis", url: _rhVoice),
+          if (!hears)
+            _EngineLink(
+                label: "FUTO Voice Input — speech recognition", url: _futo),
+        ],
+      ),
+    );
+  }
+}
+
+class _EngineLink extends ConsumerWidget {
+  const _EngineLink({required this.label, required this.url});
+
+  final String label;
+  final Uri url;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        alignment: Alignment.centerLeft,
+      ),
+      onPressed: () => ref.read(linkOpenerProvider).open(context, url),
+      child: Text(label),
+    );
+  }
+}
+
+/// A dropdown over the usable models of one kind. Not the catalog: a picker
 /// offering something that has to be downloaded first is a choice that fails
-/// when it is used rather than when it is made.
+/// when it is used rather than when it is made. [installed] is the whole of
+/// that rule — it holds what is on disk and the system-engine sentinels the
+/// device can honour, so a sentinel is offered or not on the same terms as
+/// anything else and nothing here has to know which platform it is on.
 class _ModelField extends StatelessWidget {
   const _ModelField({
     required this.label,
@@ -255,10 +361,12 @@ class _SpeakerField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
-    if (speech == null) return const SizedBox.shrink();
-    // Drawn even where the model has one voice, which is most of them: a field
-    // that came and went with the model above it would make picking a model a
-    // change of what the page is.
+    // Nothing picked, or the system synthesiser — whose voice is the user's,
+    // set in the OS, so there is no list of them here to offer.
+    if (speech == null || speech.isNative) return const SizedBox.shrink();
+    // Otherwise drawn even where the model has one voice, which is most of
+    // them: a field that came and went with the model above it would make
+    // picking a model a change of what the page is.
     final value = settings.voiceSpeaker.clamp(0, speech.speakers - 1);
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(

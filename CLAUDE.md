@@ -1499,10 +1499,12 @@ small enough to write on the UI thread, an attachment is not.
 ### Voice mode
 
 A circle for what the microphone hears and five scrolling lines of what has
-been said, over a chat that was already open. Everything runs on the device:
-`sherpa_onnx` is speech recognition, speech synthesis and voice activity
-detection from one dependency, and the models are downloaded from the settings
-page rather than shipped.
+been said, over a chat that was already open. Everything runs on the device,
+and which device decides how: **the desktops run `sherpa_onnx`** — speech
+recognition, speech synthesis and voice activity detection from one dependency,
+with the models downloaded from the settings page rather than shipped — while
+**Android runs the system's own engines** and has no models at all. See "The
+Android system engines", which is also where the reasoning for that split is.
 
 **A voice turn is an ordinary turn, and that is the constraint the rest is
 written to keep.** `VoiceController` hands what it heard to
@@ -1524,14 +1526,30 @@ The port is `Voice`, behind the app's one conditional import like `Shell` and
 composer's circle undrawn — see issue #58 for why sherpa's WebAssembly is not
 the answer there, and what is.
 
-**It is not free on Android either.** onnxruntime and sherpa's own library are
-about 26 MB per ABI, uncompressed and page-aligned the way a modern APK stores
-native code, so the universal release APK went from about 65 MB to 141 MB —
-measured. Nothing here fixes that, because the fix is in `release-build.yml`
-rather than in the app: splitting per ABI would hand a phone 47 MB instead of
-141, and it changes the release's asset naming and what the attestation records
-as its subject, which is a decision about releases rather than about voice mode.
-Issue #59 is where that is written down.
+**It is kept out of the Android build too, and that one is measured in tens of
+megabytes.** onnxruntime and sherpa's own library are about 26 MB per ABI,
+uncompressed and page-aligned the way a modern APK stores native code: 75 MB
+across the three, which took the universal release APK from 64.5 MB to 141 MB —
+more than the rest of the app put together. With Android on the system engines
+there is nothing left to load them, so they are excluded at packaging in
+`android/app/build.gradle.kts` and the APK is back to 64.5 MB, measured.
+
+**Excluded rather than removed, because they are not ours to remove.**
+`sherpa_onnx` declares all ten of its per-platform packages in its own pubspec —
+four Android ABIs, iOS, Linux, macOS, Windows, web — and pub resolves what a
+package asks for. `dependency_overrides` is the only other lever and it replaces
+a package on *every* platform, which is a risk worth taking once (below) and not
+four more times. A `packaging { jniLibs { excludes } }` block drops the `.so`
+files where they are actually unwanted and leaves every other platform's alone.
+Vendoring the desktop libraries into `linux/CMakeLists.txt` instead would mean
+dropping `package:sherpa_onnx` and writing the FFI bindings by hand — and
+`sherpa_onnx_linux` already delivers those libraries through pub, so there is no
+gap there to fill.
+
+The one thing to know is that the exclusion and `platformVoice` have to agree:
+the `.so` files are gone from Android, so a `SherpaVoice` constructed there
+would fail at its first FFI call rather than degrade. `platformVoice` returns
+`AndroidVoice` on that platform and nothing else builds one.
 
 Keeping it off the web takes one deliberate piece of machinery.
 **`sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built**,
@@ -1556,8 +1574,9 @@ entry.
 
 `domain/voice_model.dart` is the catalog, as const data: five recognition models
 and three speech ones, each naming its files, what it costs to fetch, and which
-sherpa family runs it. A model Entoli can run is one someone wired an engine
-for, so a new entry is a line there and a case in `sherpa_voice.dart`.
+sherpa family runs it, and the two Android-system sentinels beside them. A model
+Entoli can run is one someone wired an engine for, so a new entry is a line
+there and a case in `sherpa_voice.dart`.
 
 Recognition models are fetched **file by file** from HuggingFace — two to four
 each — which skips the fp32 copies the release tarballs carry beside the int8
@@ -1589,6 +1608,156 @@ is fine — it would not be for a permissively licensed app, and it is the sort 
 thing that is invisible until it is a problem. Upstream is removing espeak in
 2.0, which will want lexicon-based models instead; the constraint is pinned at
 `^1.13.6` until then.
+
+#### The Android system engines
+
+A phone already has a speech recognizer and a speech synthesiser, and until this
+landed voice mode ignored both and asked for a download first. So on Android
+voice mode **is** the OS: `TextToSpeech` and `SpeechRecognizer` behind the
+`agent_chat/voice` channel, with nothing to fetch — and sherpa-onnx is not built
+into that platform at all.
+
+**Why sherpa went rather than sitting beside them.** It ran on the CPU, and
+there was no way to change that: the `libonnxruntime.so` in the pub package
+exports exactly two execution-provider factories, `..._CPU` and `..._Nnapi`
+(checked with `nm -D`), XNNPACK and QNN are named in its strings but have no
+code in the build, and ONNX Runtime has no Vulkan, OpenCL or GPU provider for
+Android at all. NNAPI is the only accelerator route and it is a bad one —
+deprecated in Android 15, frequently *slower* than ORT's own kernels because
+unsupported ops fall back to `nnapi-reference`, and it crashes outright on VITS
+TTS (k2-fsa/sherpa-onnx#2443). So keeping it meant 75 MB of native code for the
+slower of the two answers, on the one platform where battery is the constraint.
+
+**What that costs is a phone with no system engine**, which is a real device
+rather than a hypothetical: `SpeechRecognizer` needs a recognition service and
+`TextToSpeech` needs an engine, and a de-Googled phone may have neither. Both
+are ordinary apps that register with the platform, so the fix is an install
+rather than a build — RHVoice or eSpeak NG for speaking, FUTO Voice Input for
+hearing. `_MissingEngines` in `voice_settings.dart` is that said on the page,
+with the links, because an empty picker on a platform with no catalog behind it
+is otherwise a dead end that gives no sign of being one install away. Nothing
+has to be told when one arrives: the next launch asks the device again.
+
+The desktops keep sherpa, and there the reasoning does not apply — they have no
+system engine to ask, and no battery argument of the same kind.
+
+**They are catalog entries rather than a mode.** `android-recognition` and
+`android-speech` are a `RecognitionModel` and a `SpeechModel` with no downloads,
+in `voiceCatalog` but not in `recognitionModels`/`speechModels`. That is what
+makes them cost nothing: every gate the app already has — `voiceReadyProvider`,
+`speechReadyProvider`, the settings dropdowns, `ReadAloud`, `VoiceController` —
+resolves a pick through `voiceModelOf` and asks whether it is installed, and a
+sentinel answers both questions without any of them learning a new shape. A
+`nativeVoice` flag beside the model id would have been a second thing every one
+of those had to consult, and the one that forgot would be wrong silently.
+
+`VoiceModel.isNative` is the whole of the routing, and it reads `engine` — the
+field that already decides what runs a model, rather than a second id constant
+beside it. `AndroidVoice.start` refuses anything else.
+`Voice.downloadsModels` is the other half: false on Android, which is what takes
+the catalog off the settings page, and it has exactly that one reader.
+
+**What decides is whether the engine is there, not whether this is Android**,
+and the answer goes into the set that already existed for the question.
+`Voice.systemEngines()` asks the device — `SpeechRecognizer` needs a recognition
+service installed and `TextToSpeech` needs an engine, and a phone with no Google
+apps on it may have neither — and `main` folds what it says into
+`installedVoiceModelsProvider` beside the models on disk. So a sentinel is
+usable on exactly the terms a downloaded model is, and every gate is the
+`installed.contains(...)` it already was: the ready providers, the settings
+dropdown, the defaulting. "Is this Android" was the first version and it was
+wrong on a real phone; a `nativeVoiceEnginesProvider` beside the installed set
+was the second, and it was the thing this section's own rule warns about — a
+second question each gate had to remember, silently wrong in the one that
+forgot.
+
+It is on `Voice` rather than in `core/platform/` because that port is already
+per-platform and already built there, which keeps `io/platform.dart` resolving
+`Platform.isAndroid` once instead of twice and leaves `platform.dart` with no
+member exposed any way but its own. `FakeVoice` is then the test seam, so
+`TestApp.create` takes `nativeVoice` and nothing parallel has to be overridden.
+
+So **each side is defaulted on its own**. A phone with a synthesiser and no
+recognition service gets the speaking half and leaves the listening half
+unpicked, which is the honest answer: read-aloud works, the composer's voice
+button stays away. A sentinel pinned by hand or carried in a `settings.json` is
+refused by the same set, so it needs no rule of its own.
+
+The default is filled in `AppSettingsNotifier.build` and **not written to
+disk**. A file that names something is left as it is; only a null is read as
+"the system one". Saved, it would be a pick the user never made, following their
+data to a machine where it means nothing — and it would take the ability to say
+"no pick yet" away from the platforms that have an answer for it.
+
+The probe needs the manifest's `<queries>` block, and that is the trap in it:
+from Android 11 an app sees only the packages it declares an interest in, and
+both `isRecognitionAvailable` and the TTS service query are answered out of that
+view. Without it they report nothing on every modern phone rather than only on
+the ones that genuinely have nothing — which is a default that quietly stops
+working, in the direction that looks like a device problem.
+
+
+##### Per side, not per session
+
+`SherpaVoice` used to be one class holding a microphone, two workers and a play
+queue, and a native engine could not be half of that. So listening and speaking
+are `Listener` and `Speaker` in `voice_strategies.dart`, and
+`ComposedVoiceSession` holds one of each and wires them together. Neither half
+knows which the other is.
+
+The split was built to let the two kinds mix per side, which no platform now
+does — Android is native on both and the desktops are sherpa on both. It earns
+its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
+barge-in wiring and the silence reporting were already somewhere neither engine
+owned, and `read_aloud` gets a speak-only session by passing a null [Listener]
+rather than by either engine knowing what reading one message out is.
+
+`Speaker.speaking` is on the interface for one reason, and it is the reason the
+split needed care: voice activity opens **every** utterance, not only the ones
+landing on top of a reply, and `VoiceController` aborts the running turn on a
+`VoiceInterrupted`. So the session forwards one only while something is actually
+being said. That guard was inside the old single class as `_playing ||
+_queue.isNotEmpty`, where it read as an optimisation; on the interface it is the
+contract, and each speaker answers it its own way — the sherpa one from its
+queue, the native one from what `TextToSpeech` has been handed and not reported
+done.
+
+##### The Kotlin
+
+`VoiceChannel.kt`, registered on the cached engine against the application
+context like the other three — the engine outlives the activity. Three things
+about it are not obvious:
+
+**`SpeechRecognizer` hears one utterance and stops.** Continuous listening is a
+`wantListening` flag and a restart from `onResults`/`onError`, posted rather
+than called where it happens: the old recognition is still running inside the
+callback, and starting the next one there is what `ERROR_RECOGNIZER_BUSY` is.
+
+**Silence is not a fault.** A room with nobody talking in it produces
+`ERROR_NO_MATCH` or `ERROR_SPEECH_TIMEOUT` every few seconds, so those restart
+without a word; reporting them would leave voice mode in the failed state for
+the ordinary case of waiting to be spoken to. `ERROR_INSUFFICIENT_PERMISSIONS`
+is the one that stops.
+
+**`TextToSpeech` answers on a binder thread**, and a `MethodChannel` may only be
+touched from the main one. Everything Dart hears goes through `send`, which
+posts. Invoked where it happened it would be a crash in the one path nothing on
+a desktop exercises.
+
+`AndroidVoiceBridge` is the Dart mirror of the same constraint from the other
+end: `setMethodCallHandler` takes one handler and two strategies each setting
+one would leave the second overwriting the first, so the bridge owns the handler
+and the strategies register callbacks on it.
+
+No new permissions — `RECORD_AUDIO` was already declared and the synthesiser and
+recognizer need none. The **grant** is a different matter: `SpeechRecognizer`
+reports the lack of one as an error rather than asking, and nothing else on the
+native path would ask at all. `SherpaVoice.start` asks for both kinds of
+listener through `AudioRecorder.hasPermission`, which is the only thing in the
+app that can, and the native branch throws the recorder away again.
+
+`VoiceService` is untouched. The microphone still needs holding for as long as
+voice mode is listening; only the engine behind it changed.
 
 #### Where the models live
 

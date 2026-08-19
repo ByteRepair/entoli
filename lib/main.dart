@@ -13,6 +13,7 @@ import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
 import "domain/app_restart.dart";
 import "domain/prompt_library.dart";
+import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/app_shell.dart";
 import "ui/assistant/incoming_assistant.dart";
@@ -53,7 +54,18 @@ class AppSession {
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final voiceModels = platform.createVoiceModelStore(cache);
-    final installed = await voiceModels.installed();
+    final voice = platform.createVoice(voiceModels, cache);
+    // Both started before either is awaited: one is a disk scan and the other
+    // a channel round trip, and neither needs the other's answer.
+    final scan = voiceModels.installed();
+    final engines = await voice.systemEngines();
+    // A sentinel the device can honour is usable on exactly the same terms as
+    // a downloaded model, so it goes in the same set — see [InstalledVoiceModels].
+    final system = {
+      if (engines.recognition) nativeRecognition.id,
+      if (engines.speech) nativeSpeech.id,
+    };
+    final installed = {...await scan, ...system};
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -70,9 +82,9 @@ class AppSession {
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
-        voiceProvider.overrideWithValue(platform.createVoice(voiceModels, cache)),
+        voiceProvider.overrideWithValue(voice),
         installedVoiceModelsProvider
-            .overrideWith(() => InstalledVoiceModels(installed)),
+            .overrideWith(() => InstalledVoiceModels(installed, system: system)),
       ],
     );
     container.read(availableModelsProvider);

@@ -26,7 +26,8 @@ import "domain/prompt_library.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
-import "domain/voice_model.dart";
+import "domain/voice_model.dart"
+    show nativeRecognition, nativeSpeech, RecognitionModel, SpeechModel, voiceModelOf;
 import "domain/voice_model_store.dart";
 import "ui/widgets/provider_model_selector.dart";
 
@@ -43,17 +44,27 @@ final assistantLaunchProvider =
 final voiceModelStoreProvider =
     Provider<VoiceModelStore>((ref) => throw UnimplementedError());
 
-/// Which catalog models are on disk. Read once before the app is built and
-/// kept in step after that by whatever installs or deletes one — the bargain
-/// [promptLibraryProvider] makes, for the reason it makes it. Asked lazily
-/// this is a disk scan, and until it answered every reader would be told
-/// "none": a button drawn from it would be drawn wrong for those frames, and a
-/// button's callback, which reads rather than watches, would be wrong on the
-/// first press however long the app had been open.
+/// Which models a pick can name and get something that works: what is on disk,
+/// plus the system-engine sentinels on a device that has those engines. One set
+/// rather than a set and a question beside it — every gate here asks "is this
+/// pick usable", and a second mechanism for the native half would be a second
+/// thing each of them had to remember.
+///
+/// Read once before the app is built and kept in step after that by whatever
+/// installs or deletes one — the bargain [promptLibraryProvider] makes, for the
+/// reason it makes it. Asked lazily this is a disk scan and a channel call, and
+/// until they answered every reader would be told "none": a button drawn from
+/// it would be drawn wrong for those frames, and a button's callback, which
+/// reads rather than watches, would be wrong on the first press however long
+/// the app had been open.
 class InstalledVoiceModels extends Notifier<Set<String>> {
-  InstalledVoiceModels(this._seed);
+  InstalledVoiceModels(this._seed, {this.system = const {}});
 
   final Set<String> _seed;
+
+  /// The sentinels this device can honour. Held rather than folded into the
+  /// seed, because a re-scan reads the store and would otherwise drop them.
+  final Set<String> system;
 
   @override
   Set<String> build() => _seed;
@@ -62,7 +73,7 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
   /// which is the only thing that changes the answer.
   Future<void> refresh() async {
     final installed = await ref.read(voiceModelStoreProvider).installed();
-    if (ref.mounted) state = installed;
+    if (ref.mounted) state = {...installed, ...system};
   }
 }
 
@@ -77,10 +88,11 @@ final speechReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(voiceProvider).available) return false;
   final settings = ref.watch(appSettingsProvider);
   // `contains` takes an `Object?`, so a setting naming nothing is simply not
-  // in the set.
-  return ref
-      .watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
+  // in the set. A sentinel is in it only where the device has the engine, so
+  // a settings file carried off a phone does not light up read-aloud on a
+  // machine that cannot speak.
+  return ref.watch(installedVoiceModelsProvider).contains(
+      voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
 });
 
 /// Whether the composer draws its voice button: a platform that can listen, and
@@ -89,9 +101,8 @@ final speechReadyProvider = Provider<bool>((ref) {
 final voiceReadyProvider = Provider<bool>((ref) {
   if (!ref.watch(speechReadyProvider)) return false;
   final settings = ref.watch(appSettingsProvider);
-  return ref
-      .watch(installedVoiceModelsProvider)
-      .contains(voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
+  return ref.watch(installedVoiceModelsProvider).contains(
+      voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
 });
 
 /// Loaded once, before the app is built, because assets are read
@@ -104,7 +115,31 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   @override
   AppSettings build() {
     _config = ref.watch(appConfigProvider);
-    return AppSettings.load(_config);
+    final loaded = AppSettings.load(_config);
+    // The device's own engines are the default where it has them — voice mode
+    // works the moment the app is installed, with nothing to download. Each
+    // side is defaulted on its own, so a phone with a synthesiser and no
+    // recognition service gets the half it can do and leaves the other
+    // unpicked, rather than a pick that fails when it is pressed.
+    //
+    // A settings file that already names a model, sherpa or native, is left as
+    // it is: this only fills a null, the way "no pick" used to read. Not saved
+    // either, so the file stays as it was until the user picks something and
+    // one carried to a machine without the engines means "no pick" again.
+    // The device's engines rather than the whole usable set: what a download
+    // adds is never a sentinel, so watching the set would rebuild these
+    // settings every time a model was fetched or deleted — and this `build`
+    // may only run once, since `_config` is initialised in it.
+    final system = ref.read(installedVoiceModelsProvider.notifier).system;
+    if (system.isEmpty) return loaded;
+    final defaulted = loaded.copy();
+    if (system.contains(nativeRecognition.id)) {
+      defaulted.voiceRecognitionModelId ??= nativeRecognition.id;
+    }
+    if (system.contains(nativeSpeech.id)) {
+      defaulted.voiceSpeechModelId ??= nativeSpeech.id;
+    }
+    return defaulted;
   }
 
   /// The app-level default, stored exactly as shown: a pair, one half, or

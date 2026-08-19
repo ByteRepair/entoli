@@ -14,6 +14,7 @@ import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
+import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/assistant_launch.dart";
@@ -114,8 +115,12 @@ void platformRegisterVoiceLicences() {
 VoiceModelStore platformVoiceModelStore(String cacheDir) =>
     FileVoiceModelStore(p.join(cacheDir, "models"));
 
+/// The desktops run sherpa-onnx, which is the only engine they have. Android
+/// runs its own, and ships none of sherpa's native code at all — the `.so`
+/// files are excluded at packaging in `android/app/build.gradle.kts`, so
+/// constructing a [SherpaVoice] there would fail at the first FFI call.
 Voice platformVoice(VoiceModelStore store, String cacheDir) =>
-    SherpaVoice(store, cacheDir);
+    Platform.isAndroid ? const AndroidVoice() : SherpaVoice(store, cacheDir);
 
 /// Nothing to ask for: a directory on this machine is already as durable as
 /// the app is.

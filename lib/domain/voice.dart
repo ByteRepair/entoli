@@ -16,6 +16,18 @@ abstract class Voice {
 
   bool get available => true;
 
+  /// Whether listening and speaking here are done with models the user
+  /// downloads. True on the desktops, where sherpa-onnx is the only engine
+  /// there is; false on Android, which uses the system's own and so has no
+  /// catalog to draw, nothing to fetch and nothing taking up space.
+  bool get downloadsModels => true;
+
+  /// Which of the device's own engines are there, for the platforms that have
+  /// any. Asked once at startup, where the answer joins the installed models —
+  /// a sentinel pick is usable on exactly the same terms as a downloaded one,
+  /// so there is one set to consult rather than a second question beside it.
+  Future<NativeVoiceEngines> systemEngines() async => NativeVoiceEngines.none;
+
   /// Load the models and open the microphone. Throws if a model is not
   /// installed or will not load, which the caller shows rather than swallows —
   /// a voice screen that opens silent is worse than one that says why.
@@ -28,6 +40,23 @@ abstract class Voice {
     required SpeechModel speech,
     int speaker = 0,
   });
+}
+
+/// Which of the device's own engines are actually there, which is what the
+/// Android-system sentinels resolve to. Asked of the platform rather than
+/// inferred from it: `SpeechRecognizer` needs a recognition service installed
+/// and `TextToSpeech` needs an engine, and a phone with no Google apps on it
+/// may have neither. This is what used to be asked as "is this Android" — the
+/// real question was always this one, and off Android it answers itself.
+class NativeVoiceEngines {
+  const NativeVoiceEngines({required this.recognition, required this.speech});
+
+  final bool recognition;
+  final bool speech;
+
+  /// Nothing of the platform's own: every platform that is not Android, and an
+  /// Android one whose channel said nothing.
+  static const none = NativeVoiceEngines(recognition: false, speech: false);
 }
 
 /// A session: a microphone that is open, models that are loaded, and whatever

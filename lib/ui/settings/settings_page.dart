@@ -141,10 +141,10 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // are two lines and the catalog under them is the rest of the page.
       SettingsCategory.voice => const [
           VoiceSection(),
-          Divider(),
-          VoiceCatalogSection.recognition(),
-          Divider(),
-          VoiceCatalogSection.speech(),
+          // Draws its own dividers, since on Android there is no catalog and a
+          // divider with nothing under it is a line across the bottom of the
+          // page.
+          VoiceCatalogSections(),
         ],
       // Android's only, and shown everywhere all the same: the settings are the
       // app's whatever it is running on, the way the voice category is drawn
