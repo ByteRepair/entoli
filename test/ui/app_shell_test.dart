@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/app_shell.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/theme.dart";
 
 import "../harness.dart";
 
@@ -31,7 +32,7 @@ void main() {
     await pumpAt(tester, const Size(500, 900));
 
     expect(find.byType(AppBar), findsOneWidget);
-    expect(find.text("Entoli"), findsOneWidget);
+    expect(find.text(appTitle), findsOneWidget);
     expect(find.byType(Sidebar), findsNothing);
 
     await tester.tap(find.byIcon(Icons.menu));

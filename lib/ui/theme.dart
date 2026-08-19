@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
 
 import "../domain/app_theme.dart";
@@ -6,6 +7,12 @@ import "../domain/app_theme.dart";
 /// drawable and `web/manifest.json` are this colour written again — there is no
 /// generator, so changing it here does not move them.
 const entoliIndigo = Color(0xFF4F46E5);
+
+/// The app's name, wherever it is shown from Dart. It has to agree with
+/// `@string/app_name`, which `src/debug/` overrides: `MaterialApp.title` is the
+/// Android recents entry and *replaces* the launcher label there, so without
+/// this a debug build would name itself twice and differently.
+const appTitle = kDebugMode ? "Entoli (Debug)" : "Entoli";
 
 /// The two voices on the voice screen, and the only colours in the app not
 /// taken from the scheme. A scheme's tones are picked to be *read on* a

@@ -65,11 +65,13 @@ android {
 
     buildTypes {
         debug {
+            // The name and artwork that go with this suffix are in
+            // src/debug/res/.
             applicationIdSuffix = ".debug"
         }
         release {
             // Keeps `flutter run --release` working without a keystore.
-            // release.yml refuses to publish what that produces.
+            // release-build.yml refuses to ship what that produces.
             signingConfig = signingConfigs.findByName("release")
                 ?: signingConfigs.getByName("debug")
         }

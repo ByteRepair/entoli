@@ -1525,11 +1525,11 @@ the answer there, and what is.
 **It is not free on Android either.** onnxruntime and sherpa's own library are
 about 26 MB per ABI, uncompressed and page-aligned the way a modern APK stores
 native code, so the universal release APK went from about 65 MB to 141 MB —
-measured. Nothing here fixes that, because the fix is in `release.yml` rather
-than in the app: splitting per ABI would hand a phone 47 MB instead of 141, and
-it changes the release's asset naming and what the attestation records as its
-subject, which is a decision about releases rather than about voice mode. Issue
-#59 is where that is written down.
+measured. Nothing here fixes that, because the fix is in `release-build.yml`
+rather than in the app: splitting per ABI would hand a phone 47 MB instead of
+141, and it changes the release's asset naming and what the attestation records
+as its subject, which is a decision about releases rather than about voice mode.
+Issue #59 is where that is written down.
 
 Keeping it off the web takes one deliberate piece of machinery.
 **`sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built**,
@@ -2126,6 +2126,9 @@ default's — a browser cannot be told to switch, so the other icon has no copy
 there. `Icon-*` is the file as it stands and `Icon-maskable-*` is the same file
 with the squircle `clip-path` dropped, which is what makes it the full-bleed
 square a maskable icon has to be. `favicon.png` is the clipped one at 32.
+`Icon-512.png` is load-bearing off the web as well: the AppImage takes its icon
+from it, a Linux desktop being no more switchable than a browser. See "The
+Linux AppImage".
 
 `minSdk` is pinned to 26 rather than following `flutter.minSdkVersion`, which
 is 24. Adaptive icons start at 26; below it every icon needs a full set of
@@ -2196,6 +2199,43 @@ Every channel — this one, `ForegroundService` and `FilesChannel` — is regist
 when the engine is created rather than on each attach, and holds the application
 context. That is forced by the engine outliving the activity: see "Staying alive
 off screen".
+
+#### The debug build's own
+
+A debug build installs beside a release one — its application id is suffixed
+`.debug` — and until this landed the two were the same indigo cookie under the
+same name, which makes the pair unusable for the one thing installing both is
+for. So `src/debug/` overrides the label and the artwork: `@string/app_name` is
+`Entoli (Debug)` there, and three drawables are the same paths with the indigo
+turned black.
+
+**The black copies are checked in, not tinted at build time.** A `tint` is one
+colour over the whole layer, and the icon is a white cookie with the indigo
+showing through it as the field behind and the glyph on top, so tinting flattens
+it to a blob. Routing the two colours through a `@color` the debug source set
+overrode would have worked; checked-in copies are what the rest of this section
+already does, and the cost is the same one — the paths are duplicated, and
+editing the artwork means editing both.
+
+Both foregrounds, not only the cookie's, because the icon switcher still works
+in a debug build and `ic_icon_background` is shared: draining it and leaving
+`ic_prompt_foreground` alone would put indigo details on a black field. The
+monochrome layers are shared as they are, being a single colour already — so on
+a launcher with themed icons on, the two installs are the same silhouette again
+and only the name tells them apart. That is the one case this does not fix.
+
+`appTitle` in `ui/theme.dart` is the Dart half, beside `entoliIndigo` for the
+same reason: it is the app's identity written where the platform's copy cannot
+be read. It is not a second signal — `MaterialApp.title` *replaces* the launcher
+label in Android's recents, so without it a debug build would name itself
+"Entoli" there whatever `@string/app_name` said. `_AppBrand` reads it too, so
+the bar over an empty pane is not the one place left saying "Entoli"; it is
+`Flexible` now because the name is no longer a fixed width and the slot is a
+phone's toolbar. It reads `kDebugMode` rather than the platform, so a debug web
+build's tab says it as well, which is honest and free. Linux is left alone:
+`my_application.cc` hardcodes the window title, `MaterialApp.title` does nothing
+on GTK, and there is no second install to tell apart. Profile builds have no
+`res/` of their own and so carry the release name and artwork.
 
 ### Setting overrides
 
@@ -2475,22 +2515,33 @@ which is how a reply's selection would get dropped.
 ## Releasing
 
 Publishing a release starts two workflows that share nothing but the event:
-`release.yml` builds and attaches the Android APK, and `pages.yml` deploys the
-web app from the same tag. Either can fail without the other, and only the
-first checks the tag against pubspec — a version disagreement stops the APK and
-deploys the site anyway. Linux is built by `debug-build.yml` on request and is
-not part of a release at all.
+`release.yml` attaches the binaries, and `pages.yml` deploys the web app from
+the same tag. Either can fail without the other, and only the first checks the
+tag against pubspec — a version disagreement stops the binaries and deploys the
+site anyway.
 
-`release.yml` attaches one signed APK with a provenance attestation beside it.
-There is no Play channel and so no App Bundle: the file on the release is the
-file that gets installed. It is named `entoli-<version>.apk` — a person
-downloads it, so it carries the app's name rather than the package's, and the
-name is composed once in the build job because the attestation records its
-subject by name.
+Two files are attached, each with a provenance attestation beside it: a signed
+`entoli-<version>.apk` and a `entoli-<version>-x86_64.AppImage`. There is no
+Play channel and so no App Bundle: the file on the release is the file that
+gets installed. Both carry the app's name rather than the package's, since a
+person is what downloads them.
 
-**The version is `pubspec.yaml`'s `version:` and nothing else.** The workflow
-refuses to build when the tag disagrees with it, since an APK reporting a
-version nobody released cannot be talked out of it afterwards.
+**`release.yml` builds none of it.** The builds are `release-build.yml`'s,
+which it calls with the tag and which is dispatchable on its own, so whether a
+tag builds can be found out without publishing a release to ask. What the two
+Linux builds then share is one composite action,
+`.github/actions/linux-appimage`; they differ in the mode they pass it and in
+what they do with what comes back, which is a bundle and an AppImage either
+way. The four signing secrets are named at the call site rather than
+`inherit`ed, since only one of the two jobs signs anything.
+
+**The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
+job of its own before either build. Both file names are composed there, because
+an attestation records its subject by name and the file attested is uploaded
+from a different job than the one that built it. A tag disagreeing with pubspec
+fails that job, since a binary reporting a version nobody released cannot be
+talked out of it afterwards — and failing there costs seconds rather than two
+toolchain installs.
 
 **The Android version code is derived from that version rather than stored**,
 as `major * 10000 + minor * 100 + patch` — 1.0.0 is 10000, 1.2.3 is 10203. So
@@ -2500,7 +2551,8 @@ not install over the one before it. **Minor and patch must stay below 100**, or
 1.0.100 and 1.1.0 compute the same code; the workflow fails rather than
 shipping the collision. The debug builds are a separate application id
 (`.debug`), so the run numbers `debug-build.yml` gives them are never compared
-against these.
+against these. They carry their own name and icon too: see
+"The debug build's own".
 
 **Signing material never enters the repository.** Four secrets —
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
@@ -2538,16 +2590,17 @@ gh secret set ANDROID_KEY_ALIAS
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
-**Two jobs, because the one holding the keystore should not also hold
-`contents: write`.** The publisher attests the APK with
-`actions/attest-build-provenance` and attaches both files, so a download can be
-checked against the build that made it:
+**The publisher is a job of its own, so the one holding the keystore never also
+holds `contents: write`.** It attests each binary with
+`actions/attest-build-provenance` — one attestation per file rather than one
+naming both, so a bundle on the release is about the file it sits beside — and
+attaches the four, so a download can be checked against the build that made it:
 
 ```sh
 gh attestation verify entoli-1.0.0.apk --repo Yiannis128/agent-chat
 ```
 
-Splitting also means a failed upload re-runs against the artifact that was
+Splitting also means a failed upload re-runs against the artifacts that were
 already built and checked rather than a rebuild that would have to be trusted
 to match. **A job that never checks out has no git remote**, which is the trap
 in that split: `gh release upload` reads the repository from it and fails with
@@ -2557,6 +2610,40 @@ repository explicitly.
 `workflow_dispatch` takes a tag and rebuilds an existing release for the same
 reason: recreating a release to retry a publish changes its timestamp and
 notifies every watcher a second time.
+
+### The Linux AppImage
+
+`flutter build linux` produces a directory that has to move together — the
+launcher resolves `lib/` through an `$ORIGIN/lib` rpath and finds `data/`
+beside itself — and a release asset is one file someone runs. So the bundle
+goes into the AppDir whole and unrearranged, under `usr/bin`, and `AppRun`
+execs it where it lies. Anything lifted out of it is a file the app cannot
+open.
+
+**The packaging is `linux/packaging/make-appimage.sh`, not a step of the
+workflow**, and it takes a bundle and an output path. It is the only genuinely
+new thing in the release machinery, and left inside a YAML step the only way to
+try a change to it would have been to push and dispatch. The action builds and
+then calls it; `linux/packaging/` holds what it assembles — `AppRun` and the
+desktop entry, named for the application id the way everything else on Linux
+is. The icon it takes is `web/icons/Icon-512.png` and its file name comes from
+the entry's own `Icon=`, so there is one authority for that string.
+
+**Nothing of GTK is bundled.** The AppImage carries the Flutter engine and the
+plugins and links against the system's GTK 3, exactly as the bundle already
+did.
+
+`appimagetool` is pinned to a release rather than tracking `continuous`, and to
+a SHA-256 beside it: it builds the file the release is attested by, and a
+release tag can be moved. It is run with `APPIMAGE_EXTRACT_AND_RUN=1` because
+it is itself an AppImage and a CI runner has no FUSE to mount one with. The
+runtime it embeds is static, so the AppImage it produces does not send anyone
+looking for `libfuse2`.
+
+The debug one is uploaded beside the bundle rather than instead of it, and is
+`entoli-debug-x86_64.AppImage` with no version in the name: it is dispatched
+from a branch rather than cut from a tag, so pubspec's version would name a
+build nobody released.
 
 ## Development
 
@@ -2568,6 +2655,9 @@ notifies every watcher a second time.
   caught by reloading the page.
 - Voice mode on Linux needs `parecord` on `PATH` (`pulseaudio-utils`); without
   it a session fails to start rather than hearing nothing.
+- Package the Linux build:
+  `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
+  Needs no toolbox; it downloads `appimagetool` itself.
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you

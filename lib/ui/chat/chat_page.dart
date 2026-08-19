@@ -6,6 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../fonts.dart";
+import "../theme.dart";
 import "../sidebar/sidebar.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
@@ -194,9 +195,15 @@ class _AppBrand extends StatelessWidget {
   const _AppBrand();
 
   @override
+  // Flexible because the name is not a fixed one: a debug build's is longer,
+  // and the slot is a phone's toolbar.
   Widget build(BuildContext context) => const Row(
         mainAxisSize: MainAxisSize.min,
-        children: [AppMark(size: 24), SizedBox(width: 10), Text("Entoli")],
+        children: [
+          AppMark(size: 24),
+          SizedBox(width: 10),
+          Flexible(child: Text(appTitle, overflow: TextOverflow.ellipsis)),
+        ],
       );
 }
 

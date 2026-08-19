@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The launcher label. src/debug/ overrides it. -->
+    <string name="app_name">Entoli</string>
+</resources>

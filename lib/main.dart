@@ -179,7 +179,7 @@ class _Stopped extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: "Entoli",
+        title: appTitle,
         theme: entoliTheme(Brightness.light),
         darkTheme: entoliTheme(Brightness.dark),
         home: const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -220,7 +220,7 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
   Widget build(BuildContext context) {
     final mode = ref.watch(appSettingsProvider.select((s) => s.appTheme.mode));
     return MaterialApp(
-      title: "Entoli",
+      title: appTitle,
       theme: entoliTheme(Brightness.light),
       darkTheme: entoliTheme(Brightness.dark),
       themeMode: mode,
