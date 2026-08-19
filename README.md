@@ -26,6 +26,22 @@ Ubuntu: `clang cmake ninja-build pkg-config libgtk-3-dev libgstreamer1.0-dev lib
 JDK 17 and the Android SDK with command-line tools. Gradle pulls the NDK it
 needs; `minSdk` is 26. No native dev libraries on the host.
 
+#### Bundled git
+
+The APK ships a `git` built for Android, and no part of the Flutter build makes
+it: `flutter run` and `flutter build apk` package whatever is in
+`android/app/src/main/jniLibs`, which is gitignored and empty on a fresh
+checkout. Build it once per ABI, then stage it:
+
+    ANDROID_NDK_ROOT=~/.android/ndk/<version> tool/bundle/build.sh arm64-v8a
+    tool/bundle/stage.sh
+
+`arm64-v8a` is what a phone wants; add `armeabi-v7a` and `x86_64` for emulators
+or a universal APK. The NDK has to be named explicitly — Gradle's own is not on
+`PATH` — and the host needs `make` and `perl` with `FindBin` (Fedora:
+`perl-FindBin`), which OpenSSL's `Configure` uses. CI runs the same two steps
+from `.github/actions/bundled-tools`, so a release APK always has git in it.
+
 ### Web
 
 Only the Flutter SDK. No native dependencies — `sherpa_onnx`'s WebAssembly is
