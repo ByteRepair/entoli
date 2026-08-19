@@ -22,6 +22,12 @@ abstract class Voice {
   /// catalog to draw, nothing to fetch and nothing taking up space.
   bool get downloadsModels => true;
 
+  /// Which of the device's own engines are there, for the platforms that have
+  /// any. Asked once at startup, where the answer joins the installed models —
+  /// a sentinel pick is usable on exactly the same terms as a downloaded one,
+  /// so there is one set to consult rather than a second question beside it.
+  Future<NativeVoiceEngines> systemEngines() async => NativeVoiceEngines.none;
+
   /// Load the models and open the microphone. Throws if a model is not
   /// installed or will not load, which the caller shows rather than swallows —
   /// a voice screen that opens silent is worse than one that says why.

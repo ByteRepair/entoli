@@ -2,7 +2,6 @@ import "dart:async";
 
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
-import "package:record/record.dart";
 
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
@@ -28,6 +27,22 @@ class AndroidVoice extends Voice {
   bool get downloadsModels => false;
 
   @override
+  Future<NativeVoiceEngines> systemEngines() async {
+    try {
+      final answer = await voiceChannel.invokeMapMethod<String, bool>("engines");
+      if (answer == null) return NativeVoiceEngines.none;
+      return NativeVoiceEngines(
+        recognition: answer["recognition"] ?? false,
+        speech: answer["speech"] ?? false,
+      );
+    } catch (_) {
+      // Nothing on the other end of the channel has neither engine, which is
+      // what the answer would have said.
+      return NativeVoiceEngines.none;
+    }
+  }
+
+  @override
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
@@ -38,19 +53,14 @@ class AndroidVoice extends Voice {
     }
     Listener? listener;
     if (recognition != null) {
-      // `SpeechRecognizer` opens its own microphone and reports the lack of a
-      // grant as an error rather than asking for one, so it is asked for here.
-      // `AudioRecorder` is the only thing in the app that can ask, and this is
-      // the only thing it is wanted for.
-      final recorder = AudioRecorder();
-      final allowed = await recorder.hasPermission();
-      recorder.dispose();
-      if (!allowed) {
-        throw StateError("Entoli was not allowed to use the microphone.");
-      }
+      (await openMicrophone()).dispose();
       listener = AndroidSpeechRecognizer();
     }
-    return ComposedVoiceSession(listener, AndroidTextToSpeech(speaker: speaker));
+    // `speaker` is the sherpa catalog's idea of which voice in a model file to
+    // use, and the system synthesiser has no such thing — the voice is the
+    // user's, set in the OS. So the settings page draws no picker for it here
+    // and nothing is passed on.
+    return ComposedVoiceSession(listener, AndroidTextToSpeech());
   }
 }
 
@@ -62,67 +72,23 @@ class AndroidVoice extends Voice {
 /// [VoiceFailed] the way any other engine fault is surfaced.
 const voiceChannel = MethodChannel("agent_chat/voice");
 
-/// Which of the two system engines this device actually has. Asked once at
-/// startup and seeded into a provider, the way the installed models are — asked
-/// lazily it is a channel round trip answering "neither" until it returns, and
-/// what reads it is a settings page being drawn and a button deciding whether
-/// to exist.
-///
-/// Anything other than an answer is [NativeVoiceEngines.none]: a platform with
-/// nothing on the other end of the channel has neither engine, which is the
-/// same thing the answer would have said.
-Future<NativeVoiceEngines> androidVoiceEngines() async {
-  try {
-    final answer = await voiceChannel.invokeMapMethod<String, bool>("engines");
-    if (answer == null) return NativeVoiceEngines.none;
-    return NativeVoiceEngines(
-      recognition: answer["recognition"] ?? false,
-      speech: answer["speech"] ?? false,
-    );
-  } catch (_) {
-    return NativeVoiceEngines.none;
-  }
-}
-
-/// Owns the single [MethodChannel] handler shared by both Android strategies.
-/// `setMethodCallHandler` takes one handler, so two strategies each setting it
-/// would race — the second overwrites the first. This routes each incoming
-/// method to whichever strategy is registered for it, and lets a strategy
-/// register/unregister as it is constructed and disposed.
+/// Everything Kotlin says, as a stream. `setMethodCallHandler` takes one
+/// handler and both strategies listen on the one channel, so the handler is
+/// owned here once and what arrives is broadcast; each strategy subscribes and
+/// reads the methods that are its own. A subscription is also its own
+/// bookkeeping — cancelling on dispose is the whole of it, where a slot per
+/// callback needed clearing under an identity check so a successor's
+/// registration was not undone by its predecessor.
 class AndroidVoiceBridge {
-  AndroidVoiceBridge._();
+  AndroidVoiceBridge._() {
+    voiceChannel.setMethodCallHandler((call) async => _calls.add(call));
+  }
 
   static final AndroidVoiceBridge instance = AndroidVoiceBridge._();
 
-  void Function(String text)? onHeard;
-  void Function()? onInterrupted;
-  void Function(double level)? onRms;
-  void Function(String message)? onRecognitionError;
-  void Function(int generation)? onSpeechDone;
-  void Function(String message)? onSpeechError;
+  final _calls = StreamController<MethodCall>.broadcast();
 
-  void install() {
-    voiceChannel.setMethodCallHandler(_onCall);
-  }
-
-  Future<void> _onCall(MethodCall call) async {
-    switch (call.method) {
-      case "heard":
-        final text = (call.arguments as String?)?.trim() ?? "";
-        if (text.isNotEmpty) onHeard?.call(text);
-      case "interrupted":
-        onInterrupted?.call();
-      case "rms":
-        final rms = (call.arguments as num?)?.toDouble() ?? 0;
-        onRms?.call(rms);
-      case "recognitionError":
-        onRecognitionError?.call((call.arguments as String?) ?? "Recognition failed.");
-      case "speechDone":
-        onSpeechDone?.call(call.arguments as int? ?? 0);
-      case "speechError":
-        onSpeechError?.call((call.arguments as String?) ?? "Speech failed.");
-    }
-  }
+  Stream<MethodCall> get calls => _calls.stream;
 }
 
 /// Listening through Android's `SpeechRecognizer`. No model to load, no VAD:
@@ -132,17 +98,16 @@ class AndroidVoiceBridge {
 /// the way the sherpa path maps its own RMS.
 class AndroidSpeechRecognizer implements Listener {
   AndroidSpeechRecognizer() {
-    final bridge = AndroidVoiceBridge.instance;
-    bridge
-      ..onHeard = _onHeard
-      ..onInterrupted = _onInterrupted
-      ..onRms = _onRms
-      ..onRecognitionError = _onError
-      ..install();
+    _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
     unawaited(_start());
   }
 
-  final _events = StreamController<VoiceEvent>.broadcast();
+  late final StreamSubscription<MethodCall> _calls;
+
+  /// Single-subscription, the way `SherpaListener`'s is and for its reason: a
+  /// failure to start is emitted before anything has subscribed, and a
+  /// broadcast controller would drop it on the floor.
+  final _events = StreamController<VoiceEvent>();
   final _levelOf = ValueNotifier(0.0);
   bool _closed = false;
 
@@ -157,20 +122,22 @@ class AndroidSpeechRecognizer implements Listener {
     }
   }
 
-  void _onHeard(String text) {
-    if (!_closed) _events.add(VoiceHeard(text));
+  void _onCall(MethodCall call) {
+    if (_closed) return;
+    switch (call.method) {
+      case "heard":
+        final text = (call.arguments as String?)?.trim() ?? "";
+        if (text.isNotEmpty) _events.add(VoiceHeard(text));
+      case "interrupted":
+        _events.add(const VoiceInterrupted());
+      case "rms":
+        // `onRmsChanged` reports dB in the range -2..10 roughly; map to 0–1.
+        final rms = (call.arguments as num?)?.toDouble() ?? 0;
+        _levelOf.value = ((rms + 2) / 12).clamp(0.0, 1.0);
+      case "recognitionError":
+        _fail((call.arguments as String?) ?? "Recognition failed.");
+    }
   }
-
-  void _onInterrupted() {
-    if (!_closed) _events.add(const VoiceInterrupted());
-  }
-
-  void _onRms(double rms) {
-    // `onRmsChanged` reports dB in the range -2..10 roughly; map to 0–1.
-    _levelOf.value = ((rms + 2) / 12).clamp(0.0, 1.0);
-  }
-
-  void _onError(String message) => _fail(message);
 
   void _fail(String message) {
     if (!_closed) _events.add(VoiceFailed(message));
@@ -196,11 +163,7 @@ class AndroidSpeechRecognizer implements Listener {
   @override
   Future<void> dispose() async {
     _closed = true;
-    final bridge = AndroidVoiceBridge.instance;
-    if (bridge.onHeard == _onHeard) bridge.onHeard = null;
-    if (bridge.onInterrupted == _onInterrupted) bridge.onInterrupted = null;
-    if (bridge.onRms == _onRms) bridge.onRms = null;
-    if (bridge.onRecognitionError == _onError) bridge.onRecognitionError = null;
+    await _calls.cancel();
     try {
       await voiceChannel.invokeMethod<String>("stopRecognition");
     } catch (_) {}
@@ -214,16 +177,12 @@ class AndroidSpeechRecognizer implements Listener {
 /// completion via `onUtteranceProgressListener`, mapped to [SpeechSilent] when
 /// the queue has drained and nothing is pending.
 class AndroidTextToSpeech implements Speaker {
-  AndroidTextToSpeech({this.speaker = 0}) {
-    final bridge = AndroidVoiceBridge.instance;
-    bridge
-      ..onSpeechDone = _onSpeechDone
-      ..onSpeechError = _onSpeechError
-      ..install();
+  AndroidTextToSpeech() {
+    _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
     unawaited(_init());
   }
 
-  final int speaker;
+  late final StreamSubscription<MethodCall> _calls;
   final _signals = StreamController<SpeechSignal>.broadcast();
   int _pending = 0;
   int _generation = 0;
@@ -240,18 +199,22 @@ class AndroidTextToSpeech implements Speaker {
     }
   }
 
-  void _onSpeechDone(int generation) {
-    if (generation != _generation || _closed) return;
-    _pending--;
-    if (_pending <= 0) {
-      _pending = 0;
-      _signals.add(const SpeechSilent());
+  void _onCall(MethodCall call) {
+    if (_closed) return;
+    switch (call.method) {
+      case "speechDone":
+        // Named by the generation it was queued under, so one arriving after a
+        // barge-in is not counted against the batch that replaced it.
+        if ((call.arguments as int? ?? 0) != _generation) return;
+        _pending--;
+        if (_pending <= 0) {
+          _pending = 0;
+          _signals.add(const SpeechSilent());
+        }
+      case "speechError":
+        _pending = 0;
+        _fail((call.arguments as String?) ?? "Speech failed.");
     }
-  }
-
-  void _onSpeechError(String message) {
-    _pending = 0;
-    _fail(message);
   }
 
   void _fail(String message) {
@@ -274,7 +237,6 @@ class AndroidTextToSpeech implements Speaker {
     try {
       await voiceChannel.invokeMethod<String>("speak", {
         "text": text,
-        "speaker": speaker,
         "generation": _generation,
       });
     } catch (e) {
@@ -295,9 +257,7 @@ class AndroidTextToSpeech implements Speaker {
   @override
   Future<void> dispose() async {
     _closed = true;
-    final bridge = AndroidVoiceBridge.instance;
-    if (bridge.onSpeechDone == _onSpeechDone) bridge.onSpeechDone = null;
-    if (bridge.onSpeechError == _onSpeechError) bridge.onSpeechError = null;
+    await _calls.cancel();
     try {
       await voiceChannel.invokeMethod<String>("disposeSpeech");
     } catch (_) {}

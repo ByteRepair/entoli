@@ -47,7 +47,7 @@ class SherpaVoice extends Voice {
       // returns as soon as the isolate has sent its port back, which is
       // before it has loaded its model, so a refusal after this point is a
       // hundred megabytes read off a disk and freed again.
-      final recorder = await _microphone();
+      final recorder = await openMicrophone();
       final vad = await _vadPath();
       final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
       listener = SherpaListener(recorder, worker);
@@ -58,16 +58,6 @@ class SherpaVoice extends Voice {
     final worker = await Worker.spawn(_speakWorker, (speech, speakDir, speaker));
 
     return ComposedVoiceSession(listener, SherpaSpeaker(worker));
-  }
-
-  /// The recorder, once the user has allowed it. `AudioRecorder` is the only
-  /// thing here that can ask for the grant, so the native listener — which has
-  /// no other use for one — asks through it too and throws the result away.
-  Future<AudioRecorder> _microphone() async {
-    final recorder = AudioRecorder();
-    if (await recorder.hasPermission()) return recorder;
-    recorder.dispose();
-    throw StateError("Entoli was not allowed to use the microphone.");
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
@@ -520,17 +510,17 @@ sherpa.OfflineTtsConfig _ttsConfig(SpeechModel model, String dir) {
     model: sherpa.OfflineTtsModelConfig(
       vits: model.engine == VoiceEngine.vits
           ? sherpa.OfflineTtsVitsModelConfig(
-              model: p.join(dir, model.model!),
-              tokens: p.join(dir, model.tokens!),
+              model: p.join(dir, model.model),
+              tokens: p.join(dir, model.tokens),
               dataDir: _at(dir, model.dataDir),
               lexicon: lexicon,
             )
           : const sherpa.OfflineTtsVitsModelConfig(),
       kokoro: model.engine == VoiceEngine.kokoro
           ? sherpa.OfflineTtsKokoroModelConfig(
-              model: p.join(dir, model.model!),
+              model: p.join(dir, model.model),
               voices: _at(dir, model.voices),
-              tokens: p.join(dir, model.tokens!),
+              tokens: p.join(dir, model.tokens),
               dataDir: _at(dir, model.dataDir),
               dictDir: _at(dir, model.dictDir),
               lexicon: lexicon,
@@ -538,9 +528,9 @@ sherpa.OfflineTtsConfig _ttsConfig(SpeechModel model, String dir) {
           : const sherpa.OfflineTtsKokoroModelConfig(),
       kitten: model.engine == VoiceEngine.kitten
           ? sherpa.OfflineTtsKittenModelConfig(
-              model: p.join(dir, model.model!),
+              model: p.join(dir, model.model),
               voices: _at(dir, model.voices),
-              tokens: p.join(dir, model.tokens!),
+              tokens: p.join(dir, model.tokens),
               dataDir: _at(dir, model.dataDir),
             )
           : const sherpa.OfflineTtsKittenModelConfig(),

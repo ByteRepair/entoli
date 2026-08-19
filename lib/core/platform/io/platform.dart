@@ -118,11 +118,3 @@ Voice platformVoice(VoiceModelStore store, String cacheDir) =>
 Future<void> platformPersist() async {}
 
 String? processEnv(String name) => Platform.environment[name];
-
-/// Which of the device's own voice engines are there, which is what the
-/// sentinel catalog entries resolve to. Only Android has any, and having them
-/// is a question about the device rather than about the platform — so it is
-/// asked rather than assumed. The desktops answer without a channel: there is
-/// nothing registered on the other end of one.
-Future<NativeVoiceEngines> platformNativeVoiceEngines() async =>
-    Platform.isAndroid ? androidVoiceEngines() : NativeVoiceEngines.none;

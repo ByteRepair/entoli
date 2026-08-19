@@ -2,7 +2,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
-import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../voice/read_aloud.dart";
@@ -26,10 +25,6 @@ class VoiceSection extends ConsumerWidget {
     final canListen = voice.available;
     final settings = ref.watch(appSettingsProvider);
     final installed = ref.watch(installedVoiceModelsProvider);
-    final engines = ref.watch(nativeVoiceEnginesProvider);
-    // On Android there is no catalog: the engines are the system's, so the
-    // pickers offer those or nothing, and there is nothing to download.
-    final models = voice.downloadsModels;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -42,11 +37,12 @@ class VoiceSection extends ConsumerWidget {
               : "Voice mode needs a microphone and models on disk, and a "
                   "browser has neither.",
         ),
+        // The sentinel is in the list like any other model and filtered by the
+        // same `installed` set, which holds it only where the device has the
+        // engine — so nothing here knows which platform it is drawing on.
         _ModelField(
           label: "Recognition model",
-          models: models ? recognitionModels : const [],
-          native: nativeRecognition,
-          hasNative: engines.recognition,
+          models: const [nativeRecognition, ...recognitionModels],
           installed: installed,
           selected: settings.voiceRecognitionModelId,
           onPick: (id) =>
@@ -54,17 +50,13 @@ class VoiceSection extends ConsumerWidget {
         ),
         _ModelField(
           label: "Speech model",
-          models: models ? speechModels : const [],
-          native: nativeSpeech,
-          hasNative: engines.speech,
+          models: const [nativeSpeech, ...speechModels],
           installed: installed,
           selected: settings.voiceSpeechModelId,
           onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
         ),
-        if (voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.isNative != true)
-          _SpeakerField(settings: settings),
-        if (!models && !(engines.recognition && engines.speech))
-          _MissingEngines(engines: engines),
+        _SpeakerField(settings: settings),
+        if (!voice.downloadsModels) _MissingEngines(installed: installed),
       ],
     );
   }
@@ -242,24 +234,28 @@ class _Action extends ConsumerWidget {
 /// about it: the next launch asks the device again. Each is named for the half
 /// it answers, since a phone is much more likely to be missing recognition
 /// than synthesis.
-class _MissingEngines extends ConsumerWidget {
-  const _MissingEngines({required this.engines});
+class _MissingEngines extends StatelessWidget {
+  const _MissingEngines({required this.installed});
 
-  final NativeVoiceEngines engines;
+  /// The usable set: a sentinel is in it only where its engine is there.
+  final Set<String> installed;
 
   static final _rhVoice = Uri.parse(
       "https://f-droid.org/packages/com.github.olga_yakovleva.rhvoice.android/");
   static final _futo = Uri.parse("https://voiceinput.futo.tech/");
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final text = Theme.of(context).textTheme.bodySmall;
-    final missing = [
-      if (!engines.recognition) "hear",
-      if (!engines.speech) "speak",
-    ].join(" or ");
+  Widget build(BuildContext context) {
+    final hears = installed.contains(nativeRecognition.id);
+    final speaks = installed.contains(nativeSpeech.id);
+    if (hears && speaks) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final missing = [if (!hears) "hear", if (!speaks) "speak"].join(" or ");
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      // The inset every other block on this page keeps: `SectionHeader` above
+      // and `LabelledField` between are both 16, and a paragraph flush to the
+      // edge reads as belonging to something else.
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -268,19 +264,15 @@ class _MissingEngines extends ConsumerWidget {
             "engines Android provides, and a phone without Google's apps may "
             "have none installed. Either of these adds one, and works for "
             "every app rather than only this one:",
-            style: text,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          if (!engines.speech)
+          if (!speaks)
+            _EngineLink(label: "RHVoice — speech synthesis", url: _rhVoice),
+          if (!hears)
             _EngineLink(
-              label: "RHVoice — speech synthesis",
-              url: _rhVoice,
-            ),
-          if (!engines.recognition)
-            _EngineLink(
-              label: "FUTO Voice Input — speech recognition",
-              url: _futo,
-            ),
+                label: "FUTO Voice Input — speech recognition", url: _futo),
         ],
       ),
     );
@@ -308,17 +300,16 @@ class _EngineLink extends ConsumerWidget {
   }
 }
 
-/// A dropdown over the installed models of one kind. Not the catalog: a picker
+/// A dropdown over the usable models of one kind. Not the catalog: a picker
 /// offering something that has to be downloaded first is a choice that fails
-/// when it is used rather than when it is made. The [native] sentinel is held
-/// to the same rule by [hasNative] — the device's own engine is offered where
-/// the device has one, which is not every Android phone, and never elsewhere.
+/// when it is used rather than when it is made. [installed] is the whole of
+/// that rule — it holds what is on disk and the system-engine sentinels the
+/// device can honour, so a sentinel is offered or not on the same terms as
+/// anything else and nothing here has to know which platform it is on.
 class _ModelField extends StatelessWidget {
   const _ModelField({
     required this.label,
     required this.models,
-    required this.native,
-    required this.hasNative,
     required this.installed,
     required this.selected,
     required this.onPick,
@@ -326,19 +317,14 @@ class _ModelField extends StatelessWidget {
 
   final String label;
   final List<VoiceModel> models;
-  final VoiceModel native;
-
-  /// Whether this device has the engine [native] stands for.
-  final bool hasNative;
-
   final Set<String> installed;
   final String? selected;
   final ValueChanged<String?> onPick;
 
   @override
   Widget build(BuildContext context) {
-    final downloadable = models.where((m) => installed.contains(m.id)).toList();
-    if (downloadable.isEmpty && !hasNative) {
+    final available = models.where((m) => installed.contains(m.id)).toList();
+    if (available.isEmpty) {
       return LabelledField(
         label: label,
         child: Text(
@@ -347,10 +333,6 @@ class _ModelField extends StatelessWidget {
         ),
       );
     }
-    final available = [
-      if (hasNative) native,
-      ...downloadable,
-    ];
     // A setting naming a deleted model would be a value no item carries, which
     // a DropdownButton asserts on.
     final value = available.any((m) => m.id == selected) ? selected : null;
@@ -379,10 +361,12 @@ class _SpeakerField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
-    if (speech == null) return const SizedBox.shrink();
-    // Drawn even where the model has one voice, which is most of them: a field
-    // that came and went with the model above it would make picking a model a
-    // change of what the page is.
+    // Nothing picked, or the system synthesiser — whose voice is the user's,
+    // set in the OS, so there is no list of them here to offer.
+    if (speech == null || speech.isNative) return const SizedBox.shrink();
+    // Otherwise drawn even where the model has one voice, which is most of
+    // them: a field that came and went with the model above it would make
+    // picking a model a change of what the page is.
     final value = settings.voiceSpeaker.clamp(0, speech.speakers - 1);
     final playing = ref.watch(readAloudProvider) == previewId;
     return LabelledField(

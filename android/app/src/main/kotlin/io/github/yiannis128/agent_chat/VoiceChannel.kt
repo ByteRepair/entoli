@@ -51,8 +51,14 @@ object VoiceChannel {
     // `TextToSpeech`'s progress callbacks arrive on a binder thread and a
     // `MethodChannel` may only be used from the main one, so everything Dart
     // hears goes through here rather than being invoked where it happens.
+    //
+    // `RecognitionListener`'s callbacks are already on the main thread, and
+    // `onRmsChanged` is on it many times a second for as long as voice mode
+    // listens — posting those would be a Handler round trip per audio frame to
+    // arrive where they already are.
     private fun send(method: String, argument: Any?) {
-        main.post { channel?.invokeMethod(method, argument) }
+        if (Looper.myLooper() == main.looper) channel?.invokeMethod(method, argument)
+        else main.post { channel?.invokeMethod(method, argument) }
     }
 
     private fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {

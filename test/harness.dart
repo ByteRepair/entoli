@@ -20,6 +20,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
+import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -62,8 +63,11 @@ class TestApp {
   /// has none, which is what takes voice mode off the composer.
   ///
   /// [nativeVoice] is which of the device's own engines it has, the thing an
-  /// Android phone answers and nothing else does. The default has neither,
-  /// which is every platform a VM test would otherwise be pretending to be.
+  /// Android phone answers and nothing else does. It joins [voiceModels] in the
+  /// usable set the way `main` builds it, so a test says which engines exist
+  /// rather than which sentinel ids to pretend are installed. The default has
+  /// neither, which is every platform a VM test would otherwise be pretending
+  /// to be.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -85,6 +89,10 @@ class TestApp {
     final speech = voice ?? FakeVoice();
     final models = FakeVoiceModelStore(installed: voiceModels);
     final work = FakeBackgroundWork();
+    final system = {
+      if (nativeVoice.recognition) nativeRecognition.id,
+      if (nativeVoice.speech) nativeSpeech.id,
+    };
     return TestApp._(
       config: config,
       backend: backend,
@@ -114,10 +122,10 @@ class TestApp {
           voiceModelStoreProvider.overrideWithValue(models),
           // Seeded the way the app seeds it, before the first frame: see
           // [InstalledVoiceModels].
-          installedVoiceModelsProvider
-              .overrideWith(() => InstalledVoiceModels(voiceModels)),
+          installedVoiceModelsProvider.overrideWith(
+              () => InstalledVoiceModels({...voiceModels, ...system},
+                  system: system)),
           backgroundWorkProvider.overrideWithValue(work),
-          nativeVoiceEnginesProvider.overrideWithValue(nativeVoice),
         ],
       ),
     );

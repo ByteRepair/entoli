@@ -22,8 +22,8 @@ void main() {
       final app = TestApp.create(nativeVoice: bothEngines);
       addTearDown(app.dispose);
       final settings = app.container.read(appSettingsProvider);
-      expect(settings.voiceRecognitionModelId, androidRecognitionId);
-      expect(settings.voiceSpeechModelId, androidSpeechId);
+      expect(settings.voiceRecognitionModelId, nativeRecognition.id);
+      expect(settings.voiceSpeechModelId, nativeSpeech.id);
     });
 
     test("a settings file naming a sherpa model is left as it is", () async {
@@ -37,7 +37,7 @@ void main() {
       app.container.invalidate(appSettingsProvider);
       final settings = app.container.read(appSettingsProvider);
       expect(settings.voiceSpeechModelId, "piper-en_US-amy");
-      expect(settings.voiceRecognitionModelId, androidRecognitionId);
+      expect(settings.voiceRecognitionModelId, nativeRecognition.id);
     });
 
     test("the default is not written to disk", () async {
@@ -57,7 +57,7 @@ void main() {
       );
       addTearDown(app.dispose);
       final settings = app.container.read(appSettingsProvider);
-      expect(settings.voiceSpeechModelId, androidSpeechId);
+      expect(settings.voiceSpeechModelId, nativeSpeech.id);
       // No recognition service installed — a phone with no Google apps on it.
       // Defaulting it to the sentinel would be a pick that fails when pressed.
       expect(settings.voiceRecognitionModelId, isNull);
@@ -88,7 +88,7 @@ void main() {
         nativeVoice: const NativeVoiceEngines(recognition: true, speech: false),
       );
       addTearDown(app.dispose);
-      await app.seedSettings(AppSettings(voiceSpeechModelId: androidSpeechId));
+      await app.seedSettings(AppSettings(voiceSpeechModelId: nativeSpeech.id));
       app.container.invalidate(appSettingsProvider);
       // Pinned by hand, or carried from a phone that had a synthesiser. Either
       // way there is nothing here to say it with.
@@ -109,7 +109,7 @@ void main() {
       final app = TestApp.create();
       addTearDown(app.dispose);
       await app.seedSettings(
-        AppSettings(voiceSpeechModelId: androidSpeechId));
+        AppSettings(voiceSpeechModelId: nativeSpeech.id));
       app.container.invalidate(appSettingsProvider);
       // The sentinel is not installed on a desktop, so reading a message out is
       // not offered.

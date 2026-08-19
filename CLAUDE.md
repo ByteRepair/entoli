@@ -1649,29 +1649,37 @@ sentinel answers both questions without any of them learning a new shape. A
 `nativeVoice` flag beside the model id would have been a second thing every one
 of those had to consult, and the one that forgot would be wrong silently.
 
-`VoiceModel.isNative` is the whole of the routing. `AndroidVoice.start` refuses
-anything else, and the ready providers read it to decide the installed question
-a different way. `Voice.downloadsModels` is the other half of that: false on
-Android, which is what takes the catalog off the settings page and leaves the
-pickers offering the sentinels or nothing.
+`VoiceModel.isNative` is the whole of the routing, and it reads `engine` — the
+field that already decides what runs a model, rather than a second id constant
+beside it. `AndroidVoice.start` refuses anything else.
+`Voice.downloadsModels` is the other half: false on Android, which is what takes
+the catalog off the settings page, and it has exactly that one reader.
 
-**What decides is whether the engine is there, not whether this is Android.**
-`NativeVoiceEngines` is two bools, asked of the device through the channel's
-`engines` method and seeded into `nativeVoiceEnginesProvider` before the app is
-built — the bargain `installedVoiceModelsProvider` already makes, for the reason
-it makes it. "Is this Android" was the first version and it is wrong on a real
-phone: `SpeechRecognizer` needs a recognition service installed and
-`TextToSpeech` needs an engine, and a phone with no Google apps on it may have
-neither. Asked that way, a de-Googled phone offered a default that failed the
-moment it was pressed.
+**What decides is whether the engine is there, not whether this is Android**,
+and the answer goes into the set that already existed for the question.
+`Voice.systemEngines()` asks the device — `SpeechRecognizer` needs a recognition
+service installed and `TextToSpeech` needs an engine, and a phone with no Google
+apps on it may have neither — and `main` folds what it says into
+`installedVoiceModelsProvider` beside the models on disk. So a sentinel is
+usable on exactly the terms a downloaded model is, and every gate is the
+`installed.contains(...)` it already was: the ready providers, the settings
+dropdown, the defaulting. "Is this Android" was the first version and it was
+wrong on a real phone; a `nativeVoiceEnginesProvider` beside the installed set
+was the second, and it was the thing this section's own rule warns about — a
+second question each gate had to remember, silently wrong in the one that
+forgot.
+
+It is on `Voice` rather than in `core/platform/` because that port is already
+per-platform and already built there, which keeps `io/platform.dart` resolving
+`Platform.isAndroid` once instead of twice and leaves `platform.dart` with no
+member exposed any way but its own. `FakeVoice` is then the test seam, so
+`TestApp.create` takes `nativeVoice` and nothing parallel has to be overridden.
 
 So **each side is defaulted on its own**. A phone with a synthesiser and no
 recognition service gets the speaking half and leaves the listening half
 unpicked, which is the honest answer: read-aloud works, the composer's voice
-button stays away. The same two bools gate the settings dropdown, so an engine
-the device does not have is never offered, and gate the sentinel's "installed"
-answer, so a sentinel pinned by hand or carried in a `settings.json` is refused
-the same way.
+button stays away. A sentinel pinned by hand or carried in a `settings.json` is
+refused by the same set, so it needs no rule of its own.
 
 The default is filled in `AppSettingsNotifier.build` and **not written to
 disk**. A file that names something is left as it is; only a null is read as
@@ -1686,9 +1694,6 @@ view. Without it they report nothing on every modern phone rather than only on
 the ones that genuinely have nothing — which is a default that quietly stops
 working, in the direction that looks like a device problem.
 
-A provider rather than a plain getter is also what a test overrides:
-`Platform.isAndroid` is not something a VM test can make true, and the Android
-behaviour is the one worth testing. `TestApp.create` takes `nativeVoice`.
 
 ##### Per side, not per session
 

@@ -1,8 +1,22 @@
 import "dart:async";
 
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+import "package:record/record.dart";
 
 import "../../domain/voice.dart";
+
+/// The microphone, once the user has allowed it. `AudioRecorder` is the only
+/// thing here that can ask for the grant, so both kinds of listener ask through
+/// it: the sherpa one keeps the recorder and reads from it, while
+/// `SpeechRecognizer` opens one of its own and throws this away, wanting only
+/// the answer — it reports a missing grant as an error rather than asking, so
+/// nothing on that path would ask at all.
+Future<AudioRecorder> openMicrophone() async {
+  final recorder = AudioRecorder();
+  if (await recorder.hasPermission()) return recorder;
+  recorder.dispose();
+  throw StateError("Entoli was not allowed to use the microphone.");
+}
 
 /// The listening half of a voice session: a microphone, voice activity, and
 /// recognition. Emits [VoiceHeard] for transcribed utterances, [VoiceInterrupted]
@@ -10,8 +24,8 @@ import "../../domain/voice.dart";
 /// this), and [VoiceFailed] on a fault it cannot recover from.
 ///
 /// Extracted from `SherpaVoice` so a session can compose a [Listener] and a
-/// [Speaker] independently — the Android-system sentinel for one side and a
-/// sherpa model for the other, or both sherpa, or both native. The session
+/// [Speaker] independently: sherpa's pair on the desktops, the system engines'
+/// on Android, and a null [Listener] for reading one message out. The session
 /// wires the two together; neither knows about the other.
 abstract class Listener {
   Stream<VoiceEvent> get events;
@@ -67,8 +81,9 @@ abstract class Speaker {
 /// A [VoiceSession] composed of a [Listener] and a [Speaker], neither knowing
 /// about the other. The session wires barge-in — a [VoiceInterrupted] from the
 /// listener stops the speaker — and forwards the rest of both halves' events
-/// unchanged. This is what lets a native Android listener sit beside a sherpa
-/// speaker, or vice versa: the two are chosen per side in `SherpaVoice.start`.
+/// unchanged. Each `Voice` picks its own pair in `start`, which is what makes
+/// `AndroidVoice` a dozen lines and gives read-aloud a speak-only session for
+/// free.
 class ComposedVoiceSession implements VoiceSession {
   ComposedVoiceSession(this._listener, this._speaker) {
     _listener?.events.listen(_onListener);

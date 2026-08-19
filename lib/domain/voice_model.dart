@@ -58,13 +58,6 @@ enum VoiceEngine {
   androidSpeech,
 }
 
-/// The catalog ids of the two Android-system sentinels. Picking one is picking
-/// "use what the OS ships" — no download, no model file. They are always
-/// considered installed on Android (see `providers.dart`), and `SherpaVoice`
-/// routes them to the native strategies rather than the sherpa workers.
-const androidRecognitionId = "android-recognition";
-const androidSpeechId = "android-speech";
-
 /// A model in the catalog, installed or not.
 sealed class VoiceModel {
   const VoiceModel({
@@ -101,10 +94,11 @@ sealed class VoiceModel {
   int get bytes => downloads.fold(0, (sum, d) => sum + d.bytes);
 
   /// Whether this is one of the Android-system sentinels — a pick that means
-  /// "use the OS engine" rather than a downloaded model. Routed to the native
-  /// strategies in `SherpaVoice` and treated as always-installed on Android by
-  /// the ready providers.
-  bool get isNative => id == androidRecognitionId || id == androidSpeechId;
+  /// "use the OS engine" rather than a downloaded model. Read off [engine],
+  /// which is already the one thing about a model that decides what runs it.
+  bool get isNative =>
+      engine == VoiceEngine.androidRecognition ||
+      engine == VoiceEngine.androidSpeech;
 
   /// Which half of the model directory it installs into: one of [voiceFolders].
   String get folder;
@@ -164,8 +158,8 @@ class SpeechModel extends VoiceModel {
     required super.languages,
     required super.multilingual,
     required super.downloads,
-    this.model,
-    this.tokens,
+    required this.model,
+    required this.tokens,
     super.note,
     this.voices,
     this.lexicons = const [],
@@ -177,11 +171,8 @@ class SpeechModel extends VoiceModel {
   @override
   String get folder => "tts";
 
-  /// The model file. Null on the Android-system sentinel, which has no file.
-  final String? model;
-
-  /// The tokens file. Null on the Android-system sentinel.
-  final String? tokens;
+  final String model;
+  final String tokens;
 
   /// Kokoro and Kitten keep their speakers in one file beside the model.
   final String? voices;
@@ -354,43 +345,40 @@ const speechModels = <SpeechModel>[
 ];
 
 /// The Android-system sentinels: picks that mean "use the OS engine" rather
-/// than a downloaded model. They have no downloads, so they never appear in the
-/// catalog sections that offer a download — `VoiceCatalogSection` filters on
-/// `downloads.isEmpty`. They are in [voiceCatalog] so `voiceModelOf` resolves a
-/// setting that names one, and treated as always-installed on Android by the
-/// ready providers in `providers.dart`.
+/// than a downloaded model. They are kept out of [recognitionModels] and
+/// [speechModels] — the two lists the download sections draw — so there is no
+/// row offering to fetch something that has nothing to fetch. The file fields
+/// are empty because the engine behind these is the platform's; nothing reads
+/// them, since `isNative` routes away before the sherpa config is built.
 const nativeRecognition = RecognitionModel(
-  id: androidRecognitionId,
+  id: "android-recognition",
   name: "Android system",
   engine: VoiceEngine.androidRecognition,
   languages: "System languages",
   multilingual: false,
-  note: "The device's own speech recognition — nothing to download.",
   tokens: "",
   downloads: [],
 );
 
 const nativeSpeech = SpeechModel(
-  id: androidSpeechId,
+  id: "android-speech",
   name: "Android system",
   engine: VoiceEngine.androidSpeech,
   languages: "System languages",
   multilingual: false,
-  note: "The device's own speech synthesis — nothing to download.",
+  model: "",
+  tokens: "",
   downloads: [],
 );
 
-const nativeVoiceModels = <VoiceModel>[nativeRecognition, nativeSpeech];
-
 /// Every model, either kind. The settings page draws each kind's own list; this
-/// is for looking one up by the id a setting holds. The native sentinels are in
-/// here so a setting that names one resolves, but they are not in
-/// [recognitionModels] or [speechModels] and so do not appear as downloadable
-/// rows.
+/// is for looking one up by the id a setting holds, which is why the sentinels
+/// are in here.
 const voiceCatalog = <VoiceModel>[
   ...recognitionModels,
   ...speechModels,
-  ...nativeVoiceModels,
+  nativeRecognition,
+  nativeSpeech,
 ];
 
 /// The catalog model [id] names, if it is the kind asked for. Null where it
