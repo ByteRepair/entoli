@@ -111,4 +111,40 @@ void main() {
     expect(result.returnCode, isNot(0));
     expect(result.output, contains("not found"));
   });
+
+  group("resolving the shell", () {
+    String? resolve(String path, Set<String> present) => LocalShell.resolveShell(
+        path: path, isExecutable: (candidate) => present.contains(candidate));
+
+    test("takes bash from PATH ahead of any sh", () {
+      expect(resolve("/usr/local/bin:/usr/bin", {"/usr/bin/bash", "/usr/local/bin/sh"}),
+          "/usr/bin/bash");
+    });
+
+    test("takes the first PATH entry that has one", () {
+      expect(resolve("/a:/b", {"/a/bash", "/b/bash"}), "/a/bash");
+    });
+
+    test("falls back to sh where there is no bash anywhere", () {
+      expect(resolve("/usr/bin", {"/usr/bin/sh"}), "/usr/bin/sh");
+    });
+
+    test("finds Android's shell, which no PATH of its own names", () {
+      expect(resolve("", {"/system/bin/sh"}), "/system/bin/sh");
+    });
+
+    test("a machine with nothing to run commands in says so", () {
+      expect(resolve("/usr/bin", const {}), isNull);
+      expect(LocalShell(shell: () => null).canRunCommands, isFalse);
+    });
+
+    test("and a command sent to it anyway fails rather than throwing", () async {
+      final result = await LocalShell(shell: () => null)
+          .start("echo hi", cwd: workspace.path, timeout: const Duration(seconds: 1))
+          .result;
+
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("No shell"));
+    });
+  });
 }
