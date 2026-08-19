@@ -74,6 +74,18 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="*/*"/>
             </intent-filter>
+            <!-- Entoli as the system's assistant: the gesture that used to
+                 raise Google's launches Entoli on a new chat, in the project
+                 and the view the Assistant settings name. CATEGORY_DEFAULT is
+                 load-bearing rather than boilerplate — the role is offered to
+                 whatever `queryIntentActivities(ACTION_ASSIST,
+                 MATCH_DEFAULT_ONLY)` finds exported, so without it the app is
+                 not in the picker at all. On the alias below as well, for the
+                 reason the share filter is. -->
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
         </activity>
 
         <!-- The non-default icon, enabled by MainActivity.kt when the user picks
@@ -95,6 +107,10 @@
                 <action android:name="android.intent.action.SEND_MULTIPLE"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="*/*"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST"/>
+                <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </activity-alias>
         <!-- dataSync rather than one of the named types: what a turn is doing

@@ -8,6 +8,7 @@ import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 
 import "../../../data/backup_handoff.dart";
+import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
@@ -16,6 +17,7 @@ import "../../../data/builtin/local_shell.dart";
 import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/sherpa_voice.dart";
+import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/shell.dart";
@@ -41,6 +43,13 @@ BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
     Platform.isAndroid
         ? SharedBackup(fs, handoff)
         : const FileSelectorBackup();
+
+/// The system's assistant gesture, which Android forwards as an `ACTION_ASSIST`
+/// intent and no other platform here has. One answer per platform, chosen once
+/// so neither implementation carries a branch.
+AssistantLaunch platformAssistantLaunch() => Platform.isAndroid
+    ? AndroidAssistantLaunch()
+    : const UnavailableAssistantLaunch();
 
 FileSystem platformFileSystem() => fileSystemIo;
 

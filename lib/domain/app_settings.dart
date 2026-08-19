@@ -3,6 +3,7 @@ import "dart:convert";
 import "../core/config.dart";
 import "app_icon.dart";
 import "app_theme.dart";
+import "assistant_view.dart";
 import "llm_provider.dart";
 import "permission.dart";
 import "profile.dart";
@@ -27,6 +28,8 @@ class AppSettings {
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
     this.voiceSpeaker = 0,
+    this.assistantProject,
+    this.assistantView = AssistantView.chat,
   });
 
   String? defaultModelId;
@@ -81,6 +84,14 @@ class AppSettings {
   String? voiceSpeechModelId;
   int voiceSpeaker;
 
+  /// Which project the system's assistant gesture opens a chat in. Null is the
+  /// default project, the same null `selectedProjectProvider` uses. App-level:
+  /// the assistant is the app's, not a conversation's. See issue #54.
+  String? assistantProject;
+
+  /// Which view the assistant gesture opens. App-level, for the same reason.
+  AssistantView assistantView;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -107,6 +118,8 @@ class AppSettings {
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
+        assistantProject: _orNull(json["assistantProject"] as String?),
+        assistantView: AssistantView.fromName(json["assistantView"] as String?),
       );
     } catch (_) {
       return AppSettings();
@@ -158,6 +171,8 @@ class AppSettings {
         voiceRecognitionModelId: voiceRecognitionModelId,
         voiceSpeechModelId: voiceSpeechModelId,
         voiceSpeaker: voiceSpeaker,
+        assistantProject: assistantProject,
+        assistantView: assistantView,
       );
 
   Future<void> save(AppConfig config) async {
@@ -180,6 +195,8 @@ class AppSettings {
         "voiceRecognitionModelId": voiceRecognitionModelId,
       if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
       if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
+      if (assistantProject != null) "assistantProject": assistantProject,
+      "assistantView": assistantView.name,
     }));
   }
 }

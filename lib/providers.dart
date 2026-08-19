@@ -5,12 +5,14 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../core/config.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
-import "domain/attachment_picker.dart";
-import "domain/backup_handoff.dart";
-import "domain/background_work.dart";
 import "domain/app_restart.dart";
 import "domain/app_settings.dart";
 import "domain/app_theme.dart";
+import "domain/assistant_launch.dart";
+import "domain/assistant_view.dart";
+import "domain/attachment_picker.dart";
+import "domain/backup_handoff.dart";
+import "domain/background_work.dart";
 import "domain/chat_repository.dart";
 import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
@@ -37,6 +39,8 @@ final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedEr
 final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
 final appRestartProvider = Provider<AppRestart>((ref) => throw UnimplementedError());
 final voiceProvider = Provider<Voice>((ref) => throw UnimplementedError());
+final assistantLaunchProvider =
+    Provider<AssistantLaunch>((ref) => throw UnimplementedError());
 final voiceModelStoreProvider =
     Provider<VoiceModelStore>((ref) => throw UnimplementedError());
 
@@ -174,6 +178,14 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
+
+  /// Which project the assistant gesture opens a chat in. Null is the default
+  /// project.
+  Future<void> setAssistantProject(String? project) =>
+      _update((s) => s.assistantProject = project);
+
+  Future<void> setAssistantView(AssistantView view) =>
+      _update((s) => s.assistantView = view);
 
   Future<void> setVoiceRecognitionModel(String? id) =>
       _update((s) => s.voiceRecognitionModelId = id);

@@ -7,6 +7,7 @@ import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/web/web_file_handoff.dart";
+import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/shell.dart";
@@ -41,6 +42,10 @@ FileHandoff platformFileHandoff(FileSystem fs) => WebFileHandoff(fs);
 /// dialog.
 BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
     const FileSelectorBackup();
+
+/// A browser has no system assistant gesture. The stream never fires, so the
+/// launch handler is inert — the same answer the desktop stub gives.
+AssistantLaunch platformAssistantLaunch() => const UnavailableAssistantLaunch();
 
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.

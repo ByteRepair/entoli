@@ -15,13 +15,16 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         requestNotifications()
         FilesChannel.receive(this, intent)
+        AssistantChannel.receive(intent)
     }
 
-    // The share that arrives while the app is already up. onCreate above is the
-    // one that launched it; singleTop is what keeps the two apart.
+    // The share or the assistant gesture that arrives while the app is already
+    // up. onCreate above is the one that launched it; singleTop is what keeps
+    // the two apart.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         FilesChannel.receive(this, intent)
+        AssistantChannel.receive(intent)
     }
 
     // Cached, so the isolate outlives this activity and a turn survives the app
@@ -36,6 +39,7 @@ class MainActivity : FlutterActivity() {
         IconChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         ForegroundWork.register(appContext, engine.dartExecutor.binaryMessenger)
         FilesChannel.register(appContext, engine.dartExecutor.binaryMessenger)
+        AssistantChannel.register(engine.dartExecutor.binaryMessenger)
         VoiceChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
         return engine

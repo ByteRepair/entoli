@@ -16,6 +16,7 @@ import "domain/prompt_library.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/app_shell.dart";
+import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
 import "ui/share/incoming_shares.dart";
@@ -76,6 +77,7 @@ class AppSession {
         linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
         backgroundWorkProvider.overrideWithValue(ForegroundService()),
         fileHandoffProvider.overrideWithValue(handoff),
+        assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
         backupHandoffProvider
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),
@@ -236,11 +238,14 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       theme: entoliTheme(Brightness.light),
       darkTheme: entoliTheme(Brightness.dark),
       themeMode: mode,
-      // Both wrapped rather than folded into the shell: what another app shared
-      // has to be offered a workspace over whatever is on screen, and a
-      // Navigator to push that onto only exists below here; and the keyboard is
-      // the app's to answer for, over whichever field had it.
-      home: const FocusFollowsKeyboard(child: IncomingShares(child: AppShell())),
+      // All three wrapped rather than folded into the shell: what another app
+      // shared has to be offered a workspace over whatever is on screen and the
+      // assistant gesture has to open a chat over it, both of which want a
+      // Navigator that only exists below here; and the keyboard is the app's to
+      // answer for, over whichever field had it.
+      home: const FocusFollowsKeyboard(
+        child: IncomingAssistant(child: IncomingShares(child: AppShell())),
+      ),
     );
   }
 }

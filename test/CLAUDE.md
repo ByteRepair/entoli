@@ -11,8 +11,14 @@ with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
 beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
-`FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice` and
-`testLibrary`.
+`FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`,
+`FakeAssistantLaunch` and `testLibrary`.
+
+`FakeAssistantLaunch` is the assistant gesture, and its two halves are the two
+routes a launch takes: `pending` is one Kotlin noticed before Dart was
+listening, which is the gesture that started the app, and `launch()` is one
+arriving while it is already up. A launch into voice mode wants
+`pump(settle: false)` and `pumpUntil`, since the orb never comes to rest.
 
 `FakeVoice` is voice mode with neither a microphone nor a model: `hear` is the
 user saying something and `spoken` is what the reply came out as, which is the

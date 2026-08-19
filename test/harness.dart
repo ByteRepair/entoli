@@ -42,6 +42,7 @@ class TestApp {
     required this.picker,
     required this.launcher,
     required this.handoff,
+    required this.assistant,
     required this.backups,
     required this.restart,
     required this.store,
@@ -82,6 +83,7 @@ class TestApp {
     final picker = FakeAttachmentPicker();
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
+    final assist = FakeAssistantLaunch();
     final backups = FakeBackupHandoff();
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
@@ -99,6 +101,7 @@ class TestApp {
       picker: picker,
       launcher: launcher,
       handoff: files,
+      assistant: assist,
       backups: backups,
       restart: restart,
       store: chats,
@@ -115,6 +118,7 @@ class TestApp {
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           launcherIconsProvider.overrideWithValue(launcher),
           fileHandoffProvider.overrideWithValue(files),
+          assistantLaunchProvider.overrideWithValue(assist),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
@@ -136,6 +140,7 @@ class TestApp {
   final FakeAttachmentPicker picker;
   final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
+  final FakeAssistantLaunch assistant;
   final FakeBackupHandoff backups;
   final FakeAppRestart restart;
   final ChatStore store;

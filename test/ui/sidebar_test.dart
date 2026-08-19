@@ -3,9 +3,11 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
@@ -339,6 +341,27 @@ void main() {
       expect(app.container.read(selectedProjectProvider), isNull);
       expect(await io(tester, () => app.repo.listChats()), isEmpty);
       expect(Directory(app.config.projectDir(project: "work")).existsSync(), isFalse);
+    });
+
+    testWidgets("deleting one the assistant opens in unpicks it", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("work");
+        await app.container
+            .read(appSettingsProvider.notifier)
+            .setAssistantProject("work");
+      });
+      await pumpBeside(tester);
+      await switchTo(tester, "work");
+
+      await openProjectMenu(tester);
+      await tester.tap(find.text("Delete project…"));
+      await settleIo(tester);
+      await tester.tap(find.text("Delete"));
+      await settleIo(tester, least: 20);
+
+      // Left written down it would be written back by the next save, and a
+      // project made under the same name again would re-arm the setting.
+      expect(AppSettings.load(app.config).assistantProject, isNull);
     });
 
     testWidgets("moving a chat follows it into the project it went to", (tester) async {
