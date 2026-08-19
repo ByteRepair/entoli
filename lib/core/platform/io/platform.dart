@@ -10,6 +10,7 @@ import "package:path_provider/path_provider.dart";
 import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
+import "../../../data/local/bundled_tools.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
@@ -25,8 +26,25 @@ import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 
-Shell platformShell({required Map<String, String> Function() environment}) =>
-    LocalShell(environment: environment);
+Shell platformShell({
+  required Map<String, String> Function() environment,
+  Toolset? tools,
+}) =>
+    LocalShell(environment: environment, tools: tools);
+
+/// Lay out whatever this build ships for the device's ABI, under [cacheDir]
+/// rather than the data directory: it is rebuilt from the APK on demand, so a
+/// backup carrying a tree of symlinks into an install that no longer exists
+/// would be worse than useless.
+///
+/// Null where nothing is bundled — every platform but Android, and an Android
+/// whose ABI this build has no tools for.
+Future<Toolset?> platformInstallTools(String cacheDir) async {
+  if (!Platform.isAndroid) return null;
+  final libDir = await BundledTools.nativeLibraryDir();
+  if (libDir == null) return null;
+  return BundledTools.install(root: p.join(cacheDir, "tools"), libDir: libDir);
+}
 
 WebSearch platformWebSearch() => DuckDuckGoSearch();
 

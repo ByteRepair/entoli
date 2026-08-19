@@ -20,6 +20,17 @@ class ShellResult {
   final String? exceptionInfo;
 }
 
+/// What this build ships beside the machine's own commands: the environment a
+/// command needs to find them, and the name the model is told they are there
+/// under. One value rather than two, so nothing can lay them out and forget to
+/// say so — see "Bundled tools" in CLAUDE.md.
+class Toolset {
+  const Toolset({required this.environment, required this.names});
+
+  final Map<String, String> environment;
+  final String names;
+}
+
 /// A command already running. Separate from its result so an aborted turn can
 /// [kill] a build that would otherwise carry on for minutes.
 abstract class ShellRun {

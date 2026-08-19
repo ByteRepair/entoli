@@ -146,6 +146,11 @@ jobs:
       # whose output cannot be quietly replaced once people have downloaded it.
       - run: flutter test
 
+      # Before the APK is built: what this stages is packaged from the working
+      # tree. See "Bundled tools" in CLAUDE.md.
+      - id: tools
+        uses: ./.github/actions/bundled-tools
+
       # Scoped to this step rather than the whole job. Without the environment
       # build.gradle.kts falls back to the debug key, which the next step
       # catches.
@@ -172,6 +177,20 @@ jobs:
           fi
           echo "SIGNER=$(grep -m1 'SHA-256 digest' <<<"$certs" | awk '{print $NF}')" \
             >> "$GITHUB_ENV"
+
+      # A release APK with no git in it installs and runs, and the agent quietly
+      # has nothing to work with — which is exactly the kind of thing nobody
+      # notices until it has shipped.
+      - name: Check the tools are in the APK
+        run: |
+          set -euo pipefail
+          for abi in ${{ steps.tools.outputs.abis }}; do
+            if ! unzip -l build/app/outputs/flutter-apk/app-release.apk \
+                | grep -q "lib/$abi/libgit.so"; then
+              echo "::error::The release APK has no git for $abi"
+              exit 1
+            fi
+          done
 
       - name: Name the APK after the release
         run: |

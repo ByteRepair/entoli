@@ -721,6 +721,81 @@ subscription is then cancelled, which closes the read end. What that costs is
 whatever the escaped child had still to say, which is the right thing to lose —
 it is still saying it.
 
+#### Bundled tools
+
+What `/system/bin/sh` gets you is toybox: `ls`, `cat`, `grep`, `sed`, `find`,
+`tar` and about a hundred and fifty more — and no `git`, which for a coding
+agent is most of what is missing. So the app ships one. `git` and
+`git-remote-http` are built against bionic with the NDK and ride inside the
+APK, and `BundledTools` lays them out at startup; nothing else about the shell
+changes, since the workspace, the `cwd` and `LocalShell` are all where they
+already were.
+
+**They live in the native library directory because it is the only place an
+app may execute a file from.** Since Android 10, SELinux denies an app
+targeting API 29 or higher `exec` on anything under its own data directory —
+the W^X rule that kept Termux pinned at `targetSdk` 28 and off Play. The
+library directory is not that, so a binary there runs. Two details follow from
+it and both are load-bearing: the files must be named `lib*.so`, since that is
+all the installer extracts out of an APK, and `useLegacyPackaging` has to be on
+or they are mapped from inside the APK and there is no file to run at all. That
+last one is APK-wide — AGP has no per-library lever — so every other native
+library, the Flutter engine included, is stored compressed and unpacked at
+install time as well. The APK shrinks and the installed app grows by what was
+previously read straight out of it.
+
+`<cacheDir>/tools` is a tree of **symlinks** into that directory rather than
+copies. A copy would be another twelve megabytes, and — being in app storage —
+one nothing may execute; the link is followed at exec time, so what the kernel
+sees is the file where it is allowed to be. They are repointed on every install
+rather than kept, because the library path carries an install-specific segment
+and every link from before an update points at nothing.
+
+The cache directory rather than the data one, for the reason the voice models
+are there: `backup.dart` zips the data directory whole, and a backup carrying a
+tree of links into an install that no longer exists is worse than useless. On
+Android that is the support directory and so is not evictable — see "Where the
+models live".
+
+The environment is the rest of it: `PATH` with the system's own commands behind
+ours, `GIT_EXEC_PATH` (git resolves `git-remote-https` and friends by name, so
+the one helper is linked under each scheme it might be asked for), `HOME`,
+`TMPDIR`, and `SSL_CERT_DIR` pointed at Android's own trust store, which is a
+directory of hashed certificates rather than a bundle file. It is layered in
+`LocalShell` beside the defaults that were already there, so the one place that
+decides what a command runs under decides this too, and settings still win over
+all of it — a variable the user set is the one that reaches the command.
+
+**What was laid out and what the model is told about it are one value**, the
+`Toolset` `install` answers with. They were a return value and a mutable global
+next to it, which is an ordering nothing in the types insisted on: get it wrong
+and git is on the `PATH` while the prompt never mentions it, which is the silent
+half-failure this file keeps arguing against elsewhere.
+
+**The toolset is frozen at build time, and cannot not be.** Nothing downloaded
+can ever be executed, so there is no package manager and there is no adding one
+later without changing the mechanism. What would change it is proot, which
+turns out to be reachable at a modern `targetSdk`: it substitutes its own
+loader on `execve` and only ever *maps* guest binaries, which is the permission
+W^X leaves alone. That is a whole Debian rather than one binary, and it is
+written down as an issue rather than done here.
+
+Building them is `tool/bundle/`: `versions.sh` pins what is built and its
+checksums, `build.sh` cross-compiles OpenSSL and curl statically and then git
+against them, `stage.sh` puts the result where the APK packages it from. Three
+adjustments make git build for bionic, and only three — `NO_OPENSSL=1` (git
+has its own SHA), `android-compat.h` for `pthread_setcancelstate`, which bionic
+does not have at all, and dropping `-lpthread`/`-lrt`, which bionic folds into
+libc. The output needs nothing but `libz`, `libdl` and `libc`, all of which
+Android already ships. About 12 MB an ABI, which is why nothing here is checked
+in: CI builds it through `.github/actions/bundled-tools`, cached on the recipe
+and the versions, and the release build refuses an APK that came out without
+git in it.
+
+That also means git, curl and OpenSSL are **ours to update**: nothing on the
+device does it for us, so a CVE in any of them is a version bump in
+`versions.sh` and a release.
+
 #### Approvals
 
 `approveMode` (`meta.json` over `settings.json`) is resolved once in
@@ -2897,6 +2972,9 @@ build nobody released.
 - Package the Linux build:
   `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.
+- Bundled tools (Android's git): `ANDROID_NDK_ROOT=~/.android/ndk/<version>
+  tool/bundle/build.sh arm64-v8a` then `tool/bundle/stage.sh`. Neither is run by
+  the app build; without them an APK simply has no git in it.
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you

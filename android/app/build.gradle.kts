@@ -45,6 +45,14 @@ android {
     // worth that risk only because it is one package rather than four.
     packaging {
         jniLibs {
+            // Extracted rather than mapped from inside the APK: the bundled
+            // tools are executables, and an app may only exec a real file in
+            // its native library directory. APK-wide rather than per library —
+            // AGP has no finer lever — so every other `.so` is stored
+            // compressed and unpacked at install too. See "Bundled tools" in
+            // CLAUDE.md.
+            useLegacyPackaging = true
+
             excludes += setOf(
                 "**/libonnxruntime.so",
                 "**/libsherpa-onnx-c-api.so",
