@@ -82,7 +82,7 @@ void main() {
       expect(find.text("New chats"), findsOneWidget);
     });
 
-    testWidgets("are offered General, Providers, LLMs, Data, in that order", (tester) async {
+    testWidgets("are offered General, Voice, Providers, LLMs, Data, in that order", (tester) async {
       useWindow(tester, const Size(1200, 800));
       await app.pump(tester, const SettingsPage());
 
@@ -92,7 +92,7 @@ void main() {
         tester
             .widgetList<ListTile>(find.descendant(of: panel, matching: find.byType(ListTile)))
             .map((t) => (t.title! as Text).data),
-        ["General", "Providers", "LLMs", "Data"],
+        ["General", "Voice", "Providers", "LLMs", "Data"],
       );
     });
   });

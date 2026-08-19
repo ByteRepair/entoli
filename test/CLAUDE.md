@@ -11,7 +11,32 @@ with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
 and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
 beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
-`FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart` and `testLibrary`.
+`FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice` and
+`testLibrary`.
+
+`FakeVoice` is voice mode with neither a microphone nor a model: `hear` is the
+user saying something and `spoken` is what the reply came out as, which is the
+pair every voice test is written against. `TestApp.create(voiceModels: …)` is
+what is downloaded, and the default is nothing — which is what takes the circle
+off the composer. `voiceModelIds` is the pair to install and `voiceModelPair`
+the same two with their halves named, so that installing one id and picking
+another — which leaves voice mode reading "not ready" and every assertion under
+it taking the settings branch rather than failing — is not something a test can
+do by hand. `TestApp.pickVoiceModels` picks them, and wants a real clock:
+`io(tester, app.pickVoiceModels)`.
+
+**The turn-level voice tests are `test`, not `testWidgets`**, for the reason
+`chat_controller_test.dart` is: a turn is driven by real futures, and
+`testWidgets` runs inside a fake clock where a bare `Future.delayed` only
+completes when the tree is pumped. Anything asserting on what a spoken turn
+wrote belongs beside them; anything asserting on what is drawn is a widget test
+over `FakeVoice` with nothing running.
+
+Downloading is not faked. `voice_model_store_test.dart` runs the real
+`FileVoiceModelStore` against an `HttpServer` on localhost, because what is
+worth pinning is the shape of what lands on disk — the marker that says a model
+is whole, and the nothing a cancelled download leaves behind — and a faked
+client would only ever prove the fake.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so

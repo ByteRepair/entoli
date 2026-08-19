@@ -925,6 +925,21 @@ running for. It is a `ValueListenable` of ids rather than a count so that Stop
 can abort each one, which is also why there is no `abortAll` — one way to stop a
 turn.
 
+**Three services, not one.** `VoiceService` holds the microphone while voice
+mode is listening and `DownloadService` holds a model being fetched, and both
+are as much work the process must not be killed in the middle of as a turn is.
+They are separate because a service has one foreground notification and these
+are three different things to stop — and because from Android 14 the one that
+holds the microphone has to say so, hold `RECORD_AUDIO`, and be started while
+the app is in use, none of which a `dataSync` service may claim. Everything
+about *how* a service is held, stopped, refused and woken is `ForegroundWork`;
+each of the three says only which it is and what its notification reads.
+`BackgroundWork` therefore carries a kind rather than a count, and
+`stopRequests` says which button was pressed — killing every turn because a
+download was cancelled is not what the user pressed. The wording stays in Kotlin
+for the first two; a download's cannot, since which model is being fetched is
+the catalog's and Kotlin has never heard of the catalog.
+
 **Nothing moves into the service.** The turn runs in the app's own isolate, as
 it always did; all the service buys is the right for that isolate to keep
 running. That is what keeps the invariant of "Carrying on an interrupted turn"
@@ -943,7 +958,8 @@ which is what makes the controllers, the sessions and the settings cache still
 be there.
 
 That is also why `onDestroy` throws the engine away again when the activity is
-finishing and `AgentService.busy` is false. Cached unconditionally it would be a
+finishing and `ForegroundWork.busy` is false — which counts voice mode too,
+since the session it holds is in that same isolate. Cached unconditionally it would be a
 permanent change to what "a restart" means: `main` builds the `PromptLibrary`
 once and hydrates the `Documents` cache once, and both are documented as picking
 up an edit made behind the app's back on the next restart. With no eviction that
@@ -1303,8 +1319,11 @@ whole screen and a monitor gets a line that can be read back to the start of.
 The composer is inside that column rather than under it: a centred conversation
 over a full-width field is a field twice the width of what it is answering.
 
-With nothing selected the pane is the two ways to have a conversation — New Chat
-and Open Chat — over the project they happen in. Open Chat is the drawer, so it
+With nothing selected the pane is the ways to have a conversation — New Chat,
+New Voice Chat and Open Chat — over the project they happen in. The second is
+an extension of the first rather than a third thing: it makes a chat and opens
+it in voice mode, and it sits with New Chat rather than beside the way to open
+an old one. Open Chat is the drawer, so it
 is drawn only where there is one: beside a sidebar that is already out it would
 open what is on screen. It asks the `Scaffold` above it rather than taking a
 flag beside the one that built that Scaffold, since two answers to "is there a
@@ -1474,6 +1493,386 @@ again.
 
 The store's resource I/O is async where the rest of it is sync: a JSON file is
 small enough to write on the UI thread, an attachment is not.
+
+### Voice mode
+
+A circle for what the microphone hears and five scrolling lines of what has
+been said, over a chat that was already open. Everything runs on the device:
+`sherpa_onnx` is speech recognition, speech synthesis and voice activity
+detection from one dependency, and the models are downloaded from the settings
+page rather than shipped.
+
+**A voice turn is an ordinary turn, and that is the constraint the rest is
+written to keep.** `VoiceController` hands what it heard to
+`ChatController.send` and reads the reply back out of the chat: same
+`TurnSettings`, same model, same approve mode, same tools — `bash`, `task`,
+`ask_user`, the lot — and the same records in `conv.jsonl`, so threads, resume
+and rewind all work on a conversation that was spoken. Nothing in the backend
+knows voice mode exists. Leaving it leaves a chat to read, and a chat being read
+can be carried on out loud.
+
+So `VoicePage` is a *view*, and its job is surfacing what a turn already does in
+a shape you can use without looking. The approval banner, the question panel and
+the sub-agent strip are **the same widgets** drawn here too, rather than reduced
+voice-only versions: a turn waiting on an answer nobody can see is a hung turn,
+and a second copy of either is a second thing to keep right.
+
+The port is `Voice`, behind the app's one conditional import like `Shell` and
+`WebSearch`. `Voice.available` is false in a browser, which is what leaves the
+composer's circle undrawn — see issue #58 for why sherpa's WebAssembly is not
+the answer there, and what is.
+
+**It is not free on Android either.** onnxruntime and sherpa's own library are
+about 26 MB per ABI, uncompressed and page-aligned the way a modern APK stores
+native code, so the universal release APK went from about 65 MB to 141 MB —
+measured. Nothing here fixes that, because the fix is in `release-build.yml`
+rather than in the app: splitting per ABI would hand a phone 47 MB instead of
+141, and it changes the release's asset naming and what the attestation records
+as its subject, which is a decision about releases rather than about voice mode.
+Issue #59 is where that is written down.
+
+Keeping it off the web takes one deliberate piece of machinery.
+**`sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built**,
+and that package declares a 14 MB WebAssembly build of onnxruntime as a
+web-platform asset. Plugin assets are not tree-shaken, so simply adding the
+dependency put 14 MB into a build that can never call it — measured: the web
+build went from 43 MB to 58 MB. `tool/sherpa_onnx_web_stub` is a local package
+of the same name, overridden in `dependency_overrides`, holding the two members
+the web plugin registrant reaches for and no assets at all. Nothing on the web
+imports `package:sherpa_onnx`, so none of the real API is ever wanted.
+
+The trap in it is that a `dependency_overrides` entry replaces the package on
+**every** platform, not only the one it was written for. If a `sherpa_onnx`
+bump inside `^1.13.6` ever reaches a third member of `SherpaOnnxWeb`, the
+desktop and Android builds break for a web-only reason — so the stub is
+something to check when that constraint moves, which the espeak-ng note above
+means it eventually will. The
+Silero asset is kept out the ordinary way, with `platforms:` on its pubspec
+entry.
+
+#### What listens and what speaks
+
+`domain/voice_model.dart` is the catalog, as const data: five recognition models
+and three speech ones, each naming its files, what it costs to fetch, and which
+sherpa family runs it. A model Entoli can run is one someone wired an engine
+for, so a new entry is a line there and a case in `sherpa_voice.dart`.
+
+Recognition models are fetched **file by file** from HuggingFace — two to four
+each — which skips the fp32 copies the release tarballs carry beside the int8
+ones: the SenseVoice tarball is 999 MB for a 228 MB model. Speech models arrive
+as the official `.tar.bz2` and are unpacked, because each carries
+`espeak-ng-data`, some 360 files that are not worth fetching one at a time. bz2
+in Dart runs at about 8 MB/s, so Kokoro spends a visible minute unpacking and
+the progress bar has an "Unpacking" phase of its own; the work is in an isolate
+so the bar can keep moving. `dart:io`'s native gzip would be twenty times
+faster, and upstream publishes no `.tar.gz`.
+
+**Kokoro is the only multilingual speech model there is at this size**, and it
+is worth writing down why the list looks thin. Piper covers thirty languages one
+model at a time, which is a language picker rather than a multilingual model;
+MMS covers a thousand at rough quality and one model each; everything genuinely
+multilingual beyond them is far too big for a phone. Whisper hears 99 languages
+and Kokoro answers in two, and the honest fix for a third is one more const
+entry.
+
+Silero's detector is the exception that ships: 644 KB, an asset rather than a
+catalog entry, because voice mode that cannot start until a second and invisible
+download has finished is worse to explain than an app that is slightly bigger.
+Every model sherpa takes it takes as a path, so it is copied out of the bundle
+on first use. Its MIT licence is an asset too, read into `LicenseRegistry` the
+way the font's OFL is.
+
+**sherpa-onnx vendors espeak-ng, which is GPL-3.0.** Entoli is AGPL-3.0, so that
+is fine — it would not be for a permissively licensed app, and it is the sort of
+thing that is invisible until it is a problem. Upstream is removing espeak in
+2.0, which will want lexicon-based models instead; the constraint is pinned at
+`^1.13.6` until then.
+
+#### Where the models live
+
+`<cacheDir>/models/{stt,tts}/<id>/`, and **outside the data directory** for a
+reason bigger than tidiness: `backup.dart` zips that directory whole, so a
+Kokoro and a Whisper base in it would put three hundred megabytes of
+bytes-you-can-fetch-again into every export — and a restore, which *replaces*
+the data directory, would drag them between machines and wipe whatever was
+already downloaded. Outside it, both are true by construction rather than by a
+rule in `writeBackup` that someone has to remember.
+
+`platformCacheDir` resolves it by hand, the way `platformDataDir` does:
+`$XDG_CACHE_HOME/agent-chat` or `~/.cache/agent-chat` on Linux,
+`~/Library/Caches/agent-chat` on macOS, `%LOCALAPPDATA%\agent-chat\Cache` on
+Windows, and `$AGENT_CHAT_CACHE` over any of them.
+
+**Android is the one place "cache" is the wrong word.** `getCacheDir()` is
+evictable — the system empties it under storage pressure and the app's settings
+offer a Clear Cache button that does the same — and a 140 MB model the user
+deliberately downloaded must not go that way. `FilesChannel` already stages
+shares in `cacheDir`, where losing a copy is harmless; this is not that. So
+Android uses the support directory, a sibling of the `app_flutter` tree the data
+directory lives under: outside the backup, and not thrown away.
+
+A `.complete` marker is written last in each model's directory, and it is the
+whole of what "installed" means — the same trick `turnEnd` plays in
+`conv.jsonl`. `installed()` reads the directories rather than the catalog, so a
+model the catalog has since renamed still shows as taking up the space it takes
+up. Cancelling a download cancels the subscription, and the store deletes the
+half-written directory when its listener goes.
+
+#### Hearing and speaking
+
+`SherpaVoice.start` loads the two models and opens the microphone; what comes
+back is a `VoiceSession`, which is where **two worker isolates** live. sherpa's
+calls block, so on the UI isolate a Whisper encode is a frozen screen. They are
+two rather than one because generating a spoken sentence takes about a second,
+and a single worker would have the microphone's frames queued behind it — which
+is exactly when the user is most likely to talk over the reply, and exactly the
+moment the detector would be deaf.
+
+Audio in is `record` at 16 kHz mono PCM, chunked to Silero's 512-sample window
+before it is handed over. `Pcm16Reader` is what does the chunking, and it is a
+class of its own because both things it gets right are invisible: a chunk is a
+*view* into the buffer the platform channel decoded into, starting at byte 5 of
+it on Android, and `asInt16List` refuses an odd offset outright — every frame of
+every session threw, so voice mode listened to nothing at all. The other is that
+a chunk does not have to end on a sample, and a byte dropped there shifts every
+sample after it. Audio out is `audioplayers` over a WAV written per
+sentence, into the system's temporary directory rather than the model one —
+which on Android is deliberately the directory that is *not* evicted, and is
+the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
+would be lower latency and has no Linux or Windows. **On Linux the microphone is `parecord`**, which `record` shells out
+to — `pulseaudio-utils`, which a PipeWire system has as well — so a machine
+without it gets a voice session that fails to start rather than one that hears
+nothing.
+
+**Only text parts are spoken**, and sentence by sentence as they stream, so the
+first sentence is being read while the rest of the reply is still being written.
+`speakable` is what makes a reply worth hearing: markdown is written to be
+looked at, so a heading read verbatim is a run of hashes and a bold word is a
+word between asterisks. **Fenced code is dropped whole** rather than flattened —
+a command read out character by character is unusable to listen to and unusable
+to type from, and the conversation is still on screen for anyone who wants it.
+`SentenceSplitter` is fed the whole reply each time rather than the delta, which
+is what the controller has; it refuses to split on `3.14`, `main.dart` and
+`e.g.`, and breaks a run-on paragraph at a comma rather than hold up the first
+sound the user hears.
+
+`SpeakableText` is the same bargain a second time: fed the whole reply, keeping
+what it has already worked out. Stripping is eight passes over each line, the
+transcript is redrawn on every flush of a turn, and the speech path looks four
+times a second, so re-stripping the whole reply each time costs more the longer
+it gets — the same growth the splitter is fed the whole text to avoid paying
+twice. What makes it possible is that a reply only ever grows, so every line
+before the last break is settled; only the line still being written is stripped
+again, and its fence is not counted, since an opening fence is not open until
+the line it is on ends. Both readers of a streaming reply use it, and it is
+`speakable` that they still agree with.
+
+**Settled lines are kept joined, not kept in a list**, and the `\n{3,}` collapse
+is done as they arrive — a run of three newlines is two blank lines in a row,
+which is a thing to notice on arrival rather than to scan the whole reply for
+afterwards. Without both, a look still cost a join of every line and a regex
+pass over all of it, which is the same growth one step quieter. The same reply
+asked for twice is answered from the last answer, since a turn changes far more
+than its text and the transcript is redrawn for all of it.
+
+**The line still being written is trimmed rather than stripped where no rule
+can reach it**, which is what settling cannot do anything about: nothing settles
+until a line break arrives, so a reply written as one unbroken paragraph was
+stripped whole on every look. The eleven patterns are two kinds. Six are
+anchored to the start of a line — the fence, the rule, the bullet, the quote,
+the heading, the table's own row, and the pipe handling with them — so they read
+only how the line *starts*, which is fixed as soon as it has a character that is
+not a space. The other five need one of ``* _ ~ ` [ <`` or `|` to fire at all.
+A line with neither is one all eight passes are about to hand back unchanged,
+so it is handed back unchanged. The markup is looked for once per character
+rather than once per look, since it only ever arrives: a line that has any has
+it for good, and falls back to being stripped for the rest of its length, which
+is where every line was before this.
+
+Measured over three hundred looks, microseconds per look, incremental against
+whole: one paragraph, 6 against 234 at 4,000 characters, 24 against 928 at
+16,000, 92 against 3,694 at 64,000; line-broken, 4 against 244, 10 against 973,
+52 against 3,855. What is left growing is the copy of the answer, which is
+what the answer is.
+
+**Settling inside a line is the other answer and is not worth its price.** A
+split point has to be outside every construct, and a sentence end is not one:
+`. ` falls inside `[Fig. 3](x)` and `*One. Two*` as readily as a space does, and
+the anchored rules re-fire on the tail, so `Words here. - not a bullet.` loses
+its dash. Of thirteen splits at a `. `, eight change what is said. Making it
+sound means a second, hand-written account of what those five patterns match,
+kept in agreement with them forever — where the guard above is a set of seven
+characters, and is wrong only in the direction of doing the work anyway.
+
+It is tested against `speakable` at *every* length a reply passes through, which
+is the only assertion that means anything about a thing whose whole job is to
+agree with something else — and that is what carries the collapse being moved
+out of the regex, since every run length has to agree at every prefix.
+
+A sentence is generated ahead of being heard, so **the queue running dry is not
+the end** — the session only says it has fallen silent once nothing is still in
+the worker. Without that count a fast model reports silence between every two
+sentences, which in voice mode flickers the circle and in a message being read
+out would stop it after the first sentence. The WAV of what is playing is kept
+until something else is: `play` returns when playback *starts*.
+
+**Talking over the reply stops the turn as well as the speech.** The session
+goes quiet the moment the detector fires, before the controller has decided
+anything; the controller then aborts the turn, because interrupting means stop
+and listen to me — which is Stop and then type, in one gesture, and leaves the
+same aborted turn in the log. That rides on the platform's echo cancellation,
+without which the model hears itself and every sentence is a barge-in; the Stop
+button under the orb is the fallback, and shuts the reply up without leaving
+voice mode.
+
+#### Reading one message out
+
+The row under a message has a speaker button, and it is **not voice mode**: no
+microphone, no recognition model, nothing said back into the conversation. That
+is `recognition` being null on `Voice.start` — a session with nothing to listen
+with — rather than a second port, since what it does is the half of a session
+that already existed.
+
+`ReadAloud` owns it, and owns exactly one thing being read at a time. The
+preview beside the voice picker in settings goes through the same notifier
+under the id `preview`, so the two can never talk over each other and a second
+copy of the model is never loaded to do it. Voice mode is the third thing that
+can speak and is *not* under it, so `VoiceController.start` stops it first: a
+message still being read out when the composer's circle is pressed would be a
+second speech model in a second isolate, and two voices at once. Both buttons
+that read something out go through `readAloud`, which is `toggle` plus the
+snack bar its failure needs — the notifier has no `Scaffold` to say it in,
+which is why it answers with a string. The session is let go the moment
+the message has been read — a speech model is a hundred megabytes of a phone's
+memory to hold for a button nobody may press again — and what says it has been
+read is the session falling silent, since nothing above it can tell generating
+from playing.
+
+The button stays up while it reads, uncovered or not: stopping must not mean
+going looking for the button that started it.
+
+#### The screen
+
+An orb of light, under the word for what voice mode is doing. It breathes on a
+slow cycle while it listens and swells with the microphone on top of that,
+sheds rings as it goes, orbits while a turn runs, beats as the reply is read
+out, and sits dim and still while the microphone is shut — four looks to tell
+apart across a room, which is the point of a screen nobody is looking at
+closely. `VoiceBloom` decides what is running and `BloomPainter` draws it.
+
+**The word is there because motion cannot say `starting` or `failed`.** It
+replaced a Material glyph in the middle of the orb, which is a thing to decode
+and was the only thing telling those two apart from listening. It is also the
+semantics label, so what a reader hears is what is on screen.
+
+**What a voice state looks like is the state's own business**, not each
+widget's: `hushed`, `word` and `voiceColour` sit on `VoiceViewState` in
+`voice_controller.dart`, because the orb, the dot beside the word and the Stop
+button all have to agree, and the first version had the orb owning the four-arm
+colour switch while the button re-derived one arm of it.
+
+**Two controllers, and only because of the periods.** The rings and the orbit
+are never on screen together, so they share `_cycle` and what a mode changes is
+its duration; the breath is 1.9s against the rings' 2.9s and reading it off the
+same controller would jump every time that one wrapped. Nothing runs at all in
+the still mode — a hushed microphone repainted sixty times a second to draw the
+same frame is a wake lock being spent on nothing.
+
+**The two voices are the one place the scheme is left behind.** `heardColour`
+and `spokenColour` in `ui/theme.dart` are flat indigo and teal rather than
+`colorScheme.primary` and `tertiary`: a scheme's tones are picked to be read
+*on* a surface, so the dark primary is nearly white and makes a pale smudge of
+something meant to be lit, and an indigo seed resolves `tertiary` to a rose
+that reads as a warning rather than as the other half of a conversation. The
+hot middle of the orb moves *away* from the page — lighter in the dark, deeper
+in the light — since a centre lightened on a white surface is a hole in the orb
+rather than a light in it.
+
+Three things about the drawing are worth knowing. The gradients — and the
+paints holding them — are built once per colour and drawn as a **unit circle
+under a canvas scale**, because a shader is a native allocation and a radius
+that changes every frame would otherwise mean a shader every frame. A ring
+travels from the orb *as it is now* to the edge of the box, so a swollen orb
+does not push its own rings off the screen. And the box scales to the room the
+column is given, since the same screen also holds a resume bar and a question
+panel — by `AspectRatio` under a `ConstrainedBox` rather than by `LayoutBuilder`,
+which would put every frame of the orb inside a **layout** pass: a build scope's
+rebuild reaches its render object as `needsLayout`, and a `RepaintBoundary`
+isolates paint, not layout.
+
+**The page is split by what changes when.** `_Script` — the transcript, the
+turn's surface and its questions — watches the chat, which moves sixty times a
+second while a reply streams; the orb and the controls watch the session, which
+moves a handful of times a turn. Watched together, every delta rebuilt the orb's
+whole subtree and three `ButtonStyle`s with it. The bar's title is a third
+watcher, on a `select` of its own.
+
+A screen with the orb on it **never falls still**, so a widget test that pumps
+one cannot `pumpAndSettle` — `pumpUntil` is what the tests reach for instead.
+
+**Three buttons under it, one promise each**: Mute shuts the microphone, Stop
+shuts the reply up and is dead unless there is one being read out, and Done
+goes back to typing. They were the orb at first — which of the three a tap
+meant depended on the status, so the same gesture stopped a reply, shut a
+microphone or did nothing at all, and nothing on screen said the orb could be
+tapped. So the orb now reports and nothing else. Stop is drawn in the reply's
+own colour while it is live, since it is the one button that comes and goes
+mid-turn. They sit bottom-most, where the composer is on the page this screen
+stands in for.
+
+Pausing is a *release* rather than a
+stream left running and thrown away — the device stops recording, which is what
+the system's own microphone indicator will say either way. It is a flag beside
+the status rather than one of its values, because a turn can be running and its
+reply being read out while the microphone is shut, and those are what the status
+is for. Starting a session clears it: a fresh one listens whatever the last one
+was doing.
+
+**The transcript is a five-line window that scrolls**, not five lines that roll
+past and are gone: it is a viewport over every line said, so the start of the
+conversation is still there to scroll back to. Two things follow. Five lines is
+a *height* — five times the line height at the current text scale, held rather
+than measured, because a viewport cannot lay its content out to discover how
+tall it should be, which is the same answer `_TitleLine.height` gives the app
+bar. And it follows the newest line only while it is already at the bottom,
+which is `chat_page.dart`'s slack rule reused rather than decided again —
+`ScrollPosition.nearBottom`, whose slack is the only part either caller decides:
+a reply streaming in must not yank the reader out of what they scrolled back to.
+
+**Its top fades out**, into the orb above it, so the line being read is the one
+at the bottom. A mask over the viewport rather than an opacity per line: what
+should be faint is whatever is at the top of the *view*, and a line dimmed by
+its place in the list stays dim once it has been scrolled back to. It is also
+the one thing on this screen that finding a widget cannot check — a blend mode
+on its own passes with the gradient upside down — so the test paints it and
+samples what came out.
+
+What the user said is `onSurfaceVariant` and what was said back is `onSurface` —
+the issue asks for grey and white, taken through the scheme so light mode works
+too. **A tool run gets a line as well**, dimmer than either voice: a turn can
+spend half a minute inside a sub-agent, and a screen that says nothing while it
+does reads as a broken app rather than a working one.
+
+The way in is a circle left of the composer's send button, drawn wherever the
+platform can listen rather than only where models are installed — with none
+picked it leads to the settings that pick them, which is a better answer than a
+button nobody can find. `openVoice` is that rule, and `startVoiceChat` beside it
+is the empty pane's New Voice Chat: it asks about the models *before* it makes
+the chat, since one created and then left on screen with nothing to say it with
+is a worse answer than not making one. Both read `voiceReadyProvider`
+themselves, which they can because **which models are installed is read before
+the app is built** — `AppSession.start` scans for them and seeds
+`InstalledVoiceModels` with what it found, the bargain `promptLibraryProvider`
+already makes and for the reason it makes it. Asked lazily it is a disk scan
+that answers "none" until it finishes, and a button's callback reads rather than
+watches, so the first press would have offered settings to someone who has both
+models however long the app had been open. That was first fixed by making it
+the caller's problem — a `ready` parameter, and two comments saying it had to be
+watched and not read — which is a contract every next way in has to be told
+about, and is silently wrong when it is not. **It gives the field its width back the moment there is
+a message in it**: something typed is something to send rather than to say. That
+is an `AnimatedSize` around the button and nothing else — the row is laid out
+again on every frame of it, and the `Expanded` field takes whatever it gives up.
 
 ### The workspace explorer
 
@@ -1690,6 +2089,9 @@ Android's splash has followed the system since `minSdk` went to 26 and the
 pre-Lollipop `launch_background.xml` could go. Until this landed the app did not
 agree with it: a dark phone showed a dark splash and then a white app.
 
+The exceptions are the two voice colours beside `entoliIndigo`, and why they
+are not seeded is in "The screen".
+
 `AppTheme` mirrors material's `ThemeMode` rather than holding one. Nothing in
 `domain/` imports material — `core/config.dart` does reach `foundation`, so this
 is about the framework's UI half rather than about Flutter at all — and the name
@@ -1866,13 +2268,16 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is four categories, picked from a panel beside it or, below
+The settings page is five categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself: the
 default project's workspace (which has nowhere else to be reached from),
 **Appearance** — the theme and the app icon, which are the two things the app
 looks like — the **Agent** — command approval mode and the classifier model,
 which travel together because auto mode is unusable without one — the
-environment, and deleting every chat. **Providers** is the endpoints. **LLMs**
+environment, and deleting every chat. **Voice** is what listens and what speaks,
+over the catalog they are downloaded from — its own category rather than a
+section under General because the two pickers are two lines and the catalog
+under them is the rest of the page. **Providers** is the endpoints. **LLMs**
 is what a new chat is answered by and what names it. **Data** is all of it at
 once, out as one file and back — see "Backing it all up".
 
@@ -1904,6 +2309,12 @@ directory, in its own bytes, so a backup opens in any file manager and a
 conversation reads as itself. The layout is the format: a directory that grows a
 new kind of file is backed up without `backup.dart` being told about it, which
 is the same bargain `conv.jsonl` makes.
+
+That bargain is also why the voice models are not in the data directory: three
+hundred megabytes of bytes that can be fetched again would be in every export,
+and a restore would drag them between machines and delete whatever was already
+downloaded. Keeping them outside is what makes both false, rather than an
+exception in here that someone has to remember — see "Where the models live".
 
 It was one JSON document holding every file first, and that is worse on every
 count that matters. Text in JSON is escaped inside a string inside an array,
@@ -2242,6 +2653,8 @@ build nobody released.
 - Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
   Nothing runs the app in a browser here, so a web-only regression in the UI is
   caught by reloading the page.
+- Voice mode on Linux needs `parecord` on `PATH` (`pulseaudio-utils`); without
+  it a session fails to start rather than hearing nothing.
 - Package the Linux build:
   `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.

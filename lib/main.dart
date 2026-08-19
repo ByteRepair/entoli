@@ -24,6 +24,7 @@ import "ui/theme.dart";
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerBundledFontLicences();
+  platform.registerVoiceLicences();
   await platform.persist();
   // Built here rather than by the root, so the platform's splash covers the
   // first read of the data directory instead of a blank frame.
@@ -41,11 +42,17 @@ class AppSession {
   final Timer _sweep;
 
   static Future<AppSession> start(AppRestart relaunch) async {
+    // Started here and awaited below: on Android it is a channel round trip
+    // that nothing between depends on.
+    final cacheDir = platform.cacheDir();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
     final backend = platform.createBackend(config, library, store);
     final handoff = platform.createFileHandoff(config);
+    final cache = await cacheDir;
+    final voiceModels = platform.createVoiceModelStore(cache);
+    final installed = await voiceModels.installed();
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -60,6 +67,10 @@ class AppSession {
         backupHandoffProvider
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),
+        voiceModelStoreProvider.overrideWithValue(voiceModels),
+        voiceProvider.overrideWithValue(platform.createVoice(voiceModels, cache)),
+        installedVoiceModelsProvider
+            .overrideWith(() => InstalledVoiceModels(installed)),
       ],
     );
     container.read(availableModelsProvider);

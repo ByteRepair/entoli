@@ -24,6 +24,9 @@ class AppSettings {
     this.appIcon = AppIcon.cookie,
     this.appTheme = AppTheme.system,
     this.tempChatTtl = TempChatTtl.off,
+    this.voiceRecognitionModelId,
+    this.voiceSpeechModelId,
+    this.voiceSpeaker = 0,
   });
 
   String? defaultModelId;
@@ -69,6 +72,15 @@ class AppSettings {
   /// temporary chats are off — chats live forever.
   TempChatTtl tempChatTtl;
 
+  /// Which voice models listen and speak, by catalog id, and which of a
+  /// multi-voice model's speakers is used. App-level only, like the icon and
+  /// the theme: a voice is the app's, not a conversation's. Either being null
+  /// is voice mode not set up yet, which is what takes the button off the
+  /// composer.
+  String? voiceRecognitionModelId;
+  String? voiceSpeechModelId;
+  int voiceSpeaker;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -92,6 +104,9 @@ class AppSettings {
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
         appTheme: AppTheme.fromName(json["appTheme"] as String?),
         tempChatTtl: TempChatTtl.fromName(json["tempChatTtl"] as String?),
+        voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
+        voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
+        voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
       );
     } catch (_) {
       return AppSettings();
@@ -140,6 +155,9 @@ class AppSettings {
         appIcon: appIcon,
         appTheme: appTheme,
         tempChatTtl: tempChatTtl,
+        voiceRecognitionModelId: voiceRecognitionModelId,
+        voiceSpeechModelId: voiceSpeechModelId,
+        voiceSpeaker: voiceSpeaker,
       );
 
   Future<void> save(AppConfig config) async {
@@ -158,6 +176,10 @@ class AppSettings {
       "appIcon": appIcon.name,
       "appTheme": appTheme.name,
       "tempChatTtl": tempChatTtl.name,
+      if (voiceRecognitionModelId != null)
+        "voiceRecognitionModelId": voiceRecognitionModelId,
+      if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
+      if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
     }));
   }
 }

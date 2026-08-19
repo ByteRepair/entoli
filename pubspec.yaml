@@ -56,11 +56,27 @@ dependencies:
   url_launcher: ^6.3.2
   webview_flutter: ^4.14.1
 
+  # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
+  # activity detection from one dependency: `record` opens the microphone and
+  # `audioplayers` says the reply back. See "Voice mode" in CLAUDE.md, and
+  # issue #58 for why a browser gets none of this.
+  sherpa_onnx: ^1.13.6
+  record: ^7.1.1
+  audioplayers: ^6.8.1
+
   # Misc
   uuid: ^4.6.0
   collection: ^1.19.1
   # navigator.storage.persist(), so what the browser stored is not evicted.
   web: ^1.1.1
+
+# `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
+# and that package ships a 14 MB WebAssembly build of onnxruntime as a
+# web-platform asset. Plugin assets are not tree-shaken, so a web build that
+# can never run voice mode would carry all of it. See tool/sherpa_onnx_web_stub.
+dependency_overrides:
+  sherpa_onnx_web:
+    path: tool/sherpa_onnx_web_stub
 
 dev_dependencies:
   flutter_test:
@@ -82,6 +98,15 @@ flutter:
     # rather than only a file in the repo, since the OFL asks for it to travel
     # with the font.
     - assets/fonts/OFL.txt
+    # Silero's voice activity detector, and its licence beside it. 644 KB, so
+    # it ships rather than joining the catalog: voice mode that cannot start
+    # until a second, invisible download has finished is worse to explain than
+    # an app that is slightly bigger. Every model sherpa takes, it takes as a
+    # path, so this is copied out of the bundle on first use.
+    - path: assets/models/silero_vad.onnx
+      platforms: [android, ios, linux, macos, windows]
+    - path: assets/models/silero-vad-LICENSE.txt
+      platforms: [android, ios, linux, macos, windows]
 
   # Code is set in this rather than in `monospace`, which is a different face on
   # every platform the app runs on. Roboto Mono is the mono companion to the

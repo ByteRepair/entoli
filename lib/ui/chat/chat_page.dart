@@ -8,17 +8,17 @@ import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
 import "../sidebar/sidebar.dart";
+import "../voice/read_aloud.dart";
+import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/nav_drawer.dart";
+import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
-import "widgets/approval_banner.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
-import "widgets/question_panel.dart";
-import "widgets/resume_bar.dart";
-import "widgets/sub_agent_strip.dart";
+import "widgets/turn_surface.dart";
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key, this.withDrawer = false});
@@ -67,6 +67,18 @@ class _NoChat extends ConsumerWidget {
               onPressed: () => startChat(context, ref),
               child: const Text("New Chat"),
             ),
+            // An extension of New Chat rather than a third thing: it makes one
+            // and opens it in voice mode. Drawn wherever the platform can
+            // listen rather than only where the models are, which is the rule
+            // the composer's circle keeps — with none downloaded it leads to
+            // the settings that download them.
+            if (ref.watch(voiceProvider).available) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                onPressed: () => startVoiceChat(context, ref),
+                child: const Text("New Voice Chat"),
+              ),
+            ],
             if (scaffold?.hasDrawer ?? false) ...[
               const SizedBox(height: 12),
               OutlinedButton(
@@ -256,8 +268,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   void _readPosition() {
     if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    _atBottom.value = position.maxScrollExtent - position.pixels <= _slack;
+    _atBottom.value = _scroll.position.nearBottom(_slack);
   }
 
   /// Once the list has been laid out, which is the first moment its extent is
@@ -273,9 +284,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// Streaming fires this every frame, so it jumps rather than starting a new
   /// 100ms animation each time.
   void _scrollToBottom() => _afterLayout((position) {
-        if (position.maxScrollExtent - position.pixels <= _slack) {
-          _scroll.jumpTo(position.maxScrollExtent);
-        }
+        if (position.nearBottom(_slack)) _scroll.jumpTo(position.maxScrollExtent);
       });
 
   /// Land at the end, and keep landing until the end stops moving. A builder
@@ -408,20 +417,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           child: Column(
             children: [
               Expanded(child: _conversation(chat, view, notifier)),
-              // Only while nothing is running: the turn being carried on is the one
-              // at the end, so the offer and the work are never both on screen.
-              if (chat.unfinished && !view.isRunning)
-                ResumeBar(
-                  startedAt: chat.messages.last.createdAt,
-                  onContinue: notifier.resume,
-                ),
-              SubAgentStrip(agents: view.runningSubAgents),
-              for (final a in view.approvals)
-                ApprovalBanner(
-                  approval: a,
-                  onAllow: () => notifier.respondApproval(a.id, ApprovalResponse.allow),
-                  onDeny: () => notifier.respondApproval(a.id, ApprovalResponse.deny),
-                ),
+              TurnSurface(view: view, notifier: notifier),
               // A question takes the composer's place rather than sitting above it:
               // the turn is waiting on this answer, and there is nothing useful to
               // type until it has it.
@@ -431,14 +427,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   isRunning: view.isRunning,
                   onSend: _send,
                   onAbort: _abort,
+                  onVoice: ref.watch(voiceProvider).available
+                      ? () => openVoice(context, ref, widget.chatId)
+                      : null,
                 )
               else
-                QuestionPanel(
-                  key: ValueKey(view.questions.first.id),
-                  request: view.questions.first,
-                  onAnswered: (answers) =>
-                      notifier.answerQuestions(view.questions.first.id, answers),
-                ),
+                TurnQuestions(view: view, notifier: notifier),
             ],
           ),
         ),
@@ -447,6 +441,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 
   Widget _conversation(Chat chat, ChatViewState view, ChatController notifier) {
+    final speechReady = ref.watch(speechReadyProvider);
+    final reading = ref.watch(readAloudProvider);
     // `insertCompletion` rather than writing the field here: where a trigger
     // lands is the composer's rule, and a `/command` appended at the caret is
     // text nothing would ever expand. It does not ask for the focus, which is
@@ -482,6 +478,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   ? (text) => notifier.editAndResend(m.id, text)
                   : null,
               onRegenerate: view.isRunning ? null : () => notifier.regenerate(m.id),
+              onSpeak: speechReady && m.hasText
+                  ? () => readAloud(context, ref, m.id, m.plainText)
+                  : null,
+              isSpeaking: reading == m.id,
             );
           },
         ),

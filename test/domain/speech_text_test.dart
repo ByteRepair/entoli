@@ -1,0 +1,137 @@
+import "package:agent_chat/domain/speech_text.dart";
+import "package:flutter_test/flutter_test.dart";
+
+void main() {
+  group("speakable", () {
+    test("drops a fenced block whole", () {
+      expect(
+        speakable("Try this:\n```sh\nrm -rf /tmp/x\n```\nThen check it."),
+        "Try this:\nThen check it.",
+      );
+    });
+
+    test("keeps what inline code says, without the backticks", () {
+      expect(speakable("Open `main.dart` first."), "Open main.dart first.");
+    });
+
+    test("reads a heading as the words in it", () {
+      expect(speakable("## What changed"), "What changed");
+    });
+
+    test("reads a list as its items", () {
+      expect(speakable("- one\n- two"), "one\ntwo");
+    });
+
+    test("keeps a link's text and drops its target", () {
+      expect(speakable("See [the docs](https://example.com)."), "See the docs.");
+    });
+
+    test("strips emphasis without eating the word", () {
+      expect(speakable("It is **really** important"), "It is really important");
+    });
+
+    test("reads a table as its cells", () {
+      expect(
+        speakable("| a | b |\n| - | - |\n| 1 | 2 |"),
+        "a, b\n1, 2",
+      );
+    });
+  });
+
+  group("SentenceSplitter", () {
+    test("hands over a sentence once it is whole", () {
+      final splitter = SentenceSplitter();
+      expect(splitter.add("The first thing"), isEmpty);
+      expect(splitter.add("The first thing is done. And th"),
+          ["The first thing is done."]);
+      expect(splitter.add("The first thing is done. And then"), isEmpty);
+    });
+
+    test("does not split a decimal or a file name", () {
+      final splitter = SentenceSplitter();
+      expect(splitter.add("The version is 1.2.3 and the file is main.dart"), isEmpty);
+    });
+
+    test("ends a sentence at a line break", () {
+      final splitter = SentenceSplitter();
+      expect(splitter.add("A heading of sorts\nand the rest"), ["A heading of sorts"]);
+    });
+
+    test("flushes the tail once nothing more is coming", () {
+      final splitter = SentenceSplitter();
+      splitter.add("Done. Nearly");
+      expect(splitter.flush(), "Nearly");
+      expect(splitter.flush(), "");
+    });
+
+    test("starts over when the text is a different one", () {
+      final splitter = SentenceSplitter();
+      splitter.add("The first reply is here. More");
+      expect(splitter.add("A second reply entirely. Yes"),
+          ["A second reply entirely."]);
+    });
+
+    test("breaks a run-on rather than holding the first sound back", () {
+      final splitter = SentenceSplitter();
+      final long = List.filled(80, "word").join(" ");
+      expect(splitter.add(long), isNotEmpty);
+    });
+  });
+
+  group("SpeakableText", () {
+    // Every prefix, not the whole text: what it keeps between calls is the
+    // point of it, so it has to agree with [speakable] at every length a reply
+    // is ever looked at.
+    void agreesGrowing(String reply) {
+      final growing = SpeakableText();
+      for (var i = 0; i <= reply.length; i++) {
+        final so = reply.substring(0, i);
+        expect(growing.of(so), speakable(so), reason: "at $i characters");
+      }
+    }
+
+    test("says what speakable says, at every length a reply passes through", () {
+      agreesGrowing("## What changed\n\n- one\n- two\n\nSee [the docs](x). Done.");
+    });
+
+    test("agrees while a fence is open, and once it has closed", () {
+      agreesGrowing("Try this:\n```sh\nrm -rf /tmp/x\n```\nThen check it.");
+    });
+
+    test("agrees over a table, whose rule line says nothing", () {
+      agreesGrowing("| a | b |\n| --- | --- |\n| 1 | 2 |\n\nAfter it.");
+    });
+
+    // The `\n{3,}` collapse, which it does as the lines arrive rather than
+    // over the whole reply: every run length, at both ends and in the middle.
+    test("agrees however many blank lines a reply runs to", () {
+      agreesGrowing("\n\n\nOne.\n\n\n\nTwo.\n\n\n\n\n\nThree.\n\n\n");
+    });
+
+    test("agrees where a line is nothing but what was stripped off it", () {
+      agreesGrowing("# \n\n---\n\n> \n\nWords at last.\n\n***\n");
+    });
+
+    // The line the rules cannot reach, trimmed rather than stripped. A dash, a
+    // digit and a stop are each a marker somewhere and none of them here: what
+    // makes a line plain is where they sit, not whether they are in it.
+    test("agrees over a paragraph that runs on, settling nothing", () {
+      agreesGrowing("A well-known result, e.g. 3.14 or file.dart, is that 1. is "
+          "not a list mid-line - and a dash is not a bullet there either.");
+    });
+
+    test("agrees where the markup arrives late in a line", () {
+      agreesGrowing("Prose for a while, and then **bold** turns up, then more.");
+    });
+
+    test("agrees where a line is still the whitespace before its bullet", () {
+      agreesGrowing("One.\n   - two\n");
+    });
+
+    test("starts over when the text is a different one", () {
+      final growing = SpeakableText();
+      growing.of("The first reply, which was long.");
+      expect(growing.of("## A second"), "A second");
+    });
+  });
+}

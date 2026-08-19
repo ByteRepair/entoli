@@ -17,6 +17,9 @@ import "package:agent_chat/domain/file_handoff.dart";
 import "package:agent_chat/domain/link_opener.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/voice.dart";
+import "package:agent_chat/domain/voice_model.dart";
+import "package:agent_chat/domain/voice_model_store.dart";
 import "package:uuid/uuid.dart";
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
@@ -91,19 +94,28 @@ class FakeLauncherIcons implements LauncherIcons {
   Future<void> use(AppIcon icon) async => used.add(icon);
 }
 
-/// The platform's hold on the process, which a test has none of. Records the
-/// counts it was told, and [stop] is the notification's Stop being pressed.
+/// The platform's hold on the process, which a test has none of. Records what
+/// it was told of each kind, and [stop] is one of the notifications' Stop being
+/// pressed.
 class FakeBackgroundWork implements BackgroundWork {
   final List<int> told = [];
-  final _stops = StreamController<void>.broadcast();
+  final List<bool> listened = [];
+  final List<DownloadNotice?> downloads = [];
+  final _stops = StreamController<BackgroundJob>.broadcast();
 
   @override
   Future<void> running(int turns) async => told.add(turns);
 
   @override
-  Stream<void> get stopRequests => _stops.stream;
+  Future<void> listening(bool active) async => listened.add(active);
 
-  void stop() => _stops.add(null);
+  @override
+  Future<void> downloading(DownloadNotice? notice) async => downloads.add(notice);
+
+  @override
+  Stream<BackgroundJob> get stopRequests => _stops.stream;
+
+  void stop([BackgroundJob job = BackgroundJob.turns]) => _stops.add(job);
 }
 
 /// Stands in for the platform's file chooser, which no test can drive.
@@ -457,4 +469,105 @@ class FakeChatStore implements ChatStore {
 
   @override
   Future<void> saveMeta(String chatId, ChatMeta meta) async => _metas[chatId] = meta;
+}
+
+/// Listening and speaking, with neither. [hear] is the user saying something
+/// and [spoken] is what the reply came out as, which is the pair every voice
+/// test is written against.
+class FakeVoice extends Voice {
+  FakeVoice({this.available = true});
+
+  @override
+  final bool available;
+
+  /// Set to make [start] throw, which is a model that will not load or a
+  /// microphone the user said no to.
+  String? refusal;
+
+  FakeVoiceSession? session;
+
+  /// What the last [start] was asked to listen with. Null is a session that
+  /// only speaks, which is what reading one message out asks for.
+  RecognitionModel? listeningWith;
+
+  @override
+  Future<VoiceSession> start({
+    RecognitionModel? recognition,
+    required SpeechModel speech,
+    int speaker = 0,
+  }) async {
+    if (refusal != null) throw StateError(refusal!);
+    listeningWith = recognition;
+    return session = FakeVoiceSession();
+  }
+}
+
+class FakeVoiceSession implements VoiceSession {
+  final List<String> spoken = [];
+  final _events = StreamController<VoiceEvent>.broadcast();
+
+  var hushed = 0;
+  var disposed = false;
+
+  /// Whether the microphone is open, which pausing shuts.
+  var listening = true;
+
+  @override
+  final ValueNotifier<double> level = ValueNotifier(0);
+
+  @override
+  Stream<VoiceEvent> get events => _events.stream;
+
+  @override
+  Future<void> speak(String text) async => spoken.add(text);
+
+  @override
+  Future<void> stopSpeaking() async => hushed++;
+
+  @override
+  Future<void> setListening(bool on) async => listening = on;
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+    await _events.close();
+  }
+
+  void hear(String text) => _events.add(VoiceHeard(text));
+  void interrupt() => _events.add(const VoiceInterrupted());
+  void fallSilent() => _events.add(const VoiceFellSilent());
+  void fail(String message) => _events.add(VoiceFailed(message));
+}
+
+/// Models that are simply there, or simply are not. Downloading is tested
+/// against the real store and a real socket — see `voice_model_store_test.dart`
+/// — so this only has to answer what is installed.
+class FakeVoiceModelStore extends VoiceModelStore {
+  FakeVoiceModelStore({Set<String> installed = const {}})
+      : _installed = {...installed};
+
+  final Set<String> _installed;
+
+  final List<String> deleted = [];
+
+  // A copy, the way a real store answers: the same set handed back twice is one
+  // a provider cannot tell has changed.
+  @override
+  Future<Set<String>> installed() async => {..._installed};
+
+  @override
+  Future<String?> directoryOf(VoiceModel model) async =>
+      _installed.contains(model.id) ? "/models/${model.id}" : null;
+
+  @override
+  Stream<VoiceModelProgress> install(VoiceModel model) async* {
+    yield VoiceModelProgress(received: model.bytes, total: model.bytes);
+    _installed.add(model.id);
+  }
+
+  @override
+  Future<void> delete(VoiceModel model) async {
+    deleted.add(model.id);
+    _installed.remove(model.id);
+  }
 }

@@ -33,6 +33,8 @@ void main() {
     VoidCallback? onDelete,
     ValueChanged<String>? onEdit,
     VoidCallback? onRegenerate,
+    VoidCallback? onSpeak,
+    bool isSpeaking = false,
     ValueChanged<String>? onTapLink,
   }) =>
       app.pump(
@@ -48,6 +50,8 @@ void main() {
             onDelete: onDelete,
             onEdit: onEdit,
             onRegenerate: onRegenerate,
+            onSpeak: onSpeak,
+            isSpeaking: isSpeaking,
             onTapLink: onTapLink,
           ),
         ),
@@ -931,6 +935,32 @@ void main() {
 
       // What was said, not what was thought.
       expect(copied, ["here is **bold** code"]);
+    });
+
+    testWidgets("the read-aloud button offers to stop while it is reading",
+        (tester) async {
+      var pressed = 0;
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "hello")]),
+        onSpeak: () => pressed++,
+      );
+      await reveal(tester, find.text("hello"));
+
+      await tester.tap(find.byTooltip("Read aloud"));
+      await tester.pumpAndSettle();
+      expect(pressed, 1);
+
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "hello")]),
+        onSpeak: () {},
+        isSpeaking: true,
+      );
+      // Up without being uncovered: stopping must not mean going looking for
+      // the button that started it.
+      expect(actionsOpacity(tester), 1);
+      expect(find.byTooltip("Stop reading"), findsOneWidget);
     });
 
     testWidgets("a message with nothing said in it has nothing to copy", (tester) async {

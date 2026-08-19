@@ -44,6 +44,9 @@ class TestApp {
     required this.restart,
     required this.store,
     required this.linkOpener,
+    required this.voice,
+    required this.voiceModels,
+    required this.work,
     required this.container,
   });
 
@@ -54,11 +57,15 @@ class TestApp {
   /// [handoff] is which of the three platforms the workspace explorer thinks it
   /// is on. The default can do nothing outside the app, which is right for
   /// every test that is not about the explorer.
+  /// [voiceModels] is which voice models the app has downloaded. The default
+  /// has none, which is what takes voice mode off the composer.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
     ChatStore? store,
     FakeFileHandoff? handoff,
+    FakeVoice? voice,
+    Set<String> voiceModels = const {},
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -69,6 +76,9 @@ class TestApp {
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
     final linkOpener = FakeLinkOpener();
+    final speech = voice ?? FakeVoice();
+    final models = FakeVoiceModelStore(installed: voiceModels);
+    final work = FakeBackgroundWork();
     return TestApp._(
       config: config,
       backend: backend,
@@ -79,6 +89,9 @@ class TestApp {
       restart: restart,
       store: chats,
       linkOpener: linkOpener,
+      voice: speech,
+      voiceModels: models,
+      work: work,
       container: ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
@@ -91,6 +104,13 @@ class TestApp {
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
+          voiceProvider.overrideWithValue(speech),
+          voiceModelStoreProvider.overrideWithValue(models),
+          // Seeded the way the app seeds it, before the first frame: see
+          // [InstalledVoiceModels].
+          installedVoiceModelsProvider
+              .overrideWith(() => InstalledVoiceModels(voiceModels)),
+          backgroundWorkProvider.overrideWithValue(work),
         ],
       ),
     );
@@ -105,6 +125,9 @@ class TestApp {
   final FakeAppRestart restart;
   final ChatStore store;
   final FakeLinkOpener linkOpener;
+  final FakeVoice voice;
+  final FakeVoiceModelStore voiceModels;
+  final FakeBackgroundWork work;
   final ProviderContainer container;
 
   ChatRepository get repo => container.read(chatRepositoryProvider);
@@ -116,6 +139,14 @@ class TestApp {
   /// The app-level default, written the way the app writes it.
   Future<void> seedGlobalDefault({String? providerId, String? modelId}) =>
       seedSettings(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
+
+  /// Pick both of [voiceModelPair], which is what makes voice mode ready. From
+  /// a `testWidgets` body this wants a real clock: `io(tester, app.pickVoiceModels)`.
+  Future<void> pickVoiceModels() async {
+    final settings = container.read(appSettingsProvider.notifier);
+    await settings.setVoiceRecognitionModel(voiceModelPair.recognition);
+    await settings.setVoiceSpeechModel(voiceModelPair.speech);
+  }
 
   /// A chat that is already in the sidebar. Creating one no longer puts it
   /// there: it is a draft until something is said in it.
@@ -357,6 +388,16 @@ Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
   await tester.pump();
 }
 
+/// The two models a ready voice session needs: what the voice tests install
+/// through `TestApp.create(voiceModels: ...)` and pick through
+/// [TestApp.pickVoiceModels]. One pair rather than a copy per test, and named
+/// halves rather than a set, because a copy that installs one id and picks
+/// another leaves voice mode reading "not ready" — and every assertion under
+/// it then takes the settings branch instead of failing.
+const voiceModelPair = (recognition: "whisper-tiny", speech: "piper-en_US-amy");
+/// The same pair as a set, which is the shape `TestApp.create` installs.
+final voiceModelIds = {voiceModelPair.recognition, voiceModelPair.speech};
+
 /// Whether [button] would do anything if it were pressed. A dead one is still
 /// drawn and still hit by a tap, so its callback is the only thing that says so.
 ///
@@ -462,6 +503,24 @@ List<String?> popupLabels(WidgetTester tester) => tester
     ))
     .map((t) => t.data)
     .toList();
+
+/// Give whatever is still in flight a chance to land. The predicate may be
+/// async, since some of what lands has to be read back off disk.
+///
+/// The ceiling is generous because it costs nothing: this returns the moment
+/// the condition holds, so only a genuine failure ever pays it. At 200ms the
+/// title call was occasionally still in flight on a machine running the rest
+/// of the suite alongside it, which is what CI always is.
+///
+/// For `test`, not `testWidgets`: it waits on the real clock, which a widget
+/// test's fake one only advances when the tree is pumped.
+Future<void> waitFor(FutureOr<bool> Function() done, {String what = "it"}) async {
+  for (var i = 0; i < 2000; i++) {
+    if (await done()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  fail("$what never happened");
+}
 
 /// A data directory that cleans itself up when the test ends. `forDirectory`
 /// deliberately creates nothing, and every caller needs the default project's

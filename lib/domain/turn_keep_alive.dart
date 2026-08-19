@@ -9,7 +9,12 @@ import "background_work.dart";
 class TurnKeepAlive {
   TurnKeepAlive(this._backend, this._work) {
     _backend.runningTurns.addListener(_changed);
-    _stops = _work.stopRequests.listen((_) => _stopAll());
+    // Its own kind only: voice mode and a download have Stop buttons of their
+    // own, and killing every turn because a download was cancelled is not what
+    // the user pressed.
+    _stops = _work.stopRequests
+        .where((job) => job == BackgroundJob.turns)
+        .listen((_) => _stopAll());
   }
 
   final AgentBackend _backend;
