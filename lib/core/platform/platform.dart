@@ -10,6 +10,8 @@ import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/voice.dart";
+import "../../domain/voice_model_store.dart";
 import "../config.dart";
 import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 
@@ -50,6 +52,23 @@ FileSystem createFileSystem() => platformFileSystem();
 /// Where this platform keeps things — the one question a `FileSystem` does not
 /// answer for itself.
 Future<String> dataDir() => platformDataDir();
+
+/// Where things that can be fetched again go, which is deliberately *not*
+/// under [dataDir] — see `domain/voice_model_store.dart` for what that buys.
+Future<String> cacheDir() => platformCacheDir();
+
+/// The licences of whatever this platform bundles for voice mode, which is
+/// Silero's detector where there is one and nothing in a browser.
+void registerVoiceLicences() => platformRegisterVoiceLicences();
+
+/// The downloaded voice models, and what runs them. Two rather than one because
+/// settings manages models with nothing listening, and a session needs the
+/// store to find what it has been told to load.
+VoiceModelStore createVoiceModelStore(String cacheDir) =>
+    platformVoiceModelStore(cacheDir);
+
+Voice createVoice(VoiceModelStore store, String cacheDir) =>
+    platformVoice(store, cacheDir);
 
 /// Ask the platform not to throw away what we wrote. Only a browser has
 /// anything to say here.

@@ -51,10 +51,16 @@ void selectProject(WidgetRef ref, String? project) {
 /// A new chat in the project being shown, opened. Nothing is listed here yet:
 /// an empty chat is not on disk, and joins the list when its first message is
 /// saved. The sidebar's button and the empty pane's are the same action.
-Future<void> startChat(BuildContext context, WidgetRef ref) async {
+///
+/// Returns the chat's id, so that `startVoiceChat` can carry on into voice mode
+/// with the one it just made; null is a caller that went away while it was
+/// being created.
+Future<String?> startChat(BuildContext context, WidgetRef ref) async {
   final project = ref.read(selectedProjectProvider);
   final chat = await ref.read(chatRepositoryProvider).createChat(project: project);
-  if (context.mounted) openChat(context, ref, chat.state.id);
+  if (!context.mounted) return null;
+  openChat(context, ref, chat.state.id);
+  return chat.state.id;
 }
 
 class Sidebar extends ConsumerStatefulWidget {

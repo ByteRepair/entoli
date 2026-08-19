@@ -23,6 +23,9 @@ import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
+import "domain/voice.dart";
+import "domain/voice_model.dart";
+import "domain/voice_model_store.dart";
 import "ui/widgets/provider_model_selector.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
@@ -32,6 +35,60 @@ final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw Unimp
 final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
 final backupHandoffProvider = Provider<BackupHandoff>((ref) => throw UnimplementedError());
 final appRestartProvider = Provider<AppRestart>((ref) => throw UnimplementedError());
+final voiceProvider = Provider<Voice>((ref) => throw UnimplementedError());
+final voiceModelStoreProvider =
+    Provider<VoiceModelStore>((ref) => throw UnimplementedError());
+
+/// Which catalog models are on disk. Read once before the app is built and
+/// kept in step after that by whatever installs or deletes one — the bargain
+/// [promptLibraryProvider] makes, for the reason it makes it. Asked lazily
+/// this is a disk scan, and until it answered every reader would be told
+/// "none": a button drawn from it would be drawn wrong for those frames, and a
+/// button's callback, which reads rather than watches, would be wrong on the
+/// first press however long the app had been open.
+class InstalledVoiceModels extends Notifier<Set<String>> {
+  InstalledVoiceModels(this._seed);
+
+  final Set<String> _seed;
+
+  @override
+  Set<String> build() => _seed;
+
+  /// Read the store again. Whatever installs or deletes a model calls this,
+  /// which is the only thing that changes the answer.
+  Future<void> refresh() async {
+    final installed = await ref.read(voiceModelStoreProvider).installed();
+    if (ref.mounted) state = installed;
+  }
+}
+
+final installedVoiceModelsProvider =
+    NotifierProvider<InstalledVoiceModels, Set<String>>(
+        () => InstalledVoiceModels(const {}));
+
+/// Whether a message can be read out: a platform that can speak, and a speech
+/// model picked and installed. Half of [voiceReadyProvider], because reading a
+/// message out needs nothing to hear with.
+final speechReadyProvider = Provider<bool>((ref) {
+  if (!ref.watch(voiceProvider).available) return false;
+  final settings = ref.watch(appSettingsProvider);
+  // `contains` takes an `Object?`, so a setting naming nothing is simply not
+  // in the set.
+  return ref
+      .watch(installedVoiceModelsProvider)
+      .contains(voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.id);
+});
+
+/// Whether the composer draws its voice button: a platform that can listen, and
+/// two models picked and installed. Anything less and pressing it could only
+/// lead to an apology.
+final voiceReadyProvider = Provider<bool>((ref) {
+  if (!ref.watch(speechReadyProvider)) return false;
+  final settings = ref.watch(appSettingsProvider);
+  return ref
+      .watch(installedVoiceModelsProvider)
+      .contains(voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
+});
 
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.
@@ -82,6 +139,18 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
+
+  Future<void> setVoiceRecognitionModel(String? id) =>
+      _update((s) => s.voiceRecognitionModelId = id);
+
+  /// Picking a different voice resets which of its speakers is used: speaker 40
+  /// of Kokoro is nobody in a model with eight.
+  Future<void> setVoiceSpeechModel(String? id) => _update((s) => s
+    ..voiceSpeechModelId = id
+    ..voiceSpeaker = 0);
+
+  Future<void> setVoiceSpeaker(int speaker) =>
+      _update((s) => s.voiceSpeaker = speaker);
 
   /// How long a temporary chat lives. App-level default; a project and a chat
   /// can override it. Re-anchors every chat to now so the badges appear

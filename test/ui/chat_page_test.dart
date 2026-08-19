@@ -11,6 +11,7 @@ import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
+import "package:agent_chat/ui/voice/voice_page.dart";
 
 import "../harness.dart";
 
@@ -55,11 +56,48 @@ void main() {
     Future<void> openEmpty(WidgetTester tester) =>
         app.pump(tester, const ChatPage(withDrawer: true));
 
-    testWidgets("the two ways to have a conversation are offered", (tester) async {
+    testWidgets("the ways to have a conversation are offered, in order",
+        (tester) async {
       await openEmpty(tester);
 
       expect(find.text("New Chat"), findsOneWidget);
+      expect(find.text("New Voice Chat"), findsOneWidget);
       expect(find.text("Open Chat"), findsOneWidget);
+      // New Voice Chat is an extension of New Chat, so it sits with it rather
+      // than beside the way to open an old one.
+      expect(tester.getCenter(find.text("New Voice Chat")).dy,
+          greaterThan(tester.getCenter(find.text("New Chat")).dy));
+      expect(tester.getCenter(find.text("New Voice Chat")).dy,
+          lessThan(tester.getCenter(find.text("Open Chat")).dy));
+    });
+
+    testWidgets("New Voice Chat makes one and opens it in voice mode",
+        (tester) async {
+      app.dispose();
+      app = TestApp.create(voiceModels: voiceModelIds);
+      await io(tester, app.pickVoiceModels);
+      await openEmpty(tester);
+
+      await tester.tap(find.text("New Voice Chat"));
+      // Not settled: the orb listens on, so a screen with one on it never
+      // falls still.
+      await pumpUntil(tester, find.byType(VoicePage));
+
+      expect(app.container.read(selectedChatIdProvider), isNotNull);
+      expect(find.byType(VoicePage), findsOneWidget);
+    });
+
+    testWidgets("with no models it offers settings and makes no chat",
+        (tester) async {
+      await openEmpty(tester);
+
+      await tester.tap(find.text("New Voice Chat"));
+      await settleIo(tester);
+
+      expect(find.text("Open settings"), findsOneWidget);
+      // A chat created and then left behind because there is nothing to say it
+      // with is a worse answer than not creating one.
+      expect(app.container.read(selectedChatIdProvider), isNull);
     });
 
     testWidgets("New Chat opens one", (tester) async {

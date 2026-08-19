@@ -1,0 +1,30 @@
+# Stands in for the real `sherpa_onnx_web`, which `sherpa_onnx` depends on
+# unconditionally and which ships a 14 MB WebAssembly build of onnxruntime as a
+# web-platform asset. Plugin assets are not tree-shaken, so without this every
+# web build carries that 14 MB for a feature the web does not have — see "The
+# web" in the voice mode section of CLAUDE.md, and issue #58.
+#
+# It only has to satisfy two things: pub's resolution, and the generated web
+# plugin registrant, which imports this library and calls `registerWith`.
+# Nothing on the web imports `package:sherpa_onnx`, so none of the real API is
+# ever reached.
+name: sherpa_onnx_web
+description: A no-op stand-in for sherpa_onnx_web, so its WebAssembly stays out of Entoli's web build.
+version: 1.13.6
+publish_to: "none"
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      web:
+        pluginClass: SherpaOnnxWeb
+        fileName: sherpa_onnx_web.dart

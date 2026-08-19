@@ -4,12 +4,18 @@
          release build can reach the network too. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
-    <!-- All four are AgentService's: it keeps the process alive while a turn
-         runs. See "Staying alive off screen" in CLAUDE.md. -->
+    <!-- The foreground services': they keep the process alive while a turn
+         runs, while voice mode is listening, and while a model is downloading.
+         See "Staying alive off screen" in CLAUDE.md. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- Voice mode. From Android 14 a service that holds the microphone has to
+         say which type it is *and* hold RECORD_AUDIO before it may start. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -78,11 +84,20 @@
         </activity-alias>
         <!-- dataSync rather than one of the named types: what a turn is doing
              is a model call and whatever the user's own commands do, which is
-             none of location, media or the rest. -->
+             none of location, media or the rest. A download is the same kind of
+             work; voice mode is not, and has to say microphone. -->
         <service
             android:name=".AgentService"
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
+        <service
+            android:name=".DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
+        <service
+            android:name=".VoiceService"
+            android:exported="false"
+            android:foregroundServiceType="microphone"/>
 
         <!-- What lets another app read a workspace file Entoli hands it. The
              paths it will mint a URI for are one cache directory: everything

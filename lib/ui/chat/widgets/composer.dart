@@ -104,12 +104,17 @@ class Composer extends ConsumerStatefulWidget {
     required this.isRunning,
     required this.onSend,
     required this.onAbort,
+    this.onVoice,
   });
 
   final TextEditingController controller;
   final bool isRunning;
   final SendCallback onSend;
   final VoidCallback onAbort;
+
+  /// Opens voice mode. Null where the platform cannot listen at all, which is
+  /// the web — the same rule that takes `bash` off the agent there.
+  final VoidCallback? onVoice;
 
   @override
   ConsumerState<Composer> createState() => _ComposerState();
@@ -334,6 +339,33 @@ class _ComposerState extends ConsumerState<Composer> {
                         ),
                       ),
                     ),
+                  ),
+                ),
+                // The voice button and the field share the row, so the field
+                // gets the width back the moment there is a message in it:
+                // something typed is something to send rather than to say.
+                // `AnimatedSize` is the whole of the animation — the row is
+                // laid out again on every frame of it, and `Expanded` above
+                // takes whatever this gives up.
+                ValueListenableBuilder<bool>(
+                  valueListenable: _canSend,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: widget.onVoice,
+                        icon: const Icon(Icons.circle_outlined),
+                        tooltip: "Voice mode",
+                      ),
+                    ],
+                  ),
+                  builder: (context, canSend, child) => AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    child: widget.onVoice == null || widget.isRunning || canSend
+                        ? const SizedBox.shrink()
+                        : child,
                   ),
                 ),
                 const SizedBox(width: 8),

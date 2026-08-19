@@ -34,7 +34,7 @@ class MainActivity : FlutterActivity() {
         val appContext = context.applicationContext
         val engine = FlutterEngine(appContext)
         IconChannel.register(appContext, engine.dartExecutor.binaryMessenger)
-        AgentService.register(appContext, engine.dartExecutor.binaryMessenger)
+        ForegroundWork.register(appContext, engine.dartExecutor.binaryMessenger)
         FilesChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
         return engine
@@ -46,7 +46,7 @@ class MainActivity : FlutterActivity() {
     // Android happened to reclaim the process.
     override fun onDestroy() {
         super.onDestroy()
-        if (isFinishing && !isChangingConfigurations && !AgentService.busy) {
+        if (isFinishing && !isChangingConfigurations && !ForegroundWork.busy) {
             val engine = FlutterEngineCache.getInstance().get(ENGINE_ID)
             FlutterEngineCache.getInstance().remove(ENGINE_ID)
             engine?.destroy()

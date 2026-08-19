@@ -20,6 +20,8 @@ import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
+import "../widgets/section_header.dart";
+import "voice_settings.dart";
 import "../workspace/workspace_page.dart";
 
 /// The page's categories, in the order they are offered. Everything an
@@ -28,6 +30,7 @@ import "../workspace/workspace_page.dart";
 /// and the workspaces as one file to keep.
 enum SettingsCategory {
   general("General", Icons.tune),
+  voice("Voice", Icons.graphic_eq),
   providers("Providers", Icons.cloud_outlined),
   llms("LLMs", Icons.auto_awesome_outlined),
   data("Data", Icons.inventory_2_outlined);
@@ -132,6 +135,15 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           Divider(),
           _DeleteAllChats(),
         ],
+      // Its own category rather than a section under General: the two pickers
+      // are two lines and the catalog under them is the rest of the page.
+      SettingsCategory.voice => const [
+          VoiceSection(),
+          Divider(),
+          VoiceCatalogSection.recognition(),
+          Divider(),
+          VoiceCatalogSection.speech(),
+        ],
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],
       SettingsCategory.data => const [_BackupSection()],
@@ -165,36 +177,6 @@ class _Categories extends StatelessWidget {
       );
 }
 
-/// A section heading and, under it, a line saying what the section is for.
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.title, {this.description});
-
-  final String title;
-  final String? description;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: theme.textTheme.titleMedium),
-          if (description != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              description!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// The default project has no settings page of its own, so this is the only way
 /// to the workspace the chats outside a project share.
 class _WorkspaceSection extends ConsumerWidget {
@@ -206,7 +188,7 @@ class _WorkspaceSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(
+        SectionHeader(
           name,
           description: "Where the agent puts work meant for another chat, for "
               "every chat outside a project.",
@@ -230,7 +212,7 @@ class _AppearanceSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(
+        SectionHeader(
           "Appearance",
           description: switchesLauncher
               ? "How the app looks, and the icon it wears here and on the home "
@@ -328,7 +310,7 @@ class _DefaultsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionHeader("New chats"),
+        const SectionHeader("New chats"),
         // Nothing above the app level to inherit from: Default means whatever
         // the backend picks.
         LabelledField(
@@ -372,7 +354,7 @@ class _AgentSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionHeader(
+        const SectionHeader(
           "Agent",
           description: "The built-in agent, running inside Entoli. It calls the "
               "model itself and runs its commands in the chat's workspace.",
@@ -431,7 +413,7 @@ class _TempChatSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionHeader(
+        const SectionHeader(
           "Temporary chats",
           description: "Chats that are hidden and then deleted after a delay "
               "from when their TTL was enabled. A project or an individual chat "
@@ -494,7 +476,7 @@ class _ProvidersEditor extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(
+        SectionHeader(
           "Providers",
           description: providers.isEmpty
               ? "None yet. The agent cannot answer until one is added."
@@ -588,7 +570,7 @@ class _EnvironmentSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionHeader(
+        const SectionHeader(
           "Environment",
           description: "Passed to every command the agent runs. A command already "
               "running keeps what it started with.",
@@ -782,7 +764,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionHeader(
+          const SectionHeader(
             "Backup",
             description: "Every chat, project, workspace, prompt and setting as "
                 "one zip. Restoring one replaces what is here.",
