@@ -6,7 +6,7 @@ import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../voice/read_aloud.dart";
 import "voice_models.dart";
-import "../widgets/dialogs.dart";
+import "../widgets/catalog.dart";
 import "../widgets/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
@@ -40,19 +40,17 @@ class VoiceSection extends ConsumerWidget {
         // The sentinel is in the list like any other model and filtered by the
         // same `installed` set, which holds it only where the device has the
         // engine — so nothing here knows which platform it is drawing on.
-        _ModelField(
+        InstalledPicker(
           label: "Recognition model",
-          models: const [nativeRecognition, ...recognitionModels],
-          installed: installed,
-          selected: settings.voiceRecognitionModelId,
+          options: _offer(const [nativeRecognition, ...recognitionModels], installed),
+          value: settings.voiceRecognitionModelId,
           onPick: (id) =>
               ref.read(appSettingsProvider.notifier).setVoiceRecognitionModel(id),
         ),
-        _ModelField(
+        InstalledPicker(
           label: "Speech model",
-          models: const [nativeSpeech, ...speechModels],
-          installed: installed,
-          selected: settings.voiceSpeechModelId,
+          options: _offer(const [nativeSpeech, ...speechModels], installed),
+          value: settings.voiceSpeechModelId,
           onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
         ),
         _SpeakerField(settings: settings),
@@ -123,7 +121,6 @@ class VoiceModelTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // Its own row only: a progress event names one model, and taking the whole
     // state rebuilds all eight tiles for it.
     final progress =
@@ -131,46 +128,20 @@ class VoiceModelTile extends ConsumerWidget {
     final failure =
         ref.watch(voiceModelsProvider.select((s) => s.failures[model.id]));
 
-    return ListTile(
-      isThreeLine: model.note != null || progress != null || failure != null,
+    return CatalogTile(
       title: Row(
         children: [
           Flexible(child: Text(model.name)),
           if (model.multilingual) ...[
             const SizedBox(width: 8),
-            _Badge(label: "Multilingual", tone: theme.colorScheme.primary),
+            _Badge(label: "Multilingual", tone: Theme.of(context).colorScheme.primary),
           ],
         ],
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("${model.languages} · ${formatSize(model.bytes)}"),
-          if (model.note != null)
-            Text(
-              model.note!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          if (failure != null)
-            Text(
-              failure,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            ),
-          if (progress != null) ...[
-            const SizedBox(height: 6),
-            LinearProgressIndicator(value: progress.extracting ? null : progress.fraction),
-            const SizedBox(height: 4),
-            Text(
-              progress.extracting
-                  ? "Unpacking…"
-                  : "${formatSize(progress.received)} of ${formatSize(progress.total)}",
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
+      summary: "${model.languages} · ${formatSize(model.bytes)}",
+      note: model.note,
+      failure: failure,
+      progress: progress,
       trailing: _Action(model: model, downloading: progress != null),
     );
   }
@@ -186,42 +157,20 @@ class _Action extends ConsumerWidget {
   final bool downloading;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final installed = ref.watch(installedVoiceModelsProvider).contains(model.id);
-    if (downloading) {
-      return IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: "Cancel",
-        onPressed: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
+  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
+        downloading: downloading,
+        installed: ref.watch(installedVoiceModelsProvider).contains(model.id),
+        onCancel: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
+        onDelete: () => ref.read(voiceModelsProvider.notifier).delete(model),
+        deleteTitle: "Delete ${model.name}?",
+        deleteMessage:
+            "${formatSize(model.bytes)} to download again if you want it back.",
+        // A browser has nowhere to put one, so the row is drawn dead rather
+        // than left out.
+        onDownload: ref.watch(voiceProvider).available
+            ? () => ref.read(voiceModelsProvider.notifier).install(model)
+            : null,
       );
-    }
-    if (installed) {
-      return IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: "Delete",
-        onPressed: () => _delete(context, ref),
-      );
-    }
-    return IconButton(
-      icon: const Icon(Icons.download_outlined),
-      tooltip: "Download",
-      onPressed: ref.watch(voiceProvider).available
-          ? () => ref.read(voiceModelsProvider.notifier).install(model)
-          : null,
-    );
-  }
-
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final ok = await confirm(
-      context,
-      title: "Delete ${model.name}?",
-      message: "${formatSize(model.bytes)} to download again if you want it back.",
-      confirmLabel: "Delete",
-      destructive: true,
-    );
-    if (!ok) return;
-    await ref.read(voiceModelsProvider.notifier).delete(model);
-  }
 }
 
 /// What to do when the device has no engine for one half of voice mode. Only
@@ -300,57 +249,14 @@ class _EngineLink extends ConsumerWidget {
   }
 }
 
-/// A dropdown over the usable models of one kind. Not the catalog: a picker
-/// offering something that has to be downloaded first is a choice that fails
-/// when it is used rather than when it is made. [installed] is the whole of
-/// that rule — it holds what is on disk and the system-engine sentinels the
-/// device can honour, so a sentinel is offered or not on the same terms as
-/// anything else and nothing here has to know which platform it is on.
-class _ModelField extends StatelessWidget {
-  const _ModelField({
-    required this.label,
-    required this.models,
-    required this.installed,
-    required this.selected,
-    required this.onPick,
-  });
-
-  final String label;
-  final List<VoiceModel> models;
-  final Set<String> installed;
-  final String? selected;
-  final ValueChanged<String?> onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final available = models.where((m) => installed.contains(m.id)).toList();
-    if (available.isEmpty) {
-      return LabelledField(
-        label: label,
-        child: Text(
-          "Nothing downloaded yet.",
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      );
-    }
-    // A setting naming a deleted model would be a value no item carries, which
-    // a DropdownButton asserts on.
-    final value = available.any((m) => m.id == selected) ? selected : null;
-    return LabelledField(
-      label: label,
-      child: DropdownButton<String?>(
-        isExpanded: true,
-        value: value,
-        hint: const Text("None"),
-        items: [
-          for (final model in available)
-            DropdownMenuItem(value: model.id, child: Text(model.name)),
-        ],
-        onChanged: onPick,
-      ),
-    );
-  }
-}
+/// The models of one kind that are actually there, as the picker takes them.
+/// The sentinel is filtered by the same set as everything else, which holds it
+/// only where the device has the engine — so nothing here knows which platform
+/// it is on.
+Map<String, String> _offer(List<VoiceModel> models, Set<String> installed) => {
+      for (final model in models)
+        if (installed.contains(model.id)) model.id: model.name,
+    };
 
 /// Which of a speech model's voices is used.
 class _SpeakerField extends ConsumerWidget {

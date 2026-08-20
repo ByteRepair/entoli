@@ -49,6 +49,12 @@ reason the app shells out to it, and only a real one proves they survive.
 `file_local_model_store_test.dart` is the third, for a downloaded model, and the
 one thing it adds is the checksum: a GGUF that arrived wrong is not kept.
 
+`downloads_test.dart` is what the catalogs share rather than any one of them:
+the notification a phone gets while the app is off screen, which is the one
+thing `Downloads` owns that no page draws. `installing` on both store fakes
+holds a download open so there is a mid-flight to assert about, and `failWith`
+on the voice one is a download that stops.
+
 `TestApp.create(proot: …, linuxes: …)` is the two halves the Terminal page turns
 on — whether this build could run a Linux at all, and which are installed — with
 `FakeRootfsStore` behind them. Its `installing` completer holds a download open

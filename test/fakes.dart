@@ -24,6 +24,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
+import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/rootfs_store.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
@@ -576,11 +577,7 @@ class FakeVoiceSession implements VoiceSession {
   void fail(String message) => _events.add(VoiceFailed(message));
 }
 
-/// Models that are simply there, or simply are not. Downloading is tested
-/// against the real store and a real socket — see `voice_model_store_test.dart`
-/// — so this only has to answer what is installed.
-/// A Linux or two, without one on disk. `installing` holds a download open so
-/// a test can see the row mid-flight; without it an install lands at once.
+/// A Linux or two, without one on disk.
 class FakeRootfsStore extends RootfsStore {
   FakeRootfsStore({Set<String> installed = const {}}) : _installed = {...installed};
 
@@ -588,6 +585,8 @@ class FakeRootfsStore extends RootfsStore {
 
   final List<String> deleted = [];
 
+  /// Holds a download open, so a test can see a row and a notification
+  /// mid-flight. Without it an install lands at once.
   Completer<void>? installing;
 
   @override
@@ -601,11 +600,11 @@ class FakeRootfsStore extends RootfsStore {
       _installed.contains(id) ? "/rootfs/$id" : null;
 
   @override
-  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi}) async* {
+  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) async* {
     final image = rootfs.imageFor(abi)!;
-    yield RootfsProgress(received: 0, total: image.bytes);
+    yield DownloadProgress(received: 0, total: image.bytes);
     if (installing != null) await installing!.future;
-    yield RootfsProgress(received: image.bytes, total: image.bytes);
+    yield DownloadProgress(received: image.bytes, total: image.bytes);
     _installed.add(rootfs.id);
   }
 
@@ -616,6 +615,8 @@ class FakeRootfsStore extends RootfsStore {
   }
 }
 
+/// Models that are simply there, or simply are not, like the two catalogs
+/// beside it — downloading is tested against the real store and a real socket.
 class FakeLocalModelStore extends LocalModelStore {
   FakeLocalModelStore({Set<String> installed = const {}}) : _installed = {...installed};
 
@@ -623,7 +624,8 @@ class FakeLocalModelStore extends LocalModelStore {
 
   final List<String> deleted = [];
 
-  /// Held open so a test can assert on a row mid-download.
+  /// Holds a download open, so a test can see a row and a notification
+  /// mid-flight. Without it an install lands at once.
   Completer<void>? installing;
 
   @override
@@ -634,10 +636,10 @@ class FakeLocalModelStore extends LocalModelStore {
       _installed.contains(model.id) ? "/models/${model.id}/model.gguf" : null;
 
   @override
-  Stream<LocalModelProgress> install(LocalModel model) async* {
-    yield LocalModelProgress(received: 0, total: model.bytes);
+  Stream<DownloadProgress> install(LocalModel model) async* {
+    yield DownloadProgress(received: 0, total: model.bytes);
     if (installing != null) await installing!.future;
-    yield LocalModelProgress(received: model.bytes, total: model.bytes);
+    yield DownloadProgress(received: model.bytes, total: model.bytes);
     _installed.add(model.id);
   }
 
@@ -713,6 +715,9 @@ class FakeLocalLlm extends LocalLlm {
         );
 }
 
+/// Models that are simply there, or simply are not. Downloading is tested
+/// against the real store and a real socket — see `voice_model_store_test.dart`
+/// — so this only has to answer what is installed.
 class FakeVoiceModelStore extends VoiceModelStore {
   FakeVoiceModelStore({Set<String> installed = const {}})
       : _installed = {...installed};
@@ -730,9 +735,24 @@ class FakeVoiceModelStore extends VoiceModelStore {
   Future<String?> directoryOf(VoiceModel model) async =>
       _installed.contains(model.id) ? "/models/${model.id}" : null;
 
+  /// As [FakeRootfsStore.installing].
+  Completer<void>? installing;
+
+  /// What the next download fails with, or null for one that works.
+  String? failWith;
+
+  /// How many times the first progress event is reported, for a test about what
+  /// a run of events that say the same thing costs.
+  int repeats = 1;
+
   @override
-  Stream<VoiceModelProgress> install(VoiceModel model) async* {
-    yield VoiceModelProgress(received: model.bytes, total: model.bytes);
+  Stream<DownloadProgress> install(VoiceModel model) async* {
+    for (var i = 0; i < repeats; i++) {
+      yield DownloadProgress(received: 0, total: model.bytes);
+    }
+    if (failWith != null) throw StateError(failWith!);
+    if (installing != null) await installing!.future;
+    yield DownloadProgress(received: model.bytes, total: model.bytes);
     _installed.add(model.id);
   }
 

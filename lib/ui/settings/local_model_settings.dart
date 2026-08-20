@@ -5,7 +5,7 @@ import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../providers.dart";
 import "local_model_downloads.dart";
-import "../widgets/dialogs.dart";
+import "../widgets/catalog.dart";
 import "../widgets/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
@@ -27,9 +27,7 @@ class LocalModelSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!ref.watch(localLlmProvider).available) return const _Elsewhere();
     final installed = ref.watch(installedLocalModelsProvider);
-    final settings = ref.watch(appSettingsProvider);
-    final usable =
-        localModelCatalog.where((m) => installed.contains(m.id)).toList();
+    final picked = ref.watch(appSettingsProvider.select((s) => s.localModelId));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,24 +39,18 @@ class LocalModelSection extends ConsumerWidget {
               "slower and less able than anything hosted, and it is the only one "
               "that works on a plane.",
         ),
-        LabelledField(
+        InstalledPicker(
           label: "Model",
-          child: DropdownButton<String?>(
-            isExpanded: true,
-            // A setting naming a deleted model is a value no item carries,
-            // which `DropdownButton` asserts on.
-            value: usable.any((m) => m.id == settings.localModelId)
-                ? settings.localModelId
-                : null,
-            items: [
-              const DropdownMenuItem<String?>(value: null, child: Text("None")),
-              for (final model in usable)
-                DropdownMenuItem(value: model.id, child: Text(model.name)),
-            ],
-            onChanged: ref.read(appSettingsProvider.notifier).setLocalModel,
-          ),
+          // Null is an absence rather than an answer — nothing is being served
+          // — so it is the hint rather than an entry of its own.
+          options: {
+            for (final model in localModelCatalog)
+              if (installed.contains(model.id)) model.id: model.name,
+          },
+          value: picked,
+          onPick: ref.read(appSettingsProvider.notifier).setLocalModel,
         ),
-        if (settings.localModelId != null) ...[
+        if (picked != null) ...[
           const _DevicePicker(),
           const _ContextPicker(),
           const _Status(),
@@ -76,7 +68,7 @@ class _DevicePicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final found = ref.watch(localDevicesProvider);
-    final settings = ref.watch(appSettingsProvider);
+    final picked = ref.watch(appSettingsProvider.select((s) => s.localModelDevice));
     // Enumerating spawns the server, so for a second there is no answer yet —
     // and "no accelerator" is a thing to say once rather than to say and then
     // take back.
@@ -90,29 +82,21 @@ class _DevicePicker extends ConsumerWidget {
         child: Text("The CPU. This build found no accelerator on this device."),
       );
     }
-    return LabelledField(
+    return InstalledPicker(
       label: "Runs on",
-      child: DropdownButton<String?>(
-        isExpanded: true,
-        value: devices.any((d) => d.name == settings.localModelDevice)
-            ? settings.localModelDevice
-            : null,
-        items: [
-          // Null rather than a device named `CPU`: it is what ggml means by
-          // offloading nothing, and it is the only entry that is on every phone.
-          const DropdownMenuItem<String?>(value: null, child: Text("CPU")),
-          for (final device in devices)
-            DropdownMenuItem(
-              value: device.name,
-              child: Text([
-                device.compute.label,
-                device.description,
-                if (device.totalBytes != null) formatSize(device.totalBytes!),
-              ].join(" · ")),
-            ),
-        ],
-        onChanged: ref.read(appSettingsProvider.notifier).setLocalDevice,
-      ),
+      // Null is an answer here rather than an absence: it is what ggml means by
+      // offloading nothing, and it is the only entry that is on every phone.
+      none: "CPU",
+      options: {
+        for (final device in devices)
+          device.name: [
+            device.compute.label,
+            device.description,
+            if (device.totalBytes != null) formatSize(device.totalBytes!),
+          ].join(" · "),
+      },
+      value: picked,
+      onPick: ref.read(appSettingsProvider.notifier).setLocalDevice,
     );
   }
 }
@@ -129,22 +113,22 @@ class _ContextPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final model = localModelById(settings.localModelId);
-    final choices =
-        _choices.where((n) => model == null || n <= model.contextLength).toList();
-    return LabelledField(
+    return InstalledPicker(
       label: "Context",
-      child: DropdownButton<int?>(
-        isExpanded: true,
-        value: choices.contains(settings.localModelContext)
-            ? settings.localModelContext
-            : null,
-        items: [
-          const DropdownMenuItem<int?>(value: null, child: Text("Default")),
-          for (final size in choices)
-            DropdownMenuItem(value: size, child: Text("$size tokens")),
-        ],
-        onChanged: ref.read(appSettingsProvider.notifier).setLocalContext,
-      ),
+      // Null is the default rather than nothing, so it is an entry.
+      none: "Default",
+      options: {
+        // Defensive rather than load-bearing: every model in the catalog was
+        // trained for at least the largest of these. A smaller one would need
+        // it.
+        for (final size in _choices)
+          if (model == null || size <= model.contextLength)
+            "$size": "$size tokens",
+      },
+      value: settings.localModelContext?.toString(),
+      onPick: (size) => ref
+          .read(appSettingsProvider.notifier)
+          .setLocalContext(size == null ? null : int.parse(size)),
     );
   }
 }
@@ -243,7 +227,6 @@ class LocalModelTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // Its own row only: a progress event names one model, and watching the
     // whole state would rebuild every tile for it.
     final progress =
@@ -251,33 +234,13 @@ class LocalModelTile extends ConsumerWidget {
     final failure =
         ref.watch(localModelDownloadsProvider.select((s) => s.failures[model.id]));
 
-    return ListTile(
-      isThreeLine: failure != null || progress != null || model.note != null,
+    return CatalogTile(
       title: Text(model.name),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("${model.parameters} · Q4_0 · ${formatSize(model.bytes)} to "
-              "download · ${model.licence}"),
-          if (model.note != null)
-            Text(model.note!, style: theme.textTheme.bodySmall),
-          if (failure != null)
-            Text(
-              failure,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            ),
-          if (progress != null) ...[
-            const SizedBox(height: 6),
-            LinearProgressIndicator(value: progress.fraction),
-            const SizedBox(height: 4),
-            Text(
-              "${formatSize(progress.received)} of ${formatSize(progress.total)}",
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
+      summary: "${model.parameters} · Q4_0 · ${formatSize(model.bytes)} to "
+          "download · ${model.licence}",
+      note: model.note,
+      failure: failure,
+      progress: progress,
       trailing: _Action(model: model, downloading: progress != null),
     );
   }
@@ -293,43 +256,21 @@ class _Action extends ConsumerWidget {
   final bool downloading;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (downloading) {
-      return IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: "Cancel",
-        onPressed: () =>
+  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
+        downloading: downloading,
+        installed: ref.watch(installedLocalModelsProvider).contains(model.id),
+        onCancel: () =>
             ref.read(localModelDownloadsProvider.notifier).cancel(model.id),
+        onDelete: () =>
+            ref.read(localModelDownloadsProvider.notifier).delete(model),
+        onDownload: () =>
+            ref.read(localModelDownloadsProvider.notifier).install(model),
+        deleteTitle: "Delete ${model.name}?",
+        deleteMessage:
+            ref.watch(appSettingsProvider.select((s) => s.localModelId)) == model.id
+                ? "It stops answering, and chats pinned to it have nothing to "
+                    "run until another model is picked. It can be downloaded "
+                    "again."
+                : "It can be downloaded again.",
       );
-    }
-    if (ref.watch(installedLocalModelsProvider).contains(model.id)) {
-      return IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: "Delete",
-        onPressed: () => _delete(context, ref),
-      );
-    }
-    return IconButton(
-      icon: const Icon(Icons.download_outlined),
-      tooltip: "Download",
-      onPressed: () =>
-          ref.read(localModelDownloadsProvider.notifier).install(model),
-    );
-  }
-
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final loaded = ref.read(appSettingsProvider).localModelId == model.id;
-    final ok = await confirm(
-      context,
-      title: "Delete ${model.name}?",
-      message: loaded
-          ? "It stops answering, and chats pinned to it have nothing to run "
-              "until another model is picked. It can be downloaded again."
-          : "It can be downloaded again.",
-      confirmLabel: "Delete",
-      destructive: true,
-    );
-    if (!ok) return;
-    await ref.read(localModelDownloadsProvider.notifier).delete(model);
-  }
 }

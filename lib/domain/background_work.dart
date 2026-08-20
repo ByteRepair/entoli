@@ -34,6 +34,10 @@ class DownloadNotice {
 /// model is still streaming would drop the hold and leave the app killable in
 /// the middle of the longest download it makes. Merging here makes that
 /// unrepresentable rather than a rule each of the three has to keep.
+///
+/// `Downloads` is the only thing that holds one, and its `plural` is the source
+/// name — each catalog has one and they are distinct, so there is nothing else
+/// to invent.
 class DownloadHold {
   DownloadHold(this._work);
 

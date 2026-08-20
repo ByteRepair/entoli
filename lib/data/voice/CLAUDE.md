@@ -1,0 +1,402 @@
+# Voice mode
+
+A circle for what the microphone hears and five scrolling lines of what has
+been said, over a chat that was already open. Everything runs on the device,
+and which device decides how: **the desktops run `sherpa_onnx`** — speech
+recognition, speech synthesis and voice activity detection from one dependency,
+with the models downloaded from the settings page rather than shipped — while
+**Android runs the system's own engines** and has no models at all. See "The
+Android system engines", which is also where the reasoning for that split is.
+
+**A voice turn is an ordinary turn, and that is the constraint the rest is
+written to keep.** `VoiceController` hands what it heard to
+`ChatController.send` and reads the reply back out of the chat: same
+`TurnSettings`, same model, same approve mode, same tools — `bash`, `task`,
+`ask_user`, the lot — and the same records in `conv.jsonl`, so threads, resume
+and rewind all work on a conversation that was spoken. Nothing in the backend
+knows voice mode exists. Leaving it leaves a chat to read, and a chat being read
+can be carried on out loud.
+
+So `VoicePage` is a *view*, and its job is surfacing what a turn already does in
+a shape you can use without looking. The approval banner, the question panel and
+the sub-agent strip are **the same widgets** drawn here too, rather than reduced
+voice-only versions: a turn waiting on an answer nobody can see is a hung turn,
+and a second copy of either is a second thing to keep right.
+
+The port is `Voice`, behind the app's one conditional import like `Shell` and
+`WebSearch`. `Voice.available` is false in a browser, which is what leaves the
+composer's circle undrawn — see issue #58 for why sherpa's WebAssembly is not
+the answer there, and what is.
+
+**It is kept out of the Android build too, and that one is measured in tens of
+megabytes.** onnxruntime and sherpa's own library are about 26 MB per ABI,
+uncompressed and page-aligned the way a modern APK stores native code: 75 MB
+across the three, which took the universal release APK from 64.5 MB to 141 MB —
+more than the rest of the app put together. With Android on the system engines
+there is nothing left to load them, so they are excluded at packaging in
+`android/app/build.gradle.kts` and the APK is back to 64.5 MB, measured.
+
+**Excluded rather than removed, because they are not ours to remove.**
+`sherpa_onnx` declares all ten of its per-platform packages in its own pubspec —
+four Android ABIs, iOS, Linux, macOS, Windows, web — and pub resolves what a
+package asks for. `dependency_overrides` is the only other lever and it replaces
+a package on *every* platform, which is a risk worth taking once (below) and not
+four more times. A `packaging { jniLibs { excludes } }` block drops the `.so`
+files where they are actually unwanted and leaves every other platform's alone.
+Vendoring the desktop libraries into `linux/CMakeLists.txt` instead would mean
+dropping `package:sherpa_onnx` and writing the FFI bindings by hand — and
+`sherpa_onnx_linux` already delivers those libraries through pub, so there is no
+gap there to fill.
+
+The one thing to know is that the exclusion and `platformVoice` have to agree:
+the `.so` files are gone from Android, so a `SherpaVoice` constructed there
+would fail at its first FFI call rather than degrade. `platformVoice` returns
+`AndroidVoice` on that platform and nothing else builds one.
+
+Keeping it off the web takes one deliberate piece of machinery.
+**`sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built**,
+and that package declares a 14 MB WebAssembly build of onnxruntime as a
+web-platform asset. Plugin assets are not tree-shaken, so simply adding the
+dependency put 14 MB into a build that can never call it — measured: the web
+build went from 43 MB to 58 MB. `tool/sherpa_onnx_web_stub` is a local package
+of the same name, overridden in `dependency_overrides`, holding the two members
+the web plugin registrant reaches for and no assets at all. Nothing on the web
+imports `package:sherpa_onnx`, so none of the real API is ever wanted.
+
+The trap in it is that a `dependency_overrides` entry replaces the package on
+**every** platform, not only the one it was written for. If a `sherpa_onnx`
+bump inside `^1.13.6` ever reaches a third member of `SherpaOnnxWeb`, the
+desktop and Android builds break for a web-only reason — so the stub is
+something to check when that constraint moves, which the espeak-ng note above
+means it eventually will. The
+Silero asset is kept out the ordinary way, with `platforms:` on its pubspec
+entry.
+
+## What listens and what speaks
+
+`domain/voice_model.dart` is the catalog, as const data: five recognition models
+and three speech ones, each naming its files, what it costs to fetch, and which
+sherpa family runs it, and the two Android-system sentinels beside them. A model
+Entoli can run is one someone wired an engine for, so a new entry is a line
+there and a case in `sherpa_voice.dart`.
+
+Recognition models are fetched **file by file** from HuggingFace — two to four
+each — which skips the fp32 copies the release tarballs carry beside the int8
+ones: the SenseVoice tarball is 999 MB for a 228 MB model. Speech models arrive
+as the official `.tar.bz2` and are unpacked, because each carries
+`espeak-ng-data`, some 360 files that are not worth fetching one at a time. bz2
+in Dart runs at about 8 MB/s, so Kokoro spends a visible minute unpacking and
+the progress bar has an "Unpacking" phase of its own; the work is in an isolate
+so the bar can keep moving. `dart:io`'s native gzip would be twenty times
+faster, and upstream publishes no `.tar.gz`.
+
+**Kokoro is the only multilingual speech model there is at this size**, and it
+is worth writing down why the list looks thin. Piper covers thirty languages one
+model at a time, which is a language picker rather than a multilingual model;
+MMS covers a thousand at rough quality and one model each; everything genuinely
+multilingual beyond them is far too big for a phone. Whisper hears 99 languages
+and Kokoro answers in two, and the honest fix for a third is one more const
+entry.
+
+Silero's detector is the exception that ships: 644 KB, an asset rather than a
+catalog entry, because voice mode that cannot start until a second and invisible
+download has finished is worse to explain than an app that is slightly bigger.
+Every model sherpa takes it takes as a path, so it is copied out of the bundle
+on first use. Its MIT licence is an asset too, read into `LicenseRegistry` the
+way the font's OFL is.
+
+**sherpa-onnx vendors espeak-ng, which is GPL-3.0.** Entoli is AGPL-3.0, so that
+is fine — it would not be for a permissively licensed app, and it is the sort of
+thing that is invisible until it is a problem. Upstream is removing espeak in
+2.0, which will want lexicon-based models instead; the constraint is pinned at
+`^1.13.6` until then.
+
+## The Android system engines
+
+A phone already has a speech recognizer and a speech synthesiser, and until this
+landed voice mode ignored both and asked for a download first. So on Android
+voice mode **is** the OS: `TextToSpeech` and `SpeechRecognizer` behind the
+`agent_chat/voice` channel, with nothing to fetch — and sherpa-onnx is not built
+into that platform at all.
+
+**Why sherpa went rather than sitting beside them.** It ran on the CPU, and
+there was no way to change that: the `libonnxruntime.so` in the pub package
+exports exactly two execution-provider factories, `..._CPU` and `..._Nnapi`
+(checked with `nm -D`), XNNPACK and QNN are named in its strings but have no
+code in the build, and ONNX Runtime has no Vulkan, OpenCL or GPU provider for
+Android at all. NNAPI is the only accelerator route and it is a bad one —
+deprecated in Android 15, frequently *slower* than ORT's own kernels because
+unsupported ops fall back to `nnapi-reference`, and it crashes outright on VITS
+TTS (k2-fsa/sherpa-onnx#2443). So keeping it meant 75 MB of native code for the
+slower of the two answers, on the one platform where battery is the constraint.
+
+**What that costs is a phone with no system engine**, which is a real device
+rather than a hypothetical: `SpeechRecognizer` needs a recognition service and
+`TextToSpeech` needs an engine, and a de-Googled phone may have neither. Both
+are ordinary apps that register with the platform, so the fix is an install
+rather than a build — RHVoice or eSpeak NG for speaking, FUTO Voice Input for
+hearing. `_MissingEngines` in `voice_settings.dart` is that said on the page,
+with the links, because an empty picker on a platform with no catalog behind it
+is otherwise a dead end that gives no sign of being one install away. Nothing
+has to be told when one arrives: the next launch asks the device again.
+
+The desktops keep sherpa, and there the reasoning does not apply — they have no
+system engine to ask, and no battery argument of the same kind.
+
+**They are catalog entries rather than a mode.** `android-recognition` and
+`android-speech` are a `RecognitionModel` and a `SpeechModel` with no downloads,
+in `voiceCatalog` but not in `recognitionModels`/`speechModels`. That is what
+makes them cost nothing: every gate the app already has — `voiceReadyProvider`,
+`speechReadyProvider`, the settings dropdowns, `ReadAloud`, `VoiceController` —
+resolves a pick through `voiceModelOf` and asks whether it is installed, and a
+sentinel answers both questions without any of them learning a new shape. A
+`nativeVoice` flag beside the model id would have been a second thing every one
+of those had to consult, and the one that forgot would be wrong silently.
+
+`VoiceModel.isNative` is the whole of the routing, and it reads `engine` — the
+field that already decides what runs a model, rather than a second id constant
+beside it. `AndroidVoice.start` refuses anything else.
+`Voice.downloadsModels` is the other half: false on Android, which is what takes
+the catalog off the settings page, and it has exactly that one reader.
+
+**What decides is whether the engine is there, not whether this is Android**,
+and the answer goes into the set that already existed for the question.
+`Voice.systemEngines()` asks the device — `SpeechRecognizer` needs a recognition
+service installed and `TextToSpeech` needs an engine, and a phone with no Google
+apps on it may have neither — and `main` folds what it says into
+`installedVoiceModelsProvider` beside the models on disk. So a sentinel is
+usable on exactly the terms a downloaded model is, and every gate is the
+`installed.contains(...)` it already was: the ready providers, the settings
+dropdown, the defaulting. "Is this Android" was the first version and it was
+wrong on a real phone; a `nativeVoiceEnginesProvider` beside the installed set
+was the second, and it was the thing this section's own rule warns about — a
+second question each gate had to remember, silently wrong in the one that
+forgot.
+
+It is on `Voice` rather than in `core/platform/` because that port is already
+per-platform and already built there, which keeps `io/platform.dart` resolving
+`Platform.isAndroid` once instead of twice and leaves `platform.dart` with no
+member exposed any way but its own. `FakeVoice` is then the test seam, so
+`TestApp.create` takes `nativeVoice` and nothing parallel has to be overridden.
+
+So **each side is defaulted on its own**. A phone with a synthesiser and no
+recognition service gets the speaking half and leaves the listening half
+unpicked, which is the honest answer: read-aloud works, the composer's voice
+button stays away. A sentinel pinned by hand or carried in a `settings.json` is
+refused by the same set, so it needs no rule of its own.
+
+The default is filled in `AppSettingsNotifier.build` and **not written to
+disk**. A file that names something is left as it is; only a null is read as
+"the system one". Saved, it would be a pick the user never made, following their
+data to a machine where it means nothing — and it would take the ability to say
+"no pick yet" away from the platforms that have an answer for it.
+
+The probe needs the manifest's `<queries>` block, and that is the trap in it:
+from Android 11 an app sees only the packages it declares an interest in, and
+both `isRecognitionAvailable` and the TTS service query are answered out of that
+view. Without it they report nothing on every modern phone rather than only on
+the ones that genuinely have nothing — which is a default that quietly stops
+working, in the direction that looks like a device problem.
+
+
+### Per side, not per session
+
+`SherpaVoice` used to be one class holding a microphone, two workers and a play
+queue, and a native engine could not be half of that. So listening and speaking
+are `Listener` and `Speaker` in `voice_strategies.dart`, and
+`ComposedVoiceSession` holds one of each and wires them together. Neither half
+knows which the other is.
+
+The split was built to let the two kinds mix per side, which no platform now
+does — Android is native on both and the desktops are sherpa on both. It earns
+its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
+barge-in wiring and the silence reporting were already somewhere neither engine
+owned, and `read_aloud` gets a speak-only session by passing a null [Listener]
+rather than by either engine knowing what reading one message out is.
+
+`Speaker.speaking` is on the interface for one reason, and it is the reason the
+split needed care: voice activity opens **every** utterance, not only the ones
+landing on top of a reply, and `VoiceController` aborts the running turn on a
+`VoiceInterrupted`. So the session forwards one only while something is actually
+being said. That guard was inside the old single class as `_playing ||
+_queue.isNotEmpty`, where it read as an optimisation; on the interface it is the
+contract, and each speaker answers it its own way — the sherpa one from its
+queue, the native one from what `TextToSpeech` has been handed and not reported
+done.
+
+### The Kotlin
+
+`VoiceChannel.kt`, registered on the cached engine against the application
+context like the other three — the engine outlives the activity. Three things
+about it are not obvious:
+
+**`SpeechRecognizer` hears one utterance and stops.** Continuous listening is a
+`wantListening` flag and a restart from `onResults`/`onError`, posted rather
+than called where it happens: the old recognition is still running inside the
+callback, and starting the next one there is what `ERROR_RECOGNIZER_BUSY` is.
+
+**Silence is not a fault.** A room with nobody talking in it produces
+`ERROR_NO_MATCH` or `ERROR_SPEECH_TIMEOUT` every few seconds, so those restart
+without a word; reporting them would leave voice mode in the failed state for
+the ordinary case of waiting to be spoken to. `ERROR_INSUFFICIENT_PERMISSIONS`
+is the one that stops.
+
+**`TextToSpeech` answers on a binder thread**, and a `MethodChannel` may only be
+touched from the main one. Everything Dart hears goes through `send`, which
+posts. Invoked where it happened it would be a crash in the one path nothing on
+a desktop exercises.
+
+`AndroidVoiceBridge` is the Dart mirror of the same constraint from the other
+end: `setMethodCallHandler` takes one handler and two strategies each setting
+one would leave the second overwriting the first, so the bridge owns the handler
+and the strategies register callbacks on it.
+
+No new permissions — `RECORD_AUDIO` was already declared and the synthesiser and
+recognizer need none. The **grant** is a different matter: `SpeechRecognizer`
+reports the lack of one as an error rather than asking, and nothing else on the
+native path would ask at all. `SherpaVoice.start` asks for both kinds of
+listener through `AudioRecorder.hasPermission`, which is the only thing in the
+app that can, and the native branch throws the recorder away again.
+
+`VoiceService` is untouched. The microphone still needs holding for as long as
+voice mode is listening; only the engine behind it changed.
+
+## Where the models live
+
+`<cacheDir>/models/{stt,tts}/<id>/`, and **outside the data directory** for a
+reason bigger than tidiness: `backup.dart` zips that directory whole, so a
+Kokoro and a Whisper base in it would put three hundred megabytes of
+bytes-you-can-fetch-again into every export — and a restore, which *replaces*
+the data directory, would drag them between machines and wipe whatever was
+already downloaded. Outside it, both are true by construction rather than by a
+rule in `writeBackup` that someone has to remember.
+
+A downloaded Linux is beside them, at `<cacheDir>/rootfs/<id>/`, and it is there
+for exactly the same two reasons — see "A whole Linux under proot".
+
+`platformCacheDir` resolves it by hand, the way `platformDataDir` does:
+`$XDG_CACHE_HOME/agent-chat` or `~/.cache/agent-chat` on Linux,
+`~/Library/Caches/agent-chat` on macOS, `%LOCALAPPDATA%\agent-chat\Cache` on
+Windows, and `$AGENT_CHAT_CACHE` over any of them.
+
+**Android is the one place "cache" is the wrong word.** `getCacheDir()` is
+evictable — the system empties it under storage pressure and the app's settings
+offer a Clear Cache button that does the same — and a 140 MB model the user
+deliberately downloaded must not go that way. `FilesChannel` already stages
+shares in `cacheDir`, where losing a copy is harmless; this is not that. So
+Android uses the support directory, a sibling of the `app_flutter` tree the data
+directory lives under: outside the backup, and not thrown away.
+
+A `.complete` marker is written last in each model's directory, and it is the
+whole of what "installed" means — the same trick `turnEnd` plays in
+`conv.jsonl`. `installed()` reads the directories rather than the catalog, so a
+model the catalog has since renamed still shows as taking up the space it takes
+up. Cancelling a download cancels the subscription, and the store deletes the
+half-written directory when its listener goes.
+
+## Hearing and speaking
+
+`SherpaVoice.start` loads the two models and opens the microphone; what comes
+back is a `VoiceSession`, which is where **two worker isolates** live. sherpa's
+calls block, so on the UI isolate a Whisper encode is a frozen screen. They are
+two rather than one because generating a spoken sentence takes about a second,
+and a single worker would have the microphone's frames queued behind it — which
+is exactly when the user is most likely to talk over the reply, and exactly the
+moment the detector would be deaf.
+
+Audio in is `record` at 16 kHz mono PCM, chunked to Silero's 512-sample window
+before it is handed over. `Pcm16Reader` is what does the chunking, and it is a
+class of its own because both things it gets right are invisible: a chunk is a
+*view* into the buffer the platform channel decoded into, starting at byte 5 of
+it on Android, and `asInt16List` refuses an odd offset outright — every frame of
+every session threw, so voice mode listened to nothing at all. The other is that
+a chunk does not have to end on a sample, and a byte dropped there shifts every
+sample after it. Audio out is `audioplayers` over a WAV written per
+sentence, into the system's temporary directory rather than the model one —
+which on Android is deliberately the directory that is *not* evicted, and is
+the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
+would be lower latency and has no Linux or Windows. **On Linux the microphone is `parecord`**, which `record` shells out
+to — `pulseaudio-utils`, which a PipeWire system has as well — so a machine
+without it gets a voice session that fails to start rather than one that hears
+nothing.
+
+**Only text parts are spoken**, and sentence by sentence as they stream, so the
+first sentence is being read while the rest of the reply is still being written.
+`speakable` is what makes a reply worth hearing: markdown is written to be
+looked at, so a heading read verbatim is a run of hashes and a bold word is a
+word between asterisks. **Fenced code is dropped whole** rather than flattened —
+a command read out character by character is unusable to listen to and unusable
+to type from, and the conversation is still on screen for anyone who wants it.
+`SentenceSplitter` is fed the whole reply each time rather than the delta, which
+is what the controller has; it refuses to split on `3.14`, `main.dart` and
+`e.g.`, and breaks a run-on paragraph at a comma rather than hold up the first
+sound the user hears.
+
+`SpeakableText` is the same bargain a second time: fed the whole reply, keeping
+what it has already worked out. Stripping is eight passes over each line, the
+transcript is redrawn on every flush of a turn, and the speech path looks four
+times a second, so re-stripping the whole reply each time costs more the longer
+it gets — the same growth the splitter is fed the whole text to avoid paying
+twice. What makes it possible is that a reply only ever grows, so every line
+before the last break is settled; only the line still being written is stripped
+again, and its fence is not counted, since an opening fence is not open until
+the line it is on ends. Both readers of a streaming reply use it, and it is
+`speakable` that they still agree with.
+
+**Settled lines are kept joined, not kept in a list**, and the `\n{3,}` collapse
+is done as they arrive — a run of three newlines is two blank lines in a row,
+which is a thing to notice on arrival rather than to scan the whole reply for
+afterwards. Without both, a look still cost a join of every line and a regex
+pass over all of it, which is the same growth one step quieter. The same reply
+asked for twice is answered from the last answer, since a turn changes far more
+than its text and the transcript is redrawn for all of it.
+
+**The line still being written is trimmed rather than stripped where no rule
+can reach it**, which is what settling cannot do anything about: nothing settles
+until a line break arrives, so a reply written as one unbroken paragraph was
+stripped whole on every look. The eleven patterns are two kinds. Six are
+anchored to the start of a line — the fence, the rule, the bullet, the quote,
+the heading, the table's own row, and the pipe handling with them — so they read
+only how the line *starts*, which is fixed as soon as it has a character that is
+not a space. The other five need one of ``* _ ~ ` [ <`` or `|` to fire at all.
+A line with neither is one all eight passes are about to hand back unchanged,
+so it is handed back unchanged. The markup is looked for once per character
+rather than once per look, since it only ever arrives: a line that has any has
+it for good, and falls back to being stripped for the rest of its length, which
+is where every line was before this.
+
+Measured over three hundred looks, microseconds per look, incremental against
+whole: one paragraph, 6 against 234 at 4,000 characters, 24 against 928 at
+16,000, 92 against 3,694 at 64,000; line-broken, 4 against 244, 10 against 973,
+52 against 3,855. What is left growing is the copy of the answer, which is
+what the answer is.
+
+**Settling inside a line is the other answer and is not worth its price.** A
+split point has to be outside every construct, and a sentence end is not one:
+`. ` falls inside `[Fig. 3](x)` and `*One. Two*` as readily as a space does, and
+the anchored rules re-fire on the tail, so `Words here. - not a bullet.` loses
+its dash. Of thirteen splits at a `. `, eight change what is said. Making it
+sound means a second, hand-written account of what those five patterns match,
+kept in agreement with them forever — where the guard above is a set of seven
+characters, and is wrong only in the direction of doing the work anyway.
+
+It is tested against `speakable` at *every* length a reply passes through, which
+is the only assertion that means anything about a thing whose whole job is to
+agree with something else — and that is what carries the collapse being moved
+out of the regex, since every run length has to agree at every prefix.
+
+A sentence is generated ahead of being heard, so **the queue running dry is not
+the end** — the session only says it has fallen silent once nothing is still in
+the worker. Without that count a fast model reports silence between every two
+sentences, which in voice mode flickers the circle and in a message being read
+out would stop it after the first sentence. The WAV of what is playing is kept
+until something else is: `play` returns when playback *starts*.
+
+**Talking over the reply stops the turn as well as the speech.** The session
+goes quiet the moment the detector fires, before the controller has decided
+anything; the controller then aborts the turn, because interrupting means stop
+and listen to me — which is Stop and then type, in one gesture, and leaves the
+same aborted turn in the log. That rides on the platform's echo cancellation,
+without which the model hears itself and every sentence is a barge-in; the Stop
+button under the orb is the fallback, and shuts the reply up without leaving
+voice mode.

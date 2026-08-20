@@ -1,3 +1,4 @@
+import "download.dart";
 import "rootfs.dart";
 
 /// Where a downloaded Linux is kept, and what fetching one costs.
@@ -29,26 +30,9 @@ abstract class RootfsStore {
   /// closes when it is installed and errors if it cannot be; **cancelling the
   /// subscription cancels the download** and leaves nothing behind, which is
   /// what the Cancel button does.
-  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi});
+  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi});
 
   Future<void> delete(Rootfs rootfs);
-}
-
-/// How far along an install is. [unpacking] is the second phase: a rootfs is
-/// thousands of small files and a phone writes them slowly, so a bar that sat
-/// at 100% through it would read as a hang.
-class RootfsProgress {
-  const RootfsProgress({
-    required this.received,
-    required this.total,
-    this.unpacking = false,
-  });
-
-  final int received;
-  final int total;
-  final bool unpacking;
-
-  double? get fraction => total <= 0 ? null : (received / total).clamp(0.0, 1.0);
 }
 
 /// The web's rootfs store: nowhere to put one, and nothing that could run it.
@@ -65,7 +49,7 @@ class UnavailableRootfsStore extends RootfsStore {
   String? directoryOfSync(String id) => null;
 
   @override
-  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi}) =>
+  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) =>
       Stream.error(UnsupportedError("A Linux cannot be installed here."));
 
   @override

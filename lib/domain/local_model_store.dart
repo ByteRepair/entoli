@@ -1,3 +1,4 @@
+import "download.dart";
 import "local_model.dart";
 
 /// Where a downloaded model is kept, and what fetching one costs.
@@ -15,31 +16,22 @@ abstract class LocalModelStore {
   /// halfway through is not one of them: [install] writes its marker last.
   Future<Set<String>> installed();
 
-  /// The file to load, or null if it is not installed. Synchronous because
-  /// that is what starting the server needs: it is decided from a settings
-  /// change, and one `stat` is cheaper than a state that has to be awaited
-  /// before the server can be told anything.
+  /// The file to load, or null if it is not installed. Synchronous because that
+  /// is what starting the server needs: it is decided from a settings change,
+  /// and one `stat` is cheaper than a state that has to be awaited before the
+  /// server can be told anything.
   String? fileOfSync(LocalModel model);
 
   /// Fetch [model], reporting as it goes. The stream closes when it is
   /// installed and errors if it cannot be; **cancelling the subscription
   /// cancels the download** and leaves nothing behind, which is what the Cancel
   /// button does.
-  Stream<LocalModelProgress> install(LocalModel model);
+  ///
+  /// There is no unpacking phase, unlike the other two catalogs: a GGUF is one
+  /// file and is used where it lands.
+  Stream<DownloadProgress> install(LocalModel model);
 
   Future<void> delete(LocalModel model);
-}
-
-/// How far along a download is. There is no second phase: a GGUF is one file
-/// and is used where it lands, so unlike a rootfs or a speech model there is
-/// nothing to unpack once it is here.
-class LocalModelProgress {
-  const LocalModelProgress({required this.received, required this.total});
-
-  final int received;
-  final int total;
-
-  double? get fraction => total <= 0 ? null : (received / total).clamp(0.0, 1.0);
 }
 
 /// A browser's model store: nowhere to put a gigabyte, and nothing that could
@@ -54,7 +46,7 @@ class UnavailableLocalModelStore extends LocalModelStore {
   String? fileOfSync(LocalModel model) => null;
 
   @override
-  Stream<LocalModelProgress> install(LocalModel model) =>
+  Stream<DownloadProgress> install(LocalModel model) =>
       Stream.error(UnsupportedError("A model cannot be downloaded here."));
 
   @override

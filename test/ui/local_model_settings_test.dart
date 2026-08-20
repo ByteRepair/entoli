@@ -41,10 +41,10 @@ void main() {
     expect(find.textContaining("Q4_0"), findsWidgets);
     expect(find.byTooltip("Download"), findsWidgets);
     expect(find.byTooltip("Delete"), findsNothing);
-    // The picker offers what is on disk, and nothing is: the only entry is the
-    // one that means no model at all.
+    // The picker offers what is on disk, and nothing is — so there is no
+    // dropdown to open, only a line saying why.
     expect(find.text("Model"), findsOneWidget);
-    expect(find.text("None"), findsOneWidget);
+    expect(find.text("Nothing downloaded yet."), findsOneWidget);
   });
 
   testWidgets("downloading one adds it to the picker and leaves it unpicked",
@@ -67,7 +67,7 @@ void main() {
     app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
     await pumpOnDevice(tester);
 
-    await tester.tap(find.text("None"));
+    await tester.tap(find.byType(DropdownButton<String?>).first);
     await settleIo(tester);
     await tester.tap(find.text(model.name).last);
     await settleIo(tester);

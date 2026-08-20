@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/local/llama_server.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
+import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/local_model_store.dart";
 
 /// What the server is asked to do is the whole of what running a model on the
@@ -205,7 +206,7 @@ class _AlwaysInstalled extends LocalModelStore {
   String? fileOfSync(LocalModel model) => "/nonexistent/${model.id}.gguf";
 
   @override
-  Stream<LocalModelProgress> install(LocalModel model) => const Stream.empty();
+  Stream<DownloadProgress> install(LocalModel model) => const Stream.empty();
 
   @override
   Future<void> delete(LocalModel model) async {}

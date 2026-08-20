@@ -1,10 +1,13 @@
+import "dart:async";
 import "dart:io";
 
+import "package:crypto/crypto.dart";
 import "package:path/path.dart" as p;
 
+import "../download.dart";
+import "../../domain/download.dart";
 import "../../domain/rootfs.dart";
 import "../../domain/rootfs_store.dart";
-import "download.dart";
 
 /// A downloaded Linux in a directory of its own, outside the data directory —
 /// see [RootfsStore] for why that matters. `dart:io` rather than the config's
@@ -64,55 +67,58 @@ class FileRootfsStore extends RootfsStore {
     if (await dir.exists()) await dir.delete(recursive: true);
   }
 
+  /// One tarball, checked and then unpacked. The fetching and the giving up are
+  /// [DownloadRun]'s; what is left here is the checksum, which is the thing
+  /// this download has that no other one does.
   @override
-  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi}) =>
-      downloadStream(
+  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) => DownloadRun(
         discard: () => delete(rootfs),
-        run: (client, cancelled, report) async {
+        run: (run) async {
           final image = rootfs.imageFor(abi);
           if (image == null) {
             throw UnsupportedError("${rootfs.name} has no build for $abi.");
           }
-          // Whatever an earlier attempt left: files under a name we are about
-          // to write, which is worse than starting again.
+          // Whatever an earlier attempt left: files under a name we are about to
+          // write, which is worse than starting again.
           await delete(rootfs);
-          final dir = Directory(directoryFor(rootfs.id))
-            ..createSync(recursive: true);
+          final dir = Directory(directoryFor(rootfs.id))..createSync(recursive: true);
           final archive = p.join(dir.path, "_rootfs.tar.gz");
 
-          report(RootfsProgress(received: 0, total: image.bytes));
-          final got = await fetchToFile(
-            client: client,
+          run.report(DownloadProgress(received: 0, total: image.bytes));
+          // Hashed on the way past rather than by reading the file back: it is
+          // the same bytes, and a phone reads them slowly.
+          final hash = _Sha256Sink();
+          final hashing = sha256.startChunkedConversion(hash);
+          await run.fetch(
             url: image.url,
             to: archive,
-            report: (at) =>
-                report(RootfsProgress(received: at, total: image.bytes)),
-            cancelled: cancelled,
-            hash: true,
+            total: image.bytes,
+            watch: hashing,
           );
-          if (cancelled()) return;
+          hashing.close();
+          if (run.cancelled) return;
           // Before a byte of it is unpacked, let alone run. Everything in here
           // becomes a program this device will execute, so arriving is not the
           // same as being what was asked for.
-          if (got.sha256 != image.sha256) {
+          if ("${hash.digest}" != image.sha256) {
             throw StateError(
-              "The download did not match what ${rootfs.name} "
-              "${rootfs.version} was checked to be, so nothing was installed.",
+              "The download did not match what ${rootfs.name} ${rootfs.version} was "
+              "checked to be, so nothing was installed.",
             );
           }
 
-          report(RootfsProgress(
+          run.report(DownloadProgress(
               received: image.bytes, total: image.bytes, unpacking: true));
           final result = await tar(archive, dir.path);
-          if (cancelled()) return;
+          if (run.cancelled) return;
           if (result.exitCode != 0) {
-            throw ProcessException(
-                "tar", const [], "${result.stderr}".trim(), result.exitCode);
+            throw ProcessException("tar", const [], "${result.stderr}".trim(),
+                result.exitCode);
           }
           await File(archive).delete();
           await File(p.join(dir.path, _marker)).writeAsString("");
         },
-      );
+      ).stream;
 
   /// Android's `tar` is toybox's, and `-z` is the one thing this needs of it.
   /// The absolute path is the fallback for a device whose `PATH` does not name
@@ -128,4 +134,16 @@ class FileRootfsStore extends RootfsStore {
     throw const ProcessException(
         "tar", [], "This device has no tar to unpack a Linux with.");
   }
+}
+
+/// Where the hash of the download lands. `package:convert` has one of these and
+/// is not a dependency for four lines.
+class _Sha256Sink implements Sink<Digest> {
+  Digest? digest;
+
+  @override
+  void add(Digest data) => digest = data;
+
+  @override
+  void close() {}
 }

@@ -1,135 +1,50 @@
-import "dart:async";
-
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../domain/background_work.dart";
 import "../../domain/local_model.dart";
-import "../../domain/local_model_store.dart";
 import "../../providers.dart";
+import "downloads.dart";
 
-/// What is being fetched, what failed, and what is asked to be removed. Held
-/// above the settings page rather than in it, for the reason the rootfs and
-/// voice downloads are: closing settings must not cancel a download, and on
-/// Android it has to outlive the app being on screen, which is what the
-/// notification is for.
-///
-/// These are the largest downloads the app makes — a couple of gigabytes where
-/// a rootfs is four megabytes — so the notification matters more here than
+/// The on-device models' half of [Downloads]. The largest downloads the app
+/// makes by an order of magnitude — a couple of gigabytes where a rootfs is
+/// four megabytes — which is what makes the notification matter more here than
 /// anywhere else it is used.
-class LocalModelDownloads extends Notifier<LocalModelDownloadState> {
-  late DownloadHold _hold;
+class LocalModelDownloads extends Downloads<LocalModel> {
+  @override
+  String idOf(LocalModel model) => model.id;
 
-  final _running = <String, StreamSubscription<LocalModelProgress>>{};
+  /// Every model in the catalog can be fetched wherever there is a server to
+  /// run one, so unlike the Linux half there is no architecture to refuse: the
+  /// rows are drawn only where `LocalLlm.available`.
+  @override
+  Download? begin(LocalModel model) => Download(
+        bytes: model.bytes,
+        progress: ref.read(localModelStoreProvider).install(model),
+      );
 
   @override
-  LocalModelDownloadState build() {
-    final work = ref.watch(backgroundWorkProvider);
-    // Held rather than read in the disposer: reading a provider from a
-    // life-cycle callback is what Riverpod refuses.
-    _hold = ref.watch(downloadHoldProvider);
-    final stops = work.stopRequests
-        .where((job) => job == BackgroundJob.download)
-        .listen((_) => cancelAll());
-    ref.onDispose(() {
-      unawaited(stops.cancel());
-      for (final sub in _running.values) {
-        unawaited(sub.cancel());
-      }
-      // Released rather than merely abandoned: a restore throws this container
-      // away, and a hold nobody let go of leaves the notification up for good.
-      unawaited(_hold.report("models", null));
-    });
-    return const LocalModelDownloadState();
+  String nameOf(LocalModel model) => model.name;
+
+  @override
+  String get plural => "models";
+
+  @override
+  Future<void> rescan() =>
+      ref.read(installedLocalModelsProvider.notifier).refresh();
+
+  /// Stop serving it before it goes. The load-bearing half of a delete, and
+  /// more so here than for a rootfs: the server has the file open, so deleting
+  /// under it leaves a model answering out of a file that is no longer there —
+  /// and an endpoint in every picker that nothing could rebuild.
+  @override
+  Future<void> unpick(LocalModel model) async {
+    if (ref.read(appSettingsProvider).localModelId != model.id) return;
+    await ref.read(appSettingsProvider.notifier).setLocalModel(null);
   }
 
-  void install(LocalModel model) {
-    if (_running.containsKey(model.id)) return;
-    _publish(
-      active: {
-        ...state.active,
-        model.id: LocalModelProgress(received: 0, total: model.bytes),
-      },
-      failures: {...state.failures}..remove(model.id),
-    );
-    _running[model.id] = ref.read(localModelStoreProvider).install(model).listen(
-          (progress) => _publish(active: {...state.active, model.id: progress}),
-          onError: (Object e) => _finish(model.id, failure: "$e"),
-          onDone: () {
-            _finish(model.id);
-            unawaited(ref.read(installedLocalModelsProvider.notifier).refresh());
-          },
-        );
-  }
-
-  /// Cancelling the subscription is what cancels the download: the store's
-  /// stream removes the half-written directory when its listener goes.
-  void cancel(String id) {
-    unawaited(_running[id]?.cancel());
-    _finish(id);
-  }
-
-  void cancelAll() {
-    for (final id in _running.keys.toList()) {
-      cancel(id);
-    }
-  }
-
-  /// Remove it, and stop serving it first. The unpick is the load-bearing half
-  /// and it is more so here than for a rootfs: the server has the file open, so
-  /// deleting under it leaves a model answering out of a file that is no longer
-  /// on disk — and a provider in every picker that nothing could rebuild.
-  Future<void> delete(LocalModel model) async {
-    if (ref.read(appSettingsProvider).localModelId == model.id) {
-      await ref.read(appSettingsProvider.notifier).setLocalModel(null);
-    }
-    await ref.read(localModelStoreProvider).delete(model);
-    await ref.read(installedLocalModelsProvider.notifier).refresh();
-  }
-
-  void _finish(String id, {String? failure}) {
-    _running.remove(id);
-    _publish(
-      active: {...state.active}..remove(id),
-      failures: failure == null ? null : {...state.failures, id: failure},
-    );
-  }
-
-  /// Publishes and tells the platform in one place, so the notification can
-  /// never disagree with the bar in settings.
-  void _publish({
-    Map<String, LocalModelProgress>? active,
-    Map<String, String>? failures,
-  }) {
-    state = LocalModelDownloadState(
-      active: active ?? state.active,
-      failures: failures ?? state.failures,
-    );
-    unawaited(_hold.report("models", state.notice));
-  }
-}
-
-class LocalModelDownloadState {
-  const LocalModelDownloadState({this.active = const {}, this.failures = const {}});
-
-  /// By id, so the row that is downloading finds its own bar.
-  final Map<String, LocalModelProgress> active;
-
-  /// Why one stopped. Cleared when it is tried again.
-  final Map<String, String> failures;
-
-  DownloadNotice? get notice {
-    if (active.isEmpty) return null;
-    final label = active.length == 1
-        ? (localModelById(active.keys.single)?.name ?? "Model")
-        : "${active.length} models";
-    return DownloadNotice(
-      label: label,
-      received: active.values.fold(0, (sum, p) => sum + p.received),
-      total: active.values.fold(0, (sum, p) => sum + p.total),
-    );
-  }
+  @override
+  Future<void> erase(LocalModel model) =>
+      ref.read(localModelStoreProvider).delete(model);
 }
 
 final localModelDownloadsProvider =
-    NotifierProvider<LocalModelDownloads, LocalModelDownloadState>(
-        LocalModelDownloads.new);
+    NotifierProvider<LocalModelDownloads, DownloadState>(LocalModelDownloads.new);

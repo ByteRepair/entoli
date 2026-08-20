@@ -6,10 +6,11 @@ import "package:archive/archive.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
+import "../download.dart";
+import "../../domain/download.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
 import "../../domain/workspace.dart";
-import "../local/download.dart";
 
 /// Voice models in a directory of their own, outside the data directory — see
 /// [VoiceModelStore] for why that matters. `dart:io` rather than the config's
@@ -59,10 +60,14 @@ class FileVoiceModelStore extends VoiceModelStore {
     if (await dir.exists()) await dir.delete(recursive: true);
   }
 
+  /// Two to four files, or one archive, into the model's own directory. The
+  /// fetching and the giving up are [DownloadRun]'s; what is left here is the
+  /// bz2 an archive has to be put through and the marker that says the model is
+  /// whole.
   @override
-  Stream<VoiceModelProgress> install(VoiceModel model) => downloadStream(
+  Stream<DownloadProgress> install(VoiceModel model) => DownloadRun(
         discard: () => delete(model),
-        run: (client, cancelled, report) async {
+        run: (run) async {
           // Whatever an earlier attempt left: partial files under a name we are
           // about to write, which is worse than starting again.
           await delete(model);
@@ -70,35 +75,30 @@ class FileVoiceModelStore extends VoiceModelStore {
 
           var received = 0;
           final total = model.bytes;
-          void progress(int at, {bool extracting = false}) => report(
-              VoiceModelProgress(
-                  received: at, total: total, extracting: extracting));
-          progress(0);
+          run.report(DownloadProgress(received: 0, total: total));
 
           for (final download in model.downloads) {
             final target = switch (download) {
               VoiceFile(:final path) => p.join(dir.path, path),
               VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
             };
-            final before = received;
-            received += (await fetchToFile(
-              client: client,
+            received += await run.fetch(
               url: download.url,
               to: target,
-              report: (at) => progress(before + at),
-              cancelled: cancelled,
-            ))
-                .bytes;
-            if (cancelled()) return;
+              total: total,
+              done: received,
+            );
+            if (run.cancelled) return;
             if (download is VoiceArchive) {
-              progress(received, extracting: true);
+              run.report(DownloadProgress(
+                  received: received, total: total, unpacking: true));
               await _unpackOffThread(target, dir.path);
             }
           }
-          if (cancelled()) return;
+          if (run.cancelled) return;
           await File(p.join(dir.path, _marker)).writeAsString("");
         },
-      );
+      ).stream;
 
   /// Off the UI thread, because bz2 in Dart runs at about 8 MB/s and Kokoro is
   /// a minute of solid CPU. Its own method so that the closure handed to the

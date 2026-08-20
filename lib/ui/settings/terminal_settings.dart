@@ -4,9 +4,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/rootfs.dart";
 import "../../providers.dart";
 import "rootfs_downloads.dart";
-import "../widgets/dialogs.dart";
+import "../widgets/catalog.dart";
 import "../widgets/formatting.dart";
-import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
 /// Where the agent's commands run: Android itself, or a Linux installed here.
@@ -21,7 +20,6 @@ class TerminalSection extends ConsumerWidget {
     final available = ref.watch(prootAvailableProvider);
     final installed = ref.watch(installedRootfsProvider);
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
-    final usable = rootfsCatalog.where((r) => installed.contains(r.id)).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,20 +36,18 @@ class TerminalSection extends ConsumerWidget {
                   "own shell has almost nothing in it.",
         ),
         if (available)
-          LabelledField(
+          InstalledPicker(
             label: "Commands run on",
-            child: DropdownButton<String?>(
-              isExpanded: true,
-              // A setting naming a deleted distribution is a value no item
-              // carries, which `DropdownButton` asserts on.
-              value: usable.any((r) => r.id == selected) ? selected : null,
-              items: [
-                const DropdownMenuItem<String?>(value: null, child: Text("Android")),
-                for (final rootfs in usable)
-                  DropdownMenuItem(value: rootfs.id, child: Text(rootfs.name)),
-              ],
-              onChanged: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
-            ),
+            // Null is an answer here rather than an absence, so it is an entry
+            // rather than a hint: Android is where commands ran before any of
+            // this and where they go back to.
+            none: "Android",
+            options: {
+              for (final rootfs in rootfsCatalog)
+                if (installed.contains(rootfs.id)) rootfs.id: rootfs.name,
+            },
+            value: selected,
+            onPick: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
           ),
       ],
     );
@@ -91,7 +87,6 @@ class RootfsTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // Its own row only: a progress event names one distribution, and watching
     // the whole state would rebuild every tile for it.
     final progress =
@@ -100,36 +95,14 @@ class RootfsTile extends ConsumerWidget {
         ref.watch(rootfsDownloadsProvider.select((s) => s.failures[rootfs.id]));
     final image = rootfs.imageFor(ref.watch(deviceAbiProvider));
 
-    return ListTile(
-      isThreeLine: failure != null || progress != null,
+    return CatalogTile(
       title: Text("${rootfs.name} ${rootfs.version}"),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(image == null
-              ? "No build for this device"
-              : "${image.arch} · ${formatSize(image.bytes)} to download · "
-                  "${rootfs.packageManager} for everything else"),
-          if (failure != null)
-            Text(
-              failure,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            ),
-          if (progress != null) ...[
-            const SizedBox(height: 6),
-            LinearProgressIndicator(
-                value: progress.unpacking ? null : progress.fraction),
-            const SizedBox(height: 4),
-            Text(
-              progress.unpacking
-                  ? "Unpacking…"
-                  : "${formatSize(progress.received)} of ${formatSize(progress.total)}",
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
+      summary: image == null
+          ? "No build for this device"
+          : "${image.arch} · ${formatSize(image.bytes)} to download · "
+              "${rootfs.packageManager} for everything else",
+      failure: failure,
+      progress: progress,
       trailing: _Action(rootfs: rootfs, downloading: progress != null),
     );
   }
@@ -145,44 +118,22 @@ class _Action extends ConsumerWidget {
   final bool downloading;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (downloading) {
-      return IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: "Cancel",
-        onPressed: () => ref.read(rootfsDownloadsProvider.notifier).cancel(rootfs.id),
+  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
+        downloading: downloading,
+        installed: ref.watch(installedRootfsProvider).contains(rootfs.id),
+        onCancel: () => ref.read(rootfsDownloadsProvider.notifier).cancel(rootfs.id),
+        onDelete: () => ref.read(rootfsDownloadsProvider.notifier).delete(rootfs),
+        deleteTitle: "Delete ${rootfs.name}?",
+        // What it costs to agree depends on whether commands are running in it.
+        deleteMessage:
+            ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == rootfs.id
+                ? "Everything installed in it goes with it, and commands go back "
+                    "to running on Android."
+                : "Everything installed in it goes with it.",
+        // An architecture with no image is a row drawn dead rather than left
+        // out, so the reader can see the distribution exists.
+        onDownload: rootfs.imageFor(ref.watch(deviceAbiProvider)) == null
+            ? null
+            : () => ref.read(rootfsDownloadsProvider.notifier).install(rootfs),
       );
-    }
-    if (ref.watch(installedRootfsProvider).contains(rootfs.id)) {
-      return IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: "Delete",
-        onPressed: () => _delete(context, ref),
-      );
-    }
-    final image = rootfs.imageFor(ref.watch(deviceAbiProvider));
-    return IconButton(
-      icon: const Icon(Icons.download_outlined),
-      tooltip: "Download",
-      onPressed: image == null
-          ? null
-          : () => ref.read(rootfsDownloadsProvider.notifier).install(rootfs),
-    );
-  }
-
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final running = ref.read(appSettingsProvider).rootfsId == rootfs.id;
-    final ok = await confirm(
-      context,
-      title: "Delete ${rootfs.name}?",
-      message: running
-          ? "Everything installed in it goes with it, and commands go back to "
-              "running on Android."
-          : "Everything installed in it goes with it.",
-      confirmLabel: "Delete",
-      destructive: true,
-    );
-    if (!ok) return;
-    await ref.read(rootfsDownloadsProvider.notifier).delete(rootfs);
-  }
 }
