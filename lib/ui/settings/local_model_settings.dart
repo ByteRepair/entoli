@@ -109,9 +109,11 @@ class _DevicePicker extends ConsumerWidget {
     }
     return InstalledPicker(
       label: "Runs on",
-      // Null is an answer here rather than an absence: it is what ggml means by
-      // offloading nothing, and it is the only entry that is on every phone.
-      none: "CPU",
+      // Null is auto, and auto is the best accelerator found — what a turn gets
+      // when nobody chooses. The CPU is a choice below the accelerators rather
+      // than the default now: on a phone that has one it is the slow option,
+      // and the only reason to pick it is to rule the accelerator out.
+      none: "Auto",
       options: {
         for (final device in devices)
           device.name: [
@@ -119,6 +121,7 @@ class _DevicePicker extends ConsumerWidget {
             device.description,
             if (device.totalBytes != null) formatSize(device.totalBytes!),
           ].join(" · "),
+        LocalDevice.cpu: "CPU",
       },
       value: picked,
       onPick: ref.read(appSettingsProvider.notifier).setLocalDevice,

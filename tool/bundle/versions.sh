@@ -33,6 +33,24 @@ LLAMA_CPP_VERSION=b10509
 LLAMA_CPP_URL="https://github.com/ggml-org/llama.cpp/archive/refs/tags/$LLAMA_CPP_VERSION.tar.gz"
 LLAMA_CPP_SHA256=63eb7bb55a46051ca523a670621cfaa6f4a1b3ea78e1cfc34a45c0af5139df0e
 
+# The one thing the Vulkan GPU backend's cmake wants that neither the NDK nor
+# llama.cpp carries: `find_package(SPIRV-Headers CONFIG REQUIRED)` before it
+# builds a line. Header-only — build.sh installs it for its cmake config and
+# the `spirv.hpp` the backend includes, and compiles none of it. GitHub's tag
+# tarball, pinned like the rest.
+SPIRV_HEADERS_VERSION=vulkan-sdk-1.4.321.0
+SPIRV_HEADERS_URL="https://github.com/KhronosGroup/SPIRV-Headers/archive/refs/tags/$SPIRV_HEADERS_VERSION.tar.gz"
+SPIRV_HEADERS_SHA256=5bbea925663d4cd2bab23efad53874f2718248a73dcaf9dd21dff8cb48e602fc
+
+# The Vulkan headers the backend compiles against. The NDK sysroot ships the C
+# ones but not `vulkan.hpp`, the C++ bindings ggml-vulkan includes — so the full
+# set comes from here, and only the loader (`libvulkan.so`) is still the NDK's.
+# Same SDK tag as SPIRV-Headers above, so the two move together. Header-only:
+# build.sh points the compiler at `include/` and unpacks nothing else.
+VULKAN_HEADERS_VERSION=vulkan-sdk-1.4.321.0
+VULKAN_HEADERS_URL="https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/$VULKAN_HEADERS_VERSION.tar.gz"
+VULKAN_HEADERS_SHA256=17f8ff30fd79fb7531efcb7c78c02c17a595208d482a150f06836b0ca97ef8f2
+
 # The Hexagon SDK, which the NPU backend is built against. Fetched by
 # tool/android-setup.sh; build.sh uses it if it is there.
 #
