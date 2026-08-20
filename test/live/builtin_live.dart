@@ -64,7 +64,7 @@ void main() {
         // Live means live: it runs what the model asks for.
         options: const BuiltinOptions(stepLimit: 12),
         registry: LlmRegistry(
-          providers: () => [provider],
+          endpoints: () => [LlmEndpoint(provider)],
           lookupEnv: (name) => Platform.environment[name],
         ),
       ),

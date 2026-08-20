@@ -173,3 +173,129 @@ only two: an `#include <string.h>` upstream leaves out, which clang now refuses
 rather than warns about, and `PROOT_UNBUNDLE_LOADER`, which keeps the loader a
 file of its own instead of one extracted to app storage and exec'd — the thing
 that cannot work here.
+
+## Running a model on the device
+
+A model downloaded here answers with no network and no account. It is
+llama.cpp's own server, bundled in the APK, started when a model is picked and
+bound to the loopback address — and **it reaches the agent as an ordinary
+provider**, because what it speaks is the `/chat/completions` shape
+`OpenAiClient` was already written for. So `LlmRegistry`, the model picker, a
+chat's pinned model, `meta.json`, the projection and every tool the agent has
+work unchanged, and nothing below the settings page knows a model is local.
+
+That is what rules out the alternative, which was binding libllama through FFI
+and skipping the process. A small model's idea of a tool call is a template's
+worth of prose that has to be parsed back into an OpenAI call, and doing that
+per model family is most of what llama.cpp's server *is*. Writing a second copy
+of it in Dart, to save a subprocess on a device that is about to spend a
+gigabyte of memory on weights, is the wrong trade.
+
+The endpoint is composed by `llmEndpoints` rather than written into
+`settings.json`: its base URL holds a port asked of the OS at launch, so a file
+naming it would be stale by the next one. It goes **first** in the list, which
+is what decides a collision — `localProviderId` is the app's name, and a
+`settings.json` that happens to use it is shadowed rather than allowed to take
+the model's own endpoint away from it. What is stored is the pick —
+`localModelId`, `localModelDevice`, `localModelContext` — and `applyLocalModel`
+is the one function that makes what is running agree with it. Two callers, far
+apart: the settings page, where a model is picked, and `AppSession.start`, where
+a pick from a previous run is honoured.
+
+**The provider appears the moment a model is picked, not when it answers.**
+Mapping a four-gigabyte model takes the better part of a minute, and a chat
+pinned to it must not lose its model for that minute after every launch. So the
+endpoint is in the list while it loads and `PendingLlmClient` — the same shape
+as `GatedLlmClient` — waits for `whenReady` before the first request goes
+through. **It rides on the endpoint rather than on the registry**: an
+`LlmEndpoint` is a config and, where reaching it is not the ordinary thing, the
+client to reach it with. The first version had the registry comparing a provider
+id against a name it had to be told was reserved, which is a special case in the
+one place that should know nothing about who its endpoints are — and one more
+`==` arm for every endpoint that ever needs decorating. A turn sent at a loading model waits; a turn sent at a model that will
+never load gets the server's own last words as an `LlmException`, which for a
+model too large to fit is the only place that is said at all.
+
+**Nothing loads a model on its own.** A pick is a gigabyte of the phone's memory
+and minutes of its battery, so it is picked in settings and nowhere else — a
+download does not load it, and a chat pinned to a model that is not loaded says
+the provider is not configured rather than quietly starting one.
+
+### What the NPU actually is
+
+The honest answer is narrower than the word. ggml has one NPU backend,
+`ggml-hexagon`, and it is Qualcomm's Hexagon on Snapdragon with HTP v73 and
+later — everything else a phone calls an NPU (MediaTek's APU, Samsung's, Google's
+Tensor) has no backend in llama.cpp at all, and Android's own NNAPI, which
+would have covered them, was deprecated in Android 15 and never had one either.
+The rest of what can be offloaded is a GPU, through OpenCL on Adreno or Vulkan.
+
+So the design does not name the NPU anywhere. `LlamaServer.devices` runs the
+server with `--list-devices` and offers whatever it says it found; the settings
+page labels each by the kind read off its name, and a phone with nothing is told
+so rather than being offered a dropdown of one. Which backends a build carried
+is the build's business and which of them find hardware is the phone's, and only
+the binary knows both.
+
+What the Hexagon backend does *not* need is a signature. It enables an unsigned
+process domain itself on the DSP, so an ordinary APK can drive the NPU — the
+thing that would otherwise have made this a Qualcomm-partners feature. What it
+does need is Hexagon SDK 6.6 or later at **build** time, which is behind a
+Qualcomm account and not redistributable, so CI builds without it and
+`HEXAGON_SDK_ROOT` is what turns it on. Nothing else changes when it is there:
+the backend arrives as two more `libggml-*.so` and is found the way the CPU's
+is.
+
+It also decides the catalog. The Hexagon backend repacks **Q4_0, Q8_0 and
+MXFP4** and nothing else, so every entry in `local_model.dart` is Q4_0 — a
+K-quant is a model that quietly runs on the CPU on the one device that has an
+NPU to run it on.
+
+### Where it lives, and what it costs
+
+The binaries are in the native library directory, and for the reason git and
+proot are: it is the only place an app targeting a modern Android may execute a
+file from. Here that directory is load-bearing twice over, because the DSP's own
+half of the Hexagon backend is resolved out of it too — `ADSP_LIBRARY_PATH` is
+set to the same string as `LD_LIBRARY_PATH`, whether or not this build carried a
+Hexagon backend, since the answer is the same directory either way and a build
+that grows one should not also have to grow a line here. `LD_LIBRARY_PATH` is
+not optional: the server is exec'd by path with no rpath in it, so libllama and
+the backends beside it are found through that and nothing else.
+
+**arm64 only**, and that is a size decision. The server and its libraries are
+about 18 MB stripped against git's 12, and three ABIs of it would put 56 MB into
+the universal APK. Nothing is lost: a 32-bit phone cannot map a two-gigabyte
+model at all, and x86_64 Android is an emulator. A build without it leaves
+`LocalLlm.available` false, which is also what the desktops and the web get —
+and there the settings page says so and points at Ollama and LM Studio, which
+are two of the presets and a better answer than a second copy of llama.cpp
+inside this app.
+
+The weights go to `<cacheDir>/llm/<id>/model.gguf` with a `.complete` marker
+written last, beside the voice models and a downloaded Linux and outside the
+data directory for the same two reasons: `backup.dart` zips that directory whole
+and a restore *replaces* it, so a model in there would be a gigabyte in every
+export and a deletion on every restore.
+
+`FileLocalModelStore` is `FileRootfsStore` without the unpacking: a `DownloadRun`
+and, after it, the one thing this download has that the others do not, which is
+the checksum. `LocalModelDownloads` is a third `Downloads<T>` beside the voice
+models and the Linux, and the rows are `CatalogTile` and `CatalogAction` like
+theirs — see "A catalog of things to download". Nothing here needed a new
+mechanism, which is the point: the catalog is a const list, the store is a
+marker and a hash, and everything between them was already written.
+
+It is the third catalog and by far the largest — a couple of gigabytes where a
+rootfs is four megabytes — which is what makes the notification's own throttle in
+`Downloads._publish` matter here rather than being a nicety.
+
+`-c` is the setting that decides whether Android kills the app, and it defaults
+far below what any of these models was trained for. The weights are mapped and
+paged; the KV cache is not.
+
+**The server is bound to 127.0.0.1 and given a key generated per launch.** Every
+app on the device can reach the loopback address, so without one any of them
+could spend this model's battery. The key is never written down — it lives in
+the running `LlamaServer` and in the provider config it hands the registry, and
+both go when the server does.

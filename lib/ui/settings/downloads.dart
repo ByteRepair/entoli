@@ -57,6 +57,9 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
     final stops = work.stopRequests
         .where((job) => job == BackgroundJob.download)
         .listen((_) => cancelAll());
+    // Held rather than read in the disposer, which is a life-cycle callback and
+    // may not read a provider.
+    final hold = ref.watch(downloadHoldProvider);
     ref.onDispose(() {
       unawaited(stops.cancel());
       for (final running in _running.values) {
@@ -66,7 +69,7 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
       // this container away, and a hold nobody let go of leaves the
       // notification up and `ForegroundWork.busy` true for good — after which
       // the cached engine is never evicted again.
-      unawaited(work.downloading(null));
+      unawaited(hold.report(plural, null));
     });
     return const DownloadState();
   }
@@ -149,7 +152,10 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
     if (notice?.label == _told && at == _toldAt) return;
     _told = notice?.label;
     _toldAt = at;
-    unawaited(ref.read(backgroundWorkProvider).downloading(notice));
+    // Through the hold rather than to the platform: three catalogs share one
+    // slot, and `downloading(null)` stops the service outright — see
+    // [DownloadHold].
+    unawaited(ref.read(downloadHoldProvider).report(plural, notice));
   }
 
   /// What the notification was last told, so that an event which would not

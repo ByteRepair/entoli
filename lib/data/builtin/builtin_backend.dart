@@ -365,13 +365,14 @@ class BuiltinBackend implements AgentBackend {
   /// would re-read and re-parse `settings.json` for each question asked of it.
   ({LlmClient client, String modelId})? _resolveModel(String? model, String? provider) {
     if (provider == null) return null;
-    final config = registry.configFor(provider);
-    if (config == null) return null;
+    final endpoint = registry.endpointFor(provider);
+    if (endpoint == null) return null;
+    final config = endpoint.config;
     // A provider with one model listed does not need it pinned as well; with
     // none, there is nothing to guess from.
     final modelId = model ?? config.models.firstOrNull;
     if (modelId == null || modelId.isEmpty) return null;
-    return (client: registry.clientOf(config), modelId: modelId);
+    return (client: registry.clientOf(endpoint), modelId: modelId);
   }
 
   /// The classifier model, resolved the same way the main model is. Null when

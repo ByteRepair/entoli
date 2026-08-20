@@ -16,7 +16,16 @@ class BundledTools {
 
   /// Where the extracted `lib*.so` files are, or null where nothing answers
   /// the channel — every platform but Android.
-  static Future<String?> nativeLibraryDir() => _ask("nativeLibraryDir");
+  ///
+  /// Asked once and kept: it is `applicationInfo.nativeLibraryDir`, constant
+  /// for the life of the install, and two things now want it — the tools laid
+  /// out below and the model server beside them. Holding the future rather than
+  /// the answer means the second caller waits on the first round trip instead
+  /// of starting a second.
+  static Future<String?>? _libDir;
+
+  static Future<String?> nativeLibraryDir() =>
+      _libDir ??= _ask("nativeLibraryDir");
 
   /// The ABI this install is for — `arm64-v8a` and friends. Null off Android,
   /// where nothing is bundled for one.

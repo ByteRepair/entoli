@@ -21,9 +21,14 @@ shape, base URL, key, and an optional model list — and `llmProviderPresets`
 fills in the endpoints worth naming so that adding one is a key rather than a
 URL nobody remembers. A key can be left out and named as `apiKeyEnv` instead,
 which is how one already exported stays out of the file. `LlmRegistry` builds a
-client per provider and rebuilds it when the URL or key changes; a provider that
+client per endpoint and rebuilds it when the URL or key changes; a provider that
 lists no models is asked, and one that cannot answer contributes nothing rather
-than failing the whole list.
+than failing the whole list. What it builds a client *with* is the endpoint's
+own business: an `LlmEndpoint` is a config and, where reaching it is not the
+ordinary thing, the client to reach it with — which is how the on-device
+server's "may not be answering yet" arrives without the registry knowing there
+is such a thing. See "Running a model on the device" in
+`lib/data/local/CLAUDE.md`.
 
 A `RateLimitGate` is built per turn in `BuiltinBackend.sendPrompt` and shared by
 the parent `BuiltinAgent` and every sub-agent it spawns: it bounds in-flight

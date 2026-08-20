@@ -31,7 +31,7 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is seven categories, picked from a panel beside it or, below
+The settings page is eight categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself: the
 default project's workspace (which has nowhere else to be reached from),
 **Appearance** — the theme and the app icon, which are the two things the app
@@ -40,7 +40,11 @@ which travel together because auto mode is unusable without one — the
 environment, and deleting every chat. **Terminal** is where commands run —
 Android itself, or a Linux downloaded from the catalog under it; a category of
 its own for the reason Voice is one, and drawn on every platform, where it says
-that installing one is Android's. **Voice** is what listens and what speaks,
+that installing one is Android's. **On-device** is the model that answers
+without a network — the pick, what it runs on, and the catalog it is downloaded
+from; beside Terminal rather than under LLMs, since it is a machine question
+rather than a question about models, and a model loaded there appears under LLMs
+like any other. **Voice** is what listens and what speaks,
 over the catalog they are downloaded from — its own category rather than a
 section under General because the two pickers are two lines and the catalog
 under them is the rest of the page. **Assistant** is where Android's assistant
