@@ -91,7 +91,6 @@ class InheritableDropdown<T> extends StatelessWidget {
         child: DropdownButtonFormField<T?>(
           initialValue: value,
           isExpanded: true,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
           items: [
             DropdownMenuItem<T?>(
               value: null,

@@ -78,10 +78,7 @@ Widget _dropdown({
     DropdownButtonFormField<ModelOption?>(
       initialValue: _find(models, choice.modelId, choice.providerId),
       isExpanded: true,
-      decoration: InputDecoration(
-        border: const OutlineInputBorder(),
-        helperText: helperText,
-      ),
+      decoration: InputDecoration(helperText: helperText),
       items: [
         DropdownMenuItem<ModelOption?>(value: null, child: Text(nullLabel)),
         for (final m in models)

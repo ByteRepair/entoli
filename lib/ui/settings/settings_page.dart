@@ -362,9 +362,7 @@ class _AssistantSection extends ConsumerWidget {
           label: "Project",
           child: DropdownButtonFormField<String?>(
             initialValue: projectOrDefault(settings.assistantProject, named),
-            isExpanded: true,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: [
+            isExpanded: true,            items: [
               for (final project in everyProject(named))
                 DropdownMenuItem(value: project, child: Text(projectLabel(project))),
             ],
@@ -376,9 +374,7 @@ class _AssistantSection extends ConsumerWidget {
           label: "Opens",
           child: DropdownButtonFormField<AssistantView>(
             initialValue: settings.assistantView,
-            isExpanded: true,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: [
+            isExpanded: true,            items: [
               for (final view in AssistantView.values)
                 DropdownMenuItem(value: view, child: Text(view.label)),
             ],
@@ -506,7 +502,6 @@ class _AgentSection extends ConsumerWidget {
             initialValue: settings.approveMode,
             isExpanded: true,
             decoration: InputDecoration(
-              border: const OutlineInputBorder(),
               helperText: settings.approveMode == ApproveMode.auto && noClassifier
                   ? "No classifier model set — auto mode will ask for every command."
                   : null,
@@ -564,9 +559,7 @@ class _TempChatSection extends ConsumerWidget {
           label: "Delete chats after",
           child: DropdownButtonFormField<TempChatTtl>(
             initialValue: settings.tempChatTtl,
-            isExpanded: true,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: [
+            isExpanded: true,            items: [
               for (final entry in tempChatTtlLabels.entries)
                 DropdownMenuItem(value: entry.key, child: Text(entry.value)),
             ],

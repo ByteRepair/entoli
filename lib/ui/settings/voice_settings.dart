@@ -280,9 +280,9 @@ class _SpeakerField extends ConsumerWidget {
       child: Row(
         children: [
           Expanded(
-            child: DropdownButton<int>(
+            child: DropdownButtonFormField<int>(
               isExpanded: true,
-              value: value,
+              initialValue: value,
               items: [
                 for (var i = 0; i < speech.speakers; i++)
                   DropdownMenuItem(value: i, child: Text("Voice ${i + 1}")),

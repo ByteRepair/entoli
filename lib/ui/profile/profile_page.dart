@@ -149,7 +149,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     controller: _prefs,
                     maxLines: 5,
                     decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
                       hintText: "Custom instructions for the LLM, applied to every turn",
                     ),
                   ),
@@ -157,9 +156,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 LabelledField(
                   label: "Name",
                   child: TextField(
-                    controller: _name,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                  ),
+                    controller: _name,                  ),
                 ),
                 LabelledField(
                   label: "Date of birth",
@@ -167,7 +164,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     controller: _dob,
                     readOnly: true,
                     decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
                       hintText: "Not set",
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.calendar_today),
@@ -181,16 +177,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 LabelledField(
                   label: "Religion",
                   child: TextField(
-                    controller: _religion,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                  ),
+                    controller: _religion,                  ),
                 ),
                 LabelledField(
                   label: "Profession",
                   child: TextField(
-                    controller: _profession,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                  ),
+                    controller: _profession,                  ),
                 ),
                 const SizedBox(height: 24),
               ],
