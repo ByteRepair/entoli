@@ -201,8 +201,8 @@ U+2500-257F,U+2580-259F,U+25A0-25FF,U+2713-2717,U+FFFD"
 `--name-IDs='*'` is not decoration: it keeps the copyright and licence records
 in the file, which is half of what the OFL asks for. The other half is
 `assets/fonts/OFL.txt`, an asset rather than only a file in the repo, read into
-`LicenseRegistry` lazily — so Flutter's own licence page has it whether or not
-this app grows one. Bold is bundled beside regular because inline code inherits
+`LicenseRegistry` lazily — so the licence page under About has it, which is what
+reads that registry. Bold is bundled beside regular because inline code inherits
 the weight of what holds it, and a heading with a `` `name` `` in it is a shape
 this app's replies take constantly.
 
