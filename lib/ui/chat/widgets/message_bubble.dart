@@ -6,12 +6,14 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
+import "../../../domain/shell.dart";
 import "../../widgets/action_icon.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/dialogs.dart";
 import "activity_label.dart";
 import "code_block.dart";
 import "reply_style.dart";
+import "shell_run.dart";
 
 /// Renders a single message. The bubble holds what the model said; thinking
 /// and tool runs sit above it as labels, in the order they happened.
@@ -139,6 +141,13 @@ class _MessageBubbleState extends State<MessageBubble> {
 
   bool get _hasError => widget.message.parts.whereType<ErrorPart>().isNotEmpty;
 
+  /// The command a `!` message runs, or null where it is prose. Read off the
+  /// text rather than stored: `conv.jsonl` keeps the message as typed, so the
+  /// bubble and the backend answer this from the same string.
+  String? get _command => widget.message.role == MessageRole.user
+      ? shellBypassCommand(widget.message.plainText)
+      : null;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -150,7 +159,14 @@ class _MessageBubbleState extends State<MessageBubble> {
     // said a second time. The other three keep a name, which is what makes the
     // prompt something said and a tool run something reported.
     final (name, bg) = switch (widget.message.role) {
-      MessageRole.user => ("You", theme.colorScheme.primaryContainer),
+      // A command the user ran is not something they said, so it does not get
+      // the colour the things they said are in.
+      MessageRole.user => (
+          "You",
+          _command == null
+              ? theme.colorScheme.primaryContainer
+              : theme.colorScheme.surfaceContainerHighest
+        ),
       MessageRole.assistant => (null, null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
@@ -432,12 +448,21 @@ class _MessageBubbleState extends State<MessageBubble> {
             entryFile: entryFile,
             title: title,
           ));
+        case ShellRunPart():
+          // Not a label: a command the user ran is the answer to their message
+          // rather than something the turn did on its way to one.
+          flushRun();
+          closeBubble();
+          rows.add(ShellRunBubble(run: part));
         case TextPart(:final text):
           // Text with a tool call under it stopped arriving before the call
           // started, so a caret there would point at nothing while the label
           // below it is what is busy.
           flushRun();
-          spoken.add(said(text, caret: i == liveAt));
+          final command = _command;
+          spoken.add(command == null
+              ? said(text, caret: i == liveAt)
+              : ShellCommandText(command: command));
         case ErrorPart(:final message):
           flushRun();
           spoken.add(said("Error: $message", isError: true));

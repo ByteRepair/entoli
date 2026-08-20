@@ -102,6 +102,8 @@ class TurnRecorder {
         addPart(MessagePart.toolCall(toolCall: call));
       case ToolResultEvent(:final result):
         addPart(MessagePart.toolResult(result: result));
+      case ShellRunEvent(:final run):
+        addPart(run);
       case ArtifactEvent(:final artifactId, :final entryFile, :final title):
         addPart(MessagePart.artifact(artifactId: artifactId, entryFile: entryFile, title: title));
       case ErrorEvent(:final message):

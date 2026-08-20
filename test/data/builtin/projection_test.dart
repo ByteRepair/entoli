@@ -185,6 +185,23 @@ void main() {
     expect(projected.map((m) => m.text).join(), isNot(contains("gave up")));
   });
 
+  // As the assistant rather than as a tool call: the model never chose this,
+  // and reading back a call it did not make is a conversation it disagrees
+  // with.
+  test("a command the user ran reads back as what the app did for them", () {
+    final projected = projectionOf([
+      asked("!echo hello"),
+      said(MessageRole.assistant, const [
+        MessagePart.shellRun(command: "echo hello", returnCode: 0, output: "hello\n"),
+      ]),
+    ]);
+
+    expect(projected.map((m) => m.role), [LlmRole.user, LlmRole.assistant]);
+    expect(projected.last.toolCalls, isEmpty);
+    expect(projected.last.text, contains("echo hello"));
+    expect(projected.last.text, contains('"returncode": 0'));
+  });
+
   test("a message with nothing in it contributes nothing", () {
     expect(projectionOf([asked("   ".trim()), said(MessageRole.assistant, const [])]), isEmpty);
   });

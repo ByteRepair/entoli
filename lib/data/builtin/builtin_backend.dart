@@ -26,6 +26,7 @@ import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
+import "templates.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which
@@ -155,6 +156,15 @@ class BuiltinBackend implements AgentBackend {
   }) async {
     final project = settings.project;
     try {
+      // Before the model is resolved, because a `!` turn never needs one: a
+      // chat with no provider configured can still run a command.
+      final command = text == null ? null : shellBypassCommand(text);
+      if (command != null) {
+        await _runBypass(chatId, text!, command, controller, history: history,
+            project: project);
+        return;
+      }
+
       final target = _resolveModel(settings.model, settings.provider);
       if (target == null) {
         _fail(
@@ -235,7 +245,7 @@ class BuiltinBackend implements AgentBackend {
           return store.createArtifact(chatId, resolved, project: project);
         },
       );
-      _running.add(chatId, agent);
+      _running.add(chatId, agent.cancel);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it.
@@ -274,6 +284,51 @@ class BuiltinBackend implements AgentBackend {
       // turn's closing records when the agent itself has stopped.
       _running.remove(chatId);
     }
+  }
+
+  /// Run [command] and be done: no model call, no tools, and no approval, since
+  /// the user typed the command rather than being asked to allow one.
+  ///
+  /// [prompt] is the message as typed, `!` and all — it is what the log keeps
+  /// and so what the session has to hold, or the conversation the model reads
+  /// after a restart would be a different one from the conversation it was
+  /// handed here.
+  Future<void> _runBypass(
+    String chatId,
+    String prompt,
+    String command,
+    StreamController<AgentEvent> controller, {
+    List<Message> history = const [],
+    String? project,
+  }) async {
+    await config.ensureChatDirs(chatId, project: project);
+    final run = shell.start(command,
+        cwd: config.workspaceDir(chatId, project: project),
+        timeout: options.commandTimeout);
+    // Before the wait, so Stop kills the command rather than only closing the
+    // stream over it.
+    _running.add(chatId, run.kill);
+    controller.add(const StatusEvent("Running the command"));
+
+    final result = await run.result;
+    // An aborted turn writes no part, so the session must not hold one either.
+    if (controller.isClosed) return;
+    final part = ShellRunPart(
+      command: command,
+      returnCode: result.returnCode,
+      output: result.output,
+      exceptionInfo: result.exceptionInfo,
+    );
+    controller.add(ShellRunEvent(part));
+    controller.add(const DoneEvent());
+
+    final session = _sessions.putIfAbsent(chatId, BuiltinSession.new);
+    // The same rule the model's own turns follow: a session the app was not
+    // already holding is one after a restart, and it is empty.
+    if (session.isFresh) session.replaceWith(projectionOf(history));
+    session.messages.add(LlmMessage(role: LlmRole.user, text: prompt.trim()));
+    session.messages
+        .add(LlmMessage(role: LlmRole.assistant, text: shellRunTranscript(part)));
   }
 
   /// Carry on the sub-agents the interrupted turn left in flight. A `task`
@@ -481,7 +536,7 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<void> abort(String chatId) async {
-    await _running.remove(chatId)?.cancel();
+    await _running.remove(chatId)?.call();
     _clearApprovals(chatId);
     _clearQuestions(chatId);
     final controller = _controllers.remove(chatId);
@@ -493,7 +548,7 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
-    await _running.remove(chatId)?.cancel();
+    await _running.remove(chatId)?.call();
     _sessions.putIfAbsent(chatId, BuiltinSession.new).replaceWith(projectionOf(history));
   }
 
@@ -524,20 +579,23 @@ class BuiltinBackend implements AgentBackend {
 class _RunningTurns extends ValueNotifier<Set<String>> {
   _RunningTurns() : super(const {});
 
-  final Map<String, BuiltinAgent> _agents = {};
+  /// How to stop each, rather than what is running it: an agent's own `cancel`
+  /// for a turn the model is driving, the command's `kill` for a `!` one, and
+  /// nothing here has to tell them apart.
+  final Map<String, Future<void> Function()> _stops = {};
 
-  void add(String chatId, BuiltinAgent agent) {
-    _agents[chatId] = agent;
-    value = _agents.keys.toSet();
+  void add(String chatId, Future<void> Function() stop) {
+    _stops[chatId] = stop;
+    value = _stops.keys.toSet();
   }
 
   /// Publishes only where something was actually removed: `abort` reaches chats
   /// with nothing running — deleting one does — and a `Set` compares by
   /// identity, so a fresh one would notify every time and cost a round trip to
   /// the platform to stop a service that was never started.
-  BuiltinAgent? remove(String chatId) {
-    final agent = _agents.remove(chatId);
-    if (agent != null) value = _agents.keys.toSet();
-    return agent;
+  Future<void> Function()? remove(String chatId) {
+    final stop = _stops.remove(chatId);
+    if (stop != null) value = _stops.keys.toSet();
+    return stop;
   }
 }

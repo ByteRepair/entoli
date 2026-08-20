@@ -950,6 +950,10 @@ MessagePart _$MessagePartFromJson(
           return ToolResultPart.fromJson(
             json
           );
+                case 'shellRun':
+          return ShellRunPart.fromJson(
+            json
+          );
                 case 'file':
           return FilePart.fromJson(
             json
@@ -1020,14 +1024,15 @@ extension MessagePartPatterns on MessagePart {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( TextPart value)?  text,TResult Function( ReasoningPart value)?  reasoning,TResult Function( ToolCallPart value)?  toolCall,TResult Function( ToolResultPart value)?  toolResult,TResult Function( FilePart value)?  file,TResult Function( ErrorPart value)?  error,TResult Function( ArtifactPart value)?  artifact,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( TextPart value)?  text,TResult Function( ReasoningPart value)?  reasoning,TResult Function( ToolCallPart value)?  toolCall,TResult Function( ToolResultPart value)?  toolResult,TResult Function( ShellRunPart value)?  shellRun,TResult Function( FilePart value)?  file,TResult Function( ErrorPart value)?  error,TResult Function( ArtifactPart value)?  artifact,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that);case ReasoningPart() when reasoning != null:
 return reasoning(_that);case ToolCallPart() when toolCall != null:
 return toolCall(_that);case ToolResultPart() when toolResult != null:
-return toolResult(_that);case FilePart() when file != null:
+return toolResult(_that);case ShellRunPart() when shellRun != null:
+return shellRun(_that);case FilePart() when file != null:
 return file(_that);case ErrorPart() when error != null:
 return error(_that);case ArtifactPart() when artifact != null:
 return artifact(_that);case _:
@@ -1048,14 +1053,15 @@ return artifact(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( TextPart value)  text,required TResult Function( ReasoningPart value)  reasoning,required TResult Function( ToolCallPart value)  toolCall,required TResult Function( ToolResultPart value)  toolResult,required TResult Function( FilePart value)  file,required TResult Function( ErrorPart value)  error,required TResult Function( ArtifactPart value)  artifact,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( TextPart value)  text,required TResult Function( ReasoningPart value)  reasoning,required TResult Function( ToolCallPart value)  toolCall,required TResult Function( ToolResultPart value)  toolResult,required TResult Function( ShellRunPart value)  shellRun,required TResult Function( FilePart value)  file,required TResult Function( ErrorPart value)  error,required TResult Function( ArtifactPart value)  artifact,}){
 final _that = this;
 switch (_that) {
 case TextPart():
 return text(_that);case ReasoningPart():
 return reasoning(_that);case ToolCallPart():
 return toolCall(_that);case ToolResultPart():
-return toolResult(_that);case FilePart():
+return toolResult(_that);case ShellRunPart():
+return shellRun(_that);case FilePart():
 return file(_that);case ErrorPart():
 return error(_that);case ArtifactPart():
 return artifact(_that);}
@@ -1072,14 +1078,15 @@ return artifact(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( TextPart value)?  text,TResult? Function( ReasoningPart value)?  reasoning,TResult? Function( ToolCallPart value)?  toolCall,TResult? Function( ToolResultPart value)?  toolResult,TResult? Function( FilePart value)?  file,TResult? Function( ErrorPart value)?  error,TResult? Function( ArtifactPart value)?  artifact,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( TextPart value)?  text,TResult? Function( ReasoningPart value)?  reasoning,TResult? Function( ToolCallPart value)?  toolCall,TResult? Function( ToolResultPart value)?  toolResult,TResult? Function( ShellRunPart value)?  shellRun,TResult? Function( FilePart value)?  file,TResult? Function( ErrorPart value)?  error,TResult? Function( ArtifactPart value)?  artifact,}){
 final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that);case ReasoningPart() when reasoning != null:
 return reasoning(_that);case ToolCallPart() when toolCall != null:
 return toolCall(_that);case ToolResultPart() when toolResult != null:
-return toolResult(_that);case FilePart() when file != null:
+return toolResult(_that);case ShellRunPart() when shellRun != null:
+return shellRun(_that);case FilePart() when file != null:
 return file(_that);case ErrorPart() when error != null:
 return error(_that);case ArtifactPart() when artifact != null:
 return artifact(_that);case _:
@@ -1099,13 +1106,14 @@ return artifact(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text,  String? responseId)?  text,TResult Function( String text,  int? durationMs,  String? signature,  String? responseId)?  reasoning,TResult Function( ToolCall toolCall,  String? responseId)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String resource,  String filename,  String mimeType)?  file,TResult Function( String message)?  error,TResult Function( String artifactId,  String entryFile,  String title)?  artifact,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String text,  String? responseId)?  text,TResult Function( String text,  int? durationMs,  String? signature,  String? responseId)?  reasoning,TResult Function( ToolCall toolCall,  String? responseId)?  toolCall,TResult Function( ToolResult result)?  toolResult,TResult Function( String command,  int returnCode,  String output,  String? exceptionInfo)?  shellRun,TResult Function( String resource,  String filename,  String mimeType)?  file,TResult Function( String message)?  error,TResult Function( String artifactId,  String entryFile,  String title)?  artifact,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that.text,_that.responseId);case ReasoningPart() when reasoning != null:
 return reasoning(_that.text,_that.durationMs,_that.signature,_that.responseId);case ToolCallPart() when toolCall != null:
 return toolCall(_that.toolCall,_that.responseId);case ToolResultPart() when toolResult != null:
-return toolResult(_that.result);case FilePart() when file != null:
+return toolResult(_that.result);case ShellRunPart() when shellRun != null:
+return shellRun(_that.command,_that.returnCode,_that.output,_that.exceptionInfo);case FilePart() when file != null:
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
 return error(_that.message);case ArtifactPart() when artifact != null:
 return artifact(_that.artifactId,_that.entryFile,_that.title);case _:
@@ -1126,13 +1134,14 @@ return artifact(_that.artifactId,_that.entryFile,_that.title);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text,  String? responseId)  text,required TResult Function( String text,  int? durationMs,  String? signature,  String? responseId)  reasoning,required TResult Function( ToolCall toolCall,  String? responseId)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String resource,  String filename,  String mimeType)  file,required TResult Function( String message)  error,required TResult Function( String artifactId,  String entryFile,  String title)  artifact,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String text,  String? responseId)  text,required TResult Function( String text,  int? durationMs,  String? signature,  String? responseId)  reasoning,required TResult Function( ToolCall toolCall,  String? responseId)  toolCall,required TResult Function( ToolResult result)  toolResult,required TResult Function( String command,  int returnCode,  String output,  String? exceptionInfo)  shellRun,required TResult Function( String resource,  String filename,  String mimeType)  file,required TResult Function( String message)  error,required TResult Function( String artifactId,  String entryFile,  String title)  artifact,}) {final _that = this;
 switch (_that) {
 case TextPart():
 return text(_that.text,_that.responseId);case ReasoningPart():
 return reasoning(_that.text,_that.durationMs,_that.signature,_that.responseId);case ToolCallPart():
 return toolCall(_that.toolCall,_that.responseId);case ToolResultPart():
-return toolResult(_that.result);case FilePart():
+return toolResult(_that.result);case ShellRunPart():
+return shellRun(_that.command,_that.returnCode,_that.output,_that.exceptionInfo);case FilePart():
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart():
 return error(_that.message);case ArtifactPart():
 return artifact(_that.artifactId,_that.entryFile,_that.title);}
@@ -1149,13 +1158,14 @@ return artifact(_that.artifactId,_that.entryFile,_that.title);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text,  String? responseId)?  text,TResult? Function( String text,  int? durationMs,  String? signature,  String? responseId)?  reasoning,TResult? Function( ToolCall toolCall,  String? responseId)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String resource,  String filename,  String mimeType)?  file,TResult? Function( String message)?  error,TResult? Function( String artifactId,  String entryFile,  String title)?  artifact,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String text,  String? responseId)?  text,TResult? Function( String text,  int? durationMs,  String? signature,  String? responseId)?  reasoning,TResult? Function( ToolCall toolCall,  String? responseId)?  toolCall,TResult? Function( ToolResult result)?  toolResult,TResult? Function( String command,  int returnCode,  String output,  String? exceptionInfo)?  shellRun,TResult? Function( String resource,  String filename,  String mimeType)?  file,TResult? Function( String message)?  error,TResult? Function( String artifactId,  String entryFile,  String title)?  artifact,}) {final _that = this;
 switch (_that) {
 case TextPart() when text != null:
 return text(_that.text,_that.responseId);case ReasoningPart() when reasoning != null:
 return reasoning(_that.text,_that.durationMs,_that.signature,_that.responseId);case ToolCallPart() when toolCall != null:
 return toolCall(_that.toolCall,_that.responseId);case ToolResultPart() when toolResult != null:
-return toolResult(_that.result);case FilePart() when file != null:
+return toolResult(_that.result);case ShellRunPart() when shellRun != null:
+return shellRun(_that.command,_that.returnCode,_that.output,_that.exceptionInfo);case FilePart() when file != null:
 return file(_that.resource,_that.filename,_that.mimeType);case ErrorPart() when error != null:
 return error(_that.message);case ArtifactPart() when artifact != null:
 return artifact(_that.artifactId,_that.entryFile,_that.title);case _:
@@ -1484,6 +1494,85 @@ $ToolResultCopyWith<$Res> get result {
     return _then(_self.copyWith(result: value));
   });
 }
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class ShellRunPart implements MessagePart {
+  const ShellRunPart({required this.command, required this.returnCode, required this.output, this.exceptionInfo, final  String? $type}): $type = $type ?? 'shellRun';
+  factory ShellRunPart.fromJson(Map<String, dynamic> json) => _$ShellRunPartFromJson(json);
+
+ final  String command;
+ final  int returnCode;
+ final  String output;
+ final  String? exceptionInfo;
+
+@JsonKey(name: 'runtimeType')
+final String $type;
+
+
+/// Create a copy of MessagePart
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ShellRunPartCopyWith<ShellRunPart> get copyWith => _$ShellRunPartCopyWithImpl<ShellRunPart>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$ShellRunPartToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ShellRunPart&&(identical(other.command, command) || other.command == command)&&(identical(other.returnCode, returnCode) || other.returnCode == returnCode)&&(identical(other.output, output) || other.output == output)&&(identical(other.exceptionInfo, exceptionInfo) || other.exceptionInfo == exceptionInfo));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,command,returnCode,output,exceptionInfo);
+
+@override
+String toString() {
+  return 'MessagePart.shellRun(command: $command, returnCode: $returnCode, output: $output, exceptionInfo: $exceptionInfo)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ShellRunPartCopyWith<$Res> implements $MessagePartCopyWith<$Res> {
+  factory $ShellRunPartCopyWith(ShellRunPart value, $Res Function(ShellRunPart) _then) = _$ShellRunPartCopyWithImpl;
+@useResult
+$Res call({
+ String command, int returnCode, String output, String? exceptionInfo
+});
+
+
+
+
+}
+/// @nodoc
+class _$ShellRunPartCopyWithImpl<$Res>
+    implements $ShellRunPartCopyWith<$Res> {
+  _$ShellRunPartCopyWithImpl(this._self, this._then);
+
+  final ShellRunPart _self;
+  final $Res Function(ShellRunPart) _then;
+
+/// Create a copy of MessagePart
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? command = null,Object? returnCode = null,Object? output = null,Object? exceptionInfo = freezed,}) {
+  return _then(ShellRunPart(
+command: null == command ? _self.command : command // ignore: cast_nullable_to_non_nullable
+as String,returnCode: null == returnCode ? _self.returnCode : returnCode // ignore: cast_nullable_to_non_nullable
+as int,output: null == output ? _self.output : output // ignore: cast_nullable_to_non_nullable
+as String,exceptionInfo: freezed == exceptionInfo ? _self.exceptionInfo : exceptionInfo // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+
 }
 
 /// @nodoc

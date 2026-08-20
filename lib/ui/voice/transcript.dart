@@ -88,6 +88,10 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
       return doing == null ? const [] : [VoiceLine(VoiceLineKind.activity, doing)];
     case ErrorPart(:final message):
       return [VoiceLine(VoiceLineKind.activity, message)];
+    // Typed rather than said — a `!` message from before voice mode was
+    // opened. It reads as what the agent's own command reads as.
+    case ShellRunPart():
+      return const [VoiceLine(VoiceLineKind.activity, "Ran a command")];
     case ReasoningPart():
     case ToolResultPart():
     case FilePart():
