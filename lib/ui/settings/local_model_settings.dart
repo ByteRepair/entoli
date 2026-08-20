@@ -337,10 +337,20 @@ class _RunningRow extends StatelessWidget {
 
   final LocalLlmState state;
 
+  /// Where it actually ended up, which is the one thing the picker cannot say:
+  /// Auto is resolved when the model loads, and a phone whose accelerator this
+  /// build cannot reach answers on the CPU whatever was picked.
+  static String? _where(String? device) => switch (device) {
+        null => null,
+        LocalDevice.cpu => "the CPU",
+        final name => "the ${LocalDevice.computeOf(name).label} ($name)",
+      };
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final name = localModelById(state.modelId)?.name ?? state.modelId;
+    final where = _where(state.device);
     return switch (state.phase) {
       LocalLlmPhase.starting => ListTile(
           contentPadding: EdgeInsets.zero,
@@ -356,7 +366,8 @@ class _RunningRow extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
           title: Text(name),
-          subtitle: Text("Answering · ${state.contextLength} tokens of context"),
+          subtitle: Text("${where == null ? "Answering" : "Answering on $where"}"
+              " · ${state.contextLength} tokens of context"),
         ),
       LocalLlmPhase.failed => ListTile(
           contentPadding: EdgeInsets.zero,

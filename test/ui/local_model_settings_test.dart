@@ -123,6 +123,28 @@ void main() {
     expect(find.textContaining("no accelerator on this device"), findsOneWidget);
   });
 
+  testWidgets("a loaded model says where it is actually running",
+      (tester) async {
+    final llm = FakeLocalLlm(installed: [model.id]);
+    app = TestApp.create(localLlm: llm, localModels: {model.id});
+    await io(tester, () => llm.serve(model.id, device: "Vulkan0"));
+    await pumpOnDevice(tester);
+
+    // The resolved device, not the setting: Auto is decided when the model
+    // loads, so this row is the only place the answer appears.
+    expect(find.textContaining("Answering on the GPU (Vulkan0)"), findsOneWidget);
+  });
+
+  testWidgets("a model on the CPU says so rather than naming a device",
+      (tester) async {
+    final llm = FakeLocalLlm(installed: [model.id]);
+    app = TestApp.create(localLlm: llm, localModels: {model.id});
+    await io(tester, () => llm.serve(model.id, device: LocalDevice.cpu));
+    await pumpOnDevice(tester);
+
+    expect(find.textContaining("Answering on the CPU"), findsOneWidget);
+  });
+
   testWidgets("a model that will not load says why, beside the others",
       (tester) async {
     final llm = FakeLocalLlm(

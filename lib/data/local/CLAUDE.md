@@ -357,6 +357,23 @@ device actually used and not the word. Which backends a build carried
 is the build's business and which of them find hardware is the phone's, and only
 the binary knows both.
 
+What auto is *not* is measured. It is a two-tier preference — an NPU before a
+GPU, the first of a kind otherwise — with no benchmark behind it and nothing
+comparing either against the CPU. That is worth being honest about rather than
+fixing with a timing run nobody asked for, so the running row on the settings
+page draws the device the model actually ended up on. `LocalLlmState.device`
+carries it in the picker's vocabulary rather than llama.cpp's, which is what
+keeps `noDevice` out of the UI.
+
+**The CPU is a device to name, not a flag to leave out.** `resolveLocalDevice`
+answers `none` for it — llama.cpp's own word — and `-dev none` is passed like any
+other device. Omitting `-dev` is *auto* down in llama.cpp, which is not the same
+auto as ours: it builds a device list out of every GPU it can see, and `-ngl`
+defaults to -1, which is every layer. So a picker set to CPU on a phone with a
+Vulkan driver used to run entirely on the GPU — the model was as slow as ever,
+the UI stuttered because the compositor was sharing the GPU with it, and the CPU
+cores slider moved nothing, since there was nothing on the CPU to move.
+
 What the Hexagon backend does *not* need is a signature. It enables an unsigned
 process domain itself on the DSP, so an ordinary APK can drive the NPU — the
 thing that would otherwise have made this a Qualcomm-partners feature. What it
@@ -517,8 +534,10 @@ pure key/eviction math, web-safe) and `file_kv_cache.dart` (the disk and the
 **Invalidation is the keying, not a bookkeeping step.** A rewound or edited chat
 hashes to a different key, misses, and its stale dump ages out of the LRU on its
 own. A dump is also unreadable by a different model, context length, or KV quant,
-so the filename carries a `kvNamespace` of exactly those — a change to any of
-them lands the dump where nothing looks for it, and the old namespace's files are
+so the filename carries a `kvNamespace` of exactly those — plus the device
+setting, which is the picker's word rather than the resolved one, so Auto and CPU
+keep separate dumps on a phone where they launch the same server. A change to any
+of them lands the dump where nothing looks for it, and the old namespace's files are
 reaped by the byte budget rather than tracked. One directory holds every
 namespace, because `--slot-save-path` takes a basename and the name is where the
 namespace rides; the pool and the cache are built from the one join

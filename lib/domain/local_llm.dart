@@ -121,7 +121,10 @@ class LocalLlmState {
 
   final LocalLlmPhase phase;
 
-  /// The device it was told to offload to, by name. Null is the CPU.
+  /// The device it ended up on, named the way the picker names one — so
+  /// [LocalDevice.cpu] where it offloads nothing. Resolved rather than chosen:
+  /// this is what the auto setting turned out to mean, which is the one thing
+  /// the picker cannot show.
   final String? device;
 
   /// What it was loaded with. Held because it is what a later [LocalLlm.serve]

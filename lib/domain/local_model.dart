@@ -9,9 +9,8 @@
 library;
 
 /// What an accelerator is, for the label beside its name. There is no CPU here
-/// deliberately: the CPU is what runs when nothing is offloaded, so it is the
-/// *absence* of a device rather than one of them — which is why `--device` is
-/// passed nothing to get it, and why the picker's CPU entry carries a null.
+/// deliberately: the CPU is what runs when nothing is offloaded, so ggml leaves
+/// it out of `--list-devices` and there is no kind for it to have.
 enum LocalCompute {
   gpu("GPU"),
   npu("NPU");
@@ -41,7 +40,8 @@ class LocalDevice {
   /// The stored choice that forces the CPU when the phone does have an
   /// accelerator — distinct from a null choice, which is "use the best one
   /// found". Never a real device: ggml leaves the CPU out of `--list-devices`,
-  /// so nothing it reports is named this.
+  /// so nothing it reports is named this. What the server is then passed is
+  /// `noDevice`, which is llama.cpp's word rather than this one.
   static const cpu = "cpu";
 
   /// The hardware behind it, in the backend's own words.
