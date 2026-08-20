@@ -2,10 +2,8 @@
 # whole of an update: the CI cache is keyed on this file, so the next run
 # rebuilds.
 #
-# git, curl and OpenSSL were here too, cross-compiled so the Android shell had a
-# git at all. Alpine's `apk` now answers that, and a distribution's own package
-# is patched for a CVE by someone whose job it is — which was never true of the
-# three built here. See "Bundled tools" in lib/data/local/CLAUDE.md.
+# git, curl and OpenSSL were here too, until Alpine's `apk` answered for them.
+# See "Bundled tools" in lib/data/local/CLAUDE.md.
 
 # Termux's fork rather than proot-me's: it carries the Android work — the
 # ashmem/memfd extension, --link2symlink, --kill-on-exit — and is the version
@@ -36,8 +34,7 @@ LLAMA_CPP_URL="https://github.com/ggml-org/llama.cpp/archive/refs/tags/$LLAMA_CP
 LLAMA_CPP_SHA256=63eb7bb55a46051ca523a670621cfaa6f4a1b3ea78e1cfc34a45c0af5139df0e
 
 # The Hexagon SDK, which the NPU backend is built against. Fetched by
-# tool/android-setup.sh rather than by build.sh, because it is opt-in: build.sh
-# only reads HEXAGON_SDK_ROOT and builds the CPU backend when it is unset.
+# tool/android-setup.sh; build.sh uses it if it is there.
 #
 # The one entry here that is not the upstream project's own tarball. Qualcomm
 # ships this through an installer that wants a package manager on the host, so

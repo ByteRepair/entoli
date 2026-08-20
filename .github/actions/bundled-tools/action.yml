@@ -20,7 +20,7 @@ runs:
   using: composite
   steps:
     # One authority for the list: the build below and the release build's check
-    # that git actually made it into the APK both read it from here.
+    # that the tools actually made it into the APK both read it from here.
     - id: abis
       shell: bash
       run: |

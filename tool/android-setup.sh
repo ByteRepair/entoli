@@ -2,7 +2,7 @@
 # Fetches what tool/bundle/build.sh needs but does not build itself: the Hexagon
 # SDK, which is the whole of the NPU backend. It lands in
 # tool/bundle/toolchains/, which is gitignored, and build.sh looks for it there
-# on its own — so this is one command with nothing to copy out of it.
+# on its own.
 #
 #   tool/android-setup.sh
 #   ANDROID_NDK_ROOT=$HOME/.android/ndk/<version> tool/bundle/build.sh arm64-v8a
@@ -15,21 +15,24 @@ source "$here/bundle/versions.sh"
 [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ] ||
   { echo "the Hexagon SDK build here is Linux x86_64 only" >&2; exit 1; }
 
-sdk=$here/bundle/toolchains/hexagon/$HEXAGON_SDK_VERSION
+toolchains=$here/bundle/toolchains
+sdk=$toolchains/hexagon/$HEXAGON_SDK_VERSION
 if [ -d "$sdk" ]; then
   echo "==> Hexagon SDK $HEXAGON_SDK_VERSION already unpacked"
   exit 0
 fi
 
-archive=$here/bundle/toolchains/hexagon-sdk-$HEXAGON_SDK_VERSION.tar.xz
-mkdir -p "$here/bundle/toolchains/hexagon"
+archive=$toolchains/hexagon-sdk-$HEXAGON_SDK_VERSION.tar.xz
+mkdir -p "$toolchains/hexagon"
 
 if [ ! -f "$archive" ]; then
   echo "==> fetching Hexagon SDK $HEXAGON_SDK_VERSION (about 660 MiB)"
   # curl's meter redraws with \r, which off a terminal is thousands of lines
   # rather than one that updates.
   if [ -t 2 ]; then meter=--progress-bar; else meter=--no-progress-meter; fi
-  curl -fL --retry 3 "$meter" -o "$archive.part" "$HEXAGON_SDK_URL"
+  # -C - so a dropped connection resumes the .part rather than restarting 660
+  # MiB; the sha256 below still catches a bad resume.
+  curl -fL --retry 3 -C - "$meter" -o "$archive.part" "$HEXAGON_SDK_URL"
   mv "$archive.part" "$archive"
 fi
 
@@ -44,5 +47,5 @@ fi
 echo "$HEXAGON_SDK_SHA256  $archive" | sha256sum -c -
 
 echo "==> unpacking"
-tar -C "$here/bundle/toolchains/hexagon" -xf "$archive"
+tar -C "$toolchains/hexagon" -xf "$archive"
 [ -d "$sdk" ] || { echo "no $HEXAGON_SDK_VERSION/ inside the archive" >&2; exit 1; }

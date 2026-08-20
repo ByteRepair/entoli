@@ -7,6 +7,10 @@ import "package:agent_chat/data/local/bundled_tools.dart";
 import "package:agent_chat/domain/shell.dart";
 
 void main() {
+  // Laying proot out asks Android for the network's resolvers, and a method
+  // channel needs a binding even to answer that nothing is listening.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late Directory root;
   late Directory libDir;
 
@@ -22,6 +26,11 @@ void main() {
 
   void ship(String name) => File(p.join(libDir.path, name)).writeAsStringSync("elf");
 
+  void shipProot() {
+    ship("libproot.so");
+    ship("libproot-loader.so");
+  }
+
   Future<Toolset?> install() =>
       BundledTools.install(root: root.path, libDir: libDir.path);
 
@@ -30,69 +39,35 @@ void main() {
     expect(root.listSync(), isEmpty);
   });
 
-  test("git is on the PATH, ahead of the system's own commands and as a link "
-      "into the one directory it may run from", () async {
-    ship("libgit.so");
-
-    final environment = (await install())!.environment;
-
-    final git = Link(p.join(root.path, "bin", "git"));
-    expect(git.existsSync(), isTrue);
-    expect(git.targetSync(), p.join(libDir.path, "libgit.so"));
-    expect(environment["PATH"],
-        "${p.join(root.path, "bin")}:${Platform.environment["PATH"] ?? "/system/bin"}");
-  });
-
-  test("the https helper is linked under every scheme git looks it up by",
+  test("a build with only the loader ships no proot, and so no toolset",
       () async {
-    ship("libgit.so");
-    ship("libgit-remote-http.so");
+    ship("libproot-loader.so");
 
-    final environment = (await install())!.environment;
-
-    final execPath = environment["GIT_EXEC_PATH"]!;
-    for (final scheme in const ["http", "https", "ftp", "ftps"]) {
-      expect(Link(p.join(execPath, "git-remote-$scheme")).existsSync(), isTrue,
-          reason: "git resolves its remote helpers by name");
-    }
+    expect(await install(), isNull);
   });
 
-  test("a build without the helper still offers git", () async {
-    ship("libgit.so");
+  test("proot on its own is a toolset, since it is what a command runs inside",
+      () async {
+    shipProot();
 
-    final environment = (await install())!.environment;
-
-    expect(environment["GIT_EXEC_PATH"], isNotNull);
-    expect(
-        Link(p.join(environment["GIT_EXEC_PATH"]!, "git-remote-https")).existsSync(),
-        isFalse);
+    final tools = await install();
+    expect(tools, isNotNull);
+    expect(tools!.proot, isNotNull);
   });
 
-  test("certificates come from the system's own store", () async {
-    ship("libgit.so");
+  // The prompt names `Toolset.names`, so a name here is a claim the shell can
+  // run that command. Nothing is laid out by name any more, and a build that
+  // starts claiming one without laying it out is the half-failure this is for.
+  test("nothing is advertised by name, since nothing is laid out under one",
+      () async {
+    shipProot();
 
-    expect((await install())!.environment["SSL_CERT_DIR"],
-        "/system/etc/security/cacerts");
-  });
-
-  test("a link left by the install before this one is repointed", () async {
-    ship("libgit.so");
-    await install();
-    final moved = Directory.systemTemp.createTempSync("agent_chat_tools_lib2_");
-    addTearDown(() => moved.deleteSync(recursive: true));
-    File(p.join(moved.path, "libgit.so")).writeAsStringSync("elf");
-
-    // What an app update does: the library directory's path carries an
-    // install-specific segment, so every link from before it points at nothing.
-    await BundledTools.install(root: root.path, libDir: moved.path);
-
-    expect(Link(p.join(root.path, "bin", "git")).targetSync(),
-        p.join(moved.path, "libgit.so"));
+    expect((await install())!.names, isNull);
   });
 
   test("a temporary directory of its own, since the system's is not writable",
       () async {
-    ship("libgit.so");
+    shipProot();
 
     final tmp = (await install())!.environment["TMPDIR"]!;
     expect(Directory(tmp).existsSync(), isTrue);

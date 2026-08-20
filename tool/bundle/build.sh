@@ -32,8 +32,8 @@ jobs=${JOBS:-$(nproc)}
 # link against symbols a supported device may not have.
 api=26
 
-# `triple` names the compiler, `host` names the platform for autoconf, and for
-# 32-bit arm the two disagree.
+# `triple` names the compiler, `host` the sysroot directory, and for 32-bit arm
+# the two disagree.
 case "$abi" in
   arm64-v8a)   triple=aarch64-linux-android;    host=aarch64-linux-android ;;
   armeabi-v7a) triple=armv7a-linux-androideabi; host=arm-linux-androideabi ;;
@@ -49,7 +49,6 @@ bin=$toolchain/bin
 sysroot=$toolchain/sysroot/usr/lib/$host/$api
 export CC=$bin/$triple$api-clang
 export AR=$bin/llvm-ar
-export RANLIB=$bin/llvm-ranlib
 export STRIP=$bin/llvm-strip
 export PATH=$bin:$PATH
 # Android 15 wants 16 KB-aligned segments, and a phone that enforces it will not
@@ -191,14 +190,18 @@ else
       -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
       -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
     )
-    # The NPU, where whoever is building has the SDK for it — what tool/
-    # android-setup.sh fetches, or an install of Qualcomm's own that
-    # HEXAGON_SDK_ROOT names. Announced rather than silent: enabling it off a
-    # directory nobody mentioned would otherwise be invisible until the phone
-    # either has an NPU backend or does not. Nothing else changes: the backend
-    # arrives as two more `libggml-*.so` and the app finds it the same way it
-    # finds the CPU's.
-    hexagon=${HEXAGON_SDK_ROOT:-$here/toolchains/hexagon/$HEXAGON_SDK_VERSION}
+    # Fetched by tool/android-setup.sh, or wherever HEXAGON_SDK_ROOT names. The
+    # backend arrives as two more `libggml-*.so` and is found like the CPU's.
+    #
+    # Naming a path asserts it exists, so a typo in it stops the build; the
+    # default is only a place to look, so its absence is a CPU build.
+    if [ -n "${HEXAGON_SDK_ROOT:-}" ]; then
+      [ -d "$HEXAGON_SDK_ROOT" ] ||
+        { echo "HEXAGON_SDK_ROOT is not a directory: $HEXAGON_SDK_ROOT" >&2; exit 1; }
+      hexagon=$HEXAGON_SDK_ROOT
+    else
+      hexagon=$here/toolchains/hexagon/$HEXAGON_SDK_VERSION
+    fi
     if [ -d "$hexagon" ]; then
       echo "==> NPU: $hexagon"
       cmake_args+=(-DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$hexagon")
