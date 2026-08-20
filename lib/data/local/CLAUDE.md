@@ -4,11 +4,20 @@
 
 What `/system/bin/sh` gets you is toybox: `ls`, `cat`, `grep`, `sed`, `find`,
 `tar` and about a hundred and fifty more — and no `git`, which for a coding
-agent is most of what is missing. So the app ships one. `git` and
-`git-remote-http` are built against bionic with the NDK and ride inside the
-APK, and `BundledTools` lays them out at startup; nothing else about the shell
-changes, since the workspace, the `cwd` and `LocalShell` are all where they
-already were.
+agent is most of what is missing.
+
+The app used to ship one, cross-compiled against bionic beside a curl and an
+OpenSSL that existed only to give it https. It no longer does. **git comes from
+the rootfs now**: `apk add git` inside Alpine is one command, and a
+distribution's own package is patched for a CVE by someone whose job that is,
+where the three built here were ours to notice and rebuild and then ship as an
+update every user had to install. What that costs is honest and worth stating —
+on a device with no rootfs installed there is no git at all, and the agent is
+back to toybox. See "A whole Linux under proot".
+
+So what rides inside the APK is proot and llama.cpp's server, and `BundledTools`
+lays them out at startup; nothing else about the shell changes, since the
+workspace, the `cwd` and `LocalShell` are all where they already were.
 
 **They live in the native library directory because it is the only place an
 app may execute a file from.** Since Android 10, SELinux denies an app
@@ -276,11 +285,14 @@ the binary knows both.
 What the Hexagon backend does *not* need is a signature. It enables an unsigned
 process domain itself on the DSP, so an ordinary APK can drive the NPU — the
 thing that would otherwise have made this a Qualcomm-partners feature. What it
-does need is Hexagon SDK 6.6 or later at **build** time, which is behind a
-Qualcomm account and not redistributable, so CI builds without it and
-`HEXAGON_SDK_ROOT` is what turns it on. Nothing else changes when it is there:
-the backend arrives as two more `libggml-*.so` and is found the way the CPU's
-is.
+does need is Hexagon SDK 6.6 or later at **build** time. `tool/android-setup.sh`
+fetches it — Qualcomm's own route wants a package manager installed on the host,
+so this is the Community Edition repackaging llama.cpp's own CI builds in, pinned
+by SHA-256 in `versions.sh` — and `build.sh` picks it up from where that leaves
+it. CI still builds without it, because what the NPU build emits is compiled by
+Qualcomm's toolchain against Qualcomm's headers and whether it can ship is a
+licensing question. Nothing else changes when it is there: the backend arrives as
+two more `libggml-*.so` and is found the way the CPU's is.
 
 It also decides the catalog. The Hexagon backend repacks **Q4_0, Q8_0 and
 MXFP4** and nothing else, so every entry in `local_model.dart` is Q4_0 — a

@@ -178,13 +178,12 @@ jobs:
           echo "SIGNER=$(grep -m1 'SHA-256 digest' <<<"$certs" | awk '{print $NF}')" \
             >> "$GITHUB_ENV"
 
-      # A release APK with no git in it installs and runs, and the agent quietly
-      # has nothing to work with — which is exactly the kind of thing nobody
-      # notices until it has shipped. proot is the same again: without it the
-      # Terminal settings say this build cannot run a Linux, and nobody would
-      # know that was a build fault rather than the truth. llama.cpp's server is
-      # the third, and it is checked on its own ABIs: it is arm64 only, so
-      # asking for it everywhere would fail every release.
+      # A release APK with no proot in it installs and runs, and the Terminal
+      # settings say this build cannot run a Linux — which nobody would know was
+      # a build fault rather than the truth, and is exactly the kind of thing
+      # that is not noticed until it has shipped. llama.cpp's server is the
+      # second, and it is checked on its own ABIs: it is arm64 only, so asking
+      # for it everywhere would fail every release.
       - name: Check the tools are in the APK
         run: |
           set -euo pipefail
@@ -196,7 +195,7 @@ jobs:
             fi
           }
           for abi in ${{ steps.tools.outputs.abis }}; do
-            for tool in libgit.so libproot.so libproot-loader.so; do
+            for tool in libproot.so libproot-loader.so; do
               check "$abi" "$tool"
             done
           done

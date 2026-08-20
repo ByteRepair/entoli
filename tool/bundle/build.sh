@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
-# Builds git and proot for Android, one ABI at a time, and lays the result out
-# the way the app packages it: an executable named lib*.so, because the
-# installer only extracts files matching that from an APK, and the native
-# library directory is the one place an app is allowed to exec from. See
-# "Bundled tools" in CLAUDE.md.
+# Builds proot for Android, one ABI at a time, and lays the result out the way
+# the app packages it: an executable named lib*.so, because the installer only
+# extracts files matching that from an APK, and the native library directory is
+# the one place an app is allowed to exec from. See "Bundled tools" in
+# CLAUDE.md.
 #
 #   ANDROID_NDK_ROOT=~/.android/ndk/28.2.13676358 tool/bundle/build.sh arm64-v8a
 #
-# Output, stripped, in dist/<abi>: libgit.so, libgit-remote-http.so, libproot.so
-# and its loader (libproot-loader.so, plus libproot-loader32.so where the
-# architecture can run 32-bit guests), and llama.cpp's server as
-# libllama-server.so with the libraries it loads beside it.
+# Output, stripped, in dist/<abi>: libproot.so and its loader
+# (libproot-loader.so, plus libproot-loader32.so where the architecture can run
+# 32-bit guests), and llama.cpp's server as libllama-server.so with the
+# libraries it loads beside it.
 #
-# The NPU is opt-in and needs a licensed SDK, so it is off by default:
-#
-#   HEXAGON_SDK_ROOT=~/Qualcomm/Hexagon_SDK/6.6.0.1 tool/bundle/build.sh arm64-v8a
-#
-# See "Running a model on the device" in CLAUDE.md for what that
-# buys and what it costs.
+# The NPU is opt-in, since what it emits is built by Qualcomm's own toolchain.
+# `tool/android-setup.sh` fetches the SDK and this picks it up from where that
+# put it; HEXAGON_SDK_ROOT overrides for an SDK installed some other way. See
+# "Running a model on the device" in CLAUDE.md for what it buys and what it
+# costs.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -36,9 +35,9 @@ api=26
 # `triple` names the compiler, `host` names the platform for autoconf, and for
 # 32-bit arm the two disagree.
 case "$abi" in
-  arm64-v8a)   triple=aarch64-linux-android;    host=aarch64-linux-android; openssl_target=android-arm64 ;;
-  armeabi-v7a) triple=armv7a-linux-androideabi; host=arm-linux-androideabi; openssl_target=android-arm ;;
-  x86_64)      triple=x86_64-linux-android;     host=x86_64-linux-android;  openssl_target=android-x86_64 ;;
+  arm64-v8a)   triple=aarch64-linux-android;    host=aarch64-linux-android ;;
+  armeabi-v7a) triple=armv7a-linux-androideabi; host=arm-linux-androideabi ;;
+  x86_64)      triple=x86_64-linux-android;     host=x86_64-linux-android ;;
   *) echo "unknown abi: $abi" >&2; exit 2 ;;
 esac
 
@@ -58,8 +57,8 @@ export PATH=$bin:$PATH
 export CFLAGS="-O2 -fPIC -Wl,-z,max-page-size=16384"
 
 # **llama.cpp is arm64 only, and that is a size decision.** The server and its
-# libraries are about 18 MB stripped, against git's 12, and three ABIs of it
-# would put 56 MB into the universal APK. Nothing is lost: a 32-bit phone cannot
+# libraries are about 18 MB stripped, and three ABIs of it would put 56 MB into
+# the universal APK. Nothing is lost: a 32-bit phone cannot
 # map a two-gigabyte model at all, and x86_64 Android is an emulator. A build
 # without it leaves `LocalLlm.available` false, which the settings page says.
 llama_abis=${LLAMA_ABIS:-arm64-v8a}
@@ -77,67 +76,20 @@ fetch() {
 }
 
 echo "==> fetching sources"
-fetch "$OPENSSL_URL" "openssl.tar.gz" "$OPENSSL_SHA256"
-fetch "$CURL_URL" "curl.tar.gz" "$CURL_SHA256"
-fetch "$GIT_URL" "git.tar.gz" "$GIT_SHA256"
 fetch "$TALLOC_URL" "talloc.tar.gz" "$TALLOC_SHA256"
 fetch "$PROOT_URL" "proot.tar.gz" "$PROOT_SHA256"
 if [ "$llama" = yes ]; then fetch "$LLAMA_CPP_URL" "llama.tar.gz" "$LLAMA_CPP_SHA256"; fi
 
 # Unpacked and built once per ABI. A second run reuses what is there, which is
-# what makes iterating on the git step bearable; CI starts from an empty tree
+# what makes iterating on the proot step bearable; CI starts from an empty tree
 # either way.
 src=$work/$abi
 mkdir -p "$src"
-[ -d "$src/openssl-$OPENSSL_VERSION" ] || tar -C "$src" -xf "$work/openssl.tar.gz"
-[ -d "$src/curl-$CURL_VERSION" ] || tar -C "$src" -xf "$work/curl.tar.gz"
-[ -d "$src/git-$GIT_VERSION" ] || tar -C "$src" -xf "$work/git.tar.gz"
 [ -d "$src/talloc-$TALLOC_VERSION" ] || tar -C "$src" -xf "$work/talloc.tar.gz"
 [ -d "$src/proot-$PROOT_VERSION" ] || tar -C "$src" -xf "$work/proot.tar.gz"
 if [ "$llama" = yes ] && [ ! -d "$src/llama.cpp-$LLAMA_CPP_VERSION" ]; then
   tar -C "$src" -xf "$work/llama.tar.gz"
 fi
-
-echo "==> openssl $OPENSSL_VERSION"
-(
-  cd "$src/openssl-$OPENSSL_VERSION"
-  [ -f libcrypto.a ] && exit 0
-  ANDROID_NDK_ROOT=$ndk ./Configure "$openssl_target" "-D__ANDROID_API__=$api" \
-    no-shared no-tests no-docs >/dev/null
-  make -j"$jobs" build_libs >/dev/null
-)
-
-echo "==> curl $CURL_VERSION"
-(
-  cd "$src/curl-$CURL_VERSION"
-  [ -f lib/.libs/libcurl.a ] && exit 0
-  ./configure --host="$host" --disable-shared --enable-static \
-    --without-libpsl --without-libidn2 --without-brotli --without-zstd \
-    --without-nghttp2 --disable-ldap \
-    --with-openssl="$src/openssl-$OPENSSL_VERSION" \
-    CPPFLAGS="-I$src/openssl-$OPENSSL_VERSION/include" \
-    LDFLAGS="-L$src/openssl-$OPENSSL_VERSION" >/dev/null
-  make -j"$jobs" >/dev/null
-)
-
-echo "==> git $GIT_VERSION"
-(
-  cd "$src/git-$GIT_VERSION"
-  # Three adjustments, and only three: bionic has no pthread cancellation (the
-  # header below), folds pthread and rt into libc, and git's own SHA
-  # implementations stand in for OpenSSL's, which it would otherwise want at
-  # build time for nothing we use.
-  make -j"$jobs" \
-    CC="$CC" AR="$AR" \
-    CFLAGS="$CFLAGS -include $here/android-compat.h -I$src/curl-$CURL_VERSION/include -I$src/openssl-$OPENSSL_VERSION/include" \
-    CURL_LDFLAGS="$src/curl-$CURL_VERSION/lib/.libs/libcurl.a $src/openssl-$OPENSSL_VERSION/libssl.a $src/openssl-$OPENSSL_VERSION/libcrypto.a -lz" \
-    PTHREAD_LIBS= NEEDS_LIBRT= \
-    NO_OPENSSL=1 NO_GETTEXT=1 NO_ICONV=1 NO_PERL=1 NO_PYTHON=1 NO_TCLTK=1 NO_EXPAT=1 \
-    uname_S=Linux ac_cv_fread_reads_directories=no ac_cv_snprintf_returns_bogus=no \
-    git git-remote-http >/dev/null
-  "$STRIP" -o "$out/libgit.so" git
-  "$STRIP" -o "$out/libgit-remote-http.so" git-remote-http
-)
 
 echo "==> talloc $TALLOC_VERSION"
 (
@@ -239,13 +191,17 @@ else
       -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
       -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
     )
-    # The NPU, where whoever is building has the SDK for it. Qualcomm's, behind an
-    # account, and not redistributable — which is why CI builds without it and why
-    # this is a variable rather than a default. Nothing else changes: the backend
+    # The NPU, where whoever is building has the SDK for it — what tool/
+    # android-setup.sh fetches, or an install of Qualcomm's own that
+    # HEXAGON_SDK_ROOT names. Announced rather than silent: enabling it off a
+    # directory nobody mentioned would otherwise be invisible until the phone
+    # either has an NPU backend or does not. Nothing else changes: the backend
     # arrives as two more `libggml-*.so` and the app finds it the same way it
     # finds the CPU's.
-    if [ -n "${HEXAGON_SDK_ROOT:-}" ]; then
-      cmake_args+=(-DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$HEXAGON_SDK_ROOT")
+    hexagon=${HEXAGON_SDK_ROOT:-$here/toolchains/hexagon/$HEXAGON_SDK_VERSION}
+    if [ -d "$hexagon" ]; then
+      echo "==> NPU: $hexagon"
+      cmake_args+=(-DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$hexagon")
     fi
     cmake "${cmake_args[@]}" >/dev/null
     cmake --build "$build" -j"$jobs" --target llama-server >/dev/null

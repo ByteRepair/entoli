@@ -1,10 +1,10 @@
 name: Bundled tools
 description: >
-  Build the tools Entoli ships inside the APK — git and its https helper, proot
-  and its loader, and llama.cpp's server for arm64 — and stage them where the
-  Android build packages them from. Cached on what decides the output, so a run
-  that changes neither the versions nor the recipe pays for a download rather
-  than three cross-compiles.
+  Build the tools Entoli ships inside the APK — proot and its loader, and
+  llama.cpp's server for arm64 — and stage them where the Android build
+  packages them from. Cached on what decides the output, so a run that changes
+  neither the versions nor the recipe pays for a download rather than three
+  cross-compiles.
 
 outputs:
   abis:
@@ -34,7 +34,7 @@ runs:
         path: tool/bundle/dist
         # The recipe and the versions between them decide every byte of the
         # output, so nothing else belongs in the key.
-        key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/bundle/versions.sh', 'tool/bundle/build.sh', 'tool/bundle/android-compat.h', 'tool/bundle/talloc-config.h') }}
+        key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/bundle/versions.sh', 'tool/bundle/build.sh', 'tool/bundle/talloc-config.h') }}
 
     # The runner image ships one, and llama.cpp's build is generated for it.
     # Checked rather than assumed: an image that dropped it would otherwise fail
