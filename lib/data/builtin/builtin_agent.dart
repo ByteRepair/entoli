@@ -40,7 +40,7 @@ String readingPrompt(LlmPromptProgress progress) {
 /// too fast to be worth naming — a file read is over before a frame is drawn,
 /// and a label that flashes is worse than none.
 String? runningTool(String name) => switch (name) {
-      "bash" => "Running a command",
+      bashToolName => "Running a command",
       websearchToolName => "Searching the web",
       webfetchToolName => "Fetching a page",
       taskToolName => "Working on a sub-task",
@@ -48,10 +48,14 @@ String? runningTool(String name) => switch (name) {
       _ => null,
     };
 
+/// Named beside the tool the way every other tool's is, so that matching on it
+/// is compiler-linked to the name the model is actually told.
+const bashToolName = "bash";
+
 /// The only tool for doing anything to the machine. Everything else — reading
 /// a file, editing it, running the tests — is a command.
 const bashTool = LlmTool(
-  name: "bash",
+  name: bashToolName,
   description: "Execute a bash command in the workspace directory.",
   schema: {
     "type": "object",
@@ -988,6 +992,7 @@ class BuiltinAgent {
       var reasoningClosed = false;
       DateTime? thinkingSince;
       String? signature;
+      String? said;
 
       // Said before the request goes out, because that is where the wait
       // starts. On a hosted provider it is the whole of what can be known until
@@ -1009,7 +1014,16 @@ class BuiltinAgent {
               // Only llama.cpp sends these, and only while it is still reading
               // the prompt — so this never fires on a hosted provider and never
               // after the first token.
-              yield StatusEvent(readingPrompt(chunk));
+              //
+              // Held and compared rather than forwarded: the server sends one
+              // per batch, and the chat page rebuilds on every state change. A
+              // percentage that has not moved is a redraw of the whole message
+              // list for a row that would come out identical.
+              final reading = readingPrompt(chunk);
+              if (reading != said) {
+                said = reading;
+                yield StatusEvent(reading);
+              }
 
             case LlmReasoningChunk(:final text):
               produced = true;

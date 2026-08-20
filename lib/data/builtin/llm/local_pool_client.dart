@@ -28,10 +28,10 @@ class LocalPoolClient implements LlmClient {
   final LocalLlm _llm;
   final LocalPoolOptions Function() _options;
 
-  /// One HTTP client per model, dropped when that model's server is started
-  /// again on a new port — the same signature check `LlmRegistry` makes, and
-  /// what keeps this from growing an entry per launch.
-  final _clients = <String, ({String baseUrl, OpenAiClient client})>{};
+  /// One client per model, dropped when that model's server comes up again on
+  /// a new port. The port is the whole signature here — everything else about
+  /// how to reach a local server is fixed.
+  final _clients = LlmClientCache();
 
   @override
   Stream<LlmChunk> stream(
@@ -57,12 +57,7 @@ class LocalPoolClient implements LlmClient {
   Future<List<String>> listModels() async => _llm.provider?.models ?? const [];
 
   @override
-  void close() {
-    for (final entry in _clients.values) {
-      entry.client.close();
-    }
-    _clients.clear();
-  }
+  void close() => _clients.close();
 
   /// Why it will never answer, as an [LlmException] — otherwise the agent's
   /// error arm reports a bare exception and the reason the model would not
@@ -81,20 +76,14 @@ class LocalPoolClient implements LlmClient {
     }
   }
 
-  OpenAiClient _clientFor(String model, LocalEndpoint at) {
-    final cached = _clients[model];
-    if (cached != null && cached.baseUrl == at.baseUrl) return cached.client;
-    cached?.client.close();
-    final client = OpenAiClient(
-      baseUrl: Uri.parse(at.baseUrl),
-      apiKey: at.apiKey,
-      // llama.cpp's own extension, and the only place it is asked for: it is
-      // what turns a minute of prefill into something the chat can draw. A
-      // hosted provider would reject the field, which is why it rides on this
-      // client rather than on every request the app makes.
-      returnProgress: true,
-    );
-    _clients[model] = (baseUrl: at.baseUrl, client: client);
-    return client;
-  }
+  LlmClient _clientFor(String model, LocalEndpoint at) =>
+      _clients.of(model, at.baseUrl, () => OpenAiClient(
+            baseUrl: Uri.parse(at.baseUrl),
+            apiKey: at.apiKey,
+            // llama.cpp's own extension, and the only place it is asked for: it
+            // is what turns a minute of prefill into something the chat can
+            // draw. A hosted provider would reject the field, which is why it
+            // rides on this client rather than on every request the app makes.
+            returnProgress: true,
+          ));
 }

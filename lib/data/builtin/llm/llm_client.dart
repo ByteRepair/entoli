@@ -163,3 +163,35 @@ abstract class LlmClient {
 
   void close();
 }
+
+/// Clients kept by name, rebuilt when what they were built from changes.
+///
+/// Two things hold one: `LlmRegistry`, keyed by provider id over the API shape,
+/// URL and key; and `LocalPoolClient`, keyed by model id over the port its
+/// server came up on. Both want the same three things and got them wrong in the
+/// same way twice — the close on eviction is the half that is easy to leave
+/// out, and an `http.Client` that is dropped rather than closed holds its
+/// connections until the isolate ends.
+///
+/// [signature] is whatever "still the same client" means to the holder. It is a
+/// string because both of them compose one out of several fields, and comparing
+/// a record would mean a type parameter for the sake of an `==`.
+class LlmClientCache {
+  final _entries = <String, ({String signature, LlmClient client})>{};
+
+  LlmClient of(String name, String signature, LlmClient Function() build) {
+    final cached = _entries[name];
+    if (cached != null && cached.signature == signature) return cached.client;
+    cached?.client.close();
+    final client = build();
+    _entries[name] = (signature: signature, client: client);
+    return client;
+  }
+
+  void close() {
+    for (final entry in _entries.values) {
+      entry.client.close();
+    }
+    _entries.clear();
+  }
+}

@@ -7,8 +7,9 @@ import "http_stream.dart";
 import "llm_client.dart";
 
 /// `/chat/completions` — OpenAI's shape, and everything that copied it:
-/// OpenRouter, Groq, Together, ollama, LM Studio, vLLM. Only the base URL and
-/// the key change.
+/// OpenRouter, Groq, Together, ollama, LM Studio, vLLM. The base URL and the
+/// key are the whole of what differs between them; [returnProgress] is the one
+/// knob that is not about a provider but about llama.cpp in particular.
 class OpenAiClient implements LlmClient {
   OpenAiClient({
     required this.baseUrl,

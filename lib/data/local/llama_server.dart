@@ -250,7 +250,6 @@ class LlamaServerPool extends LocalLlm {
       await old.stop();
     }
     await server.spawn(_binaries, file, onChange: _publish);
-    _publish();
     await server.ready;
     return server.endpoint;
   }
@@ -290,8 +289,11 @@ class _Server {
   final int contextLength;
 
   Process? _process;
-  int? _port;
-  String? _key;
+
+  /// Where this one is and what it will answer to. One field rather than two,
+  /// since they are made together and mean nothing apart — and null is the
+  /// whole of "it has not been spawned yet".
+  ({int port, String key})? _at;
 
   final _ready = Completer<void>();
   var _phase = LocalLlmPhase.starting;
@@ -315,8 +317,10 @@ class _Server {
 
   /// Only read after [ready] has completed, which is the only point at which
   /// there is something on the other end of it.
-  LocalEndpoint get endpoint =>
-      LocalEndpoint(baseUrl: "http://127.0.0.1:$_port/v1", apiKey: _key!);
+  LocalEndpoint get endpoint => LocalEndpoint(
+        baseUrl: "http://127.0.0.1:${_at!.port}/v1",
+        apiKey: _at!.key,
+      );
 
   /// Whether this is still the server that would be started for these settings.
   /// A failed one never is: being asked again is the user asking for another
@@ -332,16 +336,16 @@ class _Server {
     // already be on, and the failure that gives is the server exiting a second
     // after it started for a reason nothing here would think to report.
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    _port = socket.port;
+    final at = (port: socket.port, key: _newKey());
     await socket.close();
-    _key = _newKey();
+    _at = at;
 
     final launch = llamaLaunch(
       binaries: binaries,
       model: model,
       modelFile: modelFile,
-      port: _port!,
-      apiKey: _key!,
+      port: at.port,
+      apiKey: at.key,
       contextLength: contextLength,
       device: device,
       threads: _bigCores,
@@ -364,7 +368,7 @@ class _Server {
       // may hold nothing, and reporting this one's exit against it would fail a
       // model that is loading perfectly well.
       unawaited(process.exitCode.then((code) => _exited(process, code, onChange)));
-      unawaited(_waitForHealth(onChange));
+      unawaited(_waitForHealth(at, onChange));
     } on ProcessException catch (e) {
       _fail(e.message);
       onChange();
@@ -392,14 +396,14 @@ class _Server {
 
   /// Polled rather than watched for a line, since what the server prints when
   /// it is up is not part of any contract and its `/health` is.
-  Future<void> _waitForHealth(void Function() onChange) async {
+  Future<void> _waitForHealth(({int port, String key}) at, void Function() onChange) async {
     final client = http.Client();
     try {
       while (!_ready.isCompleted) {
         try {
           final response = await client.get(
-            Uri.parse("http://127.0.0.1:$_port/health"),
-            headers: {"Authorization": "Bearer $_key"},
+            Uri.parse("http://127.0.0.1:${at.port}/health"),
+            headers: {"Authorization": "Bearer ${at.key}"},
           ).timeout(const Duration(seconds: 5));
           if (response.statusCode == 200) {
             _phase = LocalLlmPhase.ready;

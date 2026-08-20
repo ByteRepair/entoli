@@ -115,14 +115,6 @@ class LocalLlmState {
   /// server's own last words, which for a model too large to fit is the only
   /// place that is said.
   final String? failure;
-
-  LocalLlmState copyWith({LocalLlmPhase? phase, String? failure}) => LocalLlmState(
-        modelId: modelId,
-        phase: phase ?? this.phase,
-        device: device,
-        contextLength: contextLength,
-        failure: failure ?? this.failure,
-      );
 }
 
 /// Why the model is not answering, worded by the server. Its own type so the
