@@ -2,20 +2,8 @@
 # whole of an update: the CI cache is keyed on this file, so the next run
 # rebuilds.
 #
-# These are security-relevant: git, curl and OpenSSL are ours to rebuild when
-# one of them has a CVE, since nothing on the device updates them for us.
-
-GIT_VERSION=2.47.1
-GIT_URL="https://mirrors.edge.kernel.org/pub/software/scm/git/git-$GIT_VERSION.tar.gz"
-GIT_SHA256=f4c4e98667800585d218dfdf415eb72f73baa7abcac4569e2ce497970f8d6665
-
-CURL_VERSION=8.21.0
-CURL_URL="https://github.com/curl/curl/releases/download/curl-8_21_0/curl-$CURL_VERSION.tar.gz"
-CURL_SHA256=d9b327997999045a24cda50f3983e69e51c516bd8be6ef9842fc7f99135e33bb
-
-OPENSSL_VERSION=4.0.1
-OPENSSL_URL="https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz"
-OPENSSL_SHA256=2db3f3a0d6ea4b59e1f094ace2c8cd536dffb87cdc39084c5afa1e6f7f37dd09
+# git, curl and OpenSSL were here too, until Alpine's `apk` answered for them.
+# See "Bundled tools" in lib/data/local/CLAUDE.md.
 
 # Termux's fork rather than proot-me's: it carries the Android work — the
 # ashmem/memfd extension, --link2symlink, --kill-on-exit — and is the version
@@ -44,3 +32,15 @@ TALLOC_SHA256=912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007
 LLAMA_CPP_VERSION=b10509
 LLAMA_CPP_URL="https://github.com/ggml-org/llama.cpp/archive/refs/tags/$LLAMA_CPP_VERSION.tar.gz"
 LLAMA_CPP_SHA256=63eb7bb55a46051ca523a670621cfaa6f4a1b3ea78e1cfc34a45c0af5139df0e
+
+# The Hexagon SDK, which the NPU backend is built against. Fetched by
+# tool/android-setup.sh; build.sh uses it if it is there.
+#
+# The one entry here that is not the upstream project's own tarball. Qualcomm
+# ships this through an installer that wants a package manager on the host, so
+# this is the Community Edition repackaged by the maintainer of llama.cpp's
+# Hexagon backend — the same artifact llama.cpp's own CI builds in. Nobody
+# signs it, which is what the sha256 below is for.
+HEXAGON_SDK_VERSION=6.6.0.0
+HEXAGON_SDK_URL="https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v$HEXAGON_SDK_VERSION/hexagon-sdk-v$HEXAGON_SDK_VERSION-amd64-lnx.tar.xz"
+HEXAGON_SDK_SHA256=4a916e42c1dab9efdf2e58773f901ea780fa43c907bf054ab76572a3b3d942f4

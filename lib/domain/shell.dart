@@ -82,9 +82,8 @@ class Sandbox {
   final List<String> command;
 
   /// The guest's environment. It **replaces** [Toolset.environment] rather than
-  /// layering over it: the bundled git is a bionic binary and its `GIT_EXEC_PATH`
-  /// names a host directory, neither of which is what a command inside the guest
-  /// should find. Settings still win over both.
+  /// layering over it: the host toolset's paths are the host's, and a command
+  /// inside the guest should find none of them. Settings still win over both.
   final Map<String, String> environment;
 
   /// What the model is told it is on, e.g. `Alpine Linux 3.24 (aarch64)`.

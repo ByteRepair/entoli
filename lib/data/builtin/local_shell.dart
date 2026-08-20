@@ -61,7 +61,16 @@ class LocalShell extends Shell {
     final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
         "commands run under ${_shell() ?? "no shell"}";
     final bundled = tools?.names;
-    return bundled == null ? where : "$where, with $bundled bundled with the app";
+    if (bundled != null) return "$where, with $bundled bundled with the app";
+    // Android's shell is toybox and nothing else — no git, and no way to add
+    // one outside a guest. Said rather than left to be discovered, since the
+    // alternative is the model working around the absence one `command not
+    // found` at a time.
+    if (Platform.isAndroid && tools?.proot != null) {
+      return "$where. There is no git and no package manager here; installing "
+          "a Linux from the Terminal settings gives you both";
+    }
+    return where;
   }
 
   /// False where the machine has no shell to offer. Android is why this is not

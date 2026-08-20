@@ -4,11 +4,20 @@
 
 What `/system/bin/sh` gets you is toybox: `ls`, `cat`, `grep`, `sed`, `find`,
 `tar` and about a hundred and fifty more — and no `git`, which for a coding
-agent is most of what is missing. So the app ships one. `git` and
-`git-remote-http` are built against bionic with the NDK and ride inside the
-APK, and `BundledTools` lays them out at startup; nothing else about the shell
-changes, since the workspace, the `cwd` and `LocalShell` are all where they
-already were.
+agent is most of what is missing.
+
+The app used to ship one, cross-compiled against bionic beside a curl and an
+OpenSSL that existed only to give it https. It no longer does. **git comes from
+the rootfs now**: `apk add git` inside Alpine is one command, and a
+distribution's own package is patched for a CVE by someone whose job that is,
+where the three built here were ours to notice and rebuild and then ship as an
+update every user had to install. What that costs is honest and worth stating —
+on a device with no rootfs installed there is no git at all, and the agent is
+back to toybox. See "A whole Linux under proot".
+
+So what rides inside the APK is proot and llama.cpp's server, and `BundledTools`
+lays them out at startup; nothing else about the shell changes, since the
+workspace, the `cwd` and `LocalShell` are all where they already were.
 
 **They live in the native library directory because it is the only place an
 app may execute a file from.** Since Android 10, SELinux denies an app
@@ -36,20 +45,20 @@ tree of links into an install that no longer exists is worse than useless. On
 Android that is the support directory and so is not evictable — see "Where the
 models live".
 
-The environment is the rest of it: `PATH` with the system's own commands behind
-ours, `GIT_EXEC_PATH` (git resolves `git-remote-https` and friends by name, so
-the one helper is linked under each scheme it might be asked for), `HOME`,
-`TMPDIR`, and `SSL_CERT_DIR` pointed at Android's own trust store, which is a
-directory of hashed certificates rather than a bundle file. It is layered in
-`LocalShell` beside the defaults that were already there, so the one place that
-decides what a command runs under decides this too, and settings still win over
-all of it — a variable the user set is the one that reaches the command.
+The environment is the rest of it, and with git gone it is `TMPDIR` and little
+else. It is layered in `LocalShell` beside the defaults that were already there,
+so the one place that decides what a command runs under decides this too, and
+settings still win over all of it — a variable the user set is the one that
+reaches the command.
 
 **What was laid out and what the model is told about it are one value**, the
-`Toolset` `install` answers with. They were a return value and a mutable global
-next to it, which is an ordering nothing in the types insisted on: get it wrong
-and git is on the `PATH` while the prompt never mentions it, which is the silent
-half-failure this file keeps arguing against elsewhere.
+`Toolset` `install` answers with. `names` is what the system prompt says is
+there, and it is null now that nothing is laid out by name — a build that
+bundles a command again sets it, and the prompt follows without a second place
+to remember. The rule reads the other way too, which is the harder half: taking
+a tool away has to reach the prompt in the same breath, or the model finds out
+one `command not found` at a time. That is why `platformDescription` says on
+Android that there is no git and where one comes from.
 
 **The toolset is frozen at build time**, and what is bundled is the whole of
 what can be run directly: nothing downloaded may be executed, so there is no
@@ -58,16 +67,13 @@ but proot, and a whole Linux behind it — see "A whole Linux under proot" below
 which is where a package manager actually comes from.
 
 Building them is `tool/bundle/`: `versions.sh` pins what is built and its
-checksums, `build.sh` cross-compiles OpenSSL and curl statically and then git
-against them, `stage.sh` puts the result where the APK packages it from. Three
-adjustments make git build for bionic, and only three — `NO_OPENSSL=1` (git
-has its own SHA), `android-compat.h` for `pthread_setcancelstate`, which bionic
-does not have at all, and dropping `-lpthread`/`-lrt`, which bionic folds into
-libc. The output needs nothing but `libz`, `libdl` and `libc`, all of which
-Android already ships. About 12 MB an ABI, which is why nothing here is checked
-in: CI builds it through `.github/actions/bundled-tools`, cached on the recipe
-and the versions, and the release build refuses an APK that came out without
-git in it.
+checksums, `build.sh` cross-compiles talloc and then proot against it, and
+llama.cpp's server for arm64, `stage.sh` puts the result where the APK packages
+it from. The output needs nothing but `libz`, `libdl` and `libc`, all of which
+Android already ships, and `build.sh` checks that against the NDK's sysroot
+rather than leaving the phone to say so. None of it is checked in: CI builds it
+through `.github/actions/bundled-tools`, cached on the recipe and the versions,
+and the release build refuses an APK that came out without proot in it.
 
 Nothing being checked in is also why a locally built APK is the one that ships
 without them: a `dist/` from an older run stages what it has and no more, and
@@ -79,9 +85,10 @@ two commands that fix it rather than describing a device that cannot run a
 Linux. Only whoever built the APK can reach that, since the release build
 refuses one with no proot in it.
 
-That also means git, curl and OpenSSL are **ours to update**: nothing on the
-device does it for us, so a CVE in any of them is a version bump in
-`versions.sh` and a release.
+Everything here is also **ours to update**: nothing on the device does it for
+us, so a CVE in a bundled tool is a version bump in `versions.sh` and a release
+every user has to install. That is the cost that took git out of this list, and
+it is worth weighing before anything is added back to it.
 
 ## A whole Linux under proot
 
@@ -138,11 +145,11 @@ nothing else in the app has to learn that commands are running somewhere else.
 The workspace explorer, the `DocumentsProvider` and a resend of an old turn all
 keep working with no knowledge of any of this.
 
-**A `Sandbox` replaces the `Toolset` rather than layering over it.** Inside the
-guest the bundled bionic git is the wrong answer and `GIT_EXEC_PATH` names a
-host directory that is not there; `apk add git` is the right one. So the guest
-gets the guest's `PATH` and nothing of the host's — and settings still win over
-both, which is the rule that was already there.
+**A `Sandbox` replaces the `Toolset` rather than layering over it.** Every path
+the host toolset names is the host's, and a `TMPDIR` under the app's own
+directory is not where a guest's `/tmp` is. So the guest gets the guest's `PATH`
+and nothing of the host's — and settings still win over both, which is the rule
+that was already there.
 
 **Which one commands run in is read per command**, through the same seam
 `LocalShell` re-reads `environment` through, so installing a Linux or going back
@@ -276,11 +283,14 @@ the binary knows both.
 What the Hexagon backend does *not* need is a signature. It enables an unsigned
 process domain itself on the DSP, so an ordinary APK can drive the NPU — the
 thing that would otherwise have made this a Qualcomm-partners feature. What it
-does need is Hexagon SDK 6.6 or later at **build** time, which is behind a
-Qualcomm account and not redistributable, so CI builds without it and
-`HEXAGON_SDK_ROOT` is what turns it on. Nothing else changes when it is there:
-the backend arrives as two more `libggml-*.so` and is found the way the CPU's
-is.
+does need is Hexagon SDK 6.6 or later at **build** time. `tool/android-setup.sh`
+fetches it — Qualcomm's own route wants a package manager installed on the host,
+so this is the Community Edition repackaging llama.cpp's own CI builds in, pinned
+by SHA-256 in `versions.sh` — and `build.sh` picks it up from where that leaves
+it. CI still builds without it, because what the NPU build emits is compiled by
+Qualcomm's toolchain against Qualcomm's headers and whether it can ship is a
+licensing question. Nothing else changes when it is there: the backend arrives as
+two more `libggml-*.so` and is found the way the CPU's is.
 
 It also decides the catalog. The Hexagon backend repacks **Q4_0, Q8_0 and
 MXFP4** and nothing else, so every entry in `local_model.dart` is Q4_0 — a

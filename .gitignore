@@ -126,3 +126,7 @@ app.*.symbols
 /tool/bundle/build/
 /tool/bundle/dist/
 /android/app/src/main/jniLibs/
+
+# Fetched by tool/android-setup.sh. Most of a gigabyte, and Qualcomm's to
+# distribute rather than ours.
+/tool/bundle/toolchains/
