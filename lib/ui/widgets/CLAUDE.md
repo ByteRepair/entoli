@@ -1,10 +1,10 @@
 # Shared UI
 
 `lib/ui/widgets/` holds what more than one page needs: `ModelPicker` and
-`OptionalModelPicker` (each a field over the model list, sharing the loading and
-failure states every page would otherwise spell out) over
-`ProviderModelSelector` (which owns every rule about the pair), the
-`Default`-plus-reset pairing, `LabelledField` (a field under its caption) and
+`OptionalModelPicker` (one field over every configured model, differing only in
+what the entry storing null means, and sharing the loading and failure states
+every page would otherwise spell out), the `Default`-plus-reset pairing,
+`LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,

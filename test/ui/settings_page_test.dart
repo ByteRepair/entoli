@@ -130,43 +130,17 @@ void main() {
     expect(find.text("New chats"), findsNothing);
   });
 
-  testWidgets("shows both provider and model form fields", (tester) async {
+  testWidgets("is one field, with no provider to pick first", (tester) async {
     await pumpSettings(tester, app, SettingsCategory.llms);
-    expect(find.text("Provider"), findsOneWidget);
-    expect(find.text("Model"), findsOneWidget);
+
+    expect(find.text("Provider"), findsNothing);
   });
 
-  testWidgets("with nothing persisted, Default offers no models to guess from", (tester) async {
-    await pumpSettings(tester, app, SettingsCategory.llms);
-    expect(find.byType(DropdownButtonFormField<String?>), findsNWidgets(2));
-    expect(find.text(defaultOptionLabel), findsNWidgets(2));
-
-    await openDropdown(tester, model: true);
-
-    // Default means the backend decides; picking a provider is what populates
-    // this list, rather than an arbitrary first one.
-    expect(popupLabels(tester), [defaultOptionLabel]);
-  });
-
-  testWidgets("choosing a provider populates the models", (tester) async {
+  testWidgets("selecting a model persists it with its provider", (tester) async {
     await pumpSettings(tester, app, SettingsCategory.llms);
 
-    await openDropdown(tester, model: false);
-    await tester.tap(find.text(firstProvider).last);
-    await settleIo(tester);
-
-    await openDropdown(tester, model: true);
-    expect(popupLabels(tester), [defaultOptionLabel, "Claude Haiku 3", "Claude Sonnet 4"]);
-  });
-
-  testWidgets("selecting a model persists default in settings", (tester) async {
-    await pumpSettings(tester, app, SettingsCategory.llms);
-    await openDropdown(tester, model: false);
-    await tester.tap(find.text(firstProvider).last);
-    await settleIo(tester);
-
-    await openDropdown(tester, model: true);
-    await tester.tap(find.text("Claude Sonnet 4"));
+    await openDropdown(tester);
+    await tester.tap(find.text("Claude Sonnet 4").last);
     await settleIo(tester);
 
     final settings = app.container.read(appSettingsProvider);
@@ -178,35 +152,11 @@ void main() {
     );
   });
 
-  testWidgets("switching provider updates model list", (tester) async {
-    await pumpSettings(tester, app, SettingsCategory.llms);
-    await openDropdown(tester, model: false);
-
-    await tester.tap(find.text(otherProvider));
-    await settleIo(tester);
-
-    await openDropdown(tester, model: true);
-
-    expect(find.text("Llama 3"), findsOneWidget);
-    expect(find.text("Qwen 2.5"), findsOneWidget);
-    expect(find.text("Claude Sonnet 4"), findsNothing);
-    expect(find.text("Claude Haiku 3"), findsNothing);
-  });
-
-  testWidgets("persisted default is preselected and cleared when provider changes", (tester) async {
+  testWidgets("a persisted default is preselected", (tester) async {
     seedSettings(otherProvider, "qwen-2.5");
     await pumpSettings(tester, app, SettingsCategory.llms);
 
-    expect(find.text(otherProvider), findsOneWidget);
     expect(find.text("Qwen 2.5"), findsOneWidget);
-
-    await openDropdown(tester, model: false);
-    await tester.tap(find.text(firstProvider));
-    await settleIo(tester);
-
-    expect(tester.takeException(), isNull);
-    expect(find.text("Qwen 2.5"), findsNothing);
-    expect(find.text(defaultOptionLabel), findsOneWidget);
   });
 
   testWidgets("a saved model the backend no longer offers does not break the page", (tester) async {
@@ -214,7 +164,6 @@ void main() {
     await pumpSettings(tester, app, SettingsCategory.llms);
 
     expect(tester.takeException(), isNull);
-    expect(find.text(otherProvider), findsOneWidget);
     expect(find.text(defaultOptionLabel), findsOneWidget);
   });
 

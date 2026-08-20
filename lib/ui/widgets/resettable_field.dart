@@ -33,10 +33,6 @@ class ResettableField extends StatelessWidget {
   }
 }
 
-/// The "inherit" entry that leads every option list.
-DropdownMenuItem<String?> defaultMenuItem() =>
-    const DropdownMenuItem<String?>(value: null, child: Text(defaultOptionLabel));
-
 /// A settings field under its caption. Shared so the two settings pages cannot
 /// drift apart on spacing.
 class LabelledField extends StatelessWidget {
