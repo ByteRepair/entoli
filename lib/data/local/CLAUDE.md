@@ -357,6 +357,14 @@ device actually used and not the word. Which backends a build carried
 is the build's business and which of them find hardware is the phone's, and only
 the binary knows both.
 
+What auto is *not* is measured. It is a two-tier preference — an NPU before a
+GPU, the first of a kind otherwise — with no benchmark behind it and nothing
+comparing either against the CPU. That is worth being honest about rather than
+fixing with a timing run nobody asked for, so the running row on the settings
+page draws the device the model actually ended up on. `LocalLlmState.device`
+carries it in the picker's vocabulary rather than llama.cpp's, which is what
+keeps `noDevice` out of the UI.
+
 **The CPU is a device to name, not a flag to leave out.** `resolveLocalDevice`
 answers `none` for it — llama.cpp's own word — and `-dev none` is passed like any
 other device. Omitting `-dev` is *auto* down in llama.cpp, which is not the same

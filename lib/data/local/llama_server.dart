@@ -409,7 +409,9 @@ class _Server {
   LocalLlmState get state => LocalLlmState(
         modelId: model.id,
         phase: _phase,
-        device: device,
+        // In the picker's word rather than llama.cpp's: [noDevice] is a flag
+        // value, and what reads this is the settings page.
+        device: device == noDevice ? LocalDevice.cpu : device,
         contextLength: contextLength,
         failure: _failure,
       );
