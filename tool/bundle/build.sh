@@ -143,6 +143,9 @@ else
   (
     cd "$src/llama.cpp-$LLAMA_CPP_VERSION"
     build=build-$abi
+    # cmake seeds CMAKE_C_FLAGS from the environment, and the arm64 linker flag
+    # in the CFLAGS this script exports fails the NPU sub-builds' compiler check.
+    unset CFLAGS
     # Everything about this build is the NDK's own toolchain file, which is what
     # makes it the one step here with no adjustments to the source at all.
     #
@@ -202,12 +205,21 @@ else
     else
       hexagon=$here/toolchains/hexagon/$HEXAGON_SDK_VERSION
     fi
+    targets=(llama-server)
     if [ -d "$hexagon" ]; then
       echo "==> NPU: $hexagon"
-      cmake_args+=(-DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$hexagon")
+      # The SDK's own cmake reads PREBUILT_LIB_DIR unconditionally; unset, it
+      # fails to configure rather than defaulting.
+      cmake_args+=(
+        -DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$hexagon"
+        -DPREBUILT_LIB_DIR=android_aarch64
+      )
+      # The DSP halves are ExternalProjects nothing on this side links, so
+      # building the server alone leaves a backend that finds no skel to run on.
+      targets+=(htp-v73 htp-v75 htp-v79 htp-v81)
     fi
     cmake "${cmake_args[@]}" >/dev/null
-    cmake --build "$build" -j"$jobs" --target llama-server >/dev/null
+    cmake --build "$build" -j"$jobs" --target "${targets[@]}" >/dev/null
 
     # Named lib*.so because that is all the installer extracts from an APK,
     # which for the executable is also the only way it lands somewhere it may
@@ -224,7 +236,12 @@ else
         libggml-htp-*) cp "$lib" "$out/" ;;
         *) "$STRIP" -o "$out/$(basename "$lib")" "$lib" ;;
       esac
-    done < <(find "$build" -name "lib*.so" -type f)
+    done < <(
+      # A skel's own build directory holds the same library it installs beside
+      # the backend, and ship/ is SDK prebuilts nothing here links.
+      find "$build" -name "lib*.so" -type f \
+        -not -path '*-prefix/*' -not -path '*/ship/*'
+    )
   )
 fi
 
