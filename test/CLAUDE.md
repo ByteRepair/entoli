@@ -208,9 +208,7 @@ skips it.
 
 `ModelPicker` is tested directly in `model_picker_test.dart` rather than through
 both settings pages, since it owns every rule about the provider/model pair and
-they only say where the values come from. It reads the model list off
-`availableModelsProvider`, so the test overrides that rather than building a
-whole `TestApp`.
+they only say where the values come from.
 
 `openCategory` is the settings page's sidebar. A test window is narrower than
 `navBreakpoint`, so a category there is a page pushed over the list rather than

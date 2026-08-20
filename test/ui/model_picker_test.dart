@@ -1,9 +1,7 @@
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 import "package:agent_chat/ui/widgets/resettable_field.dart";
 
@@ -13,7 +11,11 @@ import "../harness.dart";
 /// The rules both settings pages inherit, tested once on the widget that owns
 /// them rather than twice through the pages.
 void main() {
+  late TestApp app;
   ModelChoice? reported;
+
+  setUp(() => app = TestApp.create());
+  tearDown(() => app.dispose());
 
   Future<void> pump(
     WidgetTester tester, {
@@ -22,19 +24,17 @@ void main() {
     List<ModelOption> models = testModels,
   }) async {
     reported = null;
-    await tester.pumpWidget(ProviderScope(
-      overrides: [availableModelsProvider.overrideWith((ref) async => models)],
-      child: MaterialApp(
-        home: Scaffold(
-          body: ModelPicker(
-            choice: choice,
-            inherited: inherited,
-            onChanged: (c) => reported = c,
-          ),
+    app.backend.modelList = models;
+    await app.pump(
+      tester,
+      Scaffold(
+        body: ModelPicker(
+          choice: choice,
+          inherited: inherited,
+          onChanged: (c) => reported = c,
         ),
       ),
-    ));
-    await settleIo(tester);
+    );
   }
 
   testWidgets("Default leads the list, every model behind it and sorted", (tester) async {

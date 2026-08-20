@@ -299,6 +299,11 @@ abstract class ModelOption with _$ModelOption {
   factory ModelOption.fromJson(Map<String, dynamic> json) => _$ModelOptionFromJson(json);
 }
 
+/// A [ModelOption] as it is stored and passed around. The registry keys clients
+/// by provider id and two endpoints can offer the same model id, so this is a
+/// pair or it is nothing — never one half.
+typedef ModelChoice = ({String? providerId, String? modelId});
+
 /// What a message can address, the character that starts one, and the
 /// directory the files defining them live in — under `assets/prompts/` when
 /// they ship with the app, under `$AGENT_CHAT_CONFIG/` when the user adds one.

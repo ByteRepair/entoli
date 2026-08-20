@@ -32,7 +32,6 @@ import "domain/voice.dart";
 import "domain/voice_model.dart"
     show nativeRecognition, nativeSpeech, RecognitionModel, SpeechModel, voiceModelOf;
 import "domain/voice_model_store.dart";
-import "ui/widgets/model_picker.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
@@ -228,14 +227,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     return defaulted;
   }
 
-  /// The app-level default, stored exactly as shown: a pair, one half, or
-  /// nothing at all.
+  /// What a new chat is answered by, or nothing at all.
   Future<void> setDefault(ModelChoice choice) => _update((s) => s
     ..defaultProviderId = choice.providerId
-    ..defaultModelId = choice.providerId == null ? null : choice.modelId);
+    ..defaultModelId = choice.modelId);
 
-  /// What names a new chat, or nothing at all. Stored as it comes: the field
-  /// offers a whole model or none, never half of one.
+  /// What names a new chat, or nothing at all.
   Future<void> setTitleModel(ModelChoice choice) => _update((s) => s
     ..titleProviderId = choice.providerId
     ..titleModelId = choice.modelId);
@@ -250,7 +247,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// What classifies commands when auto mode is on, or nothing at all.
   Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
     ..classifierProviderId = choice.providerId
-    ..classifierModelId = choice.providerId == null ? null : choice.modelId);
+    ..classifierModelId = choice.modelId);
 
   /// The user's profile, injected into the system prompt. Null clears it.
   Future<void> setProfile(Profile? profile) =>
@@ -403,6 +400,15 @@ final projectListProvider = FutureProvider((ref) async {
 final availableModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
   final backend = ref.watch(agentBackendProvider);
   return backend.models();
+});
+
+/// The same models in the one order every picker lists them in. Sorted here
+/// rather than in `build`, since an endpoint that offers hundreds is sorted
+/// again on every keystroke that rebuilds a settings page.
+final sortedModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
+  String name(ModelOption m) => (m.label ?? m.modelId).toLowerCase();
+  final models = [...await ref.watch(availableModelsProvider.future)];
+  return models..sort((a, b) => name(a).compareTo(name(b)));
 });
 
 /// An attachment's bytes, read back from the chat's `resources/`, so a message

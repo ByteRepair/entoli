@@ -129,18 +129,10 @@ void main() {
     expect(find.text("New chats"), findsNothing);
   });
 
-  testWidgets("is one field, listing every provider's models", (tester) async {
+  testWidgets("is one field, with no provider to pick first", (tester) async {
     await pumpSettings(tester, app, SettingsCategory.llms);
-    expect(find.text("Provider"), findsNothing);
 
-    await openDropdown(tester);
-    expect(popupLabels(tester), [
-      defaultOptionLabel,
-      "Claude Haiku 3",
-      "Claude Sonnet 4",
-      "Llama 3",
-      "Qwen 2.5",
-    ]);
+    expect(find.text("Provider"), findsNothing);
   });
 
   testWidgets("selecting a model persists it with its provider", (tester) async {

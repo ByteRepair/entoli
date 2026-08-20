@@ -4,20 +4,14 @@
 
 A chat's `meta.json` overrides the app default in `settings.json`. Each level
 stores `null` to mean "inherit", shown in the UI as the `Default` option —
-always first in its list, with a reset button beside the field. Pinning a model
-pins its provider too: the registry keys clients by provider id, so the two are
-only ever sent as a matched pair.
+always first in its list, with a reset button beside the field.
 
 **A provider is never picked on its own.** Every field here is one list of every
-configured model, and the model brings its provider with it. There was a
-provider field above each of them once, and it only ever narrowed the list
+configured model, and the model brings the provider that offers it. There was a
+provider field above each of them once, and all it did was narrow the list
 below: picking one pinned half a pair, so a level could inherit a model from
 above while overriding the provider under it, and the model list had to answer
 what to show while the provider still said `Default`. Nothing wanted either.
-`ModelPicker` is now the same shape as the title field, and the one thing it
-still has to do is match a stored pair against the list rather than trust it —
-a model the backend no longer offers reads as `Default` instead of tripping the
-dropdown's "exactly one item" assert.
 
 `Default` is a live reference, not a snapshot: a chat that pins nothing uses
 whatever the global default currently is, and retargeting the global retargets
