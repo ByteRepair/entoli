@@ -25,10 +25,70 @@ class ShellResult {
 /// under. One value rather than two, so nothing can lay them out and forget to
 /// say so — see "Bundled tools" in CLAUDE.md.
 class Toolset {
-  const Toolset({required this.environment, required this.names});
+  const Toolset({required this.environment, this.names, this.proot});
 
   final Map<String, String> environment;
-  final String names;
+
+  /// Null where this build ships no commands of its own, which is a build that
+  /// ships only [proot] — nothing the model runs by name.
+  final String? names;
+
+  /// What can run a whole Linux, where this build ships one. Here rather than
+  /// beside the toolset for the reason the toolset is one value: both are
+  /// executables laid out by the same install, and a second return value is one
+  /// a caller can take and forget.
+  final Proot? proot;
+}
+
+/// Everything needed to run a command inside a downloaded Linux, bar the Linux.
+/// [binary] and [loader] are in the native library directory, which is the
+/// whole point of them — see "A whole Linux under proot" in CLAUDE.md.
+class Proot {
+  const Proot({
+    required this.binary,
+    required this.loader,
+    required this.tmpDir,
+    required this.resolvConf,
+    this.loader32,
+  });
+
+  final String binary;
+  final String loader;
+
+  /// For a guest binary of the other word size, where the architecture has one.
+  final String? loader32;
+
+  /// Writable, and both proot's own scratch space and the guest's `/tmp`.
+  final String tmpDir;
+
+  /// The host file bound over the guest's `/etc/resolv.conf`. Written at every
+  /// launch from what Android says the network resolves with, since a guest has
+  /// no other way to ask.
+  final String resolvConf;
+}
+
+/// A guest system the agent's commands run *inside* rather than beside. One
+/// value again, and the same reason: what a command is run under and what the
+/// model is told it is on cannot be allowed to disagree.
+class Sandbox {
+  const Sandbox({
+    required this.command,
+    required this.environment,
+    required this.description,
+  });
+
+  /// The executable and its arguments, ending in the guest's own shell. The
+  /// script goes on the end as `-c`, exactly as it does without one.
+  final List<String> command;
+
+  /// The guest's environment. It **replaces** [Toolset.environment] rather than
+  /// layering over it: the bundled git is a bionic binary and its `GIT_EXEC_PATH`
+  /// names a host directory, neither of which is what a command inside the guest
+  /// should find. Settings still win over both.
+  final Map<String, String> environment;
+
+  /// What the model is told it is on, e.g. `Alpine Linux 3.24 (aarch64)`.
+  final String description;
 }
 
 /// A command already running. Separate from its result so an aborted turn can

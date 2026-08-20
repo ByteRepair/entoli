@@ -42,7 +42,19 @@ Downloading is not faked. `voice_model_store_test.dart` runs the real
 `FileVoiceModelStore` against an `HttpServer` on localhost, because what is
 worth pinning is the shape of what lands on disk — the marker that says a model
 is whole, and the nothing a cancelled download leaves behind — and a faked
-client would only ever prove the fake.
+client would only ever prove the fake. `file_rootfs_store_test.dart` is the same
+again for a downloaded Linux, and goes one further by unpacking with the
+machine's real `tar`: the execute bit and the symlink it writes are the whole
+reason the app shells out to it, and only a real one proves they survive.
+
+`TestApp.create(proot: …, linuxes: …)` is the two halves the Terminal page turns
+on — whether this build could run a Linux at all, and which are installed — with
+`FakeRootfsStore` behind them. Its `installing` completer holds a download open
+so a test can see the row mid-flight. What a command actually runs under is not
+faked either: `local_shell_test.dart` builds a `Sandbox` out of `/usr/bin/env`,
+which really runs, and `proot_test.dart` pins the invocation itself as a pure
+function — between them they are what can be checked about proot on a machine
+with no Android on it.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so

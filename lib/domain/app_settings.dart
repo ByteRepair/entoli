@@ -30,6 +30,7 @@ class AppSettings {
     this.voiceSpeaker = 0,
     this.assistantProject,
     this.assistantView = AssistantView.chat,
+    this.rootfsId,
   });
 
   String? defaultModelId;
@@ -92,6 +93,14 @@ class AppSettings {
   /// Which view the assistant gesture opens. App-level, for the same reason.
   AssistantView assistantView;
 
+  /// The Linux the agent's commands run inside, by catalog id. Null is Android
+  /// itself, which is where every command ran before there was anything else to
+  /// run one in — and so what an existing `settings.json` already says by
+  /// saying nothing. App-level: which machine the agent is on is the app's, and
+  /// a chat moved between the two mid-conversation would be a conversation
+  /// about a filesystem that is no longer there.
+  String? rootfsId;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -120,6 +129,7 @@ class AppSettings {
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
         assistantProject: _orNull(json["assistantProject"] as String?),
         assistantView: AssistantView.fromName(json["assistantView"] as String?),
+        rootfsId: _orNull(json["rootfsId"] as String?),
       );
     } catch (_) {
       return AppSettings();
@@ -173,6 +183,7 @@ class AppSettings {
         voiceSpeaker: voiceSpeaker,
         assistantProject: assistantProject,
         assistantView: assistantView,
+        rootfsId: rootfsId,
       );
 
   Future<void> save(AppConfig config) async {
@@ -197,6 +208,7 @@ class AppSettings {
       if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
       if (assistantProject != null) "assistantProject": assistantProject,
       "assistantView": assistantView.name,
+      if (rootfsId != null) "rootfsId": rootfsId,
     }));
   }
 }

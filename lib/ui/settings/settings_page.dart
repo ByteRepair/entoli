@@ -22,6 +22,7 @@ import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "terminal_settings.dart";
 import "voice_settings.dart";
 import "../workspace/workspace_page.dart";
 
@@ -31,6 +32,7 @@ import "../workspace/workspace_page.dart";
 /// and the workspaces as one file to keep.
 enum SettingsCategory {
   general("General", Icons.tune),
+  terminal("Terminal", Icons.terminal),
   voice("Voice", Icons.graphic_eq),
   assistant("Assistant", Icons.assistant_outlined),
   providers("Providers", Icons.cloud_outlined),
@@ -136,6 +138,14 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           _EnvironmentSection(),
           Divider(),
           _DeleteAllChats(),
+        ],
+      // Its own category for the reason Voice is one: the picker is a line and
+      // the catalog under it is the rest of the page.
+      SettingsCategory.terminal => const [
+          TerminalSection(),
+          // Draws its own divider, since a build with no proot in it has no
+          // catalog to put under one.
+          RootfsCatalogSection(),
         ],
       // Its own category rather than a section under General: the two pickers
       // are two lines and the catalog under them is the rest of the page.

@@ -772,13 +772,11 @@ next to it, which is an ordering nothing in the types insisted on: get it wrong
 and git is on the `PATH` while the prompt never mentions it, which is the silent
 half-failure this file keeps arguing against elsewhere.
 
-**The toolset is frozen at build time, and cannot not be.** Nothing downloaded
-can ever be executed, so there is no package manager and there is no adding one
-later without changing the mechanism. What would change it is proot, which
-turns out to be reachable at a modern `targetSdk`: it substitutes its own
-loader on `execve` and only ever *maps* guest binaries, which is the permission
-W^X leaves alone. That is a whole Debian rather than one binary, and it is
-written down as an issue rather than done here.
+**The toolset is frozen at build time**, and what is bundled is the whole of
+what can be run directly: nothing downloaded may be executed, so there is no
+package manager here and cannot be one. What lifts that is not another binary
+but proot, and a whole Linux behind it — see "A whole Linux under proot" below,
+which is where a package manager actually comes from.
 
 Building them is `tool/bundle/`: `versions.sh` pins what is built and its
 checksums, `build.sh` cross-compiles OpenSSL and curl statically and then git
@@ -795,6 +793,107 @@ git in it.
 That also means git, curl and OpenSSL are **ours to update**: nothing on the
 device does it for us, so a CVE in any of them is a version bump in
 `versions.sh` and a release.
+
+#### A whole Linux under proot
+
+A bundled binary is one binary. What a coding agent actually wants is a package
+manager, and on Android that is the thing W^X takes away: since API 29 SELinux
+denies an app `exec` on anything under its own data directory, so nothing
+downloaded can ever be run. Termux stayed at `targetSdk` 28 for years over
+exactly this, and lowering ours is not on the table — the three foreground
+services are written against the typed model and `POST_NOTIFICATIONS`, all of
+which is 33-and-later behaviour.
+
+**proot gets past it by not exec'ing anything.** On intercepting `execve` it
+substitutes its own loader for the program, and that loader maps the guest
+binary and its ELF interpreter itself. Mapping is the permission W^X leaves
+granted; exec is the one it takes away. The single file that really is exec'd is
+the loader, and `get_loader_path()` reads `PROOT_LOADER` before anything else —
+so shipping proot and its loader as `lib*.so` in the native library directory,
+which is where "Bundled tools" above already puts executables, is the whole of
+the fix. Nothing is patched to make that true.
+
+**The distribution is Alpine, and one version of it.** `domain/rootfs.dart` is
+the catalog, const data like the voice models. Alpine is 4 MB against Debian's
+120, it is an official tarball rather than somebody's build of one, it is
+`.tar.gz` where the alternatives are `.tar.xz` — which a phone's `tar` cannot
+pipe and Dart decodes at a crawl — and `apk` is a package manager from the first
+command. What it is not is glibc, so a prebuilt binary someone downloads may
+refuse to run; a second entry here is what would answer that.
+
+**The tarball's checksum is pinned and checked before anything is unpacked.**
+Everything in there becomes a program this device will execute, so arriving is
+not the same as being what was checked — the bargain `tool/bundle/versions.sh`
+already makes for what is built into the APK. Bumping Alpine is a line in the
+catalog.
+
+**The system's `tar` unpacks it, not `package:archive`.** A rootfs is symlinks,
+execute bits and the odd hard link — `/bin/ls` is a link to busybox, and a
+busybox with no execute bit is a Linux that cannot run its first command — and
+Dart can write none of the three, having no `chmod` at all. `tar -xzf` gets all
+three right and is faster besides. It is injected into `FileRootfsStore` so a
+test can watch what it was asked to do, and the real one is tried on `PATH`
+before `/system/bin/tar`, the two-step `LocalShell` already takes to find a
+shell.
+
+Where it lives is `<cacheDir>/rootfs/`, outside the data directory, for the
+reason the voice models are: `backup.dart` zips that directory whole, and a
+restore *replaces* it. A `.complete` marker written last is the whole of what
+"installed" means.
+
+**The data directory is bound into the guest at its own path.** Not a tidier
+`/workspace`: every path the app has ever handed the model — the chat's
+workspace, the project's, an artifact — then means the same thing inside the
+guest as outside it, the host `cwd` and proot's `-w` are the same string, and
+nothing else in the app has to learn that commands are running somewhere else.
+The workspace explorer, the `DocumentsProvider` and a resend of an old turn all
+keep working with no knowledge of any of this.
+
+**A `Sandbox` replaces the `Toolset` rather than layering over it.** Inside the
+guest the bundled bionic git is the wrong answer and `GIT_EXEC_PATH` names a
+host directory that is not there; `apk add git` is the right one. So the guest
+gets the guest's `PATH` and nothing of the host's — and settings still win over
+both, which is the rule that was already there.
+
+**Which one commands run in is read per command**, through the same seam
+`LocalShell` re-reads `environment` through, so installing a Linux or going back
+to Android reaches the next command rather than the next launch. That is why
+`platformSandbox` is synchronous and `RootfsStore` has a `directoryOfSync`: it
+is asked before every command, and on this side of the app that is one `stat`.
+
+**Android keeps no `/etc/resolv.conf`**, and a guest program reads nothing else
+to find a resolver. So `BundledTools` writes one — from what `ConnectivityManager`
+says the current network uses, which is the user's own DNS rather than a public
+resolver picked here on their behalf, and the only reason the app asks for
+`ACCESS_NETWORK_STATE`. It is written at every launch and bound over the guest's
+copy, so it is one file whatever is installed and it follows the network the
+device is actually on rather than the one it was on the day the rootfs was
+downloaded. Android saying nothing writes nothing: a guest that cannot resolve a
+name is honest, where a silent fallback to someone else's resolver is not.
+
+The invocation itself is `data/local/proot.dart`, a pure function so that the
+whole of what this feature does can be pinned by a test on a machine with no
+Android on it. `--kill-on-exit` because a killed tracer otherwise leaves its
+tracees running; `--link2symlink` because a package manager unpacks with hard
+links and app storage may not have them; `-0` because `apk` wants to be root,
+which is a lie told to the guest rather than a privilege — the process is still
+the app's own uid to the kernel.
+
+What it costs is worth knowing: proot is ptrace-based, so filesystem-heavy work
+is noticeably slower than native, which is why `platformDescription` tells the
+model so. What it does not cost is size — 300 KB an ABI, against git's 12 MB,
+and the rootfs is downloaded rather than shipped.
+
+Building it is `build.sh` again, beside git. proot is termux's fork rather than
+proot-me's, for the Android work already in it, and its one dependency is
+talloc, which is built **from `talloc.c` alone** against `talloc-config.h` —
+the answers talloc's own build system would have worked out by running test
+programs, which it cannot do when cross-compiling. That is why there is no waf
+step here and why the result is one object file. Two adjustments to proot, and
+only two: an `#include <string.h>` upstream leaves out, which clang now refuses
+rather than warns about, and `PROOT_UNBUNDLE_LOADER`, which keeps the loader a
+file of its own instead of one extracted to app storage and exec'd — the thing
+that cannot work here.
 
 #### Approvals
 
@@ -1852,6 +1951,9 @@ the data directory, would drag them between machines and wipe whatever was
 already downloaded. Outside it, both are true by construction rather than by a
 rule in `writeBackup` that someone has to remember.
 
+A downloaded Linux is beside them, at `<cacheDir>/rootfs/<id>/`, and it is there
+for exactly the same two reasons — see "A whole Linux under proot".
+
 `platformCacheDir` resolves it by hand, the way `platformDataDir` does:
 `$XDG_CACHE_HOME/agent-chat` or `~/.cache/agent-chat` on Linux,
 `~/Library/Caches/agent-chat` on macOS, `%LOCALAPPDATA%\agent-chat\Cache` on
@@ -2581,13 +2683,16 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is six categories, picked from a panel beside it or, below
+The settings page is seven categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself: the
 default project's workspace (which has nowhere else to be reached from),
 **Appearance** — the theme and the app icon, which are the two things the app
 looks like — the **Agent** — command approval mode and the classifier model,
 which travel together because auto mode is unusable without one — the
-environment, and deleting every chat. **Voice** is what listens and what speaks,
+environment, and deleting every chat. **Terminal** is where commands run —
+Android itself, or a Linux downloaded from the catalog under it; a category of
+its own for the reason Voice is one, and drawn on every platform, where it says
+that installing one is Android's. **Voice** is what listens and what speaks,
 over the catalog they are downloaded from — its own category rather than a
 section under General because the two pickers are two lines and the catalog
 under them is the rest of the page. **Assistant** is where Android's assistant
@@ -2972,9 +3077,11 @@ build nobody released.
 - Package the Linux build:
   `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.
-- Bundled tools (Android's git): `ANDROID_NDK_ROOT=~/.android/ndk/<version>
+- Bundled tools (Android's git and proot): `ANDROID_NDK_ROOT=~/.android/ndk/<version>
   tool/bundle/build.sh arm64-v8a` then `tool/bundle/stage.sh`. Neither is run by
-  the app build; without them an APK simply has no git in it.
+  the app build; without them an APK has no git in it and no way to run a Linux.
+  The git half needs `perl` with `FindBin`, which the `flutter-dev` toolbox has
+  and this host does not.
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you
