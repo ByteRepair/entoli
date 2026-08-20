@@ -4,6 +4,13 @@
          release build can reach the network too. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Which resolver the network uses, and nothing else about it. A Linux
+         installed from the Terminal settings reads /etc/resolv.conf, a file
+         Android does not keep, so without asking this the guest would have to
+         be handed a public resolver chosen on the user's behalf. Normal
+         permission: granted at install, with nothing to prompt for. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <!-- The foreground services': they keep the process alive while a turn
          runs, while voice mode is listening, and while a model is downloading.
          See "Staying alive off screen" in CLAUDE.md. -->

@@ -180,16 +180,20 @@ jobs:
 
       # A release APK with no git in it installs and runs, and the agent quietly
       # has nothing to work with — which is exactly the kind of thing nobody
-      # notices until it has shipped.
+      # notices until it has shipped. proot is the same again: without it the
+      # Terminal settings say this build cannot run a Linux, and nobody would
+      # know that was a build fault rather than the truth.
       - name: Check the tools are in the APK
         run: |
           set -euo pipefail
           for abi in ${{ steps.tools.outputs.abis }}; do
-            if ! unzip -l build/app/outputs/flutter-apk/app-release.apk \
-                | grep -q "lib/$abi/libgit.so"; then
-              echo "::error::The release APK has no git for $abi"
-              exit 1
-            fi
+            for tool in libgit.so libproot.so libproot-loader.so; do
+              if ! unzip -l build/app/outputs/flutter-apk/app-release.apk \
+                  | grep -q "lib/$abi/$tool"; then
+                echo "::error::The release APK has no $tool for $abi"
+                exit 1
+              fi
+            done
           done
 
       - name: Name the APK after the release

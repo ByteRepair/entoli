@@ -13,14 +13,24 @@ class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,
     String? Function()? shell,
+    Sandbox? Function()? sandbox,
     this.tools,
   })  : _environment = environment ?? _none,
-        _shell = shell ?? _machineShell;
+        _shell = shell ?? _machineShell,
+        _sandbox = sandbox ?? _nothing;
 
   /// What this build ships beside the machine's own commands. Null where
   /// nothing is bundled, which is every platform but Android — see "Bundled
   /// tools" in CLAUDE.md.
   final Toolset? tools;
+
+  /// The Linux commands are run inside, where the user has installed one. Read
+  /// at each command for the reason [_environment] is: installing one from the
+  /// settings page, or going back to Android, reaches the next command rather
+  /// than the next launch.
+  final Sandbox? Function() _sandbox;
+
+  static Sandbox? _nothing() => null;
 
   /// What lets a test say there is no shell here without the machine agreeing.
   /// Not for the reason [_environment] is a callback: that one is re-read so a
@@ -42,6 +52,12 @@ class LocalShell extends Shell {
 
   @override
   String get platformDescription {
+    final sandbox = _sandbox();
+    if (sandbox != null) {
+      return "${sandbox.description}. It is running under proot on "
+          "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, so "
+          "filesystem-heavy commands are slower than they look";
+    }
     final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
         "commands run under ${_shell() ?? "no shell"}";
     final bundled = tools?.names;
@@ -50,22 +66,35 @@ class LocalShell extends Shell {
 
   /// False where the machine has no shell to offer. Android is why this is not
   /// a constant: it has no `/bin` at all, and a device whose `PATH` turns up
-  /// nothing is one where every command would otherwise fail one at a time.
+  /// nothing is one where every command would otherwise fail one at a time. A
+  /// sandbox brings its own shell, so it answers for itself.
   @override
-  bool get canRunCommands => _shell() != null;
+  bool get canRunCommands => _sandbox() != null || _shell() != null;
 
   @override
-  ShellRun start(String command, {required String cwd, required Duration timeout}) =>
-      _LocalRun(
-        shell: _shell(),
-        command: command,
-        cwd: cwd,
-        timeout: timeout,
-        // Settings last, so a variable the user set wins over both what the
-        // shell wants and what the bundled tools want — PATH being the one
-        // they are likely to disagree about.
-        environment: {..._defaults, ...?tools?.environment, ..._environment()},
-      );
+  ShellRun start(String command, {required String cwd, required Duration timeout}) {
+    final sandbox = _sandbox();
+    final shell = _shell();
+    return _LocalRun(
+      // The guest's shell, and everything proot needs to reach it, or the
+      // machine's own where there is no guest. Empty is a machine with neither,
+      // which is what the browser's shell already reports.
+      command: sandbox?.command ?? [?shell],
+      script: command,
+      cwd: cwd,
+      timeout: timeout,
+      // Settings last, so a variable the user set wins over both what the
+      // shell wants and what is bundled — PATH being the one they are likely to
+      // disagree about. The sandbox's environment stands in place of the
+      // toolset's rather than beside it: inside the guest, a host `PATH` names
+      // directories that are not there.
+      environment: {
+        ..._defaults,
+        ...?sandbox == null ? tools?.environment : sandbox.environment,
+        ..._environment(),
+      },
+    );
+  }
 
   /// The shell every command is run under, resolved once. `bash` is preferred
   /// because the prompt's examples are written for it, and the fallbacks are
@@ -120,8 +149,8 @@ class LocalShell extends Shell {
 
 class _LocalRun implements ShellRun {
   _LocalRun({
-    required this.shell,
     required this.command,
+    required this.script,
     required this.cwd,
     required this.timeout,
     required this.environment,
@@ -129,8 +158,12 @@ class _LocalRun implements ShellRun {
     result = _run();
   }
 
-  final String? shell;
-  final String command;
+  /// What to run, ending in a shell. `-c` and the script go on the end of it,
+  /// so a guest's shell reached through proot and the machine's own are the
+  /// same thing to everything below here.
+  final List<String> command;
+
+  final String script;
   final String cwd;
   final Duration timeout;
   final Map<String, String> environment;
@@ -149,15 +182,14 @@ class _LocalRun implements ShellRun {
   }
 
   Future<ShellResult> _run() async {
-    final shell = this.shell;
-    if (shell == null) {
+    if (command.isEmpty) {
       return const ShellResult.failed(
           "No shell was found on this device to execute commands in.");
     }
     final output = StringBuffer();
     Timer? timer;
     try {
-      _process = await _spawn(shell);
+      _process = await _spawn();
       final process = _process!;
       // Merged in the shell rather than here: two Dart streams arrive in
       // whatever order the pipes flush, and a compiler's errors interleaved
@@ -204,13 +236,13 @@ class _LocalRun implements ShellRun {
   ///
   /// Whether `setsid` exists is learned by trying it rather than by probing
   /// first: a failed spawn says the same thing without costing a subprocess.
-  Future<Process> _spawn(String shell) async {
-    final script = "exec 2>&1\n$command";
+  Future<Process> _spawn() async {
+    final argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
     if (LocalShell._hasSetsid != false) {
       try {
         final process = await Process.start(
           "setsid",
-          [shell, "-c", script],
+          [command.first, ...argv],
           workingDirectory: cwd,
           environment: environment,
         );
@@ -223,8 +255,8 @@ class _LocalRun implements ShellRun {
       }
     }
     return Process.start(
-      shell,
-      ["-c", script],
+      command.first,
+      argv,
       workingDirectory: cwd,
       environment: environment,
     );

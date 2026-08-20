@@ -51,12 +51,18 @@ class AppSession {
     // out is a channel round trip and a handful of symlinks, and nothing
     // between depends on either.
     final tools = cacheDir.then(platform.installBundledTools);
+    // A third round trip on the same channel, and the only thing that decides
+    // which rootfs a download fetches.
+    final abi = platform.deviceAbi();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
-    final backend = platform.createBackend(config, library, store, tools: await tools);
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
+    final rootfs = platform.createRootfsStore(cache);
+    final toolset = await tools;
+    final backend = platform.createBackend(config, library, store,
+        tools: toolset, rootfs: rootfs, abi: await abi);
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     // Both started before either is awaited: one is a disk scan and the other
@@ -70,6 +76,10 @@ class AppSession {
       if (engines.speech) nativeSpeech.id,
     };
     final installed = {...await scan, ...system};
+    // Read here for the reason the voice models are: the Terminal page's rows
+    // and the picker above them are drawn from it, and a scan started when the
+    // page opens would draw every row as "not installed" first.
+    final installedRootfs = await rootfs.installed();
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -89,6 +99,10 @@ class AppSession {
         voiceProvider.overrideWithValue(voice),
         installedVoiceModelsProvider
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
+        rootfsStoreProvider.overrideWithValue(rootfs),
+        installedRootfsProvider.overrideWith(() => InstalledRootfs(installedRootfs)),
+        deviceAbiProvider.overrideWithValue(await abi),
+        prootAvailableProvider.overrideWithValue(toolset?.proot != null),
       ],
     );
     container.read(availableModelsProvider);

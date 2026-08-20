@@ -83,7 +83,8 @@ void main() {
     });
 
     testWidgets(
-        "are offered General, Voice, Assistant, Providers, LLMs, Data, in that order",
+        "are offered General, Terminal, Voice, Assistant, Providers, LLMs, Data, "
+        "in that order",
         (tester) async {
       useWindow(tester, const Size(1200, 800));
       await app.pump(tester, const SettingsPage());
@@ -94,7 +95,7 @@ void main() {
         tester
             .widgetList<ListTile>(find.descendant(of: panel, matching: find.byType(ListTile)))
             .map((t) => (t.title! as Text).data),
-        ["General", "Voice", "Assistant", "Providers", "LLMs", "Data"],
+        ["General", "Terminal", "Voice", "Assistant", "Providers", "LLMs", "Data"],
       );
     });
   });

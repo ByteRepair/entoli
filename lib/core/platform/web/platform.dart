@@ -10,6 +10,7 @@ import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
+import "../../../domain/rootfs_store.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
@@ -18,10 +19,26 @@ import "../../../domain/web_search.dart";
 Shell platformShell({
   required Map<String, String> Function() environment,
   Toolset? tools,
+  Sandbox? Function()? sandbox,
 }) =>
     const UnavailableShell();
 
 Future<Toolset?> platformInstallTools(String cacheDir) async => null;
+
+/// A browser cannot run a command at all, so there is nothing for a Linux to
+/// be run under.
+Sandbox? platformSandbox({
+  required String dataDir,
+  Proot? proot,
+  RootfsStore? store,
+  String? rootfsId,
+  String? abi,
+}) =>
+    null;
+
+Future<String?> platformAbi() async => null;
+
+RootfsStore platformRootfsStore(String cacheDir) => const UnavailableRootfsStore();
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 

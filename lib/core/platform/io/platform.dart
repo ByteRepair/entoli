@@ -11,6 +11,8 @@ import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/bundled_tools.dart";
+import "../../../data/local/file_rootfs_store.dart";
+import "../../../data/local/proot.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
@@ -21,6 +23,8 @@ import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
+import "../../../domain/rootfs.dart";
+import "../../../domain/rootfs_store.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
@@ -29,8 +33,43 @@ import "../../../domain/web_search.dart";
 Shell platformShell({
   required Map<String, String> Function() environment,
   Toolset? tools,
+  Sandbox? Function()? sandbox,
 }) =>
-    LocalShell(environment: environment, tools: tools);
+    LocalShell(environment: environment, tools: tools, sandbox: sandbox);
+
+/// How a command is run inside the Linux the user installed, or null where
+/// there is none to run it in — no proot in this build, nothing picked in
+/// settings, or a pick whose files are not on disk. Answered synchronously
+/// because it is asked before every command.
+Sandbox? platformSandbox({
+  required String dataDir,
+  Proot? proot,
+  RootfsStore? store,
+  String? rootfsId,
+  String? abi,
+}) {
+  if (proot == null || store == null) return null;
+  final rootfs = rootfsById(rootfsId);
+  if (rootfs == null) return null;
+  final dir = store.directoryOfSync(rootfs.id);
+  if (dir == null) return null;
+  return prootSandbox(
+    proot: proot,
+    rootfs: rootfs,
+    rootfsDir: dir,
+    dataDir: dataDir,
+    abi: abi,
+  );
+}
+
+/// Which architecture this install is for, which decides the rootfs a download
+/// fetches. Null off Android.
+Future<String?> platformAbi() => BundledTools.abi();
+
+/// Where a downloaded Linux is kept: beside the voice models, outside the data
+/// directory, and for the same reasons — see [RootfsStore].
+RootfsStore platformRootfsStore(String cacheDir) =>
+    FileRootfsStore(p.join(cacheDir, "rootfs"));
 
 /// Lay out whatever this build ships for the device's ABI, under [cacheDir]
 /// rather than the data directory: it is rebuilt from the APK on demand, so a
@@ -88,8 +127,8 @@ Future<String> _resolveBase() async {
 
 String get _home => Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"]!;
 
-/// Where things that can be fetched again live — the voice models, and nothing
-/// else so far. `$AGENT_CHAT_CACHE` if set, else this platform's own cache
+/// Where things that can be fetched again live — the voice models, and a
+/// downloaded Linux beside them. `$AGENT_CHAT_CACHE` if set, else this platform's own cache
 /// directory, by hand rather than through `path_provider` so that the name
 /// beside `~/.config/agent-chat` is `~/.cache/agent-chat`.
 ///

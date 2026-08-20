@@ -49,6 +49,7 @@ class TestApp {
     required this.linkOpener,
     required this.voice,
     required this.voiceModels,
+    required this.rootfs,
     required this.work,
     required this.container,
   });
@@ -69,6 +70,10 @@ class TestApp {
   /// rather than which sentinel ids to pretend are installed. The default has
   /// neither, which is every platform a VM test would otherwise be pretending
   /// to be.
+  /// [linuxes] is which distributions are installed, and [proot] whether this
+  /// build could run one at all — the two halves the Terminal page turns on.
+  /// The default is a build with no proot in it, which is every platform but
+  /// Android and so what most of the suite should be pretending to be.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -77,6 +82,9 @@ class TestApp {
     FakeVoice? voice,
     Set<String> voiceModels = const {},
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
+    Set<String> linuxes = const {},
+    bool proot = false,
+    String abi = "arm64-v8a",
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -90,6 +98,7 @@ class TestApp {
     final linkOpener = FakeLinkOpener();
     final speech = voice ?? FakeVoice();
     final models = FakeVoiceModelStore(installed: voiceModels);
+    final linux = FakeRootfsStore(installed: linuxes);
     final work = FakeBackgroundWork();
     final system = {
       if (nativeVoice.recognition) nativeRecognition.id,
@@ -108,6 +117,7 @@ class TestApp {
       linkOpener: linkOpener,
       voice: speech,
       voiceModels: models,
+      rootfs: linux,
       work: work,
       container: ProviderContainer(
         overrides: [
@@ -129,6 +139,10 @@ class TestApp {
           installedVoiceModelsProvider.overrideWith(
               () => InstalledVoiceModels({...voiceModels, ...system},
                   system: system)),
+          rootfsStoreProvider.overrideWithValue(linux),
+          installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
+          deviceAbiProvider.overrideWithValue(abi),
+          prootAvailableProvider.overrideWithValue(proot),
           backgroundWorkProvider.overrideWithValue(work),
         ],
       ),
@@ -147,6 +161,7 @@ class TestApp {
   final FakeLinkOpener linkOpener;
   final FakeVoice voice;
   final FakeVoiceModelStore voiceModels;
+  final FakeRootfsStore rootfs;
   final FakeBackgroundWork work;
   final ProviderContainer container;
 

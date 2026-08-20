@@ -23,6 +23,7 @@ import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
+import "domain/rootfs_store.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
@@ -80,6 +81,39 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
 final installedVoiceModelsProvider =
     NotifierProvider<InstalledVoiceModels, Set<String>>(
         () => InstalledVoiceModels(const {}));
+
+final rootfsStoreProvider = Provider<RootfsStore>((ref) => throw UnimplementedError());
+
+/// Which distributions are installed and whole. Seeded before the app is built
+/// and refreshed by whatever installs or deletes one, for the reason
+/// [InstalledVoiceModels] is: the Terminal page's rows are drawn from it, and a
+/// lazy scan would draw every one of them as "not installed" first.
+class InstalledRootfs extends Notifier<Set<String>> {
+  InstalledRootfs(this._seed);
+
+  final Set<String> _seed;
+
+  @override
+  Set<String> build() => _seed;
+
+  Future<void> refresh() async {
+    final installed = await ref.read(rootfsStoreProvider).installed();
+    if (ref.mounted) state = installed;
+  }
+}
+
+final installedRootfsProvider =
+    NotifierProvider<InstalledRootfs, Set<String>>(() => InstalledRootfs(const {}));
+
+/// Which architecture this install is for, and so which rootfs a download
+/// fetches. Read once at startup — it cannot change while the app runs.
+final deviceAbiProvider = Provider<String?>((ref) => null);
+
+/// Whether this build can run a command inside a Linux at all: proot has to
+/// have been packaged for the device's ABI. False everywhere but Android, which
+/// is what leaves the Terminal page saying so rather than offering a download
+/// nothing could use.
+final prootAvailableProvider = Provider<bool>((ref) => false);
 
 /// Whether a message can be read out: a platform that can speak, and a speech
 /// model picked and installed. Half of [voiceReadyProvider], because reading a
@@ -198,6 +232,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setVoiceSpeaker(int speaker) =>
       _update((s) => s.voiceSpeaker = speaker);
+
+  /// Which Linux the agent's commands run inside, or null for Android itself.
+  /// It reaches the next command rather than the next turn: the shell resolves
+  /// this per command.
+  Future<void> setRootfs(String? id) => _update((s) => s.rootfsId = id);
 
   /// How long a temporary chat lives. App-level default; a project and a chat
   /// can override it. Re-anchors every chat to now so the badges appear
