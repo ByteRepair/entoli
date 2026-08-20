@@ -214,6 +214,10 @@ else
       -DBUILD_SHARED_LIBS=ON
       -DGGML_BACKEND_DL=ON
       -DGGML_NATIVE=OFF
+      # Without this, ggml appends no `-march` when cross-compiling and every
+      # Q4_0 fast path `#if`s itself out — see "Where it lives, and what it
+      # costs". Dropping it builds a server that works and is unusably slow.
+      -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16
       -DCMAKE_SKIP_INSTALL_RPATH=ON
       # ggml defaults to OpenMP, and the NDK's `libomp.so` is a host toolchain
       # file rather than something a phone has — a build with it links, ships,
