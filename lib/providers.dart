@@ -18,7 +18,9 @@ import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
+import "data/builtin/llm/local_prefill.dart";
 import "domain/local_llm.dart";
+import "domain/local_model.dart";
 import "domain/local_model_store.dart";
 import "domain/models.dart";
 import "domain/permission.dart";
@@ -153,6 +155,64 @@ class LocalLlmStatus extends Notifier<List<LocalLlmState>> {
 
 final localLlmStateProvider =
     NotifierProvider<LocalLlmStatus, List<LocalLlmState>>(LocalLlmStatus.new);
+
+/// The on-device prompt warm-up, or null where there is no server to warm
+/// against — every platform but Android, and an Android whose build shipped no
+/// model server. Overridden in `main`, where the shell that words the system
+/// prompt and the foreground service that shows its notification both are.
+final localPrefillProvider = Provider<LocalPrefill?>((ref) => null);
+
+/// What the warm-up is doing, for the settings page to draw. A notifier over
+/// the port's own [ValueListenable], like [localLlmStateProvider] beside it.
+class LocalPrefillStatus extends Notifier<LocalPrefillState?> {
+  @override
+  LocalPrefillState? build() {
+    final prefill = ref.watch(localPrefillProvider);
+    if (prefill == null) return null;
+    void update() => state = prefill.state.value;
+    prefill.state.addListener(update);
+    ref.onDispose(() => prefill.state.removeListener(update));
+    return prefill.state.value;
+  }
+}
+
+final localPrefillStateProvider =
+    NotifierProvider<LocalPrefillStatus, LocalPrefillState?>(LocalPrefillStatus.new);
+
+/// Drives the warm-up from the settings that decide it: when the default model
+/// is a downloaded on-device one and prefill is on, warm it; anything else
+/// calls it off. Read once at startup, like [turnKeepAliveProvider] — it sets
+/// up its listeners rather than rebuilding, so it keeps reacting when nothing
+/// is watching it.
+final localPrefillTriggerProvider = Provider<void>((ref) {
+  final prefill = ref.watch(localPrefillProvider);
+  if (prefill == null) return;
+  void sync() {
+    final target = _prefillTarget(
+      ref.read(appSettingsProvider),
+      ref.read(installedLocalModelsProvider),
+    );
+    if (target != null) {
+      prefill.warm(target);
+    } else {
+      prefill.cancel();
+    }
+  }
+
+  ref.listen(appSettingsProvider, (_, _) => sync());
+  ref.listen(installedLocalModelsProvider, (_, _) => sync());
+  sync();
+});
+
+/// The model to warm, or null when nothing should be: the default model, where
+/// it is a downloaded on-device one and the user has asked for this.
+String? _prefillTarget(AppSettings settings, Set<String> installed) {
+  if (!settings.localModelPrefill) return null;
+  if (settings.defaultProviderId != localProviderId) return null;
+  final id = settings.defaultModelId;
+  if (id == null || !installed.contains(id)) return null;
+  return id;
+}
 
 /// Which architecture this install is for, and so which rootfs a download
 /// fetches. Read once at startup — it cannot change while the app runs. Android
@@ -304,6 +364,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setLocalContext(int? tokens) =>
       _applyLocal((s) => s.localModelContext = tokens);
+
+  Future<void> setLocalPrefill(bool on) =>
+      _applyLocal((s) => s.localModelPrefill = on);
 
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value

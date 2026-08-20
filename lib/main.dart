@@ -74,6 +74,10 @@ class AppSession {
     final server = await localLlm;
     final backend = platform.createBackend(config, library, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server);
+    // One instance, shared: the prefill's notification and every other
+    // foreground hold go through the same service.
+    final foreground = ForegroundService();
+    final prefill = platform.createLocalPrefill(backend, server, foreground, config);
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     // Both started before either is awaited: one is a disk scan and the other
@@ -102,7 +106,7 @@ class AppSession {
         promptLibraryProvider.overrideWithValue(library),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
-        backgroundWorkProvider.overrideWithValue(ForegroundService()),
+        backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
         backupHandoffProvider
@@ -119,12 +123,16 @@ class AppSession {
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
         localModelStoreProvider.overrideWithValue(localModels),
         localLlmProvider.overrideWithValue(server),
+        localPrefillProvider.overrideWithValue(prefill),
         installedLocalModelsProvider
             .overrideWith(() => InstalledLocalModels(scans.last)),
       ],
     );
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
+    // Read once to set going, like the keep-alive above: it wires itself to the
+    // settings and drives the prefill from there.
+    container.read(localPrefillTriggerProvider);
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open

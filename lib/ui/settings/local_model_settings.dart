@@ -55,6 +55,8 @@ class LocalModelSection extends ConsumerWidget {
           const _MaxRunningPicker(),
           const _DevicePicker(),
           const _ContextPicker(),
+          const _PrefillToggle(),
+          const _Prefilling(),
           const _Running(),
         ],
       ],
@@ -154,6 +156,54 @@ class _ContextPicker extends ConsumerWidget {
       onPick: (size) => ref
           .read(appSettingsProvider.notifier)
           .setLocalContext(size == null ? null : int.parse(size)),
+    );
+  }
+}
+
+/// Whether to warm the default on-device model's system prompt in the
+/// background. Off by default: on a phone it is minutes of the processor, so it
+/// is the user's to ask for. See "Prefilling the system prompt" in CLAUDE.md.
+class _PrefillToggle extends ConsumerWidget {
+  const _PrefillToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(appSettingsProvider.select((s) => s.localModelPrefill));
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text("Prefill the prompt"),
+      subtitle: const Text(
+          "Warm the default model's system prompt in the background so the "
+          "first chat starts sooner. Costs a few minutes of the processor when "
+          "the model is set, and shows a notification while it runs."),
+      value: on,
+      onChanged: ref.read(appSettingsProvider.notifier).setLocalPrefill,
+    );
+  }
+}
+
+/// The warm-up in progress, drawn only while there is one — the rest of the
+/// time it has nothing to say. Its own row rather than a line on [_Running]
+/// because a model can be warming before any chat has loaded one.
+class _Prefilling extends ConsumerWidget {
+  const _Prefilling();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(localPrefillStateProvider);
+    if (state == null) return const SizedBox.shrink();
+    final pct =
+        state.fraction == null ? "" : " · ${(state.fraction! * 100).round()}%";
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      title: Text("Prefilling ${state.name}…"),
+      subtitle: Text("Warming its system prompt so the first chat starts "
+          "sooner$pct"),
     );
   }
 }

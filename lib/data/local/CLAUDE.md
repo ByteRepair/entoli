@@ -449,3 +449,47 @@ app on the device can reach the loopback address, so without one any of them
 could spend this model's battery. The key is never written down — it lives in
 the running `LlamaServer` and in the provider config it hands the registry, and
 both go when the server does.
+
+### Prefilling the system prompt
+
+The first turn of any chat pays for the whole system prompt at once — a couple
+of thousand tokens of instructions and tool schemas, which on a phone's CPU is
+minutes before a word is generated. Prefilling moves that wait off the first
+chat: when a local model is the default and the On-device toggle is on, the
+system prompt is warmed in the background so the server has its KV in a slot
+before a chat asks.
+
+The reorder is what makes it cheap. The system prompt used to open with the
+conversation's workspace path, which is per-chat, so no two chats shared a
+cacheable prefix. It now ends with the workspace (`## Your workspace`), so the
+long body above it is identical for every chat and is one prefix the pool's slot
+cache reuses across them. The warm-up sends that body with the workspace left
+empty (`createLocalPrefill` in `core/platform/`), so the shared head lands in a
+slot and every chat after only pays its own short tail. The date rides on the
+user message rather than the prompt (`withNow`), so the one value that changes
+every turn is never in the cached prefix.
+
+**It is the on-device provider's own feature and touches no shared interface.**
+`LocalPrefill` drives the existing `LocalLlm.serve` and an `OpenAiClient` with
+`returnProgress` — the same two a real turn uses — and cancels the stream at the
+first token, by which point the prompt is read and cached. Nothing on
+`LlmClient`, `LlmProvider` or `AgentBackend` grew a method; a hosted provider
+sees none of it. The one new port method is `BackgroundWork.prefilling`, which
+is the foreground service, not a provider — and its notification is a visible
+one rather than the silent hold turns and downloads keep, since the user set it
+going and then left.
+
+The warm-up prompt and tools are built from the same `systemPrompt` and
+`agentTools` a turn uses, so the warmed prefix is the one those turns send —
+the tool booleans in `createLocalPrefill` are `BuiltinAgent`'s defaults for a
+top-level turn and have to stay in step with them, or the cache warms a prefix
+nothing reuses. The profile is in the prompt too: a chat with an unchanged
+profile reuses it, and one after a profile edit reuses only the body above it
+and reprocesses the profile in its tail, which is small and self-heals on that
+first turn — so nothing rewarms on a profile change.
+
+The cache is the running server's slots, so a model reload or an app restart
+loses it and the warm-up runs again. Persisting the body KV to disk so it
+survives, and a per-chat history KV so reopening a long chat does not reprocess
+it, are the two follow-ups — the second is where a real cache key and
+invalidation are needed, which the live slots do not.

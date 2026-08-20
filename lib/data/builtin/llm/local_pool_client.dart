@@ -1,3 +1,4 @@
+import "../../../domain/app_settings.dart";
 import "../../../domain/local_llm.dart";
 import "llm_client.dart";
 import "openai_client.dart";
@@ -8,6 +9,16 @@ import "openai_client.dart";
 /// the settings page edits these long after this client was built, and a change
 /// should reach the next turn rather than the next launch.
 typedef LocalPoolOptions = ({String? device, int? contextLength, int maxRunning});
+
+/// The pool options the settings have. One mapper so the client that reaches a
+/// model and the prefill that warms it read them the same way — the pool keys
+/// and evicts slots on these, so a warm built from a different reading would be
+/// evicted rather than reused.
+LocalPoolOptions poolOptions(AppSettings settings) => (
+      device: settings.localModelDevice,
+      contextLength: settings.localModelContext,
+      maxRunning: settings.maxLocalModels,
+    );
 
 /// The on-device provider, as one client over however many servers are running.
 ///

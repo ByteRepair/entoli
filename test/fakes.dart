@@ -109,6 +109,7 @@ class FakeBackgroundWork implements BackgroundWork {
   final List<int> told = [];
   final List<bool> listened = [];
   final List<DownloadNotice?> downloads = [];
+  final List<String?> prefills = [];
   final _stops = StreamController<BackgroundJob>.broadcast();
 
   @override
@@ -119,6 +120,9 @@ class FakeBackgroundWork implements BackgroundWork {
 
   @override
   Future<void> downloading(DownloadNotice? notice) async => downloads.add(notice);
+
+  @override
+  Future<void> prefilling(String? model) async => prefills.add(model);
 
   @override
   Stream<BackgroundJob> get stopRequests => _stops.stream;
