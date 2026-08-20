@@ -191,17 +191,20 @@ it.
 - Package the Linux build:
   `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.
-- Bundled tools (Android's git, proot and llama.cpp): `ANDROID_NDK_ROOT=~/.android/ndk/<version>
+- Bundled tools (Android's proot and llama.cpp): `ANDROID_NDK_ROOT=$HOME/.android/ndk/<version>
   tool/bundle/build.sh arm64-v8a` then `tool/bundle/stage.sh`. None of it is run
-  by the app build; without them an APK has no git in it, no way to run a Linux,
-  and no model server. The git half needs `perl` with `FindBin`, which the
-  `flutter-dev` toolbox has and this host does not; the llama.cpp half needs
-  cmake and ninja, which is the same toolbox again, and is built for arm64
-  alone.
-- The NPU is opt-in and wants Qualcomm's SDK, which is behind an account:
-  `HEXAGON_SDK_ROOT=~/Qualcomm/Hexagon_SDK/6.6.0.1 tool/bundle/build.sh arm64-v8a`.
-  Without it the build carries the CPU backend and the settings page says the
-  device has no accelerator — see "What the NPU actually is".
+  by the app build; without them an APK has no way to run a Linux and no model
+  server. The llama.cpp half needs cmake and ninja, so the `flutter-dev`
+  toolbox, and is built for arm64 alone. `$HOME` rather than `~`: a tilde is not
+  expanded as an argument to `env` or inside quotes, and the build then fails on
+  a literal `~`.
+- git is no longer among them. The agent gets it from `apk` inside the Alpine
+  rootfs, which is a distribution's job to patch rather than ours — so a device
+  with no rootfs installed has no git.
+- The NPU is opt-in and wants Qualcomm's SDK: `tool/android-setup.sh` fetches it
+  into `tool/bundle/toolchains/` against a pinned SHA-256 and `build.sh` finds it
+  there. Without it the build carries the CPU backend and the settings page says
+  the device has no accelerator — see "What the NPU actually is".
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you

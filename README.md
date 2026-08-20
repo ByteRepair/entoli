@@ -36,34 +36,41 @@ shell utils included in Android (essentially Toybox).
 
 `Entoli` ships the following builtin packages:
 
-- `git`
 - `proot`
 - `llama-server` (llama.cpp), which is what the On-device settings page runs
+
+`git` used to be here, cross-compiled against bionic. It is not any more: the
+agent gets git from `apk` inside the Alpine rootfs the Terminal settings page
+installs, where a distribution patches it for a CVE rather than us. So on a
+device with no rootfs installed there is no git.
 
 Build them once per ABI, then stage them:
 
 ```sh
-ANDROID_NDK_ROOT=~/.android/ndk/<version> tool/bundle/build.sh arm64-v8a
+ANDROID_NDK_ROOT=$HOME/.android/ndk/<version> tool/bundle/build.sh arm64-v8a
 tool/bundle/stage.sh
 ```
 
 - `arm64-v8a` is what a phone wants; add `armeabi-v7a` and `x86_64` for
   emulators or a universal APK.
-- The NDK has to be named explicitly; Gradle's own is not on `PATH`.
-- git needs `make` and `perl` with `FindBin` (Fedora: `perl-FindBin`), which
-  OpenSSL's `Configure` uses.
+- The NDK has to be named explicitly; Gradle's own is not on `PATH`. Use
+  `$HOME` rather than `~`: as an argument to `env` or inside quotes a tilde is
+  not expanded, and the build fails on a path with a literal `~` in it.
 - llama.cpp needs `cmake` and `ninja`, and is built for `arm64-v8a` only —
   `LLAMA_ABIS` overrides that. 18 MB an ABI is why; a 32-bit phone cannot map a
   model anyway and x86_64 Android is an emulator.
-- The NPU is opt-in and wants Qualcomm's Hexagon SDK, which is behind an
-  account: `HEXAGON_SDK_ROOT=~/Qualcomm/Hexagon_SDK/<version>` before
-  `build.sh`. Without it the build carries the CPU backend and the settings page
-  says the device has no accelerator.
+- The NPU is opt-in and wants Qualcomm's Hexagon SDK. `tool/android-setup.sh`
+  fetches it into `tool/bundle/toolchains/`, checked against the SHA-256 pinned
+  in `versions.sh`, and `build.sh` picks it up from there. Without it the build
+  carries the CPU backend and the settings page says the device has no
+  accelerator.
 - CI runs the same two steps from `.github/actions/bundled-tools`, so a release
-  APK always has all three in it.
+  APK always has both in it. It does not run `android-setup.sh`: what the NPU
+  build emits is compiled by Qualcomm's own toolchain, so whether it can ship is
+  a licensing question rather than a plumbing one.
 
 Skipping this leaves an APK whose On-device page says it carries no model
-server, and whose agent has no git.
+server, and which cannot run a Linux at all.
 
 #### Adding another precompiled tool
 
@@ -93,9 +100,10 @@ adds it to `Toolset.names`, which is what the system prompt tells the model is
 there. Laying one out without naming it means a tool the model never reaches
 for.
 
-The cost is its size in every ABI the APK carries; git is about 12 MB each. And
-nothing on the device updates any of this, so a CVE in a bundled tool is a
-version bump in `versions.sh` and a release.
+The cost is its size in every ABI the APK carries. And nothing on the device
+updates any of this, so a CVE in a bundled tool is a version bump in
+`versions.sh` and a release that every user has to install — which is the
+reason git is no longer one of them, and worth weighing before adding another.
 
 #### Adding a Linux distribution
 
