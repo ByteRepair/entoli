@@ -38,6 +38,7 @@ shell utils included in Android (essentially Toybox).
 
 - `git`
 - `proot`
+- `llama-server` (llama.cpp), which is what the On-device settings page runs
 
 Build them once per ABI, then stage them:
 
@@ -46,11 +47,23 @@ ANDROID_NDK_ROOT=~/.android/ndk/<version> tool/bundle/build.sh arm64-v8a
 tool/bundle/stage.sh
 ```
 
-`arm64-v8a` is what a phone wants; add `armeabi-v7a` and `x86_64` for emulators
-or a universal APK. The NDK has to be named explicitly; Gradle's own is not on
-`PATH`; and the host needs `make` and `perl` with `FindBin` (Fedora:
-`perl-FindBin`), which OpenSSL's `Configure` uses. CI runs the same two steps
-from `.github/actions/bundled-tools`, so a release APK always has git in it.
+- `arm64-v8a` is what a phone wants; add `armeabi-v7a` and `x86_64` for
+  emulators or a universal APK.
+- The NDK has to be named explicitly; Gradle's own is not on `PATH`.
+- git needs `make` and `perl` with `FindBin` (Fedora: `perl-FindBin`), which
+  OpenSSL's `Configure` uses.
+- llama.cpp needs `cmake` and `ninja`, and is built for `arm64-v8a` only —
+  `LLAMA_ABIS` overrides that. 18 MB an ABI is why; a 32-bit phone cannot map a
+  model anyway and x86_64 Android is an emulator.
+- The NPU is opt-in and wants Qualcomm's Hexagon SDK, which is behind an
+  account: `HEXAGON_SDK_ROOT=~/Qualcomm/Hexagon_SDK/<version>` before
+  `build.sh`. Without it the build carries the CPU backend and the settings page
+  says the device has no accelerator.
+- CI runs the same two steps from `.github/actions/bundled-tools`, so a release
+  APK always has all three in it.
+
+Skipping this leaves an APK whose On-device page says it carries no model
+server, and whose agent has no git.
 
 #### Adding another precompiled tool
 
