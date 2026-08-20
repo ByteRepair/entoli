@@ -210,6 +210,11 @@ else
       -DGGML_BACKEND_DL=ON
       -DGGML_NATIVE=OFF
       -DCMAKE_SKIP_INSTALL_RPATH=ON
+      # ggml defaults to OpenMP, and the NDK's `libomp.so` is a host toolchain
+      # file rather than something a phone has — a build with it links, ships,
+      # and then cannot start. ggml carries its own threadpool for exactly this
+      # case, which is what llama.cpp's own Android instructions use.
+      -DGGML_OPENMP=OFF
       # The server downloads models when it is told to; this app does its own
       # downloading, and linking curl here would mean cross-compiling it a second
       # time for a feature nothing reaches.
@@ -253,6 +258,25 @@ else
       esac
     done < <(find "$build" -name "lib*.so" -type f)
   )
+fi
+
+# The NDK links against libraries a device does not have, and nothing says so
+# until the phone refuses to start the binary. So: every library named here is
+# either beside it in the APK or one of the ones Android ships, which is what
+# the sysroot directory below is a list of.
+echo "==> checking $abi against what a phone has"
+sysroot=$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$host/$api
+unresolved=
+for lib in "$out"/*.so; do
+  while IFS= read -r need; do
+    [ -f "$out/$need" ] || [ -f "$sysroot/$need" ] ||
+      unresolved+="  $(basename "$lib") needs $need"$'\n'
+  done < <("$bin/llvm-readelf" -d "$lib" |
+    sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
+done
+if [ -n "$unresolved" ]; then
+  printf "not bundled, and not Android's to provide:\n%s" "$unresolved" >&2
+  exit 1
 fi
 
 echo "==> $abi"
