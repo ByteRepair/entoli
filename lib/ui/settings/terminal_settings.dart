@@ -20,6 +20,9 @@ class TerminalSection extends ConsumerWidget {
     final available = ref.watch(prootAvailableProvider);
     final installed = ref.watch(installedRootfsProvider);
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
+    // Android answers with an ABI and nothing else does, so an ABI with no
+    // proot beside it is this device's build shipping without it.
+    final unpackaged = available ? null : ref.watch(deviceAbiProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -31,10 +34,15 @@ class TerminalSection extends ConsumerWidget {
                   "installed here has a package manager, so the agent can add "
                   "whatever a job needs. It runs under proot, on this device, "
                   "with the chat's files at the same paths inside as outside."
-              : "This build runs commands on the machine it is on. Installing a "
-                  "Linux to run them inside is Android's, where the system's "
-                  "own shell has almost nothing in it.",
+              : unpackaged != null
+                  ? "Commands run on Android itself. A Linux to run them inside "
+                      "is downloaded here, and this build has nothing to run "
+                      "one with."
+                  : "This build runs commands on the machine it is on. "
+                      "Installing a Linux to run them inside is Android's, "
+                      "where the system's own shell has almost nothing in it.",
         ),
+        if (unpackaged != null) _Unpackaged(abi: unpackaged),
         if (available)
           InstalledPicker(
             label: "Commands run on",
@@ -50,6 +58,43 @@ class TerminalSection extends ConsumerWidget {
             onPick: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
           ),
       ],
+    );
+  }
+}
+
+/// An APK built without proot staged into it, which is a build fault and looks
+/// exactly like the feature having been removed: the catalog below is drawn
+/// from the same answer, so the page would otherwise be a Terminal page with no
+/// terminal on it and nothing saying why. Names the two commands, since the
+/// only person who can reach this is whoever built the APK — CI checks the
+/// tools are in a release one.
+class _Unpackaged extends StatelessWidget {
+  const _Unpackaged({required this.abi});
+
+  final String abi;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded,
+              size: 18, color: theme.colorScheme.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "This build has no proot in it for $abi. Run "
+              "tool/bundle/build.sh $abi and tool/bundle/stage.sh, then build "
+              "the APK again.",
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -80,6 +80,10 @@ class TestApp {
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
   /// Android and so what most of the suite should be pretending to be.
+  ///
+  /// [abi] is what the device answers with, and only Android answers at all —
+  /// so a null one is a desktop and the default is a phone whose build is
+  /// missing its proot.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -92,7 +96,7 @@ class TestApp {
     bool proot = false,
     Set<String> localModels = const {},
     FakeLocalLlm? localLlm,
-    String abi = "arm64-v8a",
+    String? abi = "arm64-v8a",
   }) {
     final config = tempConfig();
     final backend = FakeBackend();

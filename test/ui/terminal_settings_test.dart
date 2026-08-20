@@ -18,15 +18,35 @@ void main() {
     await pumpSettings(tester, app, SettingsCategory.terminal);
   }
 
-  testWidgets("a build with no proot in it says so, and offers nothing to "
+  testWidgets("a platform that cannot run one says so, and offers nothing to "
       "download", (tester) async {
-    app = TestApp.create();
+    app = TestApp.create(abi: null);
     await pumpTerminal(tester);
 
     expect(find.textContaining("runs commands on the machine it is on"),
         findsOneWidget);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
     expect(find.text("Commands run on"), findsNothing);
+    expect(find.textContaining("tool/bundle/build.sh"), findsNothing);
+  });
+
+  testWidgets("a phone whose build has no proot in it blames the build, not "
+      "the device", (tester) async {
+    app = TestApp.create();
+    await pumpTerminal(tester);
+
+    expect(find.textContaining("no proot in it for arm64-v8a"), findsOneWidget);
+    expect(find.textContaining("tool/bundle/build.sh arm64-v8a"), findsOneWidget);
+    expect(find.textContaining("runs commands on the machine it is on"),
+        findsNothing);
+    expect(find.text("Alpine Linux 3.24.1"), findsNothing);
+  });
+
+  testWidgets("a build that has it says nothing about staging", (tester) async {
+    app = TestApp.create(proot: true);
+    await pumpTerminal(tester);
+
+    expect(find.textContaining("tool/bundle/build.sh"), findsNothing);
   });
 
   testWidgets("where it can run one, the catalog is offered with its size",
