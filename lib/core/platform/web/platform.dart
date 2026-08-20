@@ -1,8 +1,10 @@
+import "dart:convert";
 import "dart:js_interop";
 
 import "package:fs_shim/fs.dart";
 import "package:fs_shim/fs_browser.dart" show fileSystemWeb;
 import "package:fs_shim/fs_idb.dart" show FileSystemIdbExt, FileSystemIdbOptions;
+import "package:http/http.dart" as http;
 import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
@@ -39,6 +41,17 @@ Sandbox? platformSandbox({
     null;
 
 Future<String?> platformAbi() async => null;
+
+/// A web build writes `version.json` beside `index.html` rather than under
+/// `assets/`, so it is fetched rather than read through `rootBundle`.
+Future<String?> platformAppVersion() async {
+  try {
+    final response = await http.get(Uri.base.resolve("version.json"));
+    return (jsonDecode(response.body) as Map<String, dynamic>)["version"] as String?;
+  } catch (_) {
+    return null;
+  }
+}
 
 RootfsStore platformRootfsStore(String cacheDir) => const UnavailableRootfsStore();
 

@@ -31,7 +31,7 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is eight categories, picked from a panel beside it or, below
+The settings page is nine categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself: the
 default project's workspace (which has nowhere else to be reached from),
 **Appearance** — the theme and the app icon, which are the two things the app
@@ -50,7 +50,35 @@ section under General because the two pickers are two lines and the catalog
 under them is the rest of the page. **Assistant** is where Android's assistant
 gesture lands — see "Being the assistant". **Providers** is the endpoints.
 **LLMs** is what a new chat is answered by and what names it. **Data** is all of
-it at once, out as one file and back — see "Backing it all up".
+it at once, out as one file and back — see "Backing it all up". **About** is the
+app rather than anything it does, which is why it is last — see "What the app
+is".
+
+## What the app is
+
+About is four tiles: the icon the app is wearing beside its name and version,
+who made it, a link to the repository, and the libraries. Private in
+`settings_page.dart` like every other category with no state — the files beside
+it are the ones with logic.
+
+The version is read out of the bundle rather than written into Dart, so
+pubspec's number stays the only one — the same bargain the missing `+build`
+suffix makes. `platform.appVersion` is where that lands, since a web build puts
+`version.json` beside `index.html` rather than in the assets. It is awaited into
+the container in `main` beside the ABI, so nothing in the UI waits on a future
+for a string; where it could not be read the line is simply not drawn, since a
+version nothing depends on is not worth failing a startup over.
+
+`package_info_plus` answers the same question and was the first version of this.
+It drags `win32` into the build graph of every platform, forks `stat` on Linux
+for an install time nothing shows, and refetches on the web with a cache buster
+— for one field of a file this reads directly.
+
+The libraries are Flutter's own `showLicensePage`, not a list kept here. The
+registry already holds every package that ships, and this app adds the bundled
+font and voice licences to it — see "How a reply is set" and "What listens and
+what speaks", both of which were written against a licence page that did not
+exist yet.
 
 **Narrow, the categories are the page rather than its drawer**, and each one is
 pushed over the list. That is the one place this and the chat page differ about

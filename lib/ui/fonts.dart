@@ -13,8 +13,8 @@ const monoFamily = "RobotoMono";
 
 /// Roboto Mono is under the SIL Open Font Licence, which asks for the licence
 /// to travel with the font. This puts it in front of a reader rather than only
-/// in the repository — Flutter's own licence page reads the registry, so the
-/// text ships whether or not the app has grown a page that shows it.
+/// in the repository — the licence page the About category opens reads the
+/// registry, so the text is in front of whoever looks.
 ///
 /// Read lazily: the registry takes a stream and drains it only when something
 /// asks, so a run that never opens a licence page never opens the file.

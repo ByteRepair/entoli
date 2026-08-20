@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 
 import "package:flutter/foundation.dart";
@@ -69,6 +70,16 @@ Sandbox? platformSandbox({
 /// Which architecture this install is for, which decides the rootfs a download
 /// fetches. Null off Android.
 Future<String?> platformAbi() => BundledTools.abi();
+
+/// Here `version.json` is inside `flutter_assets`, so the bundle has it.
+Future<String?> platformAppVersion() async {
+  try {
+    final json = jsonDecode(await rootBundle.loadString("version.json"));
+    return (json as Map<String, dynamic>)["version"] as String?;
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Where a downloaded Linux is kept: beside the voice models, outside the data
 /// directory, and for the same reasons — see [RootfsStore].
