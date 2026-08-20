@@ -5,6 +5,7 @@ import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
 import "llm_provider.dart";
+import "local_llm.dart";
 import "permission.dart";
 import "profile.dart";
 import "temp_chat_ttl.dart";
@@ -31,7 +32,7 @@ class AppSettings {
     this.assistantProject,
     this.assistantView = AssistantView.chat,
     this.rootfsId,
-    this.localModelId,
+    this.maxLocalModels = 1,
     this.localModelDevice,
     this.localModelContext,
   });
@@ -104,14 +105,12 @@ class AppSettings {
   /// about a filesystem that is no longer there.
   String? rootfsId;
 
-  /// The model served from this device, by catalog id, or null for none — which
-  /// is what every existing `settings.json` already says by saying nothing.
-  /// Picking one starts the server at the next launch as well as at this one,
-  /// so it is the pick that is stored rather than whether it happens to be up.
-  ///
-  /// App-level, like the icon and the voice: which model a chat uses is already
-  /// a per-chat setting, and this is the machine underneath it.
-  String? localModelId;
+  /// How many on-device models may be loaded at once, capped at
+  /// [maxLocalModelsAllowed]. One is the default because each is a process
+  /// holding a set of weights and a gigabyte of KV cache; two is what makes a
+  /// small model naming chats beside a large one answering them worth setting,
+  /// and is what stops the two evicting each other turn after turn.
+  int maxLocalModels;
 
   /// The accelerator it is offloaded to, by the name `--list-devices` gave it.
   /// Null is the CPU, which is every device's answer and most devices' only
@@ -119,9 +118,11 @@ class AppSettings {
   /// the server is passed and a phone can have two of the same kind.
   String? localModelDevice;
 
-  /// How much context it is loaded with, or null for the default. The one
-  /// setting here that is really about memory: it is the KV cache that decides
-  /// whether Android kills the app, not the weights, which are mapped.
+  /// How much context every on-device model is loaded with, or null to let each
+  /// one answer for itself — `LocalModel.defaultContext`, which is what its own
+  /// KV cache costs divided into [kvBudgetBytes]. Set here, it overrides that
+  /// for all of them, which is the honest shape now that any downloaded model
+  /// can be the one a turn asks for.
   int? localModelContext;
 
   static AppSettings load(AppConfig config) {
@@ -153,7 +154,8 @@ class AppSettings {
         assistantProject: _orNull(json["assistantProject"] as String?),
         assistantView: AssistantView.fromName(json["assistantView"] as String?),
         rootfsId: _orNull(json["rootfsId"] as String?),
-        localModelId: _orNull(json["localModelId"] as String?),
+        maxLocalModels:
+            (json["maxLocalModels"] as int? ?? 1).clamp(1, maxLocalModelsAllowed),
         localModelDevice: _orNull(json["localModelDevice"] as String?),
         localModelContext: json["localModelContext"] as int?,
       );
@@ -210,7 +212,7 @@ class AppSettings {
         assistantProject: assistantProject,
         assistantView: assistantView,
         rootfsId: rootfsId,
-        localModelId: localModelId,
+        maxLocalModels: maxLocalModels,
         localModelDevice: localModelDevice,
         localModelContext: localModelContext,
       );
@@ -238,7 +240,7 @@ class AppSettings {
       if (assistantProject != null) "assistantProject": assistantProject,
       "assistantView": assistantView.name,
       if (rootfsId != null) "rootfsId": rootfsId,
-      if (localModelId != null) "localModelId": localModelId,
+      if (maxLocalModels != 1) "maxLocalModels": maxLocalModels,
       if (localModelDevice != null) "localModelDevice": localModelDevice,
       if (localModelContext != null) "localModelContext": localModelContext,
     }));

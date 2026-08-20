@@ -121,7 +121,7 @@ Future<LocalLlm> platformLocalLlm(LocalModelStore store) async {
   if (libDir == null) return const UnavailableLocalLlm();
   final server = File(p.join(libDir, "libllama-server.so"));
   if (!await server.exists()) return const UnavailableLocalLlm();
-  return LlamaServer(
+  return LlamaServerPool(
     LlamaBinaries(server: server.path, libDir: libDir),
     store,
   );

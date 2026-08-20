@@ -38,7 +38,7 @@ class LlmRegistry {
   /// answer that copies a hundred entries per lookup.
   final String? Function(String name) lookupEnv;
 
-  final Map<String, ({String signature, LlmClient client})> _clients = {};
+  final _clients = LlmClientCache();
 
   LlmEndpoint? endpointFor(String providerId) {
     for (final endpoint in endpoints()) {
@@ -61,16 +61,15 @@ class LlmRegistry {
     final config = endpoint.config;
     final key = config.resolveKeyWith(lookupEnv);
     // A URL or key edited in settings has to reach the next turn, so a cached
-    // client built from the old one is dropped rather than reused. The URL is
-    // also what changes when the on-device server is started again, since its
-    // port is asked of the OS per launch.
-    final signature = "${config.api.name}|${config.baseUrl}|$key";
-    final cached = _clients[config.id];
-    if (cached != null && cached.signature == signature) return cached.client;
-    cached?.client.close();
-    final client = (endpoint.build ?? _defaultBuild)(config, key);
-    _clients[config.id] = (signature: signature, client: client);
-    return client;
+    // client built from the old one is dropped rather than reused. The
+    // on-device endpoint is the one this never rebuilds: its URL is empty and
+    // stays empty, because the client behind it is a pool that routes per model
+    // and outlives any one server's port.
+    return _clients.of(
+      config.id,
+      "${config.api.name}|${config.baseUrl}|$key",
+      () => (endpoint.build ?? _defaultBuild)(config, key),
+    );
   }
 
   /// Every model the configured endpoints offer. One that lists its own is
@@ -105,12 +104,7 @@ class LlmRegistry {
     }
   }
 
-  void close() {
-    for (final entry in _clients.values) {
-      entry.client.close();
-    }
-    _clients.clear();
-  }
+  void close() => _clients.close();
 
   /// What an endpoint gets when it names no builder of its own, which is every
   /// endpoint that is a URL and a key.

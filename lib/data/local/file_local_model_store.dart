@@ -13,10 +13,20 @@ import "../download.dart";
 /// config's `FileSystem` for the reason `FileRootfsStore` is: what reads this
 /// file is a subprocess with a path, not the app.
 class FileLocalModelStore extends LocalModelStore {
-  const FileLocalModelStore(this.root);
+  FileLocalModelStore(this.root);
 
   /// `<cacheDir>/llm`, holding one directory per installed model.
   final String root;
+
+  /// Which ids were found to have their marker, so [fileOfSync] is a map lookup
+  /// after the first time it is asked about one.
+  ///
+  /// It is asked once per catalog entry every time the provider list is built,
+  /// and that list is built for every model a turn resolves — so without this a
+  /// turn is a handful of blocking `stat`s on the isolate drawing the UI. What
+  /// it caches only changes in [install] and [delete], which is the whole
+  /// reason it can live here: the one class that owns both.
+  final _installed = <String, bool>{};
 
   /// Written last, and the whole of what "installed" means: a directory a
   /// download was killed halfway through has a partial file in it and no
@@ -33,10 +43,11 @@ class FileLocalModelStore extends LocalModelStore {
   String _fileFor(LocalModel model) => p.join(directoryFor(model.id), _weights);
 
   @override
-  String? fileOfSync(LocalModel model) =>
-      File(p.join(directoryFor(model.id), _marker)).existsSync()
-          ? _fileFor(model)
-          : null;
+  String? fileOfSync(LocalModel model) {
+    final marked = _installed[model.id] ??=
+        File(p.join(directoryFor(model.id), _marker)).existsSync();
+    return marked ? _fileFor(model) : null;
+  }
 
   /// Read off the disk rather than off the catalog, so a model the catalog has
   /// since renamed still shows as taking up the space it takes up.
@@ -56,6 +67,7 @@ class FileLocalModelStore extends LocalModelStore {
 
   @override
   Future<void> delete(String id) async {
+    _installed[id] = false;
     final dir = Directory(directoryFor(id));
     if (await dir.exists()) await dir.delete(recursive: true);
   }
@@ -96,6 +108,7 @@ class FileLocalModelStore extends LocalModelStore {
             );
           }
           await File(p.join(dir.path, _marker)).writeAsString("");
+          _installed[model.id] = true;
         },
       ).stream;
 }

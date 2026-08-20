@@ -12,8 +12,6 @@ import "core/platform/link_opener.dart";
 import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
 import "domain/app_restart.dart";
-import "domain/app_settings.dart";
-import "domain/local_llm.dart";
 import "domain/prompt_library.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
@@ -127,10 +125,6 @@ class AppSession {
     );
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
-    // A model picked in a previous run is loaded again here, and not awaited:
-    // mapping it is a minute the app has no reason to spend before its first
-    // frame, and a turn sent in the meantime waits on `whenReady`.
-    unawaited(applyLocalModel(server, AppSettings.load(config)));
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open
@@ -151,9 +145,9 @@ class AppSession {
   Future<void> dispose() async {
     _sweep.cancel();
     await container.read(agentBackendProvider).shutdown();
-    // Before the container goes: the server is a subprocess holding a
-    // gigabyte of the phone's memory, and nothing else would ever kill it.
-    await container.read(localLlmProvider).stop();
+    // Before the container goes: each is a subprocess holding a gigabyte of the
+    // phone's memory, and nothing else would ever kill them.
+    await container.read(localLlmProvider).stopAll();
     container.dispose();
   }
 }

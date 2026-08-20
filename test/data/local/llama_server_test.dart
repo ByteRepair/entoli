@@ -28,7 +28,7 @@ void main() {
         port: 41234,
         apiKey: "abcdef",
         device: device,
-        contextLength: contextLength,
+        contextLength: contextLength ?? model.defaultContext,
         threads: threads,
       );
 
@@ -110,8 +110,11 @@ void main() {
     });
   });
 
-  test("the context is the default until something says otherwise", () {
-    expect(valueOf(launch().command, "-c"), "$defaultContextLength");
+  test("the context is the model's own until something says otherwise", () {
+    // Always passed, never left to llama.cpp: its `--fit` sizes the context
+    // against what the CPU backend calls free memory, which on Linux is every
+    // physical page — so a phone would be given a KV cache the size of its RAM.
+    expect(valueOf(launch().command, "-c"), "${model.defaultContext}");
     expect(valueOf(launch(contextLength: 16384).command, "-c"), "16384");
   });
 
@@ -172,57 +175,120 @@ something else entirely
   /// A server that cannot possibly come up, over weights that are claimed to be
   /// there: `/bin/false` exits the moment it is started, which is what a real
   /// one does when the model will not fit. Real code all the way down — the
-  /// process really is spawned — so this is the one thing about the running
-  /// server that a machine with no Android on it can check.
-  group("a start that fails", () {
-    LlamaServer failing() => LlamaServer(
+  /// process really is spawned — so this is what a machine with no Android on
+  /// it can check about the pool itself.
+  ///
+  /// A failed load still takes its place in the pool, which is what makes the
+  /// eviction order testable here: what a `serve` displaced is a property of
+  /// the list, not of whether the process came up.
+  group("the pool, over a server that will not start", () {
+    LlamaServerPool failing() => LlamaServerPool(
           const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
           _AlwaysInstalled(),
         );
 
-    Future<void> settle(LlamaServer server) async {
-      for (var i = 0; i < 100 && server.state.value.phase != LocalLlmPhase.failed; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-    }
-
-    test("the endpoint stays in the list, so a turn is told why", () async {
-      final server = failing();
-      await server.start(localModelCatalog.first);
-      await settle(server);
-
-      // Dropping it would leave a chat pinned to this model reporting that no
-      // provider is configured, which says nothing about what went wrong.
-      expect(server.provider, isNotNull);
-      expect(server.provider!.id, localProviderId);
-      expect(server.provider!.models, [localModelCatalog.first.id]);
-      // Loopback, and a key generated for this launch.
-      expect(server.provider!.baseUrl, startsWith("http://127.0.0.1:"));
-      expect(server.provider!.apiKey, isNotEmpty);
-    });
+    Future<void> ask(LlamaServerPool pool, LocalModel model, {int maxRunning = 1}) =>
+        expectLater(
+          pool.serve(model.id, maxRunning: maxRunning),
+          throwsA(isA<LocalLlmFailure>()),
+        );
 
     test("what is waiting on it is told the server's own last words", () async {
-      final server = failing();
-      await server.start(localModelCatalog.first);
-      await settle(server);
+      final pool = failing();
 
-      expect(server.state.value.failure, isNotEmpty);
-      await expectLater(server.whenReady(), throwsA(isA<LocalLlmFailure>()));
+      await ask(pool, model);
+
+      // Not a connection to localhost that was refused, which is both true and
+      // useless: for a model too big to fit, the server's own output is the
+      // only place that is said.
+      expect(pool.running.value.single.failure, isNotEmpty);
+      expect(pool.running.value.single.phase, LocalLlmPhase.failed);
+    });
+
+    test("the failure is kept, so the settings page can draw why", () async {
+      final pool = failing();
+
+      await ask(pool, model);
+
+      expect(pool.running.value.single.modelId, model.id);
+    });
+
+    test("asking for a second model past the cap drops the first", () async {
+      final pool = failing();
+
+      await ask(pool, model);
+      await ask(pool, localModelCatalog[1]);
+
+      expect(pool.running.value.map((each) => each.modelId),
+          [localModelCatalog[1].id]);
+    });
+
+    test("raising the cap is what lets both stay", () async {
+      final pool = failing();
+
+      await ask(pool, model, maxRunning: 2);
+      await ask(pool, localModelCatalog[1], maxRunning: 2);
+
+      expect(pool.running.value.map((each) => each.modelId),
+          [model.id, localModelCatalog[1].id]);
+    });
+
+    test("the cap is never more than the app allows, whatever it is passed",
+        () async {
+      final pool = failing();
+
+      for (final each in localModelCatalog) {
+        await ask(pool, each, maxRunning: 99);
+      }
+
+      expect(pool.running.value.length, maxLocalModelsAllowed);
+    });
+
+    test("unloading everything empties the list", () async {
+      final pool = failing();
+      await ask(pool, model, maxRunning: 2);
+
+      await pool.stopAll();
+
+      expect(pool.running.value, isEmpty);
+    });
+
+    test("every downloaded model is offered, not just the loaded one", () async {
+      final pool = failing();
+
+      // Nothing has been asked for, so nothing is running — and the picker is
+      // full all the same. That is the whole change from the pick that used to
+      // live on the settings page.
+      expect(pool.running.value, isEmpty);
+      expect(pool.provider!.id, localProviderId);
+      expect(pool.provider!.models, localModelCatalog.map((m) => m.id));
+      // No address of its own: each model is its own process on its own port,
+      // and the endpoint's client is what routes between them.
+      expect(pool.provider!.baseUrl, isEmpty);
     });
 
     test("a model that is not downloaded is refused before anything is spawned",
         () async {
-      final server = LlamaServer(
+      final pool = LlamaServerPool(
         const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
         const UnavailableLocalModelStore(),
       );
 
-      await server.start(localModelCatalog.first);
+      await expectLater(pool.serve(model.id), throwsA(isA<LocalLlmFailure>()));
 
-      expect(server.state.value.phase, LocalLlmPhase.failed);
-      // Nothing was started, so there is nothing to offer — unlike above, where
-      // the failure is worth carrying to whoever asks.
-      expect(server.provider, isNull);
+      expect(pool.running.value, isEmpty);
+      // Nothing on disk is nothing to offer, which is what keeps the entry out
+      // of every picker until there is something to pick.
+      expect(pool.provider, isNull);
+    });
+
+    test("a model this build has never heard of is refused too", () async {
+      final pool = failing();
+
+      await expectLater(
+          pool.serve("gone-in-a-later-build"), throwsA(isA<LocalLlmFailure>()));
+
+      expect(pool.running.value, isEmpty);
     });
   });
 }

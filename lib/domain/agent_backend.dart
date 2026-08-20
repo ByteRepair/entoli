@@ -105,6 +105,24 @@ class SubAgentEndEvent extends AgentEvent {
   final bool failed;
 }
 
+/// What the turn is doing right now, for the row the spinner is on. Null means
+/// it is no longer worth saying — the reply has started, and the caret says the
+/// rest.
+///
+/// Turn-scoped view state like [RetryEvent]: nothing here is persisted, and a
+/// conversation read back off disk has no trace of it. It exists because a
+/// spinner on its own cannot be told apart from a hang, and on a model running
+/// on the device that wait is minutes rather than seconds.
+///
+/// [label] is already worded for the reader ("Reading the prompt · 43%"): what
+/// is worth saying differs per provider and per tool, and the loop is the only
+/// thing that knows which it is waiting on.
+class StatusEvent extends AgentEvent {
+  const StatusEvent(this.label);
+
+  final String? label;
+}
+
 /// An attempt failed and is being retried. The turn is still alive, so this is
 /// a status, not an outcome — but it is the first sign of trouble.
 class RetryEvent extends AgentEvent {

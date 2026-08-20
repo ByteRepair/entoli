@@ -22,6 +22,7 @@ class MessageBubble extends StatefulWidget {
     required this.message,
     this.isWaiting = false,
     this.waitingNotice,
+    this.waitingStatus,
     this.threads,
     this.onThreadStep,
     this.onDelete,
@@ -43,6 +44,11 @@ class MessageBubble extends StatefulWidget {
   /// Trouble reported while the turn is still running, e.g. a retry after a
   /// rate limit. Shown in red beside the spinner.
   final String? waitingNotice;
+
+  /// What the turn is doing — "Thinking", "Reading the prompt · 43%". Beside
+  /// the spinner like [waitingNotice] and in the ordinary muted colour, because
+  /// it is the answer to "is this alive" rather than a problem.
+  final String? waitingStatus;
 
   /// The threads written where this message is, oldest first and including it.
   /// Null where nothing was branched here, which shows no counter and no
@@ -316,7 +322,11 @@ class _MessageBubbleState extends State<MessageBubble> {
     // Trailing state, not parts: they belong under the last thing said.
     final extras = <Widget>[
       if (widget.isWaiting && !carets && !widget.message.hasText)
-        _Spinner(color: theme.colorScheme.onSurfaceVariant, notice: widget.waitingNotice),
+        _Spinner(
+          color: theme.colorScheme.onSurfaceVariant,
+          notice: widget.waitingNotice,
+          status: widget.waitingStatus,
+        ),
       // A failed turn is a dead end without this; the same action is under the
       // message, but it should not have to be uncovered.
       if (_hasError && !widget.isWaiting && widget.onRegenerate != null)
@@ -647,14 +657,21 @@ class _StreamingCaretState extends State<StreamingCaret>
 }
 
 /// Stands in for the reply until the first text arrives.
+///
+/// [status] is what the turn is doing and [notice] is what has gone wrong with
+/// it, and both sit on this one row. Trouble wins when there is any: a retry
+/// after a rate limit is what the reader needs, and "Thinking" beside it would
+/// be the turn claiming to be fine.
 class _Spinner extends StatelessWidget {
-  const _Spinner({required this.color, this.notice});
+  const _Spinner({required this.color, this.notice, this.status});
   final Color color;
   final String? notice;
+  final String? status;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final said = notice ?? status;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -666,12 +683,14 @@ class _Spinner extends StatelessWidget {
             height: 16,
             child: CircularProgressIndicator(strokeWidth: 2, color: color),
           ),
-          if (notice != null) ...[
+          if (said != null) ...[
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                notice!,
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                said,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: notice != null ? theme.colorScheme.error : color,
+                ),
               ),
             ),
           ],

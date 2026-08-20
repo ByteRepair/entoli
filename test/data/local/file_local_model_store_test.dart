@@ -52,6 +52,7 @@ void main() {
         bytes: weights.length,
         sha256: sha ?? "${sha256.convert(weights)}",
         contextLength: 4096,
+        kvBytesPerToken: 49152,
         licence: "Apache-2.0",
       );
 
@@ -121,6 +122,35 @@ void main() {
 
     expect(await store().installed(), isEmpty);
     expect(Directory(p.join(root.path, "test-model")).existsSync(), isFalse);
+  });
+
+  /// `fileOfSync` is asked once per catalog entry every time the provider list
+  /// is built, which is several times a turn — so it remembers what it found.
+  /// One store across all three calls, deliberately: a fresh one per call would
+  /// have an empty cache and prove nothing about the remembering.
+  group("what it remembers about the marker", () {
+    test("an install and a delete both reach it", () async {
+      final one = store();
+
+      expect(one.fileOfSync(gguf()), isNull);
+      await one.install(gguf()).drain<void>();
+      expect(one.fileOfSync(gguf()), isNotNull);
+      await one.delete(gguf().id);
+
+      // The hazard the cache introduces: a model deleted while the app runs,
+      // still answered for out of what was remembered before it went.
+      expect(one.fileOfSync(gguf()), isNull);
+    });
+
+    test("a download that was not kept is not remembered as installed",
+        () async {
+      final one = store();
+
+      await one.install(gguf(sha: "not-the-checksum")).drain<void>().onError(
+          (_, _) {});
+
+      expect(one.fileOfSync(gguf()), isNull);
+    });
   });
 
   test("progress is reported against the size the catalog says", () async {

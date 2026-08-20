@@ -2,8 +2,7 @@ import "package:fs_shim/fs.dart";
 
 import "../../data/builtin/builtin_backend.dart";
 import "../../data/builtin/llm/llm_registry.dart";
-import "../../data/builtin/llm/openai_client.dart";
-import "../../data/builtin/llm/pending_client.dart";
+import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_backend.dart";
@@ -12,7 +11,6 @@ import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
-import "../../domain/llm_provider.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model_store.dart";
 import "../../domain/prompt_library.dart";
@@ -66,7 +64,7 @@ AgentBackend createBackend(
     webSearch: platformWebSearch(),
     store: store,
     registry: LlmRegistry(
-      endpoints: () => llmEndpoints(settings().llmProviders, localLlm),
+      endpoints: () => llmEndpoints(settings, localLlm),
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
@@ -74,31 +72,37 @@ AgentBackend createBackend(
   );
 }
 
-/// Every endpoint the app can reach: what the user configured, and the server
-/// running on this device where one is.
+/// Every endpoint the app can reach: what the user configured, and the models
+/// on this device where there are any.
 ///
 /// The local one is composed here rather than written into `settings.json`
-/// because its base URL holds a port asked of the OS at launch, so a file
-/// naming it would be stale by the next one — and it carries its own client,
-/// since it is an ordinary OpenAI endpoint that may not be answering yet. Null
-/// while nothing is picked, which is what keeps it out of every picker on the
+/// because it has no address to write — each model is its own process on a port
+/// asked of the OS when it loads. So it carries its own client, which is what
+/// routes a request to the right one and loads it on the way. Null while
+/// nothing is downloaded, which is what keeps it out of every picker on the
 /// platforms that have no server.
 ///
 /// **First in the list, and that decides a collision**: `localProviderId` is
 /// the app's name, and a `settings.json` that happens to use it is shadowed
-/// rather than allowed to take the model's own endpoint away from it.
+/// rather than allowed to take the models' own endpoint away from them.
 List<LlmEndpoint> llmEndpoints(
-  List<LlmProviderConfig> configured,
+  AppSettings Function() settings,
   LocalLlm localLlm,
 ) {
   final local = localLlm.provider;
   return [
-    if (local != null) LlmEndpoint(local, build: (config, apiKey) {
-      // Ordinary in every respect but one: it may not be answering yet.
-      return PendingLlmClient(OpenAiClient(baseUrl: Uri.parse(config.baseUrl), apiKey: apiKey),
-          localLlm.whenReady);
-    }),
-    for (final config in configured) LlmEndpoint(config),
+    if (local != null)
+      LlmEndpoint(local, build: (config, apiKey) => LocalPoolClient(localLlm, () {
+            // Read here rather than above: this client outlives any one turn,
+            // and the settings page edits these between them.
+            final now = settings();
+            return (
+              device: now.localModelDevice,
+              contextLength: now.localModelContext,
+              maxRunning: now.maxLocalModels,
+            );
+          })),
+    for (final config in settings().llmProviders) LlmEndpoint(config),
   ];
 }
 

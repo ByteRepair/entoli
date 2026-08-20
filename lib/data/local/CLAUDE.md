@@ -209,34 +209,87 @@ of it in Dart, to save a subprocess on a device that is about to spend a
 gigabyte of memory on weights, is the wrong trade.
 
 The endpoint is composed by `llmEndpoints` rather than written into
-`settings.json`: its base URL holds a port asked of the OS at launch, so a file
-naming it would be stale by the next one. It goes **first** in the list, which
-is what decides a collision — `localProviderId` is the app's name, and a
+`settings.json`, and it has no address to write: each model is its own process
+on a port asked of the OS when it loads. It goes **first** in the list, which is
+what decides a collision — `localProviderId` is the app's name, and a
 `settings.json` that happens to use it is shadowed rather than allowed to take
-the model's own endpoint away from it. What is stored is the pick —
-`localModelId`, `localModelDevice`, `localModelContext` — and `applyLocalModel`
-is the one function that makes what is running agree with it. Two callers, far
-apart: the settings page, where a model is picked, and `AppSession.start`, where
-a pick from a previous run is honoured.
+the models' own endpoint away from them. What is stored is how to run them —
+`maxLocalModels`, `localModelDevice`, `localModelContext` — and never which one,
+because that is not this page's to say.
 
-**The provider appears the moment a model is picked, not when it answers.**
-Mapping a four-gigabyte model takes the better part of a minute, and a chat
-pinned to it must not lose its model for that minute after every launch. So the
-endpoint is in the list while it loads and `PendingLlmClient` — the same shape
-as `GatedLlmClient` — waits for `whenReady` before the first request goes
-through. **It rides on the endpoint rather than on the registry**: an
-`LlmEndpoint` is a config and, where reaching it is not the ordinary thing, the
-client to reach it with. The first version had the registry comparing a provider
-id against a name it had to be told was reserved, which is a special case in the
-one place that should know nothing about who its endpoints are — and one more
-`==` arm for every endpoint that ever needs decorating. A turn sent at a loading model waits; a turn sent at a model that will
-never load gets the server's own last words as an `LlmException`, which for a
-model too large to fit is the only place that is said at all.
+### Loading one, and when
 
-**Nothing loads a model on its own.** A pick is a gigabyte of the phone's memory
-and minutes of its battery, so it is picked in settings and nowhere else — a
-download does not load it, and a chat pinned to a model that is not loaded says
-the provider is not configured rather than quietly starting one.
+**Every model on disk is in the picker, and asking for one is what loads it.**
+There is no model pick on the settings page and deliberately none: which model
+answers is chosen where every other model is — the app default, a chat's own
+settings, the title and classifier pickers. A pick here would have been a second
+place to say the same thing and the one place that could disagree with the rest.
+It also means a launch loads nothing at all, where it used to spend a minute and
+a gigabyte restoring a pick the user might not have been about to use.
+
+**`LocalLlm.serve` is the only thing that reconciles what is running with the
+settings**, and there is no second path to forget. It answers from a server
+already up under the same device and context, reloads one that is up under
+different ones, and starts one that is not up at all. Settings ride in per call
+rather than being held, the way `LocalShell` re-reads its environment, so a
+change reaches the next turn — and pointedly not the current one, which keeps a
+context edit from pulling the model out from under a chat mid-reply.
+
+**Two may be resident, and `maxLocalModels` is what says so.** The pair is not
+symmetric, which is the whole reason the setting is worth having: a 0.8B naming
+chats beside a 4B answering them costs far less than the 4B twice. Past the cap
+the least recently served is stopped first, and stopped *before* the new one
+starts — overlapping them would put two sets of weights in memory at once, which
+is the thing the cap exists to prevent. Two is the ceiling rather than a number
+to type: each is a process holding its own weights and its own `kvBudgetBytes`,
+and a phone that could hold three is not the phone this is written for. With the
+cap at one and a title model set, the two evict each other every turn; that is
+the honest cost of one, and the reason to raise it.
+
+**The client is what routes**, not the registry. `LocalPoolClient` reads the
+model out of the request, serves it, and hands the call to a `OpenAiClient` on
+that server's port — one per model, dropped when the port changes, the same
+signature check `LlmRegistry` makes. **It rides on the endpoint rather than on
+the registry**: an `LlmEndpoint` is a config and, where reaching it is not the
+ordinary thing, the client to reach it with. The first version had the registry
+comparing a provider id against a name it had to be told was reserved, which is
+a special case in the one place that should know nothing about who its endpoints
+are — and one more `==` arm for every endpoint that ever needs decorating. A
+turn sent at a loading model waits; a turn sent at a model that will never load
+gets the server's own last words as an `LlmException`, which for a model too
+large to fit is the only place that is said at all.
+
+The provider's `baseUrl` is empty, and that is not a placeholder standing in for
+a real one — there is no single address for "on-device". Nothing reads it, since
+the endpoint carries its own client, and an empty string keeps the registry's
+cache signature still while servers come and go underneath it.
+
+### How much context, and why it is per model
+
+**`-c` is always passed.** llama.cpp's `--fit` would otherwise size it, and on a
+phone that is wrong in a way it is not on a desktop: the CPU backend reports
+`free` as every physical page (`ggml-cpu.cpp`, and it says so in a comment), so
+the context would be fitted against the phone's whole RAM rather than against
+what Android will let this app keep resident. A KV cache sized that way is an
+app the low-memory killer takes.
+
+**The default is the model's own**, `LocalModel.defaultContext`: `kvBudgetBytes`
+divided by what one token of *that* model's KV cache costs, rounded down to a
+power of two. The cost is `2 × block_count × head_count_kv × key_length × 2` —
+K and V, every layer, f16 — read off each GGUF's metadata rather than guessed
+from the parameter count, which does not decide it. The catalog splits two and
+two: 48 KiB a token for the 0.8B and 2B, 128 KiB for the 4B and 9B, so the same
+gigabyte buys 16,384 tokens on the small pair and 8,192 on the large. One
+constant for all four is what made the small models as cramped as the large ones
+for a third of the memory.
+
+It matters more than it looks, because the agent's own prompt is not small: the
+system prompt and the tool schemas are about 2,700 tokens before the user has
+typed anything. The 4,096 this used to default to left roughly one exchange.
+
+The Context setting overrides it for every model at once. That is the honest
+shape now that any downloaded model can be the one a turn asks for — there is no
+longer a single picked model for a per-model override to attach to.
 
 ### What is in the catalog, and why it is one family
 
@@ -365,10 +418,6 @@ page draws those as rows of their own, delete and nothing else — there is no
 It is the third catalog and by far the largest — a couple of gigabytes where a
 rootfs is four megabytes — which is what makes the notification's own throttle in
 `Downloads._publish` matter here rather than being a nicety.
-
-`-c` is the setting that decides whether Android kills the app, and it defaults
-far below what any of these models was trained for. The weights are mapped and
-paged; the KV cache is not.
 
 **The server is bound to 127.0.0.1 and given a key generated per launch.** Every
 app on the device can reach the loopback address, so without one any of them

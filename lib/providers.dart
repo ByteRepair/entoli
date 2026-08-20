@@ -136,23 +136,23 @@ final installedLocalModelsProvider =
     NotifierProvider<InstalledLocalModels, Set<String>>(
         () => InstalledLocalModels(const {}));
 
-/// How far the on-device server has got. A notifier over the port's own
-/// [ValueListenable] rather than a second copy of the state: the server is
-/// started from the settings page and from startup, and both have to redraw the
-/// same row.
-class LocalLlmStatus extends Notifier<LocalLlmState> {
+/// What is loaded on the device and how far each one has got. A notifier over
+/// the port's own [ValueListenable] rather than a second copy of the state:
+/// what starts a model is a turn asking for one, so the settings page is
+/// watching something it did not start.
+class LocalLlmStatus extends Notifier<List<LocalLlmState>> {
   @override
-  LocalLlmState build() {
+  List<LocalLlmState> build() {
     final llm = ref.watch(localLlmProvider);
-    void update() => state = llm.state.value;
-    llm.state.addListener(update);
-    ref.onDispose(() => llm.state.removeListener(update));
-    return llm.state.value;
+    void update() => state = llm.running.value;
+    llm.running.addListener(update);
+    ref.onDispose(() => llm.running.removeListener(update));
+    return llm.running.value;
   }
 }
 
 final localLlmStateProvider =
-    NotifierProvider<LocalLlmStatus, LocalLlmState>(LocalLlmStatus.new);
+    NotifierProvider<LocalLlmStatus, List<LocalLlmState>>(LocalLlmStatus.new);
 
 /// Which architecture this install is for, and so which rootfs a download
 /// fetches. Read once at startup — it cannot change while the app runs. Android
@@ -291,13 +291,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// this per command.
   Future<void> setRootfs(String? id) => _update((s) => s.rootfsId = id);
 
-  /// What is served from this device. Unpicking clears the other two, since
-  /// neither means anything without a model and left behind they would be
-  /// applied to whatever is picked next.
-  Future<void> setLocalModel(String? id) => _applyLocal((s) => s
-    ..localModelId = id
-    ..localModelDevice = id == null ? null : s.localModelDevice
-    ..localModelContext = id == null ? null : s.localModelContext);
+  /// How many may be loaded at once. Lowering it does not stop anything: the
+  /// cap is read when a model is asked for, so the extra one goes at the next
+  /// turn rather than being killed under a chat that is mid-reply.
+  Future<void> setMaxLocalModels(int count) =>
+      _applyLocal((s) => s.maxLocalModels = count.clamp(1, maxLocalModelsAllowed));
 
   /// Which accelerator it is offloaded to, by the name `--list-devices` gave
   /// it. Null is the CPU.
@@ -307,16 +305,16 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setLocalContext(int? tokens) =>
       _applyLocal((s) => s.localModelContext = tokens);
 
-  /// Stored and then applied, so the pick survives the server failing to
-  /// honour it and is tried again at the next launch. One field at a time and
-  /// never a sibling: threading the other two through every setter is what
-  /// lets a value a picker is *showing* as Default be silently written back.
+  /// Stored, and then the model list is rebuilt. One field at a time and never
+  /// a sibling: threading the others through every setter is what lets a value
+  /// a picker is *showing* as Default be silently written back.
   ///
-  /// The model list is rebuilt because a running server is an endpoint: picking
-  /// one adds a model to every picker in the app, and unpicking takes it away.
+  /// Nothing is started or stopped here. What is running is reconciled against
+  /// these when a turn next asks for a model — see [LocalLlm.serve] — so a
+  /// device or context changed mid-reply does not pull the model out from under
+  /// it.
   Future<void> _applyLocal(void Function(AppSettings) change) async {
     await _update(change);
-    await applyLocalModel(ref.read(localLlmProvider), state);
     ref.invalidate(availableModelsProvider);
   }
 
