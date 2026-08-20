@@ -637,9 +637,15 @@ class FakeVoiceModelStore extends VoiceModelStore {
   /// What the next download fails with, or null for one that works.
   String? failWith;
 
+  /// How many times the first progress event is reported, for a test about what
+  /// a run of events that say the same thing costs.
+  int repeats = 1;
+
   @override
   Stream<DownloadProgress> install(VoiceModel model) async* {
-    yield DownloadProgress(received: 0, total: model.bytes);
+    for (var i = 0; i < repeats; i++) {
+      yield DownloadProgress(received: 0, total: model.bytes);
+    }
     if (failWith != null) throw StateError(failWith!);
     if (installing != null) await installing!.future;
     yield DownloadProgress(received: model.bytes, total: model.bytes);

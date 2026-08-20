@@ -5,7 +5,6 @@ import "../../domain/rootfs.dart";
 import "../../providers.dart";
 import "rootfs_downloads.dart";
 import "../widgets/catalog.dart";
-import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
 import "../widgets/section_header.dart";
 
@@ -21,7 +20,6 @@ class TerminalSection extends ConsumerWidget {
     final available = ref.watch(prootAvailableProvider);
     final installed = ref.watch(installedRootfsProvider);
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
-    final usable = rootfsCatalog.where((r) => installed.contains(r.id)).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,7 +42,10 @@ class TerminalSection extends ConsumerWidget {
             // rather than a hint: Android is where commands ran before any of
             // this and where they go back to.
             none: "Android",
-            options: {for (final rootfs in usable) rootfs.id: rootfs.name},
+            options: {
+              for (final rootfs in rootfsCatalog)
+                if (installed.contains(rootfs.id)) rootfs.id: rootfs.name,
+            },
             value: selected,
             onPick: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
           ),
@@ -121,27 +122,18 @@ class _Action extends ConsumerWidget {
         downloading: downloading,
         installed: ref.watch(installedRootfsProvider).contains(rootfs.id),
         onCancel: () => ref.read(rootfsDownloadsProvider.notifier).cancel(rootfs.id),
-        onDelete: () => _delete(context, ref),
+        onDelete: () => ref.read(rootfsDownloadsProvider.notifier).delete(rootfs),
+        deleteTitle: "Delete ${rootfs.name}?",
+        // What it costs to agree depends on whether commands are running in it.
+        deleteMessage:
+            ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == rootfs.id
+                ? "Everything installed in it goes with it, and commands go back "
+                    "to running on Android."
+                : "Everything installed in it goes with it.",
         // An architecture with no image is a row drawn dead rather than left
         // out, so the reader can see the distribution exists.
         onDownload: rootfs.imageFor(ref.watch(deviceAbiProvider)) == null
             ? null
             : () => ref.read(rootfsDownloadsProvider.notifier).install(rootfs),
       );
-
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final running = ref.read(appSettingsProvider).rootfsId == rootfs.id;
-    final ok = await confirm(
-      context,
-      title: "Delete ${rootfs.name}?",
-      message: running
-          ? "Everything installed in it goes with it, and commands go back to "
-              "running on Android."
-          : "Everything installed in it goes with it.",
-      confirmLabel: "Delete",
-      destructive: true,
-    );
-    if (!ok) return;
-    await ref.read(rootfsDownloadsProvider.notifier).delete(rootfs);
-  }
 }
