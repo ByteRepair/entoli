@@ -10,11 +10,21 @@ import "llm_client.dart";
 /// OpenRouter, Groq, Together, ollama, LM Studio, vLLM. Only the base URL and
 /// the key change.
 class OpenAiClient implements LlmClient {
-  OpenAiClient({required this.baseUrl, this.apiKey, http.Client? httpClient})
-      : _http = httpClient ?? http.Client();
+  OpenAiClient({
+    required this.baseUrl,
+    this.apiKey,
+    this.returnProgress = false,
+    http.Client? httpClient,
+  }) : _http = httpClient ?? http.Client();
 
   final Uri baseUrl;
   final String? apiKey;
+
+  /// Ask for `prompt_progress` frames. llama.cpp's own extension, so it is off
+  /// unless the endpoint is known to be one — a hosted provider is entitled to
+  /// reject a field it has never heard of, and the strict ones do.
+  final bool returnProgress;
+
   final http.Client _http;
 
   Map<String, String> get _auth =>
@@ -49,6 +59,7 @@ class OpenAiClient implements LlmClient {
         "model": model,
         "messages": messages.map(_encodeMessage).toList(),
         "stream": true,
+        if (returnProgress) "return_progress": true,
         if (tools.isNotEmpty) ...{
           "tools": tools.map(_encodeTool).toList(),
           "tool_choice": "auto",
@@ -76,6 +87,18 @@ class OpenAiClient implements LlmClient {
       final error = event["error"];
       if (error != null) {
         throw LlmException(error is Map ? "${error["message"] ?? error}" : "$error");
+      }
+
+      // Its own frame rather than something on a delta: it arrives while the
+      // prompt is still being read, so there are no choices on it at all and
+      // the check below would drop it.
+      final progress = event["prompt_progress"];
+      if (progress is Map<String, dynamic>) {
+        yield LlmPromptProgress(
+          processed: (progress["processed"] as num?)?.toInt() ?? 0,
+          total: (progress["total"] as num?)?.toInt() ?? 0,
+          cache: (progress["cache"] as num?)?.toInt() ?? 0,
+        );
       }
 
       final choices = event["choices"];

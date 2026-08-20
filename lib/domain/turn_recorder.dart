@@ -114,6 +114,7 @@ class TurnRecorder {
       case SubAgentStartEvent():
       case SubAgentEndEvent():
       case RetryEvent():
+      case StatusEvent():
       case InfoEvent():
       case DoneEvent():
         break;

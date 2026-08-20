@@ -279,6 +279,56 @@ void main() {
     expect(stored.messages.last.parts, isEmpty);
   });
 
+  test("what the turn is doing is held while it runs", () async {
+    app.backend.scriptedEvents = const [
+      StatusEvent("Thinking"),
+      StatusEvent("Reading the prompt · 43%"),
+    ];
+    app.backend.hold = Completer<void>();
+    final (id, _) = await startTurn("hello");
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    // The latest replaces the last rather than accumulating: it is one row, and
+    // the most recent thing said is the true one.
+    expect(app.container.read(chatControllerProvider(id)).status,
+        "Reading the prompt · 43%");
+    app.backend.hold!.complete();
+  });
+
+  test("the reply starting is what takes the status away", () async {
+    app.backend.scriptedEvents = const [
+      StatusEvent("Thinking"),
+      StatusEvent(null),
+      TextDelta("here you go"),
+    ];
+    app.backend.hold = Completer<void>();
+    final (id, _) = await startTurn("hello");
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    // From here the caret says the turn is alive, and a label beside it would
+    // be the second thing saying so.
+    expect(app.container.read(chatControllerProvider(id)).status, isNull);
+    app.backend.hold!.complete();
+  });
+
+  test("the status is dropped once the turn ends", () async {
+    app.backend.scriptedEvents = const [StatusEvent("Thinking"), DoneEvent()];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    expect(app.container.read(chatControllerProvider(id)).status, isNull);
+  });
+
+  test("a status is never written to the conversation", () async {
+    app.backend.scriptedEvents = const [
+      StatusEvent("Running a command"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts, isEmpty);
+  });
+
   test("an errored reply is persisted with the chat", () async {
     app.backend.scriptedEvents = const [ErrorEvent("APIError (HTTP 429): usage limit"), DoneEvent()];
     final (id, _) = await chatWithOneTurn("hello");

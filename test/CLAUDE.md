@@ -66,11 +66,20 @@ with no Android on it.
 
 `TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
 page — whether this build has a server at all, and which models are downloaded.
-`FakeLocalLlm.started` is what its tests assert on, since the point of that page
-is that picking a model is what starts a server and with what; `ready: false` is
-a model that will not load, which is the one failure the page has to draw. What
-the server is actually asked to do is `llama_server_test.dart`, a pure function
-again for the reason `proot_test.dart` is one.
+`FakeLocalLlm.served` is what its tests assert on — one entry per `serve`,
+including the ones answered from what was already up, since "it did not start a
+second copy" is worth asserting. `installed:` is what the pool would find on
+disk, and it is a separate list from what is running for the reason the real one
+keeps them apart: every downloaded model is in every picker, and only the ones
+asked for are loaded. `ready: false` is a model that will not load, which is the
+one failure the page has to draw — and reaching that row now means calling
+`serve` in the test, because the settings page no longer starts anything.
+
+What the pool is actually asked to do is `llama_server_test.dart`. `llamaLaunch`
+is a pure function there for the reason `proot_test.dart` is one; the pool
+itself is exercised over `/bin/false`, which cannot come up — and that is enough,
+because a failed load still takes its place in the list, so the eviction order
+is testable without a server that answers.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so

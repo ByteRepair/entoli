@@ -23,6 +23,31 @@ import "task_tool.dart";
 import "templates.dart";
 import "websearch_tool.dart";
 
+/// What the spinner says while the model reads the prompt.
+///
+/// A percentage rather than a count of tokens, which means nothing to anyone,
+/// and nothing at all where the server reported a total of zero. `cache` is left
+/// out deliberately: it is why the bar starts at 80% on a second turn, and
+/// explaining that is not worth a row that has to stay one line.
+String readingPrompt(LlmPromptProgress progress) {
+  final fraction = progress.fraction;
+  return fraction == null
+      ? "Reading the prompt"
+      : "Reading the prompt · ${(fraction * 100).round()}%";
+}
+
+/// What the spinner says while a tool runs, or null for the ones that finish
+/// too fast to be worth naming — a file read is over before a frame is drawn,
+/// and a label that flashes is worse than none.
+String? runningTool(String name) => switch (name) {
+      "bash" => "Running a command",
+      websearchToolName => "Searching the web",
+      webfetchToolName => "Fetching a page",
+      taskToolName => "Working on a sub-task",
+      artifactToolName => "Publishing the artifact",
+      _ => null,
+    };
+
 /// The only tool for doing anything to the machine. Everything else — reading
 /// a file, editing it, running the tests — is a command.
 const bashTool = LlmTool(
@@ -378,6 +403,9 @@ class BuiltinAgent {
       }
 
       if (call.name == taskToolName) continue;
+
+      final doing = runningTool(call.name);
+      if (doing != null) yield StatusEvent(doing);
 
       if (call.name == readToolName) {
         yield* _read(call);
@@ -961,6 +989,12 @@ class BuiltinAgent {
       DateTime? thinkingSince;
       String? signature;
 
+      // Said before the request goes out, because that is where the wait
+      // starts. On a hosted provider it is the whole of what can be known until
+      // the first token; on a local one it is replaced by real progress within
+      // a second.
+      yield const StatusEvent("Thinking");
+
       try {
         await for (final chunk in client.stream(
           session.messages,
@@ -971,8 +1005,16 @@ class BuiltinAgent {
         )) {
           if (_cancelled) return;
           switch (chunk) {
+            case LlmPromptProgress():
+              // Only llama.cpp sends these, and only while it is still reading
+              // the prompt — so this never fires on a hosted provider and never
+              // after the first token.
+              yield StatusEvent(readingPrompt(chunk));
+
             case LlmReasoningChunk(:final text):
               produced = true;
+              // The thinking block itself says the rest from here.
+              if (thinkingSince == null) yield const StatusEvent(null);
               thinkingSince ??= DateTime.now();
               yield ReasoningDelta(text);
 
@@ -981,6 +1023,8 @@ class BuiltinAgent {
 
             case LlmTextChunk(:final text):
               produced = true;
+              // The caret says it from here.
+              if (!textStreamed) yield const StatusEvent(null);
               textStreamed = true;
               // Thinking ended when the reply started, not when the call did.
               if (thinkingSince != null) {

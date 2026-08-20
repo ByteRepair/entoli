@@ -464,6 +464,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               message: m,
               isWaiting: view.isRunning && i == chat.messages.length - 1,
               waitingNotice: view.retry,
+              waitingStatus: view.status,
               onTapLink: (href) {
                 final uri = Uri.tryParse(href);
                 if (uri != null) {

@@ -52,6 +52,7 @@ void main() {
         bytes: weights.length,
         sha256: sha ?? "${sha256.convert(weights)}",
         contextLength: 4096,
+        kvBytesPerToken: 49152,
         licence: "Apache-2.0",
       );
 

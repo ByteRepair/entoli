@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
@@ -29,7 +30,7 @@ void main() {
 
     expect(find.textContaining("Ollama or LM Studio"), findsOneWidget);
     expect(find.text(model.name), findsNothing);
-    expect(find.text("Model"), findsNothing);
+    expect(find.text("Max LLMs running"), findsNothing);
   });
 
   testWidgets("where it can run one, the catalog is offered with its size",
@@ -41,47 +42,54 @@ void main() {
     expect(find.textContaining("Q4_0"), findsWidgets);
     expect(find.byTooltip("Download"), findsWidgets);
     expect(find.byTooltip("Delete"), findsNothing);
-    // The picker offers what is on disk, and nothing is — so there is no
-    // dropdown to open, only a line saying why.
-    expect(find.text("Model"), findsOneWidget);
-    expect(find.text("Nothing downloaded yet."), findsOneWidget);
+    // Nothing on disk means nothing to configure: the settings above the
+    // catalog are all about models, and there are none.
+    expect(find.text("Nothing downloaded yet"), findsOneWidget);
+    expect(find.text("Max LLMs running"), findsNothing);
   });
 
-  testWidgets("downloading one adds it to the picker and leaves it unpicked",
-      (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm());
+  testWidgets("there is no model picker — every downloaded one is offered "
+      "wherever a model is chosen", (tester) async {
+    app = TestApp.create(
+      localLlm: FakeLocalLlm(installed: [model.id]),
+      localModels: {model.id},
+    );
     await pumpOnDevice(tester);
 
-    await tester.tap(find.byTooltip("Download").first);
-    await settleIo(tester);
-
-    expect(app.container.read(installedLocalModelsProvider), {model.id});
-    expect(find.byTooltip("Delete"), findsOneWidget);
-    // Downloaded is not the same as loaded: a gigabyte of memory is the user's
-    // to spend, and fetching the file is not that.
-    expect(app.container.read(appSettingsProvider).localModelId, isNull);
-    expect(app.localLlm.started, isEmpty);
+    // The pick used to live here, and having moved it there must be nothing
+    // left that looks like one: two places to say which model answers is one
+    // that can disagree with the other.
+    expect(find.text("Model"), findsNothing);
+    expect(find.text("Max LLMs running"), findsOneWidget);
+    // Downloaded is not loaded. A gigabyte of memory is spent when a chat asks
+    // for the model, not when the file lands.
+    expect(app.localLlm.served, isEmpty);
+    expect(find.text("Nothing loaded"), findsOneWidget);
   });
 
-  testWidgets("picking one is what starts the server", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+  testWidgets("the cap on how many run at once is stored", (tester) async {
+    app = TestApp.create(
+      localLlm: FakeLocalLlm(installed: [model.id]),
+      localModels: {model.id},
+    );
     await pumpOnDevice(tester);
 
-    await tester.tap(find.byType(DropdownButton<String?>).first);
+    await tester.tap(find.text("One at a time"));
     await settleIo(tester);
-    await tester.tap(find.text(model.name).last);
+    await tester.tap(find.textContaining("naming chats beside").last);
     await settleIo(tester);
 
-    expect(app.container.read(appSettingsProvider).localModelId, model.id);
-    expect(app.localLlm.started.single.modelId, model.id);
-    // Nothing named, which is the CPU — the only device every phone has.
-    expect(app.localLlm.started.single.device, isNull);
+    expect(app.container.read(appSettingsProvider).maxLocalModels, 2);
+    // Nothing was started or stopped by the change: the cap is read when a
+    // model is next asked for, so a chat mid-reply keeps the model it has.
+    expect(app.localLlm.served, isEmpty);
+    expect(app.localLlm.stops, 0);
   });
 
   testWidgets("an accelerator is offered by the name the server gave it",
       (tester) async {
     app = TestApp.create(
-      localLlm: FakeLocalLlm(devicesFound: const [
+      localLlm: FakeLocalLlm(installed: [model.id], devicesFound: const [
         LocalDevice(
           name: "HTP0",
           description: "Hexagon NPU",
@@ -90,8 +98,6 @@ void main() {
       ]),
       localModels: {model.id},
     );
-    await io(tester,
-        () => app.container.read(appSettingsProvider.notifier).setLocalModel(model.id));
     await pumpOnDevice(tester);
 
     await tester.tap(find.text("CPU"));
@@ -99,42 +105,52 @@ void main() {
     await tester.tap(find.text("NPU · Hexagon NPU").last);
     await settleIo(tester);
 
-    expect(app.container.read(appSettingsProvider).localModelDevice, "HTP0");
     // The name is passed through untouched: it is what `--device` takes, and a
     // phone can have two of the same kind.
-    expect(app.localLlm.started.last.device, "HTP0");
+    expect(app.container.read(appSettingsProvider).localModelDevice, "HTP0");
   });
 
   testWidgets("a phone with no accelerator is told so rather than offered a "
       "dropdown of one", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
-    await io(tester,
-        () => app.container.read(appSettingsProvider.notifier).setLocalModel(model.id));
+    app = TestApp.create(
+      localLlm: FakeLocalLlm(installed: [model.id]),
+      localModels: {model.id},
+    );
     await pumpOnDevice(tester);
 
     expect(find.textContaining("no accelerator on this device"), findsOneWidget);
   });
 
-  testWidgets("a model that will not load says why, where it was picked",
+  testWidgets("a model that will not load says why, beside the others",
       (tester) async {
-    app = TestApp.create(
-      localLlm: FakeLocalLlm(ready: false, failure: "not enough memory"),
-      localModels: {model.id},
+    final llm = FakeLocalLlm(
+      installed: [model.id],
+      ready: false,
+      failure: "not enough memory",
     );
-    await io(tester,
-        () => app.container.read(appSettingsProvider.notifier).setLocalModel(model.id));
+    app = TestApp.create(localLlm: llm, localModels: {model.id});
+    // A turn asked for it and it would not come up, which is the only way this
+    // row is reached now that the settings page starts nothing. The throw is
+    // what a turn would be told, and is not what this test is about.
+    await io(tester, () async {
+      try {
+        await llm.serve(model.id);
+      } on LocalLlmFailure {
+        // Expected.
+      }
+    });
     await pumpOnDevice(tester);
 
     // The server's own last words. For a model too large to fit this is the
     // only place it is said at all.
-    expect(find.text("It would not load"), findsOneWidget);
+    expect(find.text("${model.name} would not load"), findsOneWidget);
     expect(find.text("not enough memory"), findsOneWidget);
   });
 
-  testWidgets("deleting the one being served stops it first", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
-    await io(tester,
-        () => app.container.read(appSettingsProvider.notifier).setLocalModel(model.id));
+  testWidgets("deleting one that is loaded unloads it first", (tester) async {
+    final llm = FakeLocalLlm(installed: [model.id]);
+    app = TestApp.create(localLlm: llm, localModels: {model.id});
+    await io(tester, () => llm.serve(model.id));
     await pumpOnDevice(tester);
 
     await tester.tap(find.byTooltip("Delete"));
@@ -143,9 +159,8 @@ void main() {
     await settleIo(tester);
 
     expect(app.localModels.deleted, [model.id]);
-    // Unpicked in the same breath: the server has the file open, and a setting
-    // naming a deleted model would try to load it again at the next launch.
-    expect(app.container.read(appSettingsProvider).localModelId, isNull);
+    // The server has the file open, so deleting under it would leave a model
+    // answering out of a file that is no longer there.
     expect(app.localLlm.stops, greaterThan(0));
   });
 

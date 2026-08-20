@@ -31,9 +31,24 @@ all the way down the page. The other three keep theirs: a name is what makes a
 prompt something said and a tool run something reported, and neither of those
 is the page.
 
+**The spinner says what it is waiting for.** A spinner on its own cannot be told
+apart from a hang, and against a model running on the device that wait is
+minutes rather than seconds — so `StatusEvent` carries a line for the row it
+sits on and `ChatViewState.status` holds the latest. It is one row, so the last
+thing said replaces the one before it, and trouble wins it outright: a
+`RetryEvent` beside "Thinking" would be the turn claiming to be fine while it is
+not. The wording is the agent loop's rather than this layer's, because what is
+worth saying differs per provider and per tool and only the loop knows which it
+is waiting on. Against a local model it is a real percentage — see
+`LlmPromptProgress`, and "How much context" in `lib/data/local/CLAUDE.md`;
+against everything else it is "Thinking" until the first token, which is the
+whole of what is knowable there.
+
 While a reply is still being written it ends in a `StreamingCaret`, which is
 the other half of what the spinner does — the spinner answers for a turn that
-has said nothing yet, the caret for one that has. It goes on the last text part
+has said nothing yet, the caret for one that has. The status goes when the caret
+arrives, for the same reason: two things saying the turn is alive is one too
+many. It goes on the last text part
 **only when that part is the last part of the message**: text with a tool call
 under it stopped arriving before the call started, so a caret left there points
 at nothing while the label below is what is actually busy. It is a `WidgetSpan`

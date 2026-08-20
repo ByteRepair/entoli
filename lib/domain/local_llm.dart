@@ -1,6 +1,5 @@
 import "package:flutter/foundation.dart";
 
-import "app_settings.dart";
 import "llm_provider.dart";
 import "local_model.dart";
 
@@ -16,6 +15,10 @@ import "local_model.dart";
 /// the alternative of binding libllama through FFI: parsing a small model's
 /// idea of a tool call out of its chat template is most of what the server is
 /// for, and none of it is worth writing twice.
+///
+/// **It is a pool rather than one server.** Every model on disk is offered, and
+/// one is loaded when a turn actually asks for it — see "Loading one, and when"
+/// in `lib/data/local/CLAUDE.md`.
 abstract class LocalLlm {
   const LocalLlm();
 
@@ -24,10 +27,10 @@ abstract class LocalLlm {
   /// answer and is two presets away — see `llmProviderPresets`.
   bool get available;
 
-  /// What has been picked, and how far the server has got with it. A
-  /// [ValueListenable] rather than a stream because the settings page draws it
-  /// and a rebuild per frame of a model load is the wrong shape.
-  ValueListenable<LocalLlmState> get state;
+  /// What is loaded and how far each one has got, least recently served first.
+  /// A [ValueListenable] rather than a stream because the settings page draws
+  /// it and a rebuild per frame of a model load is the wrong shape.
+  ValueListenable<List<LocalLlmState>> get running;
 
   /// The accelerators this device turned out to have, asked of the server
   /// itself. Empty means the CPU is all there is, which is the answer on most
@@ -38,88 +41,112 @@ abstract class LocalLlm {
   /// only the binary knows both.
   Future<List<LocalDevice>> devices();
 
-  /// Load [model] and serve it. Returns once the server has been started, not
-  /// once it will answer: mapping a four-gigabyte model takes the better part
-  /// of a minute, and the settings page has to be able to draw that rather than
-  /// sit on an awaited dropdown. What waits for the end of it is [whenReady].
-  Future<void> start(LocalModel model, {String? device, int? contextLength});
-
-  Future<void> stop();
-
-  /// Completes when the server will answer, or throws with why it never will.
-  /// This is what the agent's client waits on, so a turn sent at a model that
-  /// is still loading is a turn that waits rather than one that fails.
-  Future<void> whenReady();
-
-  /// The running server as an endpoint, or null when nothing is picked.
+  /// Where to reach [modelId], loading it first if it is not up.
   ///
-  /// Non-null from the moment a model is picked rather than from the moment it
-  /// answers, so the model is in the picker while it loads — the alternative is
-  /// a chat whose pinned model vanishes for the thirty seconds after a restart.
+  /// Completes when the server will answer — mapping a model takes the better
+  /// part of a minute — or throws [LocalLlmFailure] with the server's own last
+  /// words when it never will. A model already up under these settings is
+  /// returned untouched; one up under different ones is loaded again, which is
+  /// what makes this the only thing reconciling the running servers with the
+  /// settings. There is no second path to forget.
+  ///
+  /// [maxRunning] is the cap: asking for one past it stops the least recently
+  /// served first. Settings are passed per call rather than held, the way
+  /// `LocalShell` re-reads its environment, so a change in settings reaches the
+  /// next turn rather than the next launch.
+  Future<LocalEndpoint> serve(
+    String modelId, {
+    String? device,
+    int? contextLength,
+    int maxRunning = 1,
+  });
+
+  /// Stop everything. What the settings page's own control reaches, and what a
+  /// phone short of memory wants.
+  Future<void> stopAll();
+
+  /// Every model on disk, as one provider.
+  ///
+  /// Null where nothing is downloaded, which is what keeps the entry out of
+  /// every picker until there is something to pick. It lists what is *on disk*
+  /// rather than what is loaded: asking for one is what causes it to load, so a
+  /// list of the already-running would never grow.
   LlmProviderConfig? get provider;
 }
 
-enum LocalLlmPhase { off, starting, ready, failed }
+/// One running server: where it is, and what it will answer to.
+///
+/// Together rather than apart because they are made together and mean nothing
+/// singly — the key is generated per launch and is the whole of what stops
+/// another app on the phone spending this model's battery.
+class LocalEndpoint {
+  const LocalEndpoint({required this.baseUrl, required this.apiKey});
 
+  final String baseUrl;
+  final String apiKey;
+}
+
+enum LocalLlmPhase { starting, ready, failed }
+
+/// One model in the pool, and how far it has got.
 class LocalLlmState {
   const LocalLlmState({
-    this.phase = LocalLlmPhase.off,
-    this.modelId,
+    required this.modelId,
+    required this.phase,
     this.device,
     this.contextLength,
     this.failure,
   });
 
-  final LocalLlmPhase phase;
-
   /// The catalog id being served, which is also the model id the picker offers.
-  final String? modelId;
+  final String modelId;
+
+  final LocalLlmPhase phase;
 
   /// The device it was told to offload to, by name. Null is the CPU.
   final String? device;
 
-  /// What it was loaded with. Held because it is one of the three things a
-  /// change to means the server has to be started again, and comparing what is
-  /// running against what is wanted is the whole of [applyLocalModel].
+  /// What it was loaded with. Held because it is what a later [LocalLlm.serve]
+  /// compares against to decide whether this server is still the one being
+  /// asked for.
   final int? contextLength;
 
   /// Why it is not running, where [phase] is [LocalLlmPhase.failed]. It is the
   /// server's own last words, which for a model too large to fit is the only
   /// place that is said.
   final String? failure;
+
+  LocalLlmState copyWith({LocalLlmPhase? phase, String? failure}) => LocalLlmState(
+        modelId: modelId,
+        phase: phase ?? this.phase,
+        device: device,
+        contextLength: contextLength,
+        failure: failure ?? this.failure,
+      );
 }
 
-/// Start, stop or reload the server so that what is running is what
-/// [settings] asks for. It is the only thing that reconciles the two, so a
-/// path that writes `localModelId` without coming through here would leave the
-/// setting and the server disagreeing, silently.
+/// Why the model is not answering, worded by the server. Its own type so the
+/// agent's error arm can say "the on-device model" rather than reporting a
+/// connection to localhost that was refused.
+class LocalLlmFailure implements Exception {
+  const LocalLlmFailure(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// How many models may be resident at once, and what the settings page offers.
 ///
-/// One function rather than a rule each caller keeps, because there are two
-/// callers and they are far apart: the settings page, where a model is picked,
-/// and app startup, where a pick made in a previous run is honoured. Comparing
-/// against what is already running is what makes it safe to call from either —
-/// a launch with the right model already up does nothing, and re-picking the
-/// model that failed to load tries it again.
-Future<void> applyLocalModel(LocalLlm llm, AppSettings settings) async {
-  if (!llm.available) return;
-  final model = localModelById(settings.localModelId);
-  if (model == null) return llm.stop();
-  final running = llm.state.value;
-  final same = running.modelId == model.id &&
-      running.device == settings.localModelDevice &&
-      running.contextLength == settings.localModelContext;
-  // A failed one is deliberately not "the same": the pick being made again is
-  // the user asking for another go at it, and there is nothing else they could
-  // press to get one.
-  if (same && running.phase != LocalLlmPhase.failed) return;
-  await llm.start(
-    model,
-    device: settings.localModelDevice,
-    contextLength: settings.localModelContext,
-  );
-}
+/// Two is the ceiling rather than a number to type: each is its own process
+/// with its own weights and its own [kvBudgetBytes] of KV cache, and a phone
+/// that could hold three of those is not the phone this is written for. Two is
+/// worth having because the pair is not symmetric — a small model naming chats
+/// beside a large one answering them costs far less than the large one twice.
+const maxLocalModelsAllowed = 2;
 
-/// The web's, and the desktops': no server bundled, so nothing to pick and
+/// The web's, and the desktops': no server bundled, so nothing to load and
 /// nothing in the provider list.
 class UnavailableLocalLlm extends LocalLlm {
   const UnavailableLocalLlm();
@@ -128,22 +155,24 @@ class UnavailableLocalLlm extends LocalLlm {
   bool get available => false;
 
   @override
-  ValueListenable<LocalLlmState> get state => _off;
+  ValueListenable<List<LocalLlmState>> get running => _none;
 
-  static final _off = ValueNotifier(const LocalLlmState());
+  static final _none = ValueNotifier(const <LocalLlmState>[]);
 
   @override
   Future<List<LocalDevice>> devices() async => const [];
 
   @override
-  Future<void> start(LocalModel model, {String? device, int? contextLength}) async {}
+  Future<LocalEndpoint> serve(
+    String modelId, {
+    String? device,
+    int? contextLength,
+    int maxRunning = 1,
+  }) async =>
+      throw const LocalLlmFailure("There is no on-device model server in this build.");
 
   @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> whenReady() async =>
-      throw StateError("There is no on-device model server in this build.");
+  Future<void> stopAll() async {}
 
   @override
   LlmProviderConfig? get provider => null;

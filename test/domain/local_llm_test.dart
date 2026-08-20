@@ -1,101 +1,56 @@
 import "package:flutter_test/flutter_test.dart";
 
-import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
 
-import "../fakes.dart";
-
-/// [applyLocalModel] is the one place that decides what is running, and it is
-/// called from two ends — the settings page and startup — so what it does about
-/// a server that is *already* running is the whole of it.
+/// How much context a model gets when nothing overrides it. It used to be one
+/// number for the whole catalog, which made the smallest model as cramped as
+/// the largest while costing a third of the memory — so what is worth pinning
+/// is that the answer follows from the model rather than from a constant.
 void main() {
-  final model = localModelCatalog.first;
-  final other = localModelCatalog[1];
-
-  AppSettings picking(LocalModel? m, {String? device, int? context}) => AppSettings(
-        localModelId: m?.id,
-        localModelDevice: device,
-        localModelContext: context,
+  LocalModel modelWith(int kvBytesPerToken) => LocalModel(
+        id: "test",
+        name: "Test",
+        parameters: "1B",
+        url: "https://example.invalid/model.gguf",
+        bytes: 1,
+        sha256: "",
+        contextLength: 262144,
+        kvBytesPerToken: kvBytesPerToken,
+        licence: "Apache-2.0",
       );
 
-  test("a pick made in a previous run is what starts the server", () async {
-    final llm = FakeLocalLlm();
-
-    await applyLocalModel(llm, picking(model, device: "HTP0", context: 8192));
-
-    expect(llm.started.single.modelId, model.id);
-    expect(llm.started.single.device, "HTP0");
-    expect(llm.started.single.contextLength, 8192);
+  test("the budget is what decides it, divided by what a token costs", () {
+    // 48 KiB a token is the two smaller Qwen3.5s: 24 layers, 2 KV heads, 256
+    // wide, K and V, at f16.
+    expect(modelWith(48 * 1024).defaultContext, 16384);
+    // 128 KiB is the two larger ones — 32 layers and 4 KV heads — so the same
+    // gigabyte buys a quarter of the context.
+    expect(modelWith(128 * 1024).defaultContext, 8192);
   });
 
-  test("nothing picked stops whatever was running", () async {
-    final llm = FakeLocalLlm();
-    await applyLocalModel(llm, picking(model));
-
-    await applyLocalModel(llm, picking(null));
-
-    expect(llm.stops, 1);
+  test("rounding down is what keeps it inside the budget", () {
+    // 1 GiB / 48 KiB is 21,845, which is not a size anyone would choose and is
+    // over budget the moment it is rounded up to one.
+    expect(modelWith(48 * 1024).defaultContext * 48 * 1024,
+        lessThanOrEqualTo(kvBudgetBytes));
   });
 
-  test("the same pick again does nothing", () async {
-    // Both callers can arrive at any time — the settings page writes three
-    // fields one at a time, and a restore starts a session over a file that has
-    // not changed. Reloading a four-gigabyte model for either would be a minute
-    // of the phone's time for no change at all.
-    final llm = FakeLocalLlm();
-    await applyLocalModel(llm, picking(model, device: "HTP0"));
-
-    await applyLocalModel(llm, picking(model, device: "HTP0"));
-
-    expect(llm.started, hasLength(1));
-    expect(llm.stops, 0);
-  });
-
-  test("a different model, device or context is a reload", () async {
-    for (final change in [
-      picking(other),
-      picking(model, device: "HTP0"),
-      picking(model, context: 16384),
-    ]) {
-      final llm = FakeLocalLlm();
-      await applyLocalModel(llm, picking(model));
-
-      await applyLocalModel(llm, change);
-
-      expect(llm.started, hasLength(2));
+  test("no entry in the catalog is given more than the budget", () {
+    for (final model in localModelCatalog) {
+      expect(model.defaultContext * model.kvBytesPerToken,
+          lessThanOrEqualTo(kvBudgetBytes),
+          reason: model.id);
+      // Nor so little that the agent's own prompt would not fit: the system
+      // prompt and the tool schemas are about 2,700 tokens before the user has
+      // typed anything, which is what made 4,096 unusable.
+      expect(model.defaultContext, greaterThan(4096), reason: model.id);
     }
   });
 
-  test("re-picking the one that failed tries it again", () async {
-    // There is nothing else the user could press: the row says why it would not
-    // load, and picking it again is how they ask for another go.
-    final llm = FakeLocalLlm(ready: false);
-    await applyLocalModel(llm, picking(model));
-
-    await applyLocalModel(llm, picking(model));
-
-    expect(llm.started, hasLength(2));
-  });
-
-  test("a build with no server in it is left alone", () async {
-    final llm = FakeLocalLlm(available: false);
-
-    await applyLocalModel(llm, picking(model));
-
-    expect(llm.started, isEmpty);
-    // Not even the stop: there is nothing there to stop, and a settings file
-    // carried from a phone names a model this platform has never heard of.
-    expect(llm.stops, 0);
-  });
-
-  test("a setting naming a model the catalog no longer has stops the server",
-      () async {
-    final llm = FakeLocalLlm();
-    await applyLocalModel(llm, picking(model));
-
-    await applyLocalModel(llm, AppSettings(localModelId: "gone-in-a-later-build"));
-
-    expect(llm.stops, 1);
+  test("a model is never run past what it was trained for", () {
+    for (final model in localModelCatalog) {
+      expect(model.defaultContext, lessThanOrEqualTo(model.contextLength),
+          reason: model.id);
+    }
   });
 }

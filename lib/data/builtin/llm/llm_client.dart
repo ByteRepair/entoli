@@ -98,6 +98,33 @@ class LlmReasoningSignature extends LlmChunk {
   final String signature;
 }
 
+/// How far the provider has got through the prompt, before it has generated
+/// anything at all.
+///
+/// llama.cpp's `prompt_progress`, and only ever that — no hosted provider
+/// reports it, and none is asked to. It exists because prefill on a phone is
+/// minutes: without it the whole of that wait is a spinner that cannot be told
+/// apart from a hang.
+///
+/// [cache] is the part of [total] that was already in the KV cache and so cost
+/// nothing, which is why a second turn in the same chat starts most of the way
+/// through.
+class LlmPromptProgress extends LlmChunk {
+  const LlmPromptProgress({
+    required this.processed,
+    required this.total,
+    required this.cache,
+  });
+
+  final int processed;
+  final int total;
+  final int cache;
+
+  /// Null where the provider said the prompt was empty, rather than a division
+  /// by zero or a confident 100%.
+  double? get fraction => total <= 0 ? null : (processed / total).clamp(0.0, 1.0);
+}
+
 class LlmCompletion extends LlmChunk {
   const LlmCompletion({required this.message, this.finishReason});
 

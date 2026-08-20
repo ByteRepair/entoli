@@ -54,8 +54,8 @@ class LlamaBinaries {
   required String modelFile,
   required int port,
   required String apiKey,
+  required int contextLength,
   String? device,
-  int? contextLength,
   int? threads,
 }) =>
     (
@@ -74,7 +74,11 @@ class LlamaBinaries {
         // What the picker offers and what a chat's `meta.json` pins, rather
         // than the file name the weights happen to have arrived under.
         "-a", model.id,
-        "-c", "${contextLength ?? defaultContextLength}",
+        // Always passed, and that is deliberate: llama.cpp's own `--fit` would
+        // otherwise size this against the phone's whole RAM, since the CPU
+        // backend reports every physical page as free. See "How much context"
+        // in CLAUDE.md.
+        "-c", "$contextLength",
         // The chat template as the publisher wrote it, which is what turns a
         // small model's tool call into an OpenAI one. Without it the agent's
         // tools reach a model that has never been told they exist.
@@ -95,12 +99,6 @@ class LlamaBinaries {
       environment: binaries.environment,
     );
 
-/// What a model is run with when nothing says otherwise. Far below what any of
-/// the catalog was trained for, and deliberately: the weights are mapped and
-/// paged, while the KV cache is resident, so on a phone it is the context that
-/// decides whether the app is killed.
-const defaultContextLength = 4096;
-
 /// The answer for this machine, read once. A lazy top-level `final` because the
 /// cores do not change while the process lives, and every caller is on a path —
 /// the first frame, and a settings page restarting the server — that has no
@@ -117,7 +115,7 @@ final int? _bigCores = bigCoreCount(cpuCeilings());
 /// lowest ceiling; everything above it is what to run on.
 ///
 /// A machine whose cores are all one tier has no little cluster and gets all of
-/// them, and so does one the kernel would not answer for — [threads] is null
+/// them, and so does one the kernel would not answer for — `threads` is null
 /// there and llama.cpp decides, which is what happened before this existed.
 int? bigCoreCount(List<int> ceilings) {
   if (ceilings.isEmpty) return null;
@@ -130,7 +128,7 @@ int? bigCoreCount(List<int> ceilings) {
 /// whatever unit it uses, since only the ordering is read.
 ///
 /// Linux rather than Android, and it needs no guard for it: this is only ever
-/// reached from [LlamaServer], which `platformLocalLlm` builds on Android
+/// reached from [LlamaServerPool], which `platformLocalLlm` builds on Android
 /// alone, and a desktop Linux that got here through a hand-built binary would
 /// be answering about its own cores, which is the right answer there too.
 /// Anywhere else the files are missing and the list is empty.
@@ -150,13 +148,13 @@ List<int> cpuCeilings() {
   return ceilings;
 }
 
-/// llama.cpp's server, running beside the app and answering on the loopback
-/// address.
-class LlamaServer extends LocalLlm {
-  LlamaServer(this._binaries, this._store);
+/// llama.cpp's servers, running beside the app on the loopback address — one
+/// process per model, up to what the settings allow.
+class LlamaServerPool extends LocalLlm {
+  LlamaServerPool(this._binaries, this._store);
 
   /// Never null: `platformLocalLlm` answers with [UnavailableLocalLlm] where
-  /// this build shipped no server, so a [LlamaServer] that exists has one.
+  /// this build shipped no server, so a pool that exists has one.
   final LlamaBinaries _binaries;
 
   /// Where the weights are. Asked synchronously at the moment of starting, so
@@ -164,54 +162,14 @@ class LlamaServer extends LocalLlm {
   /// server that exits three seconds later saying it could not open a file.
   final LocalModelStore _store;
 
+  /// Least recently served first, which is the order [serve] evicts in.
+  final _servers = <_Server>[];
+
   @override
-  final ValueNotifier<LocalLlmState> state = ValueNotifier(const LocalLlmState());
-
-  Process? _process;
-
-  /// Where the running server is and what it will answer to. One field rather
-  /// than two, since they are made together and mean nothing apart — and null
-  /// is the whole of "there is nothing to talk to".
-  ({int port, String key})? _endpoint;
-
-  /// Completed when the server answers, or completed with an error when it
-  /// stops trying. Replaced per start, so a client that waited on a previous
-  /// one is not left holding a future that will never move.
-  Completer<void>? _ready;
-
-  /// The tail of what the server said. Kept because the one failure that
-  /// matters — a model that does not fit — is reported there and nowhere else.
-  final _log = <String>[];
-
-  static const _logLines = 40;
+  final ValueNotifier<List<LocalLlmState>> running = ValueNotifier(const []);
 
   @override
   bool get available => true;
-
-  @override
-  Future<void> whenReady() {
-    final ready = _ready;
-    if (ready == null) {
-      return Future.error(StateError("No on-device model is loaded."));
-    }
-    return ready.future;
-  }
-
-  @override
-  LlmProviderConfig? get provider {
-    final at = _endpoint;
-    if (at == null) return null;
-    return LlmProviderConfig(
-      id: localProviderId,
-      label: "On-device",
-      api: LlmApi.openai,
-      baseUrl: "http://127.0.0.1:${at.port}/v1",
-      apiKey: at.key,
-      // Named rather than asked for. The endpoint would answer, but only once
-      // it has finished loading, and the picker asks while it is still going.
-      models: [state.value.modelId!],
-    );
-  }
 
   @override
   Future<List<LocalDevice>> devices() async {
@@ -228,42 +186,166 @@ class LlamaServer extends LocalLlm {
   }
 
   @override
-  Future<void> start(LocalModel model, {String? device, int? contextLength}) async {
-    await stop();
-    // The pick is published before anything can go wrong with it, so that every
-    // failure below reads as this model failing rather than as nothing picked —
-    // which is what the settings page draws and what a waiting turn is told.
-    _log.clear();
-    _ready = Completer<void>();
-    state.value = LocalLlmState(
-      phase: LocalLlmPhase.starting,
-      modelId: model.id,
-      device: device,
-      contextLength: contextLength,
+  LlmProviderConfig? get provider {
+    final models = [
+      for (final model in localModelCatalog)
+        if (_store.fileOfSync(model) != null) model.id,
+    ];
+    if (models.isEmpty) return null;
+    return LlmProviderConfig(
+      id: localProviderId,
+      label: "On-device",
+      api: LlmApi.openai,
+      // Empty, and it has to be: there is no one server behind this entry, and
+      // each model is its own process on a port of its own. The endpoint
+      // carries the client that routes between them, so nothing reads this —
+      // and an empty string keeps the registry's cache signature still while
+      // servers come and go under it.
+      baseUrl: "",
+      models: models,
     );
+  }
+
+  @override
+  Future<LocalEndpoint> serve(
+    String modelId, {
+    String? device,
+    int? contextLength,
+    int maxRunning = 1,
+  }) async {
+    final model = localModelById(modelId);
+    if (model == null) throw LocalLlmFailure("$modelId is not a model this build knows.");
+    final wanted = contextLength ?? model.defaultContext;
+
+    final already = _serverFor(modelId);
+    if (already != null && already.serves(device: device, contextLength: wanted)) {
+      _touch(already);
+      await already.ready;
+      return already.endpoint;
+    }
 
     final file = _store.fileOfSync(model);
-    if (file == null) return _fail("${model.name} is not downloaded.");
+    if (file == null) throw LocalLlmFailure("${model.name} is not downloaded.");
 
+    // Every list edit below happens before the first await, so two turns asking
+    // at once cannot both decide to start the same model — the second finds the
+    // first already in the list and waits on it.
+    final stopping = <_Server>[];
+    if (already != null) {
+      _servers.remove(already);
+      stopping.add(already);
+    }
+    final cap = maxRunning.clamp(1, maxLocalModelsAllowed);
+    while (_servers.length >= cap) {
+      stopping.add(_servers.removeAt(0));
+    }
+    final server = _Server(model: model, device: device, contextLength: wanted);
+    _servers.add(server);
+    _publish();
+
+    // The old ones go before the new one arrives. Overlapping them would put
+    // two sets of weights in memory at once, which is the thing the cap exists
+    // to prevent.
+    for (final old in stopping) {
+      await old.stop();
+    }
+    await server.spawn(_binaries, file, onChange: _publish);
+    _publish();
+    await server.ready;
+    return server.endpoint;
+  }
+
+  @override
+  Future<void> stopAll() async {
+    final all = [..._servers];
+    _servers.clear();
+    _publish();
+    for (final server in all) {
+      await server.stop();
+    }
+  }
+
+  _Server? _serverFor(String modelId) {
+    for (final server in _servers) {
+      if (server.model.id == modelId) return server;
+    }
+    return null;
+  }
+
+  /// Most recently served last, since that is the end [serve] evicts from.
+  void _touch(_Server server) {
+    if (_servers.remove(server)) _servers.add(server);
+    _publish();
+  }
+
+  void _publish() => running.value = [for (final server in _servers) server.state];
+}
+
+/// One model, one process.
+class _Server {
+  _Server({required this.model, required this.device, required this.contextLength});
+
+  final LocalModel model;
+  final String? device;
+  final int contextLength;
+
+  Process? _process;
+  int? _port;
+  String? _key;
+
+  final _ready = Completer<void>();
+  var _phase = LocalLlmPhase.starting;
+  String? _failure;
+
+  /// The tail of what the server said. Kept because the one failure that
+  /// matters — a model that does not fit — is reported there and nowhere else.
+  final _log = <String>[];
+
+  static const _logLines = 40;
+
+  Future<void> get ready => _ready.future;
+
+  LocalLlmState get state => LocalLlmState(
+        modelId: model.id,
+        phase: _phase,
+        device: device,
+        contextLength: contextLength,
+        failure: _failure,
+      );
+
+  /// Only read after [ready] has completed, which is the only point at which
+  /// there is something on the other end of it.
+  LocalEndpoint get endpoint =>
+      LocalEndpoint(baseUrl: "http://127.0.0.1:$_port/v1", apiKey: _key!);
+
+  /// Whether this is still the server that would be started for these settings.
+  /// A failed one never is: being asked again is the user asking for another
+  /// go, and there is nothing else they could press to get one.
+  bool serves({required String? device, required int contextLength}) =>
+      _phase != LocalLlmPhase.failed &&
+      this.device == device &&
+      this.contextLength == contextLength;
+
+  Future<void> spawn(LlamaBinaries binaries, String modelFile,
+      {required void Function() onChange}) async {
     // Asked of the OS rather than picked: a fixed port is one another app can
     // already be on, and the failure that gives is the server exiting a second
     // after it started for a reason nothing here would think to report.
     final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
-    final port = socket.port;
+    _port = socket.port;
     await socket.close();
-    final apiKey = _newKey();
+    _key = _newKey();
 
     final launch = llamaLaunch(
-      binaries: _binaries,
+      binaries: binaries,
       model: model,
-      modelFile: file,
-      port: port,
-      apiKey: apiKey,
-      device: device,
+      modelFile: modelFile,
+      port: _port!,
+      apiKey: _key!,
       contextLength: contextLength,
+      device: device,
       threads: _bigCores,
     );
-    _endpoint = (port: port, key: apiKey);
 
     try {
       final process = await Process.start(
@@ -279,35 +361,26 @@ class LlamaServer extends LocalLlm {
         stream.transform(utf8.decoder).transform(const LineSplitter()).listen(_say);
       }
       // Named, rather than read off the field when it fires: by then the field
-      // may hold the *next* server, and reporting this one's exit against it
-      // would fail a model that is loading perfectly well.
-      unawaited(process.exitCode.then((code) => _exited(process, code)));
-      // Not awaited: this returns when the server is up, and the model behind
-      // it is another minute. `state` and [whenReady] are what carry that.
-      unawaited(_waitForHealth(_ready!, (port: port, key: apiKey)));
+      // may hold nothing, and reporting this one's exit against it would fail a
+      // model that is loading perfectly well.
+      unawaited(process.exitCode.then((code) => _exited(process, code, onChange)));
+      unawaited(_waitForHealth(onChange));
     } on ProcessException catch (e) {
       _fail(e.message);
+      onChange();
     }
   }
 
-  /// Never null, and that matters: this is what the settings page and a chat's
-  /// stop button reach, and a load that has not finished must still be
-  /// stoppable — the process is holding a gigabyte of the phone's memory while
-  /// it maps.
-  @override
+  /// Never awaited past a moment: a server mapping a large model can be slow to
+  /// notice, and nothing waiting on this is waiting on the memory coming back.
   Future<void> stop() async {
     final process = _process;
     _process = null;
-    _endpoint = null;
     // Before the kill, so the exit handler does not report a failure for a
     // server that was asked to go.
-    _abandon(StateError("The on-device model was stopped."));
-    _ready = null;
-    state.value = const LocalLlmState();
+    _abandon(const LocalLlmFailure("The on-device model was stopped."));
     if (process == null) return;
     process.kill(ProcessSignal.sigterm);
-    // Not awaited past a moment: a server mapping a large model can be slow to
-    // notice, and nothing above here is waiting on the memory coming back.
     await process.exitCode.timeout(
       const Duration(seconds: 5),
       onTimeout: () {
@@ -319,24 +392,19 @@ class LlamaServer extends LocalLlm {
 
   /// Polled rather than watched for a line, since what the server prints when
   /// it is up is not part of any contract and its `/health` is.
-  ///
-  /// It loops on its own completer rather than on the process and the port,
-  /// because everything that ends this wait already moves that one thing:
-  /// [stop] abandons it, an exit reaches it through [_fail], and a start that
-  /// supersedes this one stops first. One term instead of three that have to
-  /// agree.
-  Future<void> _waitForHealth(Completer<void> mine, ({int port, String key}) at) async {
+  Future<void> _waitForHealth(void Function() onChange) async {
     final client = http.Client();
     try {
-      while (!mine.isCompleted) {
+      while (!_ready.isCompleted) {
         try {
           final response = await client.get(
-            Uri.parse("http://127.0.0.1:${at.port}/health"),
-            headers: {"Authorization": "Bearer ${at.key}"},
+            Uri.parse("http://127.0.0.1:$_port/health"),
+            headers: {"Authorization": "Bearer $_key"},
           ).timeout(const Duration(seconds: 5));
           if (response.statusCode == 200) {
-            state.value = _phase(LocalLlmPhase.ready);
-            mine.complete();
+            _phase = LocalLlmPhase.ready;
+            _ready.complete();
+            onChange();
             return;
           }
         } catch (_) {
@@ -353,31 +421,22 @@ class LlamaServer extends LocalLlm {
   void _say(String line) {
     _log.add(line);
     if (_log.length > _logLines) _log.removeAt(0);
-    if (kDebugMode) debugPrint("llama-server: $line");
+    if (kDebugMode) debugPrint("llama-server[${model.id}]: $line");
   }
 
-  void _exited(Process process, int code) {
-    // Asked to stop, or replaced by a later start: [stop] has said so already.
+  void _exited(Process process, int code, void Function() onChange) {
+    // Asked to stop, or already gone: [stop] has said so.
     if (!identical(_process, process)) return;
     _process = null;
     _fail(_log.isEmpty ? "The model server exited ($code)." : _log.join("\n"));
+    onChange();
   }
-
-  /// The same pick, at another phase — so that what was asked for survives the
-  /// server failing to deliver it, which is what the settings page redraws and
-  /// what [applyLocalModel] compares against.
-  LocalLlmState _phase(LocalLlmPhase phase, {String? failure}) => LocalLlmState(
-        phase: phase,
-        modelId: state.value.modelId,
-        device: state.value.device,
-        contextLength: state.value.contextLength,
-        failure: failure,
-      );
 
   /// Kept rather than cleared, so a turn sent at a model that will not load is
   /// told why instead of being told nothing is loaded.
   void _fail(String why) {
-    state.value = _phase(LocalLlmPhase.failed, failure: why);
+    _phase = LocalLlmPhase.failed;
+    _failure = why;
     _abandon(LocalLlmFailure(why));
   }
 
@@ -385,10 +444,9 @@ class LlamaServer extends LocalLlm {
   /// half that is easy to forget: an error completed into a future nobody is
   /// waiting on is otherwise reported as unhandled, and usually nobody is.
   void _abandon(Object why) {
-    final ready = _ready;
-    if (ready == null || ready.isCompleted) return;
-    ready.completeError(why);
-    ready.future.ignore();
+    if (_ready.isCompleted) return;
+    _ready.completeError(why);
+    _ready.future.ignore();
   }
 
   static String _newKey() {
@@ -396,18 +454,6 @@ class LlamaServer extends LocalLlm {
     return [for (var i = 0; i < 16; i++) random.nextInt(256).toRadixString(16).padLeft(2, "0")]
         .join();
   }
-}
-
-/// Why the model is not answering, worded by the server. Its own type so the
-/// agent's error arm can say "the on-device model" rather than reporting a
-/// connection to localhost that was refused.
-class LocalLlmFailure implements Exception {
-  const LocalLlmFailure(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
 /// What `--list-devices` printed. Accelerators only — ggml leaves the CPU out

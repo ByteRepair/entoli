@@ -128,6 +128,10 @@ void main() {
           log("artifact: $title (entry: $entryFile)");
         case RetryEvent(:final attempt, :final message):
           log("retry $attempt: $message");
+        // Drawn as a row beside the spinner in the app; here it is one line per
+        // change, which against a local model is a running prefill percentage.
+        case StatusEvent(:final label):
+          if (label != null) log("status: $label");
         case ErrorEvent(:final message):
           log("ERROR: $message");
         case ApprovalRequestEvent():
