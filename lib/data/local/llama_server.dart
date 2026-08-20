@@ -55,7 +55,7 @@ class LlamaBinaries {
   required int port,
   required String apiKey,
   required int contextLength,
-  String? device,
+  required String device,
   int? threads,
   String? slotSavePath,
 }) =>
@@ -100,8 +100,10 @@ class LlamaBinaries {
           "-ctk", "q8_0",
           "-ctv", "q8_0",
         ],
-        if (device != null) ...[
-          "-dev", device,
+        // Always named, [noDevice] included. See "The CPU is a device to name"
+        // in CLAUDE.md.
+        "-dev", device,
+        if (device != noDevice) ...[
           // Everything the device will take. A phone has no separate pool of
           // memory to run out of — the NPU and the GPU are addressing the same
           // RAM the model was already in — so holding layers back buys nothing.
@@ -111,20 +113,24 @@ class LlamaBinaries {
       environment: binaries.environment,
     );
 
+/// llama.cpp's own name for offloading nothing, which is the CPU. It has to be
+/// passed rather than left out: no `-dev` at all is *auto* down there, and auto
+/// is every GPU the phone has.
+const noDevice = "none";
+
 /// Which device a turn offloads to, given what the user chose and what the
 /// phone turned out to have.
 ///
 /// Three cases, and the first is the default. A null choice is *auto*, and auto
 /// is the best accelerator the server found — an NPU over a GPU, and either over
 /// running on the CPU. [LocalDevice.cpu] is how the picker says "the CPU even
-/// so", and it resolves to null, which is ggml's own way of offloading nothing.
-/// Any other value is a device named outright, passed straight through — a
+/// so". Any other value is a device named outright, passed straight through — a
 /// device that has since gone is llama.cpp's to complain about, not ours to
 /// second-guess.
-String? resolveLocalDevice(String? chosen, List<LocalDevice> found) {
-  if (chosen == LocalDevice.cpu) return null;
+String resolveLocalDevice(String? chosen, List<LocalDevice> found) {
+  if (chosen == LocalDevice.cpu) return noDevice;
   if (chosen != null) return chosen;
-  return bestAccelerator(found)?.name;
+  return bestAccelerator(found)?.name ?? noDevice;
 }
 
 /// The accelerator to prefer when nothing was picked: an NPU before a GPU,
@@ -376,7 +382,7 @@ class _Server {
   });
 
   final LocalModel model;
-  final String? device;
+  final String device;
   final int contextLength;
   final int? threads;
   final String? slotSavePath;
@@ -420,7 +426,7 @@ class _Server {
   /// A failed one never is: being asked again is the user asking for another
   /// go, and there is nothing else they could press to get one.
   bool serves({
-    required String? device,
+    required String device,
     required int contextLength,
     required int? threads,
     required String? slotSavePath,

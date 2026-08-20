@@ -364,7 +364,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
       _applyLocal((s) => s.maxLocalModels = count.clamp(1, maxLocalModelsAllowed));
 
   /// Which accelerator it is offloaded to, by the name `--list-devices` gave
-  /// it. Null is the CPU.
+  /// it. Null is auto.
   Future<void> setLocalDevice(String? device) =>
       _applyLocal((s) => s.localModelDevice = device);
 

@@ -121,7 +121,7 @@ class LocalLlmState {
 
   final LocalLlmPhase phase;
 
-  /// The device it was told to offload to, by name. Null is the CPU.
+  /// The device it was told to offload to, by name.
   final String? device;
 
   /// What it was loaded with. Held because it is what a later [LocalLlm.serve]
