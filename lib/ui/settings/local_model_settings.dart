@@ -213,9 +213,64 @@ class LocalModelCatalogSection extends ConsumerWidget {
               "handed as it is.",
         ),
         for (final model in localModelCatalog) LocalModelTile(model: model),
+        const _StaleModelTiles(),
       ],
     );
   }
+}
+
+/// Rows for weights that are installed and no longer in the catalog.
+///
+/// [LocalModelStore.installed] reads the disk rather than the catalog so these
+/// stay findable; this is what makes that reachable rather than only true. A
+/// catalog that swaps a generation of models out — which is what it is for —
+/// otherwise strands gigabytes behind a file manager, on the platform least
+/// likely to have one.
+class _StaleModelTiles extends ConsumerWidget {
+  const _StaleModelTiles();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final known = {for (final model in localModelCatalog) model.id};
+    final stale = ref.watch(installedLocalModelsProvider)
+        .where((id) => !known.contains(id))
+        .toList()
+      ..sort();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final id in stale)
+          CatalogTile(
+            title: Text(id),
+            summary: "Downloaded by an earlier version · not offered any more",
+            trailing: _StaleAction(id: id),
+          ),
+      ],
+    );
+  }
+}
+
+/// Delete and nothing else. There is no [Downloads] entry behind one of these
+/// to cancel or fetch again, and nothing to unpick either: a pick naming an id
+/// the catalog has lost already stops the server rather than serving it.
+class _StaleAction extends ConsumerWidget {
+  const _StaleAction({required this.id});
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
+        downloading: false,
+        installed: true,
+        onCancel: () {},
+        onDelete: () async {
+          await ref.read(localModelStoreProvider).delete(id);
+          await ref.read(installedLocalModelsProvider.notifier).refresh();
+        },
+        deleteTitle: "Delete $id?",
+        deleteMessage: "It is not in the catalog any more, so this app cannot "
+            "download it again.",
+      );
 }
 
 /// One model as a row: what it is, what it costs, and the single button that

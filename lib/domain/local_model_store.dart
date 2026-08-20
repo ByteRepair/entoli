@@ -31,7 +31,10 @@ abstract class LocalModelStore {
   /// file and is used where it lands.
   Stream<DownloadProgress> install(LocalModel model);
 
-  Future<void> delete(LocalModel model);
+  /// By id rather than by [LocalModel], because the ids that most need
+  /// deleting are the ones the catalog no longer has: a model dropped or
+  /// renamed between releases is still the gigabytes it always was.
+  Future<void> delete(String id);
 }
 
 /// A browser's model store: nowhere to put a gigabyte, and nothing that could
@@ -50,5 +53,5 @@ class UnavailableLocalModelStore extends LocalModelStore {
       Stream.error(UnsupportedError("A model cannot be downloaded here."));
 
   @override
-  Future<void> delete(LocalModel model) async {}
+  Future<void> delete(String id) async {}
 }

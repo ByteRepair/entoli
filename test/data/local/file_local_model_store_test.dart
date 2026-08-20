@@ -117,7 +117,7 @@ void main() {
   test("deleting takes the whole directory", () async {
     await store().install(gguf()).drain<void>();
 
-    await store().delete(gguf());
+    await store().delete(gguf().id);
 
     expect(await store().installed(), isEmpty);
     expect(Directory(p.join(root.path, "test-model")).existsSync(), isFalse);
