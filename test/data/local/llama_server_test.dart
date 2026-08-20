@@ -19,6 +19,7 @@ void main() {
   ({List<String> command, Map<String, String> environment}) launch({
     String? device,
     int? contextLength,
+    int? threads,
   }) =>
       llamaLaunch(
         binaries: binaries,
@@ -28,6 +29,7 @@ void main() {
         apiKey: "abcdef",
         device: device,
         contextLength: contextLength,
+        threads: threads,
       );
 
   /// The value of the argument after [flag], or null where it was not passed.
@@ -76,6 +78,36 @@ void main() {
     // A phone has no separate pool of memory to run out of, so holding layers
     // back on the CPU buys nothing.
     expect(int.parse(valueOf(npu.command, "-ngl")!), greaterThan(100));
+  });
+
+  group("how many cores it runs on", () {
+    test("the little cluster is left out of the count", () {
+      // Four big and four little, which is the common phone. ggml's threadpool
+      // moves at its slowest thread's pace, so the little four would hold up
+      // the big four rather than adding to them.
+      expect(
+        bigCoreCount([1800000, 1800000, 1800000, 1800000, 2800000, 2800000, 2800000, 2800000]),
+        4,
+      );
+      // One prime, three mid, four little: everything above the floor.
+      expect(
+        bigCoreCount([1900000, 1900000, 1900000, 1900000, 2600000, 2600000, 2600000, 3200000]),
+        4,
+      );
+    });
+
+    test("cores that are all one tier are all worth running on", () {
+      expect(bigCoreCount([2000000, 2000000, 2000000, 2000000]), 4);
+    });
+
+    test("a kernel that will not say leaves the choice to llama.cpp", () {
+      expect(bigCoreCount(const []), isNull);
+      expect(launch().command, isNot(contains("-t")));
+    });
+
+    test("a count reaches the server", () {
+      expect(valueOf(launch(threads: 4).command, "-t"), "4");
+    });
   });
 
   test("the context is the default until something says otherwise", () {
