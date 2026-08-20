@@ -21,6 +21,9 @@ dependencies:
   # Networking
   http: ^1.6.0
   html: ^0.15.6
+  # Checks a downloaded rootfs against the checksum in the catalog, before
+  # anything in it is unpacked and run.
+  crypto: ^3.0.7
 
   # Serialization
   json_annotation: ^4.12.0

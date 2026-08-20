@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Builds git for Android, one ABI at a time, and lays the result out the way
-# the app packages it: an executable named lib*.so, because the installer only
-# extracts files matching that from an APK, and the native library directory is
-# the one place an app is allowed to exec from. See "Bundled tools" in
-# CLAUDE.md.
+# Builds git and proot for Android, one ABI at a time, and lays the result out
+# the way the app packages it: an executable named lib*.so, because the
+# installer only extracts files matching that from an APK, and the native
+# library directory is the one place an app is allowed to exec from. See
+# "Bundled tools" in CLAUDE.md.
 #
 #   ANDROID_NDK_ROOT=~/.android/ndk/28.2.13676358 tool/bundle/build.sh arm64-v8a
 #
-# Output: dist/<abi>/libgit.so and dist/<abi>/libgit-remote-http.so, stripped.
+# Output, stripped, in dist/<abi>: libgit.so, libgit-remote-http.so, libproot.so
+# and its loader (libproot-loader.so, plus libproot-loader32.so where the
+# architecture can run 32-bit guests).
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -57,6 +59,8 @@ echo "==> fetching sources"
 fetch "$OPENSSL_URL" "openssl.tar.gz" "$OPENSSL_SHA256"
 fetch "$CURL_URL" "curl.tar.gz" "$CURL_SHA256"
 fetch "$GIT_URL" "git.tar.gz" "$GIT_SHA256"
+fetch "$TALLOC_URL" "talloc.tar.gz" "$TALLOC_SHA256"
+fetch "$PROOT_URL" "proot.tar.gz" "$PROOT_SHA256"
 
 # Unpacked and built once per ABI. A second run reuses what is there, which is
 # what makes iterating on the git step bearable; CI starts from an empty tree
@@ -66,6 +70,8 @@ mkdir -p "$src"
 [ -d "$src/openssl-$OPENSSL_VERSION" ] || tar -C "$src" -xf "$work/openssl.tar.gz"
 [ -d "$src/curl-$CURL_VERSION" ] || tar -C "$src" -xf "$work/curl.tar.gz"
 [ -d "$src/git-$GIT_VERSION" ] || tar -C "$src" -xf "$work/git.tar.gz"
+[ -d "$src/talloc-$TALLOC_VERSION" ] || tar -C "$src" -xf "$work/talloc.tar.gz"
+[ -d "$src/proot-$PROOT_VERSION" ] || tar -C "$src" -xf "$work/proot.tar.gz"
 
 echo "==> openssl $OPENSSL_VERSION"
 (
@@ -106,6 +112,52 @@ echo "==> git $GIT_VERSION"
     git git-remote-http >/dev/null
   "$STRIP" -o "$out/libgit.so" git
   "$STRIP" -o "$out/libgit-remote-http.so" git-remote-http
+)
+
+echo "==> talloc $TALLOC_VERSION"
+(
+  cd "$src/talloc-$TALLOC_VERSION"
+  [ -f "$src/libtalloc.a" ] && exit 0
+  IFS=. read -r major minor release <<<"$TALLOC_VERSION"
+  # talloc.c on its own, against the answers in talloc-config.h rather than
+  # against waf's — see that file. The version has to be passed in because
+  # talloc.c checks the one it was built as against the one in talloc.h.
+  $CC -c talloc.c -o talloc.o -I. -Ilib/replace -include "$here/talloc-config.h" \
+    -DNO_CONFIG_H -D__STDC_WANT_LIB_EXT1__=1 \
+    "-DTALLOC_BUILD_VERSION_MAJOR=$major" \
+    "-DTALLOC_BUILD_VERSION_MINOR=$minor" \
+    "-DTALLOC_BUILD_VERSION_RELEASE=$release" \
+    -O2 -fPIC
+  "$AR" rcs "$src/libtalloc.a" talloc.o
+)
+
+echo "==> proot $PROOT_VERSION"
+(
+  cd "$src/proot-$PROOT_VERSION"
+  # Upstream leaves out an include and clang refuses an implicit declaration.
+  grep -q "string.h" src/extension/ashmem_memfd/ashmem_memfd.c ||
+    sed -i "3i #include <string.h>" src/extension/ashmem_memfd/ashmem_memfd.c
+  # Through the environment rather than as make arguments: the makefile appends
+  # its own -I, -D_GNU_SOURCE and -ltalloc to all three, and a make argument
+  # would replace them instead. Without _GNU_SOURCE proot silently loses
+  # process_vm_readv and reads the tracee's memory a word at a time.
+  export CC AR STRIP
+  export OBJCOPY=$bin/llvm-objcopy OBJDUMP=$bin/llvm-objdump
+  export CPPFLAGS="-I$src/talloc-$TALLOC_VERSION -DARG_MAX=131072 -DVERSION=\\\"$PROOT_VERSION\\\""
+  export CFLAGS="-O2 -fPIC"
+  export LDFLAGS="-L$src -Wl,-z,max-page-size=16384"
+  # Named rather than embedded: an embedded loader is written to a temp file and
+  # exec'd, and on Android that file would land where nothing may be executed.
+  # The path below is never the one used — the app sets PROOT_LOADER — so it is
+  # worded to say what to do if it ever is.
+  make -C src -j"$jobs" PROOT_UNBUNDLE_LOADER=/nonexistent-set-PROOT_LOADER proot >/dev/null
+  "$STRIP" -o "$out/libproot.so" src/proot
+  "$STRIP" -o "$out/libproot-loader.so" src/loader/loader
+  # Only where the architecture can run 32-bit guests at all, which is what
+  # proot's own arch.h decides.
+  if [ -f src/loader/loader-m32 ]; then
+    "$STRIP" -o "$out/libproot-loader32.so" src/loader/loader-m32
+  fi
 )
 
 echo "==> $abi"

@@ -124,6 +124,71 @@ void main() {
         contains("git"));
   });
 
+  group("inside a sandbox", () {
+    /// What proot is on a device, faked with something every machine running
+    /// these tests has: a prefix that really runs, ending in a shell.
+    Sandbox guest({Map<String, String> environment = const {}}) => Sandbox(
+          command: ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
+          environment: environment,
+          description: "Alpine Linux 3.24.1 (x86_64), in which apk installs things",
+        );
+
+    Future<dynamic> inGuest(
+      String command, {
+      Sandbox? sandbox,
+      Toolset? tools,
+      Map<String, String> settings = const {},
+    }) =>
+        LocalShell(
+          environment: () => settings,
+          tools: tools,
+          sandbox: () => sandbox ?? guest(),
+        ).start(command, cwd: workspace.path, timeout: const Duration(seconds: 10)).result;
+
+    test("the command is run by what the sandbox names, not by the machine's shell",
+        () async {
+      final result = await inGuest(r'echo "$IN_GUEST"');
+
+      expect(result.output.trim(), "yes");
+    });
+
+    test("the guest's environment stands in place of the bundled tools', which "
+        "name directories that are not in there", () async {
+      final result = await inGuest(
+        r'echo "[$GIT_EXEC_PATH][$IN_ALPINE]"',
+        sandbox: guest(environment: {"IN_ALPINE": "1"}),
+        tools: const Toolset(
+            environment: {"GIT_EXEC_PATH": "/data/tools/libexec"}, names: "git"),
+      );
+
+      expect(result.output.trim(), "[][1]");
+    });
+
+    test("a variable from settings still wins over the guest's own", () async {
+      final result = await inGuest(
+        r'echo "$LANG"',
+        sandbox: guest(environment: {"LANG": "C.UTF-8"}),
+        settings: {"LANG": "en_GB.UTF-8"},
+      );
+
+      expect(result.output.trim(), "en_GB.UTF-8");
+    });
+
+    test("what the model is told is the guest, not the machine it is on", () {
+      final shell = LocalShell(shell: () => "/system/bin/sh", sandbox: guest);
+
+      expect(shell.platformDescription, contains("Alpine Linux 3.24.1"));
+      expect(shell.platformDescription, contains("proot"));
+      expect(shell.platformDescription, isNot(contains("/system/bin/sh")));
+    });
+
+    test("brings its own shell, so a machine that has none can still run commands",
+        () {
+      expect(LocalShell(shell: () => null, sandbox: guest).canRunCommands, isTrue);
+      expect(LocalShell(shell: () => null).canRunCommands, isFalse);
+    });
+  });
+
   group("resolving the shell", () {
     String? resolve(String path, Set<String> present) => LocalShell.resolveShell(
         path: path, isExecutable: (candidate) => present.contains(candidate));

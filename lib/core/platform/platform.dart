@@ -11,6 +11,7 @@ import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model_store.dart";
@@ -35,12 +36,27 @@ AgentBackend createBackend(
   PromptLibrary library,
   ChatStore store, {
   Toolset? tools,
+  RootfsStore? rootfs,
+  String? abi,
 }) {
   AppSettings settings() => AppSettings.load(config);
   return BuiltinBackend(
     config: config,
     library: library,
-    shell: platformShell(environment: () => settings().environment, tools: tools),
+    shell: platformShell(
+      environment: () => settings().environment,
+      tools: tools,
+      // Resolved per command rather than once: a Linux installed from the
+      // settings page reaches the next command, and one deleted stops being
+      // where commands run without the app having to be restarted.
+      sandbox: () => platformSandbox(
+        dataDir: config.dataDir,
+        proot: tools?.proot,
+        store: rootfs,
+        rootfsId: settings().rootfsId,
+        abi: abi,
+      ),
+    ),
     webSearch: platformWebSearch(),
     store: store,
     registry: LlmRegistry(
@@ -57,6 +73,15 @@ AgentBackend createBackend(
 /// built, since the shell is handed the result once.
 Future<Toolset?> installBundledTools(String cacheDir) =>
     platformInstallTools(cacheDir);
+
+/// Where a downloaded Linux is kept, and which architecture to fetch one for.
+/// Two calls rather than one because the settings page manages what is
+/// installed with nothing listening, while the shell needs the store to find
+/// what it has been told to run in — the arrangement the voice models already
+/// have.
+RootfsStore createRootfsStore(String cacheDir) => platformRootfsStore(cacheDir);
+
+Future<String?> deviceAbi() => platformAbi();
 
 /// A real filesystem on desktop and Android, IndexedDB in a browser. What
 /// [AppConfig] is built on, so it is asked for first.

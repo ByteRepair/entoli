@@ -20,6 +20,8 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
+import "package:agent_chat/domain/rootfs.dart";
+import "package:agent_chat/domain/rootfs_store.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
 import "package:uuid/uuid.dart";
 
@@ -573,6 +575,43 @@ class FakeVoiceSession implements VoiceSession {
 /// Models that are simply there, or simply are not. Downloading is tested
 /// against the real store and a real socket — see `voice_model_store_test.dart`
 /// — so this only has to answer what is installed.
+/// A Linux or two, without one on disk. `installing` holds a download open so
+/// a test can see the row mid-flight; without it an install lands at once.
+class FakeRootfsStore extends RootfsStore {
+  FakeRootfsStore({Set<String> installed = const {}}) : _installed = {...installed};
+
+  final Set<String> _installed;
+
+  final List<String> deleted = [];
+
+  Completer<void>? installing;
+
+  @override
+  Future<Set<String>> installed() async => {..._installed};
+
+  @override
+  Future<String?> directoryOf(Rootfs rootfs) async => directoryOfSync(rootfs.id);
+
+  @override
+  String? directoryOfSync(String id) =>
+      _installed.contains(id) ? "/rootfs/$id" : null;
+
+  @override
+  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi}) async* {
+    final image = rootfs.imageFor(abi)!;
+    yield RootfsProgress(received: 0, total: image.bytes);
+    if (installing != null) await installing!.future;
+    yield RootfsProgress(received: image.bytes, total: image.bytes);
+    _installed.add(rootfs.id);
+  }
+
+  @override
+  Future<void> delete(Rootfs rootfs) async {
+    deleted.add(rootfs.id);
+    _installed.remove(rootfs.id);
+  }
+}
+
 class FakeVoiceModelStore extends VoiceModelStore {
   FakeVoiceModelStore({Set<String> installed = const {}})
       : _installed = {...installed};

@@ -16,9 +16,28 @@ class BundledTools {
 
   /// Where the extracted `lib*.so` files are, or null where nothing answers
   /// the channel — every platform but Android.
-  static Future<String?> nativeLibraryDir() async {
+  static Future<String?> nativeLibraryDir() => _ask("nativeLibraryDir");
+
+  /// The ABI this install is for — `arm64-v8a` and friends. Null off Android,
+  /// where nothing is bundled for one.
+  static Future<String?> abi() => _ask("abi");
+
+  /// What the network this device is on resolves names with. Empty where
+  /// nothing answers, or where Android says the device is on no network.
+  static Future<List<String>> dnsServers() async {
     try {
-      return await _channel.invokeMethod<String>("nativeLibraryDir");
+      final answer = await _channel.invokeListMethod<String>("dnsServers");
+      return answer ?? const [];
+    } on MissingPluginException {
+      return const [];
+    } on PlatformException {
+      return const [];
+    }
+  }
+
+  static Future<String?> _ask(String method) async {
+    try {
+      return await _channel.invokeMethod<String>(method);
     } on MissingPluginException {
       return null;
     } on PlatformException {
@@ -35,11 +54,19 @@ class BundledTools {
     required String libDir,
   }) async {
     final git = File(p.join(libDir, "libgit.so"));
-    if (!await git.exists()) return null;
+    final hasGit = await git.exists();
+    final tmp = Directory(p.join(root, "tmp"));
+    // proot on its own is still worth answering with: it is not a command the
+    // model runs, it is what a command can be run *inside*.
+    final proot = await _proot(libDir, root: root, tmp: tmp);
+    if (!hasGit) {
+      return proot == null
+          ? null
+          : Toolset(environment: {"TMPDIR": tmp.path}, proot: proot);
+    }
 
     final bin = Directory(p.join(root, "bin"));
     final execPath = Directory(p.join(root, "libexec", "git-core"));
-    final tmp = Directory(p.join(root, "tmp"));
     await Future.wait([
       bin.create(recursive: true),
       execPath.create(recursive: true),
@@ -60,6 +87,7 @@ class BundledTools {
 
     return Toolset(
       names: "git",
+      proot: proot,
       environment: {
         "PATH": "${bin.path}:${Platform.environment["PATH"] ?? "/system/bin"}",
         "GIT_EXEC_PATH": execPath.path,
@@ -71,6 +99,46 @@ class BundledTools {
         "TMPDIR": tmp.path,
       },
     );
+  }
+
+  /// proot and its loader, where this build ships them. Named where they lie
+  /// rather than linked into [install]'s tree the way git is: the library
+  /// directory is the only place the loader may be exec'd from, so a link into
+  /// app storage would be pointing at the one thing that is not allowed.
+  static Future<Proot?> _proot(
+    String libDir, {
+    required String root,
+    required Directory tmp,
+  }) async {
+    final binary = File(p.join(libDir, "libproot.so"));
+    final loader = File(p.join(libDir, "libproot-loader.so"));
+    if (!await binary.exists() || !await loader.exists()) return null;
+    final loader32 = File(p.join(libDir, "libproot-loader32.so"));
+    await tmp.create(recursive: true);
+    return Proot(
+      binary: binary.path,
+      loader: loader.path,
+      loader32: await loader32.exists() ? loader32.path : null,
+      tmpDir: tmp.path,
+      resolvConf: await _writeResolvConf(root),
+    );
+  }
+
+  /// The guest's `/etc/resolv.conf`, written from what Android says the network
+  /// resolves with. Here rather than into the rootfs, and rewritten on every
+  /// launch, because it is one file whatever is installed and because the answer
+  /// changes with the network the device is on — a file written once at install
+  /// would name the resolver of whatever WiFi the user was on that day.
+  ///
+  /// Nothing is written where Android says nothing: a guest with no resolver
+  /// fails to look a name up, which is honest, where a public one picked here
+  /// would send the user's queries somewhere they never chose.
+  static Future<String> _writeResolvConf(String root) async {
+    final file = File(p.join(root, "etc", "resolv.conf"));
+    final servers = await dnsServers();
+    await file.parent.create(recursive: true);
+    await file.writeAsString(servers.map((s) => "nameserver $s\n").join());
+    return file.path;
   }
 
   /// Replaced rather than kept: the library directory's path changes on every
