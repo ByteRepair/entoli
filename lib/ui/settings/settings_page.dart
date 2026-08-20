@@ -20,7 +20,7 @@ import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
-import "../widgets/provider_model_selector.dart";
+import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "local_model_settings.dart";

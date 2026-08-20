@@ -4,24 +4,23 @@
 
 A chat's `meta.json` overrides the app default in `settings.json`. Each level
 stores `null` to mean "inherit", shown in the UI as the `Default` option —
-always first in its list, with a reset button beside the field. Pinning a model
-pins its provider too: the registry keys clients by provider id, so the two are
-only ever sent as a matched pair.
+always first in its list, with a reset button beside the field.
+
+**A provider is never picked on its own.** Every field here is one list of every
+configured model, and the model brings the provider that offers it. There was a
+provider field above each of them once, and all it did was narrow the list
+below: picking one pinned half a pair, so a level could inherit a model from
+above while overriding the provider under it, and the model list had to answer
+what to show while the provider still said `Default`. Nothing wanted either.
 
 `Default` is a live reference, not a snapshot: a chat that pins nothing uses
 whatever the global default currently is, and retargeting the global retargets
-every such chat. With nothing to inherit, the model list stays empty rather than
-falling back to a provider — a guessed default would mean something that shifts
-as providers come and go.
+every such chat. `ModelPicker` names what it resolves to under the field.
 
-Both settings pages render the same `ProviderModelSelector`; it owns those
-rules, and each page only says where the values come from and where they go.
-
-The title model is the exception: nothing inherits from it, so it is a pair or
-it is off, and `OptionalModelPicker` offers every configured model in one list
-with `Off` at the top rather than a provider field and a model field. The
-classifier model is the same pattern: a separate optional pair, used only by
-auto mode, and off by default.
+The title model differs in one thing: nothing inherits from it, so it is a pair
+or it is off, and `OptionalModelPicker` leads the same list with `Off` and has
+nothing to reset to. The classifier model is the same pattern: a separate
+optional pair, used only by auto mode, and off by default.
 
 `settings.json`'s `environment` is what every command runs under, and where a
 provider that names its key rather than holding it looks. It is read off disk
