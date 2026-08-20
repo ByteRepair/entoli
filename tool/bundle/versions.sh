@@ -44,3 +44,16 @@ TALLOC_SHA256=912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007
 LLAMA_CPP_VERSION=b10509
 LLAMA_CPP_URL="https://github.com/ggml-org/llama.cpp/archive/refs/tags/$LLAMA_CPP_VERSION.tar.gz"
 LLAMA_CPP_SHA256=63eb7bb55a46051ca523a670621cfaa6f4a1b3ea78e1cfc34a45c0af5139df0e
+
+# The Hexagon SDK, which the NPU backend is built against. Fetched by
+# tool/android-setup.sh rather than by build.sh, because it is opt-in: build.sh
+# only reads HEXAGON_SDK_ROOT and builds the CPU backend when it is unset.
+#
+# The one entry here that is not the upstream project's own tarball. Qualcomm
+# ships this through an installer that wants a package manager on the host, so
+# this is the Community Edition repackaged by the maintainer of llama.cpp's
+# Hexagon backend — the same artifact llama.cpp's own CI builds in. Nobody
+# signs it, which is what the sha256 below is for.
+HEXAGON_SDK_VERSION=6.6.0.0
+HEXAGON_SDK_URL="https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v$HEXAGON_SDK_VERSION/hexagon-sdk-v$HEXAGON_SDK_VERSION-amd64-lnx.tar.xz"
+HEXAGON_SDK_SHA256=4a916e42c1dab9efdf2e58773f901ea780fa43c907bf054ab76572a3b3d942f4
