@@ -42,7 +42,12 @@ case "$abi" in
   *) echo "unknown abi: $abi" >&2; exit 2 ;;
 esac
 
-bin=$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin
+toolchain=$ndk/toolchains/llvm/prebuilt/linux-x86_64
+bin=$toolchain/bin
+# The libraries a device is guaranteed to have, which is what the sysroot holds
+# stubs of. Read at the end of the build, to check that nothing links anything
+# else.
+sysroot=$toolchain/sysroot/usr/lib/$host/$api
 export CC=$bin/$triple$api-clang
 export AR=$bin/llvm-ar
 export RANLIB=$bin/llvm-ranlib
@@ -261,23 +266,22 @@ else
 fi
 
 # The NDK links against libraries a device does not have, and nothing says so
-# until the phone refuses to start the binary. So: every library named here is
-# either beside it in the APK or one of the ones Android ships, which is what
-# the sysroot directory below is a list of.
+# until the phone refuses to start the binary. So every library named by
+# anything staged here has to be either beside it in the APK or Android's to
+# provide.
 echo "==> checking $abi against what a phone has"
-sysroot=$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$host/$api
-unresolved=
+unlinkable=0
 for lib in "$out"/*.so; do
+  # Not a CPU binary: QDSP6 code, whose libraries are the DSP's own.
+  case "${lib##*/}" in libggml-htp-*) continue ;; esac
   while IFS= read -r need; do
-    [ -f "$out/$need" ] || [ -f "$sysroot/$need" ] ||
-      unresolved+="  $(basename "$lib") needs $need"$'\n'
-  done < <("$bin/llvm-readelf" -d "$lib" |
-    sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
+    [ -f "$out/$need" ] || [ -f "$sysroot/$need" ] || {
+      echo "  ${lib##*/} needs $need, which is neither" >&2
+      unlinkable=1
+    }
+  done < <(llvm-readelf -d "$lib" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
 done
-if [ -n "$unresolved" ]; then
-  printf "not bundled, and not Android's to provide:\n%s" "$unresolved" >&2
-  exit 1
-fi
+[ "$unlinkable" = 0 ] || exit 1
 
 echo "==> $abi"
 ( cd "$out" && sha256sum ./*.so && ls -l ./*.so )
