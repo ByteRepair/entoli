@@ -10,6 +10,15 @@ inside user turns, and consecutive results have to be folded into one turn
 because a turn holding N `tool_use` blocks must be answered by exactly one turn
 holding all N results.
 
+`OpenAiClient` has one flag that is not about the shape of the wire:
+`returnProgress` asks for llama.cpp's `prompt_progress` frames, which arrive
+while the prompt is still being read and become `LlmPromptProgress`. Off by
+default and turned on only by `LocalPoolClient`, because a hosted provider is
+entitled to reject a body field it has never heard of and the strict ones do.
+The frame arrives with `choices` empty, so it is read before the guard that
+skips a frame with nothing in it — a detail worth knowing because moving that
+read below the guard silently loses every one of them.
+
 Thinking is handed back with the `signature` it arrived with. With thinking
 enabled, Anthropic rejects a tool-use turn whose thinking was dropped, so
 `LlmMessage` carries `reasoningSignature` and `ReasoningPart` carries

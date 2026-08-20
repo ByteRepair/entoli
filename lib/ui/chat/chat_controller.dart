@@ -20,6 +20,7 @@ class ChatViewState {
     this.questions = const [],
     this.runningSubAgents = const [],
     this.retry,
+    this.status,
   });
   final Chat? chat;
   final bool isRunning;
@@ -38,6 +39,11 @@ class ChatViewState {
   /// to the running turn, not to the conversation, so it is never persisted.
   final String? retry;
 
+  /// What the turn is doing, for the row the spinner is on. Transient like
+  /// [retry], and null once the reply has started — from there the caret is
+  /// what says the turn is alive.
+  final String? status;
+
   ChatViewState copyWith({
     Chat? chat,
     bool? isRunning,
@@ -46,6 +52,8 @@ class ChatViewState {
     List<SubAgentStartEvent>? runningSubAgents,
     String? retry,
     bool clearRetry = false,
+    String? status,
+    bool clearStatus = false,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -54,6 +62,7 @@ class ChatViewState {
         questions: questions ?? this.questions,
         runningSubAgents: runningSubAgents ?? this.runningSubAgents,
         retry: clearRetry ? null : (retry ?? this.retry),
+        status: clearStatus ? null : (status ?? this.status),
       );
 }
 
@@ -180,7 +189,7 @@ class ChatController extends Notifier<ChatViewState> {
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
-    state = state.copyWith(chat: updated, isRunning: true, clearRetry: true);
+    state = state.copyWith(chat: updated, isRunning: true, clearRetry: true, clearStatus: true);
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked.
     await repo.saveState(updated.state);
@@ -214,7 +223,7 @@ class ChatController extends Notifier<ChatViewState> {
     if (chat == null || state.isRunning || !chat.unfinished) return;
     final reply = chat.messages.last;
 
-    state = state.copyWith(isRunning: true, clearRetry: true);
+    state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
     _recorder.open(reply.id, existing: reply.parts);
 
     _listen(ref.read(chatRepositoryProvider)
@@ -343,6 +352,10 @@ class ChatController extends Notifier<ChatViewState> {
                 state.runningSubAgents.where((s) => s.id != id).toList());
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
+      case StatusEvent(:final label):
+        state = label == null
+            ? state.copyWith(clearStatus: true)
+            : state.copyWith(status: label);
       case DoneEvent(:final aborted):
         if (aborted) _recorder.outcome ??= TurnEnd.aborted;
         _finishTurn();
@@ -376,6 +389,7 @@ class ChatController extends Notifier<ChatViewState> {
       questions: const [],
       runningSubAgents: const [],
       clearRetry: true,
+      clearStatus: true,
     );
   }
 

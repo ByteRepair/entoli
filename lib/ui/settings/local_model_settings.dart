@@ -16,10 +16,15 @@ import "../widgets/section_header.dart";
 final localDevicesProvider = FutureProvider<List<LocalDevice>>(
     (ref) => ref.watch(localLlmProvider).devices());
 
-/// What answers from the device itself: which model is loaded, what it is run
-/// on, and how much context it is given. The picker offers only what is on
-/// disk, for the reason the voice and terminal pickers do — a choice that fails
-/// when it is used rather than when it is made is worse than no choice at all.
+/// What answers from the device itself: how many models may be loaded at once,
+/// what they run on, and how much context they are given.
+///
+/// **There is no model picker here, and that is the point.** Every model on
+/// disk is offered by the on-device provider, so which one a turn uses is
+/// chosen where every other model is — the app default, a chat's own settings,
+/// the title and classifier pickers — and asking for one is what loads it. A
+/// picker here would have been a second place to say the same thing, and the
+/// one place that could disagree with the rest.
 class LocalModelSection extends ConsumerWidget {
   const LocalModelSection({super.key});
 
@@ -27,7 +32,6 @@ class LocalModelSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!ref.watch(localLlmProvider).available) return const _Elsewhere();
     final installed = ref.watch(installedLocalModelsProvider);
-    final picked = ref.watch(appSettingsProvider.select((s) => s.localModelId));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,27 +39,48 @@ class LocalModelSection extends ConsumerWidget {
         const SectionHeader(
           "Answering on this device",
           description: "A model downloaded here answers with no network and no "
-              "account, and is offered to every chat as another provider. It is "
-              "slower and less able than anything hosted, and it is the only one "
-              "that works on a plane.",
+              "account, and every one of them is offered to every chat under "
+              "On-device. One is loaded when a chat first asks for it. They are "
+              "slower and less able than anything hosted, and the only ones "
+              "that work on a plane.",
         ),
-        InstalledPicker(
-          label: "Model",
-          // Null is an absence rather than an answer — nothing is being served
-          // — so it is the hint rather than an entry of its own.
-          options: {
-            for (final model in localModelCatalog)
-              if (installed.contains(model.id)) model.id: model.name,
-          },
-          value: picked,
-          onPick: ref.read(appSettingsProvider.notifier).setLocalModel,
-        ),
-        if (picked != null) ...[
+        if (installed.isEmpty)
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text("Nothing downloaded yet"),
+            subtitle: Text("Fetch one below and it appears in every model "
+                "picker, under On-device."),
+          )
+        else ...[
+          const _MaxRunningPicker(),
           const _DevicePicker(),
           const _ContextPicker(),
-          const _Status(),
+          const _Running(),
         ],
       ],
+    );
+  }
+}
+
+/// How many may be resident at once. The one setting here that is about the
+/// phone rather than the model: each is its own process, holding its own
+/// weights and its own KV cache.
+class _MaxRunningPicker extends ConsumerWidget {
+  const _MaxRunningPicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = ref.watch(appSettingsProvider.select((s) => s.maxLocalModels));
+    return InstalledPicker(
+      label: "Max LLMs running",
+      options: const {
+        "1": "One at a time",
+        "2": "Two — a small model naming chats beside a large one answering them",
+      },
+      value: "$value",
+      onPick: (count) => ref
+          .read(appSettingsProvider.notifier)
+          .setMaxLocalModels(int.tryParse(count ?? "1") ?? 1),
     );
   }
 }
@@ -101,9 +126,15 @@ class _DevicePicker extends ConsumerWidget {
   }
 }
 
-/// How much of a conversation the model can see at once, and the one setting
-/// here that is really about memory: the weights are mapped and paged, the KV
-/// cache is not, so this is what decides whether Android kills the app.
+/// How much of a conversation a model can see at once, and the one setting here
+/// that is really about memory: the weights are mapped and paged, the KV cache
+/// is not, so this is what decides whether Android kills the app.
+///
+/// Default is per model rather than one number — `LocalModel.defaultContext`,
+/// which is what a token of that model's KV cache costs divided into the
+/// budget, so a 2B gets four times the context of a 9B for the same memory.
+/// Setting one here overrides that for all of them, which is the honest shape
+/// now that any downloaded model can be the one a turn asks for.
 class _ContextPicker extends ConsumerWidget {
   const _ContextPicker();
 
@@ -112,19 +143,10 @@ class _ContextPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
-    final model = localModelById(settings.localModelId);
     return InstalledPicker(
       label: "Context",
-      // Null is the default rather than nothing, so it is an entry.
-      none: "Default",
-      options: {
-        // Defensive rather than load-bearing: every model in the catalog was
-        // trained for at least the largest of these. A smaller one would need
-        // it.
-        for (final size in _choices)
-          if (model == null || size <= model.contextLength)
-            "$size": "$size tokens",
-      },
+      none: "Per model",
+      options: {for (final size in _choices) "$size": "$size tokens"},
       value: settings.localModelContext?.toString(),
       onPick: (size) => ref
           .read(appSettingsProvider.notifier)
@@ -133,41 +155,73 @@ class _ContextPicker extends ConsumerWidget {
   }
 }
 
-/// How far the server has got. It is the one thing on this page that changes on
-/// its own: loading a model takes the better part of a minute, and a model that
-/// will not fit says so here and nowhere else.
-class _Status extends ConsumerWidget {
-  const _Status();
+/// What is loaded right now, one row each. The only thing on this page that
+/// changes without being touched: loading takes the better part of a minute,
+/// nothing here started it, and a model that will not fit says so here and
+/// nowhere else.
+class _Running extends ConsumerWidget {
+  const _Running();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final running = ref.watch(localLlmStateProvider);
+    if (running.isEmpty) {
+      return const ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text("Nothing loaded"),
+        subtitle: Text("The first chat to ask for one loads it."),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final state in running) _RunningRow(state),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () => ref.read(localLlmProvider).stopAll(),
+            child: const Text("Unload all"),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RunningRow extends StatelessWidget {
+  const _RunningRow(this.state);
+
+  final LocalLlmState state;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = ref.watch(localLlmStateProvider);
+    final name = localModelById(state.modelId)?.name ?? state.modelId;
     return switch (state.phase) {
-      LocalLlmPhase.off => const SizedBox.shrink(),
-      LocalLlmPhase.starting => const ListTile(
-          leading: SizedBox(
+      LocalLlmPhase.starting => ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const SizedBox(
             width: 20,
             height: 20,
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          title: Text("Loading the model…"),
-          subtitle: Text("A chat sent before this finishes waits for it."),
+          title: Text("Loading $name…"),
+          subtitle: const Text("A chat sent before this finishes waits for it."),
         ),
       LocalLlmPhase.ready => ListTile(
+          contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
-          title: const Text("Answering"),
-          subtitle: const Text("Pick it in a chat's settings, or as the app's "
-              "default: it is under On-device."),
+          title: Text(name),
+          subtitle: Text("Answering · ${state.contextLength} tokens of context"),
         ),
       LocalLlmPhase.failed => ListTile(
+          contentPadding: EdgeInsets.zero,
           isThreeLine: true,
           leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
-          title: const Text("It would not load"),
+          title: Text("$name would not load"),
           subtitle: Text(
             state.failure ?? "",
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.error),
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
           ),
         ),
     };
@@ -321,11 +375,13 @@ class _Action extends ConsumerWidget {
         onDownload: () =>
             ref.read(localModelDownloadsProvider.notifier).install(model),
         deleteTitle: "Delete ${model.name}?",
-        deleteMessage:
-            ref.watch(appSettingsProvider.select((s) => s.localModelId)) == model.id
-                ? "It stops answering, and chats pinned to it have nothing to "
-                    "run until another model is picked. It can be downloaded "
-                    "again."
-                : "It can be downloaded again.",
+        deleteMessage: ref
+                .watch(localLlmStateProvider)
+                .any((each) => each.modelId == model.id)
+            ? "It is loaded right now. It stops answering, and chats pinned to "
+                "it have nothing to run until another model is picked. It can "
+                "be downloaded again."
+            : "Chats pinned to it have nothing to run until another model is "
+                "picked. It can be downloaded again.",
       );
 }

@@ -31,14 +31,19 @@ class LocalModelDownloads extends Downloads<LocalModel> {
   Future<void> rescan() =>
       ref.read(installedLocalModelsProvider.notifier).refresh();
 
-  /// Stop serving it before it goes. The load-bearing half of a delete, and
-  /// more so here than for a rootfs: the server has the file open, so deleting
-  /// under it leaves a model answering out of a file that is no longer there —
-  /// and an endpoint in every picker that nothing could rebuild.
+  /// Stop serving it before it goes. The load-bearing half of a delete: the
+  /// server has the file open, so deleting under it leaves a model answering
+  /// out of a file that is no longer there.
+  ///
+  /// Everything is stopped rather than the one model, and that is the whole
+  /// reason there is no `stop(id)`: a delete is rare, whatever else was up
+  /// reloads on the next turn that asks for it, and a pool that can be told to
+  /// drop one member by name is a second way to get the list wrong.
   @override
   Future<void> unpick(LocalModel model) async {
-    if (ref.read(appSettingsProvider).localModelId != model.id) return;
-    await ref.read(appSettingsProvider.notifier).setLocalModel(null);
+    final llm = ref.read(localLlmProvider);
+    if (!llm.running.value.any((each) => each.modelId == model.id)) return;
+    await llm.stopAll();
   }
 
   @override

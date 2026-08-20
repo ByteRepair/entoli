@@ -326,4 +326,81 @@ void main() {
       expect(await client.listModels(), isEmpty);
     });
   });
+
+  /// llama.cpp's own extension, and what lets a phone draw a prefill that takes
+  /// minutes rather than a spinner that cannot be told apart from a hang.
+  group("how far it has got through the prompt", () {
+    test("is not asked for unless the endpoint is known to answer it", () async {
+      final client = clientStreaming([delta({"content": "hi"}), "[DONE]"]);
+
+      await client.stream(const [], model: "m").toList();
+
+      // A hosted provider is entitled to reject a field it has never heard of,
+      // and the strict ones do — so this must not go out by default.
+      expect(sentBody().containsKey("return_progress"), isFalse);
+    });
+
+    test("is asked for where it was turned on", () async {
+      requests = [];
+      final client = OpenAiClient(
+        baseUrl: Uri.parse("https://example.test/v1"),
+        returnProgress: true,
+        httpClient: MockClient.streaming((request, _) async {
+          requests.add(request);
+          return sseResponse([delta({"content": "hi"}), "[DONE]"]);
+        }),
+      );
+
+      await client.stream(const [], model: "m").toList();
+
+      expect(sentBody()["return_progress"], isTrue);
+    });
+
+    test("arrives as its own chunk, before there is anything to say", () async {
+      final client = clientStreaming([
+        {
+          "prompt_progress": {"total": 2700, "cache": 0, "processed": 1350},
+        },
+        delta({"content": "hi"}),
+        "[DONE]",
+      ]);
+
+      final chunks = await client.stream(const [], model: "m").toList();
+
+      final progress = chunks.whereType<LlmPromptProgress>().single;
+      expect(progress.processed, 1350);
+      expect(progress.total, 2700);
+      expect(progress.fraction, 0.5);
+    });
+
+    test("a frame with no choices on it is not dropped", () async {
+      // It really does arrive with `choices` empty, so this has to be read
+      // before the guard that skips a frame with nothing in it.
+      final client = clientStreaming([
+        {
+          "choices": const [],
+          "prompt_progress": {"total": 10, "cache": 8, "processed": 8},
+        },
+        "[DONE]",
+      ]);
+
+      final chunks = await client.stream(const [], model: "m").toList();
+
+      expect(chunks.whereType<LlmPromptProgress>().single.cache, 8);
+    });
+
+    test("a prompt the server called empty has no fraction to report", () async {
+      final client = clientStreaming([
+        {
+          "prompt_progress": {"total": 0, "cache": 0, "processed": 0},
+        },
+        "[DONE]",
+      ]);
+
+      final chunks = await client.stream(const [], model: "m").toList();
+
+      // Null rather than a division by zero, and rather than a confident 100%.
+      expect(chunks.whereType<LlmPromptProgress>().single.fraction, isNull);
+    });
+  });
 }

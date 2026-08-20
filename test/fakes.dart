@@ -650,16 +650,22 @@ class FakeLocalModelStore extends LocalModelStore {
   }
 }
 
-/// The on-device server with nothing behind it. [started] is what a test
-/// asserts on — that picking a model is what starts one, and with what — and
-/// [ready] is whether it gets there, so the failed row can be drawn without a
-/// model that will not load.
+/// The on-device pool with nothing behind it. [served] is what a test asserts
+/// on — that asking for a model is what loads it, and with what — and [ready] is
+/// whether it gets there, so the failed row can be drawn without a model that
+/// will not load.
+///
+/// [installed] is what the pool would find on disk, and so what the provider
+/// offers. It is a separate list from what is running for the reason the real
+/// one keeps them apart: every downloaded model is in every picker, and only
+/// the ones that have been asked for are loaded.
 class FakeLocalLlm extends LocalLlm {
   FakeLocalLlm({
     this.available = true,
     this.devicesFound = const [],
     this.ready = true,
     this.failure = "It would not fit.",
+    this.installed = const [],
   });
 
   @override
@@ -668,50 +674,65 @@ class FakeLocalLlm extends LocalLlm {
   final List<LocalDevice> devicesFound;
   final bool ready;
   final String failure;
+  final List<String> installed;
 
-  /// One entry per [start], as it was asked for.
-  final List<({String modelId, String? device, int? contextLength})> started = [];
+  /// One entry per [serve], as it was asked for — including the ones answered
+  /// from what was already up, since "it did not start a second copy" is a
+  /// thing worth asserting.
+  final List<({String modelId, String? device, int? contextLength, int maxRunning})>
+      served = [];
 
   var stops = 0;
 
   @override
-  final ValueNotifier<LocalLlmState> state = ValueNotifier(const LocalLlmState());
+  final ValueNotifier<List<LocalLlmState>> running = ValueNotifier(const []);
 
   @override
   Future<List<LocalDevice>> devices() async => devicesFound;
 
   @override
-  Future<void> start(LocalModel model, {String? device, int? contextLength}) async {
-    started.add((modelId: model.id, device: device, contextLength: contextLength));
-    state.value = LocalLlmState(
+  Future<LocalEndpoint> serve(
+    String modelId, {
+    String? device,
+    int? contextLength,
+    int maxRunning = 1,
+  }) async {
+    served.add((
+      modelId: modelId,
+      device: device,
+      contextLength: contextLength,
+      maxRunning: maxRunning,
+    ));
+    final state = LocalLlmState(
+      modelId: modelId,
       phase: ready ? LocalLlmPhase.ready : LocalLlmPhase.failed,
-      modelId: model.id,
       device: device,
       contextLength: contextLength,
       failure: ready ? null : failure,
     );
+    running.value = [
+      ...running.value.where((each) => each.modelId != modelId).take(maxRunning - 1),
+      state,
+    ];
+    if (!ready) throw LocalLlmFailure(failure);
+    return const LocalEndpoint(baseUrl: "http://127.0.0.1:1/v1", apiKey: "k");
   }
 
   @override
-  Future<void> stop() async {
+  Future<void> stopAll() async {
     stops++;
-    state.value = const LocalLlmState();
+    running.value = const [];
   }
 
   @override
-  Future<void> whenReady() async {
-    if (!ready) throw StateError(failure);
-  }
-
-  @override
-  LlmProviderConfig? get provider => state.value.modelId == null
+  LlmProviderConfig? get provider => installed.isEmpty
       ? null
       : LlmProviderConfig(
           id: localProviderId,
           label: "On-device",
           api: LlmApi.openai,
-          baseUrl: "http://127.0.0.1:1/v1",
-          models: [state.value.modelId!],
+          baseUrl: "",
+          models: installed,
         );
 }
 

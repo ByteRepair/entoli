@@ -73,6 +73,7 @@ class LocalModel {
     required this.bytes,
     required this.sha256,
     required this.contextLength,
+    required this.kvBytesPerToken,
     required this.licence,
     this.note,
   });
@@ -102,8 +103,30 @@ class LocalModel {
 
   /// What the model was trained to handle. Not what it is *run* with — a
   /// phone's memory is the KV cache's limit long before the model's is, which
-  /// is what `AppSettings.localModelContext` is for.
+  /// is what [defaultContext] and `AppSettings.localModelContext` are for.
   final int contextLength;
+
+  /// What one token of context costs, resident, for the whole conversation.
+  ///
+  /// `2 × block_count × head_count_kv × key_length × 2` — K and V, every layer,
+  /// f16 — read off each GGUF's own metadata rather than worked out from the
+  /// parameter count, which does not decide it. It is what makes [defaultContext]
+  /// per model instead of one number for a catalog whose entries differ by 2.7×.
+  final int kvBytesPerToken;
+
+  /// How much context this model is given when nothing overrides it.
+  ///
+  /// [kvBudgetBytes] divided by what a token costs, rounded down to a power of
+  /// two — so the answer follows from the model's own architecture and a new
+  /// catalog entry needs no number invented for it.
+  int get defaultContext {
+    final affordable = kvBudgetBytes ~/ kvBytesPerToken;
+    var context = 1024;
+    while (context * 2 <= affordable) {
+      context *= 2;
+    }
+    return context;
+  }
 
   final String licence;
 
@@ -111,6 +134,16 @@ class LocalModel {
   /// warning.
   final String? note;
 }
+
+/// What one running model's KV cache may take.
+///
+/// The weights are mapped and paged, so the file's size is not what decides
+/// whether Android kills the app; the KV cache is resident, and it is. A
+/// gigabyte is what leaves the two smaller models a context worth having and
+/// still fits beside the weights on a phone that can run them at all —
+/// remembering that `maxLocalModels` lets two of these be resident at once, and
+/// that this is the budget for each.
+const kvBudgetBytes = 1024 * 1024 * 1024;
 
 const _unsloth = "https://huggingface.co/unsloth";
 
@@ -127,6 +160,7 @@ const localModelCatalog = <LocalModel>[
     bytes: 1214873856,
     sha256: "cd70221bebaee0503e0f6717e174250cd7825aa88438b3aabec9ad55731d9bb1",
     contextLength: 262144,
+    kvBytesPerToken: 49152,
     licence: "Apache-2.0",
     note: "The one to try first: it fits on any phone that can run one at all, "
         "and it answers rather than thinking first.",
@@ -139,6 +173,7 @@ const localModelCatalog = <LocalModel>[
     bytes: 2583221408,
     sha256: "298fcb5fe7a77ccc79745ae24751560c5ac56874caff4bb39b1f2055bd72b8bb",
     contextLength: 262144,
+    kvBytesPerToken: 131072,
     licence: "Apache-2.0",
     note: "The pick on a phone with 8 GB or more. It thinks before it answers, "
         "which is slow here and is most of why it is better at a long turn.",
@@ -151,6 +186,7 @@ const localModelCatalog = <LocalModel>[
     bytes: 5379417312,
     sha256: "17670346b4260ddcb0173965145155885024f3c9a4a24389a3370751edbcde24",
     contextLength: 262144,
+    kvBytesPerToken: 131072,
     licence: "Apache-2.0",
     note: "The best of these at code and at using tools, and five gigabytes of "
         "a phone that had better have 12.",
@@ -163,6 +199,7 @@ const localModelCatalog = <LocalModel>[
     bytes: 507154688,
     sha256: "444406ddd926550c724ec18d5120a9d40ded44908a063b0e66e9a7e5464c652c",
     contextLength: 262144,
+    kvBytesPerToken: 49152,
     licence: "Apache-2.0",
     note: "Small enough to be a check that the NPU works at all, and too small "
         "to be much good at the agent's own job.",
