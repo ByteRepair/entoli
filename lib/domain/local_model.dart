@@ -85,7 +85,7 @@ class LocalModel {
 
   final String name;
 
-  /// As the publisher writes it — `1.5B`. Shown rather than computed, since
+  /// As the publisher writes it — `0.8B`. Shown rather than computed, since
   /// what a row is answering is "will this run on my phone".
   final String parameters;
 
@@ -112,72 +112,58 @@ class LocalModel {
   final String? note;
 }
 
-/// **Five, and all of them small.** A phone has the memory of a laptop from ten
-/// years ago and no fan, so the ceiling here is about 4B parameters — beyond it
-/// a model either will not fit beside Android or runs at a speed that makes the
-/// agent loop unusable. The coder models are first because this is a coding
-/// agent; the general ones are there because a small coder is bad at the
-/// conversation around the code.
+const _unsloth = "https://huggingface.co/unsloth";
+
+/// Four sizes of one model, smallest useful first. The ceiling moved with this
+/// list — a 9B is reachable on a phone with 12 GB, where the last one stopped
+/// at about 4B — so the top of it is a real pick on some devices and a refusal
+/// to load on others, which is what the notes are for.
 const localModelCatalog = <LocalModel>[
   LocalModel(
-    id: "qwen2.5-coder-1.5b-q4_0",
-    name: "Qwen2.5 Coder 1.5B Instruct",
-    parameters: "1.5B",
-    url: "https://huggingface.co/bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF/"
-        "resolve/main/Qwen2.5-Coder-1.5B-Instruct-Q4_0.gguf",
-    bytes: 937535776,
-    sha256: "1165e56fbe4751906354a065e0d1d84e7db0352750929d6fe508fd0565f650a4",
-    contextLength: 32768,
-    licence: "Apache-2.0",
-    note: "The one to try first: it fits on any phone that can run one at all.",
-  ),
-  LocalModel(
-    id: "qwen2.5-coder-3b-q4_0",
-    name: "Qwen2.5 Coder 3B Instruct",
-    parameters: "3B",
-    url: "https://huggingface.co/bartowski/Qwen2.5-Coder-3B-Instruct-GGUF/"
-        "resolve/main/Qwen2.5-Coder-3B-Instruct-Q4_0.gguf",
-    bytes: 1828486400,
-    sha256: "4a1bb431ec1095cc3c9c9741f1a9473841d9631adabf1839ef690376d4653938",
-    contextLength: 32768,
-    licence: "Qwen Research",
-  ),
-  LocalModel(
-    id: "qwen3-1.7b-q4_0",
-    name: "Qwen3 1.7B",
-    parameters: "1.7B",
-    url: "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/"
-        "resolve/main/Qwen3-1.7B-Q4_0.gguf",
-    bytes: 1056782912,
-    sha256: "c876f159707a4e4f70e045106c69db15bfc935a4981706fd4f65c6e7ea1e81c5",
-    contextLength: 32768,
-    licence: "Apache-2.0",
-    note: "Thinks before it answers, which is slow on a phone and better at "
-        "multi-step work when it can afford to be.",
-  ),
-  LocalModel(
-    id: "qwen3-4b-2507-q4_0",
-    name: "Qwen3 4B Instruct 2507",
-    parameters: "4B",
-    url: "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/"
-        "resolve/main/Qwen3-4B-Instruct-2507-Q4_0.gguf",
-    bytes: 2375773280,
-    sha256: "e0ba675d86ab277c61701c6793659b2ae801d95e3be791464c321e6fbf613be2",
+    id: "qwen3.5-2b-q4_0",
+    name: "Qwen3.5 2B",
+    parameters: "2B",
+    url: "$_unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_0.gguf",
+    bytes: 1214873856,
+    sha256: "cd70221bebaee0503e0f6717e174250cd7825aa88438b3aabec9ad55731d9bb1",
     contextLength: 262144,
     licence: "Apache-2.0",
-    note: "The best of these at using tools, and the one most likely to be "
-        "killed for memory on a phone with 8 GB or less.",
+    note: "The one to try first: it fits on any phone that can run one at all, "
+        "and it answers rather than thinking first.",
   ),
   LocalModel(
-    id: "llama-3.2-1b-q4_0",
-    name: "Llama 3.2 1B Instruct",
-    parameters: "1B",
-    url: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/"
-        "resolve/main/Llama-3.2-1B-Instruct-Q4_0.gguf",
-    bytes: 773025920,
-    sha256: "fa0390e7c043f89ae1847bd6682d748041a99d4ef3de0e0b27d33b6af97a8be8",
-    contextLength: 131072,
-    licence: "Llama 3.2 Community",
+    id: "qwen3.5-4b-q4_0",
+    name: "Qwen3.5 4B",
+    parameters: "4B",
+    url: "$_unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_0.gguf",
+    bytes: 2583221408,
+    sha256: "298fcb5fe7a77ccc79745ae24751560c5ac56874caff4bb39b1f2055bd72b8bb",
+    contextLength: 262144,
+    licence: "Apache-2.0",
+    note: "The pick on a phone with 8 GB or more. It thinks before it answers, "
+        "which is slow here and is most of why it is better at a long turn.",
+  ),
+  LocalModel(
+    id: "qwen3.5-9b-q4_0",
+    name: "Qwen3.5 9B",
+    parameters: "9B",
+    url: "$_unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_0.gguf",
+    bytes: 5379417312,
+    sha256: "17670346b4260ddcb0173965145155885024f3c9a4a24389a3370751edbcde24",
+    contextLength: 262144,
+    licence: "Apache-2.0",
+    note: "The best of these at code and at using tools, and five gigabytes of "
+        "a phone that had better have 12.",
+  ),
+  LocalModel(
+    id: "qwen3.5-0.8b-q4_0",
+    name: "Qwen3.5 0.8B",
+    parameters: "0.8B",
+    url: "$_unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf",
+    bytes: 507154688,
+    sha256: "444406ddd926550c724ec18d5120a9d40ded44908a063b0e66e9a7e5464c652c",
+    contextLength: 262144,
+    licence: "Apache-2.0",
     note: "Small enough to be a check that the NPU works at all, and too small "
         "to be much good at the agent's own job.",
   ),

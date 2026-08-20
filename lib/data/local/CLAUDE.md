@@ -231,6 +231,32 @@ and minutes of its battery, so it is picked in settings and nowhere else — a
 download does not load it, and a chat pinned to a model that is not loaded says
 the provider is not configured rather than quietly starting one.
 
+### What is in the catalog, and why it is one family
+
+Three things have to be true before a row can exist, and together they cut the
+field down to almost nothing: the publisher has to ship **Q4_0** — see "What the
+NPU actually is" — the GGUF's `general.architecture` has to be one the bundled
+server knows, and the exact size and SHA-256 have to come from the publisher
+rather than from a download someone did once.
+
+What survives is Qwen3.5, four sizes of it. Not a preference for the vendor:
+Gemma 4's E4B is the near miss and shows the shape of the comparison. It is the
+one model published *as* Q4_0 — quantization-aware trained, so the quant this
+list is forced into costs it nothing — and it is still twice the file of
+Qwen3.5 4B for a lower LiveCodeBench. A row nobody should pick is a row that
+only makes the list longer.
+
+**None of them is a coder model**, which is the change from the list before it.
+Small coder-tuned weights stopped being published: the current official one is
+Qwen3-Coder-Next, which is 48 GB at Q4 and arrives in four pieces. What replaced
+them is a general model of this size beating the old specialists at code
+outright, and being far better at the conversation around it — which is most of
+what this agent does between edits.
+
+The sizes are not interchangeable and the notes say so. 0.8B and 2B answer
+directly; 4B and 9B think first, which on a phone is a wait long enough to
+notice and is also why they are better over a long turn.
+
 ### What the NPU actually is
 
 The honest answer is narrower than the word. ggml has one NPU backend,
@@ -295,6 +321,15 @@ models and the Linux, and the rows are `CatalogTile` and `CatalogAction` like
 theirs — see "A catalog of things to download". Nothing here needed a new
 mechanism, which is the point: the catalog is a const list, the store is a
 marker and a hash, and everything between them was already written.
+
+The one place it parts company with the other two is `installed()`, which reads
+the directory names off the disk rather than the catalog, and `delete`, which
+takes an id rather than a `LocalModel` so that what `installed()` finds can
+actually be acted on. Both exist for the same event: the catalog replaces a
+generation of models, and every id it drops is a couple of gigabytes that no
+row would otherwise mention and nothing in the app could remove. The settings
+page draws those as rows of their own, delete and nothing else — there is no
+`Downloads` entry behind one to cancel or fetch again.
 
 It is the third catalog and by far the largest — a couple of gigabytes where a
 rootfs is four megabytes — which is what makes the notification's own throttle in

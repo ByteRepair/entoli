@@ -167,4 +167,32 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(app.container.read(installedLocalModelsProvider), isEmpty);
   });
+
+  testWidgets("a model the catalog has dropped is still a row, and deletable",
+      (tester) async {
+    // Why the store reads the disk rather than the catalog. Swapping a
+    // generation of models out is what the catalog is for, and every id it
+    // drops is a gigabyte nothing else in the app could reach.
+    app = TestApp.create(
+        localLlm: FakeLocalLlm(), localModels: {"qwen2.5-coder-3b-q4_0"});
+    await pumpOnDevice(tester);
+
+    expect(find.text("qwen2.5-coder-3b-q4_0"), findsOneWidget);
+    expect(find.textContaining("not offered any more"), findsOneWidget);
+
+    await tester.tap(find.byTooltip("Delete"));
+    await settleIo(tester);
+    await tester.tap(find.text("Delete").last);
+    await settleIo(tester);
+
+    expect(app.localModels.deleted, ["qwen2.5-coder-3b-q4_0"]);
+    expect(app.container.read(installedLocalModelsProvider), isEmpty);
+  });
+
+  testWidgets("nothing stale means no such row", (tester) async {
+    app = TestApp.create(localLlm: FakeLocalLlm(), localModels: {model.id});
+    await pumpOnDevice(tester);
+
+    expect(find.textContaining("not offered any more"), findsNothing);
+  });
 }

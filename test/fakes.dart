@@ -644,9 +644,9 @@ class FakeLocalModelStore extends LocalModelStore {
   }
 
   @override
-  Future<void> delete(LocalModel model) async {
-    deleted.add(model.id);
-    _installed.remove(model.id);
+  Future<void> delete(String id) async {
+    deleted.add(id);
+    _installed.remove(id);
   }
 }
 

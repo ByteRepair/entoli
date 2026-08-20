@@ -43,7 +43,7 @@ class LocalModelDownloads extends Downloads<LocalModel> {
 
   @override
   Future<void> erase(LocalModel model) =>
-      ref.read(localModelStoreProvider).delete(model);
+      ref.read(localModelStoreProvider).delete(model.id);
 }
 
 final localModelDownloadsProvider =
