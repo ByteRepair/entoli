@@ -45,6 +45,12 @@ void main() {
 
   CodeBlock block(WidgetTester tester) => tester.widget(find.byType(CodeBlock));
 
+  /// The block's highlighted span. Never null here: every one of these comes
+  /// out of the markdown builder, which highlights while it parses. It is
+  /// omitted only where there is no language to highlight — a `!` command's
+  /// output, in `shell_run.dart`.
+  TextSpan spanOf(WidgetTester tester) => block(tester).span!;
+
   /// Every colour the highlighted span paints, in the order the code reads.
   /// A span with no style of its own takes its parent's, which is how a token
   /// keeps the monospace font while carrying only a colour.
@@ -66,7 +72,7 @@ void main() {
       await pump(tester, "before\n\n```dart\nvoid main() {}\n```\n\nafter");
 
       expect(block(tester).code, "void main() {}");
-      expect(block(tester).span.toPlainText(), "void main() {}");
+      expect(spanOf(tester).toPlainText(), "void main() {}");
     });
 
     testWidgets("the language it was fenced with, on the block's own bar",
@@ -111,7 +117,7 @@ void main() {
     testWidgets("a language it knows is coloured token by token", (tester) async {
       await pump(tester, "```dart\nfinal x = 1;\n```");
 
-      final painted = colours(block(tester).span).toSet();
+      final painted = colours(spanOf(tester)).toSet();
       expect(painted.length, greaterThan(1), reason: "nothing was coloured");
       expect(painted, contains(githubTheme["keyword"]!.color));
     });
@@ -120,22 +126,22 @@ void main() {
       await pump(tester, "```brainfuck\n+[----->+++<]>+.\n```");
 
       // Not an error and not empty: the code is all there, in one colour.
-      expect(block(tester).span.toPlainText(), "+[----->+++<]>+.");
-      expect(colours(block(tester).span).toSet().length, 1);
+      expect(spanOf(tester).toPlainText(), "+[----->+++<]>+.");
+      expect(colours(spanOf(tester)).toSet().length, 1);
     });
 
     testWidgets("an alias the grammar declares works like its own name",
         (tester) async {
       await pump(tester, "```sh\nif [ -f x ]; then echo y; fi\n```");
 
-      expect(colours(block(tester).span).toSet().length, greaterThan(1));
+      expect(colours(spanOf(tester)).toSet().length, greaterThan(1));
     });
 
     // The token colours are the palette's, not one theme used under both.
     testWidgets("the dark palette gets the dark theme's colours", (tester) async {
       await pump(tester, "```dart\nfinal x = 1;\n```", brightness: Brightness.dark);
 
-      final painted = colours(block(tester).span).toSet();
+      final painted = colours(spanOf(tester)).toSet();
       expect(painted, contains(githubDarkTheme["keyword"]!.color));
       expect(painted, isNot(contains(githubTheme["keyword"]!.color)));
     });
@@ -146,21 +152,21 @@ void main() {
     testWidgets("the same block twice is highlighted once", (tester) async {
       const fence = "```dart\nfinal remembered = 1;\n```";
       await pump(tester, fence);
-      final first = block(tester).span;
+      final first = spanOf(tester);
 
       await pump(tester, fence);
 
-      expect(identical(block(tester).span, first), isTrue);
+      expect(identical(spanOf(tester), first), isTrue);
     });
 
     testWidgets("the other palette is not answered out of that", (tester) async {
       const fence = "```dart\nfinal repainted = 1;\n```";
       await pump(tester, fence);
-      final light = colours(block(tester).span).toSet();
+      final light = colours(spanOf(tester)).toSet();
 
       await pump(tester, fence, brightness: Brightness.dark);
 
-      expect(colours(block(tester).span).toSet(), isNot(light));
+      expect(colours(spanOf(tester)).toSet(), isNot(light));
     });
 
     testWidgets("the code keeps one font whatever it is coloured", (tester) async {
@@ -168,7 +174,7 @@ void main() {
 
       // A token span carries a colour and nothing else, so anything else it is
       // drawn with has to come from the span above it.
-      final span = block(tester).span;
+      final span = spanOf(tester);
       expect(span.style?.fontFamily, monoFamily);
       for (final child in span.children ?? const <InlineSpan>[]) {
         expect(child.style?.fontFamily, anyOf(isNull, monoFamily));

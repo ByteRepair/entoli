@@ -131,7 +131,7 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
     return CodeBlock(
       code: code,
       language: language,
-      span: _cachedSpanOf(code, language, theme),
+      span: cachedSpanOf(code, language, theme),
     );
   }
 
@@ -139,7 +139,7 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
   /// than only the brightness that picks it: a `TextStyle` is value-equal, so
   /// naming it is what stops a palette that changed anything else from being
   /// answered out of the cache.
-  static TextSpan _cachedSpanOf(String code, String? language, ThemeData theme) {
+  static TextSpan cachedSpanOf(String code, String? language, ThemeData theme) {
     final style = codeBlockStyle(theme);
     final key = (
       code: code,
@@ -223,9 +223,9 @@ TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(theme).copyWith(
     );
 
 /// What a block adds: room between the lines, because a block is read as lines
-/// where an inline span is read as part of a sentence. Public because a command
-/// the user ran has output to draw in the same face, with no fence around it to
-/// be parsed out of — see `shell_run.dart`.
+/// where an inline span is read as part of a sentence. Public because the
+/// composer sets its field in it while a `!` command is being typed, so what is
+/// about to run looks like what it is.
 TextStyle codeBlockStyle(ThemeData theme) => _codeFont(theme).copyWith(height: 1.45);
 
 /// The surface a code block sits on, above the page behind it. It belongs to
@@ -245,12 +245,16 @@ class CodeBlock extends StatelessWidget {
     super.key,
     required this.code,
     required this.language,
-    required this.span,
+    this.span,
   });
 
   final String code;
   final String? language;
-  final TextSpan span;
+
+  /// Omit where there is nothing to highlight — a command's output is not a
+  /// language — and the cache answers with the plain span. Handed in by the
+  /// markdown builder, which has it in hand from the parse.
+  final TextSpan? span;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -261,7 +265,9 @@ class CodeBlock extends StatelessWidget {
           // so a drag across the reply must not put the language name on the
           // clipboard — the rule the labels above the bubble already keep.
           SelectionContainer.disabled(child: _bar(context)),
-          _CodeScroll(child: Text.rich(span)),
+          _CodeScroll(
+              child: Text.rich(
+                  span ?? CodeBlockBuilder.cachedSpanOf(code, language, Theme.of(context)))),
         ],
       );
 

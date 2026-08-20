@@ -130,10 +130,10 @@ workspace and under the same `commandTimeout`, and Stop kills it:
 command's `kill` and an agent's `cancel` are the same thing to it.
 
 `shellBypassCommand` in `domain/shell.dart` is the whole of the syntax, and it
-lives there rather than beside `_command` and `_mention` because four places
-read it: this, the projection, the composer and the bubble. A bare `!` is a
-command too — an empty one — so the composer can say what it is about to do from
-the keystroke that decides it rather than a word later.
+lives there rather than beside `_command` and `_mention` because five places
+read it: this, the composer, the bubble, `suggestTitle` and `endsUnfinished`. A
+bare `!` is a command too — an empty one — so the composer can say what it is
+about to do from the keystroke that decides it rather than a word later.
 
 What the turn writes is one `ShellRunPart`, holding the command and the outcome
 together. Deliberately not a `ToolCallPart` and its result: nothing called a
@@ -144,15 +144,24 @@ saying who ran it — so the model sees the command and the exit code without
 being told it made the call. As the user it would be two user messages in a row,
 which not every provider accepts.
 
-That wording is used twice on purpose: `_runBypass` appends it to the live
-session as the command finishes, and `projectionOf` builds it again from the log
-after a restart. The two have to agree, and what pins that is
-`builtin_backend_test.dart`'s "a chat carried on after a restart is the one that
-was left", which sends the same second prompt through both and compares what the
-model was given.
+The live session is filled through `projectionOf` rather than worded a second
+time in `_runBypass`: it builds the two messages the turn is writing and
+projects those, so what the model is holding now and what a reload would build
+out of the log cannot be two different conversations. That is also what names an
+attachment sent with the command, which a hand-written session line got wrong.
+The turn's own ids are not in the session, so the two messages are built with
+none — the projection reads neither those nor the time.
 
 An aborted `!` turn writes nothing — no part, and nothing into the session
 either. The command was killed, so whatever it had printed is not an answer.
+
+**Two things outside this file ask the same question**, and both would otherwise
+send a command to a model. `endsUnfinished` never offers a `!` turn to be
+carried on, whatever cut it off: resuming appends to the reply, and a command
+has nothing to append — the only way to continue one would be to run it again.
+And `ChatRepository.suggestTitle` names nothing from one: a command is not a
+thing said, and titling it is a model call on the one turn the user routed away
+from a model, in a chat that may have no provider at all.
 
 ## Approvals
 

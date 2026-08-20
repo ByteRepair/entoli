@@ -91,7 +91,7 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
     // Typed rather than said — a `!` message from before voice mode was
     // opened. It reads as what the agent's own command reads as.
     case ShellRunPart():
-      return const [VoiceLine(VoiceLineKind.activity, "Ran a command")];
+      return const [VoiceLine(VoiceLineKind.activity, _ranACommand)];
     case ReasoningPart():
     case ToolResultPart():
     case FilePart():
@@ -104,8 +104,12 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
 /// names live in `data/builtin` and are not `ui`'s to import; the rest are in
 /// `domain/`, which `file_tools.dart` says in so many words is where they are
 /// *because* the UI draws labels from them.
+/// Read out for a command whoever ran it — the model through `bash`, or the
+/// user through `!`.
+const _ranACommand = "Ran a command";
+
 String? _doing(String tool) => switch (tool) {
-      "bash" => "Ran a command",
+      "bash" => _ranACommand,
       "websearch" => "Searched the web",
       "webfetch" => "Read a page",
       "task" => "Ran a sub-agent",

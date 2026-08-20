@@ -26,7 +26,6 @@ import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
-import "templates.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which
@@ -158,10 +157,9 @@ class BuiltinBackend implements AgentBackend {
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
-      final command = text == null ? null : shellBypassCommand(text);
-      if (command != null) {
-        await _runBypass(chatId, text!, command, controller, history: history,
-            project: project);
+      if (text != null && shellBypassCommand(text) != null) {
+        await _runBypass(chatId, text, controller,
+            attachments: attachments, history: history, project: project);
         return;
       }
 
@@ -204,21 +202,12 @@ class BuiltinBackend implements AgentBackend {
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
-      final session = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-      // A session the app was not already holding is the one after a restart,
-      // and it is empty. Filling it from the conversation is what keeps the
-      // chat going rather than starting it over. A resume rebuilds it either
-      // way, so that carrying on in the same process and carrying on after a
-      // restart put the same thing in front of the model — a checkpoint that
-      // failed is swallowed, so a live session can hold more than the log does.
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (text == null) {
         history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
       }
-      if (text == null || session.isFresh) {
-        session.replaceWith(projectionOf(history));
-      }
+      final session = _sessionOf(chatId, history, rebuild: text == null);
       final agent = BuiltinAgent(
         session: session,
         client: gatedClient,
@@ -286,21 +275,18 @@ class BuiltinBackend implements AgentBackend {
     }
   }
 
-  /// Run [command] and be done: no model call, no tools, and no approval, since
-  /// the user typed the command rather than being asked to allow one.
-  ///
-  /// [prompt] is the message as typed, `!` and all — it is what the log keeps
-  /// and so what the session has to hold, or the conversation the model reads
-  /// after a restart would be a different one from the conversation it was
-  /// handed here.
+  /// Run what [prompt] says and be done: no model call, no tools, and no
+  /// approval, since the user typed the command rather than being asked to
+  /// allow one.
   Future<void> _runBypass(
     String chatId,
     String prompt,
-    String command,
     StreamController<AgentEvent> controller, {
-    List<Message> history = const [],
-    String? project,
+    required List<Attachment> attachments,
+    required List<Message> history,
+    required String? project,
   }) async {
+    final command = shellBypassCommand(prompt)!;
     await config.ensureChatDirs(chatId, project: project);
     final run = shell.start(command,
         cwd: config.workspaceDir(chatId, project: project),
@@ -308,7 +294,7 @@ class BuiltinBackend implements AgentBackend {
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.add(chatId, run.kill);
-    controller.add(const StatusEvent("Running the command"));
+    controller.add(StatusEvent(runningTool(bashToolName)));
 
     final result = await run.result;
     // An aborted turn writes no part, so the session must not hold one either.
@@ -321,14 +307,39 @@ class BuiltinBackend implements AgentBackend {
     );
     controller.add(ShellRunEvent(part));
     controller.add(const DoneEvent());
+    // Through `projectionOf` rather than worded here, so the session holds
+    // exactly what a reload would build out of the log — attachments named the
+    // way the projection names them included. These are the two messages the
+    // turn is writing; only their ids differ from the ones being logged, and
+    // the projection reads neither those nor the time.
+    _sessionOf(chatId, history).messages.addAll(projectionOf([
+          _turnMessage(MessageRole.user, [
+            for (final a in attachments)
+              MessagePart.file(
+                  resource: a.resource ?? "",
+                  filename: a.filename,
+                  mimeType: a.mimeType),
+            MessagePart.text(text: prompt),
+          ]),
+          _turnMessage(MessageRole.assistant, [part]),
+        ]));
+  }
 
+  Message _turnMessage(MessageRole role, List<MessagePart> parts) =>
+      Message(id: "", role: role, createdAt: DateTime.now(), parts: parts);
+
+  /// The chat's session, filled from [history] where it is one this backend was
+  /// not already holding — which is a chat opened after a restart, and empty.
+  /// Filling it is what keeps the conversation going rather than starting it
+  /// over. [rebuild] fills it whether or not it is empty, which a resume does
+  /// so that carrying on in the same process and carrying on after a restart
+  /// put the same thing in front of the model — a checkpoint that failed is
+  /// swallowed, so a live session can hold more than the log does.
+  BuiltinSession _sessionOf(String chatId, List<Message> history,
+      {bool rebuild = false}) {
     final session = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-    // The same rule the model's own turns follow: a session the app was not
-    // already holding is one after a restart, and it is empty.
-    if (session.isFresh) session.replaceWith(projectionOf(history));
-    session.messages.add(LlmMessage(role: LlmRole.user, text: prompt.trim()));
-    session.messages
-        .add(LlmMessage(role: LlmRole.assistant, text: shellRunTranscript(part)));
+    if (rebuild || session.isFresh) session.replaceWith(projectionOf(history));
+    return session;
   }
 
   /// Carry on the sub-agents the interrupted turn left in flight. A `task`

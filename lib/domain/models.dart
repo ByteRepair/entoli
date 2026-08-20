@@ -204,9 +204,10 @@ sealed class MessagePart with _$MessagePart {
 
   /// A command the user ran themselves, by starting a message with `!`. Not a
   /// [ToolCallPart]: no model asked for it, and one reading the conversation
-  /// back would find itself having called a tool it never chose. It carries the
-  /// command as well as the outcome, so the reply says the whole of what
-  /// happened without the prompt above it.
+  /// back would find itself having called a tool it never chose.
+  ///
+  /// [command] is here as well as in the prompt above because the projection
+  /// words one message at a time and has no prompt beside it to read.
   const factory MessagePart.shellRun({
     required String command,
     required int returnCode,
