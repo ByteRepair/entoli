@@ -242,6 +242,11 @@ message, so continuing one from the middle would put new work before turns that
 already happened and that the model has since built on. Nothing reads it either,
 so nothing closes it; a tidy-up record would be written for no reader.
 
+A turn the user opened with `!` is never offered either, whatever closed it or
+failed to — the same rule once more. Resuming appends to the reply, and a
+command has nothing to append: the only way to carry one on would be to run it a
+second time, which is not continuing it. See "Running a command yourself".
+
 **"Last" is now the last of the thread being read**, which means the offer moves
 as the user cycles. Kill a turn, regenerate, and step back: the reply that was
 killed is the end of *its* thread, so it is offered again and carrying it on
@@ -327,6 +332,12 @@ while the turn runs, and it lands through `retitle`, which writes `state.json`
 alone because the turn is still adding to `conv.jsonl`. A model that cannot
 answer names nothing and the chat keeps the name it has; there is no turn to
 report that on.
+
+A `!` message names nothing either, and `suggestTitle` is where that is decided
+rather than in the controller that calls it — it is the same kind of rule as "no
+title model is configured", and it belongs beside it. A command is not a thing
+said, and asking a model to name one is a model call on the very turn the user
+routed away from a model, in a chat that may have no provider at all.
 
 `ask` is the capability, not the feature: the backend is the only route to a
 provider, so a one-shot question belongs on it, while the prompt and the

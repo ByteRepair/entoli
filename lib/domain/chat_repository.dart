@@ -9,6 +9,7 @@ import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
 import "../domain/project_settings.dart";
+import "../domain/shell.dart";
 import "../domain/temp_chat_ttl.dart";
 
 /// The UI's door to storage and the agent. Resolves which model a chat runs
@@ -148,11 +149,16 @@ class ChatRepository {
   /// A name for a new chat, from the first thing said in it. Null when no
   /// title model is configured: naming chats is off, and this one keeps the
   /// name it was created with.
+  ///
+  /// A `!` message names nothing either. It is not a thing said, and it is the
+  /// one turn the user routed away from a model — in a chat that may have no
+  /// provider configured at all.
   Future<String?> suggestTitle(String text) async {
     final settings = _settings();
     final provider = settings.titleProviderId;
     final model = settings.titleModelId;
     if (provider == null || model == null || text.trim().isEmpty) return null;
+    if (shellBypassCommand(text) != null) return null;
     final answer = await _backend.ask(titlePrompt(text), model: model, provider: provider);
     return answer == null ? null : cleanTitle(answer);
   }

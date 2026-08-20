@@ -74,7 +74,12 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
           // The user's own command, worded as what the app did for them. It is
           // the whole of its turn, so there is nothing else in this response
           // for it to run into.
-          text.write(shellRunTranscript(part));
+          text.write(shellRunTranscript(
+            command: part.command,
+            returnCode: part.returnCode,
+            output: part.output,
+            exceptionInfo: part.exceptionInfo,
+          ));
         case ToolResultPart():
         case FilePart():
         case ArtifactPart():
