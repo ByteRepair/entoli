@@ -17,7 +17,7 @@ void main() {
   final model = localModelCatalog.first;
 
   ({List<String> command, Map<String, String> environment}) launch({
-    String? device,
+    String device = noDevice,
     int? contextLength,
     int? threads,
     String? slotSavePath,
@@ -64,10 +64,12 @@ void main() {
     expect(launch().command, contains("--jinja"));
   });
 
-  test("nothing is offloaded unless a device was named", () {
+  test("the CPU is asked for by name, since leaving it out means auto", () {
     final cpu = launch();
 
-    expect(cpu.command, isNot(contains("-dev")));
+    // The literal, not the constant: what is under test is the word llama.cpp
+    // takes, which a rename of the constant must not quietly change.
+    expect(valueOf(cpu.command, "-dev"), "none");
     // Without a device to put them on, asking for layers is a warning at
     // startup and nothing else.
     expect(cpu.command, isNot(contains("-ngl")));
@@ -206,15 +208,15 @@ something else entirely
     });
 
     test("auto on a phone with no accelerator is the CPU", () {
-      // Null out is ggml offloading nothing, which is the CPU — so not picking
-      // is never worse than picking.
-      expect(resolveLocalDevice(null, const []), isNull);
+      // `none` is ggml offloading nothing, which is the CPU — so not picking is
+      // never worse than picking.
+      expect(resolveLocalDevice(null, const []), noDevice);
     });
 
     test("the CPU can be chosen even where an accelerator exists", () {
       // Distinct from auto: the sentinel forces the slow path, which is the
       // only reason it is in the picker at all.
-      expect(resolveLocalDevice(LocalDevice.cpu, [npu]), isNull);
+      expect(resolveLocalDevice(LocalDevice.cpu, [npu]), noDevice);
     });
 
     test("a device named outright is passed straight through", () {
@@ -225,7 +227,10 @@ something else entirely
       // The end of the same road: auto → NPU → `-dev HTP0`, so the offload the
       // turn was launched with is the one the picker never had to name.
       expect(valueOf(launch(device: resolveLocalDevice(null, [gpu, npu])).command, "-dev"), "HTP0");
-      expect(launch(device: resolveLocalDevice(LocalDevice.cpu, [npu])).command, isNot(contains("-dev")));
+      // And the CPU pick reaches it as a device too, which is what rules the
+      // accelerator out rather than leaving llama.cpp to pick it.
+      expect(valueOf(launch(device: resolveLocalDevice(LocalDevice.cpu, [npu])).command, "-dev"),
+          noDevice);
     });
   });
 

@@ -116,9 +116,10 @@ class AppSettings {
   int maxLocalModels;
 
   /// The accelerator it is offloaded to, by the name `--list-devices` gave it.
-  /// Null is the CPU, which is every device's answer and most devices' only
-  /// one. Stored as the name rather than as a kind, because that is the string
-  /// the server is passed and a phone can have two of the same kind.
+  /// Null is auto — the best one the phone turned out to have — and
+  /// `LocalDevice.cpu` is how the picker rules them all out. Stored as the name
+  /// rather than as a kind, because that is the string the server is passed and
+  /// a phone can have two of the same kind.
   String? localModelDevice;
 
   /// How much context every on-device model is loaded with, or null to let each
