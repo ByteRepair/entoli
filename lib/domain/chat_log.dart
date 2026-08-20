@@ -3,6 +3,7 @@ import "dart:convert";
 import "package:freezed_annotation/freezed_annotation.dart";
 
 import "models.dart";
+import "shell.dart";
 
 part "chat_log.freezed.dart";
 part "chat_log.g.dart";
@@ -266,9 +267,19 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
 /// Takes the replayed [messages] rather than replaying again: which messages a
 /// rewind left live is [replayTree]'s to answer. A resumed turn writes a second
 /// [TurnEndRecord] for the same message, so the last one wins.
+///
+/// A turn the user opened with `!` is never offered, whatever closed it or
+/// failed to. Resuming appends to the reply, and a command has nothing to
+/// append: the only way to carry one on would be to run it a second time, which
+/// is not continuing it. Without this, Continue on a killed `!ls` would resolve
+/// a model and hand it the conversation — the one thing the syntax exists to
+/// avoid.
 bool endsUnfinished(List<Message> messages, List<ChatRecord> records) {
   final last = messages.lastOrNull;
   if (last == null || last.role != MessageRole.assistant) return false;
+  // A sub-agent's transcript is the reply alone, so there is not always one.
+  final prompt = messages.length < 2 ? null : messages[messages.length - 2];
+  if (prompt != null && shellBypassCommand(prompt.plainText) != null) return false;
   TurnEnd? ended;
   for (final record in records) {
     if (record is TurnEndRecord && record.messageId == last.id) ended = record.reason;

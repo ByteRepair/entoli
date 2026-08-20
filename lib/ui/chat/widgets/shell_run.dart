@@ -47,7 +47,7 @@ class ShellRunBubble extends StatelessWidget {
     final theme = Theme.of(context);
     // The trailing newline every command ends on would draw as a blank line.
     final output = run.output.trimRight();
-    final problem = run.exceptionInfo;
+    final problem = run.exceptionInfo?.trim() ?? "";
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 4),
@@ -57,14 +57,9 @@ class ShellRunBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (output.isNotEmpty)
-            CodeBlock(
-              code: output,
-              language: null,
-              span: TextSpan(text: output, style: codeBlockStyle(theme)),
-            ),
-          if (problem != null && problem.isNotEmpty) _problem(theme, problem),
-          _exit(theme, silent: output.isEmpty && (problem == null || problem.isEmpty)),
+          if (output.isNotEmpty) CodeBlock(code: output, language: null),
+          if (problem.isNotEmpty) _problem(theme, problem),
+          _exit(theme, silent: output.isEmpty && problem.isEmpty),
         ],
       ),
     );
@@ -82,23 +77,22 @@ class ShellRunBubble extends StatelessWidget {
   /// nothing — which is why [silent] says so there rather than leaving a strip
   /// that reads as an answer cut off.
   Widget _exit(ThemeData theme, {required bool silent}) {
-    final color =
-        _failed ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant;
-    final label = theme.textTheme.labelSmall?.copyWith(color: color);
+    final muted = theme.textTheme.labelSmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final label =
+        _failed ? muted?.copyWith(color: theme.colorScheme.error) : muted;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       color: theme.colorScheme.surfaceContainerHighest,
       child: Row(
         children: [
           Icon(_failed ? Icons.error_outline : Icons.check_circle_outline,
-              size: 14, color: color),
+              size: 14, color: label?.color),
           const SizedBox(width: 8),
           Text("Exit code: ${run.returnCode}", style: label),
           if (silent) ...[
             const Spacer(),
-            Text("no output",
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            Text("no output", style: muted),
           ],
         ],
       ),

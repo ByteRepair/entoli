@@ -103,6 +103,18 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _readCommand();
+  }
+
+  @override
+  void didUpdateWidget(MessageBubble old) {
+    super.didUpdateWidget(old);
+    if (old.message.id != widget.message.id) _readCommand();
+  }
+
+  @override
   void dispose() {
     _shown.dispose();
     super.dispose();
@@ -144,7 +156,13 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// The command a `!` message runs, or null where it is prose. Read off the
   /// text rather than stored: `conv.jsonl` keeps the message as typed, so the
   /// bubble and the backend answer this from the same string.
-  String? get _command => widget.message.role == MessageRole.user
+  ///
+  /// Parsed once and kept, the way an `AskLabel`'s questions are: every visible
+  /// message is rebuilt on every streamed delta, and what a prompt says does not
+  /// change under one — an edit is a new message, with a new id.
+  String? _command;
+
+  void _readCommand() => _command = widget.message.role == MessageRole.user
       ? shellBypassCommand(widget.message.plainText)
       : null;
 

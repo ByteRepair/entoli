@@ -362,9 +362,9 @@ void main() {
         endsUnfinished(replay(records), records);
 
     /// A turn as it is written: the prompt, the reply, and whatever closed it.
-    List<ChatRecord> turn({TurnEnd? end}) => [
+    List<ChatRecord> turn({TurnEnd? end, String said = "do it"}) => [
           message("m1"),
-          part("m1", 0, "do it"),
+          part("m1", 0, said),
           message("m2", MessageRole.assistant),
           part("m2", 0, "on it"),
           if (end != null) ChatRecord.turnEnd(messageId: "m2", reason: end),
@@ -382,6 +382,13 @@ void main() {
 
     test("a turn that gave up is offered, like one that was killed",
         () => expect(unfinishedIn(turn(end: TurnEnd.error)), isTrue));
+
+    // Resuming appends to the reply, and a command has nothing to append: the
+    // only way to carry one on would be to run it again.
+    test("a command the user ran is never offered, however it was cut off", () {
+      expect(unfinishedIn(turn(said: "!make")), isFalse);
+      expect(unfinishedIn(turn(said: "!make", end: TurnEnd.error)), isFalse);
+    });
 
     test("a log that ends on a prompt has no reply to carry on", () {
       expect(unfinishedIn([message("m1"), part("m1", 0, "do it")]), isFalse);

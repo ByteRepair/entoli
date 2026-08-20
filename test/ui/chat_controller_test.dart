@@ -114,6 +114,17 @@ void main() {
       expect(app.backend.questions, hasLength(1));
     });
 
+    // A model call on the one turn the user routed away from a model, in a chat
+    // that may have no provider at all.
+    test("a chat opened with a command asks no model to name it", () async {
+      app.seedSettings(_withTitleModel);
+      app.backend.scriptedAnswer = "Listing the files";
+      final (id, _) = await chatWithOneTurn("!ls");
+
+      expect(app.backend.questions, isEmpty);
+      expect(titleOf(id), "New chat");
+    });
+
     test("a title model that answers nothing leaves the name alone", () async {
       app.seedSettings(_withTitleModel);
       app.backend.scriptedAnswer = null;

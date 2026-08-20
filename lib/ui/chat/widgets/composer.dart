@@ -349,23 +349,7 @@ class _ComposerState extends ConsumerState<Composer> {
                         // is about to run looks like what it is while it is
                         // still being typed.
                         style: _shell ? codeBlockStyle(theme) : null,
-                        decoration: InputDecoration(
-                          hintText: _shell ? "Shell command" : "Message...",
-                          border: const OutlineInputBorder(),
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          prefixIcon: _shell
-                              ? Icon(Icons.terminal,
-                                  size: 18, color: theme.colorScheme.tertiary)
-                              : null,
-                          filled: _shell,
-                          fillColor: theme.colorScheme.surfaceContainerHighest,
-                          // Both, or the field goes back to the ordinary
-                          // outline the moment it takes focus — which is
-                          // exactly while a command is being typed.
-                          enabledBorder: _shell ? _shellBorder(theme) : null,
-                          focusedBorder: _shell ? _shellBorder(theme, width: 2) : null,
-                        ),
+                        decoration: _shell ? _shellField(theme) : _messageField,
                       ),
                     ),
                   ),
@@ -420,11 +404,30 @@ class _ComposerState extends ConsumerState<Composer> {
     );
   }
 
-  /// The outline a message bound for the shell wears.
-  OutlineInputBorder _shellBorder(ThemeData theme, {double width = 1}) =>
-      OutlineInputBorder(
-        borderSide: BorderSide(color: theme.colorScheme.tertiary, width: width),
-      );
+  static const _messageField = InputDecoration(
+    hintText: "Message...",
+    border: OutlineInputBorder(),
+    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+  );
+
+  /// The same field, dressed as what it is about to do. Both borders are
+  /// given, or it goes back to the ordinary outline the moment it takes focus —
+  /// which is exactly while a command is being typed.
+  InputDecoration _shellField(ThemeData theme) {
+    OutlineInputBorder outline(double width) => OutlineInputBorder(
+          borderSide:
+              BorderSide(color: theme.colorScheme.tertiary, width: width),
+        );
+    return _messageField.copyWith(
+      hintText: "Shell command",
+      prefixIcon:
+          Icon(Icons.terminal, size: 18, color: theme.colorScheme.tertiary),
+      filled: true,
+      fillColor: theme.colorScheme.surfaceContainerHighest,
+      enabledBorder: outline(1),
+      focusedBorder: outline(2),
+    );
+  }
 
   PopupMenuItem<VoidCallback> _attachItem(IconData icon, String label, AttachmentKind kind) =>
       PopupMenuItem(

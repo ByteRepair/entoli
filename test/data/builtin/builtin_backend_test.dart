@@ -19,6 +19,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
 
+import "../../fakes.dart";
 import "../../harness.dart";
 import "builtin_fakes.dart";
 
@@ -75,10 +76,12 @@ void main() {
     String? model = "fake-model",
     String? provider = "fake",
     List<Message> history = const [],
+    List<Attachment> attachments = const [],
   }) =>
       backend
           .sendPrompt(chatId, text,
               history: history,
+              attachments: attachments,
               settings: TurnSettings(
                   model: model, provider: provider, approveMode: ApproveMode.never))
           .toList();
@@ -332,13 +335,14 @@ void main() {
       expect(sent, contains('"returncode": 0'));
     });
 
-    // The live session and what a reload projects out of the log are written
-    // in two places, so this is what keeps them the same conversation.
+    // The live session is filled as the command finishes and a reload builds
+    // the same exchange back out of the log. Attached, because what is named to
+    // the model is the half a hand-written session line would get wrong.
     test("a chat carried on after a restart is the one that was left", () async {
       final live = backendOver([
         [finish],
       ], respond: (_) => ok("hello\n"));
-      await send(live, "!echo hello");
+      await send(live, "!echo hello", attachments: [testAttachment("notes.txt")]);
       await send(live, "what did that say?");
       final held = client.sent.single.map((m) => (m.role, m.text)).toList();
 
@@ -350,7 +354,11 @@ void main() {
           id: "m1",
           role: MessageRole.user,
           createdAt: DateTime(2026),
-          parts: const [MessagePart.text(text: "!echo hello")],
+          parts: const [
+            MessagePart.file(
+                resource: "r1", filename: "notes.txt", mimeType: "text/plain"),
+            MessagePart.text(text: "!echo hello"),
+          ],
         ),
         Message(
           id: "m2",
@@ -363,6 +371,7 @@ void main() {
       ]);
 
       expect(client.sent.single.map((m) => (m.role, m.text)), held);
+      expect(held.map((m) => m.$2).join("\n"), contains("notes.txt"));
     });
   });
 

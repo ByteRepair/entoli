@@ -251,6 +251,12 @@ oldest-first: what it holds is the text of every block in it, so one that grew
 with the conversation would be a second copy of the chat in a process that
 already has one.
 
+`CodeBlock.span` is optional, and omitting it is how a caller says there is
+nothing to highlight — a `!` command's output is not a language, and guessing
+one would colour a stack trace as though it were. The block then asks the same
+cache, so it gets the plain span *and* gets it back identical on every rebuild,
+which is what a caller assembling its own per frame would have thrown away.
+
 `re_highlight` is highlight.js's grammars and themes in pure Dart, which is the
 whole reason it is the one here: the alternative with the more recent commits,
 `syntax_highlight`, pulls `super_clipboard` and so a Rust toolchain into the
