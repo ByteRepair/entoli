@@ -324,12 +324,36 @@ The honest answer is narrower than the word. ggml has one NPU backend,
 later — everything else a phone calls an NPU (MediaTek's APU, Samsung's, Google's
 Tensor) has no backend in llama.cpp at all, and Android's own NNAPI, which
 would have covered them, was deprecated in Android 15 and never had one either.
-The rest of what can be offloaded is a GPU, through OpenCL on Adreno or Vulkan.
+The rest of what can be offloaded is a GPU, and **that is what most phones
+actually have** — a Pixel's Mali, a Galaxy's, a MediaTek device's — since
+Hexagon is Snapdragon alone. So the build carries the **Vulkan** backend too,
+and unlike the NPU's it is not opt-in: everything it needs is in the NDK, so it
+costs a `libggml-vulkan.so` in the APK and nothing at setup. That library is not
+small — 36 MB of embedded SPIR-V, more than the rest of llama.cpp put together —
+which is the price of the one accelerator a non-Snapdragon phone can reach.
+`build.sh` builds it against Vulkan 1.1, which is Android 9's (API 28): the
+backend calls 1.1 entry points directly, so on an API 26 or 27 phone the library
+fails to load and `GGML_BACKEND_DL` drops it to the CPU, which is honest, there
+being no 1.1 there to offload to. It is Adreno and Mali and everything else with
+a Vulkan 1.1 driver; OpenCL on Adreno would be faster on that vendor but is a
+second backend to carry, and Vulkan is the one that covers all of them.
 
 So the design does not name the NPU anywhere. `LlamaServer.devices` runs the
 server with `--list-devices` and offers whatever it says it found; the settings
 page labels each by the kind read off its name, and a phone with nothing is told
-so rather than being offered a dropdown of one. Which backends a build carried
+so rather than being offered a dropdown of one.
+
+**And nobody has to pick.** The device setting defaults to null, which is *auto*,
+and `resolveLocalDevice` turns auto into the best accelerator the server found —
+an NPU over a GPU, and either over the CPU — at the moment a model is served.
+The CPU used to be that default, and on a phone with an accelerator it is the
+slow option that looks hung, so a turn now offloads by itself. The picker keeps
+a CPU entry below the accelerators, mapped to `LocalDevice.cpu` rather than null,
+for the one who wants to rule the accelerator out; ggml never names a real
+device that, so the two do not collide. The probe is memoised in the pool —
+`--list-devices` spawns the server, and what a phone has cannot change while the
+app runs — and resolved before the running-server check, so auto compares the
+device actually used and not the word. Which backends a build carried
 is the build's business and which of them find hardware is the phone's, and only
 the binary knows both.
 
@@ -384,9 +408,10 @@ above the floor. A machine of one tier gets all of them, and one the kernel will
 not answer for passes no `-t` at all and leaves the choice where it was.
 
 **arm64 only**, and that is a size decision. The server and its libraries are
-about 18 MB stripped against git's 12, and three ABIs of it would put 56 MB into
-the universal APK. Nothing is lost: a 32-bit phone cannot map a two-gigabyte
-model at all, and x86_64 Android is an emulator. A build without it leaves
+about 55 MB stripped — the Vulkan backend's `libggml-vulkan.so` is 36 MB of that
+on its own — and three ABIs of it would be a large part of the universal APK.
+Nothing is lost: a 32-bit phone cannot map a two-gigabyte model at all, and
+x86_64 Android is an emulator. A build without it leaves
 `LocalLlm.available` false, which is also what the desktops and the web get —
 and there the settings page says so and points at Ollama and LM Studio, which
 are two of the presets and a better answer than a second copy of llama.cpp

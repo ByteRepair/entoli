@@ -38,6 +38,12 @@ class LocalDevice {
   /// What `--device` takes, e.g. `HTP0` or `Vulkan0`.
   final String name;
 
+  /// The stored choice that forces the CPU when the phone does have an
+  /// accelerator — distinct from a null choice, which is "use the best one
+  /// found". Never a real device: ggml leaves the CPU out of `--list-devices`,
+  /// so nothing it reports is named this.
+  static const cpu = "cpu";
+
   /// The hardware behind it, in the backend's own words.
   final String description;
 

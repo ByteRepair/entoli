@@ -100,7 +100,9 @@ void main() {
     );
     await pumpOnDevice(tester);
 
-    await tester.tap(find.text("CPU"));
+    // "Auto" is the resting label now, not "CPU": null means the best
+    // accelerator found, and the CPU is a choice below it.
+    await tester.tap(find.text("Auto"));
     await settleIo(tester);
     await tester.tap(find.text("NPU · Hexagon NPU").last);
     await settleIo(tester);
