@@ -60,9 +60,9 @@ void main() {
       store: FileChatStore(config),
       options: options,
       registry: LlmRegistry(
-        providers: () => providers,
+        endpoints: () =>
+            [for (final p in providers) LlmEndpoint(p, build: (_, _) => client)],
         lookupEnv: (_) => null,
-        build: (_, _) => client,
       ),
     );
   }

@@ -22,6 +22,7 @@ import "../widgets/provider_dialog.dart";
 import "../widgets/provider_model_selector.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "local_model_settings.dart";
 import "terminal_settings.dart";
 import "voice_settings.dart";
 import "../workspace/workspace_page.dart";
@@ -33,6 +34,7 @@ import "../workspace/workspace_page.dart";
 enum SettingsCategory {
   general("General", Icons.tune),
   terminal("Terminal", Icons.terminal),
+  onDevice("On-device", Icons.memory),
   voice("Voice", Icons.graphic_eq),
   assistant("Assistant", Icons.assistant_outlined),
   providers("Providers", Icons.cloud_outlined),
@@ -146,6 +148,17 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           // Draws its own divider, since a build with no proot in it has no
           // catalog to put under one.
           RootfsCatalogSection(),
+        ],
+      // Beside Terminal rather than under LLMs, and for the same reason it is:
+      // what is picked is two lines and the catalog under it is the rest of the
+      // page. Where a model runs is also a machine question rather than a
+      // question about models — the LLMs category is what a chat is answered
+      // by, and a model here appears there like any other.
+      SettingsCategory.onDevice => const [
+          LocalModelSection(),
+          // Draws its own divider, since a build with no server in it has no
+          // catalog to put under one.
+          LocalModelCatalogSection(),
         ],
       // Its own category rather than a section under General: the two pickers
       // are two lines and the catalog under them is the rest of the page.

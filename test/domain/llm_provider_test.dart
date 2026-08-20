@@ -186,12 +186,14 @@ void main() {
     LlmRegistry registryOver() {
       built = [];
       return LlmRegistry(
-        providers: () => providers,
+        endpoints: () => [
+          for (final provider in providers)
+            LlmEndpoint(provider, build: (config, key) {
+              built.add("${config.id}:$key");
+              return FakeLlmClient(const []);
+            }),
+        ],
         lookupEnv: (name) => environment[name],
-        build: (config, key) {
-          built.add("${config.id}:$key");
-          return FakeLlmClient(const []);
-        },
       );
     }
 

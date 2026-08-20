@@ -31,3 +31,16 @@ PROOT_SHA256=80118aca363757bb2ff212ac04f12600c893c6a84aea3cf9434311cd3dafb951
 TALLOC_VERSION=2.5.0
 TALLOC_URL="https://download.samba.org/pub/talloc/talloc-$TALLOC_VERSION.tar.gz"
 TALLOC_SHA256=912afa237510ae542a7733998eb18a12bcda35ab6729c8e2ddb43e8d0ebab007
+
+# llama.cpp, which is the whole of running a model on the device: its server
+# speaks the same `/chat/completions` shape as every hosted provider, so a model
+# on the phone reaches the agent through the client that was already there.
+#
+# Security-relevant like the three above and more so: it parses GGUF files
+# fetched off the internet, in a process of this app's own.
+#
+# A release tag rather than a branch, and the tarball GitHub generates for one —
+# the same bargain proot makes above.
+LLAMA_CPP_VERSION=b10509
+LLAMA_CPP_URL="https://github.com/ggml-org/llama.cpp/archive/refs/tags/$LLAMA_CPP_VERSION.tar.gz"
+LLAMA_CPP_SHA256=63eb7bb55a46051ca523a670621cfaa6f4a1b3ea78e1cfc34a45c0af5139df0e

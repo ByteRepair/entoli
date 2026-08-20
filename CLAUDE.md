@@ -33,7 +33,8 @@ named in a cross-reference is findable from this list.
   Web search
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
-- `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot
+- `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
+  Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, The app icon, The debug build's own
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
@@ -189,11 +190,17 @@ it.
 - Package the Linux build:
   `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.
-- Bundled tools (Android's git and proot): `ANDROID_NDK_ROOT=~/.android/ndk/<version>
-  tool/bundle/build.sh arm64-v8a` then `tool/bundle/stage.sh`. Neither is run by
-  the app build; without them an APK has no git in it and no way to run a Linux.
-  The git half needs `perl` with `FindBin`, which the `flutter-dev` toolbox has
-  and this host does not.
+- Bundled tools (Android's git, proot and llama.cpp): `ANDROID_NDK_ROOT=~/.android/ndk/<version>
+  tool/bundle/build.sh arm64-v8a` then `tool/bundle/stage.sh`. None of it is run
+  by the app build; without them an APK has no git in it, no way to run a Linux,
+  and no model server. The git half needs `perl` with `FindBin`, which the
+  `flutter-dev` toolbox has and this host does not; the llama.cpp half needs
+  cmake and ninja, which is the same toolbox again, and is built for arm64
+  alone.
+- The NPU is opt-in and wants Qualcomm's SDK, which is behind an account:
+  `HEXAGON_SDK_ROOT=~/Qualcomm/Hexagon_SDK/6.6.0.1 tool/bundle/build.sh arm64-v8a`.
+  Without it the build carries the CPU backend and the settings page says the
+  device has no accelerator — see "What the NPU actually is".
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you

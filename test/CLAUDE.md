@@ -46,8 +46,10 @@ client would only ever prove the fake. `file_rootfs_store_test.dart` is the same
 again for a downloaded Linux, and goes one further by unpacking with the
 machine's real `tar`: the execute bit and the symlink it writes are the whole
 reason the app shells out to it, and only a real one proves they survive.
+`file_local_model_store_test.dart` is the third, for a downloaded model, and the
+one thing it adds is the checksum: a GGUF that arrived wrong is not kept.
 
-`downloads_test.dart` is what both catalogs share rather than either of them:
+`downloads_test.dart` is what the catalogs share rather than any one of them:
 the notification a phone gets while the app is off screen, which is the one
 thing `Downloads` owns that no page draws. `installing` on both store fakes
 holds a download open so there is a mid-flight to assert about, and `failWith`
@@ -61,6 +63,14 @@ faked either: `local_shell_test.dart` builds a `Sandbox` out of `/usr/bin/env`,
 which really runs, and `proot_test.dart` pins the invocation itself as a pure
 function — between them they are what can be checked about proot on a machine
 with no Android on it.
+
+`TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
+page — whether this build has a server at all, and which models are downloaded.
+`FakeLocalLlm.started` is what its tests assert on, since the point of that page
+is that picking a model is what starts a server and with what; `ready: false` is
+a model that will not load, which is the one failure the page has to draw. What
+the server is actually asked to do is `llama_server_test.dart`, a pure function
+again for the reason `proot_test.dart` is one.
 
 `FakeBackend.runningTurns` is the one thing on it that a scripted turn does not
 drive: a scripted turn is over the moment its events are yielded, so
