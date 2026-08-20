@@ -47,6 +47,7 @@ class AndroidVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool onDeviceOnly = false,
   }) async {
     if (!speech.isNative || (recognition != null && !recognition.isNative)) {
       throw StateError("Android runs the system voice engines, not a model.");
@@ -54,7 +55,7 @@ class AndroidVoice extends Voice {
     Listener? listener;
     if (recognition != null) {
       (await openMicrophone()).dispose();
-      listener = AndroidSpeechRecognizer();
+      listener = AndroidSpeechRecognizer(onDeviceOnly: onDeviceOnly);
     }
     // `speaker` is the sherpa catalog's idea of which voice in a model file to
     // use, and the system synthesiser has no such thing — the voice is the
@@ -97,10 +98,12 @@ class AndroidVoiceBridge {
 /// `onRmsChanged`, which the platform emits as an RMS in dB — mapped to 0–1
 /// the way the sherpa path maps its own RMS.
 class AndroidSpeechRecognizer implements Listener {
-  AndroidSpeechRecognizer() {
+  AndroidSpeechRecognizer({this.onDeviceOnly = false}) {
     _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
     unawaited(_start());
   }
+
+  final bool onDeviceOnly;
 
   late final StreamSubscription<MethodCall> _calls;
 
@@ -114,7 +117,7 @@ class AndroidSpeechRecognizer implements Listener {
   Future<void> _start() async {
     if (_closed) return;
     try {
-      await voiceChannel.invokeMethod<String>("startRecognition");
+      await voiceChannel.invokeMethod<String>("startRecognition", onDeviceOnly);
     } on PlatformException catch (e) {
       _fail(_message(e));
     } on MissingPluginException {

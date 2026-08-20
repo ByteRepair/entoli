@@ -532,14 +532,19 @@ class FakeVoice extends Voice {
   /// only speaks, which is what reading one message out asks for.
   RecognitionModel? listeningWith;
 
+  /// Whether the last [start] was told the network may not hear the user.
+  bool listeningOnDeviceOnly = false;
+
   @override
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool onDeviceOnly = false,
   }) async {
     if (refusal != null) throw StateError(refusal!);
     listeningWith = recognition;
+    listeningOnDeviceOnly = onDeviceOnly;
     return session = FakeVoiceSession();
   }
 }

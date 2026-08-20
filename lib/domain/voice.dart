@@ -35,10 +35,15 @@ abstract class Voice {
   /// **With no [recognition] model there is nothing to listen with**: no
   /// microphone is opened and the session only speaks. That is the button
   /// under a message, which reads one message out and is not voice mode.
+  ///
+  /// [onDeviceOnly] refuses a recognizer that would use the network. Only the
+  /// Android system service has one to refuse; every model in the catalog runs
+  /// on the device whatever this says.
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool onDeviceOnly = false,
   });
 }
 
@@ -133,6 +138,7 @@ class UnavailableVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool onDeviceOnly = false,
   }) async =>
       throw UnsupportedError("Voice mode is not available in a browser.");
 }

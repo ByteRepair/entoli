@@ -38,6 +38,8 @@ class SherpaVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    // Every model here runs on the device, so there is nothing to refuse.
+    bool onDeviceOnly = false,
   }) async {
     Listener? listener;
     if (recognition != null) {

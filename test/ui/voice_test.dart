@@ -55,6 +55,14 @@ void main() {
   }
 
   group("a spoken turn", () {
+    test("is started with what the on-device switch says", () async {
+      await app.container
+          .read(appSettingsProvider.notifier)
+          .setVoiceOnDeviceOnly(true);
+      await startVoice();
+      expect(app.voice.listeningOnDeviceOnly, isTrue);
+    });
+
     test("is an ordinary turn: same records, same log", () async {
       app.backend.scriptedEvents = [
         const TextDelta("Right away."),

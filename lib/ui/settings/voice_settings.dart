@@ -25,6 +25,10 @@ class VoiceSection extends ConsumerWidget {
     final canListen = voice.available;
     final settings = ref.watch(appSettingsProvider);
     final installed = ref.watch(installedVoiceModelsProvider);
+    final hearsNatively =
+        voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)
+                ?.isNative ??
+            false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,8 +36,7 @@ class VoiceSection extends ConsumerWidget {
         SectionHeader(
           "Voice mode",
           description: canListen
-              ? "What listens and what speaks. Both run on this device: nothing "
-                  "said out loud is sent anywhere the typed conversation is not."
+              ? _listens(hearsNatively)
               : "Voice mode needs a microphone and models on disk, and a "
                   "browser has neither.",
         ),
@@ -54,9 +57,24 @@ class VoiceSection extends ConsumerWidget {
           onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
         ),
         _SpeakerField(settings: settings),
+        if (hearsNatively) const _OnDeviceOnlyToggle(),
         if (!voice.downloadsModels) _MissingEngines(installed: installed),
       ],
     );
+  }
+
+  /// "Nothing leaves this device" is true of every downloaded model and not of
+  /// the system's recognition service, which may answer over the network — so
+  /// it is not claimed where that is what is picked, and the switch below is
+  /// where it becomes true again.
+  static String _listens(bool natively) {
+    const opening = "What listens and what speaks. ";
+    if (natively) {
+      return "${opening}Both are this device's own engines, and what it hears "
+          "may reach the network unless the switch below keeps it here.";
+    }
+    return "${opening}Both run on this device: nothing said out loud is sent "
+        "anywhere the typed conversation is not.";
   }
 }
 
@@ -171,6 +189,29 @@ class _Action extends ConsumerWidget {
             ? () => ref.read(voiceModelsProvider.notifier).install(model)
             : null,
       );
+}
+
+/// Whether the device's recognition service may use the network. Drawn only for
+/// the Android sentinel, which is the one pick that has a network to use. See
+/// "What is asked, and what to do when it is refused" in
+/// `lib/data/voice/CLAUDE.md`.
+class _OnDeviceOnlyToggle extends ConsumerWidget {
+  const _OnDeviceOnlyToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(appSettingsProvider.select((s) => s.voiceOnDeviceOnly));
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text("Only listen on this device"),
+      subtitle: const Text(
+          "Keep what you say off the network. Android's speech recognition "
+          "needs a language pack downloaded for that, in its own settings; "
+          "without one, voice mode says so instead of listening online."),
+      value: on,
+      onChanged: ref.read(appSettingsProvider.notifier).setVoiceOnDeviceOnly,
+    );
+  }
 }
 
 /// What to do when the device has no engine for one half of voice mode. Only

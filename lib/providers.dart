@@ -346,6 +346,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setVoiceSpeaker(int speaker) =>
       _update((s) => s.voiceSpeaker = speaker);
 
+  /// It reaches the next voice session rather than the running one: the flag
+  /// travels as a `start` argument, and a session already listening has told
+  /// the platform which recognizer it wanted.
+  Future<void> setVoiceOnDeviceOnly(bool on) =>
+      _update((s) => s.voiceOnDeviceOnly = on);
+
   /// Which Linux the agent's commands run inside, or null for Android itself.
   /// It reaches the next command rather than the next turn: the shell resolves
   /// this per command.

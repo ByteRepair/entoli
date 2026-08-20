@@ -29,6 +29,7 @@ class AppSettings {
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
     this.voiceSpeaker = 0,
+    this.voiceOnDeviceOnly = false,
     this.assistantProject,
     this.assistantView = AssistantView.chat,
     this.rootfsId,
@@ -89,6 +90,13 @@ class AppSettings {
   String? voiceRecognitionModelId;
   String? voiceSpeechModelId;
   int voiceSpeaker;
+
+  /// Whether the device's own recognition service may only listen without the
+  /// network. Off, because a phone with no language pack downloaded would then
+  /// hear nothing at all — see "What is asked, and what to do when it is
+  /// refused" in `lib/data/voice/CLAUDE.md`. Only the Android sentinel reads
+  /// it: a downloaded model has no network to keep away from.
+  bool voiceOnDeviceOnly;
 
   /// Which project the system's assistant gesture opens a chat in. Null is the
   /// default project, the same null `selectedProjectProvider` uses. App-level:
@@ -159,6 +167,7 @@ class AppSettings {
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
+        voiceOnDeviceOnly: json["voiceOnDeviceOnly"] as bool? ?? false,
         assistantProject: _orNull(json["assistantProject"] as String?),
         assistantView: AssistantView.fromName(json["assistantView"] as String?),
         rootfsId: _orNull(json["rootfsId"] as String?),
@@ -218,6 +227,7 @@ class AppSettings {
         voiceRecognitionModelId: voiceRecognitionModelId,
         voiceSpeechModelId: voiceSpeechModelId,
         voiceSpeaker: voiceSpeaker,
+        voiceOnDeviceOnly: voiceOnDeviceOnly,
         assistantProject: assistantProject,
         assistantView: assistantView,
         rootfsId: rootfsId,
@@ -247,6 +257,7 @@ class AppSettings {
         "voiceRecognitionModelId": voiceRecognitionModelId,
       if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
       if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
+      if (voiceOnDeviceOnly) "voiceOnDeviceOnly": voiceOnDeviceOnly,
       if (assistantProject != null) "assistantProject": assistantProject,
       "assistantView": assistantView.name,
       if (rootfsId != null) "rootfsId": rootfsId,

@@ -197,5 +197,55 @@ void main() {
 
       expect(find.textContaining("This device has nothing to"), findsNothing);
     });
+
+    testWidgets("the on-device switch belongs to the system service alone",
+        (tester) async {
+      app = TestApp.create(
+        voice: FakeVoice(downloadsModels: false),
+        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+        voiceModels: voiceModelIds,
+      );
+      await pumpVoice(tester);
+
+      final toggle = find.text("Only listen on this device");
+      await scrollTo(tester, toggle);
+      expect(toggle, findsOneWidget);
+
+      // A downloaded model has no network to keep away from, so the switch
+      // would be a promise about something that was never in question.
+      await pick(tester, recognition: voiceModelPair.recognition);
+      await tester.pumpAndSettle();
+      expect(find.text("Only listen on this device"), findsNothing);
+    });
+
+    testWidgets("the flat privacy claim is not made for the system service",
+        (tester) async {
+      app = TestApp.create(
+        voice: FakeVoice(downloadsModels: false),
+        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+      );
+      await pumpVoice(tester);
+
+      // The service may answer over the network, so the header says what the
+      // switch below is for rather than claiming nothing leaves the device.
+      expect(find.textContaining("may reach the network"), findsOneWidget);
+      expect(find.textContaining("is sent anywhere the typed"), findsNothing);
+    });
+
+    testWidgets("switching it on is stored", (tester) async {
+      app = TestApp.create(
+        voice: FakeVoice(downloadsModels: false),
+        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+      );
+      await pumpVoice(tester);
+
+      final toggle =
+          find.widgetWithText(SwitchListTile, "Only listen on this device");
+      await scrollTo(tester, toggle);
+      await tester.tap(toggle);
+      await settleIo(tester);
+
+      expect(app.container.read(appSettingsProvider).voiceOnDeviceOnly, isTrue);
+    });
   });
 }

@@ -259,6 +259,32 @@ has no speech recognition for that language. **On-device stays the first rung**,
 since the rest of voice mode is on the device, and being wrong about it now
 costs one fast refusal instead of the whole feature.
 
+**The rungs below the first go to the network, and that is a thing to be able
+to say no to.** Every other model voice mode can use is a file on this disk, and
+the settings page says so — so a ladder that quietly ends up at a server would
+make the page's own promise false on the one platform that does not download
+anything. `voiceOnDeviceOnly` is the answer, drawn as *Only listen on this
+device* under the recognition picker and only where the Android sentinel is what
+is picked: with it on, the ladder is one rung long and a refusal is reported
+instead of answered. It travels as a `start` argument the way the models do.
+
+It is **off** by default, because on is a promise the device may not be able to
+keep: the service needs a language pack downloaded, and the phone this was found
+on had none. On is worth having anyway — that phone is then told what is missing
+rather than sent online without being asked, which is the whole of what the
+switch buys.
+
+**On is `createOnDeviceSpeechRecognizer` where the platform has one**, rather
+than `EXTRA_PREFER_OFFLINE` again. The extra is a *preference*, and a service is
+free to ignore it; the platform recognizer (Android 13, and
+`isOnDeviceRecognitionAvailable` before it) is the only one Android promises
+never leaves the device. Where there is none, the chosen service is bound with
+the preference instead — the same promise kept as well as this device can keep
+it, which is the honest answer for a phone that has no way to guarantee it. It
+is also the one recognizer that is in no list and has no index, so `bound` is
+what the walk reads: null there is the platform's own, and a walk with nowhere
+to go next.
+
 **Asking first is the obvious alternative and is the slower one.**
 `checkRecognitionSupport` will name the languages a bound service has
 downloaded, so on Android 13 the rung could be picked rather than found — but it

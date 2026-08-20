@@ -89,7 +89,11 @@ object VoiceChannel {
             }
             "stopSpeech" -> { tts?.stop(); result.success(null) }
             "disposeSpeech" -> { disposeTts(); result.success(null) }
-            "startRecognition" -> { startRecognition(); result.success(null) }
+            "startRecognition" -> {
+                onDeviceOnly = call.arguments as? Boolean ?: false
+                startRecognition()
+                result.success(null)
+            }
             "setRecognitionListening" -> {
                 setRecognitionListening(call.arguments as? Boolean ?: true)
                 result.success(null)
@@ -195,12 +199,19 @@ object VoiceChannel {
     private var services: List<ComponentName> = emptyList()
     private var service = 0
 
+    // The service the bound recognizer is, and null for the platform's own —
+    // which is in no list and has no index, so this is what the rest of the
+    // walk reads rather than deriving it from [service].
+    private var bound: ComponentName? = null
+
+    private var onDeviceOnly = false
+
     // Transient faults since anything was last heard — see [retry].
     private var faults = 0
 
-    // The services already asked for a model. A fetch rather than a retry, so
-    // once each, and it outlives the session that discovered the gap.
-    private val downloadAsked = mutableSetOf<ComponentName>()
+    // The recognizers already asked for a model. A fetch rather than a retry,
+    // so once each, and it outlives the session that found the gap.
+    private val downloadAsked = mutableSetOf<ComponentName?>()
 
     private fun startRecognition() {
         sessionOpened = false
@@ -230,15 +241,33 @@ object VoiceChannel {
     // the time this returns.
     private fun ensureRecognizer(): SpeechRecognizer? {
         recognizer?.let { return it }
+        val fresh = onDeviceRecognizer() ?: serviceRecognizer() ?: return null
+        fresh.setRecognitionListener(recognitionListener)
+        recognizer = fresh
+        return fresh
+    }
+
+    // The platform's own on-device recognizer, where the user has asked for one
+    // and the device has one. `EXTRA_PREFER_OFFLINE` is a preference a service
+    // may ignore, and this is the only recognizer Android promises never leaves
+    // the device — so a switch that says "only" gets one that means it.
+    private fun onDeviceRecognizer(): SpeechRecognizer? {
+        if (!onDeviceOnly || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return null
+        }
+        if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(appContext)) return null
+        bound = null
+        return SpeechRecognizer.createOnDeviceSpeechRecognizer(appContext)
+    }
+
+    private fun serviceRecognizer(): SpeechRecognizer? {
         if (services.isEmpty()) services = recognitionServices(appContext)
         val component = services.getOrNull(service) ?: run {
             fail("Speech recognition is not available on this device.")
             return null
         }
-        val fresh = SpeechRecognizer.createSpeechRecognizer(appContext, component)
-        fresh.setRecognitionListener(recognitionListener)
-        recognizer = fresh
-        return fresh
+        bound = component
+        return SpeechRecognizer.createSpeechRecognizer(appContext, component)
     }
 
     private fun recognizerIntent(ask: Ask): Intent =
@@ -277,22 +306,36 @@ object VoiceChannel {
     }
 
     // The service cannot hear in the language it was asked for, or has no model
-    // downloaded for it.
+    // downloaded for it. Every rung below the first goes to the network, so
+    // there is nowhere to step to when the user has said it may not.
     private fun askDifferently() {
         if (ask == Ask.OnDevice) offerDownload()
-        val next = Ask.entries.getOrNull(ask.ordinal + 1)
+        val next = if (onDeviceOnly) null else Ask.entries.getOrNull(ask.ordinal + 1)
         if (next != null) {
             ask = next
             restart()
         } else {
-            val language = Locale.getDefault().displayLanguage
-            nextService("This device has no speech recognition for $language.")
+            nextService(refusal())
         }
     }
 
-    // [message] is what to say when this was the last service.
+    private fun refusal(): String {
+        val base = "This device has no speech recognition for " +
+            "${Locale.getDefault().displayLanguage}."
+        // Named without naming the switch: the label is Dart's, and a reworded
+        // one would leave this sentence describing something that is not there.
+        return if (onDeviceOnly) {
+            "$base Download its language pack in Android's settings, or let it " +
+                "listen online."
+        } else {
+            base
+        }
+    }
+
+    // [message] is what to say when this was the last service. The platform's
+    // own recognizer is not one of them and has no next.
     private fun nextService(message: String) {
-        if (service + 1 >= services.size) return fail(message)
+        if (bound == null || service + 1 >= services.size) return fail(message)
         service++
         ask = Ask.OnDevice
         rebind()
@@ -302,6 +345,7 @@ object VoiceChannel {
     private fun rebind() {
         recognizer?.destroy()
         recognizer = null
+        bound = null
         sessionOpened = false
     }
 
@@ -323,9 +367,8 @@ object VoiceChannel {
     private fun offerDownload() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val recognizer = this.recognizer ?: return
-        val component = services.getOrNull(service) ?: return
         val tag = languageTag() ?: return
-        if (downloadAsked.add(component)) requestModel(recognizer, tag)
+        if (downloadAsked.add(bound)) requestModel(recognizer, tag)
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
