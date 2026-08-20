@@ -47,6 +47,12 @@ again for a downloaded Linux, and goes one further by unpacking with the
 machine's real `tar`: the execute bit and the symlink it writes are the whole
 reason the app shells out to it, and only a real one proves they survive.
 
+`downloads_test.dart` is what both catalogs share rather than either of them:
+the notification a phone gets while the app is off screen, which is the one
+thing `Downloads` owns that no page draws. `installing` on both store fakes
+holds a download open so there is a mid-flight to assert about, and `failWith`
+on the voice one is a download that stops.
+
 `TestApp.create(proot: …, linuxes: …)` is the two halves the Terminal page turns
 on — whether this build could run a Linux at all, and which are installed — with
 `FakeRootfsStore` behind them. Its `installing` completer holds a download open

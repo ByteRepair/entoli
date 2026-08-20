@@ -47,7 +47,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/share/CLAUDE.md` — Sharing to Entoli
 - `lib/ui/CLAUDE.md` — The theme, The keyboard and the caret
 - `lib/ui/settings/CLAUDE.md` — Setting overrides, Backing it all up
-- `lib/ui/widgets/CLAUDE.md` — Shared UI
+- `lib/ui/widgets/CLAUDE.md` — Shared UI, A catalog of things to download
 - `.github/workflows/CLAUDE.md` — Releasing
 - `linux/packaging/CLAUDE.md` — The Linux AppImage
 - `test/CLAUDE.md` — how the tests are written and what they fake
