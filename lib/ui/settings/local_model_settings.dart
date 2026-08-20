@@ -47,7 +47,6 @@ class LocalModelSection extends ConsumerWidget {
         ),
         if (installed.isEmpty)
           const ListTile(
-            contentPadding: EdgeInsets.zero,
             title: Text("Nothing downloaded yet"),
             subtitle: Text("Fetch one below and it appears in every model "
                 "picker, under On-device."),
@@ -261,7 +260,6 @@ class _PrefillToggle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final on = ref.watch(appSettingsProvider.select((s) => s.localModelPrefill));
     return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
       title: const Text("Prefill the prompt"),
       subtitle: const Text(
           "Warm the default model's system prompt in the background so the "
@@ -286,7 +284,6 @@ class _Prefilling extends ConsumerWidget {
     final pct =
         state.fraction == null ? "" : " · ${(state.fraction! * 100).round()}%";
     return ListTile(
-      contentPadding: EdgeInsets.zero,
       leading: const SizedBox(
         width: 20,
         height: 20,
@@ -311,7 +308,6 @@ class _Running extends ConsumerWidget {
     final running = ref.watch(localLlmStateProvider);
     if (running.isEmpty) {
       return const ListTile(
-        contentPadding: EdgeInsets.zero,
         title: Text("Nothing loaded"),
         subtitle: Text("The first chat to ask for one loads it."),
       );
@@ -320,8 +316,8 @@ class _Running extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final state in running) _RunningRow(state),
-        Align(
-          alignment: Alignment.centerLeft,
+        Padding(
+          padding: const EdgeInsets.only(left: 16, bottom: 8),
           child: TextButton(
             onPressed: () => ref.read(localLlmProvider).stopAll(),
             child: const Text("Unload all"),
@@ -343,7 +339,6 @@ class _RunningRow extends StatelessWidget {
     final name = localModelById(state.modelId)?.name ?? state.modelId;
     return switch (state.phase) {
       LocalLlmPhase.starting => ListTile(
-          contentPadding: EdgeInsets.zero,
           leading: const SizedBox(
             width: 20,
             height: 20,
@@ -353,13 +348,11 @@ class _RunningRow extends StatelessWidget {
           subtitle: const Text("A chat sent before this finishes waits for it."),
         ),
       LocalLlmPhase.ready => ListTile(
-          contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
           title: Text(name),
           subtitle: Text("Answering · ${state.contextLength} tokens of context"),
         ),
       LocalLlmPhase.failed => ListTile(
-          contentPadding: EdgeInsets.zero,
           isThreeLine: true,
           leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
           title: Text("$name would not load"),
