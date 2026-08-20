@@ -124,6 +124,8 @@ void main() {
           log("bash: ${call.argumentsText}");
         case ToolResultEvent(:final result):
           log("  -> rc=${result.returnCode} ${_oneLine(result.output)}");
+        case ShellRunEvent(:final run):
+          log("! ${run.command} -> rc=${run.returnCode} ${_oneLine(run.output)}");
         case ArtifactEvent(:final title, :final entryFile):
           log("artifact: $title (entry: $entryFile)");
         case RetryEvent(:final attempt, :final message):

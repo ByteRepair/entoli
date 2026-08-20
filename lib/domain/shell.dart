@@ -1,7 +1,19 @@
 /// Where the agent's commands run. Desktop and Android have a real shell; a
 /// browser does not, and that is the whole of the difference between the
-/// platforms' agent.
+/// platforms' agent. The `!` syntax that sends a message to the shell instead
+/// of the model is here too, since it is the same shell it reaches.
 library;
+
+/// The command a message runs itself, or null where it is prose for the model.
+/// A leading `!` is the whole of the rule, and what follows it is the command —
+/// blank included, so the composer can say what it is about to do from the
+/// keystroke that decides it rather than a word later.
+///
+/// Read in four places: the backend dispatches on it, the projection words the
+/// run for the model, and the composer and the bubble draw a command rather
+/// than something said. See "Running a command yourself".
+String? shellBypassCommand(String text) =>
+    text.startsWith("!") ? text.substring(1).trim() : null;
 
 /// What a command produced. Mirrors mini-swe-agent's observation shape: a
 /// return code of -1 means the command never ran to completion, and

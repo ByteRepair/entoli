@@ -245,6 +245,127 @@ void main() {
     });
   });
 
+  group("running a command yourself", () {
+    test("a ! message runs the command and never reaches a model", () async {
+      final backend = backendOver([], respond: (_) => ok("hello\n"));
+      final events = await send(backend, "!echo hello");
+
+      expect(shell.ran, ["echo hello"]);
+      expect(client.sent, isEmpty);
+      final run = events.whereType<ShellRunEvent>().single.run;
+      expect((run.command, run.returnCode, run.output), ("echo hello", 0, "hello\n"));
+      expect(events.last, isA<DoneEvent>());
+    });
+
+    test("what it exited with comes back with it", () async {
+      final backend = backendOver([],
+          respond: (_) => const ShellResult(returnCode: 2, output: "no such file"));
+      final events = await send(backend, "!cat nothing");
+
+      expect(events.whereType<ShellRunEvent>().single.run.returnCode, 2);
+    });
+
+    test("the command is what follows the bang, with the space gone", () async {
+      final backend = backendOver([], respond: (_) => ok(""));
+      await send(backend, "!  ls -la  ");
+
+      expect(shell.ran, ["ls -la"]);
+    });
+
+    test("a bang anywhere but the front is prose", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "what does !! do?");
+
+      expect(shell.ran, isEmpty);
+      expect(client.sent, hasLength(1));
+    });
+
+    // The point of running the command yourself: it is not a model's to
+    // approve or to be configured for.
+    test("nothing is asked about, since the user typed it themselves", () async {
+      final backend = backendOver([], respond: (_) => ok(""));
+      final events = await asking(backend, "!rm -rf build").toList();
+
+      expect(shell.ran, ["rm -rf build"]);
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+    });
+
+    test("a chat with no provider can still run one", () async {
+      final backend = backendOver([], respond: (_) => ok("out"));
+      final events = await send(backend, "!ls", provider: null, model: null);
+
+      expect(shell.ran, ["ls"]);
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+    });
+
+    test("it runs in the chat's own workspace", () async {
+      final backend = backendOver([], respond: (_) => ok(""));
+      await send(backend, "!pwd");
+
+      expect(shell.cwds, [config.workspaceDir(chatId)]);
+      expect(Directory(config.workspaceDir(chatId)).existsSync(), isTrue);
+    });
+
+    test("stopping the turn kills the command", () async {
+      final backend = backendOver([]);
+      shell.hang.add("sleep 100");
+
+      final turn = asking(backend, "!sleep 100").toList();
+      await pumpEvents();
+      await backend.abort(chatId);
+      await turn.timeout(const Duration(seconds: 5));
+
+      expect(shell.killed, ["sleep 100"]);
+    });
+
+    test("the next turn's model is told what ran and how it ended", () async {
+      final backend = backendOver([
+        [finish],
+      ], respond: (_) => ok("hello\n"));
+      await send(backend, "!echo hello");
+      await send(backend, "what did that say?");
+
+      final sent = client.sent.single.map((m) => m.text).join("\n");
+      expect(sent, contains("echo hello"));
+      expect(sent, contains('"returncode": 0'));
+    });
+
+    // The live session and what a reload projects out of the log are written
+    // in two places, so this is what keeps them the same conversation.
+    test("a chat carried on after a restart is the one that was left", () async {
+      final live = backendOver([
+        [finish],
+      ], respond: (_) => ok("hello\n"));
+      await send(live, "!echo hello");
+      await send(live, "what did that say?");
+      final held = client.sent.single.map((m) => (m.role, m.text)).toList();
+
+      final restarted = backendOver([
+        [finish],
+      ], respond: (_) => ok("hello\n"));
+      await send(restarted, "what did that say?", history: [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: DateTime(2026),
+          parts: const [MessagePart.text(text: "!echo hello")],
+        ),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: DateTime(2026),
+          parts: const [
+            MessagePart.shellRun(command: "echo hello", returnCode: 0, output: "hello\n"),
+          ],
+        ),
+      ]);
+
+      expect(client.sent.single.map((m) => (m.role, m.text)), held);
+    });
+  });
+
   group("approvals", () {
     test("a pending one is offered until it is answered", () async {
       final backend = backendOver([

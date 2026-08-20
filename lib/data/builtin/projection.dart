@@ -70,6 +70,11 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
             name: toolCall.name,
             argumentsJson: toolCall.argumentsJson ?? "{}",
           ));
+        case ShellRunPart():
+          // The user's own command, worded as what the app did for them. It is
+          // the whole of its turn, so there is nothing else in this response
+          // for it to run into.
+          text.write(shellRunTranscript(part));
         case ToolResultPart():
         case FilePart():
         case ArtifactPart():

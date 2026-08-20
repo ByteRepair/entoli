@@ -417,6 +417,11 @@ void main() {
           messageId: "m1",
           index: 1,
           part: MessagePart.reasoning(text: "thinking", durationMs: 30)),
+      const ChatRecord.part(
+          messageId: "m1",
+          index: 2,
+          part: MessagePart.shellRun(
+              command: "echo hello", returnCode: 0, output: "hello\n")),
       const ChatRecord.append(messageId: "m1", index: 0, text: " more"),
       ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.aborted),
       ChatRecord.rewind(messageId: "m1"),

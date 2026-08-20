@@ -3,8 +3,10 @@ import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../domain/models.dart";
+import "../../../domain/shell.dart";
 import "../../../providers.dart";
 import "../../widgets/attachment_chip.dart";
+import "code_block.dart";
 
 class _SendIntent extends Intent {
   const _SendIntent();
@@ -27,8 +29,11 @@ typedef CompletionToken = ({CompletionKind kind, int start, String query});
 
 /// The word the caret sits in, when it is a trigger token. `/` only counts at
 /// the very start of a message; `@` counts wherever a word begins. Anything
-/// offered here has to dispatch, so this matches `BuiltinBackend`'s patterns.
+/// offered here has to dispatch, so this matches `BuiltinBackend`'s patterns —
+/// the first of which is that a `!` message goes to the shell, where neither a
+/// command of Entoli's nor an agent means anything.
 CompletionToken? activeCompletionToken(TextEditingValue value) {
+  if (shellBypassCommand(value.text) != null) return null;
   final selection = value.selection;
   if (!selection.isValid || !selection.isCollapsed) return null;
   final caret = selection.baseOffset;
@@ -127,6 +132,12 @@ class _ComposerState extends ConsumerState<Composer> {
   final ScrollController _scroll = ScrollController();
   final List<Attachment> _attachments = [];
   CompletionToken? _token;
+
+  /// This message is a command to run rather than something to say. Drawn
+  /// rather than only obeyed: `!` sends the message somewhere else entirely,
+  /// and nothing else in the composer would say so before Send is pressed.
+  bool _shell = false;
+
   int _highlighted = 0;
 
   /// Whether Send would do anything. Kept here so only the button redraws when
@@ -163,9 +174,11 @@ class _ComposerState extends ConsumerState<Composer> {
     // its matches, and that has no business re-running because Send went live.
     _canSend.value = _worthSending;
     final next = activeCompletionToken(widget.controller.value);
-    if (next == _token) return;
+    final shell = shellBypassCommand(widget.controller.text) != null;
+    if (next == _token && shell == _shell) return;
     setState(() {
       _token = next;
+      _shell = shell;
       _highlighted = 0;
     });
   }
@@ -332,10 +345,26 @@ class _ComposerState extends ConsumerState<Composer> {
                         controller: widget.controller,
                         minLines: 1,
                         maxLines: 6,
-                        decoration: const InputDecoration(
-                          hintText: "Message...",
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        // The command in the face a command is read in, so what
+                        // is about to run looks like what it is while it is
+                        // still being typed.
+                        style: _shell ? codeBlockStyle(theme) : null,
+                        decoration: InputDecoration(
+                          hintText: _shell ? "Shell command" : "Message...",
+                          border: const OutlineInputBorder(),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          prefixIcon: _shell
+                              ? Icon(Icons.terminal,
+                                  size: 18, color: theme.colorScheme.tertiary)
+                              : null,
+                          filled: _shell,
+                          fillColor: theme.colorScheme.surfaceContainerHighest,
+                          // Both, or the field goes back to the ordinary
+                          // outline the moment it takes focus — which is
+                          // exactly while a command is being typed.
+                          enabledBorder: _shell ? _shellBorder(theme) : null,
+                          focusedBorder: _shell ? _shellBorder(theme, width: 2) : null,
                         ),
                       ),
                     ),
@@ -379,8 +408,8 @@ class _ComposerState extends ConsumerState<Composer> {
                         valueListenable: _canSend,
                         builder: (context, canSend, _) => IconButton.filled(
                           onPressed: canSend ? _submit : null,
-                          icon: const Icon(Icons.send),
-                          tooltip: "Send",
+                          icon: Icon(_shell ? Icons.play_arrow : Icons.send),
+                          tooltip: _shell ? "Run" : "Send",
                         ),
                       ),
               ],
@@ -390,6 +419,12 @@ class _ComposerState extends ConsumerState<Composer> {
       ),
     );
   }
+
+  /// The outline a message bound for the shell wears.
+  OutlineInputBorder _shellBorder(ThemeData theme, {double width = 1}) =>
+      OutlineInputBorder(
+        borderSide: BorderSide(color: theme.colorScheme.tertiary, width: width),
+      );
 
   PopupMenuItem<VoidCallback> _attachItem(IconData icon, String label, AttachmentKind kind) =>
       PopupMenuItem(

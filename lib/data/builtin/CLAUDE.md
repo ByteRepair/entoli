@@ -118,6 +118,42 @@ subscription is then cancelled, which closes the read end. What that costs is
 whatever the escaped child had still to say, which is the right thing to lose —
 it is still saying it.
 
+### Running a command yourself
+
+A message that starts with `!` is a command, and `BuiltinBackend._runBypass`
+runs it and ends the turn. No model call, no tools, no approval — the user typed
+the command, so there is nobody to ask and nothing to classify. The check comes
+before the model is resolved, which is what makes `!ls` work in a chat with no
+provider configured at all. It is the shell the agent uses, in the same
+workspace and under the same `commandTimeout`, and Stop kills it:
+`_RunningTurns` holds a stop callback rather than a `BuiltinAgent`, so a
+command's `kill` and an agent's `cancel` are the same thing to it.
+
+`shellBypassCommand` in `domain/shell.dart` is the whole of the syntax, and it
+lives there rather than beside `_command` and `_mention` because four places
+read it: this, the projection, the composer and the bubble. A bare `!` is a
+command too — an empty one — so the composer can say what it is about to do from
+the keystroke that decides it rather than a word later.
+
+What the turn writes is one `ShellRunPart`, holding the command and the outcome
+together. Deliberately not a `ToolCallPart` and its result: nothing called a
+tool, and a model reading the conversation back would find itself having chosen
+something it never did. The projection words it as an assistant message
+instead — `shellRunTranscript`, which is `observation` with a sentence over it
+saying who ran it — so the model sees the command and the exit code without
+being told it made the call. As the user it would be two user messages in a row,
+which not every provider accepts.
+
+That wording is used twice on purpose: `_runBypass` appends it to the live
+session as the command finishes, and `projectionOf` builds it again from the log
+after a restart. The two have to agree, and what pins that is
+`builtin_backend_test.dart`'s "a chat carried on after a restart is the one that
+was left", which sends the same second prompt through both and compares what the
+model was given.
+
+An aborted `!` turn writes nothing — no part, and nothing into the session
+either. The command was killed, so whatever it had printed is not an answer.
+
 ## Approvals
 
 `approveMode` (`meta.json` over `settings.json`) is resolved once in

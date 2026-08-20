@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../../domain/ask.dart";
+import "../../domain/models.dart";
 import "../../domain/profile.dart";
 import "task_tool.dart";
 
@@ -237,6 +238,24 @@ String observation({
 }
 
 const _pretty = JsonEncoder.withIndent("  ");
+
+/// How a command the user ran themselves is put to the model, reusing
+/// [observation] so that a run of theirs and a run of the model's read alike —
+/// eliding included, since `!cat` a large file would otherwise be the whole
+/// session.
+///
+/// It goes back as the *assistant*, saying what the app did on the user's
+/// behalf. As the user it would be a second user message in a row, which not
+/// every provider accepts, and as a tool call it would be the model finding
+/// itself having chosen something it never did.
+///
+/// Said here rather than at each end: `BuiltinBackend` appends this to the live
+/// session as the command finishes and `projectionOf` builds it again from the
+/// log, and a chat carried on after a restart has to be the one that was left.
+String shellRunTranscript(ShellRunPart run) =>
+    "The user ran this command in the chat themselves, rather than asking me "
+    "to:\n\n${run.command}\n\n"
+    "${observation(returnCode: run.returnCode, output: run.output, exceptionInfo: run.exceptionInfo)}";
 
 /// What a call the agent never got to is answered with — the ones left over
 /// when a turn is aborted part-way through a message's calls. A call that may

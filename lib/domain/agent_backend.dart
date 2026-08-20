@@ -54,6 +54,15 @@ class ToolResultEvent extends AgentEvent {
   final ToolResult result;
 }
 
+/// A command the user ran themselves finished — the whole of a `!` turn, which
+/// never reaches a model. Carries the part rather than the command and its
+/// outcome separately, since the two are one thing that happened and the
+/// recorder has nothing of its own to add to them.
+class ShellRunEvent extends AgentEvent {
+  const ShellRunEvent(this.run);
+  final ShellRunPart run;
+}
+
 /// An HTML artifact was rendered and saved. Persisted as a [MessagePart] rather
 /// than turn-scoped view state: the artifact is durable, and a reloaded chat
 /// has to redraw the label and re-open it. The tool call/result pair that
