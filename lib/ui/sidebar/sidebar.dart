@@ -363,9 +363,9 @@ class _ChatTile extends ConsumerWidget {
           onSelected: (value) async {
             switch (value) {
               case "pin":
-                await _pin(context, ref);
+                await _setPinned(ref, true);
               case "unpin":
-                await _unpin(context, ref);
+                await _setPinned(ref, false);
               case "rename":
                 await _rename(context, ref);
               case "move":
@@ -400,17 +400,24 @@ class _ChatTile extends ConsumerWidget {
     );
     if (title == null) return;
     await ref.read(chatRepositoryProvider).retitle(chat, title);
-    ref.read(chatControllerProvider(chat.id).notifier).applyTitle(title);
+    if (selected) {
+      ref.read(chatControllerProvider(chat.id).notifier).applyTitle(title);
+    }
     ref.invalidate(chatListProvider);
   }
 
-  Future<void> _pin(BuildContext context, WidgetRef ref) async {
-    await ref.read(chatRepositoryProvider).pinChat(chat.id, chat);
-    ref.invalidate(chatListProvider);
-  }
-
-  Future<void> _unpin(BuildContext context, WidgetRef ref) async {
-    await ref.read(chatRepositoryProvider).unpinChat(chat.id, chat);
+  /// Pinning ends a temporary chat, which the title bar of the open one says —
+  /// so the write is handed to its controller, or the bar keeps counting down
+  /// to an expiry that is no longer there. Only where this chat is the open
+  /// one: reading the notifier for any other builds a controller, and loads a
+  /// conversation nobody is looking at.
+  Future<void> _setPinned(WidgetRef ref, bool pinned) async {
+    final repo = ref.read(chatRepositoryProvider);
+    final written =
+        await (pinned ? repo.pinChat(chat.id, chat) : repo.unpinChat(chat.id, chat));
+    if (selected) {
+      ref.read(chatControllerProvider(chat.id).notifier).applyState(written);
+    }
     ref.invalidate(chatListProvider);
   }
 

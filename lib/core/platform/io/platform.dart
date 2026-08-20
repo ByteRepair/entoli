@@ -1,4 +1,3 @@
-import "dart:convert";
 import "dart:io";
 
 import "package:flutter/foundation.dart";
@@ -74,10 +73,9 @@ Sandbox? platformSandbox({
 Future<String?> platformAbi() => BundledTools.abi();
 
 /// Here `version.json` is inside `flutter_assets`, so the bundle has it.
-Future<String?> platformAppVersion() async {
+Future<String?> platformVersionJson() async {
   try {
-    final json = jsonDecode(await rootBundle.loadString("version.json"));
-    return (json as Map<String, dynamic>)["version"] as String?;
+    return await rootBundle.loadString("version.json");
   } catch (_) {
     return null;
   }

@@ -13,6 +13,9 @@ inputs:
   name:
     description: File name to give the AppImage.
     required: true
+  build-number:
+    description: What About reports after the version. Pubspec carries none.
+    required: true
 
 outputs:
   bundle:
@@ -43,7 +46,10 @@ runs:
       run: flutter pub get
 
     - shell: bash
-      run: flutter build linux --${{ inputs.mode }}
+      env:
+        MODE: ${{ inputs.mode }}
+        BUILD_NUMBER: ${{ inputs.build-number }}
+      run: flutter build linux "--$MODE" --build-number="$BUILD_NUMBER"
 
     - name: Package the AppImage
       id: package

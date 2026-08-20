@@ -72,7 +72,7 @@ Future<String?> promptForText(
         autofocus: true,
         minLines: 1,
         maxLines: maxLines,
-        decoration: InputDecoration(hintText: hint, border: const OutlineInputBorder()),
+        decoration: InputDecoration(hintText: hint),
         onSubmitted: maxLines == 1 ? (_) => Navigator.pop(context, submit()) : null,
       ),
       actions: [
@@ -113,13 +113,13 @@ Future<({String name, String value})?> promptForPair(
           TextField(
             controller: nameField,
             autofocus: name.isEmpty,
-            decoration: InputDecoration(labelText: nameLabel, border: const OutlineInputBorder()),
+            decoration: InputDecoration(labelText: nameLabel),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: valueField,
             autofocus: name.isNotEmpty,
-            decoration: InputDecoration(labelText: valueLabel, border: const OutlineInputBorder()),
+            decoration: InputDecoration(labelText: valueLabel),
             onSubmitted: (_) => Navigator.pop(context, submit()),
           ),
         ],

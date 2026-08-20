@@ -94,7 +94,10 @@ class ChatRepository {
   /// setting change is the source of truth — flipping the app TTL on should
   /// anchor every chat to now, not keep one from 23h ago. The turn path leaves
   /// it false: a turn does not change the TTL, so the anchor is preserved.
-  Future<void> saveState(ChatState state, {bool reanchor = false}) async {
+  ///
+  /// Returns what was written, anchor and all, since it is not what was passed
+  /// in and a caller showing the chat has to draw the difference.
+  Future<ChatState> saveState(ChatState state, {bool reanchor = false}) async {
     final pinned = _isDraft(state.id) ? _draftMeta : null;
     _forgetDraft(state.id);
     final ttl = await _resolveTempTtl(state.id, project: state.project);
@@ -111,6 +114,7 @@ class ChatRepository {
     final anchored = state.copyWith(tempTtlSince: since, tempTtlExpiresAt: expiresAt);
     await _store.saveState(anchored);
     if (pinned != null) await _store.saveMeta(state.id, pinned);
+    return anchored;
   }
 
   /// Re-anchor every chat in a project to now, so a project-level TTL change
@@ -333,11 +337,11 @@ class ChatRepository {
   /// setting — and clearing the anchor and expiry. The on-open prompt's "keep"
   /// answer; the "delete" answer is [deleteChat]. The TTL override lives here
   /// beside [saveState]'s anchoring, so the rules about it stay in one place.
-  Future<void> keepExpiredChat(String chatId, ChatState state) async {
+  Future<ChatState> keepExpiredChat(String chatId, ChatState state) async {
     final meta = await loadMeta(chatId);
     meta.tempChatTtl = TempChatTtl.off;
     await saveMeta(chatId, meta);
-    await saveState(state.copyWith(tempTtlSince: null, tempTtlExpiresAt: null));
+    return saveState(state.copyWith(tempTtlSince: null, tempTtlExpiresAt: null));
   }
 
   /// Pin a chat. Pinned chats sit under a "Pinned" heading in the sidebar and
@@ -345,11 +349,11 @@ class ChatRepository {
   /// set to off so `saveState`'s resolution keeps it that way. The chat-level
   /// override is written even when it already resolved to off, so a later
   /// app/project change cannot revive the expiry under a pinned chat.
-  Future<void> pinChat(String chatId, ChatState state) async {
+  Future<ChatState> pinChat(String chatId, ChatState state) async {
     final meta = await loadMeta(chatId);
     meta.tempChatTtl = TempChatTtl.off;
     await saveMeta(chatId, meta);
-    await saveState(state.copyWith(
+    return saveState(state.copyWith(
       pinned: true,
       tempTtlSince: null,
       tempTtlExpiresAt: null,
@@ -359,9 +363,8 @@ class ChatRepository {
   /// Unpin a chat. The TTL override set by [pinChat] stays, so the chat remains
   /// non-temporary; the chat settings page offers the TTL combobox again, with
   /// `Off` selected, and the user can re-enable temporary from there.
-  Future<void> unpinChat(String chatId, ChatState state) async {
-    await saveState(state.copyWith(pinned: false));
-  }
+  Future<ChatState> unpinChat(String chatId, ChatState state) =>
+      saveState(state.copyWith(pinned: false));
 
   Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse r) =>
       _backend.respondApproval(chatId, approvalId, r);

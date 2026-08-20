@@ -9,6 +9,7 @@ import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 
@@ -20,13 +21,22 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  /// The wide layout: the sidebar sits beside the chat pane, no drawer.
-  Future<void> pumpBeside(WidgetTester tester, {EdgeInsets bars = EdgeInsets.zero}) =>
+  /// The wide layout: the sidebar sits beside the chat pane, no drawer. [beside]
+  /// is that pane, for the tests about what the sidebar does to the chat it is
+  /// not.
+  Future<void> pumpBeside(
+    WidgetTester tester, {
+    EdgeInsets bars = EdgeInsets.zero,
+    Widget? beside,
+  }) =>
       app.pump(
         tester,
         underSystemBars(
           bars,
-          const Row(children: [SizedBox(width: 280, child: Sidebar())]),
+          Row(children: [
+            const SizedBox(width: 280, child: Sidebar()),
+            if (beside != null) Expanded(child: beside),
+          ]),
         ),
       );
 
@@ -503,6 +513,29 @@ void main() {
       expect(saved.state.pinned, isTrue);
       expect(saved.state.tempTtlExpiresAt, isNull);
       expect(saved.state.tempTtlSince, isNull);
+    });
+
+    // The countdown is drawn from the open chat's own state, which the sidebar
+    // does not go through — so pinning used to leave the bar counting down to
+    // an expiry that had just been cleared, until the chat was opened again.
+    testWidgets("pinning the open chat stops its title bar counting down",
+        (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "temp"));
+      await io(tester, () => app.makeTemporary(chat.state));
+      app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
+      await pumpBeside(tester, beside: const ChatPage());
+      final bar = find.byType(AppBar);
+      expect(find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
+          findsOneWidget);
+
+      await openMenu(tester);
+      await tester.tap(find.text("Pin"));
+      await pumpUntil(tester, find.text(pinnedHeading));
+      await settleIo(tester);
+
+      expect(find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
+          findsNothing);
+      expect(find.descendant(of: bar, matching: find.text("Pinned")), findsOneWidget);
     });
 
     testWidgets("pinning sets the chat's TTL override to off", (tester) async {

@@ -28,12 +28,15 @@ Color spokenColour(Brightness brightness) => brightness == Brightness.dark
     ? const Color(0xFF2DD4BF)
     : const Color(0xFF0E9384);
 
-/// The app's palette, in the brightness asked for.
+/// The app's palette, in the brightness asked for. Every field and dropdown is
+/// outlined, so the border is here rather than at each of them — see "The
+/// theme". A field passing its own still wins.
 ThemeData entoliTheme(Brightness brightness) => ThemeData(
       colorScheme: ColorScheme.fromSeed(
         seedColor: entoliIndigo,
         brightness: brightness,
       ),
+      inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
     );
 
 extension AppThemeMode on AppTheme {

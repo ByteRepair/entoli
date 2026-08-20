@@ -78,17 +78,13 @@ class _ProviderDialogState extends State<_ProviderDialog> {
                 decoration: const InputDecoration(
                   labelText: "Name",
                   helperText: "How the model list refers to it, e.g. openrouter",
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<LlmApi>(
                 initialValue: _api,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: "API",
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(labelText: "API"),
                 items: const [
                   DropdownMenuItem(value: LlmApi.openai, child: Text("OpenAI-compatible")),
                   DropdownMenuItem(value: LlmApi.anthropic, child: Text("Anthropic")),
@@ -101,7 +97,6 @@ class _ProviderDialogState extends State<_ProviderDialog> {
                 decoration: const InputDecoration(
                   labelText: "Base URL",
                   helperText: "The versioned root, e.g. https://api.openai.com/v1",
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -113,7 +108,6 @@ class _ProviderDialogState extends State<_ProviderDialog> {
                   helperText: widget.initial?.apiKeyEnv == null
                       ? "Stored in settings.json"
                       : "Leave empty to read \$${widget.initial!.apiKeyEnv} from the environment",
-                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -124,7 +118,6 @@ class _ProviderDialogState extends State<_ProviderDialog> {
                 decoration: const InputDecoration(
                   labelText: "Models",
                   helperText: "Comma-separated. Leave empty to ask the endpoint.",
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 8),
