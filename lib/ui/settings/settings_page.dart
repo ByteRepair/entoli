@@ -12,6 +12,7 @@ import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
+import "../theme.dart";
 import "../widgets/anchored_menu.dart";
 import "../widgets/busy.dart";
 import "../widgets/app_mark.dart";
@@ -29,8 +30,9 @@ import "../workspace/workspace_page.dart";
 
 /// The page's categories, in the order they are offered. Everything an
 /// endpoint is is Providers, everything a model is asked to do is LLMs, General
-/// is the app itself, and Data is all of it at once — the chats, the settings
-/// and the workspaces as one file to keep.
+/// is the app itself, Data is all of it at once — the chats, the settings and
+/// the workspaces as one file to keep — and About is the app rather than
+/// anything it does, which is why it is last.
 enum SettingsCategory {
   general("General", Icons.tune),
   terminal("Terminal", Icons.terminal),
@@ -39,7 +41,8 @@ enum SettingsCategory {
   assistant("Assistant", Icons.assistant_outlined),
   providers("Providers", Icons.cloud_outlined),
   llms("LLMs", Icons.auto_awesome_outlined),
-  data("Data", Icons.inventory_2_outlined);
+  data("Data", Icons.inventory_2_outlined),
+  about("About", Icons.info_outline);
 
   const SettingsCategory(this.label, this.icon);
 
@@ -176,6 +179,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],
       SettingsCategory.data => const [_BackupSection()],
+      SettingsCategory.about => const [_AboutSection()],
     };
 
 /// The categories as a list: beside the page where there is room for one, and
@@ -275,6 +279,59 @@ class _AppearanceSection extends ConsumerWidget {
                       ref.read(appSettingsProvider.notifier).setAppIcon(icon),
                 ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What this build is, who made it, and where the source is. The libraries are
+/// Flutter's own licence page rather than a list kept here — see "What the app
+/// is".
+class _AboutSection extends ConsumerWidget {
+  const _AboutSection();
+
+  static final _repository = Uri.parse("https://github.com/Yiannis128/agent-chat");
+  static const _madeBy = "Made by Yiannis Charalambous";
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final version = ref.watch(appVersionProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader("About"),
+        ListTile(
+          leading: const AppMark(size: 40),
+          title: const Text(appTitle),
+          subtitle: version == null ? null : Text("Version $version"),
+        ),
+        const ListTile(
+          leading: Icon(Icons.person_outline),
+          title: Text(_madeBy),
+        ),
+        ListTile(
+          leading: const Icon(Icons.code),
+          title: const Text("Source on GitHub"),
+          subtitle: Text("$_repository"),
+          trailing: const Icon(Icons.open_in_new, size: 18),
+          onTap: () => ref.read(linkOpenerProvider).open(context, _repository),
+        ),
+        ListTile(
+          leading: const Icon(Icons.balance_outlined),
+          title: const Text("Open source libraries"),
+          subtitle: const Text("Everything Entoli is built on, and its licence."),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => showLicensePage(
+            context: context,
+            applicationName: appTitle,
+            applicationVersion: version,
+            applicationIcon: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: AppMark(size: 48),
+            ),
+            applicationLegalese: _madeBy,
           ),
         ),
       ],

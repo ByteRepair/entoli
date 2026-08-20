@@ -163,6 +163,7 @@ class TestApp {
           // answers for the ABI where a test did not bother to.
           deviceAbiProvider.overrideWithValue(abi ?? (proot ? "arm64-v8a" : null)),
           prootAvailableProvider.overrideWithValue(proot),
+          appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),
         ],
       ),
@@ -454,6 +455,10 @@ Future<void> softKeyboard(WidgetTester tester, {required bool up}) async {
 const voiceModelPair = (recognition: "whisper-tiny", speech: "piper-en_US-amy");
 /// The same pair as a set, which is the shape `TestApp.create` installs.
 final voiceModelIds = {voiceModelPair.recognition, voiceModelPair.speech};
+
+/// What About reads. Nothing serves `version.json` under `flutter test`, so a
+/// test that asserts on the version asserts on this.
+const testAppVersion = "1.2.3";
 
 /// Whether [button] would do anything if it were pressed. A dead one is still
 /// drawn and still hit by a tap, so its callback is the only thing that says so.

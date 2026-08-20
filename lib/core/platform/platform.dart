@@ -117,6 +117,12 @@ RootfsStore createRootfsStore(String cacheDir) => platformRootfsStore(cacheDir);
 
 Future<String?> deviceAbi() => platformAbi();
 
+/// The version this build was made from, out of the `version.json` Flutter
+/// writes from pubspec into every bundle. Here because where that file lands
+/// varies. Null if it could not be read, which About leaves the line out for
+/// rather than a startup failing over a string nothing depends on.
+Future<String?> appVersion() => platformAppVersion();
+
 /// Where a downloaded model is kept, and what runs one. Two calls rather than
 /// one for the reason the voice models and the rootfs are: the settings page
 /// manages what is installed with nothing listening, while the agent needs the

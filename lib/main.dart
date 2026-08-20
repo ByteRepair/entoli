@@ -56,6 +56,9 @@ class AppSession {
     // A third round trip on the same channel, and the only thing that decides
     // which rootfs a download fetches.
     final abi = platform.deviceAbi();
+    // Started with them and awaited below: an asset read off a disk, or a fetch
+    // in a browser, and nothing between wants it.
+    final version = platform.appVersion();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
@@ -114,6 +117,7 @@ class AppSession {
         rootfsStoreProvider.overrideWithValue(rootfs),
         installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
         deviceAbiProvider.overrideWithValue(await abi),
+        appVersionProvider.overrideWithValue(await version),
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
         localModelStoreProvider.overrideWithValue(localModels),
         localLlmProvider.overrideWithValue(server),

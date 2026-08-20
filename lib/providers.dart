@@ -161,6 +161,10 @@ final localLlmStateProvider =
 /// phone from a desktop.
 final deviceAbiProvider = Provider<String?>((ref) => null);
 
+/// What About says this build is. Read once at startup beside the ABI, and null
+/// where the bundle would not answer — see `appVersion` in `core/platform/`.
+final appVersionProvider = Provider<String?>((ref) => null);
+
 /// Whether this build can run a command inside a Linux at all: proot has to
 /// have been packaged for the device's ABI. False everywhere but Android — and
 /// on an Android whose APK was built without it, which the Terminal page says
