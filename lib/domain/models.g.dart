@@ -133,6 +133,23 @@ ToolResultPart _$ToolResultPartFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$ToolResultPartToJson(ToolResultPart instance) =>
     <String, dynamic>{'result': instance.result, 'runtimeType': instance.$type};
 
+ShellRunPart _$ShellRunPartFromJson(Map<String, dynamic> json) => ShellRunPart(
+  command: json['command'] as String,
+  returnCode: (json['returnCode'] as num).toInt(),
+  output: json['output'] as String,
+  exceptionInfo: json['exceptionInfo'] as String?,
+  $type: json['runtimeType'] as String?,
+);
+
+Map<String, dynamic> _$ShellRunPartToJson(ShellRunPart instance) =>
+    <String, dynamic>{
+      'command': instance.command,
+      'returnCode': instance.returnCode,
+      'output': instance.output,
+      'exceptionInfo': instance.exceptionInfo,
+      'runtimeType': instance.$type,
+    };
+
 FilePart _$FilePartFromJson(Map<String, dynamic> json) => FilePart(
   resource: json['resource'] as String,
   filename: json['filename'] as String,

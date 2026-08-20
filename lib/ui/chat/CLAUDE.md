@@ -289,6 +289,28 @@ be configuring a path that no longer runs. The font is the exception in the
 other direction: the sheet's inline `code` and the block are both built on
 `codeFont`, so the bundled face reaches the two of them rather than one.
 
+### A command the user ran
+
+`!` in the composer sends the message to the shell instead of the model, and the
+composer says so from the bang alone: the hint becomes "Shell command", the
+field takes the mono face and a terminal mark, the outline changes colour and
+Send becomes Run. Drawn rather than only obeyed — `!` sends the message
+somewhere else entirely, and nothing else on screen would say so before it is
+pressed. The `/` and `@` menus are off inside one, since neither expands
+there.
+
+The prompt is drawn as the command it is: no markdown, the mono face, and the
+surface a code block sits on rather than the colour the things the user said are
+in. It is an ordinary message underneath — the `!` is what `conv.jsonl` keeps —
+so editing it or regenerating it re-parses to the same command.
+
+The reply is a `ShellRunBubble` and nothing else: the output in a `CodeBlock`,
+and under it what the command exited with. Unhighlighted, because output is not
+a language and guessing one would colour a stack trace as though it were. A
+command that printed nothing says so on the exit row, rather than leaving a
+strip that reads as an answer cut off. What is behind all this is "Running a
+command yourself".
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s

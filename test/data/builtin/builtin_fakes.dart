@@ -111,6 +111,10 @@ class FakeShell extends Shell {
   final ShellResult Function(String command) respond;
 
   final List<String> ran = [];
+
+  /// Where each of [ran] was started, in step with it.
+  final List<String> cwds = [];
+
   final List<String> killed = [];
 
   /// Commands that never finish on their own, so a test can drive an abort.
@@ -125,6 +129,7 @@ class FakeShell extends Shell {
   @override
   ShellRun start(String command, {required String cwd, required Duration timeout}) {
     ran.add(command);
+    cwds.add(cwd);
     return _FakeRun(this, command);
   }
 }

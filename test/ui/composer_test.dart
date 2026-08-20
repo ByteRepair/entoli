@@ -351,6 +351,49 @@ void main() {
     expect(send.top - bar.top, lessThan(bars.top));
   });
 
+  group("a message bound for the shell", () {
+    InputDecoration decoration(WidgetTester tester) =>
+        tester.widget<TextField>(find.byType(TextField)).decoration!;
+
+    testWidgets("says so from the bang alone, before anything follows it",
+        (tester) async {
+      await pump(tester);
+      await type(tester, "!");
+
+      expect(decoration(tester).hintText, "Shell command");
+      expect(find.byIcon(Icons.terminal), findsOneWidget);
+      expect(find.byTooltip("Run"), findsOneWidget);
+    });
+
+    testWidgets("goes back to a message when the bang does", (tester) async {
+      await pump(tester);
+      await type(tester, "!ls");
+      await type(tester, "ls");
+
+      expect(decoration(tester).hintText, "Message...");
+      expect(find.byIcon(Icons.terminal), findsNothing);
+      expect(find.byTooltip("Send"), findsOneWidget);
+    });
+
+    // Nothing in the menu dispatches inside a command, so offering one would be
+    // offering something that does not happen.
+    testWidgets("offers no agent to mention", (tester) async {
+      await pump(tester);
+      await type(tester, "!git commit -m @rev");
+
+      expect(find.byType(ListView), findsNothing);
+    });
+
+    testWidgets("is sent as typed, bang and all", (tester) async {
+      await pump(tester);
+      await type(tester, "!echo hello");
+      await tester.tap(find.byTooltip("Run"));
+      await settleIo(tester);
+
+      expect(sent, ["!echo hello"]);
+    });
+  });
+
   group("the keyboard", () {
     testWidgets("comes up when the field is tapped", (tester) async {
       await pump(tester);

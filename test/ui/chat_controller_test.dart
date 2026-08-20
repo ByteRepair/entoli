@@ -199,6 +199,20 @@ void main() {
     expect(parts.first, isA<ReasoningPart>());
   });
 
+  test("a command the user ran is the whole of its turn, and is persisted", () async {
+    app.backend.scriptedEvents = const [
+      ShellRunEvent(
+          ShellRunPart(command: "echo hello", returnCode: 0, output: "hello\n")),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("!echo hello");
+
+    final reply = messagesOf(id).last;
+    expect(reply.parts.single, isA<ShellRunPart>());
+    final stored = (await app.repo.openChat(id)).messages.last;
+    expect(stored.parts, reply.parts);
+  });
+
   test("thinking is persisted with the conversation", () async {
     app.backend.scriptedEvents = const [
       ReasoningDelta("hmm"),

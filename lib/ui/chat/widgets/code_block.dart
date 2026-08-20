@@ -140,7 +140,7 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
   /// naming it is what stops a palette that changed anything else from being
   /// answered out of the cache.
   static TextSpan _cachedSpanOf(String code, String? language, ThemeData theme) {
-    final style = _blockStyle(theme);
+    final style = codeBlockStyle(theme);
     final key = (
       code: code,
       language: language,
@@ -223,8 +223,10 @@ TextStyle inlineCodeStyle(ThemeData theme) => _codeFont(theme).copyWith(
     );
 
 /// What a block adds: room between the lines, because a block is read as lines
-/// where an inline span is read as part of a sentence.
-TextStyle _blockStyle(ThemeData theme) => _codeFont(theme).copyWith(height: 1.45);
+/// where an inline span is read as part of a sentence. Public because a command
+/// the user ran has output to draw in the same face, with no fence around it to
+/// be parsed out of — see `shell_run.dart`.
+TextStyle codeBlockStyle(ThemeData theme) => _codeFont(theme).copyWith(height: 1.45);
 
 /// The surface a code block sits on, above the page behind it. It belongs to
 /// the markdown style sheet rather than to the block: `pre` is wrapped in the

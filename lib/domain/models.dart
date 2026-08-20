@@ -201,6 +201,18 @@ sealed class MessagePart with _$MessagePart {
     String? responseId,
   }) = ToolCallPart;
   const factory MessagePart.toolResult({required ToolResult result}) = ToolResultPart;
+
+  /// A command the user ran themselves, by starting a message with `!`. Not a
+  /// [ToolCallPart]: no model asked for it, and one reading the conversation
+  /// back would find itself having called a tool it never chose. It carries the
+  /// command as well as the outcome, so the reply says the whole of what
+  /// happened without the prompt above it.
+  const factory MessagePart.shellRun({
+    required String command,
+    required int returnCode,
+    required String output,
+    String? exceptionInfo,
+  }) = ShellRunPart;
   const factory MessagePart.file({
     required String resource,
     required String filename,

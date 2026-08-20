@@ -1106,4 +1106,76 @@ void main() {
 
     expect(find.text("View artifact"), findsOneWidget);
   });
+
+  group("a command the user ran", () {
+    testWidgets("shows the command without the bang that sent it", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.user, const [MessagePart.text(text: "!echo hello")]),
+      );
+
+      expect(find.text("echo hello"), findsOneWidget);
+      expect(find.byIcon(Icons.terminal), findsOneWidget);
+      expect(find.byType(MarkdownBody), findsNothing);
+    });
+
+    testWidgets("what it printed and what it exited with are both shown",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          MessagePart.shellRun(command: "echo hello", returnCode: 0, output: "hello\n"),
+        ]),
+      );
+
+      expect(find.text("hello"), findsOneWidget);
+      expect(find.text("Exit code: 0"), findsOneWidget);
+    });
+
+    testWidgets("one that printed nothing says so rather than reading as cut off",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          MessagePart.shellRun(command: "true", returnCode: 0, output: ""),
+        ]),
+      );
+
+      expect(find.text("Exit code: 0"), findsOneWidget);
+      expect(find.text("no output"), findsOneWidget);
+    });
+
+    testWidgets("one that could not run says why", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const [
+          MessagePart.shellRun(
+            command: "ls",
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "There is no shell here to execute commands in.",
+          ),
+        ]),
+      );
+
+      expect(find.text("Exit code: -1"), findsOneWidget);
+      expect(find.textContaining("no shell here"), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+
+    // It is a message like any other, and resending re-parses it into the same
+    // command.
+    testWidgets("can still be edited and regenerated", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.user, const [MessagePart.text(text: "!echo hello")]),
+        onEdit: (_) {},
+        onRegenerate: () {},
+      );
+      await reveal(tester, find.text("echo hello"));
+
+      expect(enabled(tester, buttonTipped("Edit")), isTrue);
+      expect(enabled(tester, buttonTipped("Regenerate")), isTrue);
+    });
+  });
 }
