@@ -26,10 +26,11 @@
 
     <!-- The Android-system voice engines, which the sentinel picks resolve to.
          From Android 11 an app sees only the packages it declares an interest
-         in, and both `SpeechRecognizer.isRecognitionAvailable` and the query
-         for a TTS engine are answered out of that view: without this they
-         report nothing on every modern phone rather than only on the ones that
-         genuinely have neither. -->
+         in, and the queries for a recognition service and for a TTS engine are
+         both answered out of that view: without this they report nothing on
+         every modern phone rather than only on the ones that genuinely have
+         neither. And a recognition service Entoli cannot see is one it cannot
+         name, which is what `startRecognition` has to do. -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService"/>
