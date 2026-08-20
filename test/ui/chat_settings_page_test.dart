@@ -62,23 +62,18 @@ void main() {
     await settleIo(tester);
   }
 
-  testWidgets("preselects the provider and model stored in meta.json", (tester) async {
+  testWidgets("preselects the model stored in meta.json", (tester) async {
     await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
-    expect(find.text("ollama-cloud"), findsOneWidget);
     expect(find.text("Qwen 2.5"), findsOneWidget);
   });
 
   testWidgets("chosen model is still shown after saving and reopening", (tester) async {
     await openPage(tester);
 
-    await openDropdown(tester, model: false);
-    await tester.tap(find.text("ollama-cloud"));
-    await settleIo(tester);
-
-    await openDropdown(tester, model: true);
-    await tester.tap(find.text("Qwen 2.5"));
+    await openDropdown(tester);
+    await tester.tap(find.text("Qwen 2.5").last);
     await settleIo(tester);
 
     await save(tester);
@@ -86,19 +81,14 @@ void main() {
     expect((await io(tester, () => app.savedMeta(_chatId))).model, "qwen-2.5");
 
     await openPage(tester);
-    expect(find.text("ollama-cloud"), findsOneWidget);
     expect(find.text("Qwen 2.5"), findsOneWidget);
   });
 
   testWidgets("picking a model records the provider it belongs to", (tester) async {
     await openPage(tester);
 
-    await openDropdown(tester, model: false);
-    await tester.tap(find.text("anthropic").last);
-    await settleIo(tester);
-
-    await openDropdown(tester, model: true);
-    await tester.tap(find.text("Claude Sonnet 4"));
+    await openDropdown(tester);
+    await tester.tap(find.text("Claude Sonnet 4").last);
     await settleIo(tester);
 
     await save(tester);
@@ -106,27 +96,11 @@ void main() {
     expect((await io(tester, () => app.savedMeta(_chatId))).model, "claude-sonnet-4");
   });
 
-  testWidgets("switching provider drops a model that is no longer offered", (tester) async {
-    await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
-    await openPage(tester);
-
-    await openDropdown(tester, model: false);
-    await tester.tap(find.text("anthropic"));
-    await settleIo(tester);
-
-    expect(tester.takeException(), isNull);
-    expect(find.text("Qwen 2.5"), findsNothing);
-
-    await save(tester);
-    expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
-  });
-
   testWidgets("a model saved without its provider is still preselected", (tester) async {
     await seedMeta(tester, ChatMeta(model: "qwen-2.5"));
     await openPage(tester);
 
     expect(tester.takeException(), isNull);
-    expect(find.text("ollama-cloud"), findsOneWidget);
     expect(find.text("Qwen 2.5"), findsOneWidget);
   });
 
@@ -134,9 +108,8 @@ void main() {
     await seedGlobalDefault(tester, "ollama-cloud", "qwen-2.5");
     await openPage(tester);
 
-    // provider and model; the approval field names what it inherits instead
-    expect(find.text(defaultOptionLabel), findsNWidgets(2));
-    expect(find.text("Using ollama-cloud"), findsOneWidget);
+    // the model; the approval field names what it inherits instead
+    expect(find.text(defaultOptionLabel), findsOneWidget);
     expect(find.text("Using Qwen 2.5"), findsOneWidget);
   });
 
@@ -145,20 +118,20 @@ void main() {
     await openPage(tester);
     expect(find.text("Qwen 2.5"), findsOneWidget);
 
-    await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").at(1));
+    await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").first);
     await settleIo(tester);
 
     expect(find.text("Qwen 2.5"), findsNothing);
     await save(tester);
     expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
-    expect((await io(tester, () => app.savedMeta(_chatId))).provider, "ollama-cloud");
+    expect((await io(tester, () => app.savedMeta(_chatId))).provider, isNull);
   });
 
   testWidgets("selecting Default in the list is the same as resetting", (tester) async {
     await seedMeta(tester, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
     await openPage(tester);
 
-    await openDropdown(tester, model: true);
+    await openDropdown(tester);
     await tester.tap(find.text(defaultOptionLabel).last);
     await settleIo(tester);
 
@@ -177,7 +150,6 @@ void main() {
         .setDefault((providerId: "anthropic", modelId: "claude-haiku-3"));
     await settleIo(tester);
 
-    expect(find.text("Using anthropic"), findsOneWidget);
     expect(find.text("Using Claude Haiku 3"), findsOneWidget);
     expect((await io(tester, () => app.savedMeta(_chatId))).model, isNull);
   });
@@ -187,7 +159,6 @@ void main() {
     await seedMeta(tester, ChatMeta(provider: "anthropic", model: "claude-haiku-3"));
     await openPage(tester);
 
-    expect(find.text("anthropic"), findsOneWidget);
     expect(find.text("Claude Haiku 3"), findsOneWidget);
     expect(find.text("Qwen 2.5"), findsNothing);
   });
@@ -231,7 +202,7 @@ void main() {
       await scrollTo(tester, find.text("Running commands"));
       expect(find.textContaining("Run without asking"), findsOneWidget);
 
-      await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").at(2));
+      await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").at(1));
       await settleIo(tester);
       await save(tester);
 

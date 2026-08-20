@@ -32,7 +32,7 @@ import "domain/voice.dart";
 import "domain/voice_model.dart"
     show nativeRecognition, nativeSpeech, RecognitionModel, SpeechModel, voiceModelOf;
 import "domain/voice_model_store.dart";
-import "ui/widgets/provider_model_selector.dart";
+import "ui/widgets/model_picker.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());

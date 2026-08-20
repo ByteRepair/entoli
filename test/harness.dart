@@ -29,7 +29,7 @@ import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/ui/widgets/provider_model_selector.dart";
+import "package:agent_chat/ui/widgets/model_picker.dart";
 
 import "fakes.dart";
 
@@ -540,14 +540,13 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
   await settleIo(tester);
 }
 
-/// Open one of the two provider/model dropdowns. Scoped to the picker: other
-/// inheritable fields on the same page are dropdowns of the same type.
-Future<void> openDropdown(WidgetTester tester, {required bool model}) async {
-  final dropdowns = find.descendant(
-    of: find.byType(ProviderModelSelector),
-    matching: find.byType(DropdownButtonFormField<String?>),
-  );
-  await tester.tap(model ? dropdowns.last : dropdowns.first);
+/// Open the model dropdown. Scoped to [ModelPicker]: the optional pickers on
+/// the same page are dropdowns of the same type.
+Future<void> openDropdown(WidgetTester tester) async {
+  await tester.tap(find.descendant(
+    of: find.byType(ModelPicker),
+    matching: find.byType(DropdownButtonFormField<ModelOption?>),
+  ));
   await tester.pumpAndSettle();
 }
 

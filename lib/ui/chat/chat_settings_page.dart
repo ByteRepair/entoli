@@ -10,7 +10,7 @@ import "../../providers.dart";
 import "../sidebar/sidebar.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
-import "../widgets/provider_model_selector.dart";
+import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../workspace/workspace_page.dart";
 
