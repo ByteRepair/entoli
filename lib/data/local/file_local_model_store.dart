@@ -55,8 +55,8 @@ class FileLocalModelStore extends LocalModelStore {
   }
 
   @override
-  Future<void> delete(LocalModel model) async {
-    final dir = Directory(directoryFor(model.id));
+  Future<void> delete(String id) async {
+    final dir = Directory(directoryFor(id));
     if (await dir.exists()) await dir.delete(recursive: true);
   }
 
@@ -64,11 +64,11 @@ class FileLocalModelStore extends LocalModelStore {
   /// up are [DownloadRun]'s; what is left here is the checksum and the marker.
   @override
   Stream<DownloadProgress> install(LocalModel model) => DownloadRun(
-        discard: () => delete(model),
+        discard: () => delete(model.id),
         run: (run) async {
           // Whatever an earlier attempt left: a partial file under a name we
           // are about to write, which is worse than starting again.
-          await delete(model);
+          await delete(model.id);
           final dir = Directory(directoryFor(model.id))
             ..createSync(recursive: true);
 

@@ -209,5 +209,5 @@ class _AlwaysInstalled extends LocalModelStore {
   Stream<DownloadProgress> install(LocalModel model) => const Stream.empty();
 
   @override
-  Future<void> delete(LocalModel model) async {}
+  Future<void> delete(String id) async {}
 }
