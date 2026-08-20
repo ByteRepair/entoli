@@ -99,6 +99,35 @@ class LlamaBinaries {
       environment: binaries.environment,
     );
 
+/// Which device a turn offloads to, given what the user chose and what the
+/// phone turned out to have.
+///
+/// Three cases, and the first is the default. A null choice is *auto*, and auto
+/// is the best accelerator the server found — an NPU over a GPU, and either over
+/// running on the CPU. [LocalDevice.cpu] is how the picker says "the CPU even
+/// so", and it resolves to null, which is ggml's own way of offloading nothing.
+/// Any other value is a device named outright, passed straight through — a
+/// device that has since gone is llama.cpp's to complain about, not ours to
+/// second-guess.
+String? resolveLocalDevice(String? chosen, List<LocalDevice> found) {
+  if (chosen == LocalDevice.cpu) return null;
+  if (chosen != null) return chosen;
+  return bestAccelerator(found)?.name;
+}
+
+/// The accelerator to prefer when nothing was picked: an NPU before a GPU,
+/// since on the one phone that reports both the NPU is the faster, and the
+/// first of a kind otherwise. Null where the server found none — which is the
+/// CPU, and is why not picking is never worse than picking.
+LocalDevice? bestAccelerator(List<LocalDevice> found) {
+  for (final kind in [LocalCompute.npu, LocalCompute.gpu]) {
+    for (final device in found) {
+      if (device.compute == kind) return device;
+    }
+  }
+  return null;
+}
+
 /// The answer for this machine, read once. A lazy top-level `final` because the
 /// cores do not change while the process lives, and every caller is on a path —
 /// the first frame, and a settings page restarting the server — that has no
@@ -165,6 +194,11 @@ class LlamaServerPool extends LocalLlm {
   /// Least recently served first, which is the order [serve] evicts in.
   final _servers = <_Server>[];
 
+  /// The device probe, run once. What the phone has cannot change while the
+  /// process lives, and [serve] reads it on every auto turn — a fresh
+  /// `--list-devices`, which spawns the server binary, is a cost to pay once.
+  Future<List<LocalDevice>>? _deviceProbe;
+
   @override
   final ValueNotifier<List<LocalLlmState>> running = ValueNotifier(const []);
 
@@ -172,7 +206,9 @@ class LlamaServerPool extends LocalLlm {
   bool get available => true;
 
   @override
-  Future<List<LocalDevice>> devices() async {
+  Future<List<LocalDevice>> devices() => _deviceProbe ??= _probeDevices();
+
+  Future<List<LocalDevice>> _probeDevices() async {
     try {
       final result = await Process.run(
         _binaries.server,
@@ -216,9 +252,19 @@ class LlamaServerPool extends LocalLlm {
     final model = localModelById(modelId);
     if (model == null) throw LocalLlmFailure("$modelId is not a model this build knows.");
     final wanted = contextLength ?? model.defaultContext;
+    // Auto by default: a turn asks for a model, not a processor, and the best
+    // accelerator the phone has beats the CPU by enough that picking it is not
+    // a thing to make the user do. Only auto reads the device list, and probing
+    // it spawns the server — so a named device, or the CPU chosen outright,
+    // skips it. Resolved before the list below is touched, so the running-server
+    // check compares the device actually used and not the word "auto", and two
+    // auto turns arriving together still edit the list one after the other, each
+    // resuming from this same await without yielding into it again.
+    final resolved =
+        resolveLocalDevice(device, device == null ? await devices() : const []);
 
     final already = _serverFor(modelId);
-    if (already != null && already.serves(device: device, contextLength: wanted)) {
+    if (already != null && already.serves(device: resolved, contextLength: wanted)) {
       _touch(already);
       await already.ready;
       return already.endpoint;
@@ -239,7 +285,7 @@ class LlamaServerPool extends LocalLlm {
     while (_servers.length >= cap) {
       stopping.add(_servers.removeAt(0));
     }
-    final server = _Server(model: model, device: device, contextLength: wanted);
+    final server = _Server(model: model, device: resolved, contextLength: wanted);
     _servers.add(server);
     _publish();
 

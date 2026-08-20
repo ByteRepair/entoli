@@ -57,13 +57,15 @@ tool/bundle/stage.sh
   `$HOME` rather than `~`: as an argument to `env` or inside quotes a tilde is
   not expanded, and the build fails on a path with a literal `~` in it.
 - llama.cpp needs `cmake` and `ninja`, and is built for `arm64-v8a` only —
-  `LLAMA_ABIS` overrides that. 18 MB an ABI is why; a 32-bit phone cannot map a
-  model anyway and x86_64 Android is an emulator.
+  `LLAMA_ABIS` overrides that. About 55 MB an ABI is why — the Vulkan backend's
+  `libggml-vulkan.so` is 36 MB of it — and a 32-bit phone cannot map a model
+  anyway, x86_64 Android being an emulator.
 - The NPU is opt-in and wants Qualcomm's Hexagon SDK. `tool/android-setup.sh`
   fetches it into `tool/bundle/toolchains/`, checked against the SHA-256 pinned
-  in `versions.sh`, and `build.sh` picks it up from there. Without it the build
-  carries the CPU backend and the settings page says the device has no
-  accelerator.
+  in `versions.sh`, and `build.sh` picks it up from there. Only the NPU is gated
+  on it: the build always carries the CPU and the Vulkan GPU backend, and the
+  settings page says the device has no accelerator only when it has neither an
+  NPU nor a Vulkan-1.1 GPU.
 - CI runs the same two steps from `.github/actions/bundled-tools`, so a release
   APK always has both in it. It does not run `android-setup.sh`: what the NPU
   build emits is compiled by Qualcomm's own toolchain, so whether it can ship is

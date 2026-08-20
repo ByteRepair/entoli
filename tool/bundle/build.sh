@@ -56,10 +56,12 @@ export PATH=$bin:$PATH
 export CFLAGS="-O2 -fPIC -Wl,-z,max-page-size=16384"
 
 # **llama.cpp is arm64 only, and that is a size decision.** The server and its
-# libraries are about 18 MB stripped, and three ABIs of it would put 56 MB into
-# the universal APK. Nothing is lost: a 32-bit phone cannot
-# map a two-gigabyte model at all, and x86_64 Android is an emulator. A build
-# without it leaves `LocalLlm.available` false, which the settings page says.
+# libraries are about 18 MB stripped — nearer 55 with the Vulkan backend, whose
+# `libggml-vulkan.so` is a good 36 MB of embedded SPIR-V on its own — and three
+# ABIs of that would be a lot of a universal APK. Nothing is lost: a 32-bit
+# phone cannot map a two-gigabyte model at all, and x86_64 Android is an
+# emulator. A build without it leaves `LocalLlm.available` false, which the
+# settings page says.
 llama_abis=${LLAMA_ABIS:-arm64-v8a}
 if [[ " $llama_abis " == *" $abi "* ]]; then llama=yes; else llama=no; fi
 
@@ -77,7 +79,11 @@ fetch() {
 echo "==> fetching sources"
 fetch "$TALLOC_URL" "talloc.tar.gz" "$TALLOC_SHA256"
 fetch "$PROOT_URL" "proot.tar.gz" "$PROOT_SHA256"
-if [ "$llama" = yes ]; then fetch "$LLAMA_CPP_URL" "llama.tar.gz" "$LLAMA_CPP_SHA256"; fi
+if [ "$llama" = yes ]; then
+  fetch "$LLAMA_CPP_URL" "llama.tar.gz" "$LLAMA_CPP_SHA256"
+  fetch "$SPIRV_HEADERS_URL" "spirv-headers.tar.gz" "$SPIRV_HEADERS_SHA256"
+  fetch "$VULKAN_HEADERS_URL" "vulkan-headers.tar.gz" "$VULKAN_HEADERS_SHA256"
+fi
 
 # Unpacked and built once per ABI. A second run reuses what is there, which is
 # what makes iterating on the proot step bearable; CI starts from an empty tree
@@ -146,6 +152,42 @@ else
     # cmake seeds CMAKE_C_FLAGS from the environment, and the arm64 linker flag
     # in the CFLAGS this script exports fails the NPU sub-builds' compiler check.
     unset CFLAGS
+
+    # SPIRV-Headers, which ggml-vulkan's cmake requires at configure time.
+    # Installed here, not built: it is headers plus a cmake config, and the one
+    # thing its `project()` makes cmake do is test a compiler — done with host
+    # cc/c++ because the NDK one this script exports would test against Android,
+    # which this host-side step is not. `-DSPIRV-Headers_DIR` below points the
+    # cross build straight at what this installs.
+    spirv_src=$src/SPIRV-Headers-$SPIRV_HEADERS_VERSION
+    spirv=$src/spirv-headers-root
+    [ -d "$spirv_src" ] || tar -C "$src" -xf "$work/spirv-headers.tar.gz"
+    if [ ! -f "$spirv/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake" ]; then
+      CC=/usr/bin/cc CXX=/usr/bin/c++ cmake -S "$spirv_src" -B "$spirv_src/build" \
+        -DCMAKE_INSTALL_PREFIX="$spirv" -DSPIRV_HEADERS_ENABLE_TESTS=OFF >/dev/null
+      cmake --install "$spirv_src/build" >/dev/null
+    fi
+
+    # The Vulkan headers, unpacked and pointed at — the `include/` below is
+    # `-DVulkan_INCLUDE_DIR`. ggml-vulkan.cpp also includes `spirv/…`, which it
+    # expects to sit beside `vulkan/` the way a real Vulkan SDK lays them out
+    # rather than reaching it through the SPIRV-Headers target it never links.
+    # The Vulkan-Headers tarball has no `spirv/`, so the one from SPIRV-Headers
+    # above is merged in to give that include dir the SDK's shape.
+    vulkan_headers=$src/Vulkan-Headers-$VULKAN_HEADERS_VERSION
+    [ -d "$vulkan_headers" ] || tar -C "$src" -xf "$work/vulkan-headers.tar.gz"
+    [ -d "$vulkan_headers/include/spirv" ] ||
+      cp -r "$spirv_src/include/spirv" "$vulkan_headers/include/spirv"
+
+    # The loader stub the backend links, and it is API 28's, not the 26 the rest
+    # of this build uses. ggml-vulkan calls Vulkan 1.1 entry points directly
+    # (`vkGetPhysicalDeviceFeatures2` and kin), which Android got in 9.0 — the 26
+    # stub does not export them and the link fails. The 28 stub resolves them;
+    # the built library still only NEEDs the device's own `libvulkan.so`, so on
+    # an API 26 or 27 phone — where that library lacks the symbols —
+    # `libggml-vulkan.so` fails to load and GGML_BACKEND_DL drops it to the CPU,
+    # which is the honest outcome, there being no Vulkan 1.1 there to offload to.
+    vulkan_lib=$toolchain/sysroot/usr/lib/$host/28/libvulkan.so
     # Everything about this build is the NDK's own toolchain file, which is what
     # makes it the one step here with no adjustments to the source at all.
     #
@@ -178,6 +220,25 @@ else
       # and then cannot start. ggml carries its own threadpool for exactly this
       # case, which is what llama.cpp's own Android instructions use.
       -DGGML_OPENMP=OFF
+      # The GPU backend, and unlike the NPU's it is not opt-in: everything it
+      # needs is in the NDK, so it costs a `libggml-vulkan.so` in the APK and
+      # nothing at setup. It is the only accelerator most phones have — Hexagon
+      # is Snapdragon alone, and a Pixel, a Galaxy or a MediaTek device reaches
+      # its GPU through Vulkan or reaches nothing. `libvulkan.so` is Android's
+      # own from API 24, so the built backend links only libraries a phone has.
+      #
+      # The three paths spell out what `find_package(Vulkan)` would otherwise
+      # hunt for and miss under the cross toolchain: the loader and headers live
+      # in the NDK sysroot at an API-versioned path CMake does not search, and
+      # `glslc` is a host tool the NDK ships off `PATH`. The shader generator
+      # that `glslc` feeds is a host build of its own; ggml auto-detects the
+      # host compiler for it, and finds the system `gcc`/`g++` because the NDK
+      # ships neither name.
+      -DGGML_VULKAN=ON
+      -DVulkan_INCLUDE_DIR="$vulkan_headers/include"
+      -DVulkan_LIBRARY="$vulkan_lib"
+      -DVulkan_GLSLC_EXECUTABLE="$ndk/shader-tools/linux-x86_64/glslc"
+      -DSPIRV-Headers_DIR="$spirv/share/cmake/SPIRV-Headers"
       # The server downloads models when it is told to; this app does its own
       # downloading, and linking curl here would mean cross-compiling it a second
       # time for a feature nothing reaches.

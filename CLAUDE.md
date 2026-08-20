@@ -203,8 +203,10 @@ it.
   with no rootfs installed has no git.
 - The NPU is opt-in and wants Qualcomm's SDK: `tool/android-setup.sh` fetches it
   into `tool/bundle/toolchains/` against a pinned SHA-256 and `build.sh` finds it
-  there. Without it the build carries the CPU backend and the settings page says
-  the device has no accelerator — see "What the NPU actually is".
+  there. Only the NPU is gated on it: the build always carries the CPU and the
+  Vulkan GPU backend, so a build without the SDK still accelerates most phones,
+  and the settings page says the device has no accelerator only when it has
+  neither an NPU nor a Vulkan-1.1 GPU — see "What the NPU actually is".
 - Codegen: `dart run build_runner build` (freezed + json_serializable).
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you

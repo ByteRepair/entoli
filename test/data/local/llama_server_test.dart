@@ -172,6 +172,41 @@ something else entirely
     });
   });
 
+  group("which device a turn ends up on", () {
+    const npu = LocalDevice(name: "HTP0", description: "Hexagon NPU", compute: LocalCompute.npu);
+    const gpu = LocalDevice(name: "Vulkan0", description: "Mali-G715", compute: LocalCompute.gpu);
+
+    test("auto takes the best accelerator, and the NPU beats the GPU", () {
+      // The default a turn arrives with: nobody picked, so it gets the fastest
+      // thing the phone has rather than the CPU it used to fall to.
+      expect(resolveLocalDevice(null, [gpu, npu]), "HTP0");
+      expect(resolveLocalDevice(null, [gpu]), "Vulkan0");
+    });
+
+    test("auto on a phone with no accelerator is the CPU", () {
+      // Null out is ggml offloading nothing, which is the CPU — so not picking
+      // is never worse than picking.
+      expect(resolveLocalDevice(null, const []), isNull);
+    });
+
+    test("the CPU can be chosen even where an accelerator exists", () {
+      // Distinct from auto: the sentinel forces the slow path, which is the
+      // only reason it is in the picker at all.
+      expect(resolveLocalDevice(LocalDevice.cpu, [npu]), isNull);
+    });
+
+    test("a device named outright is passed straight through", () {
+      expect(resolveLocalDevice("Vulkan0", [gpu, npu]), "Vulkan0");
+    });
+
+    test("a resolved device is what reaches the server, auto included", () {
+      // The end of the same road: auto → NPU → `-dev HTP0`, so the offload the
+      // turn was launched with is the one the picker never had to name.
+      expect(valueOf(launch(device: resolveLocalDevice(null, [gpu, npu])).command, "-dev"), "HTP0");
+      expect(launch(device: resolveLocalDevice(LocalDevice.cpu, [npu])).command, isNot(contains("-dev")));
+    });
+  });
+
   /// A server that cannot possibly come up, over weights that are claimed to be
   /// there: `/bin/false` exits the moment it is started, which is what a real
   /// one does when the model will not fit. Real code all the way down — the
