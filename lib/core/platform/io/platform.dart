@@ -12,6 +12,8 @@ import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/bundled_tools.dart";
+import "../../../data/builtin/llm/local_kv_cache.dart";
+import "../../../data/local/file_kv_cache.dart";
 import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
 import "../../../data/local/llama_server.dart";
@@ -115,7 +117,7 @@ LocalModelStore platformLocalModelStore(String cacheDir) =>
 /// are two of the presets in `llmProviderPresets`, and both are a better answer
 /// than a second copy of llama.cpp inside this app. A phone has no such thing
 /// to reach, which is the whole reason to carry one.
-Future<LocalLlm> platformLocalLlm(LocalModelStore store) async {
+Future<LocalLlm> platformLocalLlm(LocalModelStore store, String cacheDir) async {
   if (!Platform.isAndroid) return const UnavailableLocalLlm();
   final libDir = await BundledTools.nativeLibraryDir();
   if (libDir == null) return const UnavailableLocalLlm();
@@ -124,8 +126,18 @@ Future<LocalLlm> platformLocalLlm(LocalModelStore store) async {
   return LlamaServerPool(
     LlamaBinaries(server: server.path, libDir: libDir),
     store,
+    slotSaveDir: _kvCacheDir(cacheDir),
   );
 }
+
+/// The one directory the server's slot dumps and [FileKvCache] both read: the
+/// pool launches the server with it as `--slot-save-path`, the cache reads and
+/// evicts within it, so the two are built from the one join. Null off Android,
+/// where there is no server to persist for.
+String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
+
+LocalKvCache? platformLocalKvCache(String cacheDir, LocalLlm localLlm) =>
+    localLlm.available ? FileKvCache(_kvCacheDir(cacheDir)) : null;
 
 /// The one thing this side of the conditional import still has to choose at
 /// runtime: a desktop and a phone share `dart:io` and agree on nothing else

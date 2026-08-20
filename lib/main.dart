@@ -69,15 +69,18 @@ class AppSession {
     // neither needs the other's answer. The backend does need this one, since a
     // provider list composed without it would leave the on-device model out of
     // the first turn after a launch.
-    final localLlm = platform.createLocalLlm(localModels);
+    final localLlm = platform.createLocalLlm(localModels, cache);
     final toolset = await tools;
     final server = await localLlm;
+    // Beside the pool, so the two agree on where the server's slot dumps go.
+    final kvCache = platform.createLocalKvCache(cache, server);
     final backend = platform.createBackend(config, library, store,
-        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server);
+        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
-    final prefill = platform.createLocalPrefill(backend, server, foreground, config);
+    final prefill = platform.createLocalPrefill(backend, server, foreground, config,
+        kvCache: kvCache);
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     // Both started before either is awaited: one is a disk scan and the other

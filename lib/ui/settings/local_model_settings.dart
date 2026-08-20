@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/app_settings.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../providers.dart";
@@ -55,7 +56,9 @@ class LocalModelSection extends ConsumerWidget {
           const _MaxRunningPicker(),
           const _DevicePicker(),
           const _ContextPicker(),
+          const _ThreadsSlider(),
           const _PrefillToggle(),
+          const _KvCachePicker(),
           const _Prefilling(),
           const _Running(),
         ],
@@ -156,6 +159,94 @@ class _ContextPicker extends ConsumerWidget {
       onPick: (size) => ref
           .read(appSettingsProvider.notifier)
           .setLocalContext(size == null ? null : int.parse(size)),
+    );
+  }
+}
+
+/// How many cores the server runs on. Every big core by default (the reset
+/// position); dragging it down trades tokens-per-second for battery, which is
+/// the only reason to. Drawn only where the machine answered with more than one
+/// — there is nothing to slide on a device that would run on a single core.
+class _ThreadsSlider extends ConsumerStatefulWidget {
+  const _ThreadsSlider();
+
+  @override
+  ConsumerState<_ThreadsSlider> createState() => _ThreadsSliderState();
+}
+
+class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
+  /// The thumb's position while it is being dragged, so the setting is written
+  /// once the finger lifts rather than on every pixel — each write restarts the
+  /// server on the next turn.
+  double? _dragging;
+
+  @override
+  Widget build(BuildContext context) {
+    final max = ref.watch(localMaxThreadsProvider);
+    if (max == null || max <= 1) return const SizedBox.shrink();
+    final chosen = ref.watch(appSettingsProvider.select((s) => s.localModelThreads));
+    final value = _dragging ?? (chosen ?? max).toDouble();
+    return LabelledField(
+      label: "CPU cores",
+      child: ResettableField(
+        isDefault: chosen == null,
+        onReset: () => ref.read(appSettingsProvider.notifier).setLocalThreads(null),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Slider(
+              value: value.clamp(1, max.toDouble()),
+              min: 1,
+              max: max.toDouble(),
+              divisions: max - 1,
+              label: "${value.round()}",
+              onChanged: (v) => setState(() => _dragging = v),
+              onChangeEnd: (v) {
+                setState(() => _dragging = null);
+                // The top of the range is the default — store null there so it
+                // tracks a machine whose big-core count the OS later reports
+                // differently, rather than pinning today's number.
+                ref.read(appSettingsProvider.notifier).setLocalThreads(
+                    v.round() >= max ? null : v.round());
+              },
+            ),
+            Text(
+              chosen == null
+                  ? "All $max cores. Fewer is slower but easier on the battery."
+                  : "$chosen of $max cores.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// How many chats to keep warmed on disk, so reopening one restores its KV
+/// rather than reprocessing it. On by default at ten — the dumps are large, so
+/// there is a disk budget behind this and `Off` writes nothing. See "Persisting
+/// the KV cache to disk" in CLAUDE.md.
+class _KvCachePicker extends ConsumerWidget {
+  const _KvCachePicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = ref.watch(appSettingsProvider.select((s) => s.localModelKvCacheChats));
+    return InstalledPicker(
+      label: "Cached chats",
+      none: "Default (${AppSettings.defaultKvCacheChats})",
+      options: const {
+        "0": "Off",
+        "5": "5 chats",
+        "20": "20 chats",
+        "30": "30 chats",
+        "50": "50 chats",
+      },
+      value: value?.toString(),
+      onPick: (chats) => ref
+          .read(appSettingsProvider.notifier)
+          .setLocalKvCacheChats(chats == null ? null : int.parse(chats)),
     );
   }
 }

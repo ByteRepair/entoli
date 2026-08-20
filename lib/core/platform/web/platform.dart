@@ -8,6 +8,7 @@ import "package:http/http.dart" as http;
 import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
+import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
@@ -61,8 +62,11 @@ WebSearch platformWebSearch() => const UnavailableWebSearch();
 LocalModelStore platformLocalModelStore(String cacheDir) =>
     const UnavailableLocalModelStore();
 
-Future<LocalLlm> platformLocalLlm(LocalModelStore store) async =>
+Future<LocalLlm> platformLocalLlm(LocalModelStore store, String cacheDir) async =>
     const UnavailableLocalLlm();
+
+/// No server, so nothing to persist a KV cache for.
+LocalKvCache? platformLocalKvCache(String cacheDir, LocalLlm localLlm) => null;
 
 /// Nominal, like [platformDataDir]: nothing here fetches a model, so nothing
 /// needs somewhere to keep one.

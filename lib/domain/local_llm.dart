@@ -59,7 +59,15 @@ abstract class LocalLlm {
     String? device,
     int? contextLength,
     int maxRunning = 1,
+    int? threads,
+    bool kvCache = false,
   });
+
+  /// The most cores worth offering the [threads] control, or null where there
+  /// is no server to run on. It is the big-core count (`bigCoreCount`) the
+  /// server would use by default, so the slider tops out at what it already
+  /// does rather than at a number that would only slow it down.
+  int? get maxThreads;
 
   /// Stop everything. What the settings page's own control reaches, and what a
   /// phone short of memory wants.
@@ -80,10 +88,20 @@ abstract class LocalLlm {
 /// singly — the key is generated per launch and is the whole of what stops
 /// another app on the phone spending this model's battery.
 class LocalEndpoint {
-  const LocalEndpoint({required this.baseUrl, required this.apiKey});
+  const LocalEndpoint({
+    required this.baseUrl,
+    required this.apiKey,
+    required this.contextLength,
+  });
 
   final String baseUrl;
   final String apiKey;
+
+  /// The context the server actually loaded with — the model's own default
+  /// unless something overrode it. Carried here so the KV cache keys a dump on
+  /// the context the server is running rather than resolving it a second time
+  /// and risking a namespace the server never writes into.
+  final int contextLength;
 }
 
 enum LocalLlmPhase { starting, ready, failed }
@@ -160,8 +178,13 @@ class UnavailableLocalLlm extends LocalLlm {
     String? device,
     int? contextLength,
     int maxRunning = 1,
+    int? threads,
+    bool kvCache = false,
   }) async =>
       throw const LocalLlmFailure("There is no on-device model server in this build.");
+
+  @override
+  int? get maxThreads => null;
 
   @override
   Future<void> stopAll() async {}

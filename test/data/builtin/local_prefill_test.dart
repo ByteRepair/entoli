@@ -11,7 +11,13 @@ void main() {
           llm: llm,
           background: background,
           warmup: () => (
-            options: (device: null, contextLength: null, maxRunning: 1),
+            options: (
+              device: null,
+              contextLength: null,
+              maxRunning: 1,
+              threads: null,
+              kvCacheChats: 0,
+            ),
             messages: const [
               LlmMessage(role: LlmRole.system, text: "system prompt body"),
               LlmMessage(role: LlmRole.user, text: "Hello"),
