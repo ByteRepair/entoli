@@ -20,6 +20,7 @@ void main() {
     String? device,
     int? contextLength,
     int? threads,
+    String? slotSavePath,
   }) =>
       llamaLaunch(
         binaries: binaries,
@@ -30,6 +31,7 @@ void main() {
         device: device,
         contextLength: contextLength ?? model.defaultContext,
         threads: threads,
+        slotSavePath: slotSavePath,
       );
 
   /// The value of the argument after [flag], or null where it was not passed.
@@ -107,6 +109,26 @@ void main() {
 
     test("a count reaches the server", () {
       expect(valueOf(launch(threads: 4).command, "-t"), "4");
+    });
+  });
+
+  group("persisting the KV cache", () {
+    test("a slot path brings quantised KV with it", () {
+      final it = launch(slotSavePath: "/cache/agent-chat/kv-cache");
+
+      expect(valueOf(it.command, "--slot-save-path"), "/cache/agent-chat/kv-cache");
+      // q8_0 halves what a dump costs on disk, and rides on the cache being on
+      // so a user who turned it off keeps f16 generation.
+      expect(valueOf(it.command, "-ctk"), "q8_0");
+      expect(valueOf(it.command, "-ctv"), "q8_0");
+    });
+
+    test("no slot path is f16 and no save path", () {
+      final it = launch();
+
+      expect(it.command, isNot(contains("--slot-save-path")));
+      expect(it.command, isNot(contains("-ctk")));
+      expect(it.command, isNot(contains("-ctv")));
     });
   });
 

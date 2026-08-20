@@ -670,6 +670,7 @@ class FakeLocalLlm extends LocalLlm {
     this.ready = true,
     this.failure = "It would not fit.",
     this.installed = const [],
+    this.maxThreads,
   });
 
   @override
@@ -680,11 +681,24 @@ class FakeLocalLlm extends LocalLlm {
   final String failure;
   final List<String> installed;
 
+  /// What the cores slider tops out at, and whether it is drawn at all. Null by
+  /// default, which takes the slider off the page — a test that wants it sets a
+  /// number above one.
+  @override
+  final int? maxThreads;
+
   /// One entry per [serve], as it was asked for — including the ones answered
   /// from what was already up, since "it did not start a second copy" is a
   /// thing worth asserting.
-  final List<({String modelId, String? device, int? contextLength, int maxRunning})>
-      served = [];
+  final List<
+      ({
+        String modelId,
+        String? device,
+        int? contextLength,
+        int maxRunning,
+        int? threads,
+        bool kvCache,
+      })> served = [];
 
   var stops = 0;
 
@@ -700,12 +714,16 @@ class FakeLocalLlm extends LocalLlm {
     String? device,
     int? contextLength,
     int maxRunning = 1,
+    int? threads,
+    bool kvCache = false,
   }) async {
     served.add((
       modelId: modelId,
       device: device,
       contextLength: contextLength,
       maxRunning: maxRunning,
+      threads: threads,
+      kvCache: kvCache,
     ));
     final state = LocalLlmState(
       modelId: modelId,
@@ -719,7 +737,11 @@ class FakeLocalLlm extends LocalLlm {
       state,
     ];
     if (!ready) throw LocalLlmFailure(failure);
-    return const LocalEndpoint(baseUrl: "http://127.0.0.1:1/v1", apiKey: "k");
+    return LocalEndpoint(
+      baseUrl: "http://127.0.0.1:1/v1",
+      apiKey: "k",
+      contextLength: contextLength ?? 0,
+    );
   }
 
   @override

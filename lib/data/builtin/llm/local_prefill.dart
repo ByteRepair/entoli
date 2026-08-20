@@ -6,6 +6,7 @@ import "../../../domain/background_work.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model.dart";
 import "llm_client.dart";
+import "local_kv_cache.dart";
 import "local_pool_client.dart";
 import "openai_client.dart";
 
@@ -32,11 +33,16 @@ class LocalPrefill {
     required this.llm,
     required this.background,
     required this.warmup,
+    this.kvCache,
   });
 
   final LocalLlm llm;
   final BackgroundWork background;
   final Warmup Function() warmup;
+
+  /// Where the warmed body is persisted, so it survives a reload and every
+  /// chat's own `warm` finds it — the same cache a turn uses, null off Android.
+  final LocalKvCache? kvCache;
 
   /// Which model is being warmed and how far it has got, or null when nothing
   /// is. A [ValueListenable] because the settings page draws it, beside the
@@ -90,6 +96,11 @@ class LocalPrefill {
         device: spec.options.device,
         contextLength: spec.options.contextLength,
         maxRunning: spec.options.maxRunning,
+        // The same flags a real turn serves with, or the first turn would find
+        // the server launched differently and relaunch it, throwing this warm
+        // away before anything reused it.
+        threads: spec.options.threads,
+        kvCache: spec.options.kvCacheOn,
       );
     } on LocalLlmFailure {
       // A model that will not load says so where a turn asks for it, not here:
@@ -119,6 +130,23 @@ class LocalPrefill {
         // is the whole of what the warm-up was for. Generating more would only
         // spend battery on output nobody reads.
         break;
+      }
+      // Persist the warmed body so it survives a reload — the disk half of what
+      // the live slot already holds. The shortest key (`keys.last`) is the
+      // system+tools body every chat shares. Best-effort, like the warm-up.
+      final kv = kvCache;
+      final keys = kvPrefixKeys(spec.messages, spec.tools);
+      if (gen == _generation && kv != null && spec.options.kvCacheOn && keys.isNotEmpty) {
+        await kv.keep(
+          endpoint,
+          namespace: kvNamespace(
+            modelId: modelId,
+            contextLength: endpoint.contextLength,
+            device: spec.options.device,
+          ),
+          key: keys.last,
+          count: spec.options.kvCacheChats,
+        );
       }
     } catch (_) {
       // Best-effort: a warm-up that fails leaves the first real turn paying the

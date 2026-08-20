@@ -156,6 +156,12 @@ class LocalLlmStatus extends Notifier<List<LocalLlmState>> {
 final localLlmStateProvider =
     NotifierProvider<LocalLlmStatus, List<LocalLlmState>>(LocalLlmStatus.new);
 
+/// The most cores worth offering the cores slider, or null where there is no
+/// server. Read off the port so the web UI needs no `dart:io` to know the
+/// machine's core count.
+final localMaxThreadsProvider =
+    Provider<int?>((ref) => ref.watch(localLlmProvider).maxThreads);
+
 /// The on-device prompt warm-up, or null where there is no server to warm
 /// against — every platform but Android, and an Android whose build shipped no
 /// model server. Overridden in `main`, where the shell that words the system
@@ -367,6 +373,16 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setLocalPrefill(bool on) =>
       _applyLocal((s) => s.localModelPrefill = on);
+
+  /// How many cores the server runs on, or null for every big core. Reaches the
+  /// next server, not the running one — the cap is read when a model loads.
+  Future<void> setLocalThreads(int? threads) =>
+      _applyLocal((s) => s.localModelThreads = threads);
+
+  /// How many chats to keep warmed on disk, null for the default (ten) and `0`
+  /// for off.
+  Future<void> setLocalKvCacheChats(int? chats) =>
+      _applyLocal((s) => s.localModelKvCacheChats = chats);
 
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value
