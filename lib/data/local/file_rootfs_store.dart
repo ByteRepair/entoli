@@ -1,12 +1,12 @@
 import "dart:async";
 import "dart:io";
 
-import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../domain/rootfs.dart";
 import "../../domain/rootfs_store.dart";
+import "download.dart";
 
 /// A downloaded Linux in a directory of its own, outside the data directory —
 /// see [RootfsStore] for why that matters. `dart:io` rather than the config's
@@ -84,18 +84,19 @@ class FileRootfsStore extends RootfsStore {
       final archive = p.join(dir.path, "_rootfs.tar.gz");
 
       out.add(RootfsProgress(received: 0, total: image.bytes));
-      final digest = await _fetch(
+      final got = await fetchToFile(
         client: client,
         url: image.url,
         to: archive,
         report: (at) => out.add(RootfsProgress(received: at, total: image.bytes)),
         cancelled: () => cancelled,
+        hash: true,
       );
       if (cancelled) return;
       // Before a byte of it is unpacked, let alone run. Everything in here
       // becomes a program this device will execute, so arriving is not the same
       // as being what was asked for.
-      if (digest != image.sha256) {
+      if (got.sha256 != image.sha256) {
         throw StateError(
           "The download did not match what ${rootfs.name} ${rootfs.version} was "
           "checked to be, so nothing was installed.",
@@ -140,48 +141,6 @@ class FileRootfsStore extends RootfsStore {
     return out.stream;
   }
 
-  /// The tarball, streamed to disk, hashed on the way past. Hashing here rather
-  /// than reading the file back afterwards: it is the same bytes and a phone
-  /// reads them slowly.
-  static Future<String> _fetch({
-    required http.Client client,
-    required String url,
-    required String to,
-    required void Function(int) report,
-    required bool Function() cancelled,
-  }) async {
-    final response = await client.send(http.Request("GET", Uri.parse(url)));
-    if (response.statusCode != 200) {
-      throw HttpException("${response.statusCode} for $url");
-    }
-    final sink = File(to).openWrite();
-    final hash = _Sha256Sink();
-    final hashing = sha256.startChunkedConversion(hash);
-    var at = 0;
-    var told = 0;
-    try {
-      // `addStream` rather than `add` per chunk: a device whose flash is slower
-      // than its radio would otherwise queue the difference on the heap.
-      await sink.addStream(response.stream.takeWhile((_) => !cancelled()).map((chunk) {
-        hashing.add(chunk);
-        at += chunk.length;
-        if (at - told >= _reportEvery) {
-          told = at;
-          report(at);
-        }
-        return chunk;
-      }));
-      report(at);
-    } finally {
-      await sink.close();
-      hashing.close();
-    }
-    return "${hash.digest}";
-  }
-
-  /// How far the bar moves before it is worth saying so.
-  static const _reportEvery = 1 << 20;
-
   /// Android's `tar` is toybox's, and `-z` is the one thing this needs of it.
   /// The absolute path is the fallback for a device whose `PATH` does not name
   /// it, the same two-step `LocalShell` takes to find a shell.
@@ -196,16 +155,4 @@ class FileRootfsStore extends RootfsStore {
     throw const ProcessException(
         "tar", [], "This device has no tar to unpack a Linux with.");
   }
-}
-
-/// Where the hash of the download lands. `package:convert` has one of these and
-/// is not a dependency for four lines.
-class _Sha256Sink implements Sink<Digest> {
-  Digest? digest;
-
-  @override
-  void add(Digest data) => digest = data;
-
-  @override
-  void close() {}
 }

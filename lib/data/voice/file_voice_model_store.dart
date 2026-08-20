@@ -10,6 +10,7 @@ import "package:path/path.dart" as p;
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
 import "../../domain/workspace.dart";
+import "../local/download.dart";
 
 /// Voice models in a directory of their own, outside the data directory — see
 /// [VoiceModelStore] for why that matters. `dart:io` rather than the config's
@@ -83,13 +84,14 @@ class FileVoiceModelStore extends VoiceModelStore {
           VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
         };
         final before = received;
-        received += await _fetch(
+        received += (await fetchToFile(
           client: client,
           url: download.url,
           to: target,
           report: (at) => progress(before + at),
           cancelled: () => cancelled,
-        );
+        ))
+            .bytes;
         if (cancelled) return;
         if (download is VoiceArchive) {
           progress(received, extracting: true);
@@ -125,47 +127,6 @@ class FileVoiceModelStore extends VoiceModelStore {
     );
     return out.stream;
   }
-
-  /// One file, streamed to disk, reporting and returning its own bytes. What
-  /// they add up to across a model is the caller's business.
-  static Future<int> _fetch({
-    required http.Client client,
-    required String url,
-    required String to,
-    required void Function(int) report,
-    required bool Function() cancelled,
-  }) async {
-    final response = await client.send(http.Request("GET", Uri.parse(url)));
-    if (response.statusCode != 200) {
-      throw HttpException("${response.statusCode} for $url");
-    }
-    final sink = File(to).openWrite();
-    var at = 0;
-    var told = 0;
-    try {
-      // `addStream` rather than `add` per chunk: a phone whose flash is slower
-      // than its radio would otherwise queue the difference on the heap, for
-      // the length of a 250 MB download.
-      await sink.addStream(response.stream.takeWhile((_) => !cancelled()).map((chunk) {
-        at += chunk.length;
-        // Every chunk would be thousands of reports, and each one rebuilds a
-        // notification through five binder calls — for a bar with a hundred
-        // pixels to move.
-        if (at - told >= _reportEvery) {
-          told = at;
-          report(at);
-        }
-        return chunk;
-      }));
-      report(at);
-    } finally {
-      await sink.close();
-    }
-    return at;
-  }
-
-  /// How far the bar moves before it is worth saying so.
-  static const _reportEvery = 1 << 20;
 
   /// Off the UI thread, because bz2 in Dart runs at about 8 MB/s and Kokoro is
   /// a minute of solid CPU. Its own method so that the closure handed to the

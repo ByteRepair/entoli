@@ -18,6 +18,8 @@ import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
+import "domain/local_llm.dart";
+import "domain/local_model_store.dart";
 import "domain/models.dart";
 import "domain/permission.dart";
 import "domain/profile.dart";
@@ -104,6 +106,54 @@ class InstalledRootfs extends Notifier<Set<String>> {
 
 final installedRootfsProvider =
     NotifierProvider<InstalledRootfs, Set<String>>(() => InstalledRootfs(const {}));
+
+final localModelStoreProvider =
+    Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());
+
+/// The server that answers from this device, and nothing where no build of one
+/// reached it. Overridden in `main`, since resolving the binary is a channel
+/// round trip and every reader of this is synchronous.
+final localLlmProvider = Provider<LocalLlm>((ref) => const UnavailableLocalLlm());
+
+/// Which models are downloaded and whole. Seeded before the app is built and
+/// refreshed by whatever installs or deletes one, for the reason
+/// [InstalledRootfs] is: the rows are drawn from it, and a lazy scan would draw
+/// every one of them as "not installed" first.
+class InstalledLocalModels extends Notifier<Set<String>> {
+  InstalledLocalModels(this._seed);
+
+  final Set<String> _seed;
+
+  @override
+  Set<String> build() => _seed;
+
+  Future<void> refresh() async {
+    final installed = await ref.read(localModelStoreProvider).installed();
+    if (ref.mounted) state = installed;
+  }
+}
+
+final installedLocalModelsProvider =
+    NotifierProvider<InstalledLocalModels, Set<String>>(
+        () => InstalledLocalModels(const {}));
+
+/// How far the on-device server has got. A notifier over the port's own
+/// [ValueListenable] rather than a second copy of the state: the server is
+/// started from the settings page and from startup, and both have to redraw the
+/// same row.
+class LocalLlmStatus extends Notifier<LocalLlmState> {
+  @override
+  LocalLlmState build() {
+    final llm = ref.watch(localLlmProvider);
+    void update() => state = llm.state.value;
+    llm.state.addListener(update);
+    ref.onDispose(() => llm.state.removeListener(update));
+    return llm.state.value;
+  }
+}
+
+final localLlmStateProvider =
+    NotifierProvider<LocalLlmStatus, LocalLlmState>(LocalLlmStatus.new);
 
 /// Which architecture this install is for, and so which rootfs a download
 /// fetches. Read once at startup — it cannot change while the app runs.
@@ -237,6 +287,24 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// It reaches the next command rather than the next turn: the shell resolves
   /// this per command.
   Future<void> setRootfs(String? id) => _update((s) => s.rootfsId = id);
+
+  /// What is served from this device, and how. Stored and then applied, so the
+  /// pick survives the server failing to honour it and is tried again at the
+  /// next launch — and so the file is written once for a change that touches
+  /// three fields.
+  ///
+  /// The model list is rebuilt because a running server is a provider: picking
+  /// one adds a model to every picker in the app, and unpicking takes it away.
+  Future<void> setLocalModel(String? id, {String? device, int? contextLength}) async {
+    await _update((s) => s
+      ..localModelId = id
+      // Neither means anything without a model, and left behind they would be
+      // applied to whatever is picked next.
+      ..localModelDevice = id == null ? null : device
+      ..localModelContext = id == null ? null : contextLength);
+    await applyLocalModel(ref.read(localLlmProvider), state);
+    ref.invalidate(availableModelsProvider);
+  }
 
   /// How long a temporary chat lives. App-level default; a project and a chat
   /// can override it. Re-anchors every chat to now so the badges appear

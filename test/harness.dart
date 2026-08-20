@@ -50,6 +50,8 @@ class TestApp {
     required this.voice,
     required this.voiceModels,
     required this.rootfs,
+    required this.localModels,
+    required this.localLlm,
     required this.work,
     required this.container,
   });
@@ -70,6 +72,10 @@ class TestApp {
   /// rather than which sentinel ids to pretend are installed. The default has
   /// neither, which is every platform a VM test would otherwise be pretending
   /// to be.
+  /// [localModels] is which on-device models are downloaded, and [localLlm] the
+  /// server that would run one — the two halves the On-device page turns on. The
+  /// default server is unavailable, which is every platform but Android and so
+  /// what most of the suite should be pretending to be.
   /// [linuxes] is which distributions are installed, and [proot] whether this
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
@@ -84,6 +90,8 @@ class TestApp {
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
     Set<String> linuxes = const {},
     bool proot = false,
+    Set<String> localModels = const {},
+    FakeLocalLlm? localLlm,
     String abi = "arm64-v8a",
   }) {
     final config = tempConfig();
@@ -99,6 +107,8 @@ class TestApp {
     final speech = voice ?? FakeVoice();
     final models = FakeVoiceModelStore(installed: voiceModels);
     final linux = FakeRootfsStore(installed: linuxes);
+    final onDevice = FakeLocalModelStore(installed: localModels);
+    final server = localLlm ?? FakeLocalLlm(available: false);
     final work = FakeBackgroundWork();
     final system = {
       if (nativeVoice.recognition) nativeRecognition.id,
@@ -118,6 +128,8 @@ class TestApp {
       voice: speech,
       voiceModels: models,
       rootfs: linux,
+      localModels: onDevice,
+      localLlm: server,
       work: work,
       container: ProviderContainer(
         overrides: [
@@ -141,6 +153,10 @@ class TestApp {
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
+          localModelStoreProvider.overrideWithValue(onDevice),
+          localLlmProvider.overrideWithValue(server),
+          installedLocalModelsProvider
+              .overrideWith(() => InstalledLocalModels(localModels)),
           deviceAbiProvider.overrideWithValue(abi),
           prootAvailableProvider.overrideWithValue(proot),
           backgroundWorkProvider.overrideWithValue(work),
@@ -162,6 +178,8 @@ class TestApp {
   final FakeVoice voice;
   final FakeVoiceModelStore voiceModels;
   final FakeRootfsStore rootfs;
+  final FakeLocalModelStore localModels;
+  final FakeLocalLlm localLlm;
   final FakeBackgroundWork work;
   final ProviderContainer container;
 

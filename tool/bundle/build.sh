@@ -9,7 +9,15 @@
 #
 # Output, stripped, in dist/<abi>: libgit.so, libgit-remote-http.so, libproot.so
 # and its loader (libproot-loader.so, plus libproot-loader32.so where the
-# architecture can run 32-bit guests).
+# architecture can run 32-bit guests), and llama.cpp's server as
+# libllama-server.so with the libraries it loads beside it.
+#
+# The NPU is opt-in and needs a licensed SDK, so it is off by default:
+#
+#   HEXAGON_SDK_ROOT=~/Qualcomm/Hexagon_SDK/6.6.0.1 tool/bundle/build.sh arm64-v8a
+#
+# See "Running a model on the device" in CLAUDE.md for what that
+# buys and what it costs.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -44,6 +52,14 @@ export PATH=$bin:$PATH
 # load a library built for 4 KB pages.
 export CFLAGS="-O2 -fPIC -Wl,-z,max-page-size=16384"
 
+# **llama.cpp is arm64 only, and that is a size decision.** The server and its
+# libraries are about 18 MB stripped, against git's 12, and three ABIs of it
+# would put 56 MB into the universal APK. Nothing is lost: a 32-bit phone cannot
+# map a two-gigabyte model at all, and x86_64 Android is an emulator. A build
+# without it leaves `LocalLlm.available` false, which the settings page says.
+llama_abis=${LLAMA_ABIS:-arm64-v8a}
+if [[ " $llama_abis " == *" $abi "* ]]; then llama=yes; else llama=no; fi
+
 mkdir -p "$work" "$out"
 
 fetch() {
@@ -61,6 +77,7 @@ fetch "$CURL_URL" "curl.tar.gz" "$CURL_SHA256"
 fetch "$GIT_URL" "git.tar.gz" "$GIT_SHA256"
 fetch "$TALLOC_URL" "talloc.tar.gz" "$TALLOC_SHA256"
 fetch "$PROOT_URL" "proot.tar.gz" "$PROOT_SHA256"
+if [ "$llama" = yes ]; then fetch "$LLAMA_CPP_URL" "llama.tar.gz" "$LLAMA_CPP_SHA256"; fi
 
 # Unpacked and built once per ABI. A second run reuses what is there, which is
 # what makes iterating on the git step bearable; CI starts from an empty tree
@@ -72,6 +89,9 @@ mkdir -p "$src"
 [ -d "$src/git-$GIT_VERSION" ] || tar -C "$src" -xf "$work/git.tar.gz"
 [ -d "$src/talloc-$TALLOC_VERSION" ] || tar -C "$src" -xf "$work/talloc.tar.gz"
 [ -d "$src/proot-$PROOT_VERSION" ] || tar -C "$src" -xf "$work/proot.tar.gz"
+if [ "$llama" = yes ] && [ ! -d "$src/llama.cpp-$LLAMA_CPP_VERSION" ]; then
+  tar -C "$src" -xf "$work/llama.tar.gz"
+fi
 
 echo "==> openssl $OPENSSL_VERSION"
 (
@@ -159,6 +179,80 @@ echo "==> proot $PROOT_VERSION"
     "$STRIP" -o "$out/libproot-loader32.so" src/loader/loader-m32
   fi
 )
+
+if [ "$llama" = no ]; then
+  echo "==> llama.cpp: not built for $abi"
+else
+echo "==> llama.cpp $LLAMA_CPP_VERSION"
+(
+  cd "$src/llama.cpp-$LLAMA_CPP_VERSION"
+  build=build-$abi
+  # Everything about this build is the NDK's own toolchain file, which is what
+  # makes it the one step here with no adjustments to the source at all.
+  #
+  # `GGML_BACKEND_DL` is the load-bearing option: it makes each backend a
+  # `libggml-*.so` loaded at runtime from the directory the binary is in, so an
+  # APK carries whichever ones it was built with and the phone uses whichever
+  # of those find hardware. Without it the set of backends is fixed at link
+  # time, and a build with the NPU in it would refuse to start on a phone that
+  # has none.
+  #
+  # `-DCMAKE_SKIP_INSTALL_RPATH` because the app sets `LD_LIBRARY_PATH` itself:
+  # an rpath baked here would name a directory of this machine's, and the
+  # install path on a device is not known until the app is installed.
+  cmake_args=(
+    -B "$build" -G Ninja
+    -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake"
+    -DANDROID_ABI="$abi"
+    -DANDROID_PLATFORM="android-$api"
+    -DCMAKE_BUILD_TYPE=Release
+    -DBUILD_SHARED_LIBS=ON
+    -DGGML_BACKEND_DL=ON
+    -DGGML_NATIVE=OFF
+    -DCMAKE_SKIP_INSTALL_RPATH=ON
+    # The server downloads models when it is told to; this app does its own
+    # downloading, and linking curl here would mean cross-compiling it a second
+    # time for a feature nothing reaches.
+    -DLLAMA_CURL=OFF
+    -DLLAMA_BUILD_SERVER=ON
+    -DLLAMA_BUILD_TESTS=OFF
+    -DLLAMA_BUILD_EXAMPLES=OFF
+    -DLLAMA_BUILD_APP=OFF
+    # Nothing here opens the server in a browser, and building it wants a host
+    # compiler and a download from HuggingFace — two things a build of this
+    # should not need.
+    -DLLAMA_BUILD_UI=OFF
+    -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
+    -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
+  )
+  # The NPU, where whoever is building has the SDK for it. Qualcomm's, behind an
+  # account, and not redistributable — which is why CI builds without it and why
+  # this is a variable rather than a default. Nothing else changes: the backend
+  # arrives as two more `libggml-*.so` and the app finds it the same way it
+  # finds the CPU's.
+  if [ -n "${HEXAGON_SDK_ROOT:-}" ]; then
+    cmake_args+=(-DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$HEXAGON_SDK_ROOT")
+  fi
+  cmake "${cmake_args[@]}" >/dev/null
+  cmake --build "$build" -j"$jobs" --target llama-server >/dev/null
+
+  # Named lib*.so because that is all the installer extracts from an APK, which
+  # for the executable is also the only way it lands somewhere it may be run
+  # from. The libraries keep the names they were linked under — the loader
+  # resolves those by name, and renaming one is a server that will not start.
+  "$STRIP" -o "$out/libllama-server.so" "$(find "$build" -name llama-server -type f | head -1)"
+  shopt -s nullglob
+  while IFS= read -r lib; do
+    case "$(basename "$lib")" in
+      # The DSP-side half of the Hexagon backend, which is not a CPU library at
+      # all: it is QDSP6 code, loaded onto the NPU by fastRPC by name out of
+      # ADSP_LIBRARY_PATH, and nothing on this side can strip it.
+      libggml-htp-*) cp "$lib" "$out/" ;;
+      *) "$STRIP" -o "$out/$(basename "$lib")" "$lib" ;;
+    esac
+  done < <(find "$build" -name "lib*.so" -type f)
+)
+fi
 
 echo "==> $abi"
 ( cd "$out" && sha256sum ./*.so && ls -l ./*.so )

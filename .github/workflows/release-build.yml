@@ -182,17 +182,27 @@ jobs:
       # has nothing to work with — which is exactly the kind of thing nobody
       # notices until it has shipped. proot is the same again: without it the
       # Terminal settings say this build cannot run a Linux, and nobody would
-      # know that was a build fault rather than the truth.
+      # know that was a build fault rather than the truth. llama.cpp's server is
+      # the third, and it is checked on its own ABIs: it is arm64 only, so
+      # asking for it everywhere would fail every release.
       - name: Check the tools are in the APK
         run: |
           set -euo pipefail
+          check() {
+            if ! unzip -l build/app/outputs/flutter-apk/app-release.apk \
+                | grep -q "lib/$1/$2"; then
+              echo "::error::The release APK has no $2 for $1"
+              exit 1
+            fi
+          }
           for abi in ${{ steps.tools.outputs.abis }}; do
             for tool in libgit.so libproot.so libproot-loader.so; do
-              if ! unzip -l build/app/outputs/flutter-apk/app-release.apk \
-                  | grep -q "lib/$abi/$tool"; then
-                echo "::error::The release APK has no $tool for $abi"
-                exit 1
-              fi
+              check "$abi" "$tool"
+            done
+          done
+          for abi in ${{ steps.tools.outputs.llama-abis }}; do
+            for tool in libllama-server.so libggml-cpu.so; do
+              check "$abi" "$tool"
             done
           done
 

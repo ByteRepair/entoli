@@ -12,6 +12,8 @@ import "core/platform/link_opener.dart";
 import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
 import "domain/app_restart.dart";
+import "domain/app_settings.dart";
+import "domain/local_llm.dart";
 import "domain/prompt_library.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
@@ -60,9 +62,14 @@ class AppSession {
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
+    final localModels = platform.createLocalModelStore(cache);
+    // Resolving the binary is one more round trip on the tools channel, and the
+    // backend below needs the answer: a provider list composed without it would
+    // leave the on-device model out of the first turn after a launch.
+    final localLlm = await platform.createLocalLlm(localModels);
     final toolset = await tools;
     final backend = platform.createBackend(config, library, store,
-        tools: toolset, rootfs: rootfs, abi: await abi);
+        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: localLlm);
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     // Both started before either is awaited: one is a disk scan and the other
@@ -80,6 +87,7 @@ class AppSession {
     // and the picker above them are drawn from it, and a scan started when the
     // page opens would draw every row as "not installed" first.
     final installedRootfs = await rootfs.installed();
+    final installedLocalModels = await localModels.installed();
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -103,10 +111,18 @@ class AppSession {
         installedRootfsProvider.overrideWith(() => InstalledRootfs(installedRootfs)),
         deviceAbiProvider.overrideWithValue(await abi),
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
+        localModelStoreProvider.overrideWithValue(localModels),
+        localLlmProvider.overrideWithValue(localLlm),
+        installedLocalModelsProvider
+            .overrideWith(() => InstalledLocalModels(installedLocalModels)),
       ],
     );
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
+    // A model picked in a previous run is loaded again here, and not awaited:
+    // mapping it is a minute the app has no reason to spend before its first
+    // frame, and a turn sent in the meantime waits on `whenReady`.
+    unawaited(applyLocalModel(localLlm, AppSettings.load(config)));
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open
@@ -127,6 +143,9 @@ class AppSession {
   Future<void> dispose() async {
     _sweep.cancel();
     await container.read(agentBackendProvider).shutdown();
+    // Before the container goes: the server is a subprocess holding a
+    // gigabyte of the phone's memory, and nothing else would ever kill it.
+    await container.read(localLlmProvider).stop();
     container.dispose();
   }
 }

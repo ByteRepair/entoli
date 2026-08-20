@@ -11,7 +11,9 @@ import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/bundled_tools.dart";
+import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
+import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/desktop_file_handoff.dart";
@@ -23,6 +25,8 @@ import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
+import "../../../domain/local_llm.dart";
+import "../../../domain/local_model_store.dart";
 import "../../../domain/rootfs.dart";
 import "../../../domain/rootfs_store.dart";
 import "../../../domain/shell.dart";
@@ -86,6 +90,31 @@ Future<Toolset?> platformInstallTools(String cacheDir) async {
 }
 
 WebSearch platformWebSearch() => DuckDuckGoSearch();
+
+/// Where a downloaded model is kept: beside the voice models and a downloaded
+/// Linux, outside the data directory, and for the same reasons — see
+/// [LocalModelStore].
+LocalModelStore platformLocalModelStore(String cacheDir) =>
+    FileLocalModelStore(p.join(cacheDir, "llm"));
+
+/// llama.cpp's server, where this build carried one for the device's ABI.
+///
+/// **Android only, and that is a judgement rather than a limit.** The desktops
+/// can already reach a model on the machine they are on — Ollama and LM Studio
+/// are two of the presets in `llmProviderPresets`, and both are a better answer
+/// than a second copy of llama.cpp inside this app. A phone has no such thing
+/// to reach, which is the whole reason to carry one.
+Future<LocalLlm> platformLocalLlm(LocalModelStore store) async {
+  if (!Platform.isAndroid) return const UnavailableLocalLlm();
+  final libDir = await BundledTools.nativeLibraryDir();
+  if (libDir == null) return const UnavailableLocalLlm();
+  final server = File(p.join(libDir, "libllama-server.so"));
+  if (!await server.exists()) return const UnavailableLocalLlm();
+  return LlamaServer(
+    LlamaBinaries(server: server.path, libDir: libDir),
+    store,
+  );
+}
 
 /// The one thing this side of the conditional import still has to choose at
 /// runtime: a desktop and a phone share `dart:io` and agree on nothing else

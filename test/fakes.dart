@@ -16,6 +16,10 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/assistant_launch.dart";
 import "package:agent_chat/domain/file_handoff.dart";
 import "package:agent_chat/domain/link_opener.dart";
+import "package:agent_chat/domain/llm_provider.dart";
+import "package:agent_chat/domain/local_llm.dart";
+import "package:agent_chat/domain/local_model.dart";
+import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/voice.dart";
@@ -610,6 +614,106 @@ class FakeRootfsStore extends RootfsStore {
     deleted.add(rootfs.id);
     _installed.remove(rootfs.id);
   }
+}
+
+class FakeLocalModelStore extends LocalModelStore {
+  FakeLocalModelStore({Set<String> installed = const {}}) : _installed = {...installed};
+
+  final Set<String> _installed;
+
+  final List<String> deleted = [];
+
+  /// Held open so a test can assert on a row mid-download.
+  Completer<void>? installing;
+
+  @override
+  Future<Set<String>> installed() async => {..._installed};
+
+  @override
+  Future<String?> fileOf(LocalModel model) async => fileOfSync(model);
+
+  @override
+  String? fileOfSync(LocalModel model) =>
+      _installed.contains(model.id) ? "/models/${model.id}/model.gguf" : null;
+
+  @override
+  Stream<LocalModelProgress> install(LocalModel model) async* {
+    yield LocalModelProgress(received: 0, total: model.bytes);
+    if (installing != null) await installing!.future;
+    yield LocalModelProgress(received: model.bytes, total: model.bytes);
+    _installed.add(model.id);
+  }
+
+  @override
+  Future<void> delete(LocalModel model) async {
+    deleted.add(model.id);
+    _installed.remove(model.id);
+  }
+}
+
+/// The on-device server with nothing behind it. [started] is what a test
+/// asserts on — that picking a model is what starts one, and with what — and
+/// [ready] is whether it gets there, so the failed row can be drawn without a
+/// model that will not load.
+class FakeLocalLlm extends LocalLlm {
+  FakeLocalLlm({
+    this.available = true,
+    this.devicesFound = const [],
+    this.ready = true,
+    this.failure = "It would not fit.",
+  });
+
+  @override
+  final bool available;
+
+  final List<LocalDevice> devicesFound;
+  final bool ready;
+  final String failure;
+
+  /// One entry per [start], as it was asked for.
+  final List<({String modelId, String? device, int? contextLength})> started = [];
+
+  var stops = 0;
+
+  @override
+  final ValueNotifier<LocalLlmState> state = ValueNotifier(const LocalLlmState());
+
+  @override
+  Future<List<LocalDevice>> devices() async => devicesFound;
+
+  @override
+  Future<void> start(LocalModel model, {String? device, int? contextLength}) async {
+    started.add((modelId: model.id, device: device, contextLength: contextLength));
+    state.value = LocalLlmState(
+      phase: ready ? LocalLlmPhase.ready : LocalLlmPhase.failed,
+      modelId: model.id,
+      device: device,
+      contextLength: contextLength,
+      failure: ready ? null : failure,
+    );
+  }
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    state.value = const LocalLlmState();
+  }
+
+  @override
+  Future<void> whenReady() async {
+    if (!ready) throw StateError(failure);
+  }
+
+  @override
+  LlmProviderConfig? get provider => state.value.modelId == null
+      ? null
+      : LlmProviderConfig(
+          id: localProviderId,
+          label: "On-device",
+          api: LlmApi.openai,
+          baseUrl: "http://127.0.0.1:1/v1",
+          models: [state.value.modelId!],
+        );
 }
 
 class FakeVoiceModelStore extends VoiceModelStore {

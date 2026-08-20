@@ -31,6 +31,9 @@ class AppSettings {
     this.assistantProject,
     this.assistantView = AssistantView.chat,
     this.rootfsId,
+    this.localModelId,
+    this.localModelDevice,
+    this.localModelContext,
   });
 
   String? defaultModelId;
@@ -101,6 +104,26 @@ class AppSettings {
   /// about a filesystem that is no longer there.
   String? rootfsId;
 
+  /// The model served from this device, by catalog id, or null for none — which
+  /// is what every existing `settings.json` already says by saying nothing.
+  /// Picking one starts the server at the next launch as well as at this one,
+  /// so it is the pick that is stored rather than whether it happens to be up.
+  ///
+  /// App-level, like the icon and the voice: which model a chat uses is already
+  /// a per-chat setting, and this is the machine underneath it.
+  String? localModelId;
+
+  /// The accelerator it is offloaded to, by the name `--list-devices` gave it.
+  /// Null is the CPU, which is every device's answer and most devices' only
+  /// one. Stored as the name rather than as a kind, because that is the string
+  /// the server is passed and a phone can have two of the same kind.
+  String? localModelDevice;
+
+  /// How much context it is loaded with, or null for the default. The one
+  /// setting here that is really about memory: it is the KV cache that decides
+  /// whether Android kills the app, not the weights, which are mapped.
+  int? localModelContext;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -130,6 +153,9 @@ class AppSettings {
         assistantProject: _orNull(json["assistantProject"] as String?),
         assistantView: AssistantView.fromName(json["assistantView"] as String?),
         rootfsId: _orNull(json["rootfsId"] as String?),
+        localModelId: _orNull(json["localModelId"] as String?),
+        localModelDevice: _orNull(json["localModelDevice"] as String?),
+        localModelContext: json["localModelContext"] as int?,
       );
     } catch (_) {
       return AppSettings();
@@ -184,6 +210,9 @@ class AppSettings {
         assistantProject: assistantProject,
         assistantView: assistantView,
         rootfsId: rootfsId,
+        localModelId: localModelId,
+        localModelDevice: localModelDevice,
+        localModelContext: localModelContext,
       );
 
   Future<void> save(AppConfig config) async {
@@ -209,6 +238,9 @@ class AppSettings {
       if (assistantProject != null) "assistantProject": assistantProject,
       "assistantView": assistantView.name,
       if (rootfsId != null) "rootfsId": rootfsId,
+      if (localModelId != null) "localModelId": localModelId,
+      if (localModelDevice != null) "localModelDevice": localModelDevice,
+      if (localModelContext != null) "localModelContext": localModelContext,
     }));
   }
 }

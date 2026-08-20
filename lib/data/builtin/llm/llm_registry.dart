@@ -12,7 +12,7 @@ class LlmRegistry {
     required this.providers,
     required this.lookupEnv,
     LlmClient Function(LlmProviderConfig config, String? apiKey)? build,
-  }) : _build = build ?? _defaultBuild;
+  }) : _build = build ?? defaultBuild;
 
   final List<LlmProviderConfig> Function() providers;
 
@@ -94,7 +94,11 @@ class LlmRegistry {
     _clients.clear();
   }
 
-  static LlmClient _defaultBuild(LlmProviderConfig config, String? apiKey) =>
+  /// What a provider gets when the caller says nothing. Public because one
+  /// caller does say something: the on-device server is an ordinary
+  /// OpenAI-shaped endpoint that happens to need waiting for, so it is this
+  /// wrapped rather than a client of its own — see `PendingLlmClient`.
+  static LlmClient defaultBuild(LlmProviderConfig config, String? apiKey) =>
       switch (config.api) {
         LlmApi.anthropic =>
           AnthropicClient(baseUrl: Uri.parse(config.baseUrl), apiKey: apiKey),

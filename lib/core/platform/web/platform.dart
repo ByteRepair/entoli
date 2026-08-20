@@ -10,6 +10,8 @@ import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
+import "../../../domain/local_llm.dart";
+import "../../../domain/local_model_store.dart";
 import "../../../domain/rootfs_store.dart";
 import "../../../domain/shell.dart";
 import "../../../domain/voice.dart";
@@ -41,6 +43,13 @@ Future<String?> platformAbi() async => null;
 RootfsStore platformRootfsStore(String cacheDir) => const UnavailableRootfsStore();
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
+
+/// Nowhere to put a gigabyte of weights, and nothing that could run them.
+LocalModelStore platformLocalModelStore(String cacheDir) =>
+    const UnavailableLocalModelStore();
+
+Future<LocalLlm> platformLocalLlm(LocalModelStore store) async =>
+    const UnavailableLocalLlm();
 
 /// Nominal, like [platformDataDir]: nothing here fetches a model, so nothing
 /// needs somewhere to keep one.

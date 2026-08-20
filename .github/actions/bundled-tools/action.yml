@@ -1,14 +1,20 @@
 name: Bundled tools
 description: >
   Build the tools Entoli ships inside the APK — git and its https helper, proot
-  and its loader — and stage them where the Android build packages them from.
-  Cached on what decides the output, so a run that changes neither the versions
-  nor the recipe pays for a download rather than three cross-compiles.
+  and its loader, and llama.cpp's server for arm64 — and stage them where the
+  Android build packages them from. Cached on what decides the output, so a run
+  that changes neither the versions nor the recipe pays for a download rather
+  than three cross-compiles.
 
 outputs:
   abis:
     description: The ABIs built, for a caller that has to check what shipped.
     value: ${{ steps.abis.outputs.list }}
+  llama-abis:
+    description: >
+      The ABIs llama.cpp was built for, which is a subset — see build.sh for
+      why it is only arm64.
+    value: ${{ steps.abis.outputs.llama }}
 
 runs:
   using: composite
@@ -17,7 +23,9 @@ runs:
     # that git actually made it into the APK both read it from here.
     - id: abis
       shell: bash
-      run: echo "list=arm64-v8a armeabi-v7a x86_64" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "list=arm64-v8a armeabi-v7a x86_64" >> "$GITHUB_OUTPUT"
+        echo "llama=arm64-v8a" >> "$GITHUB_OUTPUT"
 
     - name: Restore the built tools
       id: cache
@@ -27,6 +35,16 @@ runs:
         # The recipe and the versions between them decide every byte of the
         # output, so nothing else belongs in the key.
         key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/bundle/versions.sh', 'tool/bundle/build.sh', 'tool/bundle/android-compat.h', 'tool/bundle/talloc-config.h') }}
+
+    # The runner image ships one, and llama.cpp's build is generated for it.
+    # Checked rather than assumed: an image that dropped it would otherwise fail
+    # in the middle of a cross-compile with a message about a generator.
+    - name: Ninja, which llama.cpp is built with
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        command -v ninja >/dev/null ||
+          { sudo apt-get update && sudo apt-get install -y ninja-build; }
 
     - name: Build the tools
       if: steps.cache.outputs.cache-hit != 'true'
@@ -38,6 +56,7 @@ runs:
         ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
       run: |
         set -euo pipefail
+        export LLAMA_ABIS="${{ steps.abis.outputs.llama }}"
         for abi in ${{ steps.abis.outputs.list }}; do
           tool/bundle/build.sh "$abi"
         done

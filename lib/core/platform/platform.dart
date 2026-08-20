@@ -2,6 +2,7 @@ import "package:fs_shim/fs.dart";
 
 import "../../data/builtin/builtin_backend.dart";
 import "../../data/builtin/llm/llm_registry.dart";
+import "../../data/builtin/llm/pending_client.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/agent_backend.dart";
@@ -10,6 +11,9 @@ import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
+import "../../domain/local_llm.dart";
+import "../../domain/local_model.dart";
+import "../../domain/local_model_store.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
@@ -38,6 +42,7 @@ AgentBackend createBackend(
   Toolset? tools,
   RootfsStore? rootfs,
   String? abi,
+  LocalLlm? localLlm,
 }) {
   AppSettings settings() => AppSettings.load(config);
   return BuiltinBackend(
@@ -60,10 +65,24 @@ AgentBackend createBackend(
     webSearch: platformWebSearch(),
     store: store,
     registry: LlmRegistry(
-      providers: () => settings().llmProviders,
+      // The server running on this device is a provider like any other, and it
+      // is composed in here rather than written into `settings.json`: its base
+      // URL holds a port asked of the OS at launch, so a file naming it would
+      // be stale by the next one. Null while nothing is picked, which is what
+      // keeps it out of every picker on the platforms that have no server.
+      providers: () => [...settings().llmProviders, ?localLlm?.provider],
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
+      build: localLlm == null
+          ? null
+          : (config, apiKey) {
+              final client = LlmRegistry.defaultBuild(config, apiKey);
+              // Ordinary in every respect but one: it may not be answering yet.
+              return config.id == localProviderId
+                  ? PendingLlmClient(client, localLlm.whenReady)
+                  : client;
+            },
     ),
   );
 }
@@ -82,6 +101,15 @@ Future<Toolset?> installBundledTools(String cacheDir) =>
 RootfsStore createRootfsStore(String cacheDir) => platformRootfsStore(cacheDir);
 
 Future<String?> deviceAbi() => platformAbi();
+
+/// Where a downloaded model is kept, and what runs one. Two calls rather than
+/// one for the reason the voice models and the rootfs are: the settings page
+/// manages what is installed with nothing listening, while the agent needs the
+/// server to answer with.
+LocalModelStore createLocalModelStore(String cacheDir) =>
+    platformLocalModelStore(cacheDir);
+
+Future<LocalLlm> createLocalLlm(LocalModelStore store) => platformLocalLlm(store);
 
 /// A real filesystem on desktop and Android, IndexedDB in a browser. What
 /// [AppConfig] is built on, so it is asked for first.
