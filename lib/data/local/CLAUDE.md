@@ -299,6 +299,27 @@ that grows one should not also have to grow a line here. `LD_LIBRARY_PATH` is
 not optional: the server is exec'd by path with no rpath in it, so libllama and
 the backends beside it are found through that and nothing else.
 
+**The CPU backend is built for armv8.2 with dotprod**, and it is the difference
+between a model that answers and one that looks hung. Cross-compiling, ggml
+appends no `-march` unless it is given `GGML_CPU_ARM_ARCH`, and the NDK's arm64
+default is baseline armv8-a — which defines neither `__ARM_FEATURE_DOTPROD` nor
+`__ARM_FEATURE_FP16_VECTOR_ARITHMETIC`. Both are what every Q4_0 fast path in
+ggml is `#if`'d on: the whole of its ARM repack file, and the gemv and gemm in
+its quants. The catalog is Q4_0 throughout for the NPU's sake, so a baseline
+build runs the one format it accelerates down the one path it does not, and
+prompt processing is minutes rather than seconds. `GGML_CPU_ALL_VARIANTS` is
+what would pick per device instead and is not offered here — ggml builds the ARM
+variant list on Linux only — so it is one floor for every phone, and dotprod is
+2018 where i8mm would be 2022.
+
+**The little cores are left out of the thread count.** llama.cpp's own default
+is every physical core, which on a phone is wrong in a way it is not on a
+desktop: the cores are not alike and ggml's threadpool moves at its slowest
+thread's pace, so a little core holds up every big one beside it. `bigCoreCount`
+ranks them by what the kernel says each one's ceiling is and takes everything
+above the floor. A machine of one tier gets all of them, and one the kernel will
+not answer for passes no `-t` at all and leaves the choice where it was.
+
 **arm64 only**, and that is a size decision. The server and its libraries are
 about 18 MB stripped against git's 12, and three ABIs of it would put 56 MB into
 the universal APK. Nothing is lost: a 32-bit phone cannot map a two-gigabyte

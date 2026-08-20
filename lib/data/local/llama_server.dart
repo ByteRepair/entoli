@@ -56,6 +56,7 @@ class LlamaBinaries {
   required String apiKey,
   String? device,
   int? contextLength,
+  int? threads,
 }) =>
     (
       command: [
@@ -81,6 +82,8 @@ class LlamaBinaries {
         // Nobody is going to open this in a browser, and the assets are served
         // from the binary either way.
         "--no-webui",
+        // Null is llama.cpp's own answer, which is every physical core.
+        if (threads != null) ...["-t", "$threads"],
         if (device != null) ...[
           "-dev", device,
           // Everything the device will take. A phone has no separate pool of
@@ -97,6 +100,55 @@ class LlamaBinaries {
 /// paged, while the KV cache is resident, so on a phone it is the context that
 /// decides whether the app is killed.
 const defaultContextLength = 4096;
+
+/// The answer for this machine, read once. A lazy top-level `final` because the
+/// cores do not change while the process lives, and every caller is on a path —
+/// the first frame, and a settings page restarting the server — that has no
+/// reason to read eight files again for a number that cannot have moved.
+final int? _bigCores = bigCoreCount(cpuCeilings());
+
+/// How many cores are worth running on, given what the kernel says each one's
+/// ceiling is.
+///
+/// llama.cpp's own answer is every physical core, and on a phone that is wrong
+/// in a way it is not on a desktop: the cores are not alike, and ggml's
+/// threadpool moves at its slowest thread's pace, so a little core holds up
+/// every big one it was scheduled beside. The little cluster is the one at the
+/// lowest ceiling; everything above it is what to run on.
+///
+/// A machine whose cores are all one tier has no little cluster and gets all of
+/// them, and so does one the kernel would not answer for — [threads] is null
+/// there and llama.cpp decides, which is what happened before this existed.
+int? bigCoreCount(List<int> ceilings) {
+  if (ceilings.isEmpty) return null;
+  final slowest = ceilings.reduce(min);
+  final big = ceilings.where((each) => each > slowest).length;
+  return big == 0 ? ceilings.length : big;
+}
+
+/// What the kernel says each core's ceiling is, out of Linux's `cpufreq` — in
+/// whatever unit it uses, since only the ordering is read.
+///
+/// Linux rather than Android, and it needs no guard for it: this is only ever
+/// reached from [LlamaServer], which `platformLocalLlm` builds on Android
+/// alone, and a desktop Linux that got here through a hand-built binary would
+/// be answering about its own cores, which is the right answer there too.
+/// Anywhere else the files are missing and the list is empty.
+///
+/// Every core has to answer or none of them do. A core the kernel says nothing
+/// about is one the others cannot be ranked against, and half a list read as a
+/// whole one is a big cluster of the wrong size — which is worse than the
+/// default this then falls back to.
+List<int> cpuCeilings() {
+  final ceilings = <int>[];
+  for (var cpu = 0; cpu < Platform.numberOfProcessors; cpu++) {
+    final file = File("/sys/devices/system/cpu/cpu$cpu/cpufreq/cpuinfo_max_freq");
+    final value = file.existsSync() ? int.tryParse(file.readAsStringSync().trim()) : null;
+    if (value == null) return const [];
+    ceilings.add(value);
+  }
+  return ceilings;
+}
 
 /// llama.cpp's server, running beside the app and answering on the loopback
 /// address.
@@ -209,6 +261,7 @@ class LlamaServer extends LocalLlm {
       apiKey: apiKey,
       device: device,
       contextLength: contextLength,
+      threads: _bigCores,
     );
     _endpoint = (port: port, key: apiKey);
 
