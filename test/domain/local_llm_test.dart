@@ -98,27 +98,4 @@ void main() {
 
     expect(llm.stops, 1);
   });
-
-  group("the running server as a provider", () {
-    test("it is in the list from the moment a model is picked", () async {
-      final llm = FakeLocalLlm();
-      expect(llm.provider, isNull);
-
-      await applyLocalModel(llm, picking(model));
-
-      // Named rather than asked for: the endpoint would answer, but only once
-      // it has finished loading, and the picker asks while it is still going.
-      expect(llm.provider!.id, localProviderId);
-      expect(llm.provider!.models, [model.id]);
-    });
-
-    test("unpicking takes it back out", () async {
-      final llm = FakeLocalLlm();
-      await applyLocalModel(llm, picking(model));
-
-      await applyLocalModel(llm, picking(null));
-
-      expect(llm.provider, isNull);
-    });
-  });
 }

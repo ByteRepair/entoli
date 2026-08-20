@@ -1,7 +1,9 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/local/llama_server.dart";
+import "package:agent_chat/domain/local_llm.dart";
 import "package:agent_chat/domain/local_model.dart";
+import "package:agent_chat/domain/local_model_store.dart";
 
 /// What the server is asked to do is the whole of what running a model on the
 /// device does, and it is the part of it that can be pinned on a machine with
@@ -133,4 +135,78 @@ something else entirely
       expect(devices.single.totalBytes, isNull);
     });
   });
+
+  /// A server that cannot possibly come up, over weights that are claimed to be
+  /// there: `/bin/false` exits the moment it is started, which is what a real
+  /// one does when the model will not fit. Real code all the way down — the
+  /// process really is spawned — so this is the one thing about the running
+  /// server that a machine with no Android on it can check.
+  group("a start that fails", () {
+    LlamaServer failing() => LlamaServer(
+          const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
+          _AlwaysInstalled(),
+        );
+
+    Future<void> settle(LlamaServer server) async {
+      for (var i = 0; i < 100 && server.state.value.phase != LocalLlmPhase.failed; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+
+    test("the endpoint stays in the list, so a turn is told why", () async {
+      final server = failing();
+      await server.start(localModelCatalog.first);
+      await settle(server);
+
+      // Dropping it would leave a chat pinned to this model reporting that no
+      // provider is configured, which says nothing about what went wrong.
+      expect(server.provider, isNotNull);
+      expect(server.provider!.id, localProviderId);
+      expect(server.provider!.models, [localModelCatalog.first.id]);
+      // Loopback, and a key generated for this launch.
+      expect(server.provider!.baseUrl, startsWith("http://127.0.0.1:"));
+      expect(server.provider!.apiKey, isNotEmpty);
+    });
+
+    test("what is waiting on it is told the server's own last words", () async {
+      final server = failing();
+      await server.start(localModelCatalog.first);
+      await settle(server);
+
+      expect(server.state.value.failure, isNotEmpty);
+      await expectLater(server.whenReady(), throwsA(isA<LocalLlmFailure>()));
+    });
+
+    test("a model that is not downloaded is refused before anything is spawned",
+        () async {
+      final server = LlamaServer(
+        const LlamaBinaries(server: "/bin/false", libDir: "/nonexistent"),
+        const UnavailableLocalModelStore(),
+      );
+
+      await server.start(localModelCatalog.first);
+
+      expect(server.state.value.phase, LocalLlmPhase.failed);
+      // Nothing was started, so there is nothing to offer — unlike above, where
+      // the failure is worth carrying to whoever asks.
+      expect(server.provider, isNull);
+    });
+  });
+}
+
+/// Says every model is on disk, at a path nothing will open.
+class _AlwaysInstalled extends LocalModelStore {
+  const _AlwaysInstalled();
+
+  @override
+  Future<Set<String>> installed() async => const {};
+
+  @override
+  String? fileOfSync(LocalModel model) => "/nonexistent/${model.id}.gguf";
+
+  @override
+  Stream<LocalModelProgress> install(LocalModel model) => const Stream.empty();
+
+  @override
+  Future<void> delete(LocalModel model) async {}
 }

@@ -17,11 +17,16 @@ import "../../providers.dart";
 /// a rootfs is four megabytes — so the notification matters more here than
 /// anywhere else it is used.
 class LocalModelDownloads extends Notifier<LocalModelDownloadState> {
+  late DownloadHold _hold;
+
   final _running = <String, StreamSubscription<LocalModelProgress>>{};
 
   @override
   LocalModelDownloadState build() {
     final work = ref.watch(backgroundWorkProvider);
+    // Held rather than read in the disposer: reading a provider from a
+    // life-cycle callback is what Riverpod refuses.
+    _hold = ref.watch(downloadHoldProvider);
     final stops = work.stopRequests
         .where((job) => job == BackgroundJob.download)
         .listen((_) => cancelAll());
@@ -32,7 +37,7 @@ class LocalModelDownloads extends Notifier<LocalModelDownloadState> {
       }
       // Released rather than merely abandoned: a restore throws this container
       // away, and a hold nobody let go of leaves the notification up for good.
-      unawaited(work.downloading(null));
+      unawaited(_hold.report("models", null));
     });
     return const LocalModelDownloadState();
   }
@@ -99,7 +104,7 @@ class LocalModelDownloads extends Notifier<LocalModelDownloadState> {
       active: active ?? state.active,
       failures: failures ?? state.failures,
     );
-    unawaited(ref.read(backgroundWorkProvider).downloading(state.notice));
+    unawaited(_hold.report("models", state.notice));
   }
 }
 

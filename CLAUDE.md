@@ -627,9 +627,13 @@ shape, base URL, key, and an optional model list — and `llmProviderPresets`
 fills in the endpoints worth naming so that adding one is a key rather than a
 URL nobody remembers. A key can be left out and named as `apiKeyEnv` instead,
 which is how one already exported stays out of the file. `LlmRegistry` builds a
-client per provider and rebuilds it when the URL or key changes; a provider that
+client per endpoint and rebuilds it when the URL or key changes; a provider that
 lists no models is asked, and one that cannot answer contributes nothing rather
-than failing the whole list.
+than failing the whole list. What it builds a client *with* is the endpoint's
+own business: an `LlmEndpoint` is a config and, where reaching it is not the
+ordinary thing, the client to reach it with — which is how the on-device
+server's "may not be up yet" arrives without the registry knowing there is such
+a thing. See "Running a model on the device".
 
 A `RateLimitGate` is built per turn in `BuiltinBackend.sendPrompt` and shared by
 the parent `BuiltinAgent` and every sub-agent it spawns: it bounds in-flight
@@ -912,9 +916,12 @@ per model family is most of what llama.cpp's server *is*. Writing a second copy
 of it in Dart, to save a subprocess on a device that is about to spend a
 gigabyte of memory on weights, is the wrong trade.
 
-The provider is composed in `createBackend` rather than written into
+The endpoint is composed by `llmEndpoints` rather than written into
 `settings.json`: its base URL holds a port asked of the OS at launch, so a file
-naming it would be stale by the next one. What is stored is the pick —
+naming it would be stale by the next one. It goes **first** in the list, which
+is what decides a collision — `localProviderId` is the app's name, and a
+`settings.json` that happens to use it is shadowed rather than allowed to take
+the model's own endpoint away from it. What is stored is the pick —
 `localModelId`, `localModelDevice`, `localModelContext` — and `applyLocalModel`
 is the one function that makes what is running agree with it. Two callers, far
 apart: the settings page, where a model is picked, and `AppSession.start`, where
@@ -925,7 +932,12 @@ Mapping a four-gigabyte model takes the better part of a minute, and a chat
 pinned to it must not lose its model for that minute after every launch. So the
 endpoint is in the list while it loads and `PendingLlmClient` — the same shape
 as `GatedLlmClient` — waits for `whenReady` before the first request goes
-through. A turn sent at a loading model waits; a turn sent at a model that will
+through. **It rides on the endpoint rather than on the registry**: an
+`LlmEndpoint` is a config and, where reaching it is not the ordinary thing, the
+client to reach it with. The first version had the registry comparing a provider
+id against a name it had to be told was reserved, which is a special case in the
+one place that should know nothing about who its endpoints are — and one more
+`==` arm for every endpoint that ever needs decorating. A turn sent at a loading model waits; a turn sent at a model that will
 never load gets the server's own last words as an `LlmException`, which for a
 model too large to fit is the only place that is said at all.
 
@@ -989,10 +1001,26 @@ The weights go to `<cacheDir>/llm/<id>/model.gguf` with a `.complete` marker
 written last, beside the voice models and a downloaded Linux and outside the
 data directory for the same two reasons: `backup.dart` zips that directory whole
 and a restore *replaces* it, so a model in there would be a gigabyte in every
-export and a deletion on every restore. `FileLocalModelStore` is
-`FileRootfsStore` without the unpacking, and the downloader both of them use is
-now one function — `fetchToFile` in `data/local/download.dart`, which the voice
-store uses as well.
+export and a deletion on every restore.
+
+`FileLocalModelStore` is `FileRootfsStore` without the unpacking, and what the
+three of them share is now in `data/local/download.dart`: `fetchToFile` for one
+file, and `downloadStream` for the install around it. What was copied three
+times was not the part that differs but the part that is easy to get subtly
+wrong — **cancelling is the listener going away**, so the half-written directory
+has to be removed with nobody left to tell, and the client closed on all three
+exits without adding to a controller that is already closed. `reportsFor` is the
+other half: a report is a notification rebuilt through the platform channel, and
+a two-gigabyte model at the megabyte granularity the voice models were written
+for is two thousand of them, most arriving faster than Android will draw.
+
+**One hold, not three.** All three catalogs fetch into a single platform slot,
+and `downloading(null)` stops the foreground service outright — so a
+four-megabyte rootfs finishing while a model is still streaming would drop the
+hold and leave the app killable in the middle of the longest download it makes.
+`DownloadHold` is the only caller of `BackgroundWork.downloading` and merges what
+each source reports, which makes that unrepresentable rather than a rule three
+notifiers have to keep.
 
 `-c` is the setting that decides whether Android kills the app, and it defaults
 far below what any of these models was trained for. The weights are mapped and

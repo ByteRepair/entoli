@@ -87,12 +87,12 @@ class LocalLlmState {
   /// server's own last words, which for a model too large to fit is the only
   /// place that is said.
   final String? failure;
-
-  bool get isRunning => phase == LocalLlmPhase.ready;
 }
 
 /// Start, stop or reload the server so that what is running is what
-/// [settings] asks for.
+/// [settings] asks for. It is the only thing that reconciles the two, so a
+/// path that writes `localModelId` without coming through here would leave the
+/// setting and the server disagreeing, silently.
 ///
 /// One function rather than a rule each caller keeps, because there are two
 /// callers and they are far apart: the settings page, where a model is picked,

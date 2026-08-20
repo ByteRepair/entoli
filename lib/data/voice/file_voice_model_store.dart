@@ -4,7 +4,6 @@ import "dart:isolate";
 
 import "package:archive/archive.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
-import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../domain/voice_model.dart";
@@ -61,72 +60,45 @@ class FileVoiceModelStore extends VoiceModelStore {
   }
 
   @override
-  Stream<VoiceModelProgress> install(VoiceModel model) {
-    final client = http.Client();
-    var cancelled = false;
-    late StreamController<VoiceModelProgress> out;
-
-    Future<void> run() async {
-      // Whatever an earlier attempt left: partial files under a name we are
-      // about to write, which is worse than starting again.
-      await delete(model);
-      final dir = Directory(directoryFor(model))..createSync(recursive: true);
-
-      var received = 0;
-      final total = model.bytes;
-      void progress(int at, {bool extracting = false}) => out.add(
-          VoiceModelProgress(received: at, total: total, extracting: extracting));
-      progress(0);
-
-      for (final download in model.downloads) {
-        final target = switch (download) {
-          VoiceFile(:final path) => p.join(dir.path, path),
-          VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
-        };
-        final before = received;
-        received += (await fetchToFile(
-          client: client,
-          url: download.url,
-          to: target,
-          report: (at) => progress(before + at),
-          cancelled: () => cancelled,
-        ))
-            .bytes;
-        if (cancelled) return;
-        if (download is VoiceArchive) {
-          progress(received, extracting: true);
-          await _unpackOffThread(target, dir.path);
-        }
-      }
-      if (cancelled) return;
-      await File(p.join(dir.path, _marker)).writeAsString("");
-    }
-
-    out = StreamController<VoiceModelProgress>(
-      onListen: () => run().then(
-        (_) async {
-          client.close();
-          // Cancelling closes the stream from the other end, so there is
-          // nobody left to tell — only the half-written directory to remove.
-          if (cancelled) return delete(model);
-          await out.close();
-        },
-        onError: (Object e) async {
+  Stream<VoiceModelProgress> install(VoiceModel model) => downloadStream(
+        discard: () => delete(model),
+        run: (client, cancelled, report) async {
+          // Whatever an earlier attempt left: partial files under a name we are
+          // about to write, which is worse than starting again.
           await delete(model);
-          client.close();
-          if (!out.isClosed) {
-            out.addError(e);
-            await out.close();
+          final dir = Directory(directoryFor(model))..createSync(recursive: true);
+
+          var received = 0;
+          final total = model.bytes;
+          void progress(int at, {bool extracting = false}) => report(
+              VoiceModelProgress(
+                  received: at, total: total, extracting: extracting));
+          progress(0);
+
+          for (final download in model.downloads) {
+            final target = switch (download) {
+              VoiceFile(:final path) => p.join(dir.path, path),
+              VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
+            };
+            final before = received;
+            received += (await fetchToFile(
+              client: client,
+              url: download.url,
+              to: target,
+              report: (at) => progress(before + at),
+              cancelled: cancelled,
+            ))
+                .bytes;
+            if (cancelled()) return;
+            if (download is VoiceArchive) {
+              progress(received, extracting: true);
+              await _unpackOffThread(target, dir.path);
+            }
           }
+          if (cancelled()) return;
+          await File(p.join(dir.path, _marker)).writeAsString("");
         },
-      ),
-      onCancel: () {
-        cancelled = true;
-        client.close();
-      },
-    );
-    return out.stream;
-  }
+      );
 
   /// Off the UI thread, because bz2 in Dart runs at about 8 MB/s and Kokoro is
   /// a minute of solid CPU. Its own method so that the closure handed to the

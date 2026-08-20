@@ -26,6 +26,47 @@ class DownloadNotice {
   final int total;
 }
 
+/// The one caller of [BackgroundWork.downloading].
+///
+/// Three catalogs fetch into one platform slot — a voice model, a Linux, and a
+/// model to run on the device — and `downloading(null)` stops the foreground
+/// service outright. So a four-megabyte rootfs finishing while a two-gigabyte
+/// model is still streaming would drop the hold and leave the app killable in
+/// the middle of the longest download it makes. Merging here makes that
+/// unrepresentable rather than a rule each of the three has to keep.
+class DownloadHold {
+  DownloadHold(this._work);
+
+  final BackgroundWork _work;
+
+  /// By source, so a catalog only ever speaks for itself.
+  final _notices = <String, DownloadNotice>{};
+
+  /// What [source] is fetching, or null when it has stopped. Answering with the
+  /// call so a caller that wants to wait can.
+  Future<void> report(String source, DownloadNotice? notice) {
+    if (notice == null) {
+      _notices.remove(source);
+    } else {
+      _notices[source] = notice;
+    }
+    return _work.downloading(_merged);
+  }
+
+  DownloadNotice? get _merged {
+    if (_notices.isEmpty) return null;
+    return DownloadNotice(
+      // One name where there is one, since "1 download" says less than the
+      // thing being downloaded.
+      label: _notices.length == 1
+          ? _notices.values.single.label
+          : "${_notices.length} downloads",
+      received: _notices.values.fold(0, (sum, n) => sum + n.received),
+      total: _notices.values.fold(0, (sum, n) => sum + n.total),
+    );
+  }
+}
+
 abstract interface class BackgroundWork {
   /// How many turns are running. Zero releases whatever was held.
   Future<void> running(int turns);

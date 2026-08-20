@@ -15,12 +15,10 @@ abstract class LocalModelStore {
   /// halfway through is not one of them: [install] writes its marker last.
   Future<Set<String>> installed();
 
-  /// The file to load, or null if it is not installed.
-  Future<String?> fileOf(LocalModel model);
-
-  /// The same answer without waiting, which is what starting the server needs:
-  /// it is decided from a settings change, and one `stat` is cheaper than a
-  /// state that has to be awaited before the server can be told anything.
+  /// The file to load, or null if it is not installed. Synchronous because
+  /// that is what starting the server needs: it is decided from a settings
+  /// change, and one `stat` is cheaper than a state that has to be awaited
+  /// before the server can be told anything.
   String? fileOfSync(LocalModel model);
 
   /// Fetch [model], reporting as it goes. The stream closes when it is
@@ -51,9 +49,6 @@ class UnavailableLocalModelStore extends LocalModelStore {
 
   @override
   Future<Set<String>> installed() async => const {};
-
-  @override
-  Future<String?> fileOf(LocalModel model) async => null;
 
   @override
   String? fileOfSync(LocalModel model) => null;

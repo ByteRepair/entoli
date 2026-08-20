@@ -63,13 +63,16 @@ class AppSession {
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
     final localModels = platform.createLocalModelStore(cache);
-    // Resolving the binary is one more round trip on the tools channel, and the
-    // backend below needs the answer: a provider list composed without it would
-    // leave the on-device model out of the first turn after a launch.
-    final localLlm = await platform.createLocalLlm(localModels);
+    // Started here and awaited below, the way the three above are: it is a
+    // channel round trip and a `stat`, and laying the tools out is another —
+    // neither needs the other's answer. The backend does need this one, since a
+    // provider list composed without it would leave the on-device model out of
+    // the first turn after a launch.
+    final localLlm = platform.createLocalLlm(localModels);
     final toolset = await tools;
+    final server = await localLlm;
     final backend = platform.createBackend(config, library, store,
-        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: localLlm);
+        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server);
     final voiceModels = platform.createVoiceModelStore(cache);
     final voice = platform.createVoice(voiceModels, cache);
     // Both started before either is awaited: one is a disk scan and the other
@@ -83,11 +86,12 @@ class AppSession {
       if (engines.speech) nativeSpeech.id,
     };
     final installed = {...await scan, ...system};
-    // Read here for the reason the voice models are: the Terminal page's rows
-    // and the picker above them are drawn from it, and a scan started when the
-    // page opens would draw every row as "not installed" first.
-    final installedRootfs = await rootfs.installed();
-    final installedLocalModels = await localModels.installed();
+    // Read here for the reason the voice models are: the Terminal and On-device
+    // pages' rows and the pickers above them are drawn from it, and a scan
+    // started when the page opens would draw every row as "not installed"
+    // first. Both at once — they are two directories and neither needs the
+    // other.
+    final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -108,13 +112,13 @@ class AppSession {
         installedVoiceModelsProvider
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
         rootfsStoreProvider.overrideWithValue(rootfs),
-        installedRootfsProvider.overrideWith(() => InstalledRootfs(installedRootfs)),
+        installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
         deviceAbiProvider.overrideWithValue(await abi),
         prootAvailableProvider.overrideWithValue(toolset?.proot != null),
         localModelStoreProvider.overrideWithValue(localModels),
-        localLlmProvider.overrideWithValue(localLlm),
+        localLlmProvider.overrideWithValue(server),
         installedLocalModelsProvider
-            .overrideWith(() => InstalledLocalModels(installedLocalModels)),
+            .overrideWith(() => InstalledLocalModels(scans.last)),
       ],
     );
     container.read(availableModelsProvider);
@@ -122,7 +126,7 @@ class AppSession {
     // A model picked in a previous run is loaded again here, and not awaited:
     // mapping it is a minute the app has no reason to spend before its first
     // frame, and a turn sent in the meantime waits on `whenReady`.
-    unawaited(applyLocalModel(localLlm, AppSettings.load(config)));
+    unawaited(applyLocalModel(server, AppSettings.load(config)));
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open

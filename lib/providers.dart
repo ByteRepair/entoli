@@ -288,20 +288,31 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// this per command.
   Future<void> setRootfs(String? id) => _update((s) => s.rootfsId = id);
 
-  /// What is served from this device, and how. Stored and then applied, so the
-  /// pick survives the server failing to honour it and is tried again at the
-  /// next launch — and so the file is written once for a change that touches
-  /// three fields.
+  /// What is served from this device. Unpicking clears the other two, since
+  /// neither means anything without a model and left behind they would be
+  /// applied to whatever is picked next.
+  Future<void> setLocalModel(String? id) => _applyLocal((s) => s
+    ..localModelId = id
+    ..localModelDevice = id == null ? null : s.localModelDevice
+    ..localModelContext = id == null ? null : s.localModelContext);
+
+  /// Which accelerator it is offloaded to, by the name `--list-devices` gave
+  /// it. Null is the CPU.
+  Future<void> setLocalDevice(String? device) =>
+      _applyLocal((s) => s.localModelDevice = device);
+
+  Future<void> setLocalContext(int? tokens) =>
+      _applyLocal((s) => s.localModelContext = tokens);
+
+  /// Stored and then applied, so the pick survives the server failing to
+  /// honour it and is tried again at the next launch. One field at a time and
+  /// never a sibling: threading the other two through every setter is what
+  /// lets a value a picker is *showing* as Default be silently written back.
   ///
-  /// The model list is rebuilt because a running server is a provider: picking
+  /// The model list is rebuilt because a running server is an endpoint: picking
   /// one adds a model to every picker in the app, and unpicking takes it away.
-  Future<void> setLocalModel(String? id, {String? device, int? contextLength}) async {
-    await _update((s) => s
-      ..localModelId = id
-      // Neither means anything without a model, and left behind they would be
-      // applied to whatever is picked next.
-      ..localModelDevice = id == null ? null : device
-      ..localModelContext = id == null ? null : contextLength);
+  Future<void> _applyLocal(void Function(AppSettings) change) async {
+    await _update(change);
     await applyLocalModel(ref.read(localLlmProvider), state);
     ref.invalidate(availableModelsProvider);
   }
@@ -348,6 +359,11 @@ final backgroundWorkProvider =
 /// moment it exists, and nothing ever asks it anything. Here rather than a bare
 /// object in `main` so that its lifetime is the container's and `dispose` has a
 /// caller.
+/// The single owner of the platform's download slot — see [DownloadHold]. Every
+/// catalog's notifier reports through it rather than to [BackgroundWork].
+final downloadHoldProvider =
+    Provider<DownloadHold>((ref) => DownloadHold(ref.watch(backgroundWorkProvider)));
+
 final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
   final keepAlive = TurnKeepAlive(
       ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));

@@ -63,7 +63,7 @@ void main() {
     await store().install(model).drain<void>();
 
     expect(await store().installed(), {"test-model"});
-    final file = await store().fileOf(model);
+    final file = store().fileOfSync(model);
     expect(file, isNotNull);
     expect(File(file!).readAsBytesSync(), weights);
     // Written last, and the whole of what "installed" means.

@@ -183,75 +183,76 @@ echo "==> proot $PROOT_VERSION"
 if [ "$llama" = no ]; then
   echo "==> llama.cpp: not built for $abi"
 else
-echo "==> llama.cpp $LLAMA_CPP_VERSION"
-(
-  cd "$src/llama.cpp-$LLAMA_CPP_VERSION"
-  build=build-$abi
-  # Everything about this build is the NDK's own toolchain file, which is what
-  # makes it the one step here with no adjustments to the source at all.
-  #
-  # `GGML_BACKEND_DL` is the load-bearing option: it makes each backend a
-  # `libggml-*.so` loaded at runtime from the directory the binary is in, so an
-  # APK carries whichever ones it was built with and the phone uses whichever
-  # of those find hardware. Without it the set of backends is fixed at link
-  # time, and a build with the NPU in it would refuse to start on a phone that
-  # has none.
-  #
-  # `-DCMAKE_SKIP_INSTALL_RPATH` because the app sets `LD_LIBRARY_PATH` itself:
-  # an rpath baked here would name a directory of this machine's, and the
-  # install path on a device is not known until the app is installed.
-  cmake_args=(
-    -B "$build" -G Ninja
-    -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake"
-    -DANDROID_ABI="$abi"
-    -DANDROID_PLATFORM="android-$api"
-    -DCMAKE_BUILD_TYPE=Release
-    -DBUILD_SHARED_LIBS=ON
-    -DGGML_BACKEND_DL=ON
-    -DGGML_NATIVE=OFF
-    -DCMAKE_SKIP_INSTALL_RPATH=ON
-    # The server downloads models when it is told to; this app does its own
-    # downloading, and linking curl here would mean cross-compiling it a second
-    # time for a feature nothing reaches.
-    -DLLAMA_CURL=OFF
-    -DLLAMA_BUILD_SERVER=ON
-    -DLLAMA_BUILD_TESTS=OFF
-    -DLLAMA_BUILD_EXAMPLES=OFF
-    -DLLAMA_BUILD_APP=OFF
-    # Nothing here opens the server in a browser, and building it wants a host
-    # compiler and a download from HuggingFace — two things a build of this
-    # should not need.
-    -DLLAMA_BUILD_UI=OFF
-    -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
-    -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
-  )
-  # The NPU, where whoever is building has the SDK for it. Qualcomm's, behind an
-  # account, and not redistributable — which is why CI builds without it and why
-  # this is a variable rather than a default. Nothing else changes: the backend
-  # arrives as two more `libggml-*.so` and the app finds it the same way it
-  # finds the CPU's.
-  if [ -n "${HEXAGON_SDK_ROOT:-}" ]; then
-    cmake_args+=(-DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$HEXAGON_SDK_ROOT")
-  fi
-  cmake "${cmake_args[@]}" >/dev/null
-  cmake --build "$build" -j"$jobs" --target llama-server >/dev/null
+  echo "==> llama.cpp $LLAMA_CPP_VERSION"
+  (
+    cd "$src/llama.cpp-$LLAMA_CPP_VERSION"
+    build=build-$abi
+    # Everything about this build is the NDK's own toolchain file, which is what
+    # makes it the one step here with no adjustments to the source at all.
+    #
+    # `GGML_BACKEND_DL` is the load-bearing option: it makes each backend a
+    # `libggml-*.so` loaded at runtime from the directory the binary is in, so an
+    # APK carries whichever ones it was built with and the phone uses whichever
+    # of those find hardware. Without it the set of backends is fixed at link
+    # time, and a build with the NPU in it would refuse to start on a phone that
+    # has none.
+    #
+    # `-DCMAKE_SKIP_INSTALL_RPATH` because the app sets `LD_LIBRARY_PATH` itself:
+    # an rpath baked here would name a directory of this machine's, and the
+    # install path on a device is not known until the app is installed.
+    cmake_args=(
+      -B "$build" -G Ninja
+      -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake"
+      -DANDROID_ABI="$abi"
+      -DANDROID_PLATFORM="android-$api"
+      -DCMAKE_BUILD_TYPE=Release
+      -DBUILD_SHARED_LIBS=ON
+      -DGGML_BACKEND_DL=ON
+      -DGGML_NATIVE=OFF
+      -DCMAKE_SKIP_INSTALL_RPATH=ON
+      # The server downloads models when it is told to; this app does its own
+      # downloading, and linking curl here would mean cross-compiling it a second
+      # time for a feature nothing reaches.
+      -DLLAMA_CURL=OFF
+      -DLLAMA_BUILD_SERVER=ON
+      -DLLAMA_BUILD_TESTS=OFF
+      -DLLAMA_BUILD_EXAMPLES=OFF
+      -DLLAMA_BUILD_APP=OFF
+      # Nothing here opens the server in a browser, and building it wants a host
+      # compiler and a download from HuggingFace — two things a build of this
+      # should not need.
+      -DLLAMA_BUILD_UI=OFF
+      -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
+      -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
+    )
+    # The NPU, where whoever is building has the SDK for it. Qualcomm's, behind an
+    # account, and not redistributable — which is why CI builds without it and why
+    # this is a variable rather than a default. Nothing else changes: the backend
+    # arrives as two more `libggml-*.so` and the app finds it the same way it
+    # finds the CPU's.
+    if [ -n "${HEXAGON_SDK_ROOT:-}" ]; then
+      cmake_args+=(-DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT="$HEXAGON_SDK_ROOT")
+    fi
+    cmake "${cmake_args[@]}" >/dev/null
+    cmake --build "$build" -j"$jobs" --target llama-server >/dev/null
 
-  # Named lib*.so because that is all the installer extracts from an APK, which
-  # for the executable is also the only way it lands somewhere it may be run
-  # from. The libraries keep the names they were linked under — the loader
-  # resolves those by name, and renaming one is a server that will not start.
-  "$STRIP" -o "$out/libllama-server.so" "$(find "$build" -name llama-server -type f | head -1)"
-  shopt -s nullglob
-  while IFS= read -r lib; do
-    case "$(basename "$lib")" in
-      # The DSP-side half of the Hexagon backend, which is not a CPU library at
-      # all: it is QDSP6 code, loaded onto the NPU by fastRPC by name out of
-      # ADSP_LIBRARY_PATH, and nothing on this side can strip it.
-      libggml-htp-*) cp "$lib" "$out/" ;;
-      *) "$STRIP" -o "$out/$(basename "$lib")" "$lib" ;;
-    esac
-  done < <(find "$build" -name "lib*.so" -type f)
-)
+    # Named lib*.so because that is all the installer extracts from an APK,
+    # which for the executable is also the only way it lands somewhere it may
+    # be run from. The libraries keep the names they were linked under — the
+    # loader resolves those by name, and renaming one is a server that will not
+    # start.
+    "$STRIP" -o "$out/libllama-server.so" \
+      "$(find "$build" -name llama-server -type f | head -1)"
+    while IFS= read -r lib; do
+      case "$(basename "$lib")" in
+        # The DSP-side half of the Hexagon backend, which is not a CPU library
+        # at all: it is QDSP6 code, loaded onto the NPU by fastRPC by name out
+        # of ADSP_LIBRARY_PATH, and nothing on this side can strip it.
+        libggml-htp-*) cp "$lib" "$out/" ;;
+        *) "$STRIP" -o "$out/$(basename "$lib")" "$lib" ;;
+      esac
+    done < <(find "$build" -name "lib*.so" -type f)
+  )
 fi
 
 echo "==> $abi"

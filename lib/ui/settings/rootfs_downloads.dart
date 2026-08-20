@@ -13,11 +13,16 @@ import "../../providers.dart";
 /// it has to outlive the app being on screen, which is what the notification is
 /// for.
 class RootfsDownloads extends Notifier<RootfsDownloadState> {
+  late DownloadHold _hold;
+
   final _running = <String, StreamSubscription<RootfsProgress>>{};
 
   @override
   RootfsDownloadState build() {
     final work = ref.watch(backgroundWorkProvider);
+    // Held rather than read in the disposer: reading a provider from a
+    // life-cycle callback is what Riverpod refuses.
+    _hold = ref.watch(downloadHoldProvider);
     final stops = work.stopRequests
         .where((job) => job == BackgroundJob.download)
         .listen((_) => cancelAll());
@@ -28,7 +33,7 @@ class RootfsDownloads extends Notifier<RootfsDownloadState> {
       }
       // Released rather than merely abandoned: a restore throws this container
       // away, and a hold nobody let go of leaves the notification up for good.
-      unawaited(work.downloading(null));
+      unawaited(_hold.report("linux", null));
     });
     return const RootfsDownloadState();
   }
@@ -100,7 +105,7 @@ class RootfsDownloads extends Notifier<RootfsDownloadState> {
       active: active ?? state.active,
       failures: failures ?? state.failures,
     );
-    unawaited(ref.read(backgroundWorkProvider).downloading(state.notice));
+    unawaited(_hold.report("linux", state.notice));
   }
 }
 

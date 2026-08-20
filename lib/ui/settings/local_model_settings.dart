@@ -55,11 +55,7 @@ class LocalModelSection extends ConsumerWidget {
               for (final model in usable)
                 DropdownMenuItem(value: model.id, child: Text(model.name)),
             ],
-            onChanged: (id) => ref.read(appSettingsProvider.notifier).setLocalModel(
-                  id,
-                  device: settings.localModelDevice,
-                  contextLength: settings.localModelContext,
-                ),
+            onChanged: ref.read(appSettingsProvider.notifier).setLocalModel,
           ),
         ),
         if (settings.localModelId != null) ...[
@@ -79,8 +75,15 @@ class _DevicePicker extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devices = ref.watch(localDevicesProvider).asData?.value ?? const [];
+    final found = ref.watch(localDevicesProvider);
     final settings = ref.watch(appSettingsProvider);
+    // Enumerating spawns the server, so for a second there is no answer yet —
+    // and "no accelerator" is a thing to say once rather than to say and then
+    // take back.
+    if (found.isLoading) {
+      return const LabelledField(label: "Runs on", child: Text("Looking…"));
+    }
+    final devices = found.asData?.value ?? const [];
     if (devices.isEmpty) {
       return const LabelledField(
         label: "Runs on",
@@ -101,14 +104,14 @@ class _DevicePicker extends ConsumerWidget {
           for (final device in devices)
             DropdownMenuItem(
               value: device.name,
-              child: Text("${device.compute.label} · ${device.description}"),
+              child: Text([
+                device.compute.label,
+                device.description,
+                if (device.totalBytes != null) formatSize(device.totalBytes!),
+              ].join(" · ")),
             ),
         ],
-        onChanged: (name) => ref.read(appSettingsProvider.notifier).setLocalModel(
-              settings.localModelId,
-              device: name,
-              contextLength: settings.localModelContext,
-            ),
+        onChanged: ref.read(appSettingsProvider.notifier).setLocalDevice,
       ),
     );
   }
@@ -140,11 +143,7 @@ class _ContextPicker extends ConsumerWidget {
           for (final size in choices)
             DropdownMenuItem(value: size, child: Text("$size tokens")),
         ],
-        onChanged: (size) => ref.read(appSettingsProvider.notifier).setLocalModel(
-              settings.localModelId,
-              device: settings.localModelDevice,
-              contextLength: size,
-            ),
+        onChanged: ref.read(appSettingsProvider.notifier).setLocalContext,
       ),
     );
   }

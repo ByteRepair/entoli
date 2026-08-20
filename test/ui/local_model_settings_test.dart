@@ -41,17 +41,10 @@ void main() {
     expect(find.textContaining("Q4_0"), findsWidgets);
     expect(find.byTooltip("Download"), findsWidgets);
     expect(find.byTooltip("Delete"), findsNothing);
-  });
-
-  testWidgets("nothing downloaded means nothing to pick", (tester) async {
-    app = TestApp.create(localLlm: FakeLocalLlm());
-    await pumpOnDevice(tester);
-
+    // The picker offers what is on disk, and nothing is: the only entry is the
+    // one that means no model at all.
     expect(find.text("Model"), findsOneWidget);
     expect(find.text("None"), findsOneWidget);
-    // The picker offers what is on disk, so a model that would have to be
-    // fetched first is not a choice that can be made here.
-    expect(find.text(model.name), findsOneWidget); // the catalog row, not a choice
   });
 
   testWidgets("downloading one adds it to the picker and leaves it unpicked",

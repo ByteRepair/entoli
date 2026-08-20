@@ -8,11 +8,11 @@
 /// refuse a file that is not the one that was checked.
 library;
 
-/// What a device can be asked to do the arithmetic on. The names are ggml's own
-/// — a device is picked by passing its name to `--device`, and the CPU is the
-/// one that is never named, since it is what runs when nothing is offloaded.
+/// What an accelerator is, for the label beside its name. There is no CPU here
+/// deliberately: the CPU is what runs when nothing is offloaded, so it is the
+/// *absence* of a device rather than one of them — which is why `--device` is
+/// passed nothing to get it, and why the picker's CPU entry carries a null.
 enum LocalCompute {
-  cpu("CPU"),
   gpu("GPU"),
   npu("NPU");
 
@@ -102,7 +102,7 @@ class LocalModel {
 
   /// What the model was trained to handle. Not what it is *run* with — a
   /// phone's memory is the KV cache's limit long before the model's is, which
-  /// is what [LocalLlmOptions.contextLength] is for.
+  /// is what `AppSettings.localModelContext` is for.
   final int contextLength;
 
   final String licence;

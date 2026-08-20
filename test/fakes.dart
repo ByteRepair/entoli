@@ -630,9 +630,6 @@ class FakeLocalModelStore extends LocalModelStore {
   Future<Set<String>> installed() async => {..._installed};
 
   @override
-  Future<String?> fileOf(LocalModel model) async => fileOfSync(model);
-
-  @override
   String? fileOfSync(LocalModel model) =>
       _installed.contains(model.id) ? "/models/${model.id}/model.gguf" : null;
 

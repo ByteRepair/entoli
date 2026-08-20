@@ -1,7 +1,5 @@
-import "dart:async";
 import "dart:io";
 
-import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../domain/rootfs.dart";
@@ -67,79 +65,54 @@ class FileRootfsStore extends RootfsStore {
   }
 
   @override
-  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi}) {
-    final client = http.Client();
-    var cancelled = false;
-    late StreamController<RootfsProgress> out;
-
-    Future<void> run() async {
-      final image = rootfs.imageFor(abi);
-      if (image == null) {
-        throw UnsupportedError("${rootfs.name} has no build for $abi.");
-      }
-      // Whatever an earlier attempt left: files under a name we are about to
-      // write, which is worse than starting again.
-      await delete(rootfs);
-      final dir = Directory(directoryFor(rootfs.id))..createSync(recursive: true);
-      final archive = p.join(dir.path, "_rootfs.tar.gz");
-
-      out.add(RootfsProgress(received: 0, total: image.bytes));
-      final got = await fetchToFile(
-        client: client,
-        url: image.url,
-        to: archive,
-        report: (at) => out.add(RootfsProgress(received: at, total: image.bytes)),
-        cancelled: () => cancelled,
-        hash: true,
-      );
-      if (cancelled) return;
-      // Before a byte of it is unpacked, let alone run. Everything in here
-      // becomes a program this device will execute, so arriving is not the same
-      // as being what was asked for.
-      if (got.sha256 != image.sha256) {
-        throw StateError(
-          "The download did not match what ${rootfs.name} ${rootfs.version} was "
-          "checked to be, so nothing was installed.",
-        );
-      }
-
-      out.add(RootfsProgress(
-          received: image.bytes, total: image.bytes, unpacking: true));
-      final result = await tar(archive, dir.path);
-      if (cancelled) return;
-      if (result.exitCode != 0) {
-        throw ProcessException("tar", const [], "${result.stderr}".trim(),
-            result.exitCode);
-      }
-      await File(archive).delete();
-      await File(p.join(dir.path, _marker)).writeAsString("");
-    }
-
-    out = StreamController<RootfsProgress>(
-      onListen: () => run().then(
-        (_) async {
-          client.close();
-          // Cancelling closes the stream from the other end, so there is nobody
-          // left to tell — only the half-written directory to remove.
-          if (cancelled) return delete(rootfs);
-          await out.close();
-        },
-        onError: (Object e) async {
-          await delete(rootfs);
-          client.close();
-          if (!out.isClosed) {
-            out.addError(e);
-            await out.close();
+  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi}) =>
+      downloadStream(
+        discard: () => delete(rootfs),
+        run: (client, cancelled, report) async {
+          final image = rootfs.imageFor(abi);
+          if (image == null) {
+            throw UnsupportedError("${rootfs.name} has no build for $abi.");
           }
+          // Whatever an earlier attempt left: files under a name we are about
+          // to write, which is worse than starting again.
+          await delete(rootfs);
+          final dir = Directory(directoryFor(rootfs.id))
+            ..createSync(recursive: true);
+          final archive = p.join(dir.path, "_rootfs.tar.gz");
+
+          report(RootfsProgress(received: 0, total: image.bytes));
+          final got = await fetchToFile(
+            client: client,
+            url: image.url,
+            to: archive,
+            report: (at) =>
+                report(RootfsProgress(received: at, total: image.bytes)),
+            cancelled: cancelled,
+            hash: true,
+          );
+          if (cancelled()) return;
+          // Before a byte of it is unpacked, let alone run. Everything in here
+          // becomes a program this device will execute, so arriving is not the
+          // same as being what was asked for.
+          if (got.sha256 != image.sha256) {
+            throw StateError(
+              "The download did not match what ${rootfs.name} "
+              "${rootfs.version} was checked to be, so nothing was installed.",
+            );
+          }
+
+          report(RootfsProgress(
+              received: image.bytes, total: image.bytes, unpacking: true));
+          final result = await tar(archive, dir.path);
+          if (cancelled()) return;
+          if (result.exitCode != 0) {
+            throw ProcessException(
+                "tar", const [], "${result.stderr}".trim(), result.exitCode);
+          }
+          await File(archive).delete();
+          await File(p.join(dir.path, _marker)).writeAsString("");
         },
-      ),
-      onCancel: () {
-        cancelled = true;
-        client.close();
-      },
-    );
-    return out.stream;
-  }
+      );
 
   /// Android's `tar` is toybox's, and `-z` is the one thing this needs of it.
   /// The absolute path is the fallback for a device whose `PATH` does not name

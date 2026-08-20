@@ -1,7 +1,5 @@
-import "dart:async";
 import "dart:io";
 
-import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../domain/local_model.dart";
@@ -33,12 +31,6 @@ class FileLocalModelStore extends LocalModelStore {
   String _fileFor(LocalModel model) => p.join(directoryFor(model.id), _weights);
 
   @override
-  Future<String?> fileOf(LocalModel model) async =>
-      await File(p.join(directoryFor(model.id), _marker)).exists()
-          ? _fileFor(model)
-          : null;
-
-  @override
   String? fileOfSync(LocalModel model) =>
       File(p.join(directoryFor(model.id), _marker)).existsSync()
           ? _fileFor(model)
@@ -67,63 +59,40 @@ class FileLocalModelStore extends LocalModelStore {
   }
 
   @override
-  Stream<LocalModelProgress> install(LocalModel model) {
-    final client = http.Client();
-    var cancelled = false;
-    late StreamController<LocalModelProgress> out;
-
-    Future<void> run() async {
-      // Whatever an earlier attempt left: a partial file under a name we are
-      // about to write, which is worse than starting again.
-      await delete(model);
-      final dir = Directory(directoryFor(model.id))..createSync(recursive: true);
-
-      out.add(LocalModelProgress(received: 0, total: model.bytes));
-      final got = await fetchToFile(
-        client: client,
-        url: model.url,
-        to: _fileFor(model),
-        report: (at) => out.add(LocalModelProgress(received: at, total: model.bytes)),
-        cancelled: () => cancelled,
-        hash: true,
-      );
-      if (cancelled) return;
-      // A gigabyte over somebody's mobile data, and the publisher already says
-      // what it should come to. Weights are not a program, so this is not the
-      // check a rootfs gets — it is the check that the download finished and
-      // arrived from the model it claims to be.
-      if (got.sha256 != model.sha256) {
-        throw StateError(
-          "The download did not match what ${model.name} was checked to be, so "
-          "nothing was kept.",
-        );
-      }
-      await File(p.join(dir.path, _marker)).writeAsString("");
-    }
-
-    out = StreamController<LocalModelProgress>(
-      onListen: () => run().then(
-        (_) async {
-          client.close();
-          // Cancelling closes the stream from the other end, so there is nobody
-          // left to tell — only the half-written directory to remove.
-          if (cancelled) return delete(model);
-          await out.close();
-        },
-        onError: (Object e) async {
+  Stream<LocalModelProgress> install(LocalModel model) => downloadStream(
+        discard: () => delete(model),
+        run: (client, cancelled, report) async {
+          // Whatever an earlier attempt left: a partial file under a name we
+          // are about to write, which is worse than starting again.
           await delete(model);
-          client.close();
-          if (!out.isClosed) {
-            out.addError(e);
-            await out.close();
+          final dir = Directory(directoryFor(model.id))
+            ..createSync(recursive: true);
+
+          report(LocalModelProgress(received: 0, total: model.bytes));
+          final got = await fetchToFile(
+            client: client,
+            url: model.url,
+            to: _fileFor(model),
+            report: (at) =>
+                report(LocalModelProgress(received: at, total: model.bytes)),
+            cancelled: cancelled,
+            hash: true,
+            // These are the largest downloads the app makes, and every report
+            // is a notification rebuilt through the platform channel.
+            reportEvery: reportsFor(model.bytes),
+          );
+          if (cancelled()) return;
+          // A gigabyte over somebody's mobile data, and the publisher already
+          // says what it should come to. Weights are not a program, so this is
+          // not the check a rootfs gets — it is the check that the download
+          // finished and arrived from the model it claims to be.
+          if (got.sha256 != model.sha256) {
+            throw StateError(
+              "The download did not match what ${model.name} was checked to "
+              "be, so nothing was kept.",
+            );
           }
+          await File(p.join(dir.path, _marker)).writeAsString("");
         },
-      ),
-      onCancel: () {
-        cancelled = true;
-        client.close();
-      },
-    );
-    return out.stream;
-  }
+      );
 }

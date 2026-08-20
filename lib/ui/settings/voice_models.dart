@@ -12,11 +12,16 @@ import "../../providers.dart";
 /// closing settings must not cancel a hundred megabytes — and on Android it
 /// outlives the app being on screen, which is what the notification is for.
 class VoiceModels extends Notifier<VoiceDownloadState> {
+  late DownloadHold _hold;
+
   final _running = <String, StreamSubscription<VoiceModelProgress>>{};
 
   @override
   VoiceDownloadState build() {
     final work = ref.watch(backgroundWorkProvider);
+    // Held rather than read in the disposer: reading a provider from a
+    // life-cycle callback is what Riverpod refuses.
+    _hold = ref.watch(downloadHoldProvider);
     final stops = work.stopRequests
         .where((job) => job == BackgroundJob.download)
         .listen((_) => cancelAll());
@@ -29,7 +34,7 @@ class VoiceModels extends Notifier<VoiceDownloadState> {
       // this container away, and a hold nobody let go of leaves the
       // notification up and `ForegroundWork.busy` true for good — after which
       // the cached engine is never evicted again.
-      unawaited(work.downloading(null));
+      unawaited(_hold.report("voice", null));
     });
     return const VoiceDownloadState();
   }
@@ -103,7 +108,7 @@ class VoiceModels extends Notifier<VoiceDownloadState> {
       active: active ?? state.active,
       failures: failures ?? state.failures,
     );
-    unawaited(ref.read(backgroundWorkProvider).downloading(state.notice));
+    unawaited(_hold.report("voice", state.notice));
   }
 }
 

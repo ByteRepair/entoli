@@ -1,7 +1,57 @@
+import "dart:async";
 import "dart:io";
 
 import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;
+
+/// An install as a stream: a client to fetch with, a way to ask whether the
+/// listener is still there, and somewhere to report progress.
+///
+/// The three catalogs — a voice model, a Linux, a model to run on the device —
+/// were three copies of this, and what they copied was the part that is easy to
+/// get subtly wrong rather than the part that differs: **cancelling is the
+/// listener going away**, so the half-written directory has to be removed with
+/// nobody left to tell, and the client has to be closed on all three exits
+/// without adding to a controller that is already closed.
+///
+/// [discard] is what a cancelled or failed install leaves nothing behind with.
+Stream<P> downloadStream<P>({
+  required Future<void> Function(
+    http.Client client,
+    bool Function() cancelled,
+    void Function(P) report,
+  ) run,
+  required Future<void> Function() discard,
+}) {
+  final client = http.Client();
+  var cancelled = false;
+  late StreamController<P> out;
+
+  out = StreamController<P>(
+    onListen: () => run(client, () => cancelled, out.add).then(
+      (_) async {
+        client.close();
+        // Cancelling closes the stream from the other end, so there is nobody
+        // left to tell — only the half-written directory to remove.
+        if (cancelled) return discard();
+        await out.close();
+      },
+      onError: (Object e) async {
+        await discard();
+        client.close();
+        if (!out.isClosed) {
+          out.addError(e);
+          await out.close();
+        }
+      },
+    ),
+    onCancel: () {
+      cancelled = true;
+      client.close();
+    },
+  );
+  return out.stream;
+}
 
 /// One file, streamed to disk, reporting as it goes and hashed on the way past
 /// where the caller has something to check it against.
@@ -21,6 +71,7 @@ Future<({int bytes, String? sha256})> fetchToFile({
   required void Function(int) report,
   required bool Function() cancelled,
   bool hash = false,
+  int reportEvery = _reportEvery,
 }) async {
   final response = await client.send(http.Request("GET", Uri.parse(url)));
   if (response.statusCode != 200) {
@@ -55,8 +106,17 @@ Future<({int bytes, String? sha256})> fetchToFile({
   return (bytes: at, sha256: digest == null ? null : "${digest.digest}");
 }
 
-/// How far the bar moves before it is worth saying so.
+/// How far the bar moves before it is worth saying so. A megabyte suits the
+/// files this was written for; a caller fetching gigabytes passes its own, since
+/// each report is a platform channel call and a notification rebuild — see
+/// [reportsFor].
 const _reportEvery = 1 << 20;
+
+/// A report threshold for a download of [total] bytes: enough for a bar to move
+/// smoothly and no more. A 2 GB model at the default would be two thousand
+/// notification rebuilds, most of them dropped by Android for arriving faster
+/// than it will draw them.
+int reportsFor(int total) => total ~/ 200 < _reportEvery ? _reportEvery : total ~/ 200;
 
 /// Where the hash of the download lands. `package:convert` has one of these and
 /// is not a dependency for four lines.
