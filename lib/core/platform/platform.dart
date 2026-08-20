@@ -1,12 +1,16 @@
 import "package:fs_shim/fs.dart";
 
+import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
+import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
+import "../../data/builtin/llm/local_prefill.dart";
+import "../../data/builtin/templates.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/prompts/prompt_sources.dart";
-import "../../domain/agent_backend.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/background_work.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
 import "../../domain/chat_store.dart";
@@ -34,7 +38,7 @@ import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 /// settings page last wrote. [library] is Entoli's commands and agents, which
 /// the agent expands itself. [store] is the chat store, which the agent needs
 /// to write artifacts to the chat's `artifacts/` dir.
-AgentBackend createBackend(
+BuiltinBackend createBackend(
   AppConfig config,
   PromptLibrary library,
   ChatStore store, {
@@ -72,6 +76,62 @@ AgentBackend createBackend(
   );
 }
 
+/// The on-device prompt warm-up, built where the shell that words the system
+/// prompt and the server it warms both are. Null where there is no server —
+/// every platform but Android. It reads the settings fresh on each run for the
+/// reason the pool's client does: they are edited between turns.
+///
+/// The warm-up prompt is the shared preamble a real turn sends with its
+/// workspace left empty, so the body caches and only the per-chat tail is ever
+/// paid again — and the tools are [agentTools] with the defaults a normal chat
+/// on this device has, so the warmed prefix is the one those chats reuse.
+LocalPrefill? createLocalPrefill(
+  BuiltinBackend backend,
+  LocalLlm localLlm,
+  BackgroundWork background,
+  AppConfig config,
+) {
+  if (!localLlm.available) return null;
+  final shell = backend.shell;
+  return LocalPrefill(
+    llm: localLlm,
+    background: background,
+    // One settings read per warm, feeding both the serve options and the
+    // prompt, so the two cannot be built from different snapshots.
+    warmup: () {
+      final now = AppSettings.load(config);
+      return (
+        options: poolOptions(now),
+        messages: [
+          LlmMessage(
+            role: LlmRole.system,
+            text: systemPrompt(
+              workspace: "",
+              projectWorkspace: "",
+              platform: shell.platformDescription,
+              profile: now.profile,
+              canRunCommands: shell.canRunCommands,
+            ),
+          ),
+          const LlmMessage(role: LlmRole.user, text: "Hello"),
+        ],
+        // The tools a default top-level turn offers. `canRunCommands` and web
+        // search come from the same shell and search a turn uses; the three
+        // booleans are `BuiltinAgent`'s defaults for one — they must stay in
+        // step with those, or the warmed prefix is one no turn sends and the
+        // cache quietly stops hitting.
+        tools: agentTools(
+          canRunCommands: shell.canRunCommands,
+          webSearchAvailable: backend.webSearch.available,
+          offerAsk: true,
+          offerTask: true,
+          saveArtifact: true,
+        ),
+      );
+    },
+  );
+}
+
 /// Every endpoint the app can reach: what the user configured, and the models
 /// on this device where there are any.
 ///
@@ -95,12 +155,7 @@ List<LlmEndpoint> llmEndpoints(
       LlmEndpoint(local, build: (config, apiKey) => LocalPoolClient(localLlm, () {
             // Read here rather than above: this client outlives any one turn,
             // and the settings page edits these between them.
-            final now = settings();
-            return (
-              device: now.localModelDevice,
-              contextLength: now.localModelContext,
-              maxRunning: now.maxLocalModels,
-            );
+            return poolOptions(settings());
           })),
     for (final config in settings().llmProviders) LlmEndpoint(config),
   ];

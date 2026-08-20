@@ -41,6 +41,9 @@ class ForegroundService implements BackgroundWork {
               },
       );
 
+  @override
+  Future<void> prefilling(String? model) => _tell("prefilling", model);
+
   Future<void> _tell(String method, Object? argument) async {
     // Logged rather than raised: a platform that will not hold the process
     // leaves the work where every other platform's already is, and a refusal

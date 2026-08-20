@@ -127,6 +127,29 @@ class BuiltinSession {
     ..addAll(conversation);
 }
 
+/// The tools a turn offers, given what this device and this agent allow. One
+/// function because the model's tool schemas are rendered into the prompt and
+/// so are part of what the prefill cache warms: a turn and its warm-up building
+/// two slightly different lists would cache a prefix no turn ever sends. The
+/// live turn is [BuiltinAgent._tools]; the cache is `LocalPrefill`.
+List<LlmTool> agentTools({
+  required bool canRunCommands,
+  required bool webSearchAvailable,
+  required bool offerAsk,
+  required bool offerTask,
+  required bool saveArtifact,
+}) =>
+    [
+      file_tool_defs.readTool,
+      file_tool_defs.writeTool,
+      file_tool_defs.editTool,
+      if (canRunCommands) bashTool,
+      if (offerAsk) askTool,
+      if (offerTask && canRunCommands) taskTool,
+      if (webSearchAvailable) ...[websearchTool, webfetchTool],
+      if (saveArtifact) artifactTool,
+    ];
+
 /// The agent loop: ask the model, run the command it asked for, show it the
 /// result, repeat until it says it is done.
 ///
@@ -241,19 +264,13 @@ class BuiltinAgent {
   /// unavailable (a browser). `artifact` is dropped where there is no
   /// [saveArtifact] (a sub-agent). `read`/`write`/`edit` are always offered —
   /// they work on the `FileSystem`, which exists on every platform.
-  List<LlmTool> get _tools => [
-        file_tool_defs.readTool,
-        file_tool_defs.writeTool,
-        file_tool_defs.editTool,
-        if (shell.canRunCommands) bashTool,
-        if (offerAskTool) askTool,
-        if (offerTaskTool && subAgentRunner != null && shell.canRunCommands) taskTool,
-        if (webSearch != null && webSearch!.available) ...[
-          websearchTool,
-          webfetchTool,
-        ],
-        if (saveArtifact != null) artifactTool,
-      ];
+  List<LlmTool> get _tools => agentTools(
+        canRunCommands: shell.canRunCommands,
+        webSearchAvailable: webSearch?.available ?? false,
+        offerAsk: offerAskTool,
+        offerTask: offerTaskTool && subAgentRunner != null,
+        saveArtifact: saveArtifact != null,
+      );
 
   bool _cancelled = false;
   ShellRun? _running;
@@ -348,8 +365,9 @@ class BuiltinAgent {
     _setSystemPrompt(agentPrompt);
     session.messages.add(LlmMessage(
       role: LlmRole.user,
-      // Only the first prompt is dressed as a task; the rest continue it.
-      text: fresh ? firstTask(task) : task,
+      // Only the first prompt is dressed as a task; the rest continue it. Both
+      // carry the current time — see [withNow].
+      text: withNow(fresh ? firstTask(task) : task),
       attachments: attachments,
     ));
   }
