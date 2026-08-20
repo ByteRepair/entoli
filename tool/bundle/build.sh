@@ -42,7 +42,12 @@ case "$abi" in
   *) echo "unknown abi: $abi" >&2; exit 2 ;;
 esac
 
-bin=$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin
+toolchain=$ndk/toolchains/llvm/prebuilt/linux-x86_64
+bin=$toolchain/bin
+# The libraries a device is guaranteed to have, which is what the sysroot holds
+# stubs of. Read at the end of the build, to check that nothing links anything
+# else.
+sysroot=$toolchain/sysroot/usr/lib/$host/$api
 export CC=$bin/$triple$api-clang
 export AR=$bin/llvm-ar
 export RANLIB=$bin/llvm-ranlib
@@ -210,6 +215,11 @@ else
       -DGGML_BACKEND_DL=ON
       -DGGML_NATIVE=OFF
       -DCMAKE_SKIP_INSTALL_RPATH=ON
+      # ggml defaults to OpenMP, and the NDK's `libomp.so` is a host toolchain
+      # file rather than something a phone has — a build with it links, ships,
+      # and then cannot start. ggml carries its own threadpool for exactly this
+      # case, which is what llama.cpp's own Android instructions use.
+      -DGGML_OPENMP=OFF
       # The server downloads models when it is told to; this app does its own
       # downloading, and linking curl here would mean cross-compiling it a second
       # time for a feature nothing reaches.
@@ -254,6 +264,24 @@ else
     done < <(find "$build" -name "lib*.so" -type f)
   )
 fi
+
+# The NDK links against libraries a device does not have, and nothing says so
+# until the phone refuses to start the binary. So every library named by
+# anything staged here has to be either beside it in the APK or Android's to
+# provide.
+echo "==> checking $abi against what a phone has"
+unlinkable=0
+for lib in "$out"/*.so; do
+  # Not a CPU binary: QDSP6 code, whose libraries are the DSP's own.
+  case "${lib##*/}" in libggml-htp-*) continue ;; esac
+  while IFS= read -r need; do
+    [ -f "$out/$need" ] || [ -f "$sysroot/$need" ] || {
+      echo "  ${lib##*/} needs $need, which is neither" >&2
+      unlinkable=1
+    }
+  done < <(llvm-readelf -d "$lib" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
+done
+[ "$unlinkable" = 0 ] || exit 1
 
 echo "==> $abi"
 ( cd "$out" && sha256sum ./*.so && ls -l ./*.so )
