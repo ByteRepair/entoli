@@ -156,13 +156,15 @@ final localLlmStateProvider =
     NotifierProvider<LocalLlmStatus, LocalLlmState>(LocalLlmStatus.new);
 
 /// Which architecture this install is for, and so which rootfs a download
-/// fetches. Read once at startup — it cannot change while the app runs.
+/// fetches. Read once at startup — it cannot change while the app runs. Android
+/// is the only thing that answers, so a null one is also how a page tells a
+/// phone from a desktop.
 final deviceAbiProvider = Provider<String?>((ref) => null);
 
 /// Whether this build can run a command inside a Linux at all: proot has to
-/// have been packaged for the device's ABI. False everywhere but Android, which
-/// is what leaves the Terminal page saying so rather than offering a download
-/// nothing could use.
+/// have been packaged for the device's ABI. False everywhere but Android — and
+/// on an Android whose APK was built without it, which the Terminal page says
+/// rather than describing a device that cannot run one.
 final prootAvailableProvider = Provider<bool>((ref) => false);
 
 /// Whether a message can be read out: a platform that can speak, and a speech

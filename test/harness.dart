@@ -80,6 +80,8 @@ class TestApp {
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
   /// Android and so what most of the suite should be pretending to be.
+  /// [abi] is what the device answers with, and only Android answers at all —
+  /// so it is named by a test that is about one, and left alone by the rest.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -92,7 +94,7 @@ class TestApp {
     bool proot = false,
     Set<String> localModels = const {},
     FakeLocalLlm? localLlm,
-    String abi = "arm64-v8a",
+    String? abi,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -157,7 +159,9 @@ class TestApp {
           localLlmProvider.overrideWithValue(server),
           installedLocalModelsProvider
               .overrideWith(() => InstalledLocalModels(localModels)),
-          deviceAbiProvider.overrideWithValue(abi),
+          // A build with proot staged into it is an Android one, so [proot]
+          // answers for the ABI where a test did not bother to.
+          deviceAbiProvider.overrideWithValue(abi ?? (proot ? "arm64-v8a" : null)),
           prootAvailableProvider.overrideWithValue(proot),
           backgroundWorkProvider.overrideWithValue(work),
         ],
