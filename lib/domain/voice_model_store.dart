@@ -1,3 +1,4 @@
+import "download.dart";
 import "voice_model.dart";
 
 /// Where the voice models are kept, and what fetching one costs.
@@ -23,28 +24,9 @@ abstract class VoiceModelStore {
   /// the model is installed and errors if it cannot be; **cancelling the
   /// subscription cancels the download** and leaves nothing behind, which is
   /// what the Cancel button does.
-  Stream<VoiceModelProgress> install(VoiceModel model);
+  Stream<DownloadProgress> install(VoiceModel model);
 
   Future<void> delete(VoiceModel model);
-}
-
-/// How far along a download is. [extracting] is the second phase a speech model
-/// has: bz2 in Dart runs at about 8 MB/s, so Kokoro spends a visible while here
-/// and a bar that stopped at 100% with nothing happening would read as a hang.
-class VoiceModelProgress {
-  const VoiceModelProgress({
-    required this.received,
-    required this.total,
-    this.extracting = false,
-  });
-
-  final int received;
-  final int total;
-  final bool extracting;
-
-  /// 0 to 1, or null where the server would not say how much there is — the
-  /// bar goes indeterminate rather than guessing.
-  double? get fraction => total <= 0 ? null : (received / total).clamp(0.0, 1.0);
 }
 
 /// The web's model store: nowhere to put one.
@@ -58,7 +40,7 @@ class UnavailableVoiceModelStore extends VoiceModelStore {
   Future<String?> directoryOf(VoiceModel model) async => null;
 
   @override
-  Stream<VoiceModelProgress> install(VoiceModel model) =>
+  Stream<DownloadProgress> install(VoiceModel model) =>
       Stream.error(UnsupportedError("Voice models cannot be downloaded in a browser."));
 
   @override

@@ -2831,8 +2831,50 @@ failure states every page would otherwise spell out) over
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
-`NavDrawer` and `navBreakpoint`, `ActionIcon`, and `AttachmentChip` /
-`AttachmentStrip`.
+`NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
+`AttachmentStrip`, and `catalog.dart` — the next section.
+
+#### A catalog of things to download
+
+There are two of them: the voice models, and the Linux the agent runs commands
+in. They are different enough to be two catalogs — one is picked in two halves
+and has system sentinels in it, the other is per-architecture and decides where
+a command runs — and identical in everything about *downloading*. So that half
+is one implementation and the differences are hooks.
+
+`Downloads<T>` in `ui/settings/downloads.dart` is the notifier both catalogs
+are: the running subscriptions, the bar's state, the Cancel in the
+notification, the release on dispose, and the order a delete happens in. A
+catalog answers six things — its ids, how to `begin` a download, what one and
+several are called, how to look again, what to unpick, and how to erase. Held
+above the settings page rather than in it, because a download outlives the page
+and, on Android, outlives the app being on screen.
+
+**Unpick, erase, then look again — in that order, and in the base class.** Both
+catalogs resolve a pick against the catalog rather than the disk, so a setting
+left naming something deleted fails later and somewhere else: at the microphone
+for a voice model, and in the middle of a turn for a rootfs. It was written
+twice, and the second copy is the one that would have drifted.
+
+`begin` returning null is the other rule worth naming: a distribution with no
+image for this device has nothing to fetch, so the press does nothing rather
+than starting a download that fails. The button that raised it is already dead,
+which makes this the belt to that pair of braces.
+
+`CatalogTile`, `CatalogAction` and `InstalledPicker` in `ui/widgets/catalog.dart`
+are the same again for what is drawn: a row with its optional note, failure and
+bar; the one button that is download *or* cancel *or* delete and never two; and
+the field over what is installed. `InstalledPicker` is deliberately **not**
+`InheritableDropdown`, which looks identical and means something else — there
+null is "inherit what the level above says" and comes with a reset button, here
+it is either an answer of its own (Android) or nothing picked yet. It also owns
+the one trap both pickers had spelled out separately: a value no item carries is
+what `DropdownButton` asserts on, so a setting naming something since deleted
+has to fall back to null.
+
+`DownloadProgress` in `domain/download.dart` is what a store reports, and it is
+one type because it was the same three fields twice — a bar reading one of them
+cannot tell which store filled it in.
 
 `ActionIcon` is the small icon button, and it carries the height the actions
 row keeps whether or not anything is in it — the row and the buttons in it have

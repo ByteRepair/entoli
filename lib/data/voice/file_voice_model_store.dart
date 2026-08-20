@@ -7,6 +7,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
+import "../../domain/download.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
 import "../../domain/workspace.dart";
@@ -60,10 +61,10 @@ class FileVoiceModelStore extends VoiceModelStore {
   }
 
   @override
-  Stream<VoiceModelProgress> install(VoiceModel model) {
+  Stream<DownloadProgress> install(VoiceModel model) {
     final client = http.Client();
     var cancelled = false;
-    late StreamController<VoiceModelProgress> out;
+    late StreamController<DownloadProgress> out;
 
     Future<void> run() async {
       // Whatever an earlier attempt left: partial files under a name we are
@@ -73,8 +74,8 @@ class FileVoiceModelStore extends VoiceModelStore {
 
       var received = 0;
       final total = model.bytes;
-      void progress(int at, {bool extracting = false}) => out.add(
-          VoiceModelProgress(received: at, total: total, extracting: extracting));
+      void progress(int at, {bool unpacking = false}) => out.add(
+          DownloadProgress(received: at, total: total, unpacking: unpacking));
       progress(0);
 
       for (final download in model.downloads) {
@@ -92,7 +93,7 @@ class FileVoiceModelStore extends VoiceModelStore {
         );
         if (cancelled) return;
         if (download is VoiceArchive) {
-          progress(received, extracting: true);
+          progress(received, unpacking: true);
           await _unpackOffThread(target, dir.path);
         }
       }
@@ -100,7 +101,7 @@ class FileVoiceModelStore extends VoiceModelStore {
       await File(p.join(dir.path, _marker)).writeAsString("");
     }
 
-    out = StreamController<VoiceModelProgress>(
+    out = StreamController<DownloadProgress>(
       onListen: () => run().then(
         (_) async {
           client.close();
