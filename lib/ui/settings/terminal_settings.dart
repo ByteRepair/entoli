@@ -22,27 +22,24 @@ class TerminalSection extends ConsumerWidget {
     final selected = ref.watch(appSettingsProvider.select((s) => s.rootfsId));
     // Android answers with an ABI and nothing else does, so an ABI with no
     // proot beside it is this device's build shipping without it.
-    final unpackaged = available ? null : ref.watch(deviceAbiProvider);
+    final unpackagedAbi = available ? null : ref.watch(deviceAbiProvider);
+    final description = available
+        ? "Android has a shell and almost nothing to run in it. A Linux "
+            "installed here has a package manager, so the agent can add "
+            "whatever a job needs. It runs under proot, on this device, with "
+            "the chat's files at the same paths inside as outside."
+        : unpackagedAbi != null
+            ? "Commands run on Android itself. A Linux to run them inside is "
+                "downloaded here."
+            : "This build runs commands on the machine it is on. Installing a "
+                "Linux to run them inside is Android's, where the system's own "
+                "shell has almost nothing in it.";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          "Where commands run",
-          description: available
-              ? "Android has a shell and almost nothing to run in it. A Linux "
-                  "installed here has a package manager, so the agent can add "
-                  "whatever a job needs. It runs under proot, on this device, "
-                  "with the chat's files at the same paths inside as outside."
-              : unpackaged != null
-                  ? "Commands run on Android itself. A Linux to run them inside "
-                      "is downloaded here, and this build has nothing to run "
-                      "one with."
-                  : "This build runs commands on the machine it is on. "
-                      "Installing a Linux to run them inside is Android's, "
-                      "where the system's own shell has almost nothing in it.",
-        ),
-        if (unpackaged != null) _Unpackaged(abi: unpackaged),
+        SectionHeader("Where commands run", description: description),
+        if (unpackagedAbi != null) _Unpackaged(abi: unpackagedAbi),
         if (available)
           InstalledPicker(
             label: "Commands run on",

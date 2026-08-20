@@ -20,7 +20,7 @@ void main() {
 
   testWidgets("a platform that cannot run one says so, and offers nothing to "
       "download", (tester) async {
-    app = TestApp.create(abi: null);
+    app = TestApp.create();
     await pumpTerminal(tester);
 
     expect(find.textContaining("runs commands on the machine it is on"),
@@ -32,7 +32,7 @@ void main() {
 
   testWidgets("a phone whose build has no proot in it blames the build, not "
       "the device", (tester) async {
-    app = TestApp.create();
+    app = TestApp.create(abi: "arm64-v8a");
     await pumpTerminal(tester);
 
     expect(find.textContaining("no proot in it for arm64-v8a"), findsOneWidget);
@@ -40,13 +40,6 @@ void main() {
     expect(find.textContaining("runs commands on the machine it is on"),
         findsNothing);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
-  });
-
-  testWidgets("a build that has it says nothing about staging", (tester) async {
-    app = TestApp.create(proot: true);
-    await pumpTerminal(tester);
-
-    expect(find.textContaining("tool/bundle/build.sh"), findsNothing);
   });
 
   testWidgets("where it can run one, the catalog is offered with its size",
@@ -58,6 +51,7 @@ void main() {
     expect(find.textContaining("aarch64"), findsOneWidget);
     expect(find.byTooltip("Download"), findsOneWidget);
     expect(find.byTooltip("Delete"), findsNothing);
+    expect(find.textContaining("tool/bundle/build.sh"), findsNothing);
   });
 
   testWidgets("an architecture this build has no image for is said rather than "
