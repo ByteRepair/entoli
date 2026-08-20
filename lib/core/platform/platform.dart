@@ -4,6 +4,7 @@ import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
 import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
+import "../../data/builtin/llm/local_kv_cache.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/builtin/templates.dart";
@@ -46,6 +47,7 @@ BuiltinBackend createBackend(
   RootfsStore? rootfs,
   String? abi,
   required LocalLlm localLlm,
+  LocalKvCache? kvCache,
 }) {
   AppSettings settings() => AppSettings.load(config);
   return BuiltinBackend(
@@ -68,7 +70,7 @@ BuiltinBackend createBackend(
     webSearch: platformWebSearch(),
     store: store,
     registry: LlmRegistry(
-      endpoints: () => llmEndpoints(settings, localLlm),
+      endpoints: () => llmEndpoints(settings, localLlm, kvCache),
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
@@ -89,13 +91,15 @@ LocalPrefill? createLocalPrefill(
   BuiltinBackend backend,
   LocalLlm localLlm,
   BackgroundWork background,
-  AppConfig config,
-) {
+  AppConfig config, {
+  LocalKvCache? kvCache,
+}) {
   if (!localLlm.available) return null;
   final shell = backend.shell;
   return LocalPrefill(
     llm: localLlm,
     background: background,
+    kvCache: kvCache,
     // One settings read per warm, feeding both the serve options and the
     // prompt, so the two cannot be built from different snapshots.
     warmup: () {
@@ -148,6 +152,7 @@ LocalPrefill? createLocalPrefill(
 List<LlmEndpoint> llmEndpoints(
   AppSettings Function() settings,
   LocalLlm localLlm,
+  LocalKvCache? kvCache,
 ) {
   final local = localLlm.provider;
   return [
@@ -156,7 +161,7 @@ List<LlmEndpoint> llmEndpoints(
             // Read here rather than above: this client outlives any one turn,
             // and the settings page edits these between them.
             return poolOptions(settings());
-          })),
+          }, kvCache: kvCache)),
     for (final config in settings().llmProviders) LlmEndpoint(config),
   ];
 }
@@ -189,7 +194,15 @@ Future<String?> appVersion() => platformAppVersion();
 LocalModelStore createLocalModelStore(String cacheDir) =>
     platformLocalModelStore(cacheDir);
 
-Future<LocalLlm> createLocalLlm(LocalModelStore store) => platformLocalLlm(store);
+Future<LocalLlm> createLocalLlm(LocalModelStore store, String cacheDir) =>
+    platformLocalLlm(store, cacheDir);
+
+/// Where a turn's KV is persisted between reloads, or null where there is no
+/// server to persist for — every platform but Android. Built beside the pool
+/// because the two have to agree on the directory the server writes into. See
+/// [LocalKvCache].
+LocalKvCache? createLocalKvCache(String cacheDir, LocalLlm localLlm) =>
+    platformLocalKvCache(cacheDir, localLlm);
 
 /// A real filesystem on desktop and Android, IndexedDB in a browser. What
 /// [AppConfig] is built on, so it is asked for first.

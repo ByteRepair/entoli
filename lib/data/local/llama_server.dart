@@ -57,6 +57,7 @@ class LlamaBinaries {
   required int contextLength,
   String? device,
   int? threads,
+  String? slotSavePath,
 }) =>
     (
       command: [
@@ -88,6 +89,17 @@ class LlamaBinaries {
         "--no-webui",
         // Null is llama.cpp's own answer, which is every physical core.
         if (threads != null) ...["-t", "$threads"],
+        // Where the slot dumps go, and — with it — quantised KV so a saved
+        // conversation is half the bytes on disk. Both ride on the cache being
+        // on: q8_0 KV is near-lossless but still a change to generation, so a
+        // user who turned the cache off gets f16 and the behaviour they had.
+        // The quant is part of the cache's namespace, so f16 and q8_0 dumps are
+        // never mixed. See "Persisting the KV cache to disk" in CLAUDE.md.
+        if (slotSavePath != null) ...[
+          "--slot-save-path", slotSavePath,
+          "-ctk", "q8_0",
+          "-ctv", "q8_0",
+        ],
         if (device != null) ...[
           "-dev", device,
           // Everything the device will take. A phone has no separate pool of
@@ -180,11 +192,17 @@ List<int> cpuCeilings() {
 /// llama.cpp's servers, running beside the app on the loopback address — one
 /// process per model, up to what the settings allow.
 class LlamaServerPool extends LocalLlm {
-  LlamaServerPool(this._binaries, this._store);
+  LlamaServerPool(this._binaries, this._store, {this._slotSaveDir});
 
   /// Never null: `platformLocalLlm` answers with [UnavailableLocalLlm] where
   /// this build shipped no server, so a pool that exists has one.
   final LlamaBinaries _binaries;
+
+  /// Where the server writes and reads its slot dumps, or null where this build
+  /// has nowhere to keep them. One directory for every model — the dump's
+  /// filename carries the namespace, so the server needs no per-model path. See
+  /// [LocalKvCache].
+  final String? _slotSaveDir;
 
   /// Where the weights are. Asked synchronously at the moment of starting, so
   /// that a model deleted behind the app's back is a refusal here rather than a
@@ -204,6 +222,9 @@ class LlamaServerPool extends LocalLlm {
 
   @override
   bool get available => true;
+
+  @override
+  int? get maxThreads => _bigCores ?? Platform.numberOfProcessors;
 
   @override
   Future<List<LocalDevice>> devices() => _deviceProbe ??= _probeDevices();
@@ -248,10 +269,16 @@ class LlamaServerPool extends LocalLlm {
     String? device,
     int? contextLength,
     int maxRunning = 1,
+    int? threads,
+    bool kvCache = false,
   }) async {
     final model = localModelById(modelId);
     if (model == null) throw LocalLlmFailure("$modelId is not a model this build knows.");
     final wanted = contextLength ?? model.defaultContext;
+    // Only where there is somewhere to write them: a build with no cache dir
+    // serves f16 whatever the setting says.
+    final slotSavePath = kvCache ? _slotSaveDir : null;
+    final wantThreads = threads ?? _bigCores;
     // Auto by default: a turn asks for a model, not a processor, and the best
     // accelerator the phone has beats the CPU by enough that picking it is not
     // a thing to make the user do. Only auto reads the device list, and probing
@@ -264,7 +291,13 @@ class LlamaServerPool extends LocalLlm {
         resolveLocalDevice(device, device == null ? await devices() : const []);
 
     final already = _serverFor(modelId);
-    if (already != null && already.serves(device: resolved, contextLength: wanted)) {
+    if (already != null &&
+        already.serves(
+          device: resolved,
+          contextLength: wanted,
+          threads: wantThreads,
+          slotSavePath: slotSavePath,
+        )) {
       _touch(already);
       await already.ready;
       return already.endpoint;
@@ -285,7 +318,13 @@ class LlamaServerPool extends LocalLlm {
     while (_servers.length >= cap) {
       stopping.add(_servers.removeAt(0));
     }
-    final server = _Server(model: model, device: resolved, contextLength: wanted);
+    final server = _Server(
+      model: model,
+      device: resolved,
+      contextLength: wanted,
+      threads: wantThreads,
+      slotSavePath: slotSavePath,
+    );
     _servers.add(server);
     _publish();
 
@@ -328,11 +367,19 @@ class LlamaServerPool extends LocalLlm {
 
 /// One model, one process.
 class _Server {
-  _Server({required this.model, required this.device, required this.contextLength});
+  _Server({
+    required this.model,
+    required this.device,
+    required this.contextLength,
+    required this.threads,
+    required this.slotSavePath,
+  });
 
   final LocalModel model;
   final String? device;
   final int contextLength;
+  final int? threads;
+  final String? slotSavePath;
 
   Process? _process;
 
@@ -366,15 +413,23 @@ class _Server {
   LocalEndpoint get endpoint => LocalEndpoint(
         baseUrl: "http://127.0.0.1:${_at!.port}/v1",
         apiKey: _at!.key,
+        contextLength: contextLength,
       );
 
   /// Whether this is still the server that would be started for these settings.
   /// A failed one never is: being asked again is the user asking for another
   /// go, and there is nothing else they could press to get one.
-  bool serves({required String? device, required int contextLength}) =>
+  bool serves({
+    required String? device,
+    required int contextLength,
+    required int? threads,
+    required String? slotSavePath,
+  }) =>
       _phase != LocalLlmPhase.failed &&
       this.device == device &&
-      this.contextLength == contextLength;
+      this.contextLength == contextLength &&
+      this.threads == threads &&
+      this.slotSavePath == slotSavePath;
 
   Future<void> spawn(LlamaBinaries binaries, String modelFile,
       {required void Function() onChange}) async {
@@ -394,7 +449,8 @@ class _Server {
       apiKey: at.key,
       contextLength: contextLength,
       device: device,
-      threads: _bigCores,
+      threads: threads,
+      slotSavePath: slotSavePath,
     );
 
     try {

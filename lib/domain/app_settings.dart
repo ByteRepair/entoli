@@ -36,6 +36,8 @@ class AppSettings {
     this.localModelDevice,
     this.localModelContext,
     this.localModelPrefill = false,
+    this.localModelThreads,
+    this.localModelKvCacheChats,
   });
 
   String? defaultModelId;
@@ -133,6 +135,23 @@ class AppSettings {
   /// `lib/data/local/CLAUDE.md`.
   bool localModelPrefill;
 
+  /// How many CPU cores the model server may run on, or null for the default —
+  /// every big core (`bigCoreCount`). Lowering it trades tokens-per-second for
+  /// battery, which is the only reason to. Read per launch, so a change reaches
+  /// the next server rather than the running one.
+  int? localModelThreads;
+
+  /// How many conversation prefixes the on-device provider keeps warmed on disk,
+  /// so reopening a chat restores its KV rather than reprocessing it. Null is the
+  /// default (10) and `0` is off — nothing is written. See "Persisting the KV
+  /// cache to disk" in `lib/data/local/CLAUDE.md`.
+  int? localModelKvCacheChats;
+
+  /// The default when nothing is set: on, at ten prefixes. A named constant so
+  /// the UI's "Default (10)" label and the provider's effective count are one
+  /// number.
+  static const defaultKvCacheChats = 10;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -167,6 +186,8 @@ class AppSettings {
         localModelDevice: _orNull(json["localModelDevice"] as String?),
         localModelContext: json["localModelContext"] as int?,
         localModelPrefill: json["localModelPrefill"] as bool? ?? false,
+        localModelThreads: json["localModelThreads"] as int?,
+        localModelKvCacheChats: json["localModelKvCacheChats"] as int?,
       );
     } catch (_) {
       return AppSettings();
@@ -225,6 +246,8 @@ class AppSettings {
         localModelDevice: localModelDevice,
         localModelContext: localModelContext,
         localModelPrefill: localModelPrefill,
+        localModelThreads: localModelThreads,
+        localModelKvCacheChats: localModelKvCacheChats,
       );
 
   Future<void> save(AppConfig config) async {
@@ -254,6 +277,9 @@ class AppSettings {
       if (localModelDevice != null) "localModelDevice": localModelDevice,
       if (localModelContext != null) "localModelContext": localModelContext,
       if (localModelPrefill) "localModelPrefill": localModelPrefill,
+      if (localModelThreads != null) "localModelThreads": localModelThreads,
+      if (localModelKvCacheChats != null)
+        "localModelKvCacheChats": localModelKvCacheChats,
     }));
   }
 }

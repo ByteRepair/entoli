@@ -488,8 +488,59 @@ profile reuses it, and one after a profile edit reuses only the body above it
 and reprocesses the profile in its tail, which is small and self-heals on that
 first turn — so nothing rewarms on a profile change.
 
-The cache is the running server's slots, so a model reload or an app restart
-loses it and the warm-up runs again. Persisting the body KV to disk so it
-survives, and a per-chat history KV so reopening a long chat does not reprocess
-it, are the two follow-ups — the second is where a real cache key and
-invalidation are needed, which the live slots do not.
+The warm-up's own cache is the running server's slots, which a reload loses —
+but the body is also written to disk by the same mechanism the next section
+describes, so a reopen after a restart restores it rather than warming again.
+
+### Persisting the KV cache to disk
+
+The prefill only ever helped the *first* turn. Reopening a long multi-turn chat
+was the same wait made worse: with the live server gone (a reload, an app
+restart, the model evicted for another), the whole history — thousands of tokens
+— is reprocessed from scratch, which on a phone is minutes just to resume a
+conversation the user already had. `LocalKvCache` closes that by saving the
+server's slot KV to disk with llama.cpp's slot save/restore, and restoring it
+when the chat comes back.
+
+**It is content-addressed, and that is what keeps it the provider's own.**
+Nothing hands it a chat id: a dump is keyed on a hash of the prompt prefix that
+produced it (`kvPrefixKeys` — one key per message boundary, over the messages
+and the tools that head every request), so no identifier crosses
+`LlmClient.stream` and no interface a hosted provider shares grew a method — the
+same constraint the prefill kept. `LocalPoolClient` restores the longest saved
+prefix of a request before the turn and saves the whole prompt after it; both
+are best-effort, so a miss or a build without slot save/restore just pays the
+prompt the way it did before. The code is `local_kv_cache.dart` (the port and the
+pure key/eviction math, web-safe) and `file_kv_cache.dart` (the disk and the
+`/slots/0` requests, Android only).
+
+**Invalidation is the keying, not a bookkeeping step.** A rewound or edited chat
+hashes to a different key, misses, and its stale dump ages out of the LRU on its
+own. A dump is also unreadable by a different model, context length, or KV quant,
+so the filename carries a `kvNamespace` of exactly those — a change to any of
+them lands the dump where nothing looks for it, and the old namespace's files are
+reaped by the byte budget rather than tracked. One directory holds every
+namespace, because `--slot-save-path` takes a basename and the name is where the
+namespace rides; the pool and the cache are built from the one join
+(`_kvCacheDir`) so they cannot disagree on it.
+
+**On by default at ten prefixes** (the "Cached chats" picker; `Off` writes
+nothing), because the win is large and the reopen is the common case. The dumps
+are not small — a few thousand tokens of a 2B's KV is on the order of hundreds of
+megabytes even at the `q8_0` quant the server runs with when the cache is on — so
+there are two bounds: the newest N of the active namespace, and a disk budget
+across every namespace so an abandoned model's dumps cannot pile up. The quant is
+near-lossless but still a change to generation, so it rides on the cache being
+on: turn it off and the server runs f16, the behaviour it had before this.
+
+The prefill persists too, but the shortest key — the system+tools body every
+chat shares (`bodyOnly`) — so the warmed body survives a reload and every chat's
+own restore finds it. It serves with the same threads and cache flags a real turn
+does, or the first turn would find the server launched differently and relaunch
+it, throwing the warm away.
+
+The **cores** setting is the other half of the On-device machine questions:
+`localModelThreads` caps how many the server runs on (the slider, from every big
+core down to one), trading tokens-per-second for battery. Null is the default —
+every big core (`bigCoreCount`) — and the slider's top is `LocalLlm.maxThreads`
+so it never offers more than the server would use anyway.

@@ -212,4 +212,60 @@ void main() {
 
     expect(find.textContaining("not offered any more"), findsNothing);
   });
+
+  testWidgets("turning the KV cache off is stored", (tester) async {
+    app = TestApp.create(
+      localLlm: FakeLocalLlm(installed: [model.id]),
+      localModels: {model.id},
+    );
+    await pumpOnDevice(tester);
+
+    // On by default: the field leads with the ten it resolves to.
+    expect(find.text("Default (10)"), findsOneWidget);
+    await tester.tap(find.text("Default (10)"));
+    await settleIo(tester);
+    await tester.tap(find.text("Off").last);
+    await settleIo(tester);
+
+    expect(app.container.read(appSettingsProvider).localModelKvCacheChats, 0);
+  });
+
+  testWidgets("the cores slider is drawn only where there is more than one core",
+      (tester) async {
+    app = TestApp.create(
+      localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 8),
+      localModels: {model.id},
+    );
+    await pumpOnDevice(tester);
+
+    expect(find.text("CPU cores"), findsOneWidget);
+    // The default is every core, and that is what the row says until it is moved.
+    expect(find.textContaining("All 8 cores"), findsOneWidget);
+  });
+
+  testWidgets("a machine that answered with one core has no slider to draw",
+      (tester) async {
+    app = TestApp.create(
+      localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 1),
+      localModels: {model.id},
+    );
+    await pumpOnDevice(tester);
+
+    expect(find.text("CPU cores"), findsNothing);
+  });
+
+  testWidgets("dragging the slider down stores fewer cores", (tester) async {
+    app = TestApp.create(
+      localLlm: FakeLocalLlm(installed: [model.id], maxThreads: 8),
+      localModels: {model.id},
+    );
+    await pumpOnDevice(tester);
+
+    await tester.drag(find.byType(Slider), const Offset(-300, 0));
+    await settleIo(tester);
+
+    final chosen = app.container.read(appSettingsProvider).localModelThreads;
+    expect(chosen, isNotNull);
+    expect(chosen, lessThan(8));
+  });
 }

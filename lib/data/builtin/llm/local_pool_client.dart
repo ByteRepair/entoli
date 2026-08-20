@@ -1,6 +1,7 @@
 import "../../../domain/app_settings.dart";
 import "../../../domain/local_llm.dart";
 import "llm_client.dart";
+import "local_kv_cache.dart";
 import "openai_client.dart";
 
 /// How the pool is to be run, read fresh for every call.
@@ -8,17 +9,34 @@ import "openai_client.dart";
 /// Read rather than held for the reason `LocalShell` re-reads its environment:
 /// the settings page edits these long after this client was built, and a change
 /// should reach the next turn rather than the next launch.
-typedef LocalPoolOptions = ({String? device, int? contextLength, int maxRunning});
+typedef LocalPoolOptions = ({
+  String? device,
+  int? contextLength,
+  int maxRunning,
+  int? threads,
+  int kvCacheChats,
+});
 
 /// The pool options the settings have. One mapper so the client that reaches a
 /// model and the prefill that warms it read them the same way — the pool keys
 /// and evicts slots on these, so a warm built from a different reading would be
-/// evicted rather than reused.
+/// evicted rather than reused. `kvCacheChats` collapses the "Default (10)" the
+/// UI shows into the number the provider counts, so nothing else has to know
+/// that null means ten.
 LocalPoolOptions poolOptions(AppSettings settings) => (
       device: settings.localModelDevice,
       contextLength: settings.localModelContext,
       maxRunning: settings.maxLocalModels,
+      threads: settings.localModelThreads,
+      kvCacheChats:
+          settings.localModelKvCacheChats ?? AppSettings.defaultKvCacheChats,
     );
+
+extension LocalPoolCaching on LocalPoolOptions {
+  /// Whether the KV cache is on, the one place null-means-ten and zero-means-off
+  /// is read as a yes/no rather than spelled out at each site that gates on it.
+  bool get kvCacheOn => kvCacheChats > 0;
+}
 
 /// The on-device provider, as one client over however many servers are running.
 ///
@@ -34,10 +52,15 @@ LocalPoolOptions poolOptions(AppSettings settings) => (
 /// still here — it is what [LocalLlm.serve] does — but it is now the tail of
 /// starting rather than the whole job.
 class LocalPoolClient implements LlmClient {
-  LocalPoolClient(this._llm, this._options);
+  LocalPoolClient(this._llm, this._options, {LocalKvCache? kvCache})
+      : _kv = kvCache;
 
   final LocalLlm _llm;
   final LocalPoolOptions Function() _options;
+
+  /// Where a turn's KV is saved and restored, or null where this build keeps
+  /// none — every platform but Android. See [LocalKvCache].
+  final LocalKvCache? _kv;
 
   /// One client per model, dropped when that model's server comes up again on
   /// a new port. The port is the whole signature here — everything else about
@@ -52,7 +75,27 @@ class LocalPoolClient implements LlmClient {
     double? temperature,
     String? reasoningEffort,
   }) async* {
-    final at = await _serve(model);
+    final options = _options();
+    final at = await _serve(model, options);
+
+    // Restore before, save after — content-addressed, so the whole of it is
+    // this model's own and no chat id is anywhere in it. Best-effort by
+    // construction: a miss or a build with no slot save/restore just pays the
+    // prompt the way it did before. The keys are hashed once here and handed to
+    // both halves rather than recomputed. See [LocalKvCache].
+    final kv = options.kvCacheOn ? _kv : null;
+    final namespace = kv == null
+        ? null
+        : kvNamespace(
+            modelId: model,
+            contextLength: at.contextLength,
+            device: options.device,
+          );
+    final keys = kv == null ? const <String>[] : kvPrefixKeys(messages, tools);
+    if (kv != null && keys.isNotEmpty) {
+      await kv.warm(at, namespace: namespace!, keys: keys);
+    }
+
     yield* _clientFor(model, at).stream(
       messages,
       model: model,
@@ -60,6 +103,15 @@ class LocalPoolClient implements LlmClient {
       temperature: temperature,
       reasoningEffort: reasoningEffort,
     );
+
+    if (kv != null && keys.isNotEmpty) {
+      await kv.keep(
+        at,
+        namespace: namespace!,
+        key: keys.first,
+        count: options.kvCacheChats,
+      );
+    }
   }
 
   /// Answered from what is on disk rather than by asking a server, since asking
@@ -73,14 +125,15 @@ class LocalPoolClient implements LlmClient {
   /// Why it will never answer, as an [LlmException] — otherwise the agent's
   /// error arm reports a bare exception and the reason the model would not
   /// load, which is the only thing worth reading, is not in it.
-  Future<LocalEndpoint> _serve(String model) async {
-    final options = _options();
+  Future<LocalEndpoint> _serve(String model, LocalPoolOptions options) async {
     try {
       return await _llm.serve(
         model,
         device: options.device,
         contextLength: options.contextLength,
         maxRunning: options.maxRunning,
+        threads: options.threads,
+        kvCache: options.kvCacheOn,
       );
     } on LocalLlmFailure catch (e) {
       throw LlmException(e.message);
