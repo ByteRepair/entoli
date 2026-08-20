@@ -74,7 +74,9 @@ server, and whose agent has no git.
    API 26 and 16 KB page alignment), and strip the result into
    `$out/lib<name>.so`. Anything it links has to be built here too and linked
    statically: the guest is `bionic`, so glibc is not there, and the only
-   libraries a device is guaranteed to have are `libc`, `libdl` and `libz`.
+   libraries a device is guaranteed to have are `libc`, `libdl` and `libz`. The
+   build checks this and fails naming what it finds, since otherwise the first
+   thing to say so is the phone.
 3. Then `stage.sh`. It copies every `*.so` it finds per ABI.
 
 The name matters twice. The installer extracts only `lib*.so` out of an APK, and
