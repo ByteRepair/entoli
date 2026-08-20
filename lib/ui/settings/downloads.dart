@@ -17,7 +17,10 @@ import "../../providers.dart";
 /// the notification, the release on dispose, the order a delete happens in — is
 /// the part that was written twice and had to stay in step.
 abstract class Downloads<T> extends Notifier<DownloadState> {
-  final _running = <String, StreamSubscription<DownloadProgress>>{};
+  /// What is in flight, by id, and the item each one is — kept beside its
+  /// subscription rather than looked up again, since the notification needs the
+  /// name of something [install] was handed three lines earlier.
+  final _running = <String, ({T item, StreamSubscription<DownloadProgress> sub})>{};
 
   /// The id [item] is filed under, which is what a row and a notice find each
   /// other by.
@@ -29,11 +32,11 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
   /// that raised it is expected to have been dead already.
   Download? begin(T item);
 
-  /// What the notification calls one, by id, and what it calls several.
-  /// Answered by the catalog rather than composed here, because "3 voice
-  /// models" and "3 systems" are not the same sentence.
-  String nameOf(String id);
-  String several(int count);
+  /// What the notification calls one of these, and the plural it counts them
+  /// in — "3 voice models", "3 systems". Two words from the catalog rather
+  /// than a sentence, since the counting is the same either way.
+  String nameOf(T item);
+  String get plural;
 
   /// Read what is installed again. The only thing that changes that answer is
   /// a download finishing or a delete, which are both here.
@@ -56,8 +59,8 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
         .listen((_) => cancelAll());
     ref.onDispose(() {
       unawaited(stops.cancel());
-      for (final sub in _running.values) {
-        unawaited(sub.cancel());
+      for (final running in _running.values) {
+        unawaited(running.sub.cancel());
       }
       // Released, not merely abandoned: a restore restarts the app by throwing
       // this container away, and a hold nobody let go of leaves the
@@ -73,24 +76,30 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
     if (_running.containsKey(id)) return;
     final download = begin(item);
     if (download == null) return;
+    // Held before the first publish, not after: the notification names what is
+    // running by looking it up here, and a stream delivers nothing until the
+    // event loop turns, so there is no race in listening first.
+    _running[id] = (
+      item: item,
+      sub: download.progress.listen(
+        (progress) => _publish(active: {...state.active, id: progress}),
+        onError: (Object e) => _finish(id, failure: "$e"),
+        onDone: () {
+          _finish(id);
+          unawaited(rescan());
+        },
+      ),
+    );
     _publish(
       active: {...state.active, id: DownloadProgress(received: 0, total: download.bytes)},
       failures: {...state.failures}..remove(id),
-    );
-    _running[id] = download.progress.listen(
-      (progress) => _publish(active: {...state.active, id: progress}),
-      onError: (Object e) => _finish(id, failure: "$e"),
-      onDone: () {
-        _finish(id);
-        unawaited(rescan());
-      },
     );
   }
 
   /// Cancelling the subscription is what cancels the download: the store's
   /// stream cleans up the half-written directory when its listener goes.
   void cancel(String id) {
-    unawaited(_running[id]?.cancel());
+    unawaited(_running[id]?.sub.cancel());
     _finish(id);
   }
 
@@ -118,6 +127,13 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
 
   /// Publishes and tells the platform in one place, so the notification can
   /// never disagree with the bar in settings.
+  ///
+  /// The bar is redrawn on every event and the notification is not. A progress
+  /// event arrives once a megabyte, and telling Android each time is a channel
+  /// call, a map encoded, and a notification rebuilt through five binder calls
+  /// — some fourteen hundred of them for a rootfs, for a bar a hundred pixels
+  /// wide. So it is told when what it would *say* changes: a different set of
+  /// downloads, or another whole percent.
   void _publish({
     Map<String, DownloadProgress>? active,
     Map<String, String>? failures,
@@ -126,8 +142,20 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
       active: active ?? state.active,
       failures: failures ?? state.failures,
     );
-    unawaited(ref.read(backgroundWorkProvider).downloading(_notice()));
+    final notice = _notice();
+    final at = notice == null || notice.total <= 0
+        ? -1
+        : notice.received * 100 ~/ notice.total;
+    if (notice?.label == _told && at == _toldAt) return;
+    _told = notice?.label;
+    _toldAt = at;
+    unawaited(ref.read(backgroundWorkProvider).downloading(notice));
   }
+
+  /// What the notification was last told, so that an event which would not
+  /// change it does not cost a channel call.
+  String? _told;
+  int _toldAt = -1;
 
   /// What the notification says, or null when there is nothing to say. Several
   /// at once are one line rather than several notifications: they share a
@@ -138,8 +166,8 @@ abstract class Downloads<T> extends Notifier<DownloadState> {
     if (active.isEmpty) return null;
     return DownloadNotice(
       label: active.length == 1
-          ? nameOf(active.keys.single)
-          : several(active.length),
+          ? nameOf(_running[active.keys.single]!.item)
+          : "${active.length} $plural",
       received: active.values.fold(0, (sum, p) => sum + p.received),
       total: active.values.fold(0, (sum, p) => sum + p.total),
     );

@@ -23,10 +23,10 @@ class RootfsDownloads extends Downloads<Rootfs> {
   }
 
   @override
-  String nameOf(String id) => rootfsById(id)?.name ?? "Linux";
+  String nameOf(Rootfs rootfs) => rootfs.name;
 
   @override
-  String several(int count) => "$count systems";
+  String get plural => "systems";
 
   @override
   Future<void> rescan() => ref.read(installedRootfsProvider.notifier).refresh();

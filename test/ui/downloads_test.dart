@@ -17,10 +17,10 @@ import "../harness.dart";
 final tiny = recognitionModels.first;
 final aVoice = speechModels.first;
 
-/// What both catalogs get from `Downloads`, asserted through each of them: the
-/// two hooks a catalog fills in are the wording, and everything else about a
-/// download in flight is the shared half. Each page's own tests cover its rows;
-/// this covers what a phone is told while it is off screen.
+/// What both catalogs get from `Downloads`, asserted through each of them. All
+/// a catalog fills in is the wording — `nameOf` and `plural` — and everything
+/// else about a download in flight is the shared half. Each page's own tests
+/// cover its rows; this covers what a phone is told while it is off screen.
 void main() {
   late TestApp app;
 
@@ -93,6 +93,23 @@ void main() {
       expect(lastNotice(), isNull);
       expect(app.container.read(voiceModelsProvider).active, isEmpty);
     });
+  });
+
+  testWidgets("a run of events that would say the same thing is told to the "
+      "platform once", (tester) async {
+    app = TestApp.create();
+    app.voiceModels
+      ..repeats = 40
+      ..installing = Completer<void>();
+    await app.pump(tester, const SizedBox());
+
+    app.container.read(voiceModelsProvider.notifier).install(tiny);
+    await settleIo(tester);
+
+    // Forty events, one notification: a channel call and five binder calls per
+    // megabyte is what this rule exists to avoid. The bar still saw all forty.
+    expect(app.work.downloads, hasLength(1));
+    expect(app.container.read(voiceModelsProvider).active, hasLength(1));
   });
 
   testWidgets("a download this device has nothing to fetch for starts nothing",
