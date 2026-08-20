@@ -8,6 +8,7 @@ import "../../domain/permission.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../sidebar/sidebar.dart";
+import "chat_controller.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/model_picker.dart";
@@ -81,8 +82,13 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     await repo.saveMeta(widget.chatId, _meta!);
     // Re-anchor immediately so the sidebar hourglass and title-bar countdown
     // appear without waiting for a turn. `reanchor: true` so flipping the
-    // chat's override on anchors to now, and off clears.
-    if (_state != null) await repo.saveState(_state!, reanchor: true);
+    // chat's override on anchors to now, and off clears. The anchor is decided
+    // by the write rather than by what was passed in, so the bar is told what
+    // was written.
+    if (_state != null) {
+      final written = await repo.saveState(_state!, reanchor: true);
+      ref.read(chatControllerProvider(widget.chatId).notifier).applyState(written);
+    }
     ref.invalidate(chatListProvider);
     if (mounted) setState(() => _saving = false);
     if (mounted) Navigator.of(context).pop();
