@@ -17,10 +17,10 @@ class VoiceModels extends Downloads<VoiceModel> {
       );
 
   @override
-  String nameOf(String id) => voiceModelById(id)?.name ?? "voice model";
+  String nameOf(VoiceModel model) => model.name;
 
   @override
-  String several(int count) => "$count voice models";
+  String get plural => "voice models";
 
   @override
   Future<void> rescan() =>

@@ -4,9 +4,9 @@ import "dart:isolate";
 
 import "package:archive/archive.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
-import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
+import "../download.dart";
 import "../../domain/download.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
@@ -60,113 +60,45 @@ class FileVoiceModelStore extends VoiceModelStore {
     if (await dir.exists()) await dir.delete(recursive: true);
   }
 
+  /// Two to four files, or one archive, into the model's own directory. The
+  /// fetching and the giving up are [DownloadRun]'s; what is left here is the
+  /// bz2 an archive has to be put through and the marker that says the model is
+  /// whole.
   @override
-  Stream<DownloadProgress> install(VoiceModel model) {
-    final client = http.Client();
-    var cancelled = false;
-    late StreamController<DownloadProgress> out;
-
-    Future<void> run() async {
-      // Whatever an earlier attempt left: partial files under a name we are
-      // about to write, which is worse than starting again.
-      await delete(model);
-      final dir = Directory(directoryFor(model))..createSync(recursive: true);
-
-      var received = 0;
-      final total = model.bytes;
-      void progress(int at, {bool unpacking = false}) => out.add(
-          DownloadProgress(received: at, total: total, unpacking: unpacking));
-      progress(0);
-
-      for (final download in model.downloads) {
-        final target = switch (download) {
-          VoiceFile(:final path) => p.join(dir.path, path),
-          VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
-        };
-        final before = received;
-        received += await _fetch(
-          client: client,
-          url: download.url,
-          to: target,
-          report: (at) => progress(before + at),
-          cancelled: () => cancelled,
-        );
-        if (cancelled) return;
-        if (download is VoiceArchive) {
-          progress(received, unpacking: true);
-          await _unpackOffThread(target, dir.path);
-        }
-      }
-      if (cancelled) return;
-      await File(p.join(dir.path, _marker)).writeAsString("");
-    }
-
-    out = StreamController<DownloadProgress>(
-      onListen: () => run().then(
-        (_) async {
-          client.close();
-          // Cancelling closes the stream from the other end, so there is
-          // nobody left to tell — only the half-written directory to remove.
-          if (cancelled) return delete(model);
-          await out.close();
-        },
-        onError: (Object e) async {
+  Stream<DownloadProgress> install(VoiceModel model) => DownloadRun(
+        discard: () => delete(model),
+        run: (run) async {
+          // Whatever an earlier attempt left: partial files under a name we are
+          // about to write, which is worse than starting again.
           await delete(model);
-          client.close();
-          if (!out.isClosed) {
-            out.addError(e);
-            await out.close();
+          final dir = Directory(directoryFor(model))..createSync(recursive: true);
+
+          var received = 0;
+          final total = model.bytes;
+          run.report(DownloadProgress(received: 0, total: total));
+
+          for (final download in model.downloads) {
+            final target = switch (download) {
+              VoiceFile(:final path) => p.join(dir.path, path),
+              VoiceArchive() => p.join(dir.path, "_archive.tar.bz2"),
+            };
+            received += await run.fetch(
+              url: download.url,
+              to: target,
+              total: total,
+              done: received,
+            );
+            if (run.cancelled) return;
+            if (download is VoiceArchive) {
+              run.report(DownloadProgress(
+                  received: received, total: total, unpacking: true));
+              await _unpackOffThread(target, dir.path);
+            }
           }
+          if (run.cancelled) return;
+          await File(p.join(dir.path, _marker)).writeAsString("");
         },
-      ),
-      onCancel: () {
-        cancelled = true;
-        client.close();
-      },
-    );
-    return out.stream;
-  }
-
-  /// One file, streamed to disk, reporting and returning its own bytes. What
-  /// they add up to across a model is the caller's business.
-  static Future<int> _fetch({
-    required http.Client client,
-    required String url,
-    required String to,
-    required void Function(int) report,
-    required bool Function() cancelled,
-  }) async {
-    final response = await client.send(http.Request("GET", Uri.parse(url)));
-    if (response.statusCode != 200) {
-      throw HttpException("${response.statusCode} for $url");
-    }
-    final sink = File(to).openWrite();
-    var at = 0;
-    var told = 0;
-    try {
-      // `addStream` rather than `add` per chunk: a phone whose flash is slower
-      // than its radio would otherwise queue the difference on the heap, for
-      // the length of a 250 MB download.
-      await sink.addStream(response.stream.takeWhile((_) => !cancelled()).map((chunk) {
-        at += chunk.length;
-        // Every chunk would be thousands of reports, and each one rebuilds a
-        // notification through five binder calls — for a bar with a hundred
-        // pixels to move.
-        if (at - told >= _reportEvery) {
-          told = at;
-          report(at);
-        }
-        return chunk;
-      }));
-      report(at);
-    } finally {
-      await sink.close();
-    }
-    return at;
-  }
-
-  /// How far the bar moves before it is worth saying so.
-  static const _reportEvery = 1 << 20;
+      ).stream;
 
   /// Off the UI thread, because bz2 in Dart runs at about 8 MB/s and Kokoro is
   /// a minute of solid CPU. Its own method so that the closure handed to the

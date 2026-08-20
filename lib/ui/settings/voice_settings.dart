@@ -7,7 +7,6 @@ import "../../providers.dart";
 import "../voice/read_aloud.dart";
 import "voice_models.dart";
 import "../widgets/catalog.dart";
-import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
@@ -41,19 +40,17 @@ class VoiceSection extends ConsumerWidget {
         // The sentinel is in the list like any other model and filtered by the
         // same `installed` set, which holds it only where the device has the
         // engine — so nothing here knows which platform it is drawing on.
-        _ModelField(
+        InstalledPicker(
           label: "Recognition model",
-          models: const [nativeRecognition, ...recognitionModels],
-          installed: installed,
-          selected: settings.voiceRecognitionModelId,
+          options: _offer(const [nativeRecognition, ...recognitionModels], installed),
+          value: settings.voiceRecognitionModelId,
           onPick: (id) =>
               ref.read(appSettingsProvider.notifier).setVoiceRecognitionModel(id),
         ),
-        _ModelField(
+        InstalledPicker(
           label: "Speech model",
-          models: const [nativeSpeech, ...speechModels],
-          installed: installed,
-          selected: settings.voiceSpeechModelId,
+          options: _offer(const [nativeSpeech, ...speechModels], installed),
+          value: settings.voiceSpeechModelId,
           onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
         ),
         _SpeakerField(settings: settings),
@@ -164,25 +161,16 @@ class _Action extends ConsumerWidget {
         downloading: downloading,
         installed: ref.watch(installedVoiceModelsProvider).contains(model.id),
         onCancel: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
-        onDelete: () => _delete(context, ref),
+        onDelete: () => ref.read(voiceModelsProvider.notifier).delete(model),
+        deleteTitle: "Delete ${model.name}?",
+        deleteMessage:
+            "${formatSize(model.bytes)} to download again if you want it back.",
         // A browser has nowhere to put one, so the row is drawn dead rather
         // than left out.
         onDownload: ref.watch(voiceProvider).available
             ? () => ref.read(voiceModelsProvider.notifier).install(model)
             : null,
       );
-
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final ok = await confirm(
-      context,
-      title: "Delete ${model.name}?",
-      message: "${formatSize(model.bytes)} to download again if you want it back.",
-      confirmLabel: "Delete",
-      destructive: true,
-    );
-    if (!ok) return;
-    await ref.read(voiceModelsProvider.notifier).delete(model);
-  }
 }
 
 /// What to do when the device has no engine for one half of voice mode. Only
@@ -261,38 +249,14 @@ class _EngineLink extends ConsumerWidget {
   }
 }
 
-/// A dropdown over the usable models of one kind. Not the catalog: a picker
-/// offering something that has to be downloaded first is a choice that fails
-/// when it is used rather than when it is made. [installed] is the whole of
-/// that rule — it holds what is on disk and the system-engine sentinels the
-/// device can honour, so a sentinel is offered or not on the same terms as
-/// anything else and nothing here has to know which platform it is on.
-class _ModelField extends StatelessWidget {
-  const _ModelField({
-    required this.label,
-    required this.models,
-    required this.installed,
-    required this.selected,
-    required this.onPick,
-  });
-
-  final String label;
-  final List<VoiceModel> models;
-  final Set<String> installed;
-  final String? selected;
-  final ValueChanged<String?> onPick;
-
-  @override
-  Widget build(BuildContext context) => InstalledPicker(
-        label: label,
-        options: {
-          for (final model in models)
-            if (installed.contains(model.id)) model.id: model.name,
-        },
-        value: selected,
-        onPick: onPick,
-      );
-}
+/// The models of one kind that are actually there, as the picker takes them.
+/// The sentinel is filtered by the same set as everything else, which holds it
+/// only where the device has the engine — so nothing here knows which platform
+/// it is on.
+Map<String, String> _offer(List<VoiceModel> models, Set<String> installed) => {
+      for (final model in models)
+        if (installed.contains(model.id)) model.id: model.name,
+    };
 
 /// Which of a speech model's voices is used.
 class _SpeakerField extends ConsumerWidget {
