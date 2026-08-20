@@ -193,10 +193,42 @@ data to a machine where it means nothing — and it would take the ability to sa
 
 The probe needs the manifest's `<queries>` block, and that is the trap in it:
 from Android 11 an app sees only the packages it declares an interest in, and
-both `isRecognitionAvailable` and the TTS service query are answered out of that
-view. Without it they report nothing on every modern phone rather than only on
-the ones that genuinely have nothing — which is a default that quietly stops
-working, in the direction that looks like a device problem.
+both service queries are answered out of that view. Without it they report
+nothing on every modern phone rather than only on the ones that genuinely have
+nothing — which is a default that quietly stops working, in the direction that
+looks like a device problem.
+
+**The probe asks which service a session would connect to, rather than whether
+one exists**, and the difference was a bug that looked like a device problem
+too. `SpeechRecognizer.isRecognitionAvailable` is true when *any* installed
+package declares a `RecognitionService`, while the one-argument
+`createSpeechRecognizer` connects to the one named in
+`Settings.Secure.VOICE_RECOGNITION_SERVICE` — and an unset setting is
+`ERROR_CLIENT` the moment the session opens, which is voice mode saying
+"Recognition failed (error 5)" before it has heard a word. A phone with a
+recognizer installed and no assistant chosen is the ordinary way to be there.
+So `recognitionService` picks the component and both the probe and
+`startRecognition` go through it: the user's pick where they made one, the
+first installed service where they did not, and a null that takes the sentinel
+off the settings page the way a missing engine already does. There is no public
+API for the setting, so it is read as a key — the constant itself is hidden.
+
+`ERROR_CLIENT` is also what the framework's own `RecognitionService` answers a
+`startListening` on a listener that is still in a session, so the same error
+means two things: a restart posted from `onError` landing before the last
+session was closed, and one that never connected. **What tells them apart is
+whether a session ever opened**, which is what `onReadyForSpeech` says and what
+`sessionOpened` holds — so the first is retried once, 200 ms out rather than on
+the next turn of the looper, since a tear-down is what is being waited for, and
+the second is reported straight away. A count with a threshold was the other
+answer and it spends four failed binds arriving where the flag already is.
+
+Reporting an error destroys the recognizer, and that is `fail` rather than a
+line in each branch. Voice mode is in its failed state from that moment — the
+Dart side has no way back short of leaving the screen — so a recognizer left
+bound is a microphone held for a screen that has given up, and worse, one the
+next unpause would drive on rather than resolve a service again. A phone that
+had one installed while the app was open gets it that way.
 
 
 ### Per side, not per session
