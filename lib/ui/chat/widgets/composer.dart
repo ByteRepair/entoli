@@ -406,7 +406,6 @@ class _ComposerState extends ConsumerState<Composer> {
 
   static const _messageField = InputDecoration(
     hintText: "Message...",
-    border: OutlineInputBorder(),
     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
   );
 

@@ -1,4 +1,3 @@
-import "dart:convert";
 import "dart:js_interop";
 
 import "package:fs_shim/fs.dart";
@@ -45,10 +44,9 @@ Future<String?> platformAbi() async => null;
 
 /// A web build writes `version.json` beside `index.html` rather than under
 /// `assets/`, so it is fetched rather than read through `rootBundle`.
-Future<String?> platformAppVersion() async {
+Future<String?> platformVersionJson() async {
   try {
-    final response = await http.get(Uri.base.resolve("version.json"));
-    return (jsonDecode(response.body) as Map<String, dynamic>)["version"] as String?;
+    return (await http.get(Uri.base.resolve("version.json"))).body;
   } catch (_) {
     return null;
   }

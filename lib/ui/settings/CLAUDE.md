@@ -61,12 +61,19 @@ who made it, a link to the repository, and the libraries. Private in
 it are the ones with logic.
 
 The version is read out of the bundle rather than written into Dart, so
-pubspec's number stays the only one — the same bargain the missing `+build`
-suffix makes. `platform.appVersion` is where that lands, since a web build puts
-`version.json` beside `index.html` rather than in the assets. It is awaited into
-the container in `main` beside the ABI, so nothing in the UI waits on a future
-for a string; where it could not be read the line is simply not drawn, since a
-version nothing depends on is not worth failing a startup over.
+pubspec's number stays the only one. `platform.appVersion` is where that lands,
+since a web build puts `version.json` beside `index.html` rather than in the
+assets — reading the file is the platform's half, and composing the string is
+shared. It is awaited into the container in `main` beside the ABI, so nothing in
+the UI waits on a future for a string; where it could not be read the line is
+simply not drawn, since a version nothing depends on is not worth failing a
+startup over.
+
+The build number is the `+42` after it, and it comes from the build rather than
+from pubspec — which deliberately carries none, since the Android version code
+is derived from the three numbers and a second one to bump is a second one to
+forget. So CI passes `--build-number` to every build it makes, the APKs and the
+AppImage alike, and a build made by hand says only which version it is.
 
 `package_info_plus` answers the same question and was the first version of this.
 It drags `win32` into the build graph of every platform, forks `stat` on Linux

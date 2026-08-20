@@ -25,6 +25,14 @@ the file unreadable if that enum were ever renamed. `ui/theme.dart` is the one
 place that maps between them, and the label the settings page draws is on the
 enum, the arrangement `AppIcon` and `ApproveMode` already have.
 
+The one other thing in it is `inputDecorationTheme`, and it is there because
+every field and every dropdown in the app is outlined. Spelled at each of them
+instead it was the same literal twenty-odd times, and three of them were left
+wearing Material's underline — the catalog pickers under Terminal, On-device and
+Voice, which then looked nothing like the model pickers beside them. A field
+that wants its own border still passes one and wins: the sidebar's rounded
+search box and the composer dressed as a shell command are both that.
+
 `entoliTheme` is a function rather than two `ThemeData` literals in `main`:
 light and dark differ by a `Brightness` and nothing else, and a second literal
 is a second thing to keep in step.

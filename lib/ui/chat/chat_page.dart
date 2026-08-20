@@ -336,7 +336,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     if (!mounted) return;
     final repo = ref.read(chatRepositoryProvider);
     if (keep == true) {
-      await repo.keepExpiredChat(widget.chatId, state);
+      final written = await repo.keepExpiredChat(widget.chatId, state);
+      ref.read(chatControllerProvider(widget.chatId).notifier).applyState(written);
     } else {
       ref.read(selectedChatIdProvider.notifier).select(null);
       await repo.deleteChat(widget.chatId);

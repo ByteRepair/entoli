@@ -109,11 +109,20 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: chat.copyWith(messages: messages));
   }
 
-  /// Retitle in place. Reloading instead would dispose a running turn.
+  /// Take a state written elsewhere — the sidebar pinning this chat — in place.
+  /// Reloading instead would dispose a running turn. Nothing to do where the
+  /// chat is not loaded yet: it reads the same write off disk.
+  void applyState(ChatState written) {
+    final chat = state.chat;
+    if (chat == null) return;
+    state = state.copyWith(chat: chat.copyWith(state: written));
+  }
+
+  /// Retitle in place, for the same reason.
   void applyTitle(String title) {
     final chat = state.chat;
     if (chat == null) return;
-    state = state.copyWith(chat: chat.copyWith(state: chat.state.copyWith(title: title)));
+    applyState(chat.state.copyWith(title: title));
   }
 
   /// Name the chat after what started it. Nothing waits on this: it is a model

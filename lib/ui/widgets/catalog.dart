@@ -183,12 +183,12 @@ class InstalledPicker extends StatelessWidget {
     }
     return LabelledField(
       label: label,
-      child: DropdownButton<String?>(
+      child: DropdownButtonFormField<String?>(
         isExpanded: true,
         // A setting naming something since deleted is a value no item carries,
         // which `DropdownButton` asserts on. One place answers that for both
         // catalogs.
-        value: options.containsKey(value) ? value : null,
+        initialValue: options.containsKey(value) ? value : null,
         hint: const Text("None"),
         items: [
           if (none != null)
