@@ -10,7 +10,7 @@ library;
 /// What the process is being held open for. Three, because they are three
 /// different things to stop — and because Android insists the one holding the
 /// microphone be a service of a different type from the two that are not.
-enum BackgroundJob { turns, voice, download }
+enum BackgroundJob { turns, voice, download, prefill }
 
 /// A download worth telling the user about. Unlike the other two, its wording
 /// cannot live in Kotlin: which model is being fetched is the catalog's.
@@ -80,6 +80,13 @@ abstract interface class BackgroundWork {
 
   /// The download under way, or null when there is none.
   Future<void> downloading(DownloadNotice? notice);
+
+  /// The on-device model whose system prompt is being prefilled, or null when
+  /// none is. Unlike the other three this one is meant to be *seen* — it is
+  /// work the user set going and then left, so its notification is a visible
+  /// one rather than the silent hold the others keep. The model names it, so
+  /// its wording comes from here rather than Kotlin, the way a download's does.
+  Future<void> prefilling(String? model);
 
   /// The user said stop from outside the app — each notification has a button,
   /// and this says which was pressed. Whoever owns that kind of work stops it,

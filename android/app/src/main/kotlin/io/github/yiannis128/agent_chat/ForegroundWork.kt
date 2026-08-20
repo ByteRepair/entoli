@@ -34,6 +34,12 @@ abstract class ForegroundWork : Service() {
     protected abstract val notificationId: Int
     protected abstract val serviceType: Int
 
+    /// How loud the channel is. Low is a silent hold the user need not notice,
+    /// which is what a turn or a download wants. The prefill overrides it: it is
+    /// work the user set going and then left, so it is meant to be seen.
+    protected open val importance: Int
+        get() = NotificationManager.IMPORTANCE_LOW
+
     /// What the notification says about this piece of work.
     protected abstract fun describe(intent: Intent, builder: Notification.Builder)
 
@@ -98,7 +104,7 @@ abstract class ForegroundWork : Service() {
 
     private fun notification(intent: Intent): Notification {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(channelId, channelLabel, NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(channelId, channelLabel, importance)
         )
 
         val builder = Notification.Builder(this, channelId)
@@ -145,11 +151,12 @@ abstract class ForegroundWork : Service() {
         private var turns = 0
         private var listening = false
         private var downloading = false
+        private var prefilling = false
 
         // Whether the isolate has work the process must not be killed for.
         // MainActivity reads it to decide whether to keep the engine — voice
         // mode counts, since the session it holds is in that isolate too.
-        val busy: Boolean get() = turns > 0 || listening || downloading
+        val busy: Boolean get() = turns > 0 || listening || downloading || prefilling
 
         fun register(context: Context, messenger: BinaryMessenger) {
             val appContext = context.applicationContext
@@ -174,6 +181,13 @@ abstract class ForegroundWork : Service() {
                                 it.putExtra(DownloadService.EXTRA_LABEL, notice?.get("label") as? String)
                                 it.putExtra(DownloadService.EXTRA_RECEIVED, (notice?.get("received") as? Number)?.toLong() ?: 0L)
                                 it.putExtra(DownloadService.EXTRA_TOTAL, (notice?.get("total") as? Number)?.toLong() ?: 0L)
+                            }
+                        }
+                        "prefilling" -> {
+                            val model = call.arguments as? String
+                            prefilling = model != null
+                            hold(appContext, PrefillService::class.java, prefilling) {
+                                it.putExtra(PrefillService.EXTRA_MODEL, model)
                             }
                         }
                         else -> return@setMethodCallHandler result.notImplemented()

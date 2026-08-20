@@ -97,16 +97,6 @@ String _withShell({
 You are a helpful assistant that can interact with a computer to answer the
 user's questions and carry out their tasks.
 
-Every command runs in this conversation's own workspace: $workspace
-It is yours; the files in it survive between turns, and no other conversation
-sees them.
-
-The project workspace is shared with every other conversation in this project:
-$projectWorkspace
-Work the user will come back to — a checkout, notes, data you built up — goes
-there, so another conversation can pick it up. Write to it by path; you do not
-have to be in it.
-
 ## How you act
 
 1. You write reasoning text saying what you are doing and why.
@@ -184,7 +174,31 @@ Read part of a file with line numbers:
 ```bash
 nl -ba filename.py | sed -n '10,20p'
 ```
-${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}${profileSection(profile)}""";
+${profileSection(profile)}${agentPrompt == null ? "" : "\n\n## Additional instructions\n\n$agentPrompt"}
+
+## Your workspace
+
+Every command runs in this conversation's own workspace: $workspace
+It is yours; the files in it survive between turns, and no other conversation
+sees them.
+
+The project workspace is shared with every other conversation in this project:
+$projectWorkspace
+Work the user will come back to — a checkout, notes, data you built up — goes
+there, so another conversation can pick it up. Write to it by path; you do not
+have to be in it.""";
+
+/// The current moment, put at the top of a user turn so the model can date its
+/// answer. It rides on the message rather than the system prompt on purpose: a
+/// value that changes every turn would break the long prefix the on-device
+/// cache warms, and the message is after that prefix anyway.
+String withNow(String message, {DateTime? now}) {
+  final t = now ?? DateTime.now();
+  String two(int n) => n.toString().padLeft(2, "0");
+  final stamp =
+      "${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}";
+  return "Current date and time: $stamp\n\n$message";
+}
 
 /// The first thing the model is asked in a conversation. Upstream calls this
 /// the instance template and puts the task in it.

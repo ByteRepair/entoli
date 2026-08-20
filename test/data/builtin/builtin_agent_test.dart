@@ -114,7 +114,7 @@ void main() {
 
       expect(client.sent.last.where((m) => m.role == LlmRole.system), hasLength(1));
       expect(client.sent.last.first.text, contains(agent.workspace));
-      expect(client.sent.last.last.text, "second");
+      expect(client.sent.last.last.text, contains("second"));
       expect(client.sent.last.map((m) => m.text).join(), contains("first"));
     });
 
@@ -595,7 +595,7 @@ void main() {
 
       expect(client.sent.first.first.role, LlmRole.system);
       expect(client.sent.first.map((m) => m.text).join(), contains("what is 2+2?"));
-      expect(client.sent.first.last.text, "and 3+3?");
+      expect(client.sent.first.last.text, contains("and 3+3?"));
     });
 
     test("given nothing, it starts from the task", () async {

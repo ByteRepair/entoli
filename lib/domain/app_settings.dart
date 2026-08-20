@@ -35,6 +35,7 @@ class AppSettings {
     this.maxLocalModels = 1,
     this.localModelDevice,
     this.localModelContext,
+    this.localModelPrefill = false,
   });
 
   String? defaultModelId;
@@ -125,6 +126,13 @@ class AppSettings {
   /// can be the one a turn asks for.
   int? localModelContext;
 
+  /// Whether to warm an on-device model's system-prompt KV in the background
+  /// when it is set as a default, so the first chat does not pay the whole
+  /// prompt at once. Off by default: it is minutes of the CPU on a phone, so it
+  /// is the user's to ask for. See "Prefilling the system prompt" in
+  /// `lib/data/local/CLAUDE.md`.
+  bool localModelPrefill;
+
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
     if (text == null) return AppSettings();
@@ -158,6 +166,7 @@ class AppSettings {
             (json["maxLocalModels"] as int? ?? 1).clamp(1, maxLocalModelsAllowed),
         localModelDevice: _orNull(json["localModelDevice"] as String?),
         localModelContext: json["localModelContext"] as int?,
+        localModelPrefill: json["localModelPrefill"] as bool? ?? false,
       );
     } catch (_) {
       return AppSettings();
@@ -215,6 +224,7 @@ class AppSettings {
         maxLocalModels: maxLocalModels,
         localModelDevice: localModelDevice,
         localModelContext: localModelContext,
+        localModelPrefill: localModelPrefill,
       );
 
   Future<void> save(AppConfig config) async {
@@ -243,6 +253,7 @@ class AppSettings {
       if (maxLocalModels != 1) "maxLocalModels": maxLocalModels,
       if (localModelDevice != null) "localModelDevice": localModelDevice,
       if (localModelContext != null) "localModelContext": localModelContext,
+      if (localModelPrefill) "localModelPrefill": localModelPrefill,
     }));
   }
 }

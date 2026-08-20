@@ -678,7 +678,7 @@ void main() {
       await send(backend, "second");
 
       expect(client.sent.last.map((m) => m.text).join(), contains("first"));
-      expect(client.sent.last.last.text, "second");
+      expect(client.sent.last.last.text, contains("second"));
     });
 
     test("resetting seeds the next turn with what was kept", () async {

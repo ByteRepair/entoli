@@ -134,6 +134,10 @@
             android:exported="false"
             android:foregroundServiceType="dataSync"/>
         <service
+            android:name=".PrefillService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
+        <service
             android:name=".VoiceService"
             android:exported="false"
             android:foregroundServiceType="microphone"/>
