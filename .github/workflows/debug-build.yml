@@ -65,6 +65,7 @@ jobs:
           # Unversioned: dispatched from a branch, so pubspec's version would
           # name a build nobody released.
           name: entoli-debug-x86_64.AppImage
+          build-number: ${{ github.run_number }}
 
       - uses: actions/upload-artifact@v7.0.1
         with:

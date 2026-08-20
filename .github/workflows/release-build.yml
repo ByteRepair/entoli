@@ -247,6 +247,8 @@ jobs:
           mode: release
           flutter-version: ${{ env.FLUTTER_VERSION }}
           name: ${{ needs.version.outputs.appimage }}
+          # The version code, so the AppImage and the APK report the same build.
+          build-number: ${{ needs.version.outputs.code }}
 
       # The AppImage alone: a release asset is a file, and the bundle it was
       # built from is a directory nobody downloads a release to get.
