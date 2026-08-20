@@ -84,7 +84,8 @@ There are two of them: the voice models, and the Linux the agent runs commands
 in. They are different enough to be two catalogs — one is picked in two halves
 and has system sentinels in it, the other is per-architecture and decides where
 a command runs — and identical in everything about *downloading*. So that half
-is one implementation and the differences are hooks.
+is one implementation, at both ends: `DownloadRun` fetches and `Downloads<T>`
+reports, and what differs between them is hooks.
 
 `Downloads<T>` in `ui/settings/downloads.dart` is the notifier both catalogs
 are: the running subscriptions, the bar's state, the Cancel in the
@@ -105,10 +106,31 @@ image for this device has nothing to fetch, so the press does nothing rather
 than starting a download that fails. The button that raised it is already dead,
 which makes this the belt to that pair of braces.
 
+**The bar is redrawn on every event and the notification is not.** Progress
+arrives once a megabyte, and telling Android each time is a channel call, a map
+encoded and a notification rebuilt through five binder calls — some fourteen
+hundred of them for a rootfs, to move a bar a hundred pixels wide. So the
+platform is told when what it would *say* changes: a different set of downloads,
+or another whole percent. `state` still moves on every event, because that is
+what the row is drawn from.
+
+`DownloadRun` in `data/download.dart` is the other half, and the half that was
+harder to have two of: the HTTP client, the throttle on how often a fetch
+reports, and — the part that matters — what a **cancelled** download does. A
+listener that goes away has to take the half-written directory with it, and
+there is nobody left to tell about it. Each store keeps only what is its own:
+the voice one loops over a model's files and puts a `.tar.bz2` through an
+isolate, the rootfs one hashes the tarball on the way past and hands it to
+`tar`. The hash rides on `fetch`'s `watch` sink so that checking a download
+costs no second read of the file.
+
 `CatalogTile`, `CatalogAction` and `InstalledPicker` in `ui/widgets/catalog.dart`
 are the same again for what is drawn: a row with its optional note, failure and
 bar; the one button that is download *or* cancel *or* delete and never two; and
-the field over what is installed. `InstalledPicker` is deliberately **not**
+the field over what is installed. `CatalogAction` owns the confirmation as well
+as the button: *that* deleting asks is the same for both, while what is being
+agreed to is not, so each catalog passes the two strings and nothing else.
+`InstalledPicker` is deliberately **not**
 `InheritableDropdown`, which looks identical and means something else — there
 null is "inherit what the level above says" and comes with a reset button, here
 it is either an answer of its own (Android) or nothing picked yet. It also owns

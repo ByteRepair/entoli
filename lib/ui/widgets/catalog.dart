@@ -1,13 +1,14 @@
 import "package:flutter/material.dart";
 
 import "../../domain/download.dart";
+import "dialogs.dart";
 import "formatting.dart";
 import "resettable_field.dart";
 
-/// What both catalogs on the settings pages are made of: a row per thing that
-/// can be downloaded, the one button that applies to it, and the picker over
-/// what is installed. The voice models and the Linux the agent runs commands in
-/// are different enough to be two catalogs and identical in all of this.
+// What both catalogs on the settings pages are made of: a row per thing that
+// can be downloaded, the one button that applies to it, and the picker over
+// what is installed. The voice models and the Linux the agent runs commands in
+// are different enough to be two catalogs and identical in all of this.
 
 /// One entry as a row: what it is, what it costs, and the button. Everything
 /// optional here is a line that only some rows have — a note, a failure, a bar
@@ -81,6 +82,10 @@ class CatalogTile extends StatelessWidget {
 /// than one at a time** — which is the whole of what this class is for. A null
 /// [onDownload] is a row this device cannot fetch, drawn dead rather than left
 /// out, so the reader can see it exists.
+///
+/// Deleting asks first, here rather than at each call site: what is being
+/// agreed to differs between catalogs and *that it is asked at all* does not.
+/// [onDelete] is reached only on a yes.
 class CatalogAction extends StatelessWidget {
   const CatalogAction({
     super.key,
@@ -88,6 +93,8 @@ class CatalogAction extends StatelessWidget {
     required this.installed,
     required this.onCancel,
     required this.onDelete,
+    required this.deleteTitle,
+    required this.deleteMessage,
     this.onDownload,
   });
 
@@ -95,6 +102,8 @@ class CatalogAction extends StatelessWidget {
   final bool installed;
   final VoidCallback onCancel;
   final VoidCallback onDelete;
+  final String deleteTitle;
+  final String deleteMessage;
   final VoidCallback? onDownload;
 
   @override
@@ -110,7 +119,7 @@ class CatalogAction extends StatelessWidget {
       return IconButton(
         icon: const Icon(Icons.delete_outline),
         tooltip: "Delete",
-        onPressed: onDelete,
+        onPressed: () => _confirmDelete(context),
       );
     }
     return IconButton(
@@ -118,6 +127,17 @@ class CatalogAction extends StatelessWidget {
       tooltip: "Download",
       onPressed: onDownload,
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final ok = await confirm(
+      context,
+      title: deleteTitle,
+      message: deleteMessage,
+      confirmLabel: "Delete",
+      destructive: true,
+    );
+    if (ok) onDelete();
   }
 }
 
@@ -137,7 +157,6 @@ class InstalledPicker extends StatelessWidget {
     required this.value,
     required this.onPick,
     this.none,
-    this.empty,
   });
 
   final String label;
@@ -153,16 +172,12 @@ class InstalledPicker extends StatelessWidget {
   /// in.
   final String? none;
 
-  /// What to say in place of the dropdown when there is nothing installed and
-  /// [none] is not an answer either — so there would be no entries at all.
-  final String? empty;
-
   @override
   Widget build(BuildContext context) {
     if (options.isEmpty && none == null) {
       return LabelledField(
         label: label,
-        child: Text(empty ?? "Nothing downloaded yet.",
+        child: Text("Nothing downloaded yet.",
             style: Theme.of(context).textTheme.bodySmall),
       );
     }

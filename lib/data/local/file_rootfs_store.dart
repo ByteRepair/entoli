@@ -2,9 +2,9 @@ import "dart:async";
 import "dart:io";
 
 import "package:crypto/crypto.dart";
-import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
+import "../download.dart";
 import "../../domain/download.dart";
 import "../../domain/rootfs.dart";
 import "../../domain/rootfs_store.dart";
@@ -67,121 +67,58 @@ class FileRootfsStore extends RootfsStore {
     if (await dir.exists()) await dir.delete(recursive: true);
   }
 
+  /// One tarball, checked and then unpacked. The fetching and the giving up are
+  /// [DownloadRun]'s; what is left here is the checksum, which is the thing
+  /// this download has that no other one does.
   @override
-  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) {
-    final client = http.Client();
-    var cancelled = false;
-    late StreamController<DownloadProgress> out;
-
-    Future<void> run() async {
-      final image = rootfs.imageFor(abi);
-      if (image == null) {
-        throw UnsupportedError("${rootfs.name} has no build for $abi.");
-      }
-      // Whatever an earlier attempt left: files under a name we are about to
-      // write, which is worse than starting again.
-      await delete(rootfs);
-      final dir = Directory(directoryFor(rootfs.id))..createSync(recursive: true);
-      final archive = p.join(dir.path, "_rootfs.tar.gz");
-
-      out.add(DownloadProgress(received: 0, total: image.bytes));
-      final digest = await _fetch(
-        client: client,
-        url: image.url,
-        to: archive,
-        report: (at) => out.add(DownloadProgress(received: at, total: image.bytes)),
-        cancelled: () => cancelled,
-      );
-      if (cancelled) return;
-      // Before a byte of it is unpacked, let alone run. Everything in here
-      // becomes a program this device will execute, so arriving is not the same
-      // as being what was asked for.
-      if (digest != image.sha256) {
-        throw StateError(
-          "The download did not match what ${rootfs.name} ${rootfs.version} was "
-          "checked to be, so nothing was installed.",
-        );
-      }
-
-      out.add(DownloadProgress(
-          received: image.bytes, total: image.bytes, unpacking: true));
-      final result = await tar(archive, dir.path);
-      if (cancelled) return;
-      if (result.exitCode != 0) {
-        throw ProcessException("tar", const [], "${result.stderr}".trim(),
-            result.exitCode);
-      }
-      await File(archive).delete();
-      await File(p.join(dir.path, _marker)).writeAsString("");
-    }
-
-    out = StreamController<DownloadProgress>(
-      onListen: () => run().then(
-        (_) async {
-          client.close();
-          // Cancelling closes the stream from the other end, so there is nobody
-          // left to tell — only the half-written directory to remove.
-          if (cancelled) return delete(rootfs);
-          await out.close();
-        },
-        onError: (Object e) async {
-          await delete(rootfs);
-          client.close();
-          if (!out.isClosed) {
-            out.addError(e);
-            await out.close();
+  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) => DownloadRun(
+        discard: () => delete(rootfs),
+        run: (run) async {
+          final image = rootfs.imageFor(abi);
+          if (image == null) {
+            throw UnsupportedError("${rootfs.name} has no build for $abi.");
           }
+          // Whatever an earlier attempt left: files under a name we are about to
+          // write, which is worse than starting again.
+          await delete(rootfs);
+          final dir = Directory(directoryFor(rootfs.id))..createSync(recursive: true);
+          final archive = p.join(dir.path, "_rootfs.tar.gz");
+
+          run.report(DownloadProgress(received: 0, total: image.bytes));
+          // Hashed on the way past rather than by reading the file back: it is
+          // the same bytes, and a phone reads them slowly.
+          final hash = _Sha256Sink();
+          final hashing = sha256.startChunkedConversion(hash);
+          await run.fetch(
+            url: image.url,
+            to: archive,
+            total: image.bytes,
+            watch: hashing,
+          );
+          hashing.close();
+          if (run.cancelled) return;
+          // Before a byte of it is unpacked, let alone run. Everything in here
+          // becomes a program this device will execute, so arriving is not the
+          // same as being what was asked for.
+          if ("${hash.digest}" != image.sha256) {
+            throw StateError(
+              "The download did not match what ${rootfs.name} ${rootfs.version} was "
+              "checked to be, so nothing was installed.",
+            );
+          }
+
+          run.report(DownloadProgress(
+              received: image.bytes, total: image.bytes, unpacking: true));
+          final result = await tar(archive, dir.path);
+          if (run.cancelled) return;
+          if (result.exitCode != 0) {
+            throw ProcessException("tar", const [], "${result.stderr}".trim(),
+                result.exitCode);
+          }
+          await File(archive).delete();
+          await File(p.join(dir.path, _marker)).writeAsString("");
         },
-      ),
-      onCancel: () {
-        cancelled = true;
-        client.close();
-      },
-    );
-    return out.stream;
-  }
-
-  /// The tarball, streamed to disk, hashed on the way past. Hashing here rather
-  /// than reading the file back afterwards: it is the same bytes and a phone
-  /// reads them slowly.
-  static Future<String> _fetch({
-    required http.Client client,
-    required String url,
-    required String to,
-    required void Function(int) report,
-    required bool Function() cancelled,
-  }) async {
-    final response = await client.send(http.Request("GET", Uri.parse(url)));
-    if (response.statusCode != 200) {
-      throw HttpException("${response.statusCode} for $url");
-    }
-    final sink = File(to).openWrite();
-    final hash = _Sha256Sink();
-    final hashing = sha256.startChunkedConversion(hash);
-    var at = 0;
-    var told = 0;
-    try {
-      // `addStream` rather than `add` per chunk: a device whose flash is slower
-      // than its radio would otherwise queue the difference on the heap.
-      await sink.addStream(response.stream.takeWhile((_) => !cancelled()).map((chunk) {
-        hashing.add(chunk);
-        at += chunk.length;
-        if (at - told >= _reportEvery) {
-          told = at;
-          report(at);
-        }
-        return chunk;
-      }));
-      report(at);
-    } finally {
-      await sink.close();
-      hashing.close();
-    }
-    return "${hash.digest}";
-  }
-
-  /// How far the bar moves before it is worth saying so.
-  static const _reportEvery = 1 << 20;
+      ).stream;
 
   /// Android's `tar` is toybox's, and `-z` is the one thing this needs of it.
   /// The absolute path is the fallback for a device whose `PATH` does not name
