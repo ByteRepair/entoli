@@ -69,6 +69,16 @@ in: CI builds it through `.github/actions/bundled-tools`, cached on the recipe
 and the versions, and the release build refuses an APK that came out without
 git in it.
 
+Nothing being checked in is also why a locally built APK is the one that ships
+without them: a `dist/` from an older run stages what it has and no more, and
+`jniLibs/` is ignored, so the gap shows up on a phone rather than in a diff.
+Missing proot then reads as the Terminal page having lost its catalog, which is
+drawn from the same answer. **So the page says which it is**: an ABI that
+Android answered with and no proot beside it is a build fault, and it names the
+two commands that fix it rather than describing a device that cannot run a
+Linux. Only whoever built the APK can reach that, since the release build
+refuses one with no proot in it.
+
 That also means git, curl and OpenSSL are **ours to update**: nothing on the
 device does it for us, so a CVE in any of them is a version bump in
 `versions.sh` and a release.
