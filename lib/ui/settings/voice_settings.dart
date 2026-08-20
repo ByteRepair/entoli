@@ -6,6 +6,7 @@ import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../voice/read_aloud.dart";
 import "voice_models.dart";
+import "../widgets/catalog.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
 import "../widgets/resettable_field.dart";
@@ -123,7 +124,6 @@ class VoiceModelTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // Its own row only: a progress event names one model, and taking the whole
     // state rebuilds all eight tiles for it.
     final progress =
@@ -131,46 +131,20 @@ class VoiceModelTile extends ConsumerWidget {
     final failure =
         ref.watch(voiceModelsProvider.select((s) => s.failures[model.id]));
 
-    return ListTile(
-      isThreeLine: model.note != null || progress != null || failure != null,
+    return CatalogTile(
       title: Row(
         children: [
           Flexible(child: Text(model.name)),
           if (model.multilingual) ...[
             const SizedBox(width: 8),
-            _Badge(label: "Multilingual", tone: theme.colorScheme.primary),
+            _Badge(label: "Multilingual", tone: Theme.of(context).colorScheme.primary),
           ],
         ],
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("${model.languages} · ${formatSize(model.bytes)}"),
-          if (model.note != null)
-            Text(
-              model.note!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          if (failure != null)
-            Text(
-              failure,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            ),
-          if (progress != null) ...[
-            const SizedBox(height: 6),
-            LinearProgressIndicator(value: progress.extracting ? null : progress.fraction),
-            const SizedBox(height: 4),
-            Text(
-              progress.extracting
-                  ? "Unpacking…"
-                  : "${formatSize(progress.received)} of ${formatSize(progress.total)}",
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
+      summary: "${model.languages} · ${formatSize(model.bytes)}",
+      note: model.note,
+      failure: failure,
+      progress: progress,
       trailing: _Action(model: model, downloading: progress != null),
     );
   }
@@ -186,30 +160,17 @@ class _Action extends ConsumerWidget {
   final bool downloading;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final installed = ref.watch(installedVoiceModelsProvider).contains(model.id);
-    if (downloading) {
-      return IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: "Cancel",
-        onPressed: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
+  Widget build(BuildContext context, WidgetRef ref) => CatalogAction(
+        downloading: downloading,
+        installed: ref.watch(installedVoiceModelsProvider).contains(model.id),
+        onCancel: () => ref.read(voiceModelsProvider.notifier).cancel(model.id),
+        onDelete: () => _delete(context, ref),
+        // A browser has nowhere to put one, so the row is drawn dead rather
+        // than left out.
+        onDownload: ref.watch(voiceProvider).available
+            ? () => ref.read(voiceModelsProvider.notifier).install(model)
+            : null,
       );
-    }
-    if (installed) {
-      return IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: "Delete",
-        onPressed: () => _delete(context, ref),
-      );
-    }
-    return IconButton(
-      icon: const Icon(Icons.download_outlined),
-      tooltip: "Download",
-      onPressed: ref.watch(voiceProvider).available
-          ? () => ref.read(voiceModelsProvider.notifier).install(model)
-          : null,
-    );
-  }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final ok = await confirm(
@@ -322,34 +283,15 @@ class _ModelField extends StatelessWidget {
   final ValueChanged<String?> onPick;
 
   @override
-  Widget build(BuildContext context) {
-    final available = models.where((m) => installed.contains(m.id)).toList();
-    if (available.isEmpty) {
-      return LabelledField(
+  Widget build(BuildContext context) => InstalledPicker(
         label: label,
-        child: Text(
-          "Nothing downloaded yet.",
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        options: {
+          for (final model in models)
+            if (installed.contains(model.id)) model.id: model.name,
+        },
+        value: selected,
+        onPick: onPick,
       );
-    }
-    // A setting naming a deleted model would be a value no item carries, which
-    // a DropdownButton asserts on.
-    final value = available.any((m) => m.id == selected) ? selected : null;
-    return LabelledField(
-      label: label,
-      child: DropdownButton<String?>(
-        isExpanded: true,
-        value: value,
-        hint: const Text("None"),
-        items: [
-          for (final model in available)
-            DropdownMenuItem(value: model.id, child: Text(model.name)),
-        ],
-        onChanged: onPick,
-      ),
-    );
-  }
 }
 
 /// Which of a speech model's voices is used.

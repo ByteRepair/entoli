@@ -5,6 +5,7 @@ import "package:crypto/crypto.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
+import "../../domain/download.dart";
 import "../../domain/rootfs.dart";
 import "../../domain/rootfs_store.dart";
 
@@ -67,10 +68,10 @@ class FileRootfsStore extends RootfsStore {
   }
 
   @override
-  Stream<RootfsProgress> install(Rootfs rootfs, {required String abi}) {
+  Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) {
     final client = http.Client();
     var cancelled = false;
-    late StreamController<RootfsProgress> out;
+    late StreamController<DownloadProgress> out;
 
     Future<void> run() async {
       final image = rootfs.imageFor(abi);
@@ -83,12 +84,12 @@ class FileRootfsStore extends RootfsStore {
       final dir = Directory(directoryFor(rootfs.id))..createSync(recursive: true);
       final archive = p.join(dir.path, "_rootfs.tar.gz");
 
-      out.add(RootfsProgress(received: 0, total: image.bytes));
+      out.add(DownloadProgress(received: 0, total: image.bytes));
       final digest = await _fetch(
         client: client,
         url: image.url,
         to: archive,
-        report: (at) => out.add(RootfsProgress(received: at, total: image.bytes)),
+        report: (at) => out.add(DownloadProgress(received: at, total: image.bytes)),
         cancelled: () => cancelled,
       );
       if (cancelled) return;
@@ -102,7 +103,7 @@ class FileRootfsStore extends RootfsStore {
         );
       }
 
-      out.add(RootfsProgress(
+      out.add(DownloadProgress(
           received: image.bytes, total: image.bytes, unpacking: true));
       final result = await tar(archive, dir.path);
       if (cancelled) return;
@@ -114,7 +115,7 @@ class FileRootfsStore extends RootfsStore {
       await File(p.join(dir.path, _marker)).writeAsString("");
     }
 
-    out = StreamController<RootfsProgress>(
+    out = StreamController<DownloadProgress>(
       onListen: () => run().then(
         (_) async {
           client.close();
