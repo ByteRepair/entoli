@@ -1,11 +1,14 @@
 package io.github.yiannis128.agent_chat
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
@@ -38,6 +41,10 @@ object VoiceChannel {
     // listening is this flag plus a restart from `onResults`/`onError` — see
     // [restart].
     private var wantListening = false
+
+    // Whether a session has opened since the recognizer was started. What
+    // tells the two meanings of ERROR_CLIENT apart — see [onError].
+    private var sessionOpened = false
 
     private val main = Handler(Looper.getMainLooper())
 
@@ -96,9 +103,27 @@ object VoiceChannel {
             .queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0)
             .isNotEmpty()
         return mapOf(
-            "recognition" to SpeechRecognizer.isRecognitionAvailable(context),
+            "recognition" to (recognitionService(context) != null),
             "speech" to speech,
         )
+    }
+
+    // The recognition service a session will connect to, and null where there
+    // is none. Named rather than left to the one-argument
+    // `createSpeechRecognizer`, which resolves
+    // `Settings.Secure.VOICE_RECOGNITION_SERVICE` and answers an unset one
+    // with ERROR_CLIENT as the session opens. See "The Android system engines"
+    // in CLAUDE.md.
+    private fun recognitionService(context: Context): ComponentName? {
+        val installed = context.packageManager
+            .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+            .map { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
+        // No public API for the user's pick: the constant is hidden, the key is
+        // not. One that is not installed is stale.
+        val chosen = Settings.Secure
+            .getString(context.contentResolver, "voice_recognition_service")
+            ?.let { ComponentName.unflattenFromString(it) }
+        return installed.firstOrNull { it == chosen } ?: installed.firstOrNull()
     }
 
     // --- Speech synthesis ---
@@ -150,16 +175,24 @@ object VoiceChannel {
     // --- Speech recognition ---
 
     private fun startRecognition(context: Context) {
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            send("recognitionError", "Speech recognition is not available on this device.")
-            return
-        }
         if (recognizer == null) {
-            recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-            recognizer?.setRecognitionListener(recognitionListener)
+            val service = recognitionService(context)
+                ?: return fail("Speech recognition is not available on this device.")
+            recognizer = SpeechRecognizer.createSpeechRecognizer(context, service).apply {
+                setRecognitionListener(recognitionListener)
+            }
         }
+        sessionOpened = false
         wantListening = true
         listen()
+    }
+
+    // An error voice mode will show. The recognizer goes with it: the Dart side
+    // is in its failed state from here, and one left bound is one the next
+    // unpause drives on rather than resolving a service again.
+    private fun fail(message: String) {
+        stopRecognition()
+        send("recognitionError", message)
     }
 
     private fun listen() {
@@ -178,17 +211,18 @@ object VoiceChannel {
         try {
             recognizer?.startListening(intent)
         } catch (e: Exception) {
-            send("recognitionError", e.message ?: "Recognition could not start.")
+            fail(e.message ?: "Recognition could not start.")
         }
     }
 
     // A recognizer that has just finished an utterance is asked for the next
     // one. Posted rather than called straight from the callback: it is still
     // inside the old recognition when `onResults` runs, and starting a new one
-    // there is what `ERROR_RECOGNIZER_BUSY` is.
-    private fun restart() {
+    // there is what `ERROR_RECOGNIZER_BUSY` is. [after] is for the one case
+    // where a turn of the looper is not enough — see [onError].
+    private fun restart(after: Long = 0) {
         if (!wantListening) return
-        main.post { listen() }
+        main.postDelayed({ listen() }, after)
     }
 
     private fun setRecognitionListening(context: Context, on: Boolean) {
@@ -208,7 +242,9 @@ object VoiceChannel {
     }
 
     private val recognitionListener = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onReadyForSpeech(params: Bundle?) {
+            sessionOpened = true
+        }
 
         override fun onBeginningOfSpeech() {
             send("interrupted", null)
@@ -232,15 +268,22 @@ object VoiceChannel {
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> restart()
 
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                    wantListening = false
-                    send("recognitionError", "Entoli was not allowed to use the microphone.")
+                // What the service answers a restart that landed while it still
+                // had the last session open, and also a session that never
+                // connected. Retried once, far enough out for a tear-down to
+                // finish; a second with nothing opened in between is the other
+                // kind, and is not going to clear.
+                SpeechRecognizer.ERROR_CLIENT -> if (sessionOpened) {
+                    sessionOpened = false
+                    restart(after = 200)
+                } else {
+                    fail("Speech recognition could not start.")
                 }
 
-                else -> {
-                    send("recognitionError", "Recognition failed (error $error).")
-                    restart()
-                }
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                    fail("Entoli was not allowed to use the microphone.")
+
+                else -> fail("Recognition failed (error $error).")
             }
         }
 
