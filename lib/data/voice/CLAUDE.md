@@ -207,11 +207,21 @@ package declares a `RecognitionService`, while the one-argument
 `ERROR_CLIENT` the moment the session opens, which is voice mode saying
 "Recognition failed (error 5)" before it has heard a word. A phone with a
 recognizer installed and no assistant chosen is the ordinary way to be there.
-So `recognitionService` picks the component and both the probe and
-`startRecognition` go through it: the user's pick where they made one, the
-first installed service where they did not, and a null that takes the sentinel
-off the settings page the way a missing engine already does. There is no public
-API for the setting, so it is read as a key — the constant itself is hidden.
+So `recognitionServices` picks the components and both the probe and `listen`
+go through it, and an empty list takes the sentinel off the settings page the
+way a missing engine already does. There is no public API for the setting, so it
+is read as a key — the constant itself is hidden.
+
+**It answers with a list where there is no pick, and with the pick alone where
+there is one.** A service cannot be asked anything before it is bound, and a
+phone can carry one that holds no model at all with the one that would have
+worked listed behind it — so where Android has been told nothing, a service that
+never connects or that refuses every shape of the request below is fallen past
+rather than reported, and only the last one's refusal reaches the user. Where
+the user *has* chosen a recognizer, walking past it would hand the microphone to
+another company's service, over the network, without saying so. That is not a
+choice to make in a private Kotlin helper, so the walk is one service long and
+the refusal is theirs to see.
 
 `ERROR_CLIENT` is also what the framework's own `RecognitionService` answers a
 `startListening` on a listener that is still in a session, so the same error
@@ -220,7 +230,7 @@ session was closed, and one that never connected. **What tells them apart is
 whether a session ever opened**, which is what `onReadyForSpeech` says and what
 `sessionOpened` holds — so the first is retried once, 200 ms out rather than on
 the next turn of the looper, since a tear-down is what is being waited for, and
-the second is reported straight away. A count with a threshold was the other
+the second falls to the next service. A count with a threshold was the other
 answer and it spends four failed binds arriving where the flag already is.
 
 Reporting an error destroys the recognizer, and that is `fail` rather than a
@@ -229,6 +239,62 @@ Dart side has no way back short of leaving the screen — so a recognizer left
 bound is a microphone held for a screen that has given up, and worse, one the
 next unpause would drive on rather than resolve a service again. A phone that
 had one installed while the app was open gets it that way.
+
+### What is asked, and what to do when it is refused
+
+`startListening` takes an intent, and the two things Entoli puts in that intent
+are exactly the two a phone can refuse: `EXTRA_PREFER_OFFLINE`, and the language
+the device is set to. A phone with no downloaded model for its own language
+refuses both together as `ERROR_LANGUAGE_NOT_SUPPORTED` — **"Recognition failed
+(error 12)", which is what voice mode said instead of hearing anything, on a
+device whose recognizer would have worked perfectly well over the network.**
+`ERROR_LANGUAGE_UNAVAILABLE` is the same thing said one step more precisely, and
+means the same to us.
+
+So the intent has three shapes and they are a ladder: on-device in the device's
+language, over the network in the device's language, and over the network in
+whatever language the service itself is set to. A language error is a step down
+rather than a fault, and only a device that has refused every shape is told it
+has no speech recognition for that language. **On-device stays the first rung**,
+since the rest of voice mode is on the device, and being wrong about it now
+costs one fast refusal instead of the whole feature.
+
+**Asking first is the obvious alternative and is the slower one.**
+`checkRecognitionSupport` will name the languages a bound service has
+downloaded, so on Android 13 the rung could be picked rather than found — but it
+is a bind and a round trip of its own, paid at the start of *every* session
+including the ones that were about to work, to save a refusal that arrives in
+tens of milliseconds and sticks for the rest of the session. It is worth it for
+the one thing a refusal cannot do: **the fallback is not meant to be permanent,
+so the model is asked for.** `triggerModelDownload` is called the first time a
+service turns out to be missing a language it could hold, so the session that
+fell back to the network is heard on the device the next time voice mode opens.
+Once per service, since it is a fetch rather than a retry. The platform decides
+whether to prompt and whether to wait for wifi, and nothing here waits for it or
+hears how it went.
+
+**The tag is stripped rather than taken.** `Locale.getDefault()` carries
+whatever `u-` extension the locale was set with — a calendar, a numbering system
+— and a tag a service cannot parse is a language it does not support, which is
+the same error 12 arriving for a reason that has nothing to do with what the
+device can hear. The script stays on: for `sr-Latn` and `zh-Hant` it *is* the
+language. `EXTRA_CALLING_PACKAGE` goes in beside it because nothing fills it in
+for a `SpeechRecognizer` session, and a service that wants to know who is asking
+answers a request without it as `ERROR_CLIENT`.
+
+Everything the walk learned is dropped when the session ends. It was learned by
+failing, and a phone that has since been given the language pack — or the
+recognizer, or the assistant setting — would otherwise keep paying for what was
+true when voice mode was last opened. Within a session it is kept, so pausing
+for a reply and unpausing does not walk it again.
+
+**The remaining codes are three kinds rather than a list.** Silence restarts and
+says nothing. Something happening elsewhere — the network, the server, one
+request too many, a service that went away under the session — is backed off and
+tried again, three times before it is called a fault, since each of those is a
+blink at least as often as it is a wall. Everything else reports: no microphone,
+no permission, and an error code nothing here has a name for, which is still
+worth showing with its number rather than swallowing.
 
 
 ### Per side, not per session

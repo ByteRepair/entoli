@@ -3,16 +3,20 @@ package io.github.yiannis128.agent_chat
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognitionService
+import android.speech.RecognitionSupport
+import android.speech.RecognitionSupportCallback
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.annotation.RequiresApi
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -36,6 +40,11 @@ object VoiceChannel {
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
 
+    // Held rather than captured in the handler's closure the way the other
+    // channels do it: the recognition listener binds a service from inside a
+    // callback nothing hands a context to.
+    private lateinit var appContext: Context
+
     // What the session has asked for, which is not what the recognizer is
     // doing. `SpeechRecognizer` hears one utterance and stops, so continuous
     // listening is this flag plus a restart from `onResults`/`onError` — see
@@ -49,9 +58,9 @@ object VoiceChannel {
     private val main = Handler(Looper.getMainLooper())
 
     fun register(context: Context, messenger: BinaryMessenger) {
-        val appContext = context.applicationContext
+        appContext = context.applicationContext
         channel = MethodChannel(messenger, "agent_chat/voice").apply {
-            setMethodCallHandler { call, result -> handle(appContext, call, result) }
+            setMethodCallHandler { call, result -> handle(call, result) }
         }
     }
 
@@ -68,10 +77,10 @@ object VoiceChannel {
         else main.post { channel?.invokeMethod(method, argument) }
     }
 
-    private fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
+    private fun handle(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "engines" -> result.success(engines(context))
-            "initSpeech" -> { ensureTts(context); result.success(null) }
+            "engines" -> result.success(engines(appContext))
+            "initSpeech" -> { ensureTts(appContext); result.success(null) }
             "speak" -> {
                 val text = call.argument<String>("text") ?: ""
                 val generation = call.argument<Int>("generation") ?: 0
@@ -80,9 +89,9 @@ object VoiceChannel {
             }
             "stopSpeech" -> { tts?.stop(); result.success(null) }
             "disposeSpeech" -> { disposeTts(); result.success(null) }
-            "startRecognition" -> { startRecognition(context); result.success(null) }
+            "startRecognition" -> { startRecognition(); result.success(null) }
             "setRecognitionListening" -> {
-                setRecognitionListening(context, call.arguments as? Boolean ?: true)
+                setRecognitionListening(call.arguments as? Boolean ?: true)
                 result.success(null)
             }
             "stopRecognition" -> { stopRecognition(); result.success(null) }
@@ -103,18 +112,18 @@ object VoiceChannel {
             .queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0)
             .isNotEmpty()
         return mapOf(
-            "recognition" to (recognitionService(context) != null),
+            "recognition" to recognitionServices(context).isNotEmpty(),
             "speech" to speech,
         )
     }
 
-    // The recognition service a session will connect to, and null where there
-    // is none. Named rather than left to the one-argument
+    // The recognition services a session may connect to, best first, and empty
+    // where there are none. Named rather than left to the one-argument
     // `createSpeechRecognizer`, which resolves
     // `Settings.Secure.VOICE_RECOGNITION_SERVICE` and answers an unset one
     // with ERROR_CLIENT as the session opens. See "The Android system engines"
     // in CLAUDE.md.
-    private fun recognitionService(context: Context): ComponentName? {
+    private fun recognitionServices(context: Context): List<ComponentName> {
         val installed = context.packageManager
             .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
             .map { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
@@ -123,7 +132,11 @@ object VoiceChannel {
         val chosen = Settings.Secure
             .getString(context.contentResolver, "voice_recognition_service")
             ?.let { ComponentName.unflattenFromString(it) }
-        return installed.firstOrNull { it == chosen } ?: installed.firstOrNull()
+        // Their pick and nothing else where they made one — walking past it
+        // would hand the microphone to another vendor without saying so. Where
+        // they made none, every installed service is a candidate, since the
+        // platform has not been told which either.
+        return installed.firstOrNull { it == chosen }?.let { listOf(it) } ?: installed
     }
 
     // --- Speech synthesis ---
@@ -174,14 +187,22 @@ object VoiceChannel {
 
     // --- Speech recognition ---
 
-    private fun startRecognition(context: Context) {
-        if (recognizer == null) {
-            val service = recognitionService(context)
-                ?: return fail("Speech recognition is not available on this device.")
-            recognizer = SpeechRecognizer.createSpeechRecognizer(context, service).apply {
-                setRecognitionListener(recognitionListener)
-            }
-        }
+    // The shapes the request is tried in, declared in the order they are tried.
+    // See "What is asked, and what to do when it is refused" in CLAUDE.md.
+    private enum class Ask { OnDevice, Network, NetworkAnyLanguage }
+
+    private var ask = Ask.OnDevice
+    private var services: List<ComponentName> = emptyList()
+    private var service = 0
+
+    // Transient faults since anything was last heard — see [retry].
+    private var faults = 0
+
+    // The services already asked for a model. A fetch rather than a retry, so
+    // once each, and it outlives the session that discovered the gap.
+    private val downloadAsked = mutableSetOf<ComponentName>()
+
+    private fun startRecognition() {
         sessionOpened = false
         wantListening = true
         listen()
@@ -197,53 +218,161 @@ object VoiceChannel {
 
     private fun listen() {
         if (!wantListening) return
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-            )
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
-            // Prefer the on-device recognizer where the platform offers one
-            // (Android 13+), matching the "on the device" framing of voice
-            // mode. Falls back to the network recognizer where it does not.
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-        }
+        val recognizer = ensureRecognizer() ?: return
         try {
-            recognizer?.startListening(intent)
+            recognizer.startListening(recognizerIntent(ask))
         } catch (e: Exception) {
             fail(e.message ?: "Recognition could not start.")
         }
     }
 
+    // Null where there is no service left to bind, which [fail] has reported by
+    // the time this returns.
+    private fun ensureRecognizer(): SpeechRecognizer? {
+        recognizer?.let { return it }
+        if (services.isEmpty()) services = recognitionServices(appContext)
+        val component = services.getOrNull(service) ?: run {
+            fail("Speech recognition is not available on this device.")
+            return null
+        }
+        val fresh = SpeechRecognizer.createSpeechRecognizer(appContext, component)
+        fresh.setRecognitionListener(recognitionListener)
+        recognizer = fresh
+        return fresh
+    }
+
+    private fun recognizerIntent(ask: Ask): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+            // Nothing fills this in for a `SpeechRecognizer` session, and a
+            // service that wants to know who is asking answers a request
+            // without it as ERROR_CLIENT.
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
+            if (ask == Ask.OnDevice) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            if (ask != Ask.NetworkAnyLanguage) {
+                languageTag()?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it) }
+            }
+        }
+
+    // Stripped of the `u-` extension the locale may have been set with, which
+    // is a calendar or a numbering system rather than a language — and a tag a
+    // service cannot parse is a language it does not support. The script is
+    // left on, since for `sr-Latn` and `zh-Hant` it is the language.
+    private fun languageTag(): String? {
+        val locale = Locale.getDefault().stripExtensions()
+        return if (locale.language.isEmpty()) null else locale.toLanguageTag()
+    }
+
     // A recognizer that has just finished an utterance is asked for the next
     // one. Posted rather than called straight from the callback: it is still
     // inside the old recognition when `onResults` runs, and starting a new one
-    // there is what `ERROR_RECOGNIZER_BUSY` is. [after] is for the one case
-    // where a turn of the looper is not enough — see [onError].
+    // there is what `ERROR_RECOGNIZER_BUSY` is. [after] is for the cases where
+    // a turn of the looper is not enough — see [onError].
     private fun restart(after: Long = 0) {
         if (!wantListening) return
         main.postDelayed({ listen() }, after)
     }
 
-    private fun setRecognitionListening(context: Context, on: Boolean) {
+    // The service cannot hear in the language it was asked for, or has no model
+    // downloaded for it.
+    private fun askDifferently() {
+        if (ask == Ask.OnDevice) offerDownload()
+        val next = Ask.entries.getOrNull(ask.ordinal + 1)
+        if (next != null) {
+            ask = next
+            restart()
+        } else {
+            val language = Locale.getDefault().displayLanguage
+            nextService("This device has no speech recognition for $language.")
+        }
+    }
+
+    // [message] is what to say when this was the last service.
+    private fun nextService(message: String) {
+        if (service + 1 >= services.size) return fail(message)
+        service++
+        ask = Ask.OnDevice
+        rebind()
+        restart()
+    }
+
+    private fun rebind() {
+        recognizer?.destroy()
+        recognizer = null
+        sessionOpened = false
+    }
+
+    // A fault worth one more try: the service dropped, the network blinked, one
+    // request too many. Three in a row with nothing heard in between is not a
+    // blink. Backed off rather than retried straight away, since every one of
+    // these is something happening elsewhere.
+    private fun retry(message: String) {
+        faults++
+        if (faults > 3) return fail(message)
+        restart(after = 500L * faults)
+    }
+
+    // Ask for the on-device model when the device language turns out to be one
+    // the service could hold and does not, so a session that fell back to the
+    // network is heard on the device next time. The platform decides whether to
+    // prompt and whether to wait for wifi; nothing here waits or hears how it
+    // went.
+    private fun offerDownload() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val recognizer = this.recognizer ?: return
+        val component = services.getOrNull(service) ?: return
+        val tag = languageTag() ?: return
+        if (downloadAsked.add(component)) requestModel(recognizer, tag)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun requestModel(recognizer: SpeechRecognizer, tag: String) {
+        val intent = recognizerIntent(Ask.OnDevice)
+        val callback = object : RecognitionSupportCallback {
+            override fun onSupportResult(support: RecognitionSupport) {
+                // A destroyed recognizer throws.
+                if (this@VoiceChannel.recognizer !== recognizer) return
+                val has = { l: List<String> -> l.any { it.equals(tag, ignoreCase = true) } }
+                if (!has(support.supportedOnDeviceLanguages)) return
+                if (has(support.pendingOnDeviceLanguages)) return
+                runCatching { recognizer.triggerModelDownload(intent) }
+            }
+
+            override fun onError(error: Int) {}
+        }
+        runCatching {
+            recognizer.checkRecognitionSupport(intent, appContext.mainExecutor, callback)
+        }
+    }
+
+    private fun setRecognitionListening(on: Boolean) {
         if (on) {
-            startRecognition(context)
+            startRecognition()
         } else {
             wantListening = false
             recognizer?.cancel()
         }
     }
 
+    // The walk is reset here rather than in [startRecognition], so pausing for
+    // a reply and unpausing keeps what it learned and a new session does not.
     private fun stopRecognition() {
         wantListening = false
         recognizer?.cancel()
-        recognizer?.destroy()
-        recognizer = null
+        rebind()
+        services = emptyList()
+        service = 0
+        ask = Ask.OnDevice
+        faults = 0
     }
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
             sessionOpened = true
+            faults = 0
         }
 
         override fun onBeginningOfSpeech() {
@@ -277,11 +406,36 @@ object VoiceChannel {
                     sessionOpened = false
                     restart(after = 200)
                 } else {
-                    fail("Speech recognition could not start.")
+                    nextService("Speech recognition could not start.")
                 }
+
+                // The request named a language this service cannot hear in, or
+                // one it could hear in and has not downloaded. Both are asked
+                // again rather than reported: this is what "Recognition failed
+                // (error 12)" was, on a phone that hears perfectly well over
+                // the network.
+                SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
+                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> askDifferently()
 
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
                     fail("Entoli was not allowed to use the microphone.")
+
+                SpeechRecognizer.ERROR_AUDIO ->
+                    fail("The microphone could not be read.")
+
+                SpeechRecognizer.ERROR_NETWORK,
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                    retry("Speech recognition could not reach the network.")
+
+                SpeechRecognizer.ERROR_SERVER,
+                SpeechRecognizer.ERROR_TOO_MANY_REQUESTS ->
+                    retry("The speech recognition service is not answering.")
+
+                // The binding is gone with it, so the retry needs a new one.
+                SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> {
+                    rebind()
+                    retry("The speech recognition service stopped.")
+                }
 
                 else -> fail("Recognition failed (error $error).")
             }
