@@ -308,15 +308,6 @@ List<ChatRecord> _asWritten(List<Message> messages, bool finished) => [
           ChatRecord.turnEnd(messageId: m.id, reason: TurnEnd.done),
     ];
 
-/// A message as a store test hands it in.
-Message makeMessage(String id, String text, {MessageRole role = MessageRole.user}) =>
-    Message(
-      id: id,
-      role: role,
-      createdAt: DateTime.utc(2026, 1, 1),
-      parts: [MessagePart.text(text: text)],
-    );
-
 /// A chat's state as a store test hands it in, dated so [day] orders one
 /// against another.
 ChatState makeState(String id, {String? project, int day = 2}) => ChatState(

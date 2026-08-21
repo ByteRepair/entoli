@@ -29,9 +29,9 @@ typedef CompletionToken = ({CompletionKind kind, int start, String query});
 
 /// The word the caret sits in, when it is a trigger token. `/` only counts at
 /// the very start of a message; `@` counts wherever a word begins. Anything
-/// offered here has to dispatch, so this matches `BuiltinBackend`'s patterns —
-/// the first of which is that a `!` message goes to the shell, where neither a
-/// command of Entoli's nor an agent means anything.
+/// offered here has to dispatch, so this matches `prompt_library.dart`'s
+/// patterns — and, before them, that a `!` message goes to the shell, where
+/// neither a command of Entoli's nor an agent means anything.
 CompletionToken? activeCompletionToken(TextEditingValue value) {
   if (shellBypassCommand(value.text) != null) return null;
   final selection = value.selection;
@@ -57,7 +57,7 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
 bool _isSpace(int codeUnit) => codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
 
 /// Where [kind]'s trigger goes: a command's at the start of the message, since
-/// that is the only place `BuiltinBackend._command` reads one from, and a
+/// that is the only place `prompt_library.dart`'s `_command` reads one from, and a
 /// mention's wherever the caret is.
 int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
       CompletionKind.command => 0,

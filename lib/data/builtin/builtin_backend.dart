@@ -29,13 +29,9 @@ import "task_tool.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which
-/// endpoint a turn runs against, and turns the composer's `/` and `@` syntax
-/// into a task and a system prompt before the agent ever sees it.
-/// What the user said and when it was logged. One value rather than two, so
-/// "there is a prompt" and "it is dated" cannot come apart — a resumed turn has
-/// neither, and nothing below this has to stand a date in.
-typedef Prompt = ({String text, DateTime at});
-
+/// endpoint a turn runs against, and hands the agent the message to run. What
+/// the composer's `/` and `@` syntax meant is already on that message — see
+/// "Commands and agents" in `lib/domain/CLAUDE.md`.
 class BuiltinBackend implements AgentBackend {
   BuiltinBackend({
     required this.config,
@@ -55,8 +51,9 @@ class BuiltinBackend implements AgentBackend {
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
 
-  /// Entoli's own commands and agents, expanded into the task and the
-  /// system prompt before the agent sees them.
+  /// Entoli's own commands and agents. A turn's own references travel on the
+  /// message, resolved where it was composed, so this is left for the `task`
+  /// tool — which names an `@agent` the user never wrote.
   final PromptLibrary? library;
 
   /// Web search and fetch, chosen by the platform like [shell] is:
@@ -84,16 +81,6 @@ class BuiltinBackend implements AgentBackend {
   final Map<String, List<AskRequest>> _questions = {};
   final Map<String, Completer<List<String?>>> _answers = {};
 
-  /// A message that is nothing but `/name` plus arguments runs that command.
-  /// The name may not hold a slash, so `/usr/bin/foo is broken` stays prose.
-  /// Matches what `activeCompletionToken` offers in the composer's menu —
-  /// anything it can offer has to dispatch here.
-  static final _command = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
-
-  /// `@name` addresses an agent, but only where a word starts, so an email
-  /// address is not a mention.
-  static final _mention = RegExp(r"(?<=^|\s)@([\w.-]+)");
-
   /// No directories yet: a chat nobody says anything in is never saved, and an
   /// empty `chats/<uuid>/` for each one would outlive it.
   @override
@@ -113,14 +100,11 @@ class BuiltinBackend implements AgentBackend {
   @override
   Stream<AgentEvent> sendPrompt(
     String chatId,
-    String text, {
-    List<Attachment> attachments = const [],
+    Message prompt, {
     List<Message> history = const [],
     TurnSettings settings = const TurnSettings(),
-    required DateTime at,
   }) =>
-      _start(chatId, (text: text, at: at),
-          attachments: attachments, history: history, settings: settings);
+      _start(chatId, prompt, history: history, settings: settings);
 
   @override
   Stream<AgentEvent> resumeTurn(
@@ -135,41 +119,35 @@ class BuiltinBackend implements AgentBackend {
   /// completes.
   Stream<AgentEvent> _start(
     String chatId,
-    Prompt? prompt, {
-    List<Attachment> attachments = const [],
+    Message? prompt, {
     List<Message> history = const [],
     required TurnSettings settings,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
     unawaited(_runTurn(chatId, prompt, controller,
-        attachments: attachments, history: history, settings: settings));
+        history: history, settings: settings));
     return controller.stream;
   }
 
-  /// [text] is what the user said, or null to carry on the turn [history] ends
-  /// in. Everything either needs — the model, the directories, the gate, the
+  /// [prompt] is the message the user sent, or null to carry on the turn
+  /// [history] ends in. Everything either needs — the model, the directories, the gate, the
   /// sub-agent runner — is the same; they differ only in what the agent is
   /// asked and in how much of the session is rebuilt first.
   Future<void> _runTurn(
     String chatId,
-    Prompt? prompt,
+    Message? prompt,
     StreamController<AgentEvent> controller, {
-    List<Attachment> attachments = const [],
     List<Message> history = const [],
     required TurnSettings settings,
   }) async {
     final project = settings.project;
-    final text = prompt?.text;
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
-      if (prompt != null && shellBypassCommand(prompt.text) != null) {
-        await _runBypass(chatId, prompt.text, controller,
-            attachments: attachments,
-            history: history,
-            project: project,
-            at: prompt.at);
+      if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
+        await _runBypass(chatId, prompt, controller,
+            history: history, project: project);
         return;
       }
 
@@ -214,12 +192,13 @@ class BuiltinBackend implements AgentBackend {
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
-      if (text == null) {
+      if (prompt == null) {
         history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
       }
-      final session = _sessionOf(chatId, history, rebuild: text == null);
+      final session = await _sessionOf(chatId, history, rebuild: prompt == null);
       final agent = BuiltinAgent(
         session: session,
+        loadResource: _resourcesOf(chatId),
         client: gatedClient,
         shell: shell,
         fs: config.fs,
@@ -247,16 +226,15 @@ class BuiltinBackend implements AgentBackend {
       _running.add(chatId, agent.cancel);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
-      // of, so they come off the message that started it.
-      final agentPrompt = _agentPromptOf(text ?? _lastUserText(history));
-      final events = text == null
+      // of, so they come off the message that started it — its record of them,
+      // not the library, so an agent edited or deleted since still carries on
+      // under what the turn actually ran under.
+      final said =
+          prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
+      final agentPrompt = agentPromptFrom(said?.documents ?? const {});
+      final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)
-          : agent.run(
-              _taskOf(text),
-              attachments: attachments.map(_toLlmAttachment).toList(),
-              agentPrompt: agentPrompt,
-              at: prompt!.at,
-            );
+          : agent.run(prompt, agentPrompt: agentPrompt);
 
       await for (final event in events) {
         if (controller.isClosed) break;
@@ -291,14 +269,12 @@ class BuiltinBackend implements AgentBackend {
   /// allow one.
   Future<void> _runBypass(
     String chatId,
-    String prompt,
+    Message prompt,
     StreamController<AgentEvent> controller, {
-    required List<Attachment> attachments,
     required List<Message> history,
     required String? project,
-    required DateTime at,
   }) async {
-    final command = shellBypassCommand(prompt)!;
+    final command = shellBypassCommand(prompt.plainText)!;
     await config.ensureChatDirs(chatId, project: project);
     final run = shell.start(command,
         cwd: config.workspaceDir(chatId, project: project),
@@ -320,29 +296,15 @@ class BuiltinBackend implements AgentBackend {
     );
     controller.add(ShellRunEvent(part));
     controller.add(const DoneEvent());
-    // Through `projectionOf` rather than worded here, so the session holds
-    // exactly what a reload would build out of the log — attachments named the
-    // way the projection names them included. These are the two messages the
-    // turn is writing; only their ids differ from the ones being logged, and
-    // the projection does not read those. It does read the date, which is why
-    // [at] is the one the prompt is logged under rather than the clock.
-    final session = _sessionOf(chatId, history);
-    final opens = session.isFresh;
-    session.messages.addAll(projectionOf([
-          _turnMessage(MessageRole.user, at, [
-            for (final a in attachments)
-              MessagePart.file(
-                  resource: a.resource ?? "",
-                  filename: a.filename,
-                  mimeType: a.mimeType),
-            MessagePart.text(text: prompt),
-          ]),
-          _turnMessage(MessageRole.assistant, at, [part]),
-        ], first: opens));
+    // Through `projectionOf` like every other turn — the reply is the app's
+    // rather than a model's, and that is the only difference.
+    final session = await _sessionOf(chatId, history);
+    final opens = !session.hasConversation;
+    session.messages.addAll(await projectionOf([
+          prompt,
+          unloggedMessage(MessageRole.assistant, prompt.createdAt, [part]),
+        ], first: opens, load: _resourcesOf(chatId)));
   }
-
-  Message _turnMessage(MessageRole role, DateTime at, List<MessagePart> parts) =>
-      Message(id: "", role: role, createdAt: at, parts: parts);
 
   /// The chat's session, filled from [history] where it is one this backend was
   /// not already holding — which is a chat opened after a restart, and empty.
@@ -351,12 +313,19 @@ class BuiltinBackend implements AgentBackend {
   /// so that carrying on in the same process and carrying on after a restart
   /// put the same thing in front of the model — a checkpoint that failed is
   /// swallowed, so a live session can hold more than the log does.
-  BuiltinSession _sessionOf(String chatId, List<Message> history,
-      {bool rebuild = false}) {
+  Future<BuiltinSession> _sessionOf(String chatId, List<Message> history,
+      {bool rebuild = false}) async {
     final session = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-    if (rebuild || session.isFresh) session.replaceWith(projectionOf(history));
+    if (rebuild || session.isFresh) {
+      session.replaceWith(
+          await projectionOf(history, load: _resourcesOf(chatId)));
+    }
     return session;
   }
+
+  /// Where this chat's attachment bytes come from, for the projection.
+  ResourceLoader _resourcesOf(String chatId) =>
+      (resource) => store.readResource(chatId, resource);
 
   /// Carry on the sub-agents the interrupted turn left in flight. A `task`
   /// call whose result never landed is answered by reviving the sub-agent that
@@ -466,41 +435,6 @@ class BuiltinBackend implements AgentBackend {
     return LlmClassifier(client: target.client, model: target.modelId);
   }
 
-  /// `/name args` is the command's template with the arguments in it. A name
-  /// the library does not know is left alone: it is more likely a path than a
-  /// command nobody defined.
-  String _taskOf(String text) {
-    final match = _command.firstMatch(text.trim());
-    if (match == null) return text;
-    final document = library?.find(CompletionKind.command, match.group(1)!);
-    if (document == null) return text;
-    final arguments = match.group(2) ?? "";
-    if (document.body.contains(r"$ARGUMENTS")) {
-      return document.body.replaceAll(r"$ARGUMENTS", arguments);
-    }
-    return arguments.isEmpty ? document.body : "${document.body}\n\n$arguments";
-  }
-
-  /// `@name` puts that agent's prompt under the system message for this turn.
-  /// Several mentions stack, in the order they were written.
-  String? _agentPromptOf(String text) {
-    final bodies = <String>[];
-    for (final match in _mention.allMatches(text)) {
-      final document = library?.find(CompletionKind.agent, match.group(1)!);
-      if (document != null) bodies.add(document.body);
-    }
-    return bodies.isEmpty ? null : bodies.join("\n\n");
-  }
-
-  String _lastUserText(List<Message> history) =>
-      history.lastWhereOrNull((m) => m.role == MessageRole.user)?.plainText ?? "";
-
-  LlmAttachment _toLlmAttachment(Attachment attachment) => LlmAttachment(
-        filename: attachment.filename,
-        mimeType: attachment.mimeType,
-        bytes: attachment.bytes,
-      );
-
   Future<ApprovalResponse> _awaitApproval(ToolApproval approval) =>
       _pending.putIfAbsent(approval.id, Completer.new).future;
 
@@ -576,7 +510,9 @@ class BuiltinBackend implements AgentBackend {
   @override
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
     await _running.remove(chatId)?.call();
-    _sessions.putIfAbsent(chatId, BuiltinSession.new).replaceWith(projectionOf(history));
+    _sessions
+        .putIfAbsent(chatId, BuiltinSession.new)
+        .replaceWith(await projectionOf(history, load: _resourcesOf(chatId)));
   }
 
   @override

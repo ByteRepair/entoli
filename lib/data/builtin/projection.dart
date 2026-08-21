@@ -1,5 +1,8 @@
+import "dart:typed_data";
+
 import "../../domain/ask.dart";
 import "../../domain/models.dart";
+import "../../domain/prompt_library.dart";
 import "llm/llm_client.dart";
 import "templates.dart";
 
@@ -16,13 +19,32 @@ import "templates.dart";
 ///
 /// Named for the projection rather than `project`, which everywhere else in
 /// this codebase is the directory a chat lives in.
+///
+/// **This is the only thing that words a conversation for a model**, the turn
+/// being sent included — `BuiltinAgent._openTurn` projects the message it is
+/// about to log rather than wording one of its own. See "The projection" in
+/// `lib/domain/CLAUDE.md` for what that is worth and what it costs.
+///
 /// [first] says whether the first user message in [messages] is also the first
 /// of the conversation, which is the one dressed as a task. False where this is
 /// a fragment appended to a session that already holds the rest — see
 /// `_runBypass`.
-List<LlmMessage> projectionOf(List<Message> messages, {bool first = true}) {
+///
+/// [load] answers with a resource's bytes. Asynchronous for that alone, which
+/// is what it costs to hand a model the image it was sent rather than the name
+/// of it.
+Future<List<LlmMessage>> projectionOf(
+  List<Message> messages, {
+  bool first = true,
+  required ResourceLoader load,
+}) async {
+  // Every resource at once rather than a message at a time: on the web each
+  // read is its own IndexedDB transaction, and a long conversation's would
+  // otherwise be one round trip after another.
+  final files = await Future.wait(messages.map((m) =>
+      m.role == MessageRole.user ? _attachments(m, load) : _noFiles));
   final projected = <LlmMessage>[];
-  for (final message in messages) {
+  for (final (index, message) in messages.indexed) {
     switch (message.role) {
       case MessageRole.user:
         final text = _userText(message);
@@ -31,6 +53,7 @@ List<LlmMessage> projectionOf(List<Message> messages, {bool first = true}) {
             role: LlmRole.user,
             text: userTurnText(text,
                 at: message.createdAt, first: first && projected.isEmpty),
+            attachments: files[index],
           ));
         }
       case MessageRole.assistant:
@@ -45,14 +68,45 @@ List<LlmMessage> projectionOf(List<Message> messages, {bool first = true}) {
   return projected;
 }
 
-/// Files are named rather than resent: the bytes are on disk, reading them back
-/// would make this asynchronous, and only the turn actually being replayed
-/// carries its own attachments.
+/// Where a resource's bytes are, given the name a [FilePart] holds. Null for
+/// one that is no longer on disk, which is a file named to the model rather
+/// than a turn that fails.
+typedef ResourceLoader = Future<Uint8List?> Function(String resource);
+
+/// A projection with nothing behind it to read bytes from: a sub-agent's
+/// transcript, which holds no user message and so no file part, and the tests
+/// that project a conversation no chat on disk ever held.
+Future<Uint8List?> noResources(String resource) async => null;
+
+/// A message no log will hold: the reply a `!` turn writes, a sub-agent's task.
+/// The id is the one field [projectionOf] does not read.
+Message unloggedMessage(MessageRole role, DateTime at, List<MessagePart> parts) =>
+    Message(id: "", role: role, createdAt: at, parts: parts);
+
+/// Expanded first, decorated second. The other order hands `$ARGUMENTS` the
+/// `(attached: …)` note, so `/review` with a file attached would substitute the
+/// decoration into the middle of the command's template.
+///
+/// Files are named as well as sent: the bytes carry no filename, and one whose
+/// resource has gone is left with nothing but its name.
 String _userText(Message message) {
-  final text = message.plainText.trim();
+  final text = expandedPrompt(message.plainText, message.documents).trim();
   final files = message.files.map((f) => f.filename).join(", ");
   if (files.isEmpty) return text;
   return text.isEmpty ? "(attached: $files)" : "$text\n\n(attached: $files)";
+}
+
+final Future<List<LlmAttachment>> _noFiles = Future.value(const []);
+
+Future<List<LlmAttachment>> _attachments(Message message, ResourceLoader load) async {
+  final loaded = await Future.wait(message.files.map((file) async {
+    final bytes = await load(file.resource);
+    return bytes == null
+        ? null
+        : LlmAttachment(
+            filename: file.filename, mimeType: file.mimeType, bytes: bytes);
+  }));
+  return loaded.nonNulls.toList();
 }
 
 Iterable<LlmMessage> _assistant(Message message) sync* {
@@ -122,7 +176,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         toolCallId: call.id,
         text: result == null
             ? _interruptedText(call.name)
-            : _resultText(call.name, result),
+            : toolResultText(call.name, result),
       );
     }
   }
@@ -153,22 +207,29 @@ String? _responseIdOf(MessagePart part) => switch (part) {
       _ => null,
     };
 
-/// Worded the way the agent worded it when it ran, so a projected conversation
-/// is the one the model already answered. An `ask_user` result is the answers
-/// themselves; every other call reads as a command's outcome.
-String _resultText(String tool, ToolResult result) => tool == askToolName
-    ? result.output
-    : observation(
-        returnCode: result.returnCode,
-        output: result.output,
-        exceptionInfo: result.exceptionInfo,
-      );
+/// **How a tool's outcome is worded for a model, and the only place it is.**
+/// The agent answers a call with this as the turn runs and the projection words
+/// that same result again out of the log; two expressions of it is two things to
+/// keep level, which is the bug this file exists to make impossible.
+///
+/// An `ask_user` that was answered reads as the answers themselves — it is the
+/// user talking, not a command reporting. One that failed does not: the reason
+/// is in `exceptionInfo` and the answers are empty, so it reads as any other
+/// failure would.
+String toolResultText(String tool, ToolResult result) =>
+    tool == askToolName && result.returnCode == 0
+        ? result.output
+        : observation(
+            returnCode: result.returnCode,
+            output: result.output,
+            exceptionInfo: result.exceptionInfo,
+          );
 
 /// A call whose result never landed, which is a turn killed between making it
 /// and writing the answer down. One wording for every tool: which one it was is
 /// in the call the model can already see, and refining "it may not have run"
 /// per tool is second-guessing an interruption nothing here witnessed. Split
-/// only where [_resultText] splits — an `ask_user` is answered in prose either
+/// only where [toolResultText] splits — an `ask_user` is answered in prose either
 /// way, never as a command's outcome.
 String _interruptedText(String tool) =>
     tool == askToolName ? _askInterrupted : _interrupted;

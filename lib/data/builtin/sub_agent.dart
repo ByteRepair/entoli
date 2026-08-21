@@ -74,8 +74,13 @@ class SubAgentRunner {
     final agentPrompt = document?.body;
 
     final session = BuiltinSession();
+    // The task as a message, because that is what opens a turn now. A
+    // sub-agent's transcript opens on the assistant's message, so this one is
+    // never logged and has no `/command` of the user's to record.
+    final said = unloggedMessage(
+        MessageRole.user, DateTime.now(), [MessagePart.text(text: prompt)]);
     return _drive(session, agentPrompt, callId,
-        (agent) => agent.run(prompt, agentPrompt: agentPrompt));
+        (agent) => agent.run(said, agentPrompt: agentPrompt));
   }
 
   /// Carry on the sub-agent [callId] left off in, over a session rebuilt from
@@ -86,7 +91,8 @@ class SubAgentRunner {
         library?.find(CompletionKind.agent, "general");
     final agentPrompt = document?.body;
 
-    final session = BuiltinSession()..replaceWith(projectionOf(await log.read(callId)));
+    final session = BuiltinSession()
+      ..replaceWith(await projectionOf(await log.read(callId), load: noResources));
     return _drive(session, agentPrompt, callId, (agent) => agent.resume(agentPrompt: agentPrompt));
   }
 

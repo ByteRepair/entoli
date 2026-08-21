@@ -331,7 +331,7 @@ void main() {
     });
 
     // Appended wherever the caret was, a `/command` is text nothing expands:
-    // `BuiltinBackend._command` only reads one at the start of the message,
+    // `prompt_library.dart`'s `_command` only reads one at the start of the message,
     // and the composer's own menu gates `/` on the same rule.
     testWidgets("a command lands where a command is read from", (tester) async {
       await openBlank(tester);

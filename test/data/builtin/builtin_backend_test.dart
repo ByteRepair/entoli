@@ -71,23 +71,27 @@ void main() {
 
   /// Most of these are not about approvals, so the default here is the chat
   /// setting that does not stop to ask.
-  /// [at] is fixed rather than left to the clock, because what the model is
-  /// shown of a user turn carries the date it was sent — so a test comparing a
-  /// live session against one rebuilt from a log has to date both the same.
+  /// The message is dated [sentAt] rather than by the clock, because what the
+  /// model is shown of a user turn carries the date it was sent — so a test
+  /// comparing a live session against one rebuilt from a log has to date both
+  /// the same. [documents] is what the turn's `/command` and `@agent`
+  /// references meant, the way the app records them when it composes.
   Future<List<AgentEvent>> send(
     BuiltinBackend backend,
     String text, {
     String? model = "fake-model",
     String? provider = "fake",
     List<Message> history = const [],
-    List<Attachment> attachments = const [],
+    List<MessagePart> files = const [],
+    Map<String, String> documents = const {},
     DateTime? at,
   }) =>
       backend
-          .sendPrompt(chatId, text,
+          .sendPrompt(
+              chatId,
+              userMessage(text,
+                  at: at ?? sentAt, documents: documents, files: files),
               history: history,
-              attachments: attachments,
-              at: at ?? sentAt,
               settings: TurnSettings(
                   model: model, provider: provider, approveMode: ApproveMode.never))
           .toList();
@@ -106,8 +110,7 @@ void main() {
   /// command to approve or a question to pick from.
   Stream<AgentEvent> asking(BuiltinBackend backend, String text,
           {ApproveMode approveMode = ApproveMode.ask}) =>
-      backend.sendPrompt(chatId, text,
-          at: sentAt,
+      backend.sendPrompt(chatId, userMessage(text, at: sentAt),
           settings: TurnSettings(
               model: "fake-model", provider: "fake", approveMode: approveMode));
 
@@ -172,8 +175,7 @@ void main() {
         [finish],
       ]);
       await backend
-          .sendPrompt(chatId, "hi",
-              at: sentAt,
+          .sendPrompt(chatId, userMessage("hi", at: sentAt),
               settings: const TurnSettings(
                   model: "fake-model",
                   provider: "fake",
@@ -193,26 +195,26 @@ void main() {
         PromptLibrary([PromptDocument.parse(kind, name, "---\ndescription: d\n---\n\n$body")]);
 
     test("/name expands to the command's template", () async {
-      final backend = backendOver(
-        [
-          [finish],
-        ],
-        library: libraryWith(CompletionKind.command, "review", "Review this:\n\n\$ARGUMENTS"),
-      );
-      await send(backend, "/review the parser");
+      final asWritten =
+          libraryWith(CompletionKind.command, "review", "Review this:\n\n\$ARGUMENTS");
+      final backend = backendOver([
+        [finish],
+      ], library: asWritten);
+      await send(backend, "/review the parser",
+          documents: promptDocuments("/review the parser", asWritten));
 
       expect(client.sent.first[2].text, contains("Review this:\n\nthe parser"));
       expect(client.sent.first[2].text, isNot(contains(r"$ARGUMENTS")));
     });
 
     test("a command with no placeholder gets its arguments appended", () async {
-      final backend = backendOver(
-        [
-          [finish],
-        ],
-        library: libraryWith(CompletionKind.command, "commit", "Commit what changed."),
-      );
-      await send(backend, "/commit only the tests");
+      final asWritten =
+          libraryWith(CompletionKind.command, "commit", "Commit what changed.");
+      final backend = backendOver([
+        [finish],
+      ], library: asWritten);
+      await send(backend, "/commit only the tests",
+          documents: promptDocuments("/commit only the tests", asWritten));
 
       expect(client.sent.first[2].text, contains("Commit what changed."));
       expect(client.sent.first[2].text, contains("only the tests"));
@@ -231,16 +233,72 @@ void main() {
     });
 
     test("@name puts that agent's prompt under the system message", () async {
+      final asWritten =
+          libraryWith(CompletionKind.agent, "researcher", "You only read.");
+      final backend = backendOver([
+        [finish],
+      ], library: asWritten);
+      await send(backend, "@researcher where is the parser?",
+          documents: promptDocuments("@researcher where is the parser?", asWritten));
+
+      expect(client.sent.first[1].text, contains("You only read."));
+      expect(client.sent.first[2].text, contains("@researcher where is the parser?"));
+    });
+
+    test("a command edited since is still the words the turn was sent with",
+        () async {
+      final asWritten = libraryWith(CompletionKind.command, "review", "Look hard at:\n\n\$ARGUMENTS");
       final backend = backendOver(
         [
           [finish],
         ],
-        library: libraryWith(CompletionKind.agent, "researcher", "You only read."),
+        // The library the turn is replayed against says something else
+        // entirely, and a deleted command would say nothing at all.
+        library: libraryWith(CompletionKind.command, "review", "REWRITTEN"),
       );
-      await send(backend, "@researcher where is the parser?");
+      await send(backend, "/review the parser",
+          documents: promptDocuments("/review the parser", asWritten));
+
+      expect(client.sent.first[2].text, contains("Look hard at:\n\nthe parser"));
+      expect(client.sent.first[2].text, isNot(contains("REWRITTEN")));
+    });
+
+    test("a command deleted since still reads back", () async {
+      final asWritten = libraryWith(CompletionKind.command, "review", "Review this.");
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "/review the parser",
+          documents: promptDocuments("/review the parser", asWritten));
+
+      expect(client.sent.first[2].text, contains("Review this."));
+    });
+
+    test("an agent edited since carries on under what the turn ran under",
+        () async {
+      final asWritten = libraryWith(CompletionKind.agent, "researcher", "You only read.");
+      final backend = backendOver(
+        [
+          [finish],
+        ],
+        library: libraryWith(CompletionKind.agent, "researcher", "REWRITTEN"),
+      );
+      // Resumed rather than sent: the `@agent` is read off the message that
+      // started the turn, which is where its record is.
+      await resuming(backend, [
+        userMessage("@researcher where is the parser?",
+            at: sentAt,
+            documents: promptDocuments("@researcher where is the parser?", asWritten)),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "part way", responseId: "r1")],
+        ),
+      ]);
 
       expect(client.sent.first[1].text, contains("You only read."));
-      expect(client.sent.first[2].text, contains("@researcher where is the parser?"));
+      expect(client.sent.first[1].text, isNot(contains("REWRITTEN")));
     });
 
     test("an email address is not a mention", () async {
@@ -382,6 +440,46 @@ void main() {
       expect(client.sent.single.map((m) => (m.role, m.text)), held);
     });
 
+    // A tool's outcome was worded twice — once as the turn ran, once out of the
+    // log — and for the file tools the two said different things, so every chat
+    // that had read or edited anything diverged the moment it was reopened.
+    test("a tool result reads the same live as it does after a restart", () async {
+      final live = backendOver([
+        [fileCall("read", {"path": "notes.txt"})],
+        [finish],
+      ]);
+      await send(live, "what is in notes.txt?");
+      final answered = client.sent.last.singleWhere((m) => m.role == LlmRole.tool);
+
+      final restarted = backendOver([
+        [finish],
+      ]);
+      await send(restarted, "and now?", history: [
+        userMessage("what is in notes.txt?", at: sentAt),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [
+            MessagePart.toolCall(
+                toolCall: ToolCall(
+                    id: "file-1", name: "read", argumentsJson: '{"path":"notes.txt"}'),
+                responseId: "r1"),
+            MessagePart.toolResult(
+                result: ToolResult(
+                    callId: "file-1",
+                    returnCode: -1,
+                    output: "",
+                    exceptionInfo: "File not found: notes.txt")),
+          ],
+        ),
+      ]);
+      final rebuilt = client.sent.last.singleWhere((m) => m.role == LlmRole.tool);
+
+      expect(answered.text, contains("File not found: notes.txt"));
+      expect(rebuilt.text, answered.text);
+    });
+
     // The live session is filled as the command finishes and a reload builds
     // the same exchange back out of the log. Attached, because what is named to
     // the model is the half a hand-written session line would get wrong.
@@ -389,7 +487,10 @@ void main() {
       final live = backendOver([
         [finish],
       ], respond: (_) => ok("hello\n"));
-      await send(live, "!echo hello", attachments: [testAttachment("notes.txt")]);
+      await send(live, "!echo hello", files: const [
+        MessagePart.file(
+            resource: "r1", filename: "notes.txt", mimeType: "text/plain"),
+      ]);
       await send(live, "what did that say?");
       final held = client.sent.single.map((m) => (m.role, m.text)).toList();
 
@@ -568,8 +669,7 @@ void main() {
       backend.runningTurns.addListener(() => seen.add(backend.runningTurns.value));
 
       var listedAtTheEnd = false;
-      await for (final event in backend.sendPrompt(chatId, "hi",
-          at: sentAt,
+      await for (final event in backend.sendPrompt(chatId, userMessage("hi", at: sentAt),
           settings: const TurnSettings(
               model: "fake-model", provider: "fake", approveMode: ApproveMode.never))) {
         // The listener writing the turn's closing records is still reading this
@@ -831,6 +931,50 @@ void main() {
       final sent = client.sent.last;
       expect(sent.where((m) => m.text.contains("count the files")), hasLength(1));
       expect(sent.last.text, contains("interrupted before it finished"));
+    });
+
+    // Why a turn is being carried on is that turn's own business, and nothing
+    // logs it. A session that went on holding it would send every later turn a
+    // conversation `conv.jsonl` cannot rebuild — the miss the projection exists
+    // to stop, in the one place that could still cause one.
+    test("the reason a turn was resumed does not outlive the turn", () async {
+      final interrupted = [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "count the files")],
+        ),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "looking", responseId: "r1")],
+        ),
+      ];
+
+      final live = backendOver([
+        [finish],
+        [finish],
+      ]);
+      await resuming(live, interrupted);
+      await send(live, "and now?");
+      final held = client.sent.last.map((m) => (m.role, m.text)).toList();
+
+      final restarted = backendOver([
+        [finish],
+      ]);
+      await send(restarted, "and now?", history: [
+        interrupted.first,
+        interrupted.last.copyWith(parts: [
+          ...interrupted.last.parts,
+          const MessagePart.text(text: "done", responseId: "r2"),
+        ]),
+      ]);
+
+      expect(held.map((m) => m.$2).join("\n"),
+          isNot(contains("interrupted before it finished")));
+      expect(client.sent.last.map((m) => (m.role, m.text)), held);
     });
 
     test("a rewound turn names the files it is not resending", () async {
