@@ -142,10 +142,11 @@ Kotlin's `isProjectDir` is Dart's `isProjectName` bar its refusal of `default`:
 Dart calls the default project `null` and has no use for the string, where here
 it is a directory like any other.
 
-A data directory still in the layout that came before this one reads as empty.
-Migrating it is `AppConfig.migrate`'s, and it happens the next time the app is
-launched; doing it from here would be a second copy of that with no engine
-running to check the result.
+A data directory a release has yet to migrate reads as empty here. Migrating is
+`migrations.dart`'s and happens the next time the app is launched, so an update
+that moves a workspace leaves the Files app showing nothing until then; doing it
+from here would be a second copy of that chain with no engine running to check
+the result.
 
 Paths are then resolved canonically and checked against the workspace they came
 out of, on a listing as well as on an open. The agent's own commands run in these

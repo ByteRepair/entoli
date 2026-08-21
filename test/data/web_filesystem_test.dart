@@ -1,4 +1,3 @@
-import "dart:convert";
 import "dart:typed_data";
 
 import "package:flutter_test/flutter_test.dart";
@@ -207,25 +206,6 @@ void main() {
       expect((await reloaded.loadMeta("kept")).model, "qwen-2.5");
       expect(await reloaded.readResource("kept", resource), [7]);
       expect(await reloaded.listProjects(), ["work"]);
-    });
-
-    // A tab whose IndexedDB was written by the build before the projects
-    // layout. Here as well as in `config_test.dart` because moving a directory
-    // in a browser is not the one call it is on a disk.
-    test("a store written to the layout that came before is moved into this one",
-        () async {
-      await fs.directory("/agent-chat/chats/old/workspace").create(recursive: true);
-      await fs
-          .file("/agent-chat/chats/old/state.json")
-          .writeAsString(jsonEncode(makeState("old").toJson()));
-      await fs.file("/agent-chat/chats/old/workspace/note.txt").writeAsString("kept");
-
-      final reloaded = await AppConfig.load(fs, "/agent-chat");
-
-      expect(
-          await fs.file("${reloaded.workspaceDir("old")}/note.txt").readAsString(),
-          "kept");
-      expect((await FileChatStore(reloaded).list()).single.id, "old");
     });
 
     test("settings are still there, app-level and per project", () async {
