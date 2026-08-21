@@ -296,14 +296,16 @@ class BuiltinBackend implements AgentBackend {
     );
     controller.add(ShellRunEvent(part));
     controller.add(const DoneEvent());
-    // Through `projectionOf` like every other turn — the reply is the app's
-    // rather than a model's, and that is the only difference.
+    // The same two functions a turn with a model in it uses, over the same one
+    // part that was just reported: the prompt through `projectionOf`, the reply
+    // through `assistantMessages`. The `!` turn writes its own reply, and that
+    // is the only way it differs.
     final session = await _sessionOf(chatId, history);
     final opens = !session.hasConversation;
-    session.messages.addAll(await projectionOf([
-          prompt,
-          unloggedMessage(MessageRole.assistant, prompt.createdAt, [part]),
-        ], first: opens, load: _resourcesOf(chatId)));
+    session.messages
+      ..addAll(await projectionOf([prompt],
+          first: opens, load: _resourcesOf(chatId)))
+      ..addAll(assistantMessages([part]));
   }
 
   /// The chat's session, filled from [history] where it is one this backend was

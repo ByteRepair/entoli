@@ -14,7 +14,7 @@ import "models.dart";
 /// into a log is the same job, and a sub-agent with a weaker version of it
 /// would be a sub-agent whose kill leaves a file nothing can read.
 class TurnRecorder {
-  TurnRecorder({required this.append, this.onParts});
+  TurnRecorder({required this.append, this.onParts}) : _logs = true;
 
   /// A recorder with no log behind it: it accumulates the parts and nothing
   /// else. What `BuiltinAgent` keeps, so the conversation it sends the model is
@@ -22,7 +22,8 @@ class TurnRecorder {
   /// second way beside them — see "The projection" in `lib/domain/CLAUDE.md`.
   TurnRecorder.parts()
       : append = _writesNothing,
-        onParts = null {
+        onParts = null,
+        _logs = false {
     // Named rather than opened: there is no message, and no log to put one in.
     // It is set because buffered text is dropped when nothing is being
     // recorded, and here everything is — into memory.
@@ -33,8 +34,9 @@ class TurnRecorder {
   static Future<void> _writesNothing(List<ChatRecord> records) async {}
 
   /// Whether anything is written. False for [TurnRecorder.parts], which skips
-  /// the checkpoints rather than building records for a log that is not there.
-  bool get _logs => _messageId != _nothing;
+  /// the checkpoints and their timer rather than building records for a log
+  /// that is not there.
+  final bool _logs;
 
   /// Where the records go. Serialised through this recorder's own queue, so a
   /// caller with other records for the same log writes them with [write]
@@ -184,7 +186,7 @@ class TurnRecorder {
 
   void checkpoint() {
     final logging = _messageId;
-    if (logging != null && _logs) unawaited(_enqueue(() => _appendChanged(logging)));
+    if (_logs && logging != null) unawaited(_enqueue(() => _appendChanged(logging)));
   }
 
   /// Fold everything buffered into the reply's trailing part of the same kind.
@@ -225,6 +227,11 @@ class TurnRecorder {
     if (reasoning != _pendingIsReasoning) flushDeltas();
     _pendingIsReasoning = reasoning;
     _pending.write(text);
+    // Only where somebody is waiting on fresher text than the next discrete
+    // part brings. A parts-only recorder is read once per step, and it flushes
+    // itself when it is: timing out to rebuild the same string sixty times a
+    // second for a reader that is not there copies the whole reply each time.
+    if (!_logs && onParts == null) return;
     _flush ??= Timer(const Duration(milliseconds: 16), flushDeltas);
     _checkpoint ??= Timer(_checkpointEvery, () {
       _checkpoint = null;
@@ -276,11 +283,20 @@ class TurnRecorder {
   /// Stamp a part with the response being streamed, where it has somewhere to
   /// put it. A result belongs to the call it answers and an error to nobody, so
   /// neither carries one.
+  ///
+  /// Enumerated rather than defaulted, and the pair to `_responseIdOf`: a new
+  /// part that carries a `responseId` and is not named here is never stamped
+  /// with one, so it reads back as part of whatever response came before it.
   MessagePart _inResponse(MessagePart part) => switch (part) {
         TextPart() => part.copyWith(responseId: _responseId),
         ReasoningPart() => part.copyWith(responseId: _responseId),
         ToolCallPart() => part.copyWith(responseId: _responseId),
-        _ => part,
+        ToolResultPart() ||
+        ShellRunPart() ||
+        FilePart() ||
+        ArtifactPart() ||
+        ErrorPart() =>
+          part,
       };
 
   /// Write whatever the reply has grown by, and [then] after it. Parts are

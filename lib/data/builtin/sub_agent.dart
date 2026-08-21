@@ -137,7 +137,24 @@ class SubAgentRunner {
             buffer.write(text);
           case ErrorEvent(:final message):
             error = message;
-          default:
+          // Named rather than defaulted, so a new event is decided about here
+          // too: what a sub-agent hands back is its text and nothing else, and
+          // that has to stay a choice rather than a fallthrough.
+          case ReasoningDelta():
+          case ReasoningEnd():
+          case ResponseStart():
+          case ToolCallEvent():
+          case ToolResultEvent():
+          case ShellRunEvent():
+          case ArtifactEvent():
+          case ApprovalRequestEvent():
+          case QuestionRequestEvent():
+          case SubAgentStartEvent():
+          case SubAgentEndEvent():
+          case RetryEvent():
+          case StatusEvent():
+          case InfoEvent():
+          case DoneEvent():
             break;
         }
       }

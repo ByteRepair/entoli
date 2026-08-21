@@ -599,6 +599,9 @@ void main() {
       final answered = events.whereType<ToolResultEvent>().toList();
       expect(answered.map((e) => e.result.callId), ["c1", "c2"]);
       expect(answered.last.result.exceptionInfo, contains("not executed"));
+      // Paired with its call, or the projection has nothing to hang it on and
+      // the model is never told the call went unrun.
+      expect(events.whereType<ToolCallEvent>().map((e) => e.call.id), ["c1", "c2"]);
     });
   });
 

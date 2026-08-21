@@ -227,9 +227,11 @@ decided by what parsed, not by the name that got it there: a call named
 `ask_user` with nothing askable in it falls back to `ToolLabel`, which shows the
 rejection the model was sent.
 
-Answering is `_answer`, one tool message per call — the invariant that keeps the
-next turn from being rejected. `_answerRun` is that plus the wording a command's
-outcome gets, which is every call but an `ask_user`.
+Every call is reported and every call is answered, which is the invariant that
+keeps the next turn from being rejected — but nothing here answers one. A turn
+reports its result and the projection words it, so the report is the answer;
+`_ran` is only the ShellResult a command hands back, said as the result of the
+call that asked for it. See "One accumulation".
 
 `lib/domain/ask.dart` holds both directions of the format, `askAnswers` beside
 `askAnswersFrom`, so the round trip is one file. `askQuestionsFrom` is

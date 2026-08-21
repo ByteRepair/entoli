@@ -240,17 +240,6 @@ class BuiltinAgent {
 
   final BuiltinSession session;
 
-  /// The parts this turn has produced, from this turn's own events. The
-  /// conversation the model is sent is [session]'s durable half plus the
-  /// projection of these — never an append of its own, which is what made the
-  /// live turn and the same turn read back out of the log two different things
-  /// to keep level. See "One accumulation" in `lib/domain/CLAUDE.md`.
-  TurnRecorder _said = TurnRecorder.parts();
-
-  /// Where [session] stops being the conversation so far and starts being this
-  /// turn, so the turn's half can be rebuilt from [_said] after every step.
-  int _turnAt = 0;
-
   final LlmClient client;
   final Shell shell;
 
@@ -375,7 +364,7 @@ class BuiltinAgent {
   /// worded here — see [projectionOf].
   Stream<AgentEvent> run(Message prompt, {String? agentPrompt}) async* {
     await _openTurn(prompt, agentPrompt);
-    yield* _recorded(_loop());
+    yield* _recorded(_loop)();
   }
 
   /// [run] without the task: the session is already holding everything the
@@ -394,52 +383,63 @@ class BuiltinAgent {
   /// `lib/domain/CLAUDE.md` for what that cost.
   Stream<AgentEvent> resume({String? agentPrompt}) async* {
     _setSystemPrompt(agentPrompt);
-    if (session.messages.lastOrNull?.role == LlmRole.user) {
-      yield* _loop();
-      return;
-    }
-    yield* session.forTurn(const LlmMessage(role: LlmRole.user, text: continueTask),
-        () => _recorded(_loop()));
+    final turn = _recorded(_loop);
+    // Wrapped either way: the branch decides whether the reason goes in, not
+    // whether the turn is recorded.
+    yield* session.messages.lastOrNull?.role == LlmRole.user
+        ? turn()
+        : session.forTurn(
+            const LlmMessage(role: LlmRole.user, text: continueTask), turn);
   }
 
   /// Every event the turn emits, through [_said] on its way out. A `yield`
   /// suspends the loop until its consumer takes the event, so everything a step
   /// produced is a part before the next step builds its request.
-  Stream<AgentEvent> _recorded(Stream<AgentEvent> events) async* {
-    // Per turn, not per agent: one agent runs a second turn on the same
-    // session, and the turn before it is already in the conversation.
-    _said = TurnRecorder.parts();
-    try {
-      await for (final event in events) {
-        _said.handle(event);
-        yield event;
-      }
-    } finally {
-      // Once more at the end, for the step that produced no further request to
-      // be built for — and on a cancel, so the session holds what did happen.
-      await _sayWhatWasSaid();
-      _said.dispose();
-    }
-  }
+  /// [turn]'s events, through a recorder on their way out, with the session's
+  /// turn half rebuilt from them as they land.
+  ///
+  /// Both pieces of state are the closure's rather than the agent's: a turn is
+  /// what has one, and holding them on the agent would have two turns on one
+  /// agent writing over each other. The boundary is read here because by now
+  /// everything the turn opens with — the prompt, a resume's reason — is in
+  /// place; the parts start empty because whatever came before is already in
+  /// the conversation, projected.
+  Stream<AgentEvent> Function() _recorded(Stream<AgentEvent> Function() turn) =>
+      () async* {
+        final said = TurnRecorder.parts();
+        final from = session.messages.length;
+        void sayWhatWasSaid() {
+          said.flushDeltas();
+          session.replaceTurn(from, assistantMessages(said.parts));
+        }
+
+        _sayWhatWasSaid = sayWhatWasSaid;
+        try {
+          await for (final event in turn()) {
+            said.handle(event);
+            yield event;
+          }
+        } finally {
+          // Once more at the end, for the step that produced no further
+          // request to be built for — and on a cancel, so the session holds
+          // what did happen.
+          sayWhatWasSaid();
+          said.dispose();
+        }
+      };
+
+  /// The running turn's rebuild, set by [_recorded] and called by the loop.
+  void Function() _sayWhatWasSaid = _nothingSaidYet;
+
+  static void _nothingSaidYet() {}
 
   /// This turn's half of the conversation, rebuilt from what it has said. The
   /// only thing that writes to [session] during a turn, and it writes what
   /// `projectionOf` would build out of the same parts once they are on disk.
-  Future<void> _sayWhatWasSaid() async {
-    _said.flushDeltas();
-    session.replaceTurn(
-        _turnAt,
-        await projectionOf(
-            [unloggedMessage(MessageRole.assistant, DateTime.now(), _said.parts)],
-            first: false,
-            load: noResources));
-  }
-
   Stream<AgentEvent> _loop() async* {
-    _turnAt = session.messages.length;
     for (var step = 0; step < options.stepLimit; step++) {
       if (_cancelled) break;
-      await _sayWhatWasSaid();
+      _sayWhatWasSaid();
 
       // One response per step, named before it starts: what streams out of it
       // is stamped with this, so the turn can be handed back to a provider a
@@ -533,7 +533,12 @@ class BuiltinAgent {
         // Task calls are answered at the end; a task call that was never
         // collected (no sub-agent runner) is answered here instead.
         if (call.name != taskToolName || taskCalls.isEmpty) {
-          yield* _answered(call, _ran(call, const ShellResult.failed(notExecuted)));
+          // The call as well as the answer: a result whose call is not in the
+          // parts is a result the projection has nothing to pair it to, and
+          // drops. The model did ask for this one — it just never ran.
+          yield ToolCallEvent(ToolCall(
+              id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+          yield ToolResultEvent(_ran(call, const ShellResult.failed(notExecuted)));
         }
         continue;
       }
@@ -603,14 +608,14 @@ class BuiltinAgent {
           argumentsText: command);
       final result = _commandResult!;
 
-      yield* _answered(call, _ran(call, result));
+      yield ToolResultEvent(_ran(call, result));
     }
 
     if (taskCalls.isEmpty || _cancelled) {
       // Answer the task calls that never ran, so the next turn is not rejected
       // for missing results.
       for (final call in taskCalls) {
-        yield* _reject(call, "This sub-agent was not started.");
+        yield* _reject(call, notStarted);
       }
       return;
     }
@@ -642,19 +647,13 @@ class BuiltinAgent {
 
     final controller = StreamController<AgentEvent>();
 
-    ToolResult failed(LlmToolCall call, String why) =>
-        ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: why);
-
     Future<void> runOne(int index) async {
       final call = calls[index];
-      if (_cancelled) {
-        controller.add(ToolResultEvent(failed(call, "This sub-agent was not started.")));
-        return;
-      }
       final args = parsed[index];
       if (args == null) {
-        controller.add(ToolResultEvent(failed(call,
-            'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.')));
+        controller.add(ToolResultEvent(_ran(call,
+            ShellResult.failed(
+                'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.'))));
         return;
       }
       final (:agent, :prompt) = args;
@@ -687,7 +686,7 @@ class BuiltinAgent {
       futures.add(() async {
         await acquire();
         if (_cancelled) {
-          controller.add(ToolResultEvent(failed(calls[i], "The turn was stopped.")));
+          controller.add(ToolResultEvent(_ran(calls[i], const ShellResult.failed(turnStopped))));
           return;
         }
         try {
@@ -723,13 +722,6 @@ class BuiltinAgent {
     return t.length <= max ? t : "${t.substring(0, max - 1)}…";
   }
 
-  /// Report a call's outcome. Every call gets one whether it ran or not: a
-  /// provider that sees a tool call with no result rejects the next turn, and
-  /// the result the model is answered with is this same part, projected.
-  Stream<AgentEvent> _answered(LlmToolCall call, ToolResult result) async* {
-    yield ToolResultEvent(result);
-  }
-
   /// A command's outcome as the result of the call that asked for it: one that
   /// ran, one that was refused, one that was never reached.
   ToolResult _ran(LlmToolCall call, ShellResult result) => ToolResult(
@@ -756,8 +748,7 @@ class BuiltinAgent {
     yield QuestionRequestEvent(request);
     final answers = askAnswers(questions, await answer(request));
 
-    yield* _answered(
-        call, ToolResult(callId: call.id, returnCode: 0, output: answers));
+    yield ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: answers));
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same
@@ -776,7 +767,7 @@ class BuiltinAgent {
       argumentsText: query,
     ));
     final result = await webSearch!.search(query);
-    yield* _answered(call, _ran(call, result));
+    yield ToolResultEvent(_ran(call, result));
   }
 
   /// Fetch a URL. Read-only, so no approval.
@@ -797,7 +788,7 @@ class BuiltinAgent {
         () => webSearch!.fetch(url),
         argumentsText: url);
     final result = _commandResult!;
-    yield* _answered(call, _ran(call, result));
+    yield ToolResultEvent(_ran(call, result));
   }
 
   /// Read a file from the workspace. No approval: the workspace is the
@@ -819,9 +810,7 @@ class BuiltinAgent {
     ));
     final file = fs.file(resolved);
     if (!await file.exists()) {
-      yield* _answered(
-          call,
-          ToolResult(
+      yield ToolResultEvent(ToolResult(
             callId: call.id,
             returnCode: -1,
             output: "",
@@ -839,9 +828,7 @@ class BuiltinAgent {
       buf.writeln("$i: ${lines[i - 1]}");
     }
     final result = buf.toString();
-    yield* _answered(
-        call,
-        ToolResult(
+    yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
           output: result.isEmpty ? "(empty file)" : result,
@@ -868,9 +855,7 @@ class BuiltinAgent {
     await fs.directory(fs.path.dirname(resolved)).create(recursive: true);
     await fs.file(resolved).writeAsString(args.content);
     final bytes = args.content.length;
-    yield* _answered(
-        call,
-        ToolResult(
+    yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
           output: "Wrote $bytes bytes to ${args.path}",
@@ -896,9 +881,7 @@ class BuiltinAgent {
     ));
     final file = fs.file(resolved);
     if (!await file.exists()) {
-      yield* _answered(
-          call,
-          ToolResult(
+      yield ToolResultEvent(ToolResult(
             callId: call.id,
             returnCode: -1,
             output: "",
@@ -909,9 +892,7 @@ class BuiltinAgent {
     final content = await file.readAsString();
     final count = content.split(args.oldString).length - 1;
     if (count == 0) {
-      yield* _answered(
-          call,
-          ToolResult(
+      yield ToolResultEvent(ToolResult(
             callId: call.id,
             returnCode: -1,
             output: "",
@@ -920,9 +901,7 @@ class BuiltinAgent {
       return;
     }
     if (!args.replaceAll && count > 1) {
-      yield* _answered(
-          call,
-          ToolResult(
+      yield ToolResultEvent(ToolResult(
             callId: call.id,
             returnCode: -1,
             output: "",
@@ -935,9 +914,7 @@ class BuiltinAgent {
         ? content.replaceAll(args.oldString, args.newString)
         : content.replaceFirst(args.oldString, args.newString);
     await file.writeAsString(updated);
-    yield* _answered(
-        call,
-        ToolResult(
+    yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
           output: "Edited ${args.path}: replaced $count occurrence(s).",
@@ -966,9 +943,7 @@ class BuiltinAgent {
     // One output, so the model is told how to update it on a reload too — the
     // instructions used to be said to the model alone and were lost with the
     // session.
-    yield* _answered(
-        call,
-        ToolResult(
+    yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
           output: "Artifact $label published. The user can view it in the app. "
@@ -982,8 +957,7 @@ class BuiltinAgent {
   Stream<AgentEvent> _reject(LlmToolCall call, String problem) async* {
     yield ToolCallEvent(
         ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
-    yield* _answered(call,
-        ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
+    yield ToolResultEvent(ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
   }
 
   /// Run [run] gated by [approveMode]: ask the user, classify then maybe ask,
