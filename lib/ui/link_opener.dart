@@ -3,19 +3,19 @@ import "package:flutter/material.dart";
 import "package:url_launcher/url_launcher.dart";
 import "package:webview_flutter/webview_flutter.dart";
 
-import "../../domain/artifact_server.dart";
-import "../../domain/chat_store.dart";
-import "../../domain/link_opener.dart";
-import "../../ui/widgets/dialogs.dart";
-import "io/artifact_server_factory.dart"
-    if (dart.library.js_interop) "web/artifact_server_factory.dart"
+import "../core/platform/io/artifact_server_factory.dart"
+    if (dart.library.js_interop) "../core/platform/web/artifact_server_factory.dart"
     show startArtifactServer;
-import "io/desktop_artifact_opener.dart"
-    if (dart.library.js_interop) "web/desktop_artifact_opener.dart"
+import "../core/platform/io/desktop_artifact_opener.dart"
+    if (dart.library.js_interop) "../core/platform/web/desktop_artifact_opener.dart"
     show writeArtifactTemp;
-import "io/web_artifact_opener.dart"
-    if (dart.library.js_interop) "web/web_artifact_opener.dart"
+import "../core/platform/io/web_artifact_opener.dart"
+    if (dart.library.js_interop) "../core/platform/web/web_artifact_opener.dart"
     show WebArtifactOpenerImpl;
+import "../domain/artifact_server.dart";
+import "../domain/chat_store.dart";
+import "../domain/link_opener.dart";
+import "widgets/dialogs.dart";
 
 /// Opens links from rendered markdown, and artifacts the model rendered.
 ///
