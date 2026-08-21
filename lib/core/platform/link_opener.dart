@@ -6,6 +6,7 @@ import "package:webview_flutter/webview_flutter.dart";
 import "../../domain/artifact_server.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/link_opener.dart";
+import "../../ui/widgets/dialogs.dart";
 import "io/artifact_server_factory.dart"
     if (dart.library.js_interop) "web/artifact_server_factory.dart"
     show startArtifactServer;
@@ -90,6 +91,8 @@ class PlatformLinkOpener implements LinkOpener {
 /// A full-screen webview for browsing a web page on Android, so a link tap
 /// keeps the user in the app rather than bouncing them out to the browser.
 /// The back button walks webview history first and only then pops the route.
+/// Copy link and Open in browser act on the page navigated to rather than the
+/// link that opened it, which is why `_url` follows the webview.
 class _WebViewPage extends StatefulWidget {
   const _WebViewPage({required this.url});
   final Uri url;
@@ -100,19 +103,28 @@ class _WebViewPage extends StatefulWidget {
 
 class _WebViewPageState extends State<_WebViewPage> {
   late final WebViewController _controller;
+  late Uri _url;
   var _title = "";
   var _canGoBack = false;
 
   @override
   void initState() {
     super.initState();
+    _url = widget.url;
     _title = widget.url.host;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
+          // Fires without a page load too, which is the only notice a
+          // history-rewriting page gives.
+          onUrlChange: (change) {
+            final url = change.url;
+            if (url != null) _url = Uri.parse(url);
+          },
           onPageFinished: (url) async {
-            _title = await _controller.getTitle() ?? Uri.parse(url).host;
+            _url = Uri.parse(url);
+            _title = await _controller.getTitle() ?? _url.host;
             _canGoBack = await _controller.canGoBack();
             if (mounted) setState(() {});
           },
@@ -121,7 +133,9 @@ class _WebViewPageState extends State<_WebViewPage> {
       ..loadRequest(widget.url);
   }
 
-  Future<void> _openExternally() => launchUrl(widget.url, mode: LaunchMode.externalApplication);
+  Future<void> _openExternally() => launchUrl(_url, mode: LaunchMode.externalApplication);
+
+  Future<void> _copyLink() => copyToClipboard(context, _url.toString(), said: "Copied link");
 
   @override
   Widget build(BuildContext context) => PopScope(
@@ -133,6 +147,11 @@ class _WebViewPageState extends State<_WebViewPage> {
           appBar: AppBar(
             title: Text(_title, overflow: TextOverflow.ellipsis),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.copy),
+                tooltip: "Copy link",
+                onPressed: _copyLink,
+              ),
               IconButton(
                 icon: const Icon(Icons.open_in_browser),
                 tooltip: "Open in browser",
@@ -148,7 +167,8 @@ class _WebViewPageState extends State<_WebViewPage> {
 /// An artifact viewer that serves the artifact's files over a local HTTP
 /// server, since Android's WebView blocks `file://` URLs. The server starts
 /// in `initState` and stops in `dispose`, so it lives only while the page
-/// is on screen.
+/// is on screen — which is why this one has no Copy link or Open in browser:
+/// its URL is a port that is gone by the time anything else could follow it.
 class _ArtifactWebViewPage extends StatefulWidget {
   const _ArtifactWebViewPage({required this.dir, required this.entryFile, this.title});
   final String dir;
