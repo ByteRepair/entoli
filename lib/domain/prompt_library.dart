@@ -137,6 +137,7 @@ Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
 /// The task the model is given: a command's template with the arguments in it,
 /// or the message unchanged where it names no command this one recorded.
 String expandedPrompt(String text, Map<String, String> documents) {
+  if (documents.isEmpty) return text;
   final match = _command.firstMatch(text.trim());
   if (match == null) return text;
   final body = documents["${CompletionKind.command.trigger}${match.group(1)}"];

@@ -1,5 +1,7 @@
 import "dart:typed_data";
 
+import "package:uuid/uuid.dart";
+
 import "../core/config.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
@@ -9,6 +11,7 @@ import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
 import "../domain/project_settings.dart";
+import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
 import "../domain/temp_chat_ttl.dart";
 
@@ -16,7 +19,9 @@ import "../domain/temp_chat_ttl.dart";
 /// on, and owns which thread of a conversation is being read. The turn itself
 /// is accumulated and saved by `ChatController` as events arrive.
 class ChatRepository {
-  ChatRepository(this._store, this._backend, this._settings, this._config);
+  ChatRepository(this._store, this._backend, this._settings, this._config,
+      {PromptLibrary? library})
+      : _library = library ?? PromptLibrary.empty;
 
   final ChatStore _store;
   final AgentBackend _backend;
@@ -26,6 +31,10 @@ class ChatRepository {
 
   /// Where project settings live. Read on use, like [_settings].
   final AppConfig _config;
+
+  /// The commands and agents a message's references are resolved against, once,
+  /// as it is composed — see [composeUserPrompt].
+  final PromptLibrary _library;
 
   /// A chat that has been started but not written to. It lives here until
   /// [save] puts it on disk, which the first turn does. Its settings come with
@@ -246,6 +255,26 @@ class ChatRepository {
   /// so it answers for itself.
   Future<String?> projectOf(String chatId) async =>
       _isDraft(chatId) ? _draft!.state.project : await _store.projectOf(chatId);
+
+  /// **The one place a user's message is made.** What they typed, the files it
+  /// carries, and what its `/command` and `@agent` references meant when they
+  /// sent it — resolved here, against the library as it is now, and never
+  /// looked up again. A message built anywhere else would carry no references
+  /// and quietly send the four characters the user typed; see "Commands and
+  /// agents" in `lib/domain/CLAUDE.md`.
+  ///
+  /// [files] are already under the chat's `resources/`: the composer saves what
+  /// it is holding with [saveAttachments] first, and a resend passes on the
+  /// parts the message it branches from already had.
+  Message composeUserPrompt(String text, {List<MessagePart> files = const []}) =>
+      Message(
+        id: const Uuid().v4(),
+        role: MessageRole.user,
+        createdAt: DateTime.now(),
+        // Files first, the order they are sent in and a resend rebuilds.
+        parts: [...files, MessagePart.text(text: text)],
+        documents: promptDocuments(text, _library),
+      );
 
   /// Save what the user attached and describe it as the parts that outlive the
   /// turn. Only the composer has bytes to save: a message being resent already

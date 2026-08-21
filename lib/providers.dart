@@ -460,6 +460,7 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     ref.watch(agentBackendProvider),
     () => ref.read(appSettingsProvider),
     ref.watch(appConfigProvider),
+    library: ref.watch(promptLibraryProvider),
   );
 });
 

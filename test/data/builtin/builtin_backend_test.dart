@@ -285,20 +285,17 @@ void main() {
       );
       // Resumed rather than sent: the `@agent` is read off the message that
       // started the turn, which is where its record is.
-      await backend
-          .resumeTurn(chatId, history: [
-            userMessage("@researcher where is the parser?",
-                at: sentAt,
-                documents: promptDocuments("@researcher where is the parser?", asWritten)),
-            Message(
-              id: "m2",
-              role: MessageRole.assistant,
-              createdAt: sentAt,
-              parts: const [MessagePart.text(text: "part way", responseId: "r1")],
-            ),
-          ], settings: const TurnSettings(
-              model: "fake-model", provider: "fake", approveMode: ApproveMode.never))
-          .toList();
+      await resuming(backend, [
+        userMessage("@researcher where is the parser?",
+            at: sentAt,
+            documents: promptDocuments("@researcher where is the parser?", asWritten)),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "part way", responseId: "r1")],
+        ),
+      ]);
 
       expect(client.sent.first[1].text, contains("You only read."));
       expect(client.sent.first[1].text, isNot(contains("REWRITTEN")));
@@ -439,6 +436,46 @@ void main() {
       ]);
 
       expect(client.sent.single.map((m) => (m.role, m.text)), held);
+    });
+
+    // A tool's outcome was worded twice — once as the turn ran, once out of the
+    // log — and for the file tools the two said different things, so every chat
+    // that had read or edited anything diverged the moment it was reopened.
+    test("a tool result reads the same live as it does after a restart", () async {
+      final live = backendOver([
+        [fileCall("read", {"path": "notes.txt"})],
+        [finish],
+      ]);
+      await send(live, "what is in notes.txt?");
+      final answered = client.sent.last.singleWhere((m) => m.role == LlmRole.tool);
+
+      final restarted = backendOver([
+        [finish],
+      ]);
+      await send(restarted, "and now?", history: [
+        userMessage("what is in notes.txt?", at: sentAt),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [
+            MessagePart.toolCall(
+                toolCall: ToolCall(
+                    id: "file-1", name: "read", argumentsJson: '{"path":"notes.txt"}'),
+                responseId: "r1"),
+            MessagePart.toolResult(
+                result: ToolResult(
+                    callId: "file-1",
+                    returnCode: -1,
+                    output: "",
+                    exceptionInfo: "File not found: notes.txt")),
+          ],
+        ),
+      ]);
+      final rebuilt = client.sent.last.singleWhere((m) => m.role == LlmRole.tool);
+
+      expect(answered.text, contains("File not found: notes.txt"));
+      expect(rebuilt.text, answered.text);
     });
 
     // The live session is filled as the command finishes and a reload builds

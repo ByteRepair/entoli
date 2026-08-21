@@ -9,6 +9,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/prompt_library.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -19,8 +20,9 @@ void main() {
 
   late AppConfig config;
 
-  ChatRepository repoWith(AppSettings settings) =>
-      ChatRepository(FileChatStore(config), backend, () => settings, config);
+  ChatRepository repoWith(AppSettings settings, {PromptLibrary? library}) =>
+      ChatRepository(FileChatStore(config), backend, () => settings, config,
+          library: library);
 
 
 
@@ -245,6 +247,30 @@ void main() {
     expect(file.mimeType, "text/plain");
     expect(await repo.readResource(chat.state.id, file.resource), [104, 105]);
     expect(Directory(config.resourcesDir(chat.state.id)).listSync(), hasLength(1));
+  });
+
+  // The library is user-editable files, so what a reference meant has to be
+  // written down as the message is composed rather than looked up again when
+  // the turn is replayed.
+  test("a composed prompt records what its references meant", () async {
+    final repo = repoWith(
+      AppSettings(),
+      library: PromptLibrary([
+        PromptDocument.parse(
+            CompletionKind.command, "review", "---\ndescription: d\n---\n\nLook at it."),
+      ]),
+    );
+
+    final prompt = repo.composeUserPrompt("/review the parser");
+
+    expect(prompt.plainText, "/review the parser");
+    expect(prompt.documents, {"/review": "Look at it."});
+  });
+
+  test("a reference the library does not know records nothing", () async {
+    final repo = repoWith(AppSettings());
+
+    expect(repo.composeUserPrompt("/etc/hosts is where?").documents, isEmpty);
   });
 
   test("a resource that has gone reads back as nothing", () async {

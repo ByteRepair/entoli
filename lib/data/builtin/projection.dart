@@ -41,7 +41,8 @@ Future<List<LlmMessage>> projectionOf(
   // Every resource at once rather than a message at a time: on the web each
   // read is its own IndexedDB transaction, and a long conversation's would
   // otherwise be one round trip after another.
-  final files = await Future.wait(messages.map((m) => _attachments(m, load)));
+  final files = await Future.wait(messages.map((m) =>
+      m.role == MessageRole.user ? _attachments(m, load) : _noFiles));
   final projected = <LlmMessage>[];
   for (final (index, message) in messages.indexed) {
     switch (message.role) {
@@ -77,9 +78,8 @@ typedef ResourceLoader = Future<Uint8List?> Function(String resource);
 /// that project a conversation no chat on disk ever held.
 Future<Uint8List?> noResources(String resource) async => null;
 
-/// A message to word for a model that no log will hold: the reply a `!` turn
-/// writes beside the prompt, a sub-agent's task. The id is the one field
-/// [projectionOf] does not read, so there is nothing here to invent.
+/// A message no log will hold: the reply a `!` turn writes, a sub-agent's task.
+/// The id is the one field [projectionOf] does not read.
 Message unloggedMessage(MessageRole role, DateTime at, List<MessagePart> parts) =>
     Message(id: "", role: role, createdAt: at, parts: parts);
 
@@ -95,6 +95,8 @@ String _userText(Message message) {
   if (files.isEmpty) return text;
   return text.isEmpty ? "(attached: $files)" : "$text\n\n(attached: $files)";
 }
+
+final Future<List<LlmAttachment>> _noFiles = Future.value(const []);
 
 Future<List<LlmAttachment>> _attachments(Message message, ResourceLoader load) async {
   final loaded = await Future.wait(message.files.map((file) async {
@@ -174,7 +176,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         toolCallId: call.id,
         text: result == null
             ? _interruptedText(call.name)
-            : _resultText(call.name, result),
+            : toolResultText(call.name, result),
       );
     }
   }
@@ -205,22 +207,29 @@ String? _responseIdOf(MessagePart part) => switch (part) {
       _ => null,
     };
 
-/// Worded the way the agent worded it when it ran, so a projected conversation
-/// is the one the model already answered. An `ask_user` result is the answers
-/// themselves; every other call reads as a command's outcome.
-String _resultText(String tool, ToolResult result) => tool == askToolName
-    ? result.output
-    : observation(
-        returnCode: result.returnCode,
-        output: result.output,
-        exceptionInfo: result.exceptionInfo,
-      );
+/// **How a tool's outcome is worded for a model, and the only place it is.**
+/// The agent answers a call with this as the turn runs and the projection words
+/// that same result again out of the log; two expressions of it is two things to
+/// keep level, which is the bug this file exists to make impossible.
+///
+/// An `ask_user` that was answered reads as the answers themselves — it is the
+/// user talking, not a command reporting. One that failed does not: the reason
+/// is in `exceptionInfo` and the answers are empty, so it reads as any other
+/// failure would.
+String toolResultText(String tool, ToolResult result) =>
+    tool == askToolName && result.returnCode == 0
+        ? result.output
+        : observation(
+            returnCode: result.returnCode,
+            output: result.output,
+            exceptionInfo: result.exceptionInfo,
+          );
 
 /// A call whose result never landed, which is a turn killed between making it
 /// and writing the answer down. One wording for every tool: which one it was is
 /// in the call the model can already see, and refining "it may not have run"
 /// per tool is second-guessing an interruption nothing here witnessed. Split
-/// only where [_resultText] splits — an `ask_user` is answered in prose either
+/// only where [toolResultText] splits — an `ask_user` is answered in prose either
 /// way, never as a command's outcome.
 String _interruptedText(String tool) =>
     tool == askToolName ? _askInterrupted : _interrupted;

@@ -216,17 +216,9 @@ abstract class AgentBackend {
   /// seen nothing of the chat to answer it fluently. Read only where the
   /// session is empty.
   ///
-  /// [prompt] is the message being logged for this turn, not the text of it.
-  /// What the model is shown of a user turn is more than what was typed — the
-  /// moment it was sent, the command a `/name` stood for, the bytes its file
-  /// parts name — and all of it is in the message. Passing the pieces
-  /// separately is what let the turn being sent and the same turn read back out
-  /// of the log become two different strings; see "The projection" in
-  /// `lib/domain/CLAUDE.md`.
-  ///
-  /// Its attachments are named rather than passed: the bytes are already on
-  /// disk under the resources the message points at, which is where a reload
-  /// would find them.
+  /// [prompt] is the message being logged for this turn, not the text of it —
+  /// what the model is shown of a user turn is the whole message, attachments
+  /// named rather than passed. See "The projection" in `lib/domain/CLAUDE.md`.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history, TurnSettings settings});
 

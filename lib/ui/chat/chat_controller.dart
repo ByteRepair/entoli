@@ -8,7 +8,6 @@ import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/chat_repository.dart";
 import "../../domain/turn_recorder.dart";
-import "../../domain/prompt_library.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 
@@ -145,18 +144,19 @@ class ChatController extends Notifier<ChatViewState> {
     state = state.copyWith(chat: chat);
   }
 
-  Future<void> send(String text, {List<Attachment> attachments = const []}) =>
-      _prompt(text, attachments: attachments);
+  /// The composer's own path: what it is holding becomes files under the chat
+  /// before anything else, since from here on a prompt is its parts.
+  Future<void> send(String text, {List<Attachment> attachments = const []}) async {
+    if (state.chat == null || state.isRunning) return;
+    final repo = ref.read(chatRepositoryProvider);
+    await _prompt(text, files: await repo.saveAttachments(chatId, attachments));
+  }
 
-  /// Say [text] and run the turn it starts. [attachments] are what the composer
-  /// is holding and [files] what a message being resent already had on disk;
-  /// one or the other, never both. [replacing] makes it another thread beside a
-  /// prompt already in the conversation — an edit — rather than the next thing
-  /// said.
+  /// Say [text] and run the turn it starts. [files] are already under the
+  /// chat's `resources/`. [replacing] makes it another thread beside a prompt
+  /// already in the conversation — an edit — rather than the next thing said.
   Future<void> _prompt(String text,
-      {List<Attachment> attachments = const [],
-      List<MessagePart> files = const [],
-      Message? replacing}) async {
+      {List<MessagePart> files = const [], Message? replacing}) async {
     final repo = ref.read(chatRepositoryProvider);
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
@@ -164,20 +164,7 @@ class ChatController extends Notifier<ChatViewState> {
         replacing == null ? chat.messages.length : chat.messages.indexOf(replacing);
     if (at < 0) return;
 
-    final userMsg = Message(
-      id: _uuid.v4(),
-      role: MessageRole.user,
-      createdAt: DateTime.now(),
-      // Files first, the order they are sent in and the order a resend rebuilds.
-      parts: [
-        ...files,
-        ...await repo.saveAttachments(chatId, attachments),
-        MessagePart.text(text: text),
-      ],
-      // Resolved here, where the message is composed, and never looked up
-      // again — see [promptDocuments].
-      documents: promptDocuments(text, ref.read(promptLibraryProvider)),
-    );
+    final userMsg = repo.composeUserPrompt(text, files: files);
     await _turn(
       chat: chat,
       prompt: userMsg,

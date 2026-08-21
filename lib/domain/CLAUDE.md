@@ -238,12 +238,29 @@ the message shifts it and costs one reprocessing on the next turn — but it put
 a message nobody sent into the record of what was, to make a cache faster. The
 log describes the conversation. This does not belong in it.
 
-A result is worded the way the agent worded it when it ran — `observation(...)`,
-or the answers themselves for an `ask_user` — so a projected conversation is the
-one the model already answered rather than a paraphrase of it. A call whose
-result never landed is answered anyway, since a provider that sees a tool call
-with no result rejects the next turn — worded by what was called, which is the
-next section.
+**A result is worded once too, by `toolResultText`**, and that was the same bug
+one layer down. The agent answered a call as the turn ran and the projection
+worded that same result again out of the log, and for the file tools the two
+said different things: `read` told the live model `File not found: notes.txt`
+and told a reloaded one the JSON `observation` of a result with that in
+`exceptionInfo`. Reading an empty file said `(empty file)` live and `(empty)`
+from the log. Publishing an artifact told the live model how to update it and
+told a reloaded one only that it existed. So any chat that had read or edited
+anything — most of them — diverged the moment it was reopened, at every one of
+those results.
+
+Now the agent builds the `ToolResult` the conversation records and answers from
+that, through the same function the projection uses. `_answered` does both in
+one go, so the log and the session cannot be handed different values in the
+first place. An `ask_user` still reads as the answers themselves rather than as
+a command's outcome — it is the user talking — but only when it was answered:
+one that failed has its reason in `exceptionInfo` and no answers, so it reads
+like any other failure. That last part was wrong on both sides before, and
+silently: the model was told nothing at all.
+
+A call whose result never landed is answered anyway, since a provider that sees
+a tool call with no result rejects the next turn — worded by what was called,
+which is the next section.
 
 Everything that puts messages in front of a model reaches for it. `_openTurn`,
 for the turn being sent. `resetSession` on a rewind, which is what it replaced —
@@ -439,11 +456,20 @@ appended); a name the library does not know is left alone, because it is more
 likely a path. `@name` stacks that agent's prompt under the system message.
 
 **The library is read once, where the message is composed, and never again.**
-`ChatController._prompt` calls `promptDocuments` and what each reference meant
-goes into the message as `documents`, keyed by the reference as written —
-`/review`, `@researcher`, sigil included, so a command and an agent of the same
-name do not collide. Every later reading renders from that map: the turn being
-sent, the chat reopened tomorrow, a regenerate a week later.
+`ChatRepository.composeUserPrompt` is the only place a user's message is made,
+and it calls `promptDocuments`: what each reference meant goes into the message
+as `documents`, keyed by the reference as written — `/review`, `@researcher`,
+sigil included, so a command and an agent of the same name do not collide. Every
+later reading renders from that map: the turn being sent, the chat reopened
+tomorrow, a regenerate a week later.
+
+It is on the repository rather than in `ChatController` because that is what
+makes it unskippable. The controller was the only sender when this landed, and a
+second one — a headless entry point, a share target that sends rather than
+prefills — would have compiled perfectly while quietly sending the four
+characters the user typed. Composing a message is now the same kind of thing as
+resolving which model answers it: something the repository does for a turn, with
+nowhere else to get one.
 
 It was re-parsed against the library each time before, and that is wrong for a
 reason nothing catches. These are user-editable files, so rebuilding a year-old

@@ -226,10 +226,11 @@ class BuiltinBackend implements AgentBackend {
       _running.add(chatId, agent.cancel);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
-      // of, so they come off the message that started it — the record on that
-      // message, not the library, so an agent since edited or deleted still
-      // carries on under what the turn actually ran under.
-      final said = prompt ?? _lastUserMessage(history);
+      // of, so they come off the message that started it — its record of them,
+      // not the library, so an agent edited or deleted since still carries on
+      // under what the turn actually ran under.
+      final said =
+          prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
       final agentPrompt = agentPromptFrom(said?.documents ?? const {});
       final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)
@@ -294,11 +295,10 @@ class BuiltinBackend implements AgentBackend {
     );
     controller.add(ShellRunEvent(part));
     controller.add(const DoneEvent());
-    // Through `projectionOf` like every other turn: this one is written by the
-    // app rather than by a model, and the session still has to hold what a
-    // reload would build out of the log.
+    // Through `projectionOf` like every other turn — the reply is the app's
+    // rather than a model's, and that is the only difference.
     final session = await _sessionOf(chatId, history);
-    final opens = session.isFresh;
+    final opens = !session.hasConversation;
     session.messages.addAll(await projectionOf([
           prompt,
           unloggedMessage(MessageRole.assistant, prompt.createdAt, [part]),
@@ -433,11 +433,6 @@ class BuiltinBackend implements AgentBackend {
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);
   }
-
-  /// The turn an interrupted one is carrying on, so its `@agent` record can be
-  /// read off it.
-  Message? _lastUserMessage(List<Message> history) =>
-      history.lastWhereOrNull((m) => m.role == MessageRole.user);
 
   Future<ApprovalResponse> _awaitApproval(ToolApproval approval) =>
       _pending.putIfAbsent(approval.id, Completer.new).future;
