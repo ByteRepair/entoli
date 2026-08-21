@@ -64,11 +64,11 @@ void main() {
     expect(messages, hasLength(2));
     expect(messages.first.role, MessageRole.user);
     expect(textOf(messages.first), "hello");
-    expect(app.backend.prompts.single.text, "hello");
+    expect(app.backend.prompts.single.prompt.plainText, "hello");
     // Under the date it was logged with, not the clock: what the model is shown
     // of a user turn carries the moment it was sent, so a turn rebuilt from the
     // log has to land on the same string. See `userTurnText`.
-    expect(app.backend.prompts.single.at, messages.first.createdAt);
+    expect(app.backend.prompts.single.prompt.createdAt, messages.first.createdAt);
   });
 
   group("a new chat", () {
@@ -376,11 +376,11 @@ void main() {
     await waitIdle(id);
 
     expect(messagesOf(id), hasLength(2));
-    expect(app.backend.prompts.map((p) => p.text), ["hello", "hello"]);
+    expect(app.backend.prompts.map((p) => p.prompt.plainText), ["hello", "hello"]);
     // The same text *and* the same date, which is what makes it the same
     // string: a regenerate re-runs the message that is already logged, so it
     // carries that message's date rather than the moment it was re-run.
-    expect(app.backend.prompts.map((p) => p.at), [sentAt, sentAt]);
+    expect(app.backend.prompts.map((p) => p.prompt.createdAt), [sentAt, sentAt]);
   });
 
   test("regenerate from the assistant reply reruns the message above it", () async {
@@ -390,7 +390,7 @@ void main() {
     await controller.regenerate(assistantId);
     await waitIdle(id);
 
-    expect(app.backend.prompts.map((p) => p.text), ["hello", "hello"]);
+    expect(app.backend.prompts.map((p) => p.prompt.plainText), ["hello", "hello"]);
     expect(messagesOf(id), hasLength(2));
   });
 
@@ -404,7 +404,7 @@ void main() {
     final messages = messagesOf(id);
     expect(messages, hasLength(2));
     expect(textOf(messages.first), "hello");
-    expect(app.backend.prompts.map((p) => p.text), ["helo", "hello"]);
+    expect(app.backend.prompts.map((p) => p.prompt.plainText), ["helo", "hello"]);
   });
 
   test("a resend starts a fresh session seeded with the kept messages", () async {
@@ -445,7 +445,8 @@ void main() {
     expect(file.filename, "shot.png");
     expect(file.mimeType, "image/png");
     expect(Directory(app.config.resourcesDir(id)).listSync(), hasLength(1));
-    expect(app.backend.prompts.single.attachments.single.bytes, [104, 105]);
+    expect(app.backend.prompts.single.prompt.files.single.filename, "shot.png");
+    expect(await app.repo.readResource(id, file.resource), [104, 105]);
   });
 
   test("regenerating sends the attachments again, from disk", () async {
@@ -457,7 +458,7 @@ void main() {
     await controller.regenerate(messagesOf(id).first.id);
     await waitIdle(id);
 
-    expect(app.backend.prompts.map((p) => p.attachments.single.filename), ["shot.png", "shot.png"]);
+    expect(app.backend.prompts.map((p) => p.prompt.files.single.filename), ["shot.png", "shot.png"]);
     expect(messagesOf(id).first.parts.whereType<FilePart>(), hasLength(1));
     // The same file, not a second copy of it.
     expect(Directory(app.config.resourcesDir(id)).listSync(), hasLength(1));
@@ -475,7 +476,7 @@ void main() {
     final message = (await app.repo.openChat(id)).messages.first;
     expect(textOf(message), "read this");
     expect(message.parts.whereType<FilePart>().single.filename, "notes.txt");
-    expect(app.backend.prompts.last.attachments.single.filename, "notes.txt");
+    expect(app.backend.prompts.last.prompt.files.single.filename, "notes.txt");
   });
 
   test("the branched conversation is persisted, not just held in memory", () async {

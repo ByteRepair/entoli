@@ -8,6 +8,7 @@ import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/chat_repository.dart";
 import "../../domain/turn_recorder.dart";
+import "../../domain/prompt_library.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 
@@ -147,11 +148,15 @@ class ChatController extends Notifier<ChatViewState> {
   Future<void> send(String text, {List<Attachment> attachments = const []}) =>
       _prompt(text, attachments: attachments);
 
-  /// Say [text] and run the turn it starts. [replacing] makes it another thread
-  /// beside a prompt already in the conversation — an edit — rather than the
-  /// next thing said.
+  /// Say [text] and run the turn it starts. [attachments] are what the composer
+  /// is holding and [files] what a message being resent already had on disk;
+  /// one or the other, never both. [replacing] makes it another thread beside a
+  /// prompt already in the conversation — an edit — rather than the next thing
+  /// said.
   Future<void> _prompt(String text,
-      {List<Attachment> attachments = const [], Message? replacing}) async {
+      {List<Attachment> attachments = const [],
+      List<MessagePart> files = const [],
+      Message? replacing}) async {
     final repo = ref.read(chatRepositoryProvider);
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
@@ -164,15 +169,20 @@ class ChatController extends Notifier<ChatViewState> {
       role: MessageRole.user,
       createdAt: DateTime.now(),
       // Files first, the order they are sent in and the order a resend rebuilds.
-      parts: [...await repo.saveAttachments(chatId, attachments), MessagePart.text(text: text)],
+      parts: [
+        ...files,
+        ...await repo.saveAttachments(chatId, attachments),
+        MessagePart.text(text: text),
+      ],
+      // Resolved here, where the message is composed, and never looked up
+      // again — see [promptDocuments].
+      documents: promptDocuments(text, ref.read(promptLibraryProvider)),
     );
     await _turn(
       chat: chat,
-      text: text,
-      attachments: attachments,
+      prompt: userMsg,
       history: chat.messages.take(at).toList(),
       opening: [userMsg, _newReply()],
-      at: userMsg.createdAt,
       replacing: replacing,
     );
   }
@@ -187,15 +197,9 @@ class ChatController extends Notifier<ChatViewState> {
   /// alternative to, and null when this is simply the next thing said.
   Future<void> _turn({
     required Chat chat,
-    required String text,
-    required List<Attachment> attachments,
+    required Message prompt,
     required List<Message> history,
     required List<Message> opening,
-    /// The prompt's own date, which is what the model is shown of when it was
-    /// sent. A regenerate passes the date of the prompt it is re-running, so
-    /// the turn it sends is the one that was sent before, to the byte — see
-    /// `userTurnText`.
-    required DateTime at,
     Message? replacing,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
@@ -216,14 +220,11 @@ class ChatController extends Notifier<ChatViewState> {
     // refreshing it re-reads every chat off disk.
     if (isFirst) {
       ref.invalidate(chatListProvider);
-      unawaited(_nameChat(text));
+      unawaited(_nameChat(prompt.plainText));
     }
 
-    _listen(repo.sendPrompt(chatId, text,
-        attachments: attachments,
-        history: history,
-        replaces: replacing != null,
-        at: at));
+    _listen(repo.sendPrompt(chatId, prompt,
+        history: history, replaces: replacing != null));
   }
 
   Message _newReply() => Message(
@@ -272,17 +273,15 @@ class ChatController extends Notifier<ChatViewState> {
     return at < 0 ? null : chat.messages[at];
   }
 
-  /// Resend a message with new text, as another thread beside it. What it
-  /// carried comes with it: the resources are named by the parts, and branching
-  /// leaves the message they belong to where it is.
+  /// Resend a message with new text, as another thread beside it. The file
+  /// parts come across as they are: the resources are already under this chat,
+  /// and branching leaves the message they belong to where it is.
   Future<void> editAndResend(String messageId, String text) async {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
     if (prompt == null) return;
-    final attachments =
-        await ref.read(chatRepositoryProvider).loadAttachments(chatId, prompt);
-    await _prompt(text, attachments: attachments, replacing: prompt);
+    await _prompt(text, files: prompt.files.toList(), replacing: prompt);
   }
 
   /// Run the turn again, as another thread beside the reply already there.
@@ -296,14 +295,11 @@ class ChatController extends Notifier<ChatViewState> {
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
     if (prompt == null) return;
-    final repo = ref.read(chatRepositoryProvider);
     await _turn(
       chat: chat,
-      text: prompt.plainText,
-      attachments: await repo.loadAttachments(chatId, prompt),
+      prompt: prompt,
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
       opening: [_newReply()],
-      at: prompt.createdAt,
       replacing: _replyFor(chat, messageId),
     );
   }

@@ -53,7 +53,7 @@ void main() {
     final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
     final chat = await repo.createChat();
 
-    await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
+    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
     expect(backend.prompts.single.settings.provider, "anthropic");
     expect(backend.prompts.single.settings.model, "claude-sonnet-4");
@@ -65,7 +65,7 @@ void main() {
 
     pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
 
-    await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
+    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
     expect(backend.prompts.single.settings.provider, "ollama-cloud");
     expect(backend.prompts.single.settings.model, "qwen-2.5");
@@ -77,7 +77,7 @@ void main() {
 
     pinChatModel(chat.state.id, model: "qwen-2.5");
 
-    await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
+    await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
     expect(backend.prompts.single.settings.model, "qwen-2.5");
     expect(backend.prompts.single.settings.provider, isNull);
@@ -150,7 +150,7 @@ void main() {
       final chat = await repo.createChat(project: "work");
       await writeChatVia(repo, chat);
 
-      await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
       expect(backend.prompts.single.settings.project, "work");
     });
@@ -183,7 +183,7 @@ void main() {
       await writeChatVia(repo, chat);
 
       await repo.moveChat(chat.state.id, "work");
-      await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
       expect(backend.prompts.single.settings.project, "work");
     });
@@ -239,53 +239,18 @@ void main() {
     final chat = await repo.createChat();
 
     final parts = await repo.saveAttachments(chat.state.id, [testAttachment("notes.txt")]);
-    final message = Message(
-      id: "m1",
-      role: MessageRole.user,
-      createdAt: DateTime(2026),
-      parts: parts,
-    );
+    final file = parts.single as FilePart;
 
-    final loaded = await repo.loadAttachments(chat.state.id, message);
-    expect(loaded.single.filename, "notes.txt");
-    expect(loaded.single.mimeType, "text/plain");
-    expect(loaded.single.bytes, [104, 105]);
-  });
-
-  // Regenerating a message repeatedly would otherwise copy its bytes each time.
-  test("an attachment already on disk is not saved a second time", () async {
-    final repo = repoWith(AppSettings());
-    final chat = await repo.createChat();
-
-    final first = await repo.saveAttachments(chat.state.id, [testAttachment("notes.txt")]);
-    final message = Message(
-      id: "m1",
-      role: MessageRole.user,
-      createdAt: DateTime(2026),
-      parts: first,
-    );
-    final again = await repo.saveAttachments(
-      chat.state.id,
-      await repo.loadAttachments(chat.state.id, message),
-    );
-
-    expect((again.single as FilePart).resource, (first.single as FilePart).resource);
+    expect(file.filename, "notes.txt");
+    expect(file.mimeType, "text/plain");
+    expect(await repo.readResource(chat.state.id, file.resource), [104, 105]);
     expect(Directory(config.resourcesDir(chat.state.id)).listSync(), hasLength(1));
   });
 
-  test("an attachment whose file has gone is dropped, not resent empty", () async {
+  test("a resource that has gone reads back as nothing", () async {
     final repo = repoWith(AppSettings());
     final chat = await repo.createChat();
 
-    final message = Message(
-      id: "m1",
-      role: MessageRole.user,
-      createdAt: DateTime(2026),
-      parts: const [
-        MessagePart.file(resource: "gone.txt", filename: "notes.txt", mimeType: "text/plain"),
-      ],
-    );
-
-    expect(await repo.loadAttachments(chat.state.id, message), isEmpty);
+    expect(await repo.readResource(chat.state.id, "gone.txt"), isNull);
   });
 }

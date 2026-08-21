@@ -161,6 +161,10 @@ abstract class Message with _$Message {
     required MessageRole role,
     required DateTime createdAt,
     @Default([]) List<MessagePart> parts,
+    /// What this message's `/command` and `@agent` references meant when it was
+    /// sent, keyed by the reference as written — `/review`, `@researcher`. See
+    /// "Commands and agents" in `lib/domain/CLAUDE.md`.
+    @Default({}) Map<String, String> documents,
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
@@ -259,21 +263,19 @@ abstract class ToolResult with _$ToolResult {
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);
 }
 
-/// A file the user attached to a message. The agent is sent [bytes];
-/// [resource] is the name they were saved under in the chat's `resources/`,
-/// null until they have been.
+/// A file the composer is holding, on its way to the chat's `resources/`. Once
+/// saved it is a [FilePart] of the message and the bytes are read back from
+/// disk, so this is the one shape that carries them around.
 class Attachment {
   const Attachment({
     required this.filename,
     required this.mimeType,
     required this.bytes,
-    this.resource,
   });
 
   final String filename;
   final String mimeType;
   final Uint8List bytes;
-  final String? resource;
 }
 
 /// What the composer's `+` button can attach. Only the chooser's filter

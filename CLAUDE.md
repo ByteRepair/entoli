@@ -72,7 +72,8 @@ with nothing either, which is why nothing user-facing names it at all.
   re-injected only when a turn is resent — otherwise the agent's own session
   carries it.
 - The agent runs **on top of** Entoli. Commands and agents are Entoli's,
-  expanded before the agent sees them.
+  resolved where the message is composed and recorded on it, so the model reads
+  the same words on every reading of the conversation.
 
 ### On-disk layout
 

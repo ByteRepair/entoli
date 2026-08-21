@@ -13,8 +13,10 @@ rather than something to apologise for.
 Six records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
-thread being read; `replacesSibling` takes that one away rather than joining it.
-`part` is one part of it, at an index. `append` is more text
+thread being read; `replacesSibling` takes that one away rather than joining it,
+and `documents` records what its `/command` and `@agent` references stood for
+when it was written — see "Commands and agents". `part` is one part of it, at an
+index. `append` is more text
 on the end of the part at an index. `turnEnd` closes the turn and says why:
 `done`, `aborted`, or `error`. `select` says which of a message's alternatives
 to read. `rewind` forgets a message and everything below it.
@@ -187,52 +189,60 @@ block is still open, and it is yielded there as `LlmReasoningSignature` rather
 than waiting for the completion, so the block is closed already holding it
 instead of being written to the log a second time.
 
-**A user's turn is worded once, by `userTurnText`, and both sides call it.**
-What the model is shown of a message is not what the user typed: it carries the
-moment it was sent, and the one that opens a conversation is dressed as a task
-(upstream's instance template). `BuiltinAgent` words the turn it is about to
-run and the projection words that same turn read back out of the log — and for
-a long time they worded it differently, the log holding only what was typed. So
-a chat reopened after a restart, and every regenerate, sent text that was not
-what had been sent before. Nothing was visibly wrong, which is why it lasted:
-the model answers either version. What it cost was the on-device KV cache,
-where a prefix that differs by one line is a prefix that misses, so reopening a
-long chat reprocessed the whole history — the exact wait that cache exists to
-remove.
+**Nothing else words a conversation for a model.** What the model is shown of a
+user's message is not what the user typed: it carries the moment it was sent,
+the one that opens a conversation is dressed as a task (upstream's instance
+template), a `/command` is expanded to its body, and a file part comes back as
+the bytes it names. `BuiltinAgent` used to word the turn it was about to run
+while the projection worded that same turn read back out of the log, and for a
+long time the two disagreed — the log holding only what was typed. So a chat
+reopened after a restart, and every regenerate, sent text that was not what had
+been sent before. Nothing was visibly wrong, which is why it lasted: the model
+answers either version. What it cost was the on-device KV cache, where a prefix
+that differs by one line is a prefix that misses, so reopening a long chat
+reprocessed the whole history — the exact wait that cache exists to remove.
 
-The date comes off the message's own `createdAt` rather than the clock, which
-is what makes the wording a function of what `conv.jsonl` holds and nothing
-else. It is why `at` travels with the prompt from `ChatController` down: a
-regenerate passes the date of the message it is re-running, so what it sends is
-what was sent the first time, to the byte.
+**The fix was not to make the two agree.** `_openTurn` projects the message it
+is about to log, so the session a turn runs against is filled by the function
+that would rebuild it, and "what the model is holding" and "what a reload would
+build" are one expression rather than two kept level by hand. It is why
+`sendPrompt` takes a `Message` rather than a text, a date and a list of
+attachments: the pieces travelling separately is what let them be assembled two
+ways.
 
-**Two inputs still differ, and both are known.** A `/command` turn is sent
-expanded — `_taskOf` turns `/review the parser` into the command's body — while
-the log keeps what was typed, deliberately, so a chat *reopened* projects that
-turn as the short text the live session never held. And an attachment is bytes
-on the live message and the words `(attached: notes.txt)` on the projected one,
-which is `_userText`'s doing and also deliberate: reading the file back would
-make the projection asynchronous. So the invariant holds for a plain turn and
-not for those two, which is what the test in `builtin_backend_test.dart` pins
-and no more. Closing them means either logging the expansion beside the raw
-text or handing the projection an expander, and the attachment half may not be
-worth closing at all — a message carrying an image is a different prompt from
-one naming a file, whatever the hash says.
+That puts the whole burden on the log, which now has to hold everything the
+wording needs. The date is the message's own `createdAt`, so a regenerate — which
+re-runs the message rather than a copy of its text — sends the date that turn
+was sent under. The bytes are read back through a `ResourceLoader`, and that is
+the only reason the projection is asynchronous; a file whose resource has gone is
+left named rather than failing the turn, which is what every message did before
+this read any. And what a `/command` or an `@agent` stood for is written into the
+message when it is composed — see "Commands and agents".
+
+**One input still differs, and it is `resume`.** Carrying on an interrupted turn
+adds a user message of its own — `continueTask`, the reason the model is being
+asked again — and nothing logs it. So a chat resumed in this process holds one
+message a reload would not build, and every turn after it in that chat has a
+prefix the log disagrees with: the cache miss this whole thing exists to remove,
+in the one place it is still possible. Closing it means logging the marker as a
+part the projection re-derives, or synthesising it from the `turnEnd` that says
+the turn was interrupted — the second is the better shape, since the log already
+knows and nothing new has to be written. It is not closed here.
 
 A result is worded the way the agent worded it when it ran — `observation(...)`,
 or the answers themselves for an `ask_user` — so a projected conversation is the
 one the model already answered rather than a paraphrase of it. A call whose
 result never landed is answered anyway, since a provider that sees a tool call
 with no result rejects the next turn — worded by what was called, which is the
-next section. Attachments are named, not resent: the bytes are on disk and
-reading them back would make this asynchronous.
+next section.
 
-Three things reach for it. `resetSession` on a rewind, which is what it replaced
-— the old path wrote the kept messages out as prose and told the model "earlier
-in this conversation", losing the thinking, the calls and the results.
-`sendPrompt`, which fills a session that is empty: sessions live in memory for as
-long as the app does, so a chat opened after a restart has none, and the model
-would have been answering the next message having seen nothing of the chat. And
+Everything that puts messages in front of a model reaches for it. `_openTurn`,
+for the turn being sent. `resetSession` on a rewind, which is what it replaced —
+the old path wrote the kept messages out as prose and told the model "earlier in
+this conversation", losing the thinking, the calls and the results. `sendPrompt`,
+which fills a session that is empty: sessions live in memory for as long as the
+app does, so a chat opened after a restart has none, and the model would have
+been answering the next message having seen nothing of the chat. And
 `resumeTurn`, which rebuilds one whether or not it is empty.
 
 That is why `history` is a `sendPrompt` parameter rather than a call of its own.
@@ -248,6 +258,16 @@ signature, and every result verbatim, and the whole session is resent on every
 model call of the turn. That is parity — a live session that actually ran those
 steps holds exactly those messages — but it is what makes compaction, above, the
 thing that bounds a long chat.
+
+Reading the bytes back is the expensive half of that, and it is worth being
+clear about which direction the parity was closed in. A live session has always
+held its attachments as bytes, for every turn of the chat, for as long as the
+app runs; it was the *rebuilt* session that named them and sent nothing. So this
+did not make a running conversation more expensive — it made a reopened one cost
+what the running one already cost, which is the side to land on, since the other
+would take an image away from a model halfway through being asked about it. What
+it does mean is that an image-heavy chat is re-encoded on every step of every
+turn, and that compaction is what bounds it, exactly as with the text.
 
 ### Carrying on an interrupted turn
 
@@ -329,9 +349,10 @@ is the log the user is reading.
 
 `AgentBackend.resumeTurn` is a method of its own rather than a flag on
 `sendPrompt`, because there is no prompt: no text, no attachments, no `/command`
-or `@agent` to expand. `@agent` mentions are recovered by re-parsing the last user
-message, the same way a resend re-parses rather than storing what it resolved to.
-What the two share is `TurnSettings`, resolved once by `ChatRepository`.
+or `@agent` to expand. Its `@agent` prompt comes off the last user message of the
+history — off that message's own record of what the name meant, so a turn
+interrupted last week carries on under the agent it started under. What the two
+share is `TurnSettings`, resolved once by `ChatRepository`.
 
 The projection's answer to a call whose result never landed is the other half of
 this, and it is **one wording for every tool**. Which tool it was is in the call
@@ -388,21 +409,48 @@ packaged under `assets/prompts/{commands,agents}/`, then
 preset it shares a name with. Entries come back sorted by name, so the menu does
 not reorder when a source does. Built once because reading assets is async and
 nothing downstream should wait on it; a file added while the app runs therefore
-does not appear until a restart, though nothing would break if it did — the
-agent looks documents up per turn.
+does not appear until a restart, though nothing would break if it did — a
+message resolves against whatever the library holds when it is composed, and
+keeps the answer.
 
 A prompt file is YAML frontmatter, then the template a command expands to or the
 system prompt an agent runs under. `PromptDocument` reads only the top-level
 scalars — `description` is all the menu needs.
 
-The syntax is parsed in `BuiltinBackend` (`_command` / `_mention`), not in the
-repository or the UI: `conv.jsonl` stores the message as typed, so a regenerated
-turn re-parses to the same thing. `activeCompletionToken` in the composer has to
-agree with those two patterns — anything the menu offers has to dispatch.
+The syntax is `_command` and `_mention` in `prompt_library.dart`, beside the
+library they are read against rather than in whichever layer happened to need
+them first — `BuiltinBackend` held them when it was the only thing that expanded
+one. `activeCompletionToken` in the composer has to agree with those two
+patterns: anything the menu offers has to dispatch.
 
 `/name args` expands to the command's body with `$ARGUMENTS` substituted (or
 appended); a name the library does not know is left alone, because it is more
 likely a path. `@name` stacks that agent's prompt under the system message.
+
+**The library is read once, where the message is composed, and never again.**
+`ChatController._prompt` calls `promptDocuments` and what each reference meant
+goes into the message as `documents`, keyed by the reference as written —
+`/review`, `@researcher`, sigil included, so a command and an agent of the same
+name do not collide. Every later reading renders from that map: the turn being
+sent, the chat reopened tomorrow, a regenerate a week later.
+
+It was re-parsed against the library each time before, and that is wrong for a
+reason nothing catches. These are user-editable files, so rebuilding a year-old
+turn read whatever `commands/review.md` says *now* — putting words in the model's
+mouth it had never seen, and quietly changing a conversation the user is reading
+beside it. A command since deleted was worse: the turn fell back to the four
+characters the user typed, and the model was asked to carry on from a prompt it
+had never been given. Held, none of that is possible, and the message that
+carried it says so on its face.
+
+Old logs have no `documents` and default to an empty map, which renders as the
+text alone — exactly what those turns already did. There is nothing to migrate
+and no version to bump, the same bargain `siblingOf` made.
+
+`agentPromptFrom` reads the same map for the `@agent` half, which is why a
+resumed turn carries on under the agent the turn actually ran under rather than
+whatever that name means today. The mentions stay in the text and are not
+stripped, so what the user reads and what the model reads name the same agent.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
 reads the library directly and is synchronous.
@@ -414,8 +462,8 @@ discarding what was there. The live session still holds the thread being left,
 so `resetSession` drops it and puts back `projectionOf` the messages above the
 branch — thinking, calls and results and all. This is where the "conv.jsonl is
 the source of truth, re-inject context" rule is exercised, and the projection is
-what makes it true rather than approximate. Only the turn being replayed carries
-its own attachments back; the messages above it name theirs.
+what makes it true rather than approximate — attachments and all, since it reads
+the bytes back off `resources/` rather than naming the files.
 
 **They branch at different messages, and that is what decides where the counter
 lands.** An edit is a new prompt, so it is a thread beside the prompt it
@@ -439,10 +487,22 @@ mime type and bytes.
 
 Bytes are saved under the chat's `resources/` and the message keeps a `FilePart`
 naming the resource. That is what makes an edit or a regenerate work: the parts
-are in `conv.jsonl`, so a resend reads the bytes back off disk rather than
-needing the composer to still hold them. `saveAttachments` leaves one that
-already has a resource where it is, so replaying a turn does not copy its bytes
-again.
+are in `conv.jsonl`, so a resend passes the parts along and never touches the
+bytes — `saveAttachments` is the composer's alone, and an `Attachment` is only
+ever a file on its way to disk.
+
+It used to be both. A resend read every attachment back into `Attachment`s so
+the turn could be sent with them, and `saveAttachments` then had to notice they
+were already saved and not save them twice. Once the projection read the bytes
+itself, that whole round trip was reading a file to hand it back to the code
+that had just written it — so the load went, and `Attachment.resource`, which
+existed for no other reason, went with it.
+
+It is also what the model sees. `projectionOf` reads each resource back through
+the loader the backend hands it, so an image is an image on every reading of the
+conversation and not only on the turn that arrived with it — the whole reason the
+projection is asynchronous. A resource that has gone leaves the file named in the
+text and nothing else, which is what every projected message did before this.
 
 The store's resource I/O is async where the rest of it is sync: a JSON file is
 small enough to write on the UI thread, an attachment is not.

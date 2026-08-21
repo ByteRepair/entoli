@@ -103,8 +103,15 @@ void main() {
     final thinking = StringBuffer();
     await for (final event in backend.sendPrompt(
       chat.state.id,
-      "Read hello.txt in this directory and tell me what it says.",
-      at: DateTime.now(),
+      Message(
+        id: "u1",
+        role: MessageRole.user,
+        createdAt: DateTime.now(),
+        parts: const [
+          MessagePart.text(
+              text: "Read hello.txt in this directory and tell me what it says.")
+        ],
+      ),
       settings: TurnSettings(
         model: model,
         provider: _providerId,

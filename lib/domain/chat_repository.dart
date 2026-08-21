@@ -189,17 +189,12 @@ class ChatRepository {
   /// prompt for the reason [history] does: a separate "forget what you were
   /// told" call is one a caller can forget, and forgetting it is silent, the
   /// model answering fluently from the turn the user has just left.
-  Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const [],
-      List<Message> history = const [],
-      bool replaces = false,
-      required DateTime at}) async* {
+  Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
+      {List<Message> history = const [],
+      bool replaces = false}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
-    yield* _backend.sendPrompt(chatId, text,
-        attachments: attachments,
-        history: history,
-        settings: await _turnSettings(chatId),
-        at: at);
+    yield* _backend.sendPrompt(chatId, prompt,
+        history: history, settings: await _turnSettings(chatId));
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
@@ -253,31 +248,14 @@ class ChatRepository {
       _isDraft(chatId) ? _draft!.state.project : await _store.projectOf(chatId);
 
   /// Save what the user attached and describe it as the parts that outlive the
-  /// turn. One already on disk stays where it is, so resending a message does
-  /// not copy its bytes again.
+  /// turn. Only the composer has bytes to save: a message being resent already
+  /// has its parts and passes those along instead.
   Future<List<MessagePart>> saveAttachments(String chatId, List<Attachment> attachments) =>
       Future.wait(attachments.map((a) async => MessagePart.file(
-            resource: a.resource ?? await _store.saveResource(chatId, a.filename, a.bytes),
+            resource: await _store.saveResource(chatId, a.filename, a.bytes),
             filename: a.filename,
             mimeType: a.mimeType,
           )));
-
-  /// What [message] carried, bytes and all, so the turn can be sent again. A
-  /// resource that has gone missing is dropped.
-  Future<List<Attachment>> loadAttachments(String chatId, Message message) async {
-    final loaded = await Future.wait(message.files.map((part) async {
-      final bytes = await _store.readResource(chatId, part.resource);
-      return bytes == null
-          ? null
-          : Attachment(
-              filename: part.filename,
-              mimeType: part.mimeType,
-              bytes: bytes,
-              resource: part.resource,
-            );
-    }));
-    return loaded.nonNulls.toList();
-  }
 
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);

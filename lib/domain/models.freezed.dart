@@ -656,7 +656,10 @@ $ChatStateCopyWith<$Res> get state {
 /// @nodoc
 mixin _$Message {
 
- String get id; MessageRole get role; DateTime get createdAt; List<MessagePart> get parts;
+ String get id; MessageRole get role; DateTime get createdAt; List<MessagePart> get parts;/// What this message's `/command` and `@agent` references meant when it was
+/// sent, keyed by the reference as written — `/review`, `@researcher`. See
+/// "Commands and agents" in `lib/domain/CLAUDE.md`.
+ Map<String, String> get documents;
 /// Create a copy of Message
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -669,16 +672,16 @@ $MessageCopyWith<Message> get copyWith => _$MessageCopyWithImpl<Message>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other.parts, parts));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other.parts, parts)&&const DeepCollectionEquality().equals(other.documents, documents));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(parts));
+int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(parts),const DeepCollectionEquality().hash(documents));
 
 @override
 String toString() {
-  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts)';
+  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts, documents: $documents)';
 }
 
 
@@ -689,7 +692,7 @@ abstract mixin class $MessageCopyWith<$Res>  {
   factory $MessageCopyWith(Message value, $Res Function(Message) _then) = _$MessageCopyWithImpl;
 @useResult
 $Res call({
- String id, MessageRole role, DateTime createdAt, List<MessagePart> parts
+ String id, MessageRole role, DateTime createdAt, List<MessagePart> parts, Map<String, String> documents
 });
 
 
@@ -706,13 +709,14 @@ class _$MessageCopyWithImpl<$Res>
 
 /// Create a copy of Message
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,Object? documents = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,role: null == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
 as MessageRole,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,parts: null == parts ? _self.parts : parts // ignore: cast_nullable_to_non_nullable
-as List<MessagePart>,
+as List<MessagePart>,documents: null == documents ? _self.documents : documents // ignore: cast_nullable_to_non_nullable
+as Map<String, String>,
   ));
 }
 
@@ -797,10 +801,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts,  Map<String, String> documents)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Message() when $default != null:
-return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
+return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.documents);case _:
   return orElse();
 
 }
@@ -818,10 +822,10 @@ return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts,  Map<String, String> documents)  $default,) {final _that = this;
 switch (_that) {
 case _Message():
-return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
+return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.documents);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -838,10 +842,10 @@ return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  MessageRole role,  DateTime createdAt,  List<MessagePart> parts,  Map<String, String> documents)?  $default,) {final _that = this;
 switch (_that) {
 case _Message() when $default != null:
-return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
+return $default(_that.id,_that.role,_that.createdAt,_that.parts,_that.documents);case _:
   return null;
 
 }
@@ -853,7 +857,7 @@ return $default(_that.id,_that.role,_that.createdAt,_that.parts);case _:
 @JsonSerializable()
 
 class _Message implements Message {
-  const _Message({required this.id, required this.role, required this.createdAt, final  List<MessagePart> parts = const []}): _parts = parts;
+  const _Message({required this.id, required this.role, required this.createdAt, final  List<MessagePart> parts = const [], final  Map<String, String> documents = const {}}): _parts = parts,_documents = documents;
   factory _Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
 
 @override final  String id;
@@ -864,6 +868,19 @@ class _Message implements Message {
   if (_parts is EqualUnmodifiableListView) return _parts;
   // ignore: implicit_dynamic_type
   return EqualUnmodifiableListView(_parts);
+}
+
+/// What this message's `/command` and `@agent` references meant when it was
+/// sent, keyed by the reference as written — `/review`, `@researcher`. See
+/// "Commands and agents" in `lib/domain/CLAUDE.md`.
+ final  Map<String, String> _documents;
+/// What this message's `/command` and `@agent` references meant when it was
+/// sent, keyed by the reference as written — `/review`, `@researcher`. See
+/// "Commands and agents" in `lib/domain/CLAUDE.md`.
+@override@JsonKey() Map<String, String> get documents {
+  if (_documents is EqualUnmodifiableMapView) return _documents;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_documents);
 }
 
 
@@ -880,16 +897,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other._parts, _parts));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Message&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&const DeepCollectionEquality().equals(other._parts, _parts)&&const DeepCollectionEquality().equals(other._documents, _documents));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(_parts));
+int get hashCode => Object.hash(runtimeType,id,role,createdAt,const DeepCollectionEquality().hash(_parts),const DeepCollectionEquality().hash(_documents));
 
 @override
 String toString() {
-  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts)';
+  return 'Message(id: $id, role: $role, createdAt: $createdAt, parts: $parts, documents: $documents)';
 }
 
 
@@ -900,7 +917,7 @@ abstract mixin class _$MessageCopyWith<$Res> implements $MessageCopyWith<$Res> {
   factory _$MessageCopyWith(_Message value, $Res Function(_Message) _then) = __$MessageCopyWithImpl;
 @override @useResult
 $Res call({
- String id, MessageRole role, DateTime createdAt, List<MessagePart> parts
+ String id, MessageRole role, DateTime createdAt, List<MessagePart> parts, Map<String, String> documents
 });
 
 
@@ -917,13 +934,14 @@ class __$MessageCopyWithImpl<$Res>
 
 /// Create a copy of Message
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? parts = null,Object? documents = null,}) {
   return _then(_Message(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,role: null == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
 as MessageRole,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,parts: null == parts ? _self._parts : parts // ignore: cast_nullable_to_non_nullable
-as List<MessagePart>,
+as List<MessagePart>,documents: null == documents ? _self._documents : documents // ignore: cast_nullable_to_non_nullable
+as Map<String, String>,
   ));
 }
 

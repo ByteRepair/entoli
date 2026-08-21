@@ -71,23 +71,27 @@ void main() {
 
   /// Most of these are not about approvals, so the default here is the chat
   /// setting that does not stop to ask.
-  /// [at] is fixed rather than left to the clock, because what the model is
-  /// shown of a user turn carries the date it was sent — so a test comparing a
-  /// live session against one rebuilt from a log has to date both the same.
+  /// The message is dated [sentAt] rather than by the clock, because what the
+  /// model is shown of a user turn carries the date it was sent — so a test
+  /// comparing a live session against one rebuilt from a log has to date both
+  /// the same. [documents] is what the turn's `/command` and `@agent`
+  /// references meant, the way the app records them when it composes.
   Future<List<AgentEvent>> send(
     BuiltinBackend backend,
     String text, {
     String? model = "fake-model",
     String? provider = "fake",
     List<Message> history = const [],
-    List<Attachment> attachments = const [],
+    List<MessagePart> files = const [],
+    Map<String, String> documents = const {},
     DateTime? at,
   }) =>
       backend
-          .sendPrompt(chatId, text,
+          .sendPrompt(
+              chatId,
+              userMessage(text,
+                  at: at ?? sentAt, documents: documents, files: files),
               history: history,
-              attachments: attachments,
-              at: at ?? sentAt,
               settings: TurnSettings(
                   model: model, provider: provider, approveMode: ApproveMode.never))
           .toList();
@@ -106,8 +110,7 @@ void main() {
   /// command to approve or a question to pick from.
   Stream<AgentEvent> asking(BuiltinBackend backend, String text,
           {ApproveMode approveMode = ApproveMode.ask}) =>
-      backend.sendPrompt(chatId, text,
-          at: sentAt,
+      backend.sendPrompt(chatId, userMessage(text, at: sentAt),
           settings: TurnSettings(
               model: "fake-model", provider: "fake", approveMode: approveMode));
 
@@ -172,8 +175,7 @@ void main() {
         [finish],
       ]);
       await backend
-          .sendPrompt(chatId, "hi",
-              at: sentAt,
+          .sendPrompt(chatId, userMessage("hi", at: sentAt),
               settings: const TurnSettings(
                   model: "fake-model",
                   provider: "fake",
@@ -193,26 +195,26 @@ void main() {
         PromptLibrary([PromptDocument.parse(kind, name, "---\ndescription: d\n---\n\n$body")]);
 
     test("/name expands to the command's template", () async {
-      final backend = backendOver(
-        [
-          [finish],
-        ],
-        library: libraryWith(CompletionKind.command, "review", "Review this:\n\n\$ARGUMENTS"),
-      );
-      await send(backend, "/review the parser");
+      final asWritten =
+          libraryWith(CompletionKind.command, "review", "Review this:\n\n\$ARGUMENTS");
+      final backend = backendOver([
+        [finish],
+      ], library: asWritten);
+      await send(backend, "/review the parser",
+          documents: promptDocuments("/review the parser", asWritten));
 
       expect(client.sent.first[2].text, contains("Review this:\n\nthe parser"));
       expect(client.sent.first[2].text, isNot(contains(r"$ARGUMENTS")));
     });
 
     test("a command with no placeholder gets its arguments appended", () async {
-      final backend = backendOver(
-        [
-          [finish],
-        ],
-        library: libraryWith(CompletionKind.command, "commit", "Commit what changed."),
-      );
-      await send(backend, "/commit only the tests");
+      final asWritten =
+          libraryWith(CompletionKind.command, "commit", "Commit what changed.");
+      final backend = backendOver([
+        [finish],
+      ], library: asWritten);
+      await send(backend, "/commit only the tests",
+          documents: promptDocuments("/commit only the tests", asWritten));
 
       expect(client.sent.first[2].text, contains("Commit what changed."));
       expect(client.sent.first[2].text, contains("only the tests"));
@@ -231,16 +233,75 @@ void main() {
     });
 
     test("@name puts that agent's prompt under the system message", () async {
+      final asWritten =
+          libraryWith(CompletionKind.agent, "researcher", "You only read.");
+      final backend = backendOver([
+        [finish],
+      ], library: asWritten);
+      await send(backend, "@researcher where is the parser?",
+          documents: promptDocuments("@researcher where is the parser?", asWritten));
+
+      expect(client.sent.first[1].text, contains("You only read."));
+      expect(client.sent.first[2].text, contains("@researcher where is the parser?"));
+    });
+
+    test("a command edited since is still the words the turn was sent with",
+        () async {
+      final asWritten = libraryWith(CompletionKind.command, "review", "Look hard at:\n\n\$ARGUMENTS");
       final backend = backendOver(
         [
           [finish],
         ],
-        library: libraryWith(CompletionKind.agent, "researcher", "You only read."),
+        // The library the turn is replayed against says something else
+        // entirely, and a deleted command would say nothing at all.
+        library: libraryWith(CompletionKind.command, "review", "REWRITTEN"),
       );
-      await send(backend, "@researcher where is the parser?");
+      await send(backend, "/review the parser",
+          documents: promptDocuments("/review the parser", asWritten));
+
+      expect(client.sent.first[2].text, contains("Look hard at:\n\nthe parser"));
+      expect(client.sent.first[2].text, isNot(contains("REWRITTEN")));
+    });
+
+    test("a command deleted since still reads back", () async {
+      final asWritten = libraryWith(CompletionKind.command, "review", "Review this.");
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "/review the parser",
+          documents: promptDocuments("/review the parser", asWritten));
+
+      expect(client.sent.first[2].text, contains("Review this."));
+    });
+
+    test("an agent edited since carries on under what the turn ran under",
+        () async {
+      final asWritten = libraryWith(CompletionKind.agent, "researcher", "You only read.");
+      final backend = backendOver(
+        [
+          [finish],
+        ],
+        library: libraryWith(CompletionKind.agent, "researcher", "REWRITTEN"),
+      );
+      // Resumed rather than sent: the `@agent` is read off the message that
+      // started the turn, which is where its record is.
+      await backend
+          .resumeTurn(chatId, history: [
+            userMessage("@researcher where is the parser?",
+                at: sentAt,
+                documents: promptDocuments("@researcher where is the parser?", asWritten)),
+            Message(
+              id: "m2",
+              role: MessageRole.assistant,
+              createdAt: sentAt,
+              parts: const [MessagePart.text(text: "part way", responseId: "r1")],
+            ),
+          ], settings: const TurnSettings(
+              model: "fake-model", provider: "fake", approveMode: ApproveMode.never))
+          .toList();
 
       expect(client.sent.first[1].text, contains("You only read."));
-      expect(client.sent.first[2].text, contains("@researcher where is the parser?"));
+      expect(client.sent.first[1].text, isNot(contains("REWRITTEN")));
     });
 
     test("an email address is not a mention", () async {
@@ -387,7 +448,10 @@ void main() {
       final live = backendOver([
         [finish],
       ], respond: (_) => ok("hello\n"));
-      await send(live, "!echo hello", attachments: [testAttachment("notes.txt")]);
+      await send(live, "!echo hello", files: const [
+        MessagePart.file(
+            resource: "r1", filename: "notes.txt", mimeType: "text/plain"),
+      ]);
       await send(live, "what did that say?");
       final held = client.sent.single.map((m) => (m.role, m.text)).toList();
 
@@ -566,8 +630,7 @@ void main() {
       backend.runningTurns.addListener(() => seen.add(backend.runningTurns.value));
 
       var listedAtTheEnd = false;
-      await for (final event in backend.sendPrompt(chatId, "hi",
-          at: sentAt,
+      await for (final event in backend.sendPrompt(chatId, userMessage("hi", at: sentAt),
           settings: const TurnSettings(
               model: "fake-model", provider: "fake", approveMode: ApproveMode.never))) {
         // The listener writing the turn's closing records is still reading this

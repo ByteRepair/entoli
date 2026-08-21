@@ -20,6 +20,7 @@ import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
+import "projection.dart";
 import "templates.dart";
 import "websearch_tool.dart";
 
@@ -198,7 +199,13 @@ class BuiltinAgent {
     this.webSearch,
     this.profile,
     this.saveArtifact,
+    this.loadResource = noResources,
   });
+
+  /// Where an attachment's bytes come from when the turn being opened is
+  /// projected. [noResources] for the tests that drive the loop with no chat
+  /// under them; `BuiltinBackend` passes the store's.
+  final ResourceLoader loadResource;
 
   final BuiltinSession session;
   final LlmClient client;
@@ -316,17 +323,12 @@ class BuiltinAgent {
     await subAgentRunner?.cancel();
   }
 
-  /// [at] is the date the prompt is logged under — see `userTurnText`. Null is
-  /// the clock, which is right only where nothing logs the turn to word again:
-  /// the tests that drive the loop, and a sub-agent, whose transcript opens on
-  /// the assistant's message and so never has a prompt to project back.
-  Stream<AgentEvent> run(
-    String task, {
-    List<LlmAttachment> attachments = const [],
-    String? agentPrompt,
-    DateTime? at,
-  }) async* {
-    _openTurn(task, attachments, agentPrompt, at ?? DateTime.now());
+  /// [prompt] is the message being logged for this turn, and it is projected
+  /// rather than worded here — see [projectionOf]. Everything the model is
+  /// shown of it comes out of the log: the date it carries, the command a
+  /// `/name` stood for, the bytes its file parts point at.
+  Stream<AgentEvent> run(Message prompt, {String? agentPrompt}) async* {
+    await _openTurn(prompt, agentPrompt);
     yield* _loop();
   }
 
@@ -385,15 +387,11 @@ class BuiltinAgent {
     yield const DoneEvent();
   }
 
-  void _openTurn(
-      String task, List<LlmAttachment> attachments, String? agentPrompt, DateTime at) {
+  Future<void> _openTurn(Message prompt, String? agentPrompt) async {
     final fresh = session.isFresh;
     _setSystemPrompt(agentPrompt);
-    session.messages.add(LlmMessage(
-      role: LlmRole.user,
-      text: userTurnText(task, at: at, first: fresh),
-      attachments: attachments,
-    ));
+    session.messages.addAll(
+        await projectionOf([prompt], first: fresh, load: loadResource));
   }
 
   /// The system prompt is rewritten every turn rather than once, so an
