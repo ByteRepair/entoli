@@ -18,8 +18,9 @@ continue), which works reliably across model sizes. The codebase previously
 used mini-swe-agent's `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` marker as the
 termination signal, but that protocol was a forcing function for weak models on
 SWE-bench and failed on exactly the small models this app targets: they called
-the marker without writing answer text, leaving the sub-agent runner with an
-empty buffer. Upstream still holds the opposite rule — a reply with no tool call
+the marker without writing answer text, leaving the sub-agent runner with
+nothing to hand back. Upstream still holds the opposite rule — a reply with no
+tool call
 is a format error it retries — so the one behaviour the old name would have
 predicted is the one this does backwards.
 
@@ -227,9 +228,11 @@ decided by what parsed, not by the name that got it there: a call named
 `ask_user` with nothing askable in it falls back to `ToolLabel`, which shows the
 rejection the model was sent.
 
-Answering is `_answer`, one tool message per call — the invariant that keeps the
-next turn from being rejected. `_answerRun` is that plus the wording a command's
-outcome gets, which is every call but an `ask_user`.
+Every call is reported and every call is answered, which is the invariant that
+keeps the next turn from being rejected — but nothing here answers one. A turn
+reports its result and the projection words it, so the report is the answer;
+`_ran` is only the ShellResult a command hands back, said as the result of the
+call that asked for it. See "One accumulation".
 
 `lib/domain/ask.dart` holds both directions of the format, `askAnswers` beside
 `askAnswersFrom`, so the round trip is one file. `askQuestionsFrom` is
@@ -273,7 +276,15 @@ counter leaves out, for the same reason.
 
 `task` spawns a sub-agent with its own session under the named `@agent`'s
 prompt, runs it to completion headless, and returns its final text as the tool
-result. The sub-agent shares the parent's model, shell, and workspace, but
+result. That text is read off the session when the run ends rather than
+collected from the deltas as they stream — the session is the sub-agent's whole
+transcript, so one carried on after an interruption answers with both halves,
+which is what the single `task` call that asked for it is owed. Collecting the
+deltas answered with the half after the interruption, and the empty-buffer
+fallback underneath it reached into the session and answered with the half
+before; which of the two you got turned on whether the second half said
+anything. See "One accumulation". The sub-agent shares the parent's model,
+shell, and workspace, but
 sees nothing of the parent's conversation — the prompt is its whole task. It
 has no `task` (sub-agents do not fan out), no `ask_user` (nobody answers), and
 runs under `ApproveMode.never`: a fan-out of 75 voters is not usable if each

@@ -109,6 +109,17 @@ Future<List<LlmAttachment>> _attachments(Message message, ResourceLoader load) a
   return loaded.nonNulls.toList();
 }
 
+/// One turn's reply as the provider messages it becomes: one per response, each
+/// followed by the results answering its calls. What a running turn puts in
+/// front of the model, and what a reload rebuilds — the same function, so there
+/// is nothing to keep level. See "One accumulation" in `lib/domain/CLAUDE.md`.
+Iterable<LlmMessage> assistantMessages(List<MessagePart> parts) =>
+    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts));
+
+/// A reply's date is not read by anything that words one, so a turn being
+/// assembled has none to give.
+final _noDate = DateTime.fromMillisecondsSinceEpoch(0);
+
 Iterable<LlmMessage> _assistant(Message message) sync* {
   // Over the whole message rather than per response: a result is paired to its
   // call by id, and one that landed in a later response than the call it
@@ -176,7 +187,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         toolCallId: call.id,
         text: result == null
             ? _interruptedText(call.name)
-            : toolResultText(call.name, result),
+            : _toolResultText(call.name, result),
       );
     }
   }
@@ -199,37 +210,57 @@ List<List<MessagePart>> _responses(List<MessagePart> parts) {
   return responses;
 }
 
+/// Enumerated rather than defaulted: a new part that carries a `responseId`
+/// and is not named here groups into the response before it, which is a wrong
+/// answer no test would ask about. See "One accumulation".
 String? _responseIdOf(MessagePart part) => switch (part) {
       TextPart(:final responseId) ||
       ReasoningPart(:final responseId) ||
       ToolCallPart(:final responseId) =>
         responseId,
-      _ => null,
+      ToolResultPart() ||
+      ShellRunPart() ||
+      FilePart() ||
+      ArtifactPart() ||
+      ErrorPart() =>
+        null,
     };
 
 /// **How a tool's outcome is worded for a model, and the only place it is.**
-/// The agent answers a call with this as the turn runs and the projection words
-/// that same result again out of the log; two expressions of it is two things to
-/// keep level, which is the bug this file exists to make impossible.
+/// A turn reports its results and nothing else: the model is answered with this,
+/// off the part that was reported, whether the turn is running now or being read
+/// back out of the log.
 ///
 /// An `ask_user` that was answered reads as the answers themselves — it is the
 /// user talking, not a command reporting. One that failed does not: the reason
 /// is in `exceptionInfo` and the answers are empty, so it reads as any other
 /// failure would.
-String toolResultText(String tool, ToolResult result) =>
-    tool == askToolName && result.returnCode == 0
-        ? result.output
-        : observation(
-            returnCode: result.returnCode,
-            output: result.output,
-            exceptionInfo: result.exceptionInfo,
-          );
+String _toolResultText(String tool, ToolResult result) =>
+    tool == askToolName && result.returnCode == 0 ? result.output : _observed(result);
+
+/// [observation] of a result, memoised on the result itself. A running turn
+/// re-words its whole reply after every step — see "One accumulation" — and
+/// encoding a ten-kilobyte command output as JSON forty times over is the bulk
+/// of what that costs. The result is an immutable value in an immutable part,
+/// so the same instance always words the same way; every instance a reload
+/// builds is fresh and simply misses.
+///
+/// Only this branch is memoised, and that is deliberate: it is the expensive
+/// one, and it is the one that does not depend on which tool was called, so
+/// the result alone is the whole of the key.
+String _observed(ToolResult result) => _observations[result] ??= observation(
+      returnCode: result.returnCode,
+      output: result.output,
+      exceptionInfo: result.exceptionInfo,
+    );
+
+final _observations = Expando<String>("observation");
 
 /// A call whose result never landed, which is a turn killed between making it
 /// and writing the answer down. One wording for every tool: which one it was is
 /// in the call the model can already see, and refining "it may not have run"
 /// per tool is second-guessing an interruption nothing here witnessed. Split
-/// only where [toolResultText] splits — an `ask_user` is answered in prose either
+/// only where [_toolResultText] splits — an `ask_user` is answered in prose either
 /// way, never as a command's outcome.
 String _interruptedText(String tool) =>
     tool == askToolName ? _askInterrupted : _interrupted;

@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -569,6 +570,38 @@ void main() {
       expect(shell.killed, ["npm install"]);
       expect(client.sent, hasLength(1));
       expect(events.last, isA<DoneEvent>());
+    });
+
+    // A call the stop got to first is one the agent knows did not run. Left
+    // unreported it is a call with no result in the log, which a reload can
+    // only guess about — and guesses cautiously, "may or may not have run".
+    // Reporting it is also what keeps the live session and a reload agreeing.
+    test("a call the stop beat is reported rather than left to a guess", () async {
+      final client = FakeLlmClient([
+        [
+          LlmCompletion(
+            message: const LlmMessage(role: LlmRole.assistant, toolCalls: [
+              LlmToolCall(id: "c1", name: "bash", argumentsJson: '{"command":"first"}'),
+              LlmToolCall(id: "c2", name: "bash", argumentsJson: '{"command":"second"}'),
+            ]),
+          ),
+        ],
+      ]);
+      late BuiltinAgent agent;
+      final events = <AgentEvent>[];
+      // Stop while the first is running, so the second is never reached.
+      final done = (agent = agentOver(client, respond: (command) {
+        if (command == "first") unawaited(agent.cancel());
+        return ok("");
+      })).run(userMessage("do both")).forEach(events.add);
+      await done;
+
+      final answered = events.whereType<ToolResultEvent>().toList();
+      expect(answered.map((e) => e.result.callId), ["c1", "c2"]);
+      expect(answered.last.result.exceptionInfo, contains("not executed"));
+      // Paired with its call, or the projection has nothing to hang it on and
+      // the model is never told the call went unrun.
+      expect(events.whereType<ToolCallEvent>().map((e) => e.call.id), ["c1", "c2"]);
     });
   });
 

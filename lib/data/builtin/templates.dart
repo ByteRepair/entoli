@@ -303,6 +303,12 @@ String shellRunTranscript({
 /// `projection.dart`.
 const notExecuted = "This command was not executed.";
 
+/// The same for a sub-agent a stop reached before it began.
+const notStarted = "This sub-agent was not started.";
+
+/// And for one a stop reached while its siblings were still being started.
+const turnStopped = "The turn was stopped.";
+
 /// The "About the user" block appended to the system prompt when a profile is
 /// set. Only non-null fields are emitted; an empty profile produces nothing,
 /// so a chat with no profile set gets the same system prompt as before.
