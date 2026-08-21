@@ -118,25 +118,34 @@ a better one: a file coming in has to be told which workspace it belongs in, and
 `FLAG_SUPPORTS_CREATE` and `createDocument`/`deleteDocument` beside what is there
 rather than a change to any of it.
 
-**The tree is the on-disk layout, not a view of it.** The root is the default
-project — which *is* the data directory — so its children are that project's
-shared `workspace/`, a folder per chat in it, and a folder per named project,
-which is where `projects/` already puts them; a named project holds the same two
-kinds of thing. Each is named after whatever owns it, since every workspace is a
-directory called `workspace`: a chat by its title, a project's shared one by the
-word the explorer uses.
+**The tree is the on-disk layout, not a view of it.** The root is every project,
+which is what `projects/` holds; a project's children are its shared
+`workspace/` and, named by title, the folder each of its chats works in — those
+being folders inside that workspace rather than beside the conversations, so
+opening the shared one reaches them too. A workspace is a directory called
+`workspace`, so it is named by the word the explorer uses; a chat's is named by
+the title in its `state.json`, which lives with the conversation rather than in
+the folder named after it.
 
-A document id is either a project — `:` for the default one, `:<name>` for a
-named one — or a path relative to the data directory, which is what every file
-in a workspace is. Neither can be read as the other: a project name is never
-empty and a real path always starts `workspace`, `chats` or `projects`.
+A document id is either a project — `:` for the root, `:<name>` for one — or a
+path relative to the data directory, which is what every file in a workspace is.
+Neither can be read as the other: a real path always starts `projects`.
 `workspaceDepth` is the whole of what a path can reach — it has to name
-`[projects/<name>/]workspace` or `[projects/<name>/]chats/<id>/workspace` before
-anything under it resolves, so `resources/`, `subagents/`, `conv.jsonl` and
-`settings.json` are not in the tree and cannot be asked for. `projectOf` holds a
-project id to `AppConfig.projectDir`'s rule for the same reason, and why both
-are needed is worth saying: a tree grant lets the app holding it compose ids of
-its own, so `:..` is an id that arrives rather than one that was handed out.
+`projects/<name>/workspace` before anything under it resolves, so `chats/`, with
+`conv.jsonl`, `resources/` and `subagents/` in it, and `settings.json` beside
+them, are not in the tree and cannot be asked for. `projectOf` holds a project
+id to `AppConfig.projectDir`'s rule for the same reason, and why both are needed
+is worth saying: a tree grant lets the app holding it compose ids of its own, so
+`:..` is an id that arrives rather than one that was handed out.
+
+Kotlin's `isProjectDir` is Dart's `isProjectName` bar its refusal of `default`:
+Dart calls the default project `null` and has no use for the string, where here
+it is a directory like any other.
+
+A data directory still in the layout that came before this one reads as empty.
+Migrating it is `AppConfig.migrate`'s, and it happens the next time the app is
+launched; doing it from here would be a second copy of that with no engine
+running to check the result.
 
 Paths are then resolved canonically and checked against the workspace they came
 out of, on a listing as well as on an open. The agent's own commands run in these

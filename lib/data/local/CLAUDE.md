@@ -145,6 +145,26 @@ nothing else in the app has to learn that commands are running somewhere else.
 The workspace explorer, the `DocumentsProvider` and a resend of an old turn all
 keep working with no knowledge of any of this.
 
+**`HOME` inside the guest is the project's workspace, not `/root`.** The rootfs
+is one directory shared by every project and outside what a backup carries, so a
+`~/.gitconfig`, an `npm` cache or a key written there belongs to whichever chat
+wrote it last and is gone on a reinstall. The project workspace is the project's,
+is backed up, and is the directory the chat's own working directory sits in — so
+`cd ~` from a turn reaches the workspace the model is already told to leave work
+in, and one project is one environment. What it costs is that dotfiles and tool
+caches are among the project's files: the workspace explorer lists them and a
+backup carries them.
+
+Per project rather than per chat because that is what an environment is for —
+a clone or an installed package is worth having in the next conversation, and a
+per-chat `HOME` would fetch it again every time.
+
+It is `LocalShell` that sets it, from the `home` its caller passes beside `cwd`:
+`prootSandbox` is built once for the app and cannot know which project is
+running. Only inside a guest — on a desktop `HOME` is the user's own and the
+tools there expect what is in it — which is the same "am I in a guest" branch
+the file already makes three times.
+
 **A `Sandbox` replaces the `Toolset` rather than layering over it.** Every path
 the host toolset names is the host's, and a `TMPDIR` under the app's own
 directory is not where a guest's `/tmp` is. So the guest gets the guest's `PATH`

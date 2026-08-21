@@ -2,11 +2,12 @@ import "../../domain/rootfs.dart";
 import "../../domain/shell.dart";
 
 /// How a command is run inside a downloaded Linux: the proot invocation, the
-/// environment on both sides of it, and the sentence the model is told.
+/// environment on both sides of it bar `HOME`, and the sentence the model is
+/// told.
 ///
 /// A pure function over paths, deliberately — what proot is asked to do is the
-/// whole of this feature's behaviour, and it is the one part of it that can be
-/// pinned by a test on a machine with no Android on it.
+/// part of this feature that can be pinned by a test on a machine with no
+/// Android on it.
 Sandbox prootSandbox({
   required Proot proot,
   required Rootfs rootfs,
@@ -57,7 +58,7 @@ Sandbox prootSandbox({
         "PROOT_TMP_DIR": proot.tmpDir,
         // Everything below this line is the guest's rather than proot's.
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "HOME": "/root",
+        // No `HOME`: `LocalShell` sets it, to the project's workspace.
         "LANG": "C.UTF-8",
       },
       description: "${rootfs.describe(abi)}, in which ${rootfs.packageManager} "

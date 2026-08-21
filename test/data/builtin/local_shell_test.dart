@@ -7,18 +7,24 @@ import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/domain/shell.dart";
 
 void main() {
+  /// The project workspace and, inside it, the chat's own — what the two
+  /// arguments to `start` are on a real run.
+  late Directory home;
   late Directory workspace;
 
-  setUp(() => workspace = Directory.systemTemp.createTempSync("agent_chat_shell_"));
+  setUp(() {
+    home = Directory.systemTemp.createTempSync("agent_chat_shell_");
+    workspace = Directory(p.join(home.path, "chats", "c1"))..createSync(recursive: true);
+  });
   tearDown(() {
-    if (workspace.existsSync()) workspace.deleteSync(recursive: true);
+    if (home.existsSync()) home.deleteSync(recursive: true);
   });
 
   Future<dynamic> run(String command,
           {Duration timeout = const Duration(seconds: 10),
           Map<String, String> env = const {}}) =>
       LocalShell(environment: () => env)
-          .start(command, cwd: workspace.path, timeout: timeout)
+          .start(command, cwd: workspace.path, home: home.path, timeout: timeout)
           .result;
 
   test("reports what the command printed and the code it exited with", () async {
@@ -97,7 +103,8 @@ void main() {
 
   test("killing it early reports the interruption rather than an exit code", () async {
     final run = LocalShell()
-        .start("sleep 30", cwd: workspace.path, timeout: const Duration(seconds: 30));
+        .start("sleep 30",
+            cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 30));
     await Future<void>.delayed(const Duration(milliseconds: 100));
     await run.kill();
 
@@ -111,6 +118,12 @@ void main() {
 
     expect(result.returnCode, isNot(0));
     expect(result.output, contains("not found"));
+  });
+
+  test("off a guest, home is left as the machine's own", () async {
+    final result = await run(r'echo "$HOME"');
+
+    expect(result.output.trim(), Platform.environment["HOME"]);
   });
 
   test("what the model is told names the shell, and the tools beside it", () {
@@ -143,7 +156,10 @@ void main() {
           environment: () => settings,
           tools: tools,
           sandbox: () => sandbox ?? guest(),
-        ).start(command, cwd: workspace.path, timeout: const Duration(seconds: 10)).result;
+        )
+            .start(command,
+                cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 10))
+            .result;
 
     test("the command is run by what the sandbox names, not by the machine's shell",
         () async {
@@ -172,6 +188,18 @@ void main() {
       );
 
       expect(result.output.trim(), "en_GB.UTF-8");
+    });
+
+    test("home is the project's own workspace, not the guest's /root", () async {
+      final result = await inGuest(r'echo "$HOME"');
+
+      expect(result.output.trim(), home.path);
+    });
+
+    test("a home from settings still wins over the workspace", () async {
+      final result = await inGuest(r'echo "$HOME"', settings: {"HOME": "/root"});
+
+      expect(result.output.trim(), "/root");
     });
 
     test("what the model is told is the guest, not the machine it is on", () {
@@ -217,7 +245,8 @@ void main() {
 
     test("and a command sent to it anyway fails rather than throwing", () async {
       final result = await LocalShell(shell: () => null)
-          .start("echo hi", cwd: workspace.path, timeout: const Duration(seconds: 1))
+          .start("echo hi",
+              cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 1))
           .result;
 
       expect(result.returnCode, -1);

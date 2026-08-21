@@ -115,6 +115,9 @@ class FakeShell extends Shell {
   /// Where each of [ran] was started, in step with it.
   final List<String> cwds = [];
 
+  /// The `HOME` each of [ran] was given, in step with it.
+  final List<String> homes = [];
+
   final List<String> killed = [];
 
   /// Commands that never finish on their own, so a test can drive an abort.
@@ -127,9 +130,11 @@ class FakeShell extends Shell {
   String get platformDescription => "TestOS 1.0 test";
 
   @override
-  ShellRun start(String command, {required String cwd, required Duration timeout}) {
+  ShellRun start(String command,
+      {required String cwd, required String home, required Duration timeout}) {
     ran.add(command);
     cwds.add(cwd);
+    homes.add(home);
     return _FakeRun(this, command);
   }
 }
