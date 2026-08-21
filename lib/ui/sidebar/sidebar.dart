@@ -10,6 +10,7 @@ import "../settings/settings_page.dart";
 import "../widgets/anchored_menu.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/dialogs.dart";
+import "../workspace/workspace_page.dart";
 import "chat_groups.dart";
 import "project_settings_page.dart";
 
@@ -116,6 +117,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
               child: Row(
                 children: [
                   const Expanded(child: _ProjectMenu()),
+                  // The default project is the data directory and has no
+                  // settings page, so the slot goes straight to the one thing
+                  // that page would have held.
                   if (project != null)
                     IconButton(
                       icon: const Icon(Icons.settings),
@@ -123,6 +127,19 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => ProjectSettingsPage(project: project),
+                        ),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.folder_outlined),
+                      tooltip: "$defaultProjectLabel workspace",
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => WorkspacePage(
+                            root: ref.read(appConfigProvider).projectWorkspaceDir(),
+                            title: "$defaultProjectLabel workspace",
+                          ),
                         ),
                       ),
                     ),

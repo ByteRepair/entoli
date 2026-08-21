@@ -11,6 +11,7 @@ import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
+import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 
 import "../harness.dart";
@@ -280,6 +281,32 @@ void main() {
 
       expect(app.container.read(selectedProjectProvider), isNull);
       expect(find.text("Default"), findsOneWidget);
+    });
+
+    // The slot beside the switcher is whatever the project it names can be
+    // asked about: a named one has a settings page, the default one has only
+    // its workspace.
+    testWidgets("the default project's button goes to its workspace", (tester) async {
+      File("${app.config.projectWorkspaceDir()}/shared.md").writeAsStringSync("x");
+      await pumpBeside(tester);
+
+      expect(find.byTooltip("Project settings"), findsNothing);
+      await tester.tap(find.byTooltip("Default workspace"));
+      await settleIo(tester);
+
+      expect(find.text("shared.md"), findsOneWidget);
+    });
+
+    testWidgets("a named project's still goes to its settings", (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await pumpBeside(tester);
+      await switchTo(tester, "work");
+
+      expect(find.byTooltip("Default workspace"), findsNothing);
+      await tester.tap(find.byTooltip("Project settings"));
+      await settleIo(tester);
+
+      expect(find.byType(ProjectSettingsPage), findsOneWidget);
     });
 
     testWidgets("only the chats of the project shown are listed", (tester) async {
