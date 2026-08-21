@@ -1,5 +1,22 @@
 # The look of the app, and the keyboard
 
+## Opening a link
+
+`PlatformLinkOpener` is here rather than under `core/platform/` because it is a
+page, not a port. What it dispatches on is the platform, which is what filed it
+there to begin with, but two of its three answers are a `Navigator.push` of a
+webview it also defines — it takes a `BuildContext`, builds `Scaffold`s and
+`AppBar`s, and reaches the shared `copyToClipboard` the rest of the UI uses.
+Under `core/` that last one was the only import in the tree pointing from
+`core/` back into `ui/`, which is the direction that says a file is on the wrong
+side of a line.
+
+What stayed behind is what genuinely is a port: the artifact server and the two
+artifact openers under `core/platform/io/` and `core/platform/web/`, still
+reached through the conditional import that keeps `dart:io` off the web and
+`package:web` off a native build. The `LinkOpener` interface stays in `domain/`,
+which is what lets `main` inject it and the tests fake it.
+
 ## The theme
 
 One palette, seeded from `entoliIndigo` — the colour the icon sits on, which the
