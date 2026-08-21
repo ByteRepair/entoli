@@ -100,10 +100,9 @@ class LocalShell extends Shell {
       environment: {
         ..._defaults,
         ...?sandbox == null ? tools?.environment : sandbox.environment,
-        // The chat's own workspace rather than the guest's `/root`, which is
-        // one directory every chat would share and no backup would carry. Only
-        // inside a guest: on a desktop `HOME` is the user's own, and the tools
-        // there expect to find what is in it.
+        // The guest's `/root` is one directory every chat would share; the
+        // workspace is the chat's own. Guest only — a desktop's `HOME` is the
+        // user's, and the tools there expect what is in it.
         if (sandbox != null) "HOME": cwd,
         ..._environment(),
       },

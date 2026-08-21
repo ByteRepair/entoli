@@ -86,8 +86,7 @@ void main() {
     expect(sandbox.command, contains("-0"));
   });
 
-  test("the guest's own PATH, not the host's, and no HOME — the chat's "
-      "workspace is that, and only the shell knows it", () {
+  test("the guest's own PATH, not the host's, and no HOME", () {
     final sandbox = build();
 
     expect(sandbox.environment["PATH"], contains("/usr/bin"));
