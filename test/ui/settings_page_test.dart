@@ -35,7 +35,7 @@ void main() {
       expect(find.byIcon(Icons.menu), findsNothing);
       expect(tile("Providers"), findsOneWidget);
       // Beside the list, so the page opens on a category as well as on them.
-      expect(find.text("Default workspace"), findsOneWidget);
+      expect(find.text("Appearance"), findsOneWidget);
     });
 
     testWidgets("and are the page itself where there is not", (tester) async {
@@ -46,7 +46,7 @@ void main() {
       expect(tile("Providers"), findsOneWidget);
       expect(find.byIcon(Icons.menu), findsNothing);
       expect(find.byType(Drawer), findsNothing);
-      expect(find.text("Default workspace"), findsNothing);
+      expect(find.text("Appearance"), findsNothing);
     });
 
     testWidgets("a category is then a page over it, left by the back key", (tester) async {
@@ -115,7 +115,6 @@ void main() {
 
     // scrollTo ends in ensureVisible, which throws unless the finder matches
     // exactly one widget — reaching each section is the assertion.
-    await scrollTo(tester, find.text("Default workspace"));
     await scrollTo(tester, find.text("Appearance"));
     await scrollTo(tester, find.text("Agent"));
     await scrollTo(tester, find.text("Environment"));
@@ -123,7 +122,7 @@ void main() {
 
     await openCategory(tester, SettingsCategory.llms);
     expect(find.text("New chats"), findsOneWidget);
-    expect(find.text("Default workspace"), findsNothing);
+    expect(find.text("Appearance"), findsNothing);
 
     await openCategory(tester, SettingsCategory.providers);
     expect(find.text("Add provider"), findsOneWidget);

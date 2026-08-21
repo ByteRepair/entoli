@@ -8,8 +8,10 @@ import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
 
-/// The row that opens the explorer, on the chat, project and app settings pages
-/// alike. All three hold a workspace and none has anything else to say about it.
+/// The row that opens the explorer, on the chat and project settings pages
+/// alike. Both hold a workspace and neither has anything else to say about it.
+/// The default project has no settings page, so its workspace is a button in
+/// the sidebar rather than a row.
 class WorkspaceTile extends StatelessWidget {
   const WorkspaceTile({super.key, required this.root, required this.title});
 

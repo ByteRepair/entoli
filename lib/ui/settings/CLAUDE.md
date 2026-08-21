@@ -31,8 +31,7 @@ exported is found without having to be pasted in. Old files with the former
 next save.
 
 The settings page is nine categories, picked from a panel beside it or, below
-`navBreakpoint`, from a page of their own. **General** is the app itself: the
-default project's workspace (which has nowhere else to be reached from),
+`navBreakpoint`, from a page of their own. **General** is the app itself:
 **Appearance** — the theme and the app icon, which are the two things the app
 looks like — the **Agent** — command approval mode and the classifier model,
 which travel together because auto mode is unusable without one — the

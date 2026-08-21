@@ -4,8 +4,8 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
-import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
+import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/widgets/formatting.dart";
 import "package:agent_chat/ui/workspace/workspace_page.dart";
 
@@ -407,11 +407,11 @@ void main() {
       expect(find.text("in-project.txt"), findsOneWidget);
     });
 
-    testWidgets("the settings page opens the default workspace", (tester) async {
+    testWidgets("the sidebar opens the default project's workspace", (tester) async {
       seed(files: ["shared.md"]);
 
-      await pumpSettings(tester, app, SettingsCategory.general);
-      await tester.tap(find.text("Workspace"));
+      await app.pump(tester, const SizedBox(width: 280, child: Sidebar()));
+      await tester.tap(find.byTooltip("Default workspace"));
       await settleIo(tester);
 
       expect(find.text("Default workspace"), findsOneWidget);
