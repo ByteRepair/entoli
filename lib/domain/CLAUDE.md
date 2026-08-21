@@ -210,6 +210,75 @@ build" are one expression rather than two kept level by hand. It is why
 attachments: the pieces travelling separately is what let them be assembled two
 ways.
 
+### One accumulation
+
+Wording a turn once was half of it. A turn was still *built up* twice — the
+agent appending `LlmMessage`s to the session as it went, the recorder
+accumulating `MessagePart`s that became `conv.jsonl` — and every divergence
+found so far was one of the two having drifted from the other. That is a kind of
+bug that regenerates: fix the wording and the next feature adds a new place to
+forget.
+
+So the agent no longer accumulates. It emits events, as it always did, and
+`_recorded` puts every one of them through a `TurnRecorder.parts()` on its way
+out — the same class, the same `handle`, that `ChatController` uses to write the
+log. What the session sends is then a function of those parts:
+
+    scaffolding + prefix + projectionOf(the turn's parts so far)
+
+`_sayWhatWasSaid` rebuilds the last term after every step and once when the turn
+ends, through `BuiltinSession.replaceTurn`, which is the only thing that writes
+to a session while a turn runs. `_answer` and `_answerRun` are gone; so is
+`session.messages.add(completion.message)`. A tool result reaches the model
+because it was reported, not because it was also appended.
+
+**This is what makes parity structural rather than tested.** `AgentEvent` and
+`MessagePart` are both sealed, and the switches over them — `TurnRecorder.handle`
+and `_inResponse`, the projection's `_assistant` and `_responseIdOf`, and
+`SubAgentRunner._drive` — enumerate every member with no default. Add a chat
+feature and the compiler stops in the places that decide what it means to the
+model, and deciding once gives the live turn, the reload, the regenerate and the
+KV prefix together. Before, the compiler caught the projection half and said
+nothing about the live half, which was a hand-written append. The two
+`responseId` switches were the exception until this landed, and the pair matters:
+a part stamped with no response reads back inside whichever response came before
+it, which is a wrong answer nothing would have asked about.
+
+What it costs is that a turn re-words itself once per step, where the old append
+worded each result once and kept it. The expensive half of that is encoding a
+long command's output as JSON, so `observation` is memoised on the result it
+words — the results are immutable and only the last response can still change.
+The rest is a `StringBuffer` per response, which is what the old path paid to
+send the session anyway. A cheaper shape exists if it ever bites: only the last
+response's messages can change between steps, so the ones before it could be
+kept. That rests on no result landing in a later response than its call, which
+is the same thing the fan-out ordering below establishes.
+
+Two things stay outside, and they are the same two: the system prompt and the
+resume nudge. Neither is in the log, both say how to run *this* turn rather than
+what was said in it, and both are rewritten per turn rather than accumulated —
+`_setSystemPrompt` and `BuiltinSession.forTurn`. They are now the only things
+placed into a session by hand, which is a better home for the exception than one
+hidden among a hundred appends.
+
+The ordering it fixes is worth naming. A `task` fan-out used to emit each call
+as its sub-agent resolved, so the log held them in finishing order while the
+live session held the model's own — and the hand-answering loop underneath had
+a comment explaining that it answered "in the original order, so the session
+messages pair up". The calls now go out together, in the order the model made
+them, and the projection pairs each result back by id. The comment went with the
+loop.
+
+**What a new tool owes the turn is one rule: report the call, then report the
+result.** The projection builds a response's calls from its `ToolCallPart`s and
+looks each result up by id, so a result whose call was never reported has
+nothing to hang on and is dropped — silently, and now from the live session too,
+since that is the same list. Stopping a turn used to be exactly this: the calls
+it never reached were answered "not executed" into the session and nothing was
+reported, so the log had the answer's call missing. Both halves go out now, and
+the model is told a call it made went unrun instead of the call quietly ceasing
+to have happened.
+
 That puts the whole burden on the log, which now has to hold everything the
 wording needs. The date is the message's own `createdAt`, so a regenerate — which
 re-runs the message rather than a copy of its text — sends the date that turn
@@ -219,9 +288,9 @@ left named rather than failing the turn, which is what every message did before
 this read any. And what a `/command` or an `@agent` stood for is written into the
 message when it is composed — see "Commands and agents".
 
-**`resume` was the last thing that could break this, and the answer was to
-notice what its message is.** Carrying on an interrupted turn puts a user
-message in front of the model — `continueTask`, the reason it is being asked
+**`resume` is the one message a turn shows the model that nobody said.**
+Carrying on an interrupted turn puts a user message in front of the model —
+`continueTask`, the reason it is being asked
 again — and nothing logs it, because nobody said it. Left in the session it made
 a chat resumed in this process hold a message a reload could not rebuild, so
 every later turn in that chat sent a prefix `conv.jsonl` disagreed with: exactly
@@ -249,11 +318,10 @@ told a reloaded one only that it existed. So any chat that had read or edited
 anything — most of them — diverged the moment it was reopened, at every one of
 those results.
 
-Now the agent builds the `ToolResult` the conversation records and answers from
-that, through the same function the projection uses. `_answered` does both in
-one go, so the log and the session cannot be handed different values in the
-first place. An `ask_user` still reads as the answers themselves rather than as
-a command's outcome — it is the user talking — but only when it was answered:
+Now a turn reports the `ToolResult` the conversation records and the projection
+words it — the agent does not answer the model at all, so there is nothing to
+hand a different value to. An `ask_user` still reads as the answers themselves
+rather than as a command's outcome — it is the user talking — but only when it was answered:
 one that failed has its reason in `exceptionInfo` and no answers, so it reads
 like any other failure. That last part was wrong on both sides before, and
 silently: the model was told nothing at all.

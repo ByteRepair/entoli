@@ -104,7 +104,11 @@ void main() {
       final result = await runner.resume("general", "call-9");
 
       expect(result.returnCode, 0);
-      expect(result.output, contains("and finished"));
+      // Both halves. The `task` call that asked for this gets one answer, and
+      // what the sub-agent said before it was interrupted is part of it —
+      // reading only the deltas this run streamed answered with the second
+      // half alone.
+      expect(result.output, "halfway\nand finished");
       // The same message, carried on rather than a second one beside it.
       final messages = await log.read("call-9");
       expect(messages, hasLength(1));

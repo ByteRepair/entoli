@@ -205,6 +205,23 @@ LlmCompletion saidOnly(String text, {String? finishReason}) => LlmCompletion(
       message: LlmMessage(role: LlmRole.assistant, text: text),
     );
 
+/// One assistant turn that spawns several sub-agents at once, the fan-out a
+/// `task` batch is for. [tasks] is agent-name to prompt, and the call ids are
+/// `t1`, `t2`, ... in the order given — which is the order the model made them.
+LlmCompletion taskCalls(List<(String, String)> tasks) => LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        toolCalls: [
+          for (final (i, (agent, prompt)) in tasks.indexed)
+            LlmToolCall(
+              id: "t${i + 1}",
+              name: "task",
+              argumentsJson: jsonEncode({"agent": agent, "prompt": prompt}),
+            ),
+        ],
+      ),
+    );
+
 /// One assistant turn that spawns a sub-agent via the `task` tool.
 LlmCompletion taskCall(String agent, String prompt, {String id = "task-1", String text = ""}) =>
     LlmCompletion(

@@ -104,7 +104,6 @@ class SubAgentRunner {
     String? callId,
     Stream<AgentEvent> Function(BuiltinAgent) start,
   ) async {
-    final buffer = StringBuffer();
     String? error;
 
     final agent = BuiltinAgent(
@@ -133,11 +132,27 @@ class SubAgentRunner {
       await for (final event in start(agent)) {
         recorder?.handle(event);
         switch (event) {
-          case TextDelta(:final text):
-            buffer.write(text);
           case ErrorEvent(:final message):
             error = message;
-          default:
+          // Named rather than defaulted, so a new event is decided about here
+          // too: what a sub-agent hands back is read off the session below, so
+          // this watches for the one thing the session cannot say.
+          case TextDelta():
+          case ReasoningDelta():
+          case ReasoningEnd():
+          case ResponseStart():
+          case ToolCallEvent():
+          case ToolResultEvent():
+          case ShellRunEvent():
+          case ArtifactEvent():
+          case ApprovalRequestEvent():
+          case QuestionRequestEvent():
+          case SubAgentStartEvent():
+          case SubAgentEndEvent():
+          case RetryEvent():
+          case StatusEvent():
+          case InfoEvent():
+          case DoneEvent():
             break;
         }
       }
@@ -151,21 +166,28 @@ class SubAgentRunner {
       recorder?.dispose();
     }
 
-    // Text that was in the completion message but never streamed as a delta —
-    // the fake client does this, and a provider may too. Read it from the
-    // session so nothing the model said is lost.
-    if (buffer.isEmpty) {
-      for (final message in session.messages) {
-        if (message.role == LlmRole.assistant && message.text.isNotEmpty) {
-          buffer.write(message.text);
-        }
-      }
-    }
+    // **What it said, off the session rather than off the deltas it streamed.**
+    // The session is this sub-agent's whole transcript — see "One accumulation"
+    // — so a run that was interrupted and carried on answers with both halves,
+    // which is what the one `task` call that asked for it is owed.
+    //
+    // Collecting the deltas instead answered a resumed sub-agent with only the
+    // half it said after the interruption, and had a fallback for an empty
+    // buffer that reached into the session and so answered with only the half
+    // before it. Neither is the answer, and which one you got turned on whether
+    // the second half happened to say anything.
+    // One line per response, the way `Message.plainText` joins the parts they
+    // came from — a response that only called a tool contributes nothing.
+    final said = [
+      for (final message in session.messages)
+        if (message.role == LlmRole.assistant && message.text.isNotEmpty)
+          message.text,
+    ].join("\n");
 
     if (error != null) {
-      return ShellResult.failed(error, output: buffer.toString());
+      return ShellResult.failed(error, output: said);
     }
-    final output = buffer.toString().trim();
+    final output = said.trim();
     if (output.isEmpty) {
       return const ShellResult.failed("The sub-agent produced no output.");
     }
