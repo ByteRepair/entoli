@@ -16,6 +16,13 @@ desktop entry, named for the application id the way everything else on Linux
 is. The icon it takes is `web/icons/Icon-512.png` and its file name comes from
 the entry's own `Icon=`, so there is one authority for that string.
 
+**`StartupWMClass=` is load-bearing.** GNOME matches a running window to a
+desktop entry by id — application id on Wayland, WM_CLASS on X11, both the
+application id here — never by `Name=`. Tools that install their own renamed
+copy of the entry (Gear Lever writes `entoli.desktop`) break that match without
+it, and the dock then shows the raw id under a generic icon; the field is what
+lets any such copy claim the window.
+
 **Nothing of GTK is bundled.** The AppImage carries the Flutter engine and the
 plugins and links against the system's GTK 3, exactly as the bundle already
 did.
