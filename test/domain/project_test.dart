@@ -32,6 +32,16 @@ void main() {
     expect(isProjectName(""), isFalse);
   });
 
+  // The default project is `null` above the filesystem and that directory
+  // below it, so a second project answering to the same name is two entries
+  // for one place.
+  test("the default project's own directory is not a name a project can have",
+      () {
+    expect(isProjectName(defaultProjectDir), isFalse);
+    expect(projectNameFrom("Default"), isNull);
+    expect(projectNameFrom("default"), isNull);
+  });
+
   test("the default project is labelled rather than left blank", () {
     expect(projectLabel(null), defaultProjectLabel);
     expect(projectLabel("work"), "work");

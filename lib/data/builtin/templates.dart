@@ -41,14 +41,16 @@ String turnPrompt({
 ## Your workspace
 
 Every command runs in this conversation's own workspace: $workspace
-It is yours; the files in it survive between turns, and no other conversation
-sees them.
+It is yours; the files in it survive between turns, and nothing else writes
+there.
 
-The project workspace is shared with every other conversation in this project:
-$projectWorkspace
+It is a folder inside the project workspace, which is shared with every other
+conversation in this project: $projectWorkspace
 Work the user will come back to — a checkout, notes, data you built up — goes
 there, so another conversation can pick it up. Write to it by path; you do not
-have to be in it.""",
+have to be in it. Anything a tool keeps in a home directory is the project's
+too, so a repository cloned or a package installed by one conversation is
+already there for the next.""",
     if (agentPrompt != null) "## Additional instructions\n\n$agentPrompt",
   ];
   return parts.join("\n\n");

@@ -312,11 +312,13 @@ void main() {
       expect(events.whereType<ErrorEvent>(), isEmpty);
     });
 
-    test("it runs in the chat's own workspace", () async {
+    test("it runs in the chat's own workspace, with the project's for a home",
+        () async {
       final backend = backendOver([], respond: (_) => ok(""));
       await send(backend, "!pwd");
 
       expect(shell.cwds, [config.workspaceDir(chatId)]);
+      expect(shell.homes, [config.projectWorkspaceDir()]);
       expect(Directory(config.workspaceDir(chatId)).existsSync(), isTrue);
     });
 
