@@ -64,6 +64,9 @@ Future<String?> startChat(BuildContext context, WidgetRef ref) async {
   return chat.state.id;
 }
 
+/// The button's tooltip and the title of the page it opens.
+const _defaultWorkspaceTitle = "$defaultProjectLabel workspace";
+
 class Sidebar extends ConsumerStatefulWidget {
   const Sidebar({super.key});
 
@@ -117,9 +120,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
               child: Row(
                 children: [
                   const Expanded(child: _ProjectMenu()),
-                  // The default project is the data directory and has no
-                  // settings page, so the slot goes straight to the one thing
-                  // that page would have held.
+                  // The default project has no settings page; the workspace is
+                  // all one would hold.
                   if (project != null)
                     IconButton(
                       icon: const Icon(Icons.settings),
@@ -133,12 +135,12 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   else
                     IconButton(
                       icon: const Icon(Icons.folder_outlined),
-                      tooltip: "$defaultProjectLabel workspace",
+                      tooltip: _defaultWorkspaceTitle,
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => WorkspacePage(
                             root: ref.read(appConfigProvider).projectWorkspaceDir(),
-                            title: "$defaultProjectLabel workspace",
+                            title: _defaultWorkspaceTitle,
                           ),
                         ),
                       ),

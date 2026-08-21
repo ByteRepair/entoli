@@ -13,6 +13,7 @@ import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/workspace/workspace_page.dart";
 
 import "../harness.dart";
 
@@ -287,14 +288,14 @@ void main() {
     // asked about: a named one has a settings page, the default one has only
     // its workspace.
     testWidgets("the default project's button goes to its workspace", (tester) async {
-      File("${app.config.projectWorkspaceDir()}/shared.md").writeAsStringSync("x");
       await pumpBeside(tester);
 
       expect(find.byTooltip("Project settings"), findsNothing);
       await tester.tap(find.byTooltip("Default workspace"));
       await settleIo(tester);
 
-      expect(find.text("shared.md"), findsOneWidget);
+      // That it is the right root is workspace_page_test's.
+      expect(find.byType(WorkspacePage), findsOneWidget);
     });
 
     testWidgets("a named project's still goes to its settings", (tester) async {

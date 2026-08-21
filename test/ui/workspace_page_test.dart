@@ -411,7 +411,6 @@ void main() {
       seed(files: ["shared.md"]);
 
       await app.pump(tester, const SizedBox(width: 280, child: Sidebar()));
-      await settleIo(tester);
       await tester.tap(find.byTooltip("Default workspace"));
       await settleIo(tester);
 
