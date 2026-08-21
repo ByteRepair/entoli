@@ -28,7 +28,10 @@ void main() {
     });
   }
 
-  Future<void> openLink(WidgetTester tester, String url) async {
+  /// Opens [url] in the in-app browser, and hands back what gets copied out of
+  /// it.
+  Future<List<String>> openLink(WidgetTester tester, String url) async {
+    final copied = clipboard(tester);
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -41,17 +44,21 @@ void main() {
     ));
     await tester.tap(find.text("open"));
     await tester.pumpAndSettle();
+    return copied;
+  }
+
+  Future<void> tapCopyLink(WidgetTester tester) async {
+    await tester.tap(find.byTooltip("Copy link"));
+    await tester.pumpAndSettle();
   }
 
   androidTest("copies the page navigated to, not the link that opened it", (tester) async {
-    final copied = clipboard(tester);
-    await openLink(tester, "https://example.com/one");
+    final copied = await openLink(tester, "https://example.com/one");
     platform.title = "Two";
     platform.delegate!.onPageFinished!("https://example.com/two");
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip("Copy link"));
-    await tester.pumpAndSettle();
+    await tapCopyLink(tester);
 
     expect(copied, ["https://example.com/two"]);
     expect(find.text("Copied link"), findsOneWidget);
@@ -59,32 +66,28 @@ void main() {
   });
 
   androidTest("a page that only rewrites its URL is still copied as it is", (tester) async {
-    final copied = clipboard(tester);
-    await openLink(tester, "https://example.com/one");
+    final copied = await openLink(tester, "https://example.com/one");
     platform.delegate!.onUrlChange!(const UrlChange(url: "https://example.com/three"));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip("Copy link"));
-    await tester.pumpAndSettle();
+    await tapCopyLink(tester);
 
     expect(copied, ["https://example.com/three"]);
   });
 
   androidTest("nothing loaded yet copies the link it was opened with", (tester) async {
-    final copied = clipboard(tester);
-    await openLink(tester, "https://example.com/one");
+    final copied = await openLink(tester, "https://example.com/one");
 
-    await tester.tap(find.byTooltip("Copy link"));
-    await tester.pumpAndSettle();
+    await tapCopyLink(tester);
 
     expect(copied, ["https://example.com/one"]);
   });
 }
 
-/// The webview, faked at the platform interface: there is no implementation on
-/// a test host and `WebViewController()` throws without one. Only the members
-/// the page calls are answered — the rest of the interface keeps its default of
-/// throwing, so a new call shows up as a failure rather than as a silent no-op.
+/// The webview, faked at the platform interface — see `test/CLAUDE.md` for why
+/// here. Only the members the page calls are answered: the rest of the
+/// interface keeps its default of throwing, so a new call shows up as a failure
+/// rather than as a silent no-op.
 class _FakeWebViewPlatform extends WebViewPlatform {
   _FakeNavigationDelegate? delegate;
   String? title;
