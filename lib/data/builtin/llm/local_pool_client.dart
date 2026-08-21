@@ -14,13 +14,13 @@ typedef LocalPoolOptions = ({
   int? contextLength,
   int maxRunning,
   int? threads,
-  int kvCacheChats,
+  int kvCachePrompts,
 });
 
 /// The pool options the settings have. One mapper so the client that reaches a
 /// model and the prefill that warms it read them the same way — the pool keys
 /// and evicts slots on these, so a warm built from a different reading would be
-/// evicted rather than reused. `kvCacheChats` collapses the "Default (10)" the
+/// evicted rather than reused. `kvCachePrompts` collapses the "Default (10)" the
 /// UI shows into the number the provider counts, so nothing else has to know
 /// that null means ten.
 LocalPoolOptions poolOptions(AppSettings settings) => (
@@ -28,14 +28,14 @@ LocalPoolOptions poolOptions(AppSettings settings) => (
       contextLength: settings.localModelContext,
       maxRunning: settings.maxLocalModels,
       threads: settings.localModelThreads,
-      kvCacheChats:
-          settings.localModelKvCacheChats ?? AppSettings.defaultKvCacheChats,
+      kvCachePrompts:
+          settings.localModelKvCachePrompts ?? AppSettings.defaultKvCachePrompts,
     );
 
 extension LocalPoolCaching on LocalPoolOptions {
   /// Whether the KV cache is on, the one place null-means-ten and zero-means-off
   /// is read as a yes/no rather than spelled out at each site that gates on it.
-  bool get kvCacheOn => kvCacheChats > 0;
+  bool get kvCacheOn => kvCachePrompts > 0;
 }
 
 /// The on-device provider, as one client over however many servers are running.
@@ -83,17 +83,17 @@ class LocalPoolClient implements LlmClient {
     // construction: a miss or a build with no slot save/restore just pays the
     // prompt the way it did before. The keys are hashed once here and handed to
     // both halves rather than recomputed. See [LocalKvCache].
-    final kv = options.kvCacheOn ? _kv : null;
-    final namespace = kv == null
-        ? null
-        : kvNamespace(
-            modelId: model,
-            contextLength: at.contextLength,
-            device: options.device,
-          );
-    final keys = kv == null ? const <String>[] : kvPrefixKeys(messages, tools);
-    if (kv != null && keys.isNotEmpty) {
-      await kv.warm(at, namespace: namespace!, keys: keys);
+    final kv = kvLookup(
+      _kv,
+      on: options.kvCacheOn,
+      modelId: model,
+      at: at,
+      device: options.device,
+      messages: messages,
+      tools: tools,
+    );
+    if (kv != null) {
+      await kv.cache.warm(at, namespace: kv.namespace, keys: kv.keys);
     }
 
     yield* _clientFor(model, at).stream(
@@ -104,12 +104,12 @@ class LocalPoolClient implements LlmClient {
       reasoningEffort: reasoningEffort,
     );
 
-    if (kv != null && keys.isNotEmpty) {
-      await kv.keep(
+    if (kv != null) {
+      await kv.cache.keep(
         at,
-        namespace: namespace!,
-        key: keys.first,
-        count: options.kvCacheChats,
+        namespace: kv.namespace,
+        key: kv.keys.first,
+        count: options.kvCachePrompts,
       );
     }
   }
