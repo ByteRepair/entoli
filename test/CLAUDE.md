@@ -74,6 +74,16 @@ keeps them apart: every downloaded model is in every picker, and only the ones
 asked for are loaded. `ready: false` is a model that will not load, which is the
 one failure the page has to draw — and reaching that row now means calling
 `serve` in the test, because the settings page no longer starts anything.
+`loading` is a completer `serve` waits on after publishing its row, which is a
+model still coming up and is where a warm-up sits.
+
+`TestApp.create(prefill: true)` builds a real `LocalPrefill` over the two fakes
+it sits between and exposes it as `app.prefill`, since what a page shows of a
+warm-up and what stopping one reaches are its own. A page drawing one has a
+spinner on it, so `pumpAndSettle` never returns and those tests pump instead.
+`FakeLocalLlm.baseUrl` is the other half, for the prefill's own tests: the
+default is a port nothing is on, and one pointed at an `HttpServer` is how
+"the prompt was never sent" is asserted at all.
 
 What the pool is actually asked to do is `llama_server_test.dart`. `llamaLaunch`
 is a pure function there for the reason `proot_test.dart` is one; the pool

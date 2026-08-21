@@ -215,8 +215,18 @@ abstract class AgentBackend {
   /// call to fill one is a call a caller can forget — leaving a model that has
   /// seen nothing of the chat to answer it fluently. Read only where the
   /// session is empty.
+  ///
+  /// [at] is the date the prompt is being logged under, and travels with it for
+  /// the reason [history] does. What the model is shown of a user turn carries
+  /// the moment it was sent, so a turn read back out of the log has to word
+  /// that the same way — see `userTurnText`. Required rather than defaulted to
+  /// the clock: a caller that logs a message under one date and sends it under
+  /// another is the bug this exists to prevent.
   Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments, List<Message> history, TurnSettings settings});
+      {List<Attachment> attachments,
+      List<Message> history,
+      TurnSettings settings,
+      required DateTime at});
 
   /// Carry on the turn [history] ends in. No prompt, because there is no new
   /// thing to say: the model is handed back what it had already done. Unlike

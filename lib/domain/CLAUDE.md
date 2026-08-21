@@ -187,6 +187,38 @@ block is still open, and it is yielded there as `LlmReasoningSignature` rather
 than waiting for the completion, so the block is closed already holding it
 instead of being written to the log a second time.
 
+**A user's turn is worded once, by `userTurnText`, and both sides call it.**
+What the model is shown of a message is not what the user typed: it carries the
+moment it was sent, and the one that opens a conversation is dressed as a task
+(upstream's instance template). `BuiltinAgent` words the turn it is about to
+run and the projection words that same turn read back out of the log — and for
+a long time they worded it differently, the log holding only what was typed. So
+a chat reopened after a restart, and every regenerate, sent text that was not
+what had been sent before. Nothing was visibly wrong, which is why it lasted:
+the model answers either version. What it cost was the on-device KV cache,
+where a prefix that differs by one line is a prefix that misses, so reopening a
+long chat reprocessed the whole history — the exact wait that cache exists to
+remove.
+
+The date comes off the message's own `createdAt` rather than the clock, which
+is what makes the wording a function of what `conv.jsonl` holds and nothing
+else. It is why `at` travels with the prompt from `ChatController` down: a
+regenerate passes the date of the message it is re-running, so what it sends is
+what was sent the first time, to the byte.
+
+**Two inputs still differ, and both are known.** A `/command` turn is sent
+expanded — `_taskOf` turns `/review the parser` into the command's body — while
+the log keeps what was typed, deliberately, so a chat *reopened* projects that
+turn as the short text the live session never held. And an attachment is bytes
+on the live message and the words `(attached: notes.txt)` on the projected one,
+which is `_userText`'s doing and also deliberate: reading the file back would
+make the projection asynchronous. So the invariant holds for a plain turn and
+not for those two, which is what the test in `builtin_backend_test.dart` pins
+and no more. Closing them means either logging the expansion beside the raw
+text or handing the projection an expander, and the attachment half may not be
+worth closing at all — a message carrying an image is a different prompt from
+one naming a file, whatever the hash says.
+
 A result is worded the way the agent worded it when it ran — `observation(...)`,
 or the answers themselves for an `ask_user` — so a projected conversation is the
 one the model already answered rather than a paraphrase of it. A call whose

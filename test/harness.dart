@@ -9,6 +9,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -52,6 +53,7 @@ class TestApp {
     required this.rootfs,
     required this.localModels,
     required this.localLlm,
+    required this.prefill,
     required this.work,
     required this.container,
   });
@@ -94,6 +96,7 @@ class TestApp {
     bool proot = false,
     Set<String> localModels = const {},
     FakeLocalLlm? localLlm,
+    bool prefill = false,
     String? abi,
   }) {
     final config = tempConfig();
@@ -112,6 +115,11 @@ class TestApp {
     final onDevice = FakeLocalModelStore(installed: localModels);
     final server = localLlm ?? FakeLocalLlm(available: false);
     final work = FakeBackgroundWork();
+    // The real one over the two fakes it sits between: what a page shows of a
+    // warm-up, and what stopping one reaches, is all its own.
+    final warmUp = prefill
+        ? LocalPrefill(llm: server, background: work, warmup: testWarmup())
+        : null;
     final system = {
       if (nativeVoice.recognition) nativeRecognition.id,
       if (nativeVoice.speech) nativeSpeech.id,
@@ -132,6 +140,7 @@ class TestApp {
       rootfs: linux,
       localModels: onDevice,
       localLlm: server,
+      prefill: warmUp,
       work: work,
       container: ProviderContainer(
         overrides: [
@@ -157,6 +166,7 @@ class TestApp {
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),
+          localPrefillProvider.overrideWithValue(warmUp),
           installedLocalModelsProvider
               .overrideWith(() => InstalledLocalModels(localModels)),
           // A build with proot staged into it is an Android one, so [proot]
@@ -185,6 +195,11 @@ class TestApp {
   final FakeRootfsStore rootfs;
   final FakeLocalModelStore localModels;
   final FakeLocalLlm localLlm;
+
+  /// The warm-up, where a test asked for one — null otherwise, which is the
+  /// platform most of the suite is pretending to be.
+  final LocalPrefill? prefill;
+
   final FakeBackgroundWork work;
   final ProviderContainer container;
 
@@ -261,7 +276,10 @@ class TestApp {
   }
 
   /// `tempConfig` already registers the directory's own teardown.
-  void dispose() => container.dispose();
+  void dispose() {
+    prefill?.dispose();
+    container.dispose();
+  }
 }
 
 /// Put a whole chat on disk the way the app would have: its state, then its

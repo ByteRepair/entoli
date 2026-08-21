@@ -9,7 +9,6 @@ import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/local_kv_cache.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
-import "../../data/builtin/templates.dart";
 import "../../data/local/file_chat_store.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/app_settings.dart";
@@ -85,10 +84,11 @@ BuiltinBackend createBackend(
 /// every platform but Android. It reads the settings fresh on each run for the
 /// reason the pool's client does: they are edited between turns.
 ///
-/// The warm-up prompt is the shared preamble a real turn sends with its
-/// workspace left empty, so the body caches and only the per-chat tail is ever
-/// paid again — and the tools are [agentTools] with the defaults a normal chat
-/// on this device has, so the warmed prefix is the one those chats reuse.
+/// The warm-up prompt is `systemPrompt` and nothing else — the body a real turn
+/// sends as its first system message, with the per-chat `turnPrompt` that
+/// follows it left off. That is what makes the warm-up's shortest key equal to
+/// every chat's: the two hash the same message. The tools are [agentTools] with
+/// the defaults a normal chat on this device has, for the same reason.
 LocalPrefill? createLocalPrefill(
   BuiltinBackend backend,
   LocalLlm localLlm,
@@ -109,15 +109,10 @@ LocalPrefill? createLocalPrefill(
       return (
         options: poolOptions(now),
         messages: [
-          LlmMessage(
-            role: LlmRole.system,
-            text: systemPrompt(
-              workspace: "",
-              projectWorkspace: "",
-              platform: shell.platformDescription,
-              profile: now.profile,
-              canRunCommands: shell.canRunCommands,
-            ),
+          agentSystemMessage(
+            platform: shell.platformDescription,
+            profile: now.profile,
+            canRunCommands: shell.canRunCommands,
           ),
           const LlmMessage(role: LlmRole.user, text: "Hello"),
         ],

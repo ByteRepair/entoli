@@ -16,13 +16,23 @@ import "templates.dart";
 ///
 /// Named for the projection rather than `project`, which everywhere else in
 /// this codebase is the directory a chat lives in.
-List<LlmMessage> projectionOf(List<Message> messages) {
+/// [first] says whether the first user message in [messages] is also the first
+/// of the conversation, which is the one dressed as a task. False where this is
+/// a fragment appended to a session that already holds the rest — see
+/// `_runBypass`.
+List<LlmMessage> projectionOf(List<Message> messages, {bool first = true}) {
   final projected = <LlmMessage>[];
   for (final message in messages) {
     switch (message.role) {
       case MessageRole.user:
         final text = _userText(message);
-        if (text.isNotEmpty) projected.add(LlmMessage(role: LlmRole.user, text: text));
+        if (text.isNotEmpty) {
+          projected.add(LlmMessage(
+            role: LlmRole.user,
+            text: userTurnText(text,
+                at: message.createdAt, first: first && projected.isEmpty),
+          ));
+        }
       case MessageRole.assistant:
         projected.addAll(_assistant(message));
       case MessageRole.system:

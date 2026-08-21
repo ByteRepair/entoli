@@ -53,7 +53,7 @@ void main() {
     final repo = repoWith(AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude-sonnet-4"));
     final chat = await repo.createChat();
 
-    await repo.sendPrompt(chat.state.id, "hi").toList();
+    await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
 
     expect(backend.prompts.single.settings.provider, "anthropic");
     expect(backend.prompts.single.settings.model, "claude-sonnet-4");
@@ -65,7 +65,7 @@ void main() {
 
     pinChatModel(chat.state.id, provider: "ollama-cloud", model: "qwen-2.5");
 
-    await repo.sendPrompt(chat.state.id, "hi").toList();
+    await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
 
     expect(backend.prompts.single.settings.provider, "ollama-cloud");
     expect(backend.prompts.single.settings.model, "qwen-2.5");
@@ -77,7 +77,7 @@ void main() {
 
     pinChatModel(chat.state.id, model: "qwen-2.5");
 
-    await repo.sendPrompt(chat.state.id, "hi").toList();
+    await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
 
     expect(backend.prompts.single.settings.model, "qwen-2.5");
     expect(backend.prompts.single.settings.provider, isNull);
@@ -150,7 +150,7 @@ void main() {
       final chat = await repo.createChat(project: "work");
       await writeChatVia(repo, chat);
 
-      await repo.sendPrompt(chat.state.id, "hi").toList();
+      await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
 
       expect(backend.prompts.single.settings.project, "work");
     });
@@ -183,7 +183,7 @@ void main() {
       await writeChatVia(repo, chat);
 
       await repo.moveChat(chat.state.id, "work");
-      await repo.sendPrompt(chat.state.id, "hi").toList();
+      await repo.sendPrompt(chat.state.id, "hi", at: DateTime(2026)).toList();
 
       expect(backend.prompts.single.settings.project, "work");
     });

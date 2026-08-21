@@ -37,7 +37,7 @@ class AppSettings {
     this.localModelContext,
     this.localModelPrefill = false,
     this.localModelThreads,
-    this.localModelKvCacheChats,
+    this.localModelKvCachePrompts,
   });
 
   String? defaultModelId;
@@ -142,16 +142,20 @@ class AppSettings {
   /// the next server rather than the running one.
   int? localModelThreads;
 
-  /// How many conversation prefixes the on-device provider keeps warmed on disk,
-  /// so reopening a chat restores its KV rather than reprocessing it. Null is the
-  /// default (10) and `0` is off — nothing is written. See "Persisting the KV
-  /// cache to disk" in `lib/data/local/CLAUDE.md`.
-  int? localModelKvCacheChats;
+  /// How many prompt prefixes the on-device provider keeps warmed on disk, so
+  /// reopening a chat restores its KV rather than reprocessing it. Null is the
+  /// default (10) and `0` is off — nothing is written.
+  ///
+  /// One prompt is one request to the model, so it is neither per chat nor per
+  /// turn: a turn writes one for each step it takes, and the bound is over
+  /// every chat at once. It was called `Chats` and counted neither. See
+  /// "Persisting the KV cache to disk" in `lib/data/local/CLAUDE.md`.
+  int? localModelKvCachePrompts;
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
   /// number.
-  static const defaultKvCacheChats = 10;
+  static const defaultKvCachePrompts = 10;
 
   static AppSettings load(AppConfig config) {
     final text = config.documents.read(config.settingsFile);
@@ -188,7 +192,11 @@ class AppSettings {
         localModelContext: json["localModelContext"] as int?,
         localModelPrefill: json["localModelPrefill"] as bool? ?? false,
         localModelThreads: json["localModelThreads"] as int?,
-        localModelKvCacheChats: json["localModelKvCacheChats"] as int?,
+        // `localModelKvCacheChats` is what this was called while it was thought
+        // to count chats. Read-only, like `opencodeEnv` above: `save` writes
+        // the new name, so a file migrates itself on the next change.
+        localModelKvCachePrompts: (json["localModelKvCachePrompts"] ??
+            json["localModelKvCacheChats"]) as int?,
       );
     } catch (_) {
       return AppSettings();
@@ -248,7 +256,7 @@ class AppSettings {
         localModelContext: localModelContext,
         localModelPrefill: localModelPrefill,
         localModelThreads: localModelThreads,
-        localModelKvCacheChats: localModelKvCacheChats,
+        localModelKvCachePrompts: localModelKvCachePrompts,
       );
 
   Future<void> save(AppConfig config) async {
@@ -279,8 +287,8 @@ class AppSettings {
       if (localModelContext != null) "localModelContext": localModelContext,
       if (localModelPrefill) "localModelPrefill": localModelPrefill,
       if (localModelThreads != null) "localModelThreads": localModelThreads,
-      if (localModelKvCacheChats != null)
-        "localModelKvCacheChats": localModelKvCacheChats,
+      if (localModelKvCachePrompts != null)
+        "localModelKvCachePrompts": localModelKvCachePrompts,
     }));
   }
 }

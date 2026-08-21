@@ -379,10 +379,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setLocalThreads(int? threads) =>
       _applyLocal((s) => s.localModelThreads = threads);
 
-  /// How many chats to keep warmed on disk, null for the default (ten) and `0`
-  /// for off.
-  Future<void> setLocalKvCacheChats(int? chats) =>
-      _applyLocal((s) => s.localModelKvCacheChats = chats);
+  /// How many prompt prefixes to keep warmed on disk, null for the default
+  /// (ten) and `0` for off.
+  Future<void> setLocalKvCachePrompts(int? prompts) =>
+      _applyLocal((s) => s.localModelKvCachePrompts = prompts);
 
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value

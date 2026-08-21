@@ -4,7 +4,11 @@ import "dart:convert";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 
+import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
+import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/domain/app_icon.dart";
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_restart.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/attachment_picker.dart";
@@ -129,6 +133,23 @@ class FakeBackgroundWork implements BackgroundWork {
 
   void stop([BackgroundJob job = BackgroundJob.turns]) => _stops.add(job);
 }
+
+/// The prefill's [Warmup], with the settings a test cares about and defaults
+/// for the rest. One spelling: the record has five option fields, and a rename
+/// of any of them should not be a hunt through the suite.
+Warmup Function() testWarmup({
+  int kvCachePrompts = 0,
+  List<LlmMessage> messages = const [
+    LlmMessage(role: LlmRole.system, text: "system prompt body"),
+    LlmMessage(role: LlmRole.user, text: "Hello"),
+  ],
+  List<LlmTool> tools = const [],
+}) =>
+    () => (
+          options: poolOptions(AppSettings(localModelKvCachePrompts: kvCachePrompts)),
+          messages: messages,
+          tools: tools,
+        );
 
 /// Stands in for the platform's file chooser, which no test can drive.
 class FakeAttachmentPicker implements AttachmentPicker {
@@ -316,6 +337,7 @@ class FakeBackend implements AgentBackend {
         List<Attachment> attachments,
         List<Message> history,
         TurnSettings settings,
+        DateTime at,
       })> prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
@@ -329,12 +351,14 @@ class FakeBackend implements AgentBackend {
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
       List<Message> history = const [],
-      TurnSettings settings = const TurnSettings()}) async* {
+      TurnSettings settings = const TurnSettings(),
+      required DateTime at}) async* {
     prompts.add((
       text: text,
       attachments: attachments,
       history: history,
       settings: settings,
+      at: at,
     ));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;
@@ -671,7 +695,14 @@ class FakeLocalLlm extends LocalLlm {
     this.failure = "It would not fit.",
     this.installed = const [],
     this.maxThreads,
+    this.baseUrl = "http://127.0.0.1:1/v1",
   });
+
+  /// Where a served model says it is. The default is a port nothing is on, so a
+  /// test that only cares that a warm-up was attempted gets a refused
+  /// connection rather than a wait; a test about what was actually sent points
+  /// this at an `HttpServer` of its own.
+  final String baseUrl;
 
   @override
   final bool available;
@@ -701,6 +732,11 @@ class FakeLocalLlm extends LocalLlm {
       })> served = [];
 
   var stops = 0;
+
+  /// Held open where a test wants a model that has not finished loading: [serve]
+  /// publishes its row and then waits on this, which is where the settings page
+  /// draws one and where a warm-up sits until it has a server to warm.
+  Completer<void>? loading;
 
   @override
   final ValueNotifier<List<LocalLlmState>> running = ValueNotifier(const []);
@@ -736,9 +772,10 @@ class FakeLocalLlm extends LocalLlm {
       ...running.value.where((each) => each.modelId != modelId).take(maxRunning - 1),
       state,
     ];
+    if (loading != null) await loading!.future;
     if (!ready) throw LocalLlmFailure(failure);
     return LocalEndpoint(
-      baseUrl: "http://127.0.0.1:1/v1",
+      baseUrl: baseUrl,
       apiKey: "k",
       contextLength: contextLength ?? 0,
     );
