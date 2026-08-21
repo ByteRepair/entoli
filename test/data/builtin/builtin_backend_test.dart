@@ -25,6 +25,7 @@ import "builtin_fakes.dart";
 
 void main() {
   const chatId = "chat-1";
+  final sentAt = DateTime(2026);
   late AppConfig config;
   late FakeLlmClient client;
   late FakeShell shell;
@@ -70,6 +71,9 @@ void main() {
 
   /// Most of these are not about approvals, so the default here is the chat
   /// setting that does not stop to ask.
+  /// [at] is fixed rather than left to the clock, because what the model is
+  /// shown of a user turn carries the date it was sent — so a test comparing a
+  /// live session against one rebuilt from a log has to date both the same.
   Future<List<AgentEvent>> send(
     BuiltinBackend backend,
     String text, {
@@ -77,11 +81,13 @@ void main() {
     String? provider = "fake",
     List<Message> history = const [],
     List<Attachment> attachments = const [],
+    DateTime? at,
   }) =>
       backend
           .sendPrompt(chatId, text,
               history: history,
               attachments: attachments,
+              at: at ?? sentAt,
               settings: TurnSettings(
                   model: model, provider: provider, approveMode: ApproveMode.never))
           .toList();
@@ -101,6 +107,7 @@ void main() {
   Stream<AgentEvent> asking(BuiltinBackend backend, String text,
           {ApproveMode approveMode = ApproveMode.ask}) =>
       backend.sendPrompt(chatId, text,
+          at: sentAt,
           settings: TurnSettings(
               model: "fake-model", provider: "fake", approveMode: approveMode));
 
@@ -147,7 +154,7 @@ void main() {
       await send(backend, "where am I?");
 
       expect(Directory(config.workspaceDir(chatId)).existsSync(), isTrue);
-      expect(client.sent.first.first.text, contains(config.workspaceDir(chatId)));
+      expect(client.sent.first[1].text, contains(config.workspaceDir(chatId)));
     });
 
     test("the model is told about the project workspace it shares", () async {
@@ -157,7 +164,7 @@ void main() {
       await send(backend, "hi");
 
       expect(Directory(config.projectWorkspaceDir()).existsSync(), isTrue);
-      expect(client.sent.first.first.text, contains(config.projectWorkspaceDir()));
+      expect(client.sent.first[1].text, contains(config.projectWorkspaceDir()));
     });
 
     test("a chat in a project works in that project's directories", () async {
@@ -166,6 +173,7 @@ void main() {
       ]);
       await backend
           .sendPrompt(chatId, "hi",
+              at: sentAt,
               settings: const TurnSettings(
                   model: "fake-model",
                   provider: "fake",
@@ -173,7 +181,7 @@ void main() {
                   approveMode: ApproveMode.never))
           .toList();
 
-      final system = client.sent.first.first.text;
+      final system = client.sent.first[1].text;
       expect(system, contains(config.workspaceDir(chatId, project: "work")));
       expect(system, contains(config.projectWorkspaceDir(project: "work")));
       expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
@@ -193,8 +201,8 @@ void main() {
       );
       await send(backend, "/review the parser");
 
-      expect(client.sent.first[1].text, contains("Review this:\n\nthe parser"));
-      expect(client.sent.first[1].text, isNot(contains(r"$ARGUMENTS")));
+      expect(client.sent.first[2].text, contains("Review this:\n\nthe parser"));
+      expect(client.sent.first[2].text, isNot(contains(r"$ARGUMENTS")));
     });
 
     test("a command with no placeholder gets its arguments appended", () async {
@@ -206,8 +214,8 @@ void main() {
       );
       await send(backend, "/commit only the tests");
 
-      expect(client.sent.first[1].text, contains("Commit what changed."));
-      expect(client.sent.first[1].text, contains("only the tests"));
+      expect(client.sent.first[2].text, contains("Commit what changed."));
+      expect(client.sent.first[2].text, contains("only the tests"));
     });
 
     test("a name the library does not know is left as the prose it probably is", () async {
@@ -219,7 +227,7 @@ void main() {
       );
       await send(backend, "/etc/hosts is where?");
 
-      expect(client.sent.first[1].text, contains("/etc/hosts is where?"));
+      expect(client.sent.first[2].text, contains("/etc/hosts is where?"));
     });
 
     test("@name puts that agent's prompt under the system message", () async {
@@ -231,8 +239,8 @@ void main() {
       );
       await send(backend, "@researcher where is the parser?");
 
-      expect(client.sent.first.first.text, contains("You only read."));
-      expect(client.sent.first[1].text, contains("@researcher where is the parser?"));
+      expect(client.sent.first[1].text, contains("You only read."));
+      expect(client.sent.first[2].text, contains("@researcher where is the parser?"));
     });
 
     test("an email address is not a mention", () async {
@@ -244,7 +252,8 @@ void main() {
       );
       await send(backend, "write to me@example.com");
 
-      expect(client.sent.first.first.text, isNot(contains("You only read.")));
+      expect(client.sent.first.map((m) => m.text).join(),
+          isNot(contains("You only read.")));
     });
   });
 
@@ -335,6 +344,42 @@ void main() {
       expect(sent, contains('"returncode": 0'));
     });
 
+    test("an ordinary chat carried on after a restart is the one that was left",
+        () async {
+      // The same invariant the `!` turn below keeps, for the path every other
+      // turn takes. It is what the on-device KV cache rests on: a chat reopened
+      // or regenerated has to send the text that was sent before, or every
+      // cached prefix past the system prompt misses and the whole history is
+      // read again. See "The projection" in `lib/domain/CLAUDE.md`.
+      final live = backendOver([
+        [finish],
+        [finish],
+      ]);
+      await send(live, "first");
+      await send(live, "second");
+      final held = client.sent.last.map((m) => (m.role, m.text)).toList();
+
+      final restarted = backendOver([
+        [finish],
+      ]);
+      await send(restarted, "second", history: [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "first")],
+        ),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "done", responseId: "r1")],
+        ),
+      ]);
+
+      expect(client.sent.single.map((m) => (m.role, m.text)), held);
+    });
+
     // The live session is filled as the command finishes and a reload builds
     // the same exchange back out of the log. Attached, because what is named to
     // the model is the half a hand-written session line would get wrong.
@@ -353,7 +398,7 @@ void main() {
         Message(
           id: "m1",
           role: MessageRole.user,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [
             MessagePart.file(
                 resource: "r1", filename: "notes.txt", mimeType: "text/plain"),
@@ -363,7 +408,7 @@ void main() {
         Message(
           id: "m2",
           role: MessageRole.assistant,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [
             MessagePart.shellRun(command: "echo hello", returnCode: 0, output: "hello\n"),
           ],
@@ -522,6 +567,7 @@ void main() {
 
       var listedAtTheEnd = false;
       await for (final event in backend.sendPrompt(chatId, "hi",
+          at: sentAt,
           settings: const TurnSettings(
               model: "fake-model", provider: "fake", approveMode: ApproveMode.never))) {
         // The listener writing the turn's closing records is still reading this
@@ -691,13 +737,13 @@ void main() {
         Message(
           id: "m1",
           role: MessageRole.user,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [MessagePart.text(text: "what is 2+2?")],
         ),
         Message(
           id: "m2",
           role: MessageRole.assistant,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [MessagePart.text(text: "four")],
         ),
       ]);
@@ -719,13 +765,13 @@ void main() {
         Message(
           id: "m1",
           role: MessageRole.user,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [MessagePart.text(text: "what is 2+2?")],
         ),
         Message(
           id: "m2",
           role: MessageRole.assistant,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [MessagePart.text(text: "four")],
         ),
       ]);
@@ -743,7 +789,7 @@ void main() {
         Message(
           id: "m1",
           role: MessageRole.user,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [MessagePart.text(text: "somebody else's conversation")],
         ),
       ]);
@@ -765,13 +811,13 @@ void main() {
         Message(
           id: "m1",
           role: MessageRole.user,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [MessagePart.text(text: "count the files")],
         ),
         Message(
           id: "m2",
           role: MessageRole.assistant,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [
             MessagePart.toolCall(
               toolCall: ToolCall(id: "c1", name: "bash", argumentsJson: '{"command":"ls"}'),
@@ -793,7 +839,7 @@ void main() {
         Message(
           id: "m1",
           role: MessageRole.user,
-          createdAt: DateTime(2026),
+          createdAt: sentAt,
           parts: const [
             MessagePart.file(resource: "r1", filename: "diagram.png", mimeType: "image/png"),
             MessagePart.text(text: "what is this?"),

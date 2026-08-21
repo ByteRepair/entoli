@@ -7,30 +7,72 @@ import "task_tool.dart";
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
 /// and adapted for a conversation: upstream runs one task and exits, this is
 /// asked something else once the turn is over.
+///
+/// **Nothing per-conversation is in here**, which is what makes it one string
+/// for every chat on the device and so one cacheable prefix. What is per-chat —
+/// the workspace, an `@agent`'s own instructions — is [turnPrompt], a second
+/// system message after this one. See "Prefilling the system prompt" in
+/// `lib/data/local/CLAUDE.md` for what that buys.
 String systemPrompt({
-  required String workspace,
-  required String projectWorkspace,
   required String platform,
-  String? agentPrompt,
   Profile? profile,
   bool canRunCommands = true,
 }) =>
     canRunCommands
-        ? _withShell(
-            workspace: workspace,
-            projectWorkspace: projectWorkspace,
-            platform: platform,
-            agentPrompt: agentPrompt,
-            profile: profile,
-          )
-        : _withoutShell(agentPrompt, profile: profile);
+        ? _withShell(platform: platform, profile: profile)
+        : _withoutShell(profile: profile);
+
+/// The half that changes: where this conversation's files are, and whatever an
+/// `@agent` mention added. Its own system message so the body above it is
+/// byte-identical between two chats and between a chat and the warm-up — which
+/// is the whole of why the split exists.
+///
+/// Empty where there is nothing to say, and a caller sends no second message
+/// then: a browser has no workspace path to name.
+String turnPrompt({
+  required String workspace,
+  required String projectWorkspace,
+  String? agentPrompt,
+  required bool canRunCommands,
+}) {
+  final parts = [
+    if (canRunCommands)
+      """
+## Your workspace
+
+Every command runs in this conversation's own workspace: $workspace
+It is yours; the files in it survive between turns, and no other conversation
+sees them.
+
+The project workspace is shared with every other conversation in this project:
+$projectWorkspace
+Work the user will come back to — a checkout, notes, data you built up — goes
+there, so another conversation can pick it up. Write to it by path; you do not
+have to be in it.""",
+    if (agentPrompt != null) "## Additional instructions\n\n$agentPrompt",
+  ];
+  return parts.join("\n\n");
+}
+
+/// What a user's turn reads as to the model: the moment it was sent, and — for
+/// the one that opens a conversation — the task framing upstream calls the
+/// instance template.
+///
+/// **One renderer, called from both sides.** `BuiltinAgent` words the turn it
+/// is running and `projectionOf` words the same turn read back out of
+/// `conv.jsonl`; wording it twice is what left a reopened or regenerated chat
+/// sending different text from the one that was cached, so [at] is the
+/// message's own `createdAt` rather than the clock. See "The projection" in
+/// `lib/domain/CLAUDE.md`.
+String userTurnText(String text, {required DateTime at, required bool first}) =>
+    _withNow(first ? _firstTask(text) : text, at);
 
 /// Where there is no shell, the model cannot run commands. But it does have a
 /// filesystem: the `read`/`write`/`edit` tools work on the workspace via the
 /// same `FileSystem` the app uses, so a browser can still produce files and
 /// artifacts. The turn ends when it replies with text and calls no tool — the
 /// same termination signal the shell path uses.
-String _withoutShell(String? agentPrompt, {Profile? profile}) => """
+String _withoutShell({Profile? profile}) => """
 You are a helpful assistant.
 
 You are running in a browser, so you have no shell: you cannot run commands.
@@ -41,7 +83,7 @@ view. Prefix a path with `project:` to reach the project workspace.
 $_files
 $_asking
 $_artifacts
-${agentPrompt == null ? "" : "\n## Additional instructions\n\n$agentPrompt\n"}${profileSection(profile)}""";
+${profileSection(profile)}""";
 
 /// The one thing both prompts say, because asking is the one thing the agent
 /// can do with or without a machine under it. Deliberately only what the tool's
@@ -86,13 +128,7 @@ keep the look working on the serif fallbacks the base stylesheet uses offline.
 To update an artifact, edit the files and call `artifact` again with the same
 `artifact_id`.""";
 
-String _withShell({
-  required String workspace,
-  required String projectWorkspace,
-  required String platform,
-  String? agentPrompt,
-  Profile? profile,
-}) =>
+String _withShell({required String platform, Profile? profile}) =>
     """
 You are a helpful assistant that can interact with a computer to answer the
 user's questions and carry out their tasks.
@@ -174,26 +210,14 @@ Read part of a file with line numbers:
 ```bash
 nl -ba filename.py | sed -n '10,20p'
 ```
-${profileSection(profile)}${agentPrompt == null ? "" : "\n\n## Additional instructions\n\n$agentPrompt"}
-
-## Your workspace
-
-Every command runs in this conversation's own workspace: $workspace
-It is yours; the files in it survive between turns, and no other conversation
-sees them.
-
-The project workspace is shared with every other conversation in this project:
-$projectWorkspace
-Work the user will come back to — a checkout, notes, data you built up — goes
-there, so another conversation can pick it up. Write to it by path; you do not
-have to be in it.""";
+${profileSection(profile)}""";
 
 /// The current moment, put at the top of a user turn so the model can date its
 /// answer. It rides on the message rather than the system prompt on purpose: a
 /// value that changes every turn would break the long prefix the on-device
 /// cache warms, and the message is after that prefix anyway.
-String withNow(String message, {DateTime? now}) {
-  final t = now ?? DateTime.now();
+String _withNow(String message, DateTime now) {
+  final t = now;
   String two(int n) => n.toString().padLeft(2, "0");
   final stamp =
       "${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}";
@@ -202,7 +226,7 @@ String withNow(String message, {DateTime? now}) {
 
 /// The first thing the model is asked in a conversation. Upstream calls this
 /// the instance template and puts the task in it.
-String firstTask(String task) => """
+String _firstTask(String task) => """
 The user asks:
 
 $task

@@ -222,30 +222,37 @@ class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
   }
 }
 
-/// How many chats to keep warmed on disk, so reopening one restores its KV
-/// rather than reprocessing it. On by default at ten — the dumps are large, so
-/// there is a disk budget behind this and `Off` writes nothing. See "Persisting
-/// the KV cache to disk" in CLAUDE.md.
+/// How many prompt prefixes to keep warmed on disk, so reopening a chat
+/// restores its KV rather than reprocessing it. On by default at ten — the
+/// dumps are large, so there is a disk budget behind this and `Off` writes
+/// nothing. See "Persisting the KV cache to disk" in CLAUDE.md.
+///
+/// It read "Cached chats" and counted neither chats nor turns: one dump is one
+/// request to the model, so a turn that runs five commands writes five, and the
+/// bound is over every chat at once. At ten, "10 chats" promised ten
+/// conversations kept warm and meant something closer to two.
 class _KvCachePicker extends ConsumerWidget {
   const _KvCachePicker();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref.watch(appSettingsProvider.select((s) => s.localModelKvCacheChats));
+    final value = ref.watch(appSettingsProvider.select((s) => s.localModelKvCachePrompts));
     return InstalledPicker(
-      label: "Cached chats",
-      none: "Default (${AppSettings.defaultKvCacheChats})",
+      label: "Cached prompts",
+      description: "Kept across every chat, and a turn writes one for each step "
+          "it takes. The disk budget behind this may allow fewer.",
+      none: "Default (${AppSettings.defaultKvCachePrompts})",
       options: const {
         "0": "Off",
-        "5": "5 chats",
-        "20": "20 chats",
-        "30": "30 chats",
-        "50": "50 chats",
+        "5": "5 prompts",
+        "20": "20 prompts",
+        "30": "30 prompts",
+        "50": "50 prompts",
       },
       value: value?.toString(),
-      onPick: (chats) => ref
+      onPick: (prompts) => ref
           .read(appSettingsProvider.notifier)
-          .setLocalKvCacheChats(chats == null ? null : int.parse(chats)),
+          .setLocalKvCachePrompts(prompts == null ? null : int.parse(prompts)),
     );
   }
 }

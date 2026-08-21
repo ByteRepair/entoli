@@ -172,6 +172,7 @@ class ChatController extends Notifier<ChatViewState> {
       attachments: attachments,
       history: chat.messages.take(at).toList(),
       opening: [userMsg, _newReply()],
+      at: userMsg.createdAt,
       replacing: replacing,
     );
   }
@@ -190,6 +191,11 @@ class ChatController extends Notifier<ChatViewState> {
     required List<Attachment> attachments,
     required List<Message> history,
     required List<Message> opening,
+    /// The prompt's own date, which is what the model is shown of when it was
+    /// sent. A regenerate passes the date of the prompt it is re-running, so
+    /// the turn it sends is the one that was sent before, to the byte — see
+    /// `userTurnText`.
+    required DateTime at,
     Message? replacing,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
@@ -214,7 +220,10 @@ class ChatController extends Notifier<ChatViewState> {
     }
 
     _listen(repo.sendPrompt(chatId, text,
-        attachments: attachments, history: history, replaces: replacing != null));
+        attachments: attachments,
+        history: history,
+        replaces: replacing != null,
+        at: at));
   }
 
   Message _newReply() => Message(
@@ -294,6 +303,7 @@ class ChatController extends Notifier<ChatViewState> {
       attachments: await repo.loadAttachments(chatId, prompt),
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
       opening: [_newReply()],
+      at: prompt.createdAt,
       replacing: _replyFor(chat, messageId),
     );
   }
