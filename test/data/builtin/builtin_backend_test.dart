@@ -894,6 +894,50 @@ void main() {
       expect(sent.last.text, contains("interrupted before it finished"));
     });
 
+    // Why a turn is being carried on is that turn's own business, and nothing
+    // logs it. A session that went on holding it would send every later turn a
+    // conversation `conv.jsonl` cannot rebuild — the miss the projection exists
+    // to stop, in the one place that could still cause one.
+    test("the reason a turn was resumed does not outlive the turn", () async {
+      final interrupted = [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "count the files")],
+        ),
+        Message(
+          id: "m2",
+          role: MessageRole.assistant,
+          createdAt: sentAt,
+          parts: const [MessagePart.text(text: "looking", responseId: "r1")],
+        ),
+      ];
+
+      final live = backendOver([
+        [finish],
+        [finish],
+      ]);
+      await resuming(live, interrupted);
+      await send(live, "and now?");
+      final held = client.sent.last.map((m) => (m.role, m.text)).toList();
+
+      final restarted = backendOver([
+        [finish],
+      ]);
+      await send(restarted, "and now?", history: [
+        interrupted.first,
+        interrupted.last.copyWith(parts: [
+          ...interrupted.last.parts,
+          const MessagePart.text(text: "done", responseId: "r2"),
+        ]),
+      ]);
+
+      expect(held.map((m) => m.$2).join("\n"),
+          isNot(contains("interrupted before it finished")));
+      expect(client.sent.last.map((m) => (m.role, m.text)), held);
+    });
+
     test("a rewound turn names the files it is not resending", () async {
       final backend = backendOver([
         [finish],

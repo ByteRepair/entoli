@@ -219,15 +219,24 @@ left named rather than failing the turn, which is what every message did before
 this read any. And what a `/command` or an `@agent` stood for is written into the
 message when it is composed — see "Commands and agents".
 
-**One input still differs, and it is `resume`.** Carrying on an interrupted turn
-adds a user message of its own — `continueTask`, the reason the model is being
-asked again — and nothing logs it. So a chat resumed in this process holds one
-message a reload would not build, and every turn after it in that chat has a
-prefix the log disagrees with: the cache miss this whole thing exists to remove,
-in the one place it is still possible. Closing it means logging the marker as a
-part the projection re-derives, or synthesising it from the `turnEnd` that says
-the turn was interrupted — the second is the better shape, since the log already
-knows and nothing new has to be written. It is not closed here.
+**`resume` was the last thing that could break this, and the answer was to
+notice what its message is.** Carrying on an interrupted turn puts a user
+message in front of the model — `continueTask`, the reason it is being asked
+again — and nothing logs it, because nobody said it. Left in the session it made
+a chat resumed in this process hold a message a reload could not rebuild, so
+every later turn in that chat sent a prefix `conv.jsonl` disagreed with: exactly
+the miss this all exists to remove, in the one place still capable of causing
+one.
+
+It is not part of the conversation, though. It says how to run *this* turn, which
+makes it the same kind of thing as the system prompt — and the system prompt is
+rewritten every turn rather than added to, for this reason. So `resume` takes it
+back out when the turn ends, and the session is again what the log says. The
+alternative was to write it down, as a part of the reply the projection re-reads;
+that keeps more of the cache — the resumed span keeps its place, where dropping
+the message shifts it and costs one reprocessing on the next turn — but it puts
+a message nobody sent into the record of what was, to make a cache faster. The
+log describes the conversation. This does not belong in it.
 
 A result is worded the way the agent worded it when it ran — `observation(...)`,
 or the answers themselves for an `ask_user` — so a projected conversation is the
@@ -345,7 +354,9 @@ because a held session would double anything — it holds those messages exactly
 once — but so that carrying on in the same process and carrying on after a
 restart put the same thing in front of the model. A checkpoint that failed is
 swallowed on purpose, so a live session can hold more than the log does, and it
-is the log the user is reading.
+is the log the user is reading. What it adds — `continueTask`, the reason the
+turn is being asked again — it takes away when the turn is over, so a session
+that has been resumed is still one the log could rebuild; see "The projection".
 
 `AgentBackend.resumeTurn` is a method of its own rather than a flag on
 `sendPrompt`, because there is no prompt: no text, no attachments, no `/command`

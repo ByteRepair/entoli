@@ -340,12 +340,26 @@ class BuiltinAgent {
   /// killed before the model was ever called. Telling a model it was cut off
   /// part-way when there is nothing of its own above is a contradiction, and
   /// small models are what this app is for.
+  ///
+  /// **The reason is this turn's, and the session gives it back when the turn
+  /// is over** — rewritten rather than accreted, the way the system prompt is,
+  /// and for the same reason. Nothing logs it: it is not a thing anyone said,
+  /// it is how this one turn is being run. A session that kept it would hold a
+  /// message no reload could rebuild, and every later turn in the chat would
+  /// send a conversation `conv.jsonl` disagrees with — see "The projection".
   Stream<AgentEvent> resume({String? agentPrompt}) async* {
     _setSystemPrompt(agentPrompt);
-    if (session.messages.lastOrNull?.role != LlmRole.user) {
+    final asked = session.messages.lastOrNull?.role != LlmRole.user
+        ? session.messages.length
+        : null;
+    if (asked != null) {
       session.messages.add(const LlmMessage(role: LlmRole.user, text: continueTask));
     }
-    yield* _loop();
+    try {
+      yield* _loop();
+    } finally {
+      if (asked != null) session.messages.removeAt(asked);
+    }
   }
 
   Stream<AgentEvent> _loop() async* {
