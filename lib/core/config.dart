@@ -4,6 +4,7 @@ import "package:fs_shim/fs.dart";
 import "../domain/documents.dart";
 import "../domain/models.dart";
 import "../domain/project.dart";
+import "migrations.dart";
 
 /// Composes the paths of the Entoli data directory, and holds the filesystem
 /// they lead into. This file builds names; [fs] is what they mean.
@@ -19,8 +20,8 @@ import "../domain/project.dart";
 ///
 /// Every path but the first three is a project's, and every project is a
 /// directory under `projects/` — the default one included, under the name
-/// `defaultProjectDir`. [migrate] is what moves a data directory written before
-/// that was true.
+/// `defaultProjectDir`. Moving any of it in a release is what `migrations.dart`
+/// is for.
 ///
 /// A chat's own workspace is *inside* the project's rather than beside its
 /// conversation: it is where the chat's commands start, and the project
@@ -50,8 +51,7 @@ class AppConfig {
 
   static Future<AppConfig> load(FileSystem fs, String dataDir) async {
     final config = AppConfig._(dataDir, fs);
-    await config.ensureDirs();
-    await config.migrate();
+    await runMigrations(config, fresh: await config.ensureDirs());
     await config.documents.hydrate([
       config.settingsFile,
       for (final project in everyProject(await config.projectNames()))
@@ -156,16 +156,22 @@ class AppConfig {
         projectWorkspaceDir(project: project),
       ]);
 
+  /// True where this call created the data directory, which is what says a
+  /// migration has nothing here to move — asked by the call that creates them,
+  /// since afterwards there is nobody left to ask.
+  ///
   /// The prompt directories are created empty rather than on demand: an
   /// absent one is a worse hint than an empty one about where a custom
   /// command goes.
-  Future<void> ensureDirs() async {
+  Future<bool> ensureDirs() async {
+    final fresh = !await fs.directory(dataDir).exists();
     await _ensure([
       dataDir,
       projectsDir,
       for (final kind in CompletionKind.values) promptsDir(kind),
     ]);
     await ensureProjectDirs();
+    return fresh;
   }
 
   Future<void> _ensure(List<String> dirs) async {
@@ -174,68 +180,10 @@ class AppConfig {
     }
   }
 
-  /// Move a data directory written to the layout that came before this one:
-  /// the default project *was* the data directory, and a chat's workspace sat
-  /// inside its own chat directory rather than in the project's.
-  ///
-  /// Entry by entry, so a `projects/default` that an older build let someone
-  /// create is merged into rather than stepped on. Anything already at the
-  /// target is left where it is, which is also what makes a second run over a
-  /// half-moved directory harmless. Called after a restore as well as at
-  /// launch: a backup made by an older build unpacks into the old shape.
-  ///
-  /// Meant to be deleted whole, once no data directory is old enough to need
-  /// it.
-  Future<void> migrate() async {
-    // One listing rather than three `exists` calls, since this is on the path
-    // to the first frame and has nothing to do on all but the first launch.
-    final top = {
-      await for (final entity in fs.directory(dataDir).list())
-        fs.path.basename(entity.path),
-    };
-    if (!top.contains("chats") &&
-        !top.contains("workspace") &&
-        !top.contains("project.json")) {
-      return;
-    }
-    await _moveEntries(fs.path.join(dataDir, "chats"), chatsDir());
-    await _moveEntries(fs.path.join(dataDir, "workspace"), projectWorkspaceDir());
-    await _move(
-        fs.file(fs.path.join(dataDir, "project.json")), projectSettingsFile());
-    for (final project in everyProject(await projectNames())) {
-      final chats = fs.directory(chatsDir(project: project));
-      if (!await chats.exists()) continue;
-      for (final chat in await chats.list().toList()) {
-        if (chat is! Directory) continue;
-        await _move(
-          fs.directory(fs.path.join(chat.path, "workspace")),
-          workspaceDir(fs.path.basename(chat.path), project: project),
-        );
-      }
-    }
-  }
-
-  /// Move what is in [from] into [to], and drop [from] if all of it went.
-  Future<void> _moveEntries(String from, String to) async {
-    final dir = fs.directory(from);
-    if (!await dir.exists()) return;
-    var moved = true;
-    for (final entity in await dir.list().toList()) {
-      if (!await _move(entity, fs.path.join(to, fs.path.basename(entity.path)))) {
-        moved = false;
-      }
-    }
-    if (moved) await dir.delete();
-  }
-
-  /// False where something is already at [to] and was left as it was.
-  Future<bool> _move(FileSystemEntity entity, String to) async {
-    if (await fs.type(to) != FileSystemEntityType.notFound) return false;
-    if (!await entity.exists()) return false;
-    await fs.directory(fs.path.dirname(to)).create(recursive: true);
-    await entity.rename(to);
-    return true;
-  }
+  /// Not the app's version: it names the release whose migration last ran here,
+  /// and a release that leaves the layout alone leaves this where it was. See
+  /// `migrations.dart`.
+  String get versionFile => fs.path.join(dataDir, "version");
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");
 

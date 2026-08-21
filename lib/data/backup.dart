@@ -5,6 +5,7 @@ import "package:archive/archive.dart";
 import "package:fs_shim/fs.dart";
 
 import "../core/config.dart";
+import "../core/migrations.dart";
 import "../domain/documents.dart";
 import "../domain/file_handoff.dart";
 import "../domain/workspace.dart";
@@ -70,10 +71,8 @@ class Backup {
 }
 
 /// `projects/<name>/chats/<id>/state.json`, which is where `AppConfig` puts one
-/// and nowhere else. The prefix is optional because a backup made before the
-/// projects layout has none, and this count is read before the restore that
-/// would move it.
-final _chatState = RegExp(r"^(projects/[^/]+/)?chats/[^/]+/state\.json$");
+/// and nowhere else.
+final _chatState = RegExp(r"^projects/[^/]+/chats/[^/]+/state\.json$");
 
 /// Every file under the data directory, as the zip a backup is.
 ///
@@ -160,9 +159,9 @@ Future<void> restoreBackup(AppConfig config, Backup backup) async {
   }
 
   // A backup holding none of them is still a working app afterwards, and one
-  // made by an older build is in the layout that came before this one.
-  await config.ensureDirs();
-  await config.migrate();
+  // made by an older build unpacks that build's layout — including the version
+  // stamp that says which one it is.
+  await runMigrations(config, fresh: await config.ensureDirs());
 }
 
 /// A member on its way out of the archive, which is what `IncomingFile` already
