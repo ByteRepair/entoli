@@ -89,20 +89,6 @@ void main() {
     expect(Directory(config.workspaceDir("abc")).existsSync(), isTrue);
   });
 
-  // What it moves where is `config_test.dart`'s; that a restore moves it at all
-  // is this one's, since a backup made by an older build is in the old shape.
-  test("a backup made before the projects layout is moved into it", () async {
-    write("chats/old/state.json", "{}");
-    final backup = await roundTrip();
-    Directory(config.dataDir).deleteSync(recursive: true);
-    Directory(config.dataDir).createSync(recursive: true);
-
-    await restoreBackup(config, backup);
-
-    expect(File(config.stateFile("old")).existsSync(), isTrue);
-    expect(Directory("${config.dataDir}/chats").existsSync(), isFalse);
-  });
-
   test("the manifest is not restored as a file of its own", () async {
     await restoreBackup(config, await roundTrip());
 
@@ -131,9 +117,12 @@ void main() {
   });
 
   test("chats are counted from the state.json each one has", () async {
-    write("chats/a/state.json", "{}");
+    write("projects/default/chats/a/state.json", "{}");
     write("projects/work/chats/b/state.json", "{}");
-    write("chats/a/conv.jsonl", "{}");
+    write("projects/default/chats/a/conv.jsonl", "{}");
+    // One the agent wrote, which is why the count matches the layout rather
+    // than the name.
+    write("projects/default/workspace/chats/a/state.json", "{}");
 
     expect((await roundTrip()).chats, 2);
   });
@@ -141,10 +130,11 @@ void main() {
   // The point of the zip over one JSON document holding every file: a
   // conversation is text, and text deflates.
   test("a conversation is smaller in the backup than it is on disk", () async {
-    write("chats/a/conv.jsonl", '{"type":"append","text":"hello"}\n' * 200);
+    write("projects/default/chats/a/conv.jsonl",
+        '{"type":"append","text":"hello"}\n' * 200);
 
     expect((await writeBackup(config)).length,
-        lessThan(File("${config.dataDir}/chats/a/conv.jsonl").lengthSync()));
+        lessThan(File(config.convFile("a")).lengthSync()));
   });
 
   group("what it refuses", () {

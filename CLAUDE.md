@@ -80,9 +80,7 @@ with nothing either, which is why nothing user-facing names it at all.
 `chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
-Every project is a directory under `projects/`, the default one included —
-`AppConfig.migrate` moves a data directory written before that was true, at
-launch and after a restore.
+Every project is a directory under `projects/`, the default one included.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
@@ -136,6 +134,36 @@ any more; `core/platform/` builds both once.
 
 None of this is checked by loading a tab — see `test/CLAUDE.md` for how the
 browser's filesystem is exercised on the VM instead.
+
+### Migrations
+
+**A release that moves anything under `<dataDir>` carries a migration, in the
+same PR as the move.** `lib/core/migrations.dart` is where it goes: `migrations`
+is a chain, oldest first, and each entry is written against the layout the entry
+above it leaves and nothing older. A directory several releases behind is
+brought up by running the entries after it in order — 0.1.2 to 0.1.3 to 0.2.0 to
+1.0.0 — so no entry has to know every shape the directory has ever had. Name it
+by the version being released, which is `pubspec.yaml`'s and nothing else; see
+"Releasing".
+
+`<dataDir>/version` holds the release whose entry last ran. It is not the app's
+version: a release that leaves the layout alone leaves this where it was, so
+what it names is always an entry in the chain. A data directory this launch
+created is stamped with the end of the chain and nothing runs over it; one with
+no stamp at all is older than every entry and gets the lot. A stamp naming no
+entry this build has is a directory written by a newer build, and it is left
+exactly as it is. `AppConfig.load` runs the chain, and so does `restoreBackup` —
+a backup unpacks the layout of the build that made it, stamp included.
+
+Three rules for writing one. **An entry that has shipped is never edited**: an
+installed copy has already run it and will not run it again, so a change reaches
+only the directories that were behind. **An entry spells its paths out** — it is
+handed a filesystem and the data directory rather than an `AppConfig` for that
+reason, since `workspaceDir` answers for the layout this build has and an entry
+is about one that is gone. **An entry does nothing where what it moves is not
+there**, because it also runs over restored backups and over directories where
+the user deleted whatever it was looking for. Nothing has changed the layout
+since 1.0.0, so the chain is empty and there is no entry to copy.
 
 ### Projects
 

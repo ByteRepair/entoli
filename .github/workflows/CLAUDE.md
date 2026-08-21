@@ -29,6 +29,10 @@ fails that job, since a binary reporting a version nobody released cannot be
 talked out of it afterwards — and failing there costs seconds rather than two
 toolchain installs.
 
+**A release that moves anything under the data directory needs a migration**
+named by that same version — see "Migrations" in the root CLAUDE.md. Nothing in
+CI checks for one; the check is that the PR moving the files adds it.
+
 **The Android version code is derived from that version rather than stored**,
 as `major * 10000 + minor * 100 + patch` — 1.0.0 is 10000, 1.2.3 is 10203. So
 pubspec carries no `+build` suffix: a suffix would be a second number to bump
