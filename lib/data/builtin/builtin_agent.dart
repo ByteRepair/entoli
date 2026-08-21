@@ -981,7 +981,8 @@ class BuiltinAgent {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
     }
-    final run = shell.start(command, cwd: workspace, timeout: options.commandTimeout);
+    final run = shell.start(command,
+        cwd: workspace, home: projectWorkspace, timeout: options.commandTimeout);
     _running = run;
     try {
       return await run.result;

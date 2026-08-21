@@ -76,10 +76,13 @@ with nothing either, which is why nothing user-facing names it at all.
 
 ### On-disk layout
 
-`<dataDir>/chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`,
-`resources/`, `subagents/`, `workspace/`, and `<dataDir>/workspace/` beside
-them.
-`<dataDir>/projects/<project>/` holds `chats/` and `workspace/` of its own.
+`<dataDir>/projects/<project>/` holds `chats/` and `workspace/`. A chat is
+`chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
+and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
+inside the workspace the project shares rather than beside the conversation.
+Every project is a directory under `projects/`, the default one included —
+`AppConfig.migrate` moves a data directory written before that was true, at
+launch and after a restore.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
@@ -137,17 +140,23 @@ browser's filesystem is exercised on the VM instead.
 ### Projects
 
 A project is a directory holding its own chats and one workspace they share.
-The default project is `null`, and it **is** the data directory — so every chat
-written before there were projects is already in it, and nothing had to be
-moved. `AppConfig`'s path helpers all take `{String? project}` for that reason:
-passing nothing means the default project and the layout that was there before.
+The default project is `null` above the filesystem and `projects/default/` below
+it — one shape for every project rather than one project that is also the data
+directory. `AppConfig`'s path helpers all take `{String? project}`, and passing
+nothing means the default. `isProjectName` refuses `default` for the same
+reason: a second way to name it would be a second entry for it in every list.
 
-Two workspaces reach a turn, and they answer different questions. The chat's own
-(`chats/<id>/workspace/`) is the working directory of every command and is not
-shared with anything. The project's (`<project>/workspace/`) is named in the
-system prompt as where work another conversation should find goes. The agent
-writes to it by path; it is deliberately not the cwd, because a turn's scratch
-files would then be everyone's.
+Two workspaces reach a turn, and they answer different questions. The project's
+(`<project>/workspace/`) is where work another conversation should find goes,
+and it is the `HOME` of every command — so a repository cloned, a package
+installed or a `~/.gitconfig` written by one conversation is already there for
+the next, and one project is one environment. The chat's own is a folder
+*inside* it (`<project>/workspace/chats/<id>/`) and is the working directory of
+every command: a turn's scratch files stay the turn's without being hidden from
+the user or from the next conversation. What a chat *is* — the log, and what was
+attached to it — stays in `chats/`, which the agent is never given a path to.
+
+`moveChat` therefore moves two directories, and `delete` removes two.
 
 `ChatStore` is addressed by chat id alone, so `FileChatStore` is what knows
 where a chat is: `_locate` answers from a cache that `list` fills, and falls

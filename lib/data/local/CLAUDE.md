@@ -145,22 +145,25 @@ nothing else in the app has to learn that commands are running somewhere else.
 The workspace explorer, the `DocumentsProvider` and a resend of an old turn all
 keep working with no knowledge of any of this.
 
-**`HOME` inside the guest is the chat's own workspace, not `/root`.** The
-rootfs is one directory shared by every conversation and outside what a backup
-carries, so a `~/.gitconfig`, an `npm` cache or a key written there belongs to
-whichever chat wrote it last and is gone on a reinstall. The workspace is the
-chat's, is already the working directory, and is backed up. What that costs is
-that dotfiles are now among the chat's own files: the workspace explorer lists
-them and a backup carries whatever a tool cached. Per chat rather than per
-project because the working directory is, and the two disagreeing is worse than
-either.
+**`HOME` inside the guest is the project's workspace, not `/root`.** The rootfs
+is one directory shared by every project and outside what a backup carries, so a
+`~/.gitconfig`, an `npm` cache or a key written there belongs to whichever chat
+wrote it last and is gone on a reinstall. The project workspace is the project's,
+is backed up, and is the directory the chat's own working directory sits in — so
+`cd ~` from a turn reaches the workspace the model is already told to leave work
+in, and one project is one environment. What it costs is that dotfiles and tool
+caches are among the project's files: the workspace explorer lists them and a
+backup carries them.
 
-It is `LocalShell` that sets it, since `prootSandbox` is built once for the app
-and cannot know which chat is running — the same "am I in a guest" branch the
-file already makes three times. A second guest variable that has to follow the
-chat is what would earn `Sandbox` a member taking the cwd; one does not. Only
-inside a guest: on a desktop `HOME` is the user's own and the tools there expect
-what is in it.
+Per project rather than per chat because that is what an environment is for —
+a clone or an installed package is worth having in the next conversation, and a
+per-chat `HOME` would fetch it again every time.
+
+It is `LocalShell` that sets it, from the `home` its caller passes beside `cwd`:
+`prootSandbox` is built once for the app and cannot know which project is
+running. Only inside a guest — on a desktop `HOME` is the user's own and the
+tools there expect what is in it — which is the same "am I in a guest" branch
+the file already makes three times.
 
 **A `Sandbox` replaces the `Toolset` rather than layering over it.** Every path
 the host toolset names is the host's, and a `TMPDIR` under the app's own

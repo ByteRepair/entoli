@@ -117,11 +117,21 @@ class FileChatStore implements ChatStore {
 
   @override
   Future<void> moveChat(String chatId, String? project) async {
+    final was = await _projectOf(chatId);
     final to = config.chatDir(chatId, project: project);
-    final from = config.chatDir(chatId, project: await _projectOf(chatId));
+    final from = config.chatDir(chatId, project: was);
     if (!await _fs.directory(from).exists() || from == to) return;
     await config.ensureProjectDirs(project: project);
     await _fs.directory(from).rename(to);
+    // The workspace is in the project's, not in the chat directory that just
+    // moved, so it is a second move — and the chat's commands would otherwise
+    // go on running in the project it left.
+    final workspace = _fs.directory(config.workspaceDir(chatId, project: was));
+    if (await workspace.exists()) {
+      final target = config.workspaceDir(chatId, project: project);
+      await _fs.directory(_fs.path.dirname(target)).create(recursive: true);
+      await workspace.rename(target);
+    }
     _projects[chatId] = project;
     // `state.json` names its project too, so a chat read straight off the
     // filesystem still knows where it is.
@@ -171,8 +181,14 @@ class FileChatStore implements ChatStore {
 
   @override
   Future<void> delete(String id) async {
-    final dir = _fs.directory(config.chatDir(id, project: await _projectOf(id)));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    final project = await _projectOf(id);
+    for (final path in [
+      config.chatDir(id, project: project),
+      config.workspaceDir(id, project: project),
+    ]) {
+      final dir = _fs.directory(path);
+      if (await dir.exists()) await dir.delete(recursive: true);
+    }
     _projects.remove(id);
   }
 

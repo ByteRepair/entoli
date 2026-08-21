@@ -151,12 +151,13 @@ void main() {
     expect(summaries, isEmpty);
   });
 
-  test("delete removes the chat directory", () async {
+  test("delete removes the chat directory and the workspace it ran in", () async {
     await store.saveState(makeState("c3"));
     expect(Directory(config.chatDir("c3")).existsSync(), isTrue);
 
     await store.delete("c3");
     expect(Directory(config.chatDir("c3")).existsSync(), isFalse);
+    expect(Directory(config.workspaceDir("c3")).existsSync(), isFalse);
   });
 
   test("saveResource writes bytes under resources/ and reads them back", () async {
@@ -264,6 +265,20 @@ void main() {
       expect(moved.state.project, "work");
       expect(moved.messages, hasLength(1));
       expect(await store.readResource("p4", resource), [7]);
+    });
+
+    // The workspace is in the project's, so it does not travel with the chat
+    // directory: a move that forgot it would leave the chat's files behind in
+    // the project it left.
+    test("what was in the chat's workspace moves with it", () async {
+      await store.saveState(makeState("p7"));
+      File("${config.workspaceDir("p7")}/note.txt").writeAsStringSync("mine");
+
+      await store.moveChat("p7", "work");
+
+      expect(File("${config.workspaceDir("p7", project: "work")}/note.txt")
+          .readAsStringSync(), "mine");
+      expect(Directory(config.workspaceDir("p7")).existsSync(), isFalse);
     });
 
     test("a moved chat says so in its state.json", () async {

@@ -81,7 +81,8 @@ class LocalShell extends Shell {
   bool get canRunCommands => _sandbox() != null || _shell() != null;
 
   @override
-  ShellRun start(String command, {required String cwd, required Duration timeout}) {
+  ShellRun start(String command,
+      {required String cwd, required String home, required Duration timeout}) {
     final sandbox = _sandbox();
     final shell = _shell();
     return _LocalRun(
@@ -100,10 +101,10 @@ class LocalShell extends Shell {
       environment: {
         ..._defaults,
         ...?sandbox == null ? tools?.environment : sandbox.environment,
-        // The guest's `/root` is one directory every chat would share; the
-        // workspace is the chat's own. Guest only — a desktop's `HOME` is the
-        // user's, and the tools there expect what is in it.
-        if (sandbox != null) "HOME": cwd,
+        // The guest's `/root` is one directory every project would share; the
+        // project workspace is the project's own. Guest only — a desktop's
+        // `HOME` is the user's, and the tools there expect what is in it.
+        if (sandbox != null) "HOME": home,
         ..._environment(),
       },
     );

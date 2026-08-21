@@ -11,18 +11,22 @@ import "../domain/project.dart";
 /// Layout:
 ///   `<dataDir>/settings.json`
 ///   `<dataDir>/commands/*.md`, `<dataDir>/agents/*.md`
-///   `<dataDir>/chats/<chat-id>/`
-///     state.json
-///     conv.jsonl
-///     meta.json
-///     resources/
-///     workspace/
-///   `<dataDir>/workspace/`
-///   `<dataDir>/projects/<project>/{chats,workspace}/`
+///   `<dataDir>/projects/<project>/`
+///     `project.json`
+///     `chats/<chat-id>/` — state.json, conv.jsonl, meta.json, resources/,
+///        artifacts/, subagents/
+///     `workspace/`, holding `chats/<chat-id>/`
 ///
-/// Every path but the first three is a project's: `null` is the default
-/// project, and it is the data directory itself, so a chat written before
-/// there were projects is already in it.
+/// Every path but the first three is a project's, and every project is a
+/// directory under `projects/` — the default one included, under the name
+/// `defaultProjectDir`. [migrate] is what moves a data directory written before
+/// that was true.
+///
+/// A chat's own workspace is *inside* the project's rather than beside its
+/// conversation: it is where the chat's commands start, and the project
+/// workspace above it is their `HOME`, so one project is one environment. What
+/// a chat is — the log and what was attached to it — stays in `chats/`, which
+/// the agent never has a path to.
 ///
 /// The workspace half of this layout is spoken a second time, in Kotlin, by
 /// `WorkspaceProvider` — it answers Android's Files app with no engine running,
@@ -60,7 +64,7 @@ class AppConfig {
   /// Every project-scoped path goes through here, so this is where a name that
   /// would reach outside `projects/` is refused rather than joined.
   String projectDir({String? project}) {
-    if (project == null) return dataDir;
+    if (project == null) return fs.path.join(projectsDir, defaultProjectDir);
     if (!isProjectName(project)) {
       throw ArgumentError.value(project, "project", "not a project name");
     }
@@ -115,8 +119,10 @@ class AppConfig {
   String artifactDir(String chatId, String artifactId, {String? project}) =>
       fs.path.join(artifactsDir(chatId, project: project), artifactId);
 
+  /// Where a chat's commands run, under the workspace they share rather than
+  /// beside the conversation: see the layout above.
   String workspaceDir(String chatId, {String? project}) =>
-      fs.path.join(chatDir(chatId, project: project), "workspace");
+      fs.path.join(projectWorkspaceDir(project: project), "chats", chatId);
 
   /// A `task` call's own transcript, in the same format as [convFile] and named
   /// by the call that spawned it. That id is the only one there is, and the
@@ -153,6 +159,7 @@ class AppConfig {
   /// absent one is a worse hint than an empty one about where a custom
   /// command goes.
   Future<void> ensureDirs() async {
+    await migrate();
     await _ensure([
       dataDir,
       projectsDir,
@@ -167,11 +174,74 @@ class AppConfig {
     }
   }
 
+  /// Move a data directory written to the layout that came before this one:
+  /// the default project *was* the data directory, and a chat's workspace sat
+  /// inside its own chat directory rather than in the project's.
+  ///
+  /// Run from [ensureDirs], so it is both what a launch does and what a restore
+  /// does — a backup made by an older build unpacks into the old shape.
+  /// Everything here is skipped once there is nothing left where it used to be,
+  /// which is every run after the first — see the check at the top of it.
+  ///
+  /// Entry by entry rather than directory by directory: a `projects/default`
+  /// can already exist — an older build let one be created — and merging into
+  /// it is the only answer that loses nothing. Anything already at the target
+  /// stays; there is no version to read, so being able to run twice over a
+  /// half-moved directory is what stands in for one.
+  Future<void> migrate() async {
+    final chats = fs.directory(fs.path.join(dataDir, "chats"));
+    final workspace = fs.directory(fs.path.join(dataDir, "workspace"));
+    final settings = fs.file(fs.path.join(dataDir, "project.json"));
+    // Three `exists` calls on a launch rather than a walk of every chat in
+    // every project. The build this moves away from created the first two
+    // whatever else it did, so there is nothing left to find once they are
+    // gone.
+    if (!await chats.exists() &&
+        !await workspace.exists() &&
+        !await settings.exists()) {
+      return;
+    }
+    await _moveEntries(chats.path, chatsDir());
+    await _moveEntries(workspace.path, projectWorkspaceDir());
+    await _move(settings, projectSettingsFile());
+    for (final project in everyProject(await projectNames())) {
+      final chats = fs.directory(chatsDir(project: project));
+      if (!await chats.exists()) continue;
+      for (final chat in await chats.list().toList()) {
+        if (chat is! Directory) continue;
+        final id = fs.path.basename(chat.path);
+        await _move(
+          fs.directory(fs.path.join(chat.path, "workspace")),
+          workspaceDir(id, project: project),
+        );
+      }
+    }
+  }
+
+  /// Move what is in [from] into [to], then drop [from] once it is empty. What
+  /// could not be moved is left where it is rather than deleted with it.
+  Future<void> _moveEntries(String from, String to) async {
+    final dir = fs.directory(from);
+    if (!await dir.exists()) return;
+    for (final entity in await dir.list().toList()) {
+      await _move(entity, fs.path.join(to, fs.path.basename(entity.path)));
+    }
+    if (await dir.list().isEmpty) await dir.delete();
+  }
+
+  Future<void> _move(FileSystemEntity entity, String to) async {
+    if (!await entity.exists()) return;
+    if (await fs.file(to).exists() || await fs.directory(to).exists()) return;
+    await fs.directory(fs.path.dirname(to)).create(recursive: true);
+    if (entity is Directory) await entity.rename(to);
+    if (entity is File) await entity.rename(to);
+  }
+
   String get settingsFile => fs.path.join(dataDir, "settings.json");
 
-  /// Project-scoped overrides. The default project is null, and it is the data
-  /// directory, so its settings sit beside `settings.json` rather than under
-  /// `projects/`.
+  /// Project-scoped overrides, in the project's own directory — the default
+  /// project's included, which is what makes them one kind of file in one
+  /// place.
   String projectSettingsFile({String? project}) =>
       fs.path.join(projectDir(project: project), "project.json");
 }

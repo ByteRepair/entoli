@@ -116,7 +116,11 @@ abstract class ShellRun {
 abstract class Shell {
   const Shell();
 
-  ShellRun start(String command, {required String cwd, required Duration timeout});
+  /// [cwd] is where the command starts, [home] the `HOME` it is given — the
+  /// chat's directory and the project workspace above it. Only a sandbox uses
+  /// [home]: on a desktop `HOME` is the user's own and stays that way.
+  ShellRun start(String command,
+      {required String cwd, required String home, required Duration timeout});
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -144,7 +148,8 @@ class UnavailableShell extends Shell {
   bool get canRunCommands => false;
 
   @override
-  ShellRun start(String command, {required String cwd, required Duration timeout}) =>
+  ShellRun start(String command,
+          {required String cwd, required String home, required Duration timeout}) =>
       const _Unavailable();
 }
 

@@ -290,6 +290,7 @@ class BuiltinBackend implements AgentBackend {
     await config.ensureChatDirs(chatId, project: project);
     final run = shell.start(command,
         cwd: config.workspaceDir(chatId, project: project),
+        home: config.projectWorkspaceDir(project: project),
         timeout: options.commandTimeout);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.

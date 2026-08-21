@@ -34,9 +34,10 @@ void main() {
 
   test("a file is a member at the path it has under the data directory",
       () async {
-    write("chats/abc/conv.jsonl", '{"type":"message"}\n');
+    write("projects/default/chats/abc/conv.jsonl", '{"type":"message"}\n');
 
-    final member = (await archive()).findFile("chats/abc/conv.jsonl");
+    final member =
+        (await archive()).findFile("projects/default/chats/abc/conv.jsonl");
 
     expect(utf8.decode(member!.readBytes()!), '{"type":"message"}\n');
   });
@@ -57,32 +58,54 @@ void main() {
   });
 
   test("an empty folder is a member, since no file names it", () async {
-    Directory("${config.dataDir}/workspace/empty").createSync(recursive: true);
+    Directory("${config.projectWorkspaceDir()}/empty").createSync(recursive: true);
 
-    final member = (await archive()).files.firstWhere(
-        (f) => f.name == "workspace/empty" || f.name == "workspace/empty/");
+    const path = "projects/default/workspace/empty";
+    final member = (await archive())
+        .files
+        .firstWhere((f) => f.name == path || f.name == "$path/");
 
     expect(member.isDirectory, isTrue);
   });
 
   test("what is on disk comes back byte for byte", () async {
     write("settings.json", '{"appTheme":"dark"}');
-    write("chats/abc/conv.jsonl", '{"type":"message"}\n{"type":"turnEnd"}\n');
-    writeBytes("chats/abc/resources/pic.png", [0x89, 0x50, 0xff, 0xfe]);
-    Directory("${config.dataDir}/chats/abc/workspace").createSync(recursive: true);
+    write("projects/default/chats/abc/conv.jsonl",
+        '{"type":"message"}\n{"type":"turnEnd"}\n');
+    writeBytes(
+        "projects/default/chats/abc/resources/pic.png", [0x89, 0x50, 0xff, 0xfe]);
+    Directory(config.workspaceDir("abc")).createSync(recursive: true);
 
     final backup = await roundTrip();
     Directory(config.dataDir).deleteSync(recursive: true);
     Directory(config.dataDir).createSync(recursive: true);
     await restoreBackup(config, backup);
 
-    expect(File("${config.dataDir}/settings.json").readAsStringSync(),
-        '{"appTheme":"dark"}');
-    expect(File("${config.dataDir}/chats/abc/conv.jsonl").readAsStringSync(),
+    expect(File(config.settingsFile).readAsStringSync(), '{"appTheme":"dark"}');
+    expect(File(config.convFile("abc")).readAsStringSync(),
         '{"type":"message"}\n{"type":"turnEnd"}\n');
-    expect(File("${config.dataDir}/chats/abc/resources/pic.png").readAsBytesSync(),
+    expect(File("${config.resourcesDir("abc")}/pic.png").readAsBytesSync(),
         [0x89, 0x50, 0xff, 0xfe]);
-    expect(Directory("${config.dataDir}/chats/abc/workspace").existsSync(), isTrue);
+    expect(Directory(config.workspaceDir("abc")).existsSync(), isTrue);
+  });
+
+  test("a backup made before the projects layout is moved into it", () async {
+    write("chats/old/state.json", "{}");
+    write("chats/old/workspace/note.txt", "kept");
+    write("workspace/shared.txt", "shared");
+    write("project.json", '{"model":"m"}');
+    final backup = await roundTrip();
+    Directory(config.dataDir).deleteSync(recursive: true);
+    Directory(config.dataDir).createSync(recursive: true);
+
+    await restoreBackup(config, backup);
+
+    expect(File(config.stateFile("old")).existsSync(), isTrue);
+    expect(File("${config.workspaceDir("old")}/note.txt").readAsStringSync(), "kept");
+    expect(File("${config.projectWorkspaceDir()}/shared.txt").readAsStringSync(),
+        "shared");
+    expect(File(config.projectSettingsFile()).readAsStringSync(), '{"model":"m"}');
+    expect(Directory("${config.dataDir}/chats").existsSync(), isFalse);
   });
 
   test("the manifest is not restored as a file of its own", () async {
@@ -92,14 +115,14 @@ void main() {
   });
 
   test("a restore replaces rather than merges", () async {
-    write("chats/kept/state.json", "{}");
+    write("projects/default/chats/kept/state.json", "{}");
     final backup = await roundTrip();
-    write("chats/later/state.json", "{}");
+    write("projects/default/chats/later/state.json", "{}");
 
     await restoreBackup(config, backup);
 
-    expect(Directory("${config.dataDir}/chats/kept").existsSync(), isTrue);
-    expect(Directory("${config.dataDir}/chats/later").existsSync(), isFalse);
+    expect(Directory(config.chatDir("kept")).existsSync(), isTrue);
+    expect(Directory(config.chatDir("later")).existsSync(), isFalse);
   });
 
   test("the directories the app needs are there whatever the backup held",
