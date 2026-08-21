@@ -12,6 +12,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 
+import "../../fakes.dart";
 import "builtin_fakes.dart";
 
 void main() {
@@ -141,7 +142,7 @@ void main() {
         [finish],
       ]);
       final events = await agentWith(client, decide: (_, _) => PermissionDecision.allow)
-          .run("list").toList();
+          .run(userMessage("list")).toList();
 
       expect(shell.ran, contains("ls"));
       // Only the bash command goes through the classifier — finish is a text
@@ -157,7 +158,7 @@ void main() {
         [finish],
       ]);
       final events = await agentWith(client, decide: (_, _) => PermissionDecision.deny)
-          .run("clean").toList();
+          .run(userMessage("clean")).toList();
 
       expect(shell.ran, isNot(contains("rm -rf /")));
       final result = events.whereType<ToolResultEvent>().first;
@@ -173,7 +174,7 @@ void main() {
       final events = await agentWith(client,
               decide: (_, _) => PermissionDecision.ask,
               approvals: [ApprovalResponse.allow])
-          .run("push").toList();
+          .run(userMessage("push")).toList();
 
       expect(events.whereType<ApprovalRequestEvent>().length, 1);
       expect(shell.ran, contains("git push"));
@@ -200,7 +201,7 @@ void main() {
       final events = await agentWith(client,
               decide: (_, _) => PermissionDecision.ask,
               approvals: List.filled(4, ApprovalResponse.allow))
-          .run("test").toList();
+          .run(userMessage("test")).toList();
 
       expect(events.whereType<InfoEvent>().single.message, contains("Auto mode paused"));
       // All four commands got approval banners. The finish is a text reply
@@ -227,7 +228,7 @@ void main() {
         [finish],
       ]);
       final events = await agentWith(client, decide: (_, _) => PermissionDecision.allow)
-          .run("test").toList();
+          .run(userMessage("test")).toList();
 
       expect(events.whereType<InfoEvent>(), isEmpty);
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
@@ -253,7 +254,7 @@ void main() {
         approve: (_) async => ApprovalResponse.allow,
         answer: (request) async => request.unanswered,
       );
-      final events = await agent.run("list").toList();
+      final events = await agent.run(userMessage("list")).toList();
 
       // Only the bash command asks — finish is a text reply with no tool call.
       expect(events.whereType<ApprovalRequestEvent>().length, 1);
@@ -283,7 +284,7 @@ void main() {
         answer: (request) async => request.unanswered,
         webSearch: web,
       );
-      final events = await agent.run("fetch").toList();
+      final events = await agent.run(userMessage("fetch")).toList();
 
       expect(web.fetched, isEmpty);
       expect(classifier.classified.first.tool, "webfetch");

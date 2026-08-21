@@ -12,6 +12,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/web_search.dart";
 
+import "../../fakes.dart";
 import "builtin_fakes.dart";
 
 void main() {
@@ -50,7 +51,7 @@ void main() {
 
     test("websearch and webfetch are offered alongside bash", () async {
       final client = FakeLlmClient([[finish]]);
-      await agentWith(client).run("hi").toList();
+      await agentWith(client).run(userMessage("hi")).toList();
 
       final tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, containsAll(["websearch", "webfetch", "bash"]));
@@ -59,7 +60,7 @@ void main() {
     test("websearch/webfetch are not offered when unavailable", () async {
       final client = FakeLlmClient([[finish]]);
       web = FakeWebSearch(available: false);
-      await agentWith(client).run("hi").toList();
+      await agentWith(client).run(userMessage("hi")).toList();
 
       final tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, isNot(contains("websearch")));
@@ -68,7 +69,7 @@ void main() {
 
     test("websearch/webfetch are not offered when webSearch is null", () async {
       final client = FakeLlmClient([[finish]]);
-      await agentWith(client, useDefaultWeb: false).run("hi").toList();
+      await agentWith(client, useDefaultWeb: false).run(userMessage("hi")).toList();
 
       final tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, isNot(contains("websearch")));
@@ -83,7 +84,7 @@ void main() {
       web.searchResult = (q) => const ShellResult(
           returnCode: 0,
           output: "1. Flutter\n   https://flutter.dev\n   A framework.");
-      final events = await agentWith(client).run("search").toList();
+      final events = await agentWith(client).run(userMessage("search")).toList();
 
       expect(web.searched, ["flutter dart"]);
 
@@ -101,7 +102,7 @@ void main() {
       ]);
       web.fetchResult = (url) => const ShellResult(
           returnCode: 0, output: "Example Domain");
-      final events = await agentWith(client).run("fetch").toList();
+      final events = await agentWith(client).run(userMessage("fetch")).toList();
 
       expect(web.fetched, ["https://example.com"]);
 
@@ -125,7 +126,7 @@ void main() {
         ],
         [finish],
       ]);
-      final events = await agentWith(client).run("search").toList();
+      final events = await agentWith(client).run(userMessage("search")).toList();
 
       final result = events.whereType<ToolResultEvent>().firstWhere(
           (e) => e.result.callId == "s1").result;
@@ -148,7 +149,7 @@ void main() {
         ],
         [finish],
       ]);
-      final events = await agentWith(client).run("fetch").toList();
+      final events = await agentWith(client).run(userMessage("fetch")).toList();
 
       final result = events.whereType<ToolResultEvent>().firstWhere(
           (e) => e.result.callId == "f1").result;
@@ -162,7 +163,7 @@ void main() {
         [searchCall("test", id: "s1")],
         [finish],
       ]);
-      await agentWith(client).run("search").toList();
+      await agentWith(client).run(userMessage("search")).toList();
 
       final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
       expect(toolMessages.map((m) => m.toolCallId), contains("s1"));
@@ -174,7 +175,7 @@ void main() {
         [finish],
       ]);
       web.searchResult = (_) => const ShellResult.failed("Network error.");
-      final events = await agentWith(client).run("search").toList();
+      final events = await agentWith(client).run(userMessage("search")).toList();
 
       final result = events.whereType<ToolResultEvent>().firstWhere(
           (e) => e.result.callId == "s1").result;
@@ -201,7 +202,7 @@ void main() {
       ]);
       web.searchResult = (q) => const ShellResult(returnCode: 0, output: "1. Rust\n   https://rust-lang.org");
       web.fetchResult = (url) => const ShellResult(returnCode: 0, output: "Rust programming language");
-      final events = await agentWith(client).run("both").toList();
+      final events = await agentWith(client).run(userMessage("both")).toList();
 
       final results = events.whereType<ToolResultEvent>().where((e) =>
           e.result.callId != "done").toList();
@@ -218,7 +219,7 @@ void main() {
         [finish],
       ]);
       web.fetchResult = (_) => const ShellResult.failed("HTTP 404.");
-      final events = await agentWith(client).run("fetch").toList();
+      final events = await agentWith(client).run(userMessage("fetch")).toList();
 
       final result = events.whereType<ToolResultEvent>().firstWhere(
           (e) => e.result.callId == "f1").result;

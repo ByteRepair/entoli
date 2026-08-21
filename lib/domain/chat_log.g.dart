@@ -13,6 +13,11 @@ MessageRecord _$MessageRecordFromJson(Map<String, dynamic> json) =>
       createdAt: DateTime.parse(json['createdAt'] as String),
       siblingOf: json['siblingOf'] as String?,
       replacesSibling: json['replacesSibling'] as bool? ?? false,
+      documents:
+          (json['documents'] as Map<String, dynamic>?)?.map(
+            (k, e) => MapEntry(k, e as String),
+          ) ??
+          const {},
       $type: json['runtimeType'] as String?,
     );
 
@@ -23,6 +28,7 @@ Map<String, dynamic> _$MessageRecordToJson(MessageRecord instance) =>
       'createdAt': instance.createdAt.toIso8601String(),
       'siblingOf': instance.siblingOf,
       'replacesSibling': instance.replacesSibling,
+      'documents': instance.documents,
       'runtimeType': instance.$type,
     };
 

@@ -1,5 +1,7 @@
 import "dart:typed_data";
 
+import "package:uuid/uuid.dart";
+
 import "../core/config.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
@@ -9,6 +11,7 @@ import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
 import "../domain/project_settings.dart";
+import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
 import "../domain/temp_chat_ttl.dart";
 
@@ -16,7 +19,9 @@ import "../domain/temp_chat_ttl.dart";
 /// on, and owns which thread of a conversation is being read. The turn itself
 /// is accumulated and saved by `ChatController` as events arrive.
 class ChatRepository {
-  ChatRepository(this._store, this._backend, this._settings, this._config);
+  ChatRepository(this._store, this._backend, this._settings, this._config,
+      {PromptLibrary? library})
+      : _library = library ?? PromptLibrary.empty;
 
   final ChatStore _store;
   final AgentBackend _backend;
@@ -26,6 +31,10 @@ class ChatRepository {
 
   /// Where project settings live. Read on use, like [_settings].
   final AppConfig _config;
+
+  /// The commands and agents a message's references are resolved against, once,
+  /// as it is composed — see [composeUserPrompt].
+  final PromptLibrary _library;
 
   /// A chat that has been started but not written to. It lives here until
   /// [save] puts it on disk, which the first turn does. Its settings come with
@@ -189,17 +198,12 @@ class ChatRepository {
   /// prompt for the reason [history] does: a separate "forget what you were
   /// told" call is one a caller can forget, and forgetting it is silent, the
   /// model answering fluently from the turn the user has just left.
-  Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const [],
-      List<Message> history = const [],
-      bool replaces = false,
-      required DateTime at}) async* {
+  Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
+      {List<Message> history = const [],
+      bool replaces = false}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
-    yield* _backend.sendPrompt(chatId, text,
-        attachments: attachments,
-        history: history,
-        settings: await _turnSettings(chatId),
-        at: at);
+    yield* _backend.sendPrompt(chatId, prompt,
+        history: history, settings: await _turnSettings(chatId));
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
@@ -252,32 +256,35 @@ class ChatRepository {
   Future<String?> projectOf(String chatId) async =>
       _isDraft(chatId) ? _draft!.state.project : await _store.projectOf(chatId);
 
+  /// **The one place a user's message is made.** What they typed, the files it
+  /// carries, and what its `/command` and `@agent` references meant when they
+  /// sent it — resolved here, against the library as it is now, and never
+  /// looked up again. A message built anywhere else would carry no references
+  /// and quietly send the four characters the user typed; see "Commands and
+  /// agents" in `lib/domain/CLAUDE.md`.
+  ///
+  /// [files] are already under the chat's `resources/`: the composer saves what
+  /// it is holding with [saveAttachments] first, and a resend passes on the
+  /// parts the message it branches from already had.
+  Message composeUserPrompt(String text, {List<MessagePart> files = const []}) =>
+      Message(
+        id: const Uuid().v4(),
+        role: MessageRole.user,
+        createdAt: DateTime.now(),
+        // Files first, the order they are sent in and a resend rebuilds.
+        parts: [...files, MessagePart.text(text: text)],
+        documents: promptDocuments(text, _library),
+      );
+
   /// Save what the user attached and describe it as the parts that outlive the
-  /// turn. One already on disk stays where it is, so resending a message does
-  /// not copy its bytes again.
+  /// turn. Only the composer has bytes to save: a message being resent already
+  /// has its parts and passes those along instead.
   Future<List<MessagePart>> saveAttachments(String chatId, List<Attachment> attachments) =>
       Future.wait(attachments.map((a) async => MessagePart.file(
-            resource: a.resource ?? await _store.saveResource(chatId, a.filename, a.bytes),
+            resource: await _store.saveResource(chatId, a.filename, a.bytes),
             filename: a.filename,
             mimeType: a.mimeType,
           )));
-
-  /// What [message] carried, bytes and all, so the turn can be sent again. A
-  /// resource that has gone missing is dropped.
-  Future<List<Attachment>> loadAttachments(String chatId, Message message) async {
-    final loaded = await Future.wait(message.files.map((part) async {
-      final bytes = await _store.readResource(chatId, part.resource);
-      return bytes == null
-          ? null
-          : Attachment(
-              filename: part.filename,
-              mimeType: part.mimeType,
-              bytes: bytes,
-              resource: part.resource,
-            );
-    }));
-    return loaded.nonNulls.toList();
-  }
 
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);

@@ -1,3 +1,5 @@
+import "dart:typed_data";
+
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
@@ -24,10 +26,15 @@ void main() {
   MessagePart ran(String id, String output, {int returnCode = 0}) => MessagePart.toolResult(
       result: ToolResult(callId: id, returnCode: returnCode, output: output));
 
+  /// Nothing in this file is about attachment bytes except the two tests that
+  /// pass a loader of their own.
+  Future<List<LlmMessage>> project(List<Message> messages, {bool first = true}) =>
+      projectionOf(messages, first: first, load: noResources);
+
   setUp(() => next = 0);
 
-  test("a plain exchange goes back as one message each way", () {
-    final projected = projectionOf([
+  test("a plain exchange goes back as one message each way", () async {
+    final projected = await project([
       asked("what is 2+2?"),
       said(MessageRole.assistant, const [MessagePart.text(text: "four")]),
     ]);
@@ -42,8 +49,8 @@ void main() {
     ]);
   });
 
-  test("only the message that opens the conversation is dressed as a task", () {
-    final projected = projectionOf([
+  test("only the message that opens the conversation is dressed as a task", () async {
+    final projected = await project([
       asked("first"),
       said(MessageRole.assistant, const [MessagePart.text(text: "ok")]),
       asked("second"),
@@ -55,16 +62,16 @@ void main() {
   });
 
   test("a fragment appended to a session already holding the rest opens nothing",
-      () {
+      () async {
     // What `_runBypass` projects: the two messages its turn is writing, onto a
     // session that already has the conversation.
-    final projected = projectionOf([asked("later")], first: false);
+    final projected = await project([asked("later")], first: false);
 
     expect(projected.single.text, userTurnText("later", at: at, first: false));
   });
 
-  test("thinking travels with the response it belongs to, signature and all", () {
-    final projected = projectionOf([
+  test("thinking travels with the response it belongs to, signature and all", () async {
+    final projected = await project([
       asked("go on"),
       said(MessageRole.assistant, const [
         MessagePart.reasoning(text: "weighing it up", durationMs: 20, signature: "sig-1", responseId: "r1"),
@@ -78,8 +85,8 @@ void main() {
     expect(reply.text, "here goes");
   });
 
-  test("a turn of several responses goes back as one message each", () {
-    final projected = projectionOf([
+  test("a turn of several responses goes back as one message each", () async {
+    final projected = await project([
       asked("list the files"),
       said(MessageRole.assistant, [
         const MessagePart.reasoning(text: "have a look", responseId: "r1"),
@@ -105,8 +112,8 @@ void main() {
     expect(projected[3].toolCalls, isEmpty);
   });
 
-  test("a result is worded the way the agent worded it when it ran", () {
-    final projected = projectionOf([
+  test("a result is worded the way the agent worded it when it ran", () async {
+    final projected = await project([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"false"}', response: "r1"),
         ran("c1", "nope", returnCode: 1),
@@ -118,8 +125,8 @@ void main() {
 
   // The answers are the answer; wrapping them as a command's outcome would put
   // the user's own words behind a return code.
-  test("an ask_user result goes back as the answers themselves", () {
-    final projected = projectionOf([
+  test("an ask_user result goes back as the answers themselves", () async {
+    final projected = await project([
       said(MessageRole.assistant, [
         call("a1", askToolName, '{"questions":[]}', response: "r1"),
         ran("a1", "Which one? Rust"),
@@ -130,8 +137,8 @@ void main() {
   });
 
   // A provider that sees a tool call with no result rejects the next turn.
-  test("a call whose result never landed is answered anyway", () {
-    final projected = projectionOf([
+  test("a call whose result never landed is answered anyway", () async {
+    final projected = await project([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"sleep 1000"}', response: "r1"),
       ]),
@@ -144,8 +151,8 @@ void main() {
 
   // A command's effects outlive the process that ran it, so "not executed"
   // would be a guess — and the wrong one half the time.
-  test("an interrupted command is not claimed to have been skipped", () {
-    final projected = projectionOf([
+  test("an interrupted command is not claimed to have been skipped", () async {
+    final projected = await project([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"make install"}', response: "r1"),
       ]),
@@ -157,8 +164,8 @@ void main() {
 
   // The answered form is the answers themselves, so the unanswered one is
   // plainly worded too rather than dressed as a command's outcome.
-  test("questions the user never saw are answered as questions", () {
-    final projected = projectionOf([
+  test("questions the user never saw are answered as questions", () async {
+    final projected = await project([
       said(MessageRole.assistant, [
         call("a1", askToolName, '{"questions":[]}', response: "r1"),
       ]),
@@ -168,8 +175,8 @@ void main() {
     expect(projected.last.text, isNot(contains("returncode")));
   });
 
-  test("two calls in one response are answered in order, after it", () {
-    final projected = projectionOf([
+  test("two calls in one response are answered in order, after it", () async {
+    final projected = await project([
       said(MessageRole.assistant, [
         call("c1", "bash", '{"command":"ls"}', response: "r1"),
         ran("c1", "one"),
@@ -185,21 +192,37 @@ void main() {
     expect(projected[2].toolCallId, "c2");
   });
 
-  test("what the user attached is named, not resent", () {
-    final projected = projectionOf([
+  test("what the user attached is named and sent", () async {
+    final projected = await projectionOf([
+      said(MessageRole.user, const [
+        MessagePart.file(resource: "r1", filename: "diagram.png", mimeType: "image/png"),
+        MessagePart.text(text: "what is this?"),
+      ]),
+    ], load: (resource) async => Uint8List.fromList([1, 2, 3]));
+
+    expect(projected.single.text,
+        userTurnText("what is this?\n\n(attached: diagram.png)", at: at, first: true));
+    expect(projected.single.attachments.single.filename, "diagram.png");
+    expect(projected.single.attachments.single.mimeType, "image/png");
+    expect(projected.single.attachments.single.bytes, [1, 2, 3]);
+  });
+
+  // The bytes are gone, the conversation is not: the model is told a file was
+  // attached and asked to carry on without it.
+  test("an attachment whose resource has gone is left named", () async {
+    final projected = await project([
       said(MessageRole.user, const [
         MessagePart.file(resource: "r1", filename: "diagram.png", mimeType: "image/png"),
         MessagePart.text(text: "what is this?"),
       ]),
     ]);
 
-    expect(projected.single.text,
-        userTurnText("what is this?\n\n(attached: diagram.png)", at: at, first: true));
+    expect(projected.single.text, contains("(attached: diagram.png)"));
     expect(projected.single.attachments, isEmpty);
   });
 
-  test("an error is the turn's own report, so it is not put back", () {
-    final projected = projectionOf([
+  test("an error is the turn's own report, so it is not put back", () async {
+    final projected = await project([
       asked("go"),
       said(MessageRole.assistant, const [
         MessagePart.text(text: "started", responseId: "r1"),
@@ -214,8 +237,8 @@ void main() {
   // As the assistant rather than as a tool call: the model never chose this,
   // and reading back a call it did not make is a conversation it disagrees
   // with.
-  test("a command the user ran reads back as what the app did for them", () {
-    final projected = projectionOf([
+  test("a command the user ran reads back as what the app did for them", () async {
+    final projected = await project([
       asked("!echo hello"),
       said(MessageRole.assistant, const [
         MessagePart.shellRun(command: "echo hello", returnCode: 0, output: "hello\n"),
@@ -228,7 +251,9 @@ void main() {
     expect(projected.last.text, contains('"returncode": 0'));
   });
 
-  test("a message with nothing in it contributes nothing", () {
-    expect(projectionOf([asked("   ".trim()), said(MessageRole.assistant, const [])]), isEmpty);
+  test("a message with nothing in it contributes nothing", () async {
+    expect(
+        await project([asked("   ".trim()), said(MessageRole.assistant, const [])]),
+        isEmpty);
   });
 }

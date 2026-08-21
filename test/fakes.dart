@@ -151,6 +151,24 @@ Warmup Function() testWarmup({
           tools: tools,
         );
 
+/// A user message as the app would have logged one, for the tests that hand a
+/// turn to an agent or a backend. `sendPrompt` and `BuiltinAgent.run` take the
+/// message rather than its text, since what the model is shown of a turn is the
+/// message plus what is recorded on it — see "The projection".
+Message userMessage(
+  String text, {
+  DateTime? at,
+  Map<String, String> documents = const {},
+  List<MessagePart> files = const [],
+}) =>
+    Message(
+      id: "u1",
+      role: MessageRole.user,
+      createdAt: at ?? DateTime(2026),
+      parts: [...files, MessagePart.text(text: text)],
+      documents: documents,
+    );
+
 /// Stands in for the platform's file chooser, which no test can drive.
 class FakeAttachmentPicker implements AttachmentPicker {
   final List<AttachmentKind> picks = [];
@@ -331,14 +349,11 @@ class FakeBackend implements AgentBackend {
     return scriptedAnswer;
   }
 
-  final List<
-      ({
-        String text,
-        List<Attachment> attachments,
-        List<Message> history,
-        TurnSettings settings,
-        DateTime at,
-      })> prompts = [];
+  /// The message itself rather than fields taken off it: what the model is
+  /// shown of a turn is the whole message, so a test that wants the text, the
+  /// date or what a `/command` meant asks the message for it.
+  final List<({Message prompt, List<Message> history, TurnSettings settings})>
+      prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
   List<AgentEvent> scriptedEvents = const [DoneEvent()];
@@ -348,18 +363,10 @@ class FakeBackend implements AgentBackend {
   Completer<void>? hold;
 
   @override
-  Stream<AgentEvent> sendPrompt(String chatId, String text,
-      {List<Attachment> attachments = const [],
-      List<Message> history = const [],
-      TurnSettings settings = const TurnSettings(),
-      required DateTime at}) async* {
-    prompts.add((
-      text: text,
-      attachments: attachments,
-      history: history,
-      settings: settings,
-      at: at,
-    ));
+  Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
+      {List<Message> history = const [],
+      TurnSettings settings = const TurnSettings()}) async* {
+    prompts.add((prompt: prompt, history: history, settings: settings));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;
   }

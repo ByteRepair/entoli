@@ -70,6 +70,9 @@ sealed class ChatRecord with _$ChatRecord {
     required DateTime createdAt,
     String? siblingOf,
     @Default(false) bool replacesSibling,
+    /// See [Message.documents]. On the record that opens the message rather
+    /// than a part of its own: it is about the message, not something in it.
+    @Default({}) Map<String, String> documents,
   }) = MessageRecord;
 
   /// One part of a message. Written again with the same [index] to supersede
@@ -184,7 +187,8 @@ Replayed replayTree(Iterable<ChatRecord> records) {
           :final role,
           :final createdAt,
           :final siblingOf,
-          :final replacesSibling
+          :final replacesSibling,
+          :final documents
         ):
         // A branch of a message that has since been deleted goes on the end
         // instead, which is where it would have gone naming nothing at all.
@@ -195,7 +199,8 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         // A thread just written is the one being read, until a [SelectRecord]
         // further down the log says the user cycled off it.
         shown[under] = id;
-        nodes[id] = Message(id: id, role: role, createdAt: createdAt);
+        nodes[id] = Message(
+            id: id, role: role, createdAt: createdAt, documents: documents);
         // After this one has joined them, so what it replaces is still there to
         // be found — and so that one record says the whole of where a message
         // goes, with no second line to arrive in the right order.
@@ -332,6 +337,7 @@ List<ChatRecord> recordsOf(List<Message> messages,
           id: message.id,
           role: message.role,
           createdAt: message.createdAt,
+          documents: message.documents,
           siblingOf: at == 0 ? siblingOf : null,
           replacesSibling: at == 0 && replacing,
         ),

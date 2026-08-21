@@ -390,7 +390,7 @@ nothing at all in the library it says how to reach them instead.
 Tapping one types it into the composer through `insertCompletion`, which is the
 composer's own insertion lifted out of its `State` so both callers reach it.
 Both halves of that mattered. **Where** it lands is a rule: a command goes to
-offset 0, because `BuiltinBackend._command` is anchored there and
+offset 0, because `prompt_library.dart`'s `_command` is anchored there and
 `activeCompletionToken` gates `/` on `start == 0` — appended at the caret it
 would be text that looks like a command, dispatches as none, and is not even
 offered a menu. A mention goes at the caret, since `_mention` reads one wherever

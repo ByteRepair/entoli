@@ -173,10 +173,10 @@ return rewind(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String id,  MessageRole role,  DateTime createdAt,  String? siblingOf,  bool replacesSibling)?  message,TResult Function( String messageId,  int index,  MessagePart part)?  part,TResult Function( String messageId,  int index,  String text)?  append,TResult Function( String messageId,  TurnEnd reason)?  turnEnd,TResult Function( String messageId)?  select,TResult Function( String messageId)?  rewind,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String id,  MessageRole role,  DateTime createdAt,  String? siblingOf,  bool replacesSibling,  Map<String, String> documents)?  message,TResult Function( String messageId,  int index,  MessagePart part)?  part,TResult Function( String messageId,  int index,  String text)?  append,TResult Function( String messageId,  TurnEnd reason)?  turnEnd,TResult Function( String messageId)?  select,TResult Function( String messageId)?  rewind,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case MessageRecord() when message != null:
-return message(_that.id,_that.role,_that.createdAt,_that.siblingOf,_that.replacesSibling);case PartRecord() when part != null:
+return message(_that.id,_that.role,_that.createdAt,_that.siblingOf,_that.replacesSibling,_that.documents);case PartRecord() when part != null:
 return part(_that.messageId,_that.index,_that.part);case AppendRecord() when append != null:
 return append(_that.messageId,_that.index,_that.text);case TurnEndRecord() when turnEnd != null:
 return turnEnd(_that.messageId,_that.reason);case SelectRecord() when select != null:
@@ -199,10 +199,10 @@ return rewind(_that.messageId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String id,  MessageRole role,  DateTime createdAt,  String? siblingOf,  bool replacesSibling)  message,required TResult Function( String messageId,  int index,  MessagePart part)  part,required TResult Function( String messageId,  int index,  String text)  append,required TResult Function( String messageId,  TurnEnd reason)  turnEnd,required TResult Function( String messageId)  select,required TResult Function( String messageId)  rewind,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String id,  MessageRole role,  DateTime createdAt,  String? siblingOf,  bool replacesSibling,  Map<String, String> documents)  message,required TResult Function( String messageId,  int index,  MessagePart part)  part,required TResult Function( String messageId,  int index,  String text)  append,required TResult Function( String messageId,  TurnEnd reason)  turnEnd,required TResult Function( String messageId)  select,required TResult Function( String messageId)  rewind,}) {final _that = this;
 switch (_that) {
 case MessageRecord():
-return message(_that.id,_that.role,_that.createdAt,_that.siblingOf,_that.replacesSibling);case PartRecord():
+return message(_that.id,_that.role,_that.createdAt,_that.siblingOf,_that.replacesSibling,_that.documents);case PartRecord():
 return part(_that.messageId,_that.index,_that.part);case AppendRecord():
 return append(_that.messageId,_that.index,_that.text);case TurnEndRecord():
 return turnEnd(_that.messageId,_that.reason);case SelectRecord():
@@ -221,10 +221,10 @@ return rewind(_that.messageId);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String id,  MessageRole role,  DateTime createdAt,  String? siblingOf,  bool replacesSibling)?  message,TResult? Function( String messageId,  int index,  MessagePart part)?  part,TResult? Function( String messageId,  int index,  String text)?  append,TResult? Function( String messageId,  TurnEnd reason)?  turnEnd,TResult? Function( String messageId)?  select,TResult? Function( String messageId)?  rewind,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String id,  MessageRole role,  DateTime createdAt,  String? siblingOf,  bool replacesSibling,  Map<String, String> documents)?  message,TResult? Function( String messageId,  int index,  MessagePart part)?  part,TResult? Function( String messageId,  int index,  String text)?  append,TResult? Function( String messageId,  TurnEnd reason)?  turnEnd,TResult? Function( String messageId)?  select,TResult? Function( String messageId)?  rewind,}) {final _that = this;
 switch (_that) {
 case MessageRecord() when message != null:
-return message(_that.id,_that.role,_that.createdAt,_that.siblingOf,_that.replacesSibling);case PartRecord() when part != null:
+return message(_that.id,_that.role,_that.createdAt,_that.siblingOf,_that.replacesSibling,_that.documents);case PartRecord() when part != null:
 return part(_that.messageId,_that.index,_that.part);case AppendRecord() when append != null:
 return append(_that.messageId,_that.index,_that.text);case TurnEndRecord() when turnEnd != null:
 return turnEnd(_that.messageId,_that.reason);case SelectRecord() when select != null:
@@ -241,7 +241,7 @@ return rewind(_that.messageId);case _:
 @JsonSerializable()
 
 class MessageRecord implements ChatRecord {
-  const MessageRecord({required this.id, required this.role, required this.createdAt, this.siblingOf, this.replacesSibling = false, final  String? $type}): $type = $type ?? 'message';
+  const MessageRecord({required this.id, required this.role, required this.createdAt, this.siblingOf, this.replacesSibling = false, final  Map<String, String> documents = const {}, final  String? $type}): _documents = documents,$type = $type ?? 'message';
   factory MessageRecord.fromJson(Map<String, dynamic> json) => _$MessageRecordFromJson(json);
 
  final  String id;
@@ -249,6 +249,17 @@ class MessageRecord implements ChatRecord {
  final  DateTime createdAt;
  final  String? siblingOf;
 @JsonKey() final  bool replacesSibling;
+/// See [Message.documents]. On the record that opens the message rather
+/// than a part of its own: it is about the message, not something in it.
+ final  Map<String, String> _documents;
+/// See [Message.documents]. On the record that opens the message rather
+/// than a part of its own: it is about the message, not something in it.
+@JsonKey() Map<String, String> get documents {
+  if (_documents is EqualUnmodifiableMapView) return _documents;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_documents);
+}
+
 
 @JsonKey(name: 'runtimeType')
 final String $type;
@@ -267,16 +278,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.siblingOf, siblingOf) || other.siblingOf == siblingOf)&&(identical(other.replacesSibling, replacesSibling) || other.replacesSibling == replacesSibling));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MessageRecord&&(identical(other.id, id) || other.id == id)&&(identical(other.role, role) || other.role == role)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.siblingOf, siblingOf) || other.siblingOf == siblingOf)&&(identical(other.replacesSibling, replacesSibling) || other.replacesSibling == replacesSibling)&&const DeepCollectionEquality().equals(other._documents, _documents));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,role,createdAt,siblingOf,replacesSibling);
+int get hashCode => Object.hash(runtimeType,id,role,createdAt,siblingOf,replacesSibling,const DeepCollectionEquality().hash(_documents));
 
 @override
 String toString() {
-  return 'ChatRecord.message(id: $id, role: $role, createdAt: $createdAt, siblingOf: $siblingOf, replacesSibling: $replacesSibling)';
+  return 'ChatRecord.message(id: $id, role: $role, createdAt: $createdAt, siblingOf: $siblingOf, replacesSibling: $replacesSibling, documents: $documents)';
 }
 
 
@@ -287,7 +298,7 @@ abstract mixin class $MessageRecordCopyWith<$Res> implements $ChatRecordCopyWith
   factory $MessageRecordCopyWith(MessageRecord value, $Res Function(MessageRecord) _then) = _$MessageRecordCopyWithImpl;
 @useResult
 $Res call({
- String id, MessageRole role, DateTime createdAt, String? siblingOf, bool replacesSibling
+ String id, MessageRole role, DateTime createdAt, String? siblingOf, bool replacesSibling, Map<String, String> documents
 });
 
 
@@ -304,14 +315,15 @@ class _$MessageRecordCopyWithImpl<$Res>
 
 /// Create a copy of ChatRecord
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? siblingOf = freezed,Object? replacesSibling = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? id = null,Object? role = null,Object? createdAt = null,Object? siblingOf = freezed,Object? replacesSibling = null,Object? documents = null,}) {
   return _then(MessageRecord(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,role: null == role ? _self.role : role // ignore: cast_nullable_to_non_nullable
 as MessageRole,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime,siblingOf: freezed == siblingOf ? _self.siblingOf : siblingOf // ignore: cast_nullable_to_non_nullable
 as String?,replacesSibling: null == replacesSibling ? _self.replacesSibling : replacesSibling // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,documents: null == documents ? _self._documents : documents // ignore: cast_nullable_to_non_nullable
+as Map<String, String>,
   ));
 }
 

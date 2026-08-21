@@ -20,6 +20,7 @@ import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
+import "projection.dart";
 import "templates.dart";
 import "websearch_tool.dart";
 
@@ -114,10 +115,19 @@ class BuiltinOptions {
 /// A chat's conversation as the model sees it. Held per chat and outliving a
 /// turn, which is what makes the next prompt a continuation rather than a
 /// fresh task.
+///
+/// **What it holds is what `projectionOf` would build out of `conv.jsonl`**, and
+/// [forTurn] is the only exception, for the length of one turn.
 class BuiltinSession {
   final List<LlmMessage> messages = [];
 
   bool get isFresh => messages.isEmpty;
+
+  /// Whether anything has been said yet, which is what decides if a prompt is
+  /// dressed as the opening task. Not [isFresh]: the system prompt is written
+  /// into the same list, so a session that has one is not empty and has still
+  /// heard nothing.
+  bool get hasConversation => messages.any((m) => m.role != LlmRole.system);
 
   /// Put the conversation back into a session that does not have it — one
   /// rewound, or one belonging to a chat opened after a restart. `project` is
@@ -125,6 +135,24 @@ class BuiltinSession {
   void replaceWith(Iterable<LlmMessage> conversation) => messages
     ..clear()
     ..addAll(conversation);
+
+  /// Run [turn] with [message] in the conversation, and take it back out when
+  /// the turn ends however it ends.
+  ///
+  /// For the one thing a turn needs the model to see that nobody said and
+  /// nothing logs — see `resume`. Left in, it would be a message no reload
+  /// could rebuild, and every later turn would send a conversation the log
+  /// disagrees with. By index rather than by value: the messages are freezed,
+  /// so an identical one earlier in the conversation would be removed instead.
+  Stream<T> forTurn<T>(LlmMessage message, Stream<T> Function() turn) async* {
+    final at = messages.length;
+    messages.add(message);
+    try {
+      yield* turn();
+    } finally {
+      messages.removeAt(at);
+    }
+  }
 }
 
 /// The body of the system prompt as the message a turn sends, so the turn and
@@ -198,11 +226,17 @@ class BuiltinAgent {
     this.webSearch,
     this.profile,
     this.saveArtifact,
+    this.loadResource = noResources,
   });
 
   final BuiltinSession session;
   final LlmClient client;
   final Shell shell;
+
+  /// Where an attachment's bytes come from when the turn being opened is
+  /// projected. Defaulted because a sub-agent has no chat under it to read
+  /// from; `BuiltinBackend` passes the store's.
+  final ResourceLoader loadResource;
 
   /// The filesystem the file tools (`read`/`write`/`edit`) and the artifact
   /// tool's path resolution operate on. The same one `AppConfig` holds, so it
@@ -316,17 +350,10 @@ class BuiltinAgent {
     await subAgentRunner?.cancel();
   }
 
-  /// [at] is the date the prompt is logged under — see `userTurnText`. Null is
-  /// the clock, which is right only where nothing logs the turn to word again:
-  /// the tests that drive the loop, and a sub-agent, whose transcript opens on
-  /// the assistant's message and so never has a prompt to project back.
-  Stream<AgentEvent> run(
-    String task, {
-    List<LlmAttachment> attachments = const [],
-    String? agentPrompt,
-    DateTime? at,
-  }) async* {
-    _openTurn(task, attachments, agentPrompt, at ?? DateTime.now());
+  /// [prompt] is the message being logged for this turn, projected rather than
+  /// worded here — see [projectionOf].
+  Stream<AgentEvent> run(Message prompt, {String? agentPrompt}) async* {
+    await _openTurn(prompt, agentPrompt);
     yield* _loop();
   }
 
@@ -338,12 +365,20 @@ class BuiltinAgent {
   /// killed before the model was ever called. Telling a model it was cut off
   /// part-way when there is nothing of its own above is a contradiction, and
   /// small models are what this app is for.
+  ///
+  /// **The reason is this turn's**, so it goes in through [BuiltinSession.forTurn]
+  /// and is gone when the turn ends — the way the system prompt is rewritten
+  /// rather than added to. Nothing logs it, so a session that kept it would
+  /// hold a message no reload could rebuild; see "The projection" in
+  /// `lib/domain/CLAUDE.md` for what that cost.
   Stream<AgentEvent> resume({String? agentPrompt}) async* {
     _setSystemPrompt(agentPrompt);
-    if (session.messages.lastOrNull?.role != LlmRole.user) {
-      session.messages.add(const LlmMessage(role: LlmRole.user, text: continueTask));
+    if (session.messages.lastOrNull?.role == LlmRole.user) {
+      yield* _loop();
+      return;
     }
-    yield* _loop();
+    yield* session.forTurn(
+        const LlmMessage(role: LlmRole.user, text: continueTask), _loop);
   }
 
   Stream<AgentEvent> _loop() async* {
@@ -385,15 +420,10 @@ class BuiltinAgent {
     yield const DoneEvent();
   }
 
-  void _openTurn(
-      String task, List<LlmAttachment> attachments, String? agentPrompt, DateTime at) {
-    final fresh = session.isFresh;
+  Future<void> _openTurn(Message prompt, String? agentPrompt) async {
     _setSystemPrompt(agentPrompt);
-    session.messages.add(LlmMessage(
-      role: LlmRole.user,
-      text: userTurnText(task, at: at, first: fresh),
-      attachments: attachments,
-    ));
+    session.messages.addAll(await projectionOf([prompt],
+        first: !session.hasConversation, load: loadResource));
   }
 
   /// The system prompt is rewritten every turn rather than once, so an
@@ -519,14 +549,7 @@ class BuiltinAgent {
           argumentsText: command);
       final result = _commandResult!;
 
-      yield ToolResultEvent(ToolResult(
-        callId: call.id,
-        returnCode: result.returnCode,
-        output: result.output,
-        exceptionInfo: result.exceptionInfo,
-      ));
-
-      _answerRun(call, result);
+      yield* _answered(call, _ran(call, result));
     }
 
     if (taskCalls.isEmpty || _cancelled) {
@@ -654,22 +677,37 @@ class BuiltinAgent {
     return t.length <= max ? t : "${t.substring(0, max - 1)}…";
   }
 
-  /// Answer a call the model made. Every one gets exactly this, whether it ran
-  /// or not — a provider that sees a tool call with no result rejects the next
-  /// turn.
-  void _answer(LlmToolCall call, String text) => session.messages
-      .add(LlmMessage(role: LlmRole.tool, toolCallId: call.id, text: text));
+  /// Answer a call the model made, from the result the conversation records
+  /// and worded by [toolResultText] — the same function `projectionOf` words it
+  /// with when the turn is read back out of the log. Every call gets one
+  /// whether it ran or not: a provider that sees a tool call with no result
+  /// rejects the next turn.
+  void _answer(LlmToolCall call, ToolResult result) =>
+      session.messages.add(LlmMessage(
+        role: LlmRole.tool,
+        toolCallId: call.id,
+        text: toolResultText(call.name, result),
+      ));
 
-  /// How a command's outcome is worded, which is every call but an `ask_user`:
-  /// one that ran, one that was refused, one that was never reached.
-  void _answerRun(LlmToolCall call, ShellResult result) => _answer(
-        call,
-        observation(
-          returnCode: result.returnCode,
-          output: result.output,
-          exceptionInfo: result.exceptionInfo,
-        ),
+  /// Report the result and answer the call with it, off the one value. Split in
+  /// two, the log and the session were given different strings for the same
+  /// outcome — which a reload then disagreed with.
+  Stream<AgentEvent> _answered(LlmToolCall call, ToolResult result) async* {
+    yield ToolResultEvent(result);
+    _answer(call, result);
+  }
+
+  /// A command's outcome as the result of the call that asked for it: one that
+  /// ran, one that was refused, one that was never reached.
+  ToolResult _ran(LlmToolCall call, ShellResult result) => ToolResult(
+        callId: call.id,
+        returnCode: result.returnCode,
+        output: result.output,
+        exceptionInfo: result.exceptionInfo,
       );
+
+  void _answerRun(LlmToolCall call, ShellResult result) =>
+      _answer(call, _ran(call, result));
 
   /// The model asking the user something. The call and its answers are a pair
   /// like any other, so a finished chat still shows what was asked and picked.
@@ -688,8 +726,8 @@ class BuiltinAgent {
     yield QuestionRequestEvent(request);
     final answers = askAnswers(questions, await answer(request));
 
-    yield ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: answers));
-    _answer(call, answers);
+    yield* _answered(
+        call, ToolResult(callId: call.id, returnCode: 0, output: answers));
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same
@@ -708,13 +746,7 @@ class BuiltinAgent {
       argumentsText: query,
     ));
     final result = await webSearch!.search(query);
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: result.returnCode,
-      output: result.output,
-      exceptionInfo: result.exceptionInfo,
-    ));
-    _answerRun(call, result);
+    yield* _answered(call, _ran(call, result));
   }
 
   /// Fetch a URL. Read-only, so no approval.
@@ -735,13 +767,7 @@ class BuiltinAgent {
         () => webSearch!.fetch(url),
         argumentsText: url);
     final result = _commandResult!;
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: result.returnCode,
-      output: result.output,
-      exceptionInfo: result.exceptionInfo,
-    ));
-    _answerRun(call, result);
+    yield* _answered(call, _ran(call, result));
   }
 
   /// Read a file from the workspace. No approval: the workspace is the
@@ -763,13 +789,14 @@ class BuiltinAgent {
     ));
     final file = fs.file(resolved);
     if (!await file.exists()) {
-      yield ToolResultEvent(ToolResult(
-        callId: call.id,
-        returnCode: -1,
-        output: "",
-        exceptionInfo: "File not found: ${args.path}",
-      ));
-      _answer(call, "File not found: ${args.path}");
+      yield* _answered(
+          call,
+          ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "File not found: ${args.path}",
+          ));
       return;
     }
     final content = await file.readAsString();
@@ -782,12 +809,13 @@ class BuiltinAgent {
       buf.writeln("$i: ${lines[i - 1]}");
     }
     final result = buf.toString();
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: 0,
-      output: result.isEmpty ? "(empty)" : result,
-    ));
-    _answer(call, result.isEmpty ? "(empty file)" : result);
+    yield* _answered(
+        call,
+        ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: result.isEmpty ? "(empty file)" : result,
+        ));
   }
 
   /// Write a file to the workspace, creating or overwriting. No approval:
@@ -810,12 +838,13 @@ class BuiltinAgent {
     await fs.directory(fs.path.dirname(resolved)).create(recursive: true);
     await fs.file(resolved).writeAsString(args.content);
     final bytes = args.content.length;
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: 0,
-      output: "Wrote $bytes bytes to ${args.path}",
-    ));
-    _answer(call, "Wrote $bytes bytes to ${args.path}");
+    yield* _answered(
+        call,
+        ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Wrote $bytes bytes to ${args.path}",
+        ));
   }
 
   /// Edit a file by exact string replacement. No approval: the workspace is
@@ -837,49 +866,52 @@ class BuiltinAgent {
     ));
     final file = fs.file(resolved);
     if (!await file.exists()) {
-      yield ToolResultEvent(ToolResult(
-        callId: call.id,
-        returnCode: -1,
-        output: "",
-        exceptionInfo: "File not found: ${args.path}",
-      ));
-      _answer(call, "File not found: ${args.path}");
+      yield* _answered(
+          call,
+          ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "File not found: ${args.path}",
+          ));
       return;
     }
     final content = await file.readAsString();
     final count = content.split(args.oldString).length - 1;
     if (count == 0) {
-      yield ToolResultEvent(ToolResult(
-        callId: call.id,
-        returnCode: -1,
-        output: "",
-        exceptionInfo: "old_string not found in ${args.path}",
-      ));
-      _answer(call, "old_string not found in ${args.path}");
+      yield* _answered(
+          call,
+          ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "old_string not found in ${args.path}",
+          ));
       return;
     }
     if (!args.replaceAll && count > 1) {
-      yield ToolResultEvent(ToolResult(
-        callId: call.id,
-        returnCode: -1,
-        output: "",
-        exceptionInfo: "old_string appears $count times in ${args.path}; "
-            "add context to make it unique or set replace_all.",
-      ));
-      _answer(call, "old_string appears $count times in ${args.path}; "
-          "add context to make it unique or set replace_all.");
+      yield* _answered(
+          call,
+          ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "old_string appears $count times in ${args.path}; "
+                "add context to make it unique or set replace_all.",
+          ));
       return;
     }
     final updated = args.replaceAll
         ? content.replaceAll(args.oldString, args.newString)
         : content.replaceFirst(args.oldString, args.newString);
     await file.writeAsString(updated);
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: 0,
-      output: "Edited ${args.path}: replaced $count occurrence(s).",
-    ));
-    _answer(call, "Edited ${args.path}: replaced $count occurrence(s).");
+    yield* _answered(
+        call,
+        ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Edited ${args.path}: replaced $count occurrence(s).",
+        ));
   }
 
   /// Publish an artifact from a workspace path. Copies the dir (or the file's
@@ -901,16 +933,18 @@ class BuiltinAgent {
     final artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
     yield ArtifactEvent(artifactId: artifactId, entryFile: parsed.entryFile, title: parsed.title);
     final label = parsed.title.isEmpty ? parsed.path : "'${parsed.title}'";
-    yield ToolResultEvent(ToolResult(
-      callId: call.id,
-      returnCode: 0,
-      output: "Artifact $label published. The user can view it in the app. "
-          "artifact_id: $artifactId",
-    ));
-    _answer(call,
-        "Artifact published. The user can view it in the app. It is saved with "
-        "the chat. To update it, edit the files and call artifact again with "
-        "artifact_id: \"$artifactId\".");
+    // One output, so the model is told how to update it on a reload too — the
+    // instructions used to be said to the model alone and were lost with the
+    // session.
+    yield* _answered(
+        call,
+        ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Artifact $label published. The user can view it in the app. "
+              "It is saved with the chat. To update it, edit the files and call "
+              "artifact again with artifact_id: \"$artifactId\".",
+        ));
   }
 
   /// A call that could not be run at all: the UI still sees the pair, and the
@@ -918,9 +952,8 @@ class BuiltinAgent {
   Stream<AgentEvent> _reject(LlmToolCall call, String problem) async* {
     yield ToolCallEvent(
         ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
-    yield ToolResultEvent(
+    yield* _answered(call,
         ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
-    _answerRun(call, ShellResult.failed(problem));
   }
 
   /// Run [run] gated by [approveMode]: ask the user, classify then maybe ask,

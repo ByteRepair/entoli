@@ -15,6 +15,7 @@ import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/shell.dart";
 
+import "../../fakes.dart";
 import "builtin_fakes.dart";
 
 void main() {
@@ -155,7 +156,7 @@ void main() {
         [saidOnly("hello from the sub-agent")],
       ]);
       final agent = agentOver(parent, sub);
-      final events = await agent.run("delegate it").toList();
+      final events = await agent.run(userMessage("delegate it")).toList();
 
       // The parent received the sub-agent's text as the tool result.
       final toolResult = events.whereType<ToolResultEvent>().first.result;
@@ -172,7 +173,7 @@ void main() {
       final sub = FakeLlmClient([
         [saidOnly("done")],
       ]);
-      final events = await agentOver(parent, sub).run("delegate").toList();
+      final events = await agentOver(parent, sub).run(userMessage("delegate")).toList();
 
       final start = events.whereType<SubAgentStartEvent>().single;
       expect(start.id, "t1");
@@ -190,7 +191,7 @@ void main() {
       final sub = FakeLlmClient([
         [saidOnly("done")],
       ]);
-      await agentOver(parent, sub).run("delegate").toList();
+      await agentOver(parent, sub).run(userMessage("delegate")).toList();
 
       final toolMessages = session.messages.where((m) => m.role == LlmRole.tool);
       expect(toolMessages.map((m) => m.toolCallId), contains("t1"));
@@ -211,7 +212,7 @@ void main() {
         [done],
       ]);
       final sub = FakeLlmClient([]);
-      final events = await agentOver(parent, sub).run("delegate").toList();
+      final events = await agentOver(parent, sub).run(userMessage("delegate")).toList();
 
       final result = events.whereType<ToolResultEvent>().first.result;
       expect(result.callId, "t1");
@@ -225,7 +226,7 @@ void main() {
         [done],
       ]);
       final sub = FakeLlmClient([]);
-      await agentOver(parent, sub).run("hi").toList();
+      await agentOver(parent, sub).run(userMessage("hi")).toList();
 
       final tools = parent.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, containsAll(["bash", "task", "ask_user"]));
@@ -253,7 +254,7 @@ void main() {
         [saidOnly("result A")],
         [saidOnly("result B")],
       ]);
-      final events = await agentOver(parent, sub).run("fan out").toList();
+      final events = await agentOver(parent, sub).run(userMessage("fan out")).toList();
 
       // Both sub-agents started and ended.
       final starts = events.whereType<SubAgentStartEvent>().toList();
@@ -311,7 +312,7 @@ void main() {
         subAgentRunner: runner,
       );
 
-      final events = await agent.run("fan out").toList();
+      final events = await agent.run(userMessage("fan out")).toList();
       final ends = events.whereType<SubAgentEndEvent>().toList();
       expect(ends, hasLength(5));
     });
@@ -351,7 +352,7 @@ void main() {
       );
 
       final events = <AgentEvent>[];
-      final doneFuture = agent.run("delegate").forEach(events.add);
+      final doneFuture = agent.run(userMessage("delegate")).forEach(events.add);
       // Let the sub-agent start.
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await agent.cancel();
@@ -443,7 +444,7 @@ void main() {
           maxConcurrent: 2,
           options: const BuiltinOptions(maxConcurrentSubAgents: 5));
 
-      await agent.run("fan out").toList();
+      await agent.run(userMessage("fan out")).toList();
 
       // The sub-agents' model calls never exceeded 2 in flight.
       expect(subTrack.maxConcurrent, lessThanOrEqualTo(2));
@@ -486,7 +487,7 @@ void main() {
           initialBackoff: const Duration(milliseconds: 50),
           options: const BuiltinOptions(maxConcurrentSubAgents: 3));
 
-      final events = await agent.run("fan out").toList();
+      final events = await agent.run(userMessage("fan out")).toList();
 
       // All three sub-agents finished despite the first's 429.
       final ends = events.whereType<SubAgentEndEvent>().toList();
@@ -524,7 +525,7 @@ void main() {
           initialBackoff: const Duration(milliseconds: 10),
           maxRetryBudget: const Duration(milliseconds: 200));
 
-      final events = await agent.run("fan out").toList();
+      final events = await agent.run(userMessage("fan out")).toList();
 
       // The sub-agent failed — its result carries the 429.
       final result = events.whereType<ToolResultEvent>().firstWhere((e) => e.result.callId == "t0").result;
@@ -580,7 +581,7 @@ void main() {
         subAgentRunner: runner,
       );
 
-      final events = await agent.run("fan out").toList();
+      final events = await agent.run(userMessage("fan out")).toList();
 
       // The sub-agent gave up after maxAttempts 429s.
       final result = events.whereType<ToolResultEvent>().firstWhere((e) => e.result.callId == "t0").result;

@@ -13,6 +13,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 
+import "../../fakes.dart";
 import "builtin_fakes.dart";
 
 void main() {
@@ -68,7 +69,7 @@ void main() {
         [bashCall("ls -la")],
         [finish],
       ]);
-      await agentOver(client).run("what is here?").toList();
+      await agentOver(client).run(userMessage("what is here?")).toList();
 
       expect(shell.ran, ["ls -la"]);
     });
@@ -81,7 +82,7 @@ void main() {
       await agentOver(client, respond: (c) {
         if (c.startsWith("cat")) return ShellResult(returnCode: 2, output: "no such file");
         return ok("");
-      }).run("read it").toList();
+      }).run(userMessage("read it")).toList();
 
       final observation = client.sent[1].last;
       expect(observation.role, LlmRole.tool);
@@ -95,7 +96,7 @@ void main() {
         [finish],
       ]);
       final agent = agentOver(client);
-      await agent.run("fix the bug").toList();
+      await agent.run(userMessage("fix the bug")).toList();
 
       // The body first and this conversation's own directories second: split so
       // the body is one string every chat on the device shares, which is what
@@ -114,8 +115,8 @@ void main() {
         [finish],
       ]);
       final agent = agentOver(client);
-      await agent.run("first").toList();
-      await agent.run("second").toList();
+      await agent.run(userMessage("first")).toList();
+      await agent.run(userMessage("second")).toList();
 
       // Rewritten rather than added to: a second turn must not stack another
       // pair of system messages on the first.
@@ -130,7 +131,7 @@ void main() {
         [finish],
       ]);
       await agentOver(client)
-          .run("look at it", agentPrompt: "You only read; you never edit.")
+          .run(userMessage("look at it"), agentPrompt: "You only read; you never edit.")
           .toList();
 
       // In the per-turn message, not the body: an @agent is this turn's, and
@@ -146,7 +147,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.last, isA<DoneEvent>());
       expect(events.whereType<ErrorEvent>(), isEmpty);
@@ -157,7 +158,7 @@ void main() {
       final client = FakeLlmClient([
         [saidOnly("The answer is 42.")],
       ]);
-      final events = await agentOver(client).run("what is the answer?").toList();
+      final events = await agentOver(client).run(userMessage("what is the answer?")).toList();
 
       expect(events.whereType<TextDelta>().map((e) => e.text), ["The answer is 42."]);
       expect(events.last, isA<DoneEvent>());
@@ -168,7 +169,7 @@ void main() {
         [bashCall("ls")],
         [saidOnly("Found three files.")],
       ]);
-      final events = await agentOver(client, respond: (c) => ok("a b c")).run("hi").toList();
+      final events = await agentOver(client, respond: (c) => ok("a b c")).run(userMessage("hi")).toList();
 
       expect(shell.ran, ["ls"]);
       expect(events.whereType<TextDelta>().map((e) => e.text), ["Found three files."]);
@@ -184,7 +185,7 @@ void main() {
           saidOnly("Looking now."),
         ],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ReasoningDelta>().map((e) => e.text), ["weighing it up"]);
       expect(events.whereType<TextDelta>().map((e) => e.text), ["Looking now."]);
@@ -204,7 +205,7 @@ void main() {
           saidOnly("Looking now."),
         ],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ReasoningEnd>().single.signature, "sig-abc");
     });
@@ -222,7 +223,7 @@ void main() {
           ),
         ],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ReasoningEnd>().single.signature, "sig-late");
     });
@@ -234,7 +235,7 @@ void main() {
         [bashCall("pwd")],
         [finish],
       ]);
-      final events = await agentOver(client).run("where am I?").toList();
+      final events = await agentOver(client).run(userMessage("where am I?")).toList();
 
       final ids = events.whereType<ResponseStart>().map((e) => e.id).toList();
       expect(ids, hasLength(2));
@@ -257,7 +258,7 @@ void main() {
           ),
         ],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ReasoningEnd>(), hasLength(1));
       expect(events.whereType<ReasoningEnd>().single.duration, isNotNull);
@@ -275,7 +276,7 @@ void main() {
           ),
         ],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ReasoningEnd>().single.text, "all of it at once");
     });
@@ -288,7 +289,7 @@ void main() {
       final events = await agentOver(client, respond: (c) {
         if (c == "pwd") return ok("/tmp/workspace\n");
         return ok("");
-      }).run("hi").toList();
+      }).run(userMessage("hi")).toList();
 
       final call = events.whereType<ToolCallEvent>().first.call;
       expect(call.name, "bash");
@@ -304,7 +305,7 @@ void main() {
       final client = FakeLlmClient([
         [saidOnly("Here is my answer.")],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ErrorEvent>(), isEmpty);
       expect(client.sent, hasLength(1));
@@ -321,7 +322,7 @@ void main() {
       final events = await agentOver(client,
               approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
-          .run("clean up")
+          .run(userMessage("clean up"))
           .toList();
 
       expect(events.whereType<ApprovalRequestEvent>().first.approval.toolName, "bash");
@@ -339,7 +340,7 @@ void main() {
       final events = await agentOver(client,
               approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
-          .run("clean up")
+          .run(userMessage("clean up"))
           .toList();
 
       final approval = events.whereType<ApprovalRequestEvent>().first.approval;
@@ -354,7 +355,7 @@ void main() {
       await agentOver(client,
               approveMode: ApproveMode.ask,
               approvals: [ApprovalResponse.deny, ApprovalResponse.allow])
-          .run("clean up")
+          .run(userMessage("clean up"))
           .toList();
 
       expect(shell.ran, isNot(contains("rm -rf /")));
@@ -365,7 +366,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
     });
@@ -390,7 +391,7 @@ void main() {
         [finish],
       ]);
       final events = await agentOver(client, answers: ["Postgres"])
-          .run("set up storage")
+          .run(userMessage("set up storage"))
           .toList();
 
       final request = events.whereType<QuestionRequestEvent>().single.request;
@@ -409,7 +410,7 @@ void main() {
         [finish],
       ]);
       final events = await agentOver(client, answers: ["SQLite"])
-          .run("set up storage")
+          .run(userMessage("set up storage"))
           .toList();
 
       final call = events.whereType<ToolCallEvent>().first.call;
@@ -424,7 +425,7 @@ void main() {
         [askCall(oneQuestion)],
         [finish],
       ]);
-      await agentOver(client).run("set up storage").toList();
+      await agentOver(client).run(userMessage("set up storage")).toList();
 
       final answer = client.sent[1].firstWhere((m) => m.toolCallId == "ask-1");
       expect(answer.text, contains("Which database?"));
@@ -436,7 +437,7 @@ void main() {
         [askCall({"question": "Which one?"})],
         [finish],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<QuestionRequestEvent>(), isEmpty);
       expect(session.messages.firstWhere((m) => m.toolCallId == "ask-1").text,
@@ -447,7 +448,7 @@ void main() {
       final client = FakeLlmClient([
         [saidOnly("nothing to run")],
       ]);
-      await agentOver(client, canRunCommands: false).run("hi").toList();
+      await agentOver(client, canRunCommands: false).run(userMessage("hi")).toList();
 
       // File tools are always offered; bash is dropped without a shell, and
       // ask_user is still there.
@@ -463,7 +464,7 @@ void main() {
       final client = FakeLlmClient(List.filled(3, [bashCall("sleep 1")]));
       final events = await agentOver(client,
               options: const BuiltinOptions(stepLimit: 3))
-          .run("hi")
+          .run(userMessage("hi"))
           .toList();
 
       expect(client.sent, hasLength(3));
@@ -477,7 +478,7 @@ void main() {
       ])..failures[0] = const LlmException("rate limited", statusCode: 429, retryable: true);
       final events = await agentOver(client,
               options: const BuiltinOptions(retryBackoff: Duration.zero))
-          .run("hi")
+          .run(userMessage("hi"))
           .toList();
 
       expect(events.whereType<RetryEvent>().single.attempt, 1);
@@ -487,7 +488,7 @@ void main() {
     test("a rejected key is reported rather than retried", () async {
       final client = FakeLlmClient([[]])
         ..failures[0] = const LlmException("bad key", statusCode: 401);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(client.sent, hasLength(1));
       expect(events.whereType<ErrorEvent>().single.message, contains("bad key"));
@@ -501,7 +502,7 @@ void main() {
       }
       final events = await agentOver(client,
               options: const BuiltinOptions(maxAttempts: 3, retryBackoff: Duration.zero))
-          .run("hi")
+          .run(userMessage("hi"))
           .toList();
 
       expect(client.sent, hasLength(3));
@@ -523,7 +524,7 @@ void main() {
         ],
         [finish],
       ]);
-      final events = await agentOver(client).run("hi").toList();
+      final events = await agentOver(client).run(userMessage("hi")).toList();
 
       expect(events.whereType<ToolResultEvent>().first.result.exceptionInfo,
           contains("no tool called 'python'"));
@@ -543,7 +544,7 @@ void main() {
         ],
         [finish],
       ]);
-      await agentOver(client).run("hi").toList();
+      await agentOver(client).run(userMessage("hi")).toList();
 
       expect(session.messages.firstWhere((m) => m.toolCallId == "x").text,
           contains("was missing"));
@@ -559,7 +560,7 @@ void main() {
       final agent = agentOver(client);
       shell.hang.add("npm install");
       final events = <AgentEvent>[];
-      final done = agent.run("hi").forEach(events.add);
+      final done = agent.run(userMessage("hi")).forEach(events.add);
 
       await Future<void>.delayed(Duration.zero);
       await agent.cancel();
@@ -576,7 +577,7 @@ void main() {
       final client = FakeLlmClient([
         [saidOnly("There is nothing I can run here.")],
       ]);
-      await agentOver(client, canRunCommands: false).run("hi").toList();
+      await agentOver(client, canRunCommands: false).run(userMessage("hi")).toList();
 
       expect(client.sent.first.first.text, contains("no shell"));
     });
@@ -585,7 +586,7 @@ void main() {
       final client = FakeLlmClient([
         [const LlmTextChunk("Two plus two is four."), saidOnly("Two plus two is four.")],
       ]);
-      final events = await agentOver(client, canRunCommands: false).run("2+2?").toList();
+      final events = await agentOver(client, canRunCommands: false).run(userMessage("2+2?")).toList();
 
       expect(client.sent, hasLength(1));
       expect(events.whereType<ErrorEvent>(), isEmpty);
@@ -602,7 +603,7 @@ void main() {
       final client = FakeLlmClient([
         [finish],
       ]);
-      await agentOver(client).run("and 3+3?").toList();
+      await agentOver(client).run(userMessage("and 3+3?")).toList();
 
       expect(client.sent.first.first.role, LlmRole.system);
       expect(client.sent.first.map((m) => m.text).join(), contains("what is 2+2?"));
@@ -682,7 +683,7 @@ void main() {
         [finish],
       ]);
       final events = await agentOver(client, saveArtifact: saveAndRecord(saved))
-          .run("show me a demo")
+          .run(userMessage("show me a demo"))
           .toList();
 
       expect(saved, hasLength(1));
@@ -710,7 +711,7 @@ void main() {
         [finish],
       ]);
       await agentOver(client, saveArtifact: saveAndRecord(saved))
-          .run("update it")
+          .run(userMessage("update it"))
           .toList();
 
       expect(saved.first.artifactId, "existing-id");
@@ -731,7 +732,7 @@ void main() {
         [finish],
       ]);
       final events = await agentOver(client, saveArtifact: saveAndRecord(saved))
-          .run("show me")
+          .run(userMessage("show me"))
           .toList();
 
       expect(saved, isEmpty);
@@ -744,7 +745,7 @@ void main() {
         [artifactCall("report/index.html")],
         [finish],
       ]);
-      await agentOver(client).run("show me").toList();
+      await agentOver(client).run(userMessage("show me")).toList();
 
       // The tool was not offered.
       final tools = client.calls.first.tools.map((t) => t.name).toList();
@@ -759,7 +760,7 @@ void main() {
         [readCall("hello.txt")],
         [finish],
       ]);
-      final events = await agentOver(client).run("write and read").toList();
+      final events = await agentOver(client).run(userMessage("write and read")).toList();
 
       // Both calls succeeded.
       final results = events.whereType<ToolResultEvent>().toList();
@@ -777,7 +778,7 @@ void main() {
         [readCall("test.txt")],
         [finish],
       ]);
-      final events = await agentOver(client).run("write, edit, read").toList();
+      final events = await agentOver(client).run(userMessage("write, edit, read")).toList();
 
       final results = events.whereType<ToolResultEvent>().toList();
       expect(results[1].result.returnCode, 0);
@@ -791,7 +792,7 @@ void main() {
         [editCall("test.txt", "a", "b")],
         [finish],
       ]);
-      final events = await agentOver(client).run("write and edit").toList();
+      final events = await agentOver(client).run(userMessage("write and edit")).toList();
 
       final results = events.whereType<ToolResultEvent>().toList();
       expect(results[1].result.returnCode, -1);
@@ -805,7 +806,7 @@ void main() {
         [readCall("test.txt")],
         [finish],
       ]);
-      final events = await agentOver(client).run("write, edit, read").toList();
+      final events = await agentOver(client).run(userMessage("write, edit, read")).toList();
 
       final results = events.whereType<ToolResultEvent>().toList();
       expect(results[1].result.returnCode, 0);
@@ -819,7 +820,7 @@ void main() {
         [readCall("lines.txt", offset: 2, limit: 2)],
         [finish],
       ]);
-      final events = await agentOver(client).run("write and read").toList();
+      final events = await agentOver(client).run(userMessage("write and read")).toList();
 
       final results = events.whereType<ToolResultEvent>().toList();
       expect(results[1].result.output, contains("2: line2"));
@@ -834,7 +835,7 @@ void main() {
         [finish],
       ]);
       final agent = agentOver(client);
-      await agent.run("write to project").toList();
+      await agent.run(userMessage("write to project")).toList();
 
       expect(File(p.join(agent.projectWorkspace, "shared.txt")).readAsStringSync(), "from project");
       expect(File(p.join(agent.workspace, "shared.txt")).existsSync(), isFalse);
@@ -845,7 +846,7 @@ void main() {
         [readCall("nope.txt")],
         [finish],
       ]);
-      final events = await agentOver(client).run("read missing").toList();
+      final events = await agentOver(client).run(userMessage("read missing")).toList();
 
       expect(events.whereType<ToolResultEvent>().single.result.returnCode, -1);
       expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo, contains("not found"));
@@ -856,7 +857,7 @@ void main() {
         [writeCall("test.txt", "hi")],
         [finish],
       ]);
-      await agentOver(client, canRunCommands: false).run("write").toList();
+      await agentOver(client, canRunCommands: false).run(userMessage("write")).toList();
 
       final tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, containsAll(["read", "write", "edit"]));

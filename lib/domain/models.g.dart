@@ -65,6 +65,11 @@ _Message _$MessageFromJson(Map<String, dynamic> json) => _Message(
           ?.map((e) => MessagePart.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const [],
+  documents:
+      (json['documents'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, e as String),
+      ) ??
+      const {},
 );
 
 Map<String, dynamic> _$MessageToJson(_Message instance) => <String, dynamic>{
@@ -72,6 +77,7 @@ Map<String, dynamic> _$MessageToJson(_Message instance) => <String, dynamic>{
   'role': _$MessageRoleEnumMap[instance.role]!,
   'createdAt': instance.createdAt.toIso8601String(),
   'parts': instance.parts,
+  'documents': instance.documents,
 };
 
 const _$MessageRoleEnumMap = {

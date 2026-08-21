@@ -172,6 +172,18 @@ LlmCompletion bashCall(String command, {String id = "call-1", String text = ""})
       ),
     );
 
+/// One assistant turn that calls a file tool — `read`, `write` or `edit`.
+LlmCompletion fileCall(String tool, Map<String, Object?> arguments,
+        {String id = "file-1"}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        toolCalls: [
+          LlmToolCall(id: id, name: tool, argumentsJson: jsonEncode(arguments)),
+        ],
+      ),
+    );
+
 /// One assistant turn that asks the user something. [arguments] is passed as
 /// the model wrote it, so a test can hand over a shape nobody designed for.
 LlmCompletion askCall(Object arguments, {String id = "ask-1"}) => LlmCompletion(

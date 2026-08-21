@@ -144,15 +144,14 @@ saying who ran it — so the model sees the command and the exit code without
 being told it made the call. As the user it would be two user messages in a row,
 which not every provider accepts.
 
-The live session is filled through `projectionOf` rather than worded a second
-time in `_runBypass`: it builds the two messages the turn is writing and
-projects those, so what the model is holding now and what a reload would build
-out of the log cannot be two different conversations. That is also what names an
-attachment sent with the command, which a hand-written session line got wrong.
-The turn's own ids are not in the session, so the two messages are built with
-none; the projection does not read those. It does read the date, which is why
-the turn's `at` is the one the prompt is logged under rather than the clock —
-see "The projection".
+The live session is filled through `projectionOf`, which is by now what every
+turn does — this one is unusual only in that the app wrote the reply rather than
+a model. It gets the prompt message itself and builds the reply beside it, so
+what the model is holding now and what a reload would build out of the log
+cannot be two different conversations. The reply it builds carries no id,
+because the projection does not read one; everything it does read — the date, an
+attachment's bytes, what a `/command` stood for — is on the prompt, which is the
+message being logged. See "The projection".
 
 An aborted `!` turn writes nothing — no part, and nothing into the session
 either. The command was killed, so whatever it had printed is not an answer.
