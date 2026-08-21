@@ -46,7 +46,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen
 - `lib/ui/workspace/CLAUDE.md` — The workspace explorer
 - `lib/ui/share/CLAUDE.md` — Sharing to Entoli
-- `lib/ui/CLAUDE.md` — The theme, The keyboard and the caret
+- `lib/ui/CLAUDE.md` — Opening a link, The theme, The keyboard and the caret
 - `lib/ui/settings/CLAUDE.md` — Setting overrides, What the app is, Backing it
   all up
 - `lib/ui/widgets/CLAUDE.md` — Shared UI, A catalog of things to download

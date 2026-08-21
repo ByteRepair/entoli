@@ -1,5 +1,4 @@
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/temp_chat_ttl.dart";
@@ -136,12 +135,7 @@ class _CopyField extends StatelessWidget {
       trailing: IconButton(
         icon: const Icon(Icons.copy),
         tooltip: "Copy",
-        onPressed: () {
-          Clipboard.setData(ClipboardData(text: value));
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(snack)),
-          );
-        },
+        onPressed: () => copyToClipboard(context, value, said: snack),
       ),
     );
   }
