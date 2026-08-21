@@ -267,9 +267,6 @@ void main() {
       expect(await store.readResource("p4", resource), [7]);
     });
 
-    // The workspace is in the project's, so it does not travel with the chat
-    // directory: a move that forgot it would leave the chat's files behind in
-    // the project it left.
     test("what was in the chat's workspace moves with it", () async {
       await store.saveState(makeState("p7"));
       File("${config.workspaceDir("p7")}/note.txt").writeAsStringSync("mine");

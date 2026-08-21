@@ -124,8 +124,7 @@ class FileChatStore implements ChatStore {
     await config.ensureProjectDirs(project: project);
     await _fs.directory(from).rename(to);
     // The workspace is in the project's, not in the chat directory that just
-    // moved, so it is a second move — and the chat's commands would otherwise
-    // go on running in the project it left.
+    // moved, so it is a second move.
     final workspace = _fs.directory(config.workspaceDir(chatId, project: was));
     if (await workspace.exists()) {
       final target = config.workspaceDir(chatId, project: project);

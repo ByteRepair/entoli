@@ -159,8 +159,10 @@ Future<void> restoreBackup(AppConfig config, Backup backup) async {
     if (member.isDirectory) await createFolder(fs, config.dataDir, member.name);
   }
 
-  // A backup holding none of them is still a working app afterwards.
+  // A backup holding none of them is still a working app afterwards, and one
+  // made by an older build is in the layout that came before this one.
   await config.ensureDirs();
+  await config.migrate();
 }
 
 /// A member on its way out of the archive, which is what `IncomingFile` already

@@ -51,6 +51,7 @@ class AppConfig {
   static Future<AppConfig> load(FileSystem fs, String dataDir) async {
     final config = AppConfig._(dataDir, fs);
     await config.ensureDirs();
+    await config.migrate();
     await config.documents.hydrate([
       config.settingsFile,
       for (final project in everyProject(await config.projectNames()))
@@ -159,7 +160,6 @@ class AppConfig {
   /// absent one is a worse hint than an empty one about where a custom
   /// command goes.
   Future<void> ensureDirs() async {
-    await migrate();
     await _ensure([
       dataDir,
       projectsDir,
@@ -178,63 +178,63 @@ class AppConfig {
   /// the default project *was* the data directory, and a chat's workspace sat
   /// inside its own chat directory rather than in the project's.
   ///
-  /// Run from [ensureDirs], so it is both what a launch does and what a restore
-  /// does — a backup made by an older build unpacks into the old shape.
-  /// Everything here is skipped once there is nothing left where it used to be,
-  /// which is every run after the first — see the check at the top of it.
+  /// Entry by entry, so a `projects/default` that an older build let someone
+  /// create is merged into rather than stepped on. Anything already at the
+  /// target is left where it is, which is also what makes a second run over a
+  /// half-moved directory harmless. Called after a restore as well as at
+  /// launch: a backup made by an older build unpacks into the old shape.
   ///
-  /// Entry by entry rather than directory by directory: a `projects/default`
-  /// can already exist — an older build let one be created — and merging into
-  /// it is the only answer that loses nothing. Anything already at the target
-  /// stays; there is no version to read, so being able to run twice over a
-  /// half-moved directory is what stands in for one.
+  /// Meant to be deleted whole, once no data directory is old enough to need
+  /// it.
   Future<void> migrate() async {
-    final chats = fs.directory(fs.path.join(dataDir, "chats"));
-    final workspace = fs.directory(fs.path.join(dataDir, "workspace"));
-    final settings = fs.file(fs.path.join(dataDir, "project.json"));
-    // Three `exists` calls on a launch rather than a walk of every chat in
-    // every project. The build this moves away from created the first two
-    // whatever else it did, so there is nothing left to find once they are
-    // gone.
-    if (!await chats.exists() &&
-        !await workspace.exists() &&
-        !await settings.exists()) {
+    // One listing rather than three `exists` calls, since this is on the path
+    // to the first frame and has nothing to do on all but the first launch.
+    final top = {
+      await for (final entity in fs.directory(dataDir).list())
+        fs.path.basename(entity.path),
+    };
+    if (!top.contains("chats") &&
+        !top.contains("workspace") &&
+        !top.contains("project.json")) {
       return;
     }
-    await _moveEntries(chats.path, chatsDir());
-    await _moveEntries(workspace.path, projectWorkspaceDir());
-    await _move(settings, projectSettingsFile());
+    await _moveEntries(fs.path.join(dataDir, "chats"), chatsDir());
+    await _moveEntries(fs.path.join(dataDir, "workspace"), projectWorkspaceDir());
+    await _move(
+        fs.file(fs.path.join(dataDir, "project.json")), projectSettingsFile());
     for (final project in everyProject(await projectNames())) {
       final chats = fs.directory(chatsDir(project: project));
       if (!await chats.exists()) continue;
       for (final chat in await chats.list().toList()) {
         if (chat is! Directory) continue;
-        final id = fs.path.basename(chat.path);
         await _move(
           fs.directory(fs.path.join(chat.path, "workspace")),
-          workspaceDir(id, project: project),
+          workspaceDir(fs.path.basename(chat.path), project: project),
         );
       }
     }
   }
 
-  /// Move what is in [from] into [to], then drop [from] once it is empty. What
-  /// could not be moved is left where it is rather than deleted with it.
+  /// Move what is in [from] into [to], and drop [from] if all of it went.
   Future<void> _moveEntries(String from, String to) async {
     final dir = fs.directory(from);
     if (!await dir.exists()) return;
+    var moved = true;
     for (final entity in await dir.list().toList()) {
-      await _move(entity, fs.path.join(to, fs.path.basename(entity.path)));
+      if (!await _move(entity, fs.path.join(to, fs.path.basename(entity.path)))) {
+        moved = false;
+      }
     }
-    if (await dir.list().isEmpty) await dir.delete();
+    if (moved) await dir.delete();
   }
 
-  Future<void> _move(FileSystemEntity entity, String to) async {
-    if (!await entity.exists()) return;
-    if (await fs.file(to).exists() || await fs.directory(to).exists()) return;
+  /// False where something is already at [to] and was left as it was.
+  Future<bool> _move(FileSystemEntity entity, String to) async {
+    if (await fs.type(to) != FileSystemEntityType.notFound) return false;
+    if (!await entity.exists()) return false;
     await fs.directory(fs.path.dirname(to)).create(recursive: true);
-    if (entity is Directory) await entity.rename(to);
-    if (entity is File) await entity.rename(to);
+    await entity.rename(to);
+    return true;
   }
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");

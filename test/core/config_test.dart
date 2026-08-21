@@ -31,9 +31,10 @@ void main() {
     });
 
     test("a chat's workspace is in the project's, not beside its conversation", () {
-      expect(config.workspaceDir("c1"),
-          p.join(config.projectWorkspaceDir(), "chats", "c1"));
-      expect(config.chatDir("c1"), isNot(contains(config.projectWorkspaceDir())));
+      expect(relative(config.workspaceDir("c1")),
+          p.join("projects", "default", "workspace", "chats", "c1"));
+      expect(relative(config.chatDir("c1")),
+          p.join("projects", "default", "chats", "c1"));
     });
 
     test("a project's settings sit in the project, the app's in the data dir", () {

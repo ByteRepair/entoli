@@ -101,9 +101,7 @@ class LocalShell extends Shell {
       environment: {
         ..._defaults,
         ...?sandbox == null ? tools?.environment : sandbox.environment,
-        // The guest's `/root` is one directory every project would share; the
-        // project workspace is the project's own. Guest only — a desktop's
-        // `HOME` is the user's, and the tools there expect what is in it.
+        // The guest's `/root` is one directory every project would share.
         if (sandbox != null) "HOME": home,
         ..._environment(),
       },

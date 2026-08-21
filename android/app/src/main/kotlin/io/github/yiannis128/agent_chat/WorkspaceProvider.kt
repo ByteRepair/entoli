@@ -18,10 +18,7 @@ import java.io.FileNotFoundException
 //
 // Queried with no Flutter engine running — the Files app starts the process by
 // asking — so the layout `AppConfig` composes is read off the disk here, and
-// `workspaceDepth` with `projectOf` is the whole of that agreement. A data
-// directory in the layout that came before it reads as empty until the app has
-// been launched once: migrating it is `AppConfig.migrate`'s, and doing it from
-// here would be a second copy of that with no engine to check the result.
+// `isWorkspacePath` with `projectOf` is the whole of that agreement.
 class WorkspaceProvider : DocumentsProvider() {
     override fun onCreate() = true
 
@@ -106,11 +103,12 @@ class WorkspaceProvider : DocumentsProvider() {
     private fun locate(documentId: String): Found {
         val segments = documentId.split('/')
         if (segments.any { it.isEmpty() || it == "." || it == ".." }) throw notFound(documentId)
-        val depth = workspaceDepth(segments) ?: throw notFound(documentId)
+        if (!isWorkspacePath(segments)) throw notFound(documentId)
         val file = File(dataDir, segments.joinToString(File.separator)).canonicalFile
-        val workspace = if (depth == segments.size) file else {
-            File(dataDir, segments.take(depth).joinToString(File.separator)).canonicalFile
-        }
+        val workspace = File(
+            dataDir,
+            segments.take(WORKSPACE_DEPTH).joinToString(File.separator),
+        ).canonicalFile
         if (!contains(workspace, file)) throw notFound(documentId)
         return Found(file, workspace)
     }
@@ -129,18 +127,16 @@ class WorkspaceProvider : DocumentsProvider() {
     }
 
     /**
-     * How many leading segments of a document id are the workspace it is in, or
-     * null if it names none — so `chats/`, holding the conversation and what was
-     * attached to it, is not in the tree and cannot be asked for. A chat's own
-     * workspace is inside the project's, so there is one shape to name and not
-     * two.
+     * Whether a document id names a workspace or something inside one — so
+     * `chats/`, holding the conversation and what was attached to it, is not in
+     * the tree and cannot be asked for. A chat's own workspace is inside the
+     * project's, so there is one shape to name and not two.
      */
-    private fun workspaceDepth(segments: List<String>): Int? = when {
-        segments.size < 3 -> null
-        segments[0] != "projects" || !isProjectDir(segments[1]) -> null
-        segments[2] != "workspace" -> null
-        else -> 3
-    }
+    private fun isWorkspacePath(segments: List<String>) =
+        segments.size >= WORKSPACE_DEPTH &&
+            segments[0] == "projects" &&
+            isProjectDir(segments[1]) &&
+            segments[2] == "workspace"
 
     private fun dirOf(project: String) = File(dataDir, "projects/$project")
 
@@ -149,7 +145,8 @@ class WorkspaceProvider : DocumentsProvider() {
             projectDirs().forEach { addProject(it.name) }
             return
         }
-        val workspace = File(dirOf(project), "workspace")
+        val dir = dirOf(project)
+        val workspace = File(dir, "workspace")
         if (!workspace.isDirectory) return
         val id = "projects/$project/workspace"
         addFile(id, workspace, WORKSPACE)
@@ -158,7 +155,7 @@ class WorkspaceProvider : DocumentsProvider() {
         // the user picked one by.
         File(workspace, "chats").listFiles()?.sortedWith(BY_NAME)?.forEach { chat ->
             if (chat.isDirectory) {
-                addFile("$id/chats/${chat.name}", chat, chatTitle(dirOf(project), chat.name))
+                addFile("$id/chats/${chat.name}", chat, chatTitle(dir, chat.name))
             }
         }
     }
@@ -168,7 +165,7 @@ class WorkspaceProvider : DocumentsProvider() {
     private fun projectDirs(): List<File> =
         File(dataDir, "projects").listFiles()
             ?.filter { it.isDirectory && isProjectDir(it.name) }
-            ?.sortedWith(compareBy({ it.name != DEFAULT }, { it.name.lowercase() }))
+            ?.sortedWith(compareBy<File> { it.name != DEFAULT }.thenComparing(BY_NAME))
             ?: emptyList()
 
     private fun MatrixCursor.addProject(project: String) {
@@ -258,6 +255,9 @@ class WorkspaceProvider : DocumentsProvider() {
 
         // `defaultProjectDir`, in lib/domain/project.dart.
         const val DEFAULT = "default"
+
+        // `projects/<name>/workspace`, which every reachable path starts with.
+        const val WORKSPACE_DEPTH = 3
 
         // What the explorer calls a workspace, and every workspace is a
         // directory called `workspace`.

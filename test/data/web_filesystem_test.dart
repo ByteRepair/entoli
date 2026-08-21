@@ -180,30 +180,21 @@ void main() {
     });
 
     // A tab whose IndexedDB was written by the build before the projects
-    // layout. `rename` is the browser filesystem's own, and moving a directory
-    // there is not the one call it is on a disk.
+    // layout. Here as well as in `config_test.dart` because moving a directory
+    // in a browser is not the one call it is on a disk.
     test("a store written to the layout that came before is moved into this one",
         () async {
-      await fs.directory("/agent-chat/chats/old").create(recursive: true);
+      await fs.directory("/agent-chat/chats/old/workspace").create(recursive: true);
       await fs
           .file("/agent-chat/chats/old/state.json")
           .writeAsString(jsonEncode(makeState("old").toJson()));
-      await fs.directory("/agent-chat/chats/old/workspace").create(recursive: true);
       await fs.file("/agent-chat/chats/old/workspace/note.txt").writeAsString("kept");
-      await fs.directory("/agent-chat/workspace").create(recursive: true);
-      await fs.file("/agent-chat/workspace/shared.txt").writeAsString("shared");
 
       final reloaded = await AppConfig.load(fs, "/agent-chat");
 
-      expect(await fs.file(reloaded.stateFile("old")).exists(), isTrue);
       expect(
           await fs.file("${reloaded.workspaceDir("old")}/note.txt").readAsString(),
           "kept");
-      expect(
-          await fs
-              .file("${reloaded.projectWorkspaceDir()}/shared.txt")
-              .readAsString(),
-          "shared");
       expect((await FileChatStore(reloaded).list()).single.id, "old");
     });
 

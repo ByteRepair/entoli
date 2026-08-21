@@ -89,11 +89,10 @@ void main() {
     expect(Directory(config.workspaceDir("abc")).existsSync(), isTrue);
   });
 
+  // What it moves where is `config_test.dart`'s; that a restore moves it at all
+  // is this one's, since a backup made by an older build is in the old shape.
   test("a backup made before the projects layout is moved into it", () async {
     write("chats/old/state.json", "{}");
-    write("chats/old/workspace/note.txt", "kept");
-    write("workspace/shared.txt", "shared");
-    write("project.json", '{"model":"m"}');
     final backup = await roundTrip();
     Directory(config.dataDir).deleteSync(recursive: true);
     Directory(config.dataDir).createSync(recursive: true);
@@ -101,10 +100,6 @@ void main() {
     await restoreBackup(config, backup);
 
     expect(File(config.stateFile("old")).existsSync(), isTrue);
-    expect(File("${config.workspaceDir("old")}/note.txt").readAsStringSync(), "kept");
-    expect(File("${config.projectWorkspaceDir()}/shared.txt").readAsStringSync(),
-        "shared");
-    expect(File(config.projectSettingsFile()).readAsStringSync(), '{"model":"m"}');
     expect(Directory("${config.dataDir}/chats").existsSync(), isFalse);
   });
 
