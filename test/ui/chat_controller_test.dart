@@ -65,6 +65,10 @@ void main() {
     expect(messages.first.role, MessageRole.user);
     expect(textOf(messages.first), "hello");
     expect(app.backend.prompts.single.text, "hello");
+    // Under the date it was logged with, not the clock: what the model is shown
+    // of a user turn carries the moment it was sent, so a turn rebuilt from the
+    // log has to land on the same string. See `userTurnText`.
+    expect(app.backend.prompts.single.at, messages.first.createdAt);
   });
 
   group("a new chat", () {
@@ -366,11 +370,17 @@ void main() {
     final (id, controller) = await chatWithOneTurn("hello");
     final userId = messagesOf(id).first.id;
 
+    final sentAt = messagesOf(id).first.createdAt;
+
     await controller.regenerate(userId);
     await waitIdle(id);
 
     expect(messagesOf(id), hasLength(2));
     expect(app.backend.prompts.map((p) => p.text), ["hello", "hello"]);
+    // The same text *and* the same date, which is what makes it the same
+    // string: a regenerate re-runs the message that is already logged, so it
+    // carries that message's date rather than the moment it was re-run.
+    expect(app.backend.prompts.map((p) => p.at), [sentAt, sentAt]);
   });
 
   test("regenerate from the assistant reply reruns the message above it", () async {

@@ -476,15 +476,29 @@ chat: when a local model is the default and the On-device toggle is on, the
 system prompt is warmed in the background so the server has its KV in a slot
 before a chat asks.
 
-The reorder is what makes it cheap. The system prompt used to open with the
+**The split is what makes it cheap.** The system prompt used to open with the
 conversation's workspace path, which is per-chat, so no two chats shared a
-cacheable prefix. It now ends with the workspace (`## Your workspace`), so the
-long body above it is identical for every chat and is one prefix the pool's slot
-cache reuses across them. The warm-up sends that body with the workspace left
-empty (`createLocalPrefill` in `core/platform/`), so the shared head lands in a
-slot and every chat after only pays its own short tail. The date rides on the
-user message rather than the prompt (`withNow`), so the one value that changes
+cacheable prefix. Moving the workspace to the end of the prompt bought most of
+that back — the long body above it is the same text for every chat, and
+llama.cpp's slot cache matches tokens, so it reused the head — but it left the
+whole thing one message, and a message is what `kvPrefixKeys` hashes. Two chats
+therefore agreed on no *key*, and the body the warm-up wrote to disk was filed
+under a name no chat ever looked for: the live slot helped, the dump could not.
+
+So the per-chat half is its own system message now. `systemPrompt` is the body
+and nothing else; `turnPrompt` is the workspace and whatever an `@agent` added,
+sent after it. The warm-up sends the body alone (`createLocalPrefill` in
+`core/platform/`), so its shortest key *is* every chat's shortest key — the two
+hash the same message — and a chat reopened on a cold server restores what the
+warm-up left rather than reading the body again. The date rides on the user
+message rather than the prompt (`userTurnText`), so the one value that changes
 every turn is never in the cached prefix.
+
+What it costs is two system messages on the wire. `AnthropicClient` already
+joined every system message into its one `system` parameter, so that provider
+sees no change at all, and the OpenAI shape takes a list of messages with roles
+on them. A chat template that assumed exactly one system message would be the
+thing to watch; the bundled server renders each message under its own role.
 
 **It is the on-device provider's own feature and touches no shared interface.**
 `LocalPrefill` drives the existing `LocalLlm.serve` and an `OpenAiClient` with
@@ -586,10 +600,12 @@ at 128 KiB a token for the 4B, halved by `q8_0`, a 3,000-token prompt is around
 190 MB and four gigabytes holds about twenty.
 
 The prefill persists too, but the shortest key — the system+tools body every
-chat shares (`keys.last`) — so the warmed body survives a reload and every chat's
-own restore finds it. It serves with the same threads and cache flags a real turn
-does, or the first turn would find the server launched differently and relaunch
-it, throwing the warm away.
+chat shares (`keys.last`) — so the warmed body survives a reload and every
+chat's own restore finds it. That last clause is only true because the body is
+its own message: while the workspace was in it, a chat's shortest key was over
+its own directories and the warm-up's dump sat there unread. It serves with the
+same threads and cache flags a real turn does, or the first turn would find the
+server launched differently and relaunch it, throwing the warm away.
 
 **Eviction reads a dump's date as when it was last used, not when it was
 written**, and `FileKvCache.warm` touching the file it restored is the whole of

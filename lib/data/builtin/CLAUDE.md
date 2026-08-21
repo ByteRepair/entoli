@@ -150,7 +150,9 @@ projects those, so what the model is holding now and what a reload would build
 out of the log cannot be two different conversations. That is also what names an
 attachment sent with the command, which a hand-written session line got wrong.
 The turn's own ids are not in the session, so the two messages are built with
-none — the projection reads neither those nor the time.
+none; the projection does not read those. It does read the date, which is why
+the turn's `at` is the one the prompt is logged under rather than the clock —
+see "The projection".
 
 An aborted `!` turn writes nothing — no part, and nothing into the session
 either. The command was killed, so whatever it had printed is not an answer.

@@ -337,6 +337,7 @@ class FakeBackend implements AgentBackend {
         List<Attachment> attachments,
         List<Message> history,
         TurnSettings settings,
+        DateTime at,
       })> prompts = [];
 
   /// What the next turn streams back. Defaults to an immediate, empty reply.
@@ -350,12 +351,14 @@ class FakeBackend implements AgentBackend {
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
       List<Message> history = const [],
-      TurnSettings settings = const TurnSettings()}) async* {
+      TurnSettings settings = const TurnSettings(),
+      required DateTime at}) async* {
     prompts.add((
       text: text,
       attachments: attachments,
       history: history,
       settings: settings,
+      at: at,
     ));
     yield* Stream.fromIterable(scriptedEvents);
     if (hold != null) await hold!.future;
