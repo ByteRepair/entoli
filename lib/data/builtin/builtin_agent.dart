@@ -12,6 +12,7 @@ import "../../domain/permission.dart";
 import "../../domain/profile.dart";
 import "../../domain/shell.dart";
 import "../../domain/tool_arg.dart";
+import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
 import "ask_tool.dart";
 import "artifact_tool.dart";
@@ -136,6 +137,14 @@ class BuiltinSession {
     ..clear()
     ..addAll(conversation);
 
+  /// Replace everything from [from] on with [turn]. How a running turn puts
+  /// what it has said into the conversation: it is rebuilt from the turn's own
+  /// parts after every step rather than appended to, so there is no second
+  /// assembly of it to drift from what the log would rebuild.
+  void replaceTurn(int from, Iterable<LlmMessage> turn) => messages
+    ..removeRange(from, messages.length)
+    ..addAll(turn);
+
   /// Run [turn] with [message] in the conversation, and take it back out when
   /// the turn ends however it ends.
   ///
@@ -230,6 +239,18 @@ class BuiltinAgent {
   });
 
   final BuiltinSession session;
+
+  /// The parts this turn has produced, from this turn's own events. The
+  /// conversation the model is sent is [session]'s durable half plus the
+  /// projection of these — never an append of its own, which is what made the
+  /// live turn and the same turn read back out of the log two different things
+  /// to keep level. See "One accumulation" in `lib/domain/CLAUDE.md`.
+  TurnRecorder _said = TurnRecorder.parts();
+
+  /// Where [session] stops being the conversation so far and starts being this
+  /// turn, so the turn's half can be rebuilt from [_said] after every step.
+  int _turnAt = 0;
+
   final LlmClient client;
   final Shell shell;
 
@@ -354,7 +375,7 @@ class BuiltinAgent {
   /// worded here — see [projectionOf].
   Stream<AgentEvent> run(Message prompt, {String? agentPrompt}) async* {
     await _openTurn(prompt, agentPrompt);
-    yield* _loop();
+    yield* _recorded(_loop());
   }
 
   /// [run] without the task: the session is already holding everything the
@@ -377,13 +398,48 @@ class BuiltinAgent {
       yield* _loop();
       return;
     }
-    yield* session.forTurn(
-        const LlmMessage(role: LlmRole.user, text: continueTask), _loop);
+    yield* session.forTurn(const LlmMessage(role: LlmRole.user, text: continueTask),
+        () => _recorded(_loop()));
+  }
+
+  /// Every event the turn emits, through [_said] on its way out. A `yield`
+  /// suspends the loop until its consumer takes the event, so everything a step
+  /// produced is a part before the next step builds its request.
+  Stream<AgentEvent> _recorded(Stream<AgentEvent> events) async* {
+    // Per turn, not per agent: one agent runs a second turn on the same
+    // session, and the turn before it is already in the conversation.
+    _said = TurnRecorder.parts();
+    try {
+      await for (final event in events) {
+        _said.handle(event);
+        yield event;
+      }
+    } finally {
+      // Once more at the end, for the step that produced no further request to
+      // be built for — and on a cancel, so the session holds what did happen.
+      await _sayWhatWasSaid();
+      _said.dispose();
+    }
+  }
+
+  /// This turn's half of the conversation, rebuilt from what it has said. The
+  /// only thing that writes to [session] during a turn, and it writes what
+  /// `projectionOf` would build out of the same parts once they are on disk.
+  Future<void> _sayWhatWasSaid() async {
+    _said.flushDeltas();
+    session.replaceTurn(
+        _turnAt,
+        await projectionOf(
+            [unloggedMessage(MessageRole.assistant, DateTime.now(), _said.parts)],
+            first: false,
+            load: noResources));
   }
 
   Stream<AgentEvent> _loop() async* {
+    _turnAt = session.messages.length;
     for (var step = 0; step < options.stepLimit; step++) {
       if (_cancelled) break;
+      await _sayWhatWasSaid();
 
       // One response per step, named before it starts: what streams out of it
       // is stamped with this, so the turn can be handed back to a provider a
@@ -400,8 +456,6 @@ class BuiltinAgent {
       }
       final completion = _completion;
       if (completion == null) break;
-
-      session.messages.add(completion.message);
 
       // A reply with no tool calls is the finished answer — the text was
       // already streamed as TextDelta by _query. This is the native API
@@ -479,7 +533,7 @@ class BuiltinAgent {
         // Task calls are answered at the end; a task call that was never
         // collected (no sub-agent runner) is answered here instead.
         if (call.name != taskToolName || taskCalls.isEmpty) {
-          _answerRun(call, const ShellResult.failed(notExecuted));
+          yield* _answered(call, _ran(call, const ShellResult.failed(notExecuted)));
         }
         continue;
       }
@@ -565,48 +619,50 @@ class BuiltinAgent {
   }
 
   /// Run a batch of `task` calls concurrently, capped to
-  /// [BuiltinOptions.maxConcurrentSubAgents]. Events stream as each sub-agent
-  /// resolves; session messages are answered in the calls' original order so
-  /// the tool results pair up with the calls.
+  /// [BuiltinOptions.maxConcurrentSubAgents]. Results stream as each sub-agent
+  /// resolves; the projection pairs each back to its call by id, so finishing
+  /// out of order costs nothing.
   Stream<AgentEvent> _executeTasks(List<LlmToolCall> calls) async* {
-    final results = List<ShellResult?>.filled(calls.length, null);
+    final parsed = [for (final call in calls) _taskArgsOf(call)];
+
+    // The calls up front, in the order the model made them. They are one
+    // message's worth of calls and the projection reads them back in the order
+    // their parts are in — emitted as each sub-agent resolved, they went into
+    // the log in finishing order, which is not an order the model ever chose.
+    for (var i = 0; i < calls.length; i++) {
+      final args = parsed[i];
+      yield ToolCallEvent(ToolCall(
+        id: calls[i].id,
+        name: calls[i].name,
+        argumentsJson: calls[i].argumentsJson,
+        argumentsText:
+            args == null ? null : "@${args.agent}: ${_truncate(args.prompt, 200)}",
+      ));
+    }
+
     final controller = StreamController<AgentEvent>();
 
+    ToolResult failed(LlmToolCall call, String why) =>
+        ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: why);
+
     Future<void> runOne(int index) async {
-      if (_cancelled) {
-        results[index] = const ShellResult.failed("This sub-agent was not started.");
-        return;
-      }
       final call = calls[index];
-      final parsed = _taskArgsOf(call);
-      if (parsed == null) {
-        controller.add(ToolCallEvent(
-            ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson)));
-        controller.add(ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: 'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.')));
-        results[index] = const ShellResult.failed(
-            'The task tool takes {"agent": "...", "prompt": "..."}.');
+      if (_cancelled) {
+        controller.add(ToolResultEvent(failed(call, "This sub-agent was not started.")));
         return;
       }
-      final (:agent, :prompt) = parsed;
+      final args = parsed[index];
+      if (args == null) {
+        controller.add(ToolResultEvent(failed(call,
+            'The $taskToolName tool takes {"agent": "...", "prompt": "..."}.')));
+        return;
+      }
+      final (:agent, :prompt) = args;
       controller.add(SubAgentStartEvent(
           id: call.id, agent: agent, prompt: _truncate(prompt, 80)));
       final result = await subAgentRunner!.run(agent, prompt, callId: call.id);
-      results[index] = result;
       controller.add(SubAgentEndEvent(id: call.id, failed: result.returnCode != 0));
-      controller.add(ToolCallEvent(ToolCall(
-          id: call.id,
-          name: call.name,
-          argumentsJson: call.argumentsJson,
-          argumentsText: "@$agent: ${_truncate(prompt, 200)}")));
-      controller.add(ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: result.returnCode,
-          output: result.output,
-          exceptionInfo: result.exceptionInfo)));
+      controller.add(ToolResultEvent(_ran(call, result)));
     }
 
     // A bounded fan-out: run maxConcurrentSubAgents at a time, starting the
@@ -631,7 +687,7 @@ class BuiltinAgent {
       futures.add(() async {
         await acquire();
         if (_cancelled) {
-          results[i] = const ShellResult.failed("The turn was stopped.");
+          controller.add(ToolResultEvent(failed(calls[i], "The turn was stopped.")));
           return;
         }
         try {
@@ -651,16 +707,6 @@ class BuiltinAgent {
       yield event;
     }
     await allDone;
-
-    // Answer each in the original order, so the session messages pair up.
-    for (var i = 0; i < calls.length; i++) {
-      final result = results[i];
-      if (result == null) {
-        _answerRun(calls[i], const ShellResult.failed("This sub-agent was not started."));
-      } else {
-        _answerRun(calls[i], result);
-      }
-    }
   }
 
   /// Pull `agent` and `prompt` out of a `task` call's arguments, or null when
@@ -677,24 +723,11 @@ class BuiltinAgent {
     return t.length <= max ? t : "${t.substring(0, max - 1)}…";
   }
 
-  /// Answer a call the model made, from the result the conversation records
-  /// and worded by [toolResultText] — the same function `projectionOf` words it
-  /// with when the turn is read back out of the log. Every call gets one
-  /// whether it ran or not: a provider that sees a tool call with no result
-  /// rejects the next turn.
-  void _answer(LlmToolCall call, ToolResult result) =>
-      session.messages.add(LlmMessage(
-        role: LlmRole.tool,
-        toolCallId: call.id,
-        text: toolResultText(call.name, result),
-      ));
-
-  /// Report the result and answer the call with it, off the one value. Split in
-  /// two, the log and the session were given different strings for the same
-  /// outcome — which a reload then disagreed with.
+  /// Report a call's outcome. Every call gets one whether it ran or not: a
+  /// provider that sees a tool call with no result rejects the next turn, and
+  /// the result the model is answered with is this same part, projected.
   Stream<AgentEvent> _answered(LlmToolCall call, ToolResult result) async* {
     yield ToolResultEvent(result);
-    _answer(call, result);
   }
 
   /// A command's outcome as the result of the call that asked for it: one that
@@ -705,9 +738,6 @@ class BuiltinAgent {
         output: result.output,
         exceptionInfo: result.exceptionInfo,
       );
-
-  void _answerRun(LlmToolCall call, ShellResult result) =>
-      _answer(call, _ran(call, result));
 
   /// The model asking the user something. The call and its answers are a pair
   /// like any other, so a finished chat still shows what was asked and picked.

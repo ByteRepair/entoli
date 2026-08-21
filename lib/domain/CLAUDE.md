@@ -210,6 +210,51 @@ build" are one expression rather than two kept level by hand. It is why
 attachments: the pieces travelling separately is what let them be assembled two
 ways.
 
+### One accumulation
+
+Wording a turn once was half of it. A turn was still *built up* twice — the
+agent appending `LlmMessage`s to the session as it went, the recorder
+accumulating `MessagePart`s that became `conv.jsonl` — and every divergence
+found so far was one of the two having drifted from the other. That is a kind of
+bug that regenerates: fix the wording and the next feature adds a new place to
+forget.
+
+So the agent no longer accumulates. It emits events, as it always did, and
+`_recorded` puts every one of them through a `TurnRecorder.parts()` on its way
+out — the same class, the same `handle`, that `ChatController` uses to write the
+log. What the session sends is then a function of those parts:
+
+    scaffolding + prefix + projectionOf(the turn's parts so far)
+
+`_sayWhatWasSaid` rebuilds the last term after every step and once when the turn
+ends, through `BuiltinSession.replaceTurn`, which is the only thing that writes
+to a session while a turn runs. `_answer` and `_answerRun` are gone; so is
+`session.messages.add(completion.message)`. A tool result reaches the model
+because it was reported, not because it was also appended.
+
+**This is what makes parity structural rather than tested.** `AgentEvent` and
+`MessagePart` are both sealed, and both switches over them — `TurnRecorder.handle`
+and the projection's `_assistant` — enumerate every member with no default. Add
+a chat feature and the compiler stops in the one place that decides what it means
+to the model, and deciding once gives the live turn, the reload, the regenerate
+and the KV prefix together. Before, the compiler caught the projection half and
+said nothing about the live half, which was a hand-written append.
+
+Two things stay outside, and they are the same two: the system prompt and the
+resume nudge. Neither is in the log, both say how to run *this* turn rather than
+what was said in it, and both are rewritten per turn rather than accumulated —
+`_setSystemPrompt` and `BuiltinSession.forTurn`. They are now the only things
+placed into a session by hand, which is a better home for the exception than one
+hidden among a hundred appends.
+
+The ordering it fixes is worth naming. A `task` fan-out used to emit each call
+as its sub-agent resolved, so the log held them in finishing order while the
+live session held the model's own — and the hand-answering loop underneath had
+a comment explaining that it answered "in the original order, so the session
+messages pair up". The calls now go out together, in the order the model made
+them, and the projection pairs each result back by id. The comment went with the
+loop.
+
 That puts the whole burden on the log, which now has to hold everything the
 wording needs. The date is the message's own `createdAt`, so a regenerate — which
 re-runs the message rather than a copy of its text — sends the date that turn
@@ -219,8 +264,7 @@ left named rather than failing the turn, which is what every message did before
 this read any. And what a `/command` or an `@agent` stood for is written into the
 message when it is composed — see "Commands and agents".
 
-**`resume` was the last thing that could break this, and the answer was to
-notice what its message is.** Carrying on an interrupted turn puts a user
+**`resume` is the one message a turn shows the model that nobody said.** Carrying on an interrupted turn puts a user
 message in front of the model — `continueTask`, the reason it is being asked
 again — and nothing logs it, because nobody said it. Left in the session it made
 a chat resumed in this process hold a message a reload could not rebuild, so

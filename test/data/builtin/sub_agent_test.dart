@@ -317,6 +317,34 @@ void main() {
       expect(ends, hasLength(5));
     });
 
+    // The projection reads a turn's calls back in the order their parts are in,
+    // so emitting each as its sub-agent resolved put them into the log — and
+    // from there in front of the model — in finishing order, which is not an
+    // order the model ever chose.
+    test("a fan-out is read back in the order the model asked, not finished",
+        () async {
+      final parent = FakeLlmClient([
+        [taskCalls(const [("general", "slow"), ("general", "quick")])],
+        [done],
+      ]);
+      // The second sub-agent answers in one step and the first in two, so it
+      // finishes first.
+      final sub = FakeLlmClient([
+        [bashCall("sleep")],
+        [saidOnly("slow answer")],
+        [saidOnly("quick answer")],
+      ]);
+      final agent = agentOver(parent, sub);
+      await agent.run(userMessage("fan out")).toList();
+
+      final asked = parent.sent.last;
+      final calls = asked.firstWhere((m) => m.toolCalls.isNotEmpty).toolCalls;
+      expect(calls.map((c) => c.id), ["t1", "t2"]);
+      expect(
+          asked.where((m) => m.role == LlmRole.tool).map((m) => m.toolCallId),
+          ["t1", "t2"]);
+    });
+
     test("cancel stops running sub-agents", () async {
       final parent = FakeLlmClient([
         [taskCall("general", "long task", id: "t1")],

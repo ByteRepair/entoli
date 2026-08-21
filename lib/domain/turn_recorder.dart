@@ -16,6 +16,26 @@ import "models.dart";
 class TurnRecorder {
   TurnRecorder({required this.append, this.onParts});
 
+  /// A recorder with no log behind it: it accumulates the parts and nothing
+  /// else. What `BuiltinAgent` keeps, so the conversation it sends the model is
+  /// derived from the parts its own events produce rather than assembled a
+  /// second way beside them — see "The projection" in `lib/domain/CLAUDE.md`.
+  TurnRecorder.parts()
+      : append = _writesNothing,
+        onParts = null {
+    // Named rather than opened: there is no message, and no log to put one in.
+    // It is set because buffered text is dropped when nothing is being
+    // recorded, and here everything is — into memory.
+    _messageId = _nothing;
+  }
+
+  static const _nothing = "";
+  static Future<void> _writesNothing(List<ChatRecord> records) async {}
+
+  /// Whether anything is written. False for [TurnRecorder.parts], which skips
+  /// the checkpoints rather than building records for a log that is not there.
+  bool get _logs => _messageId != _nothing;
+
   /// Where the records go. Serialised through this recorder's own queue, so a
   /// caller with other records for the same log writes them with [write]
   /// rather than calling this.
@@ -164,7 +184,7 @@ class TurnRecorder {
 
   void checkpoint() {
     final logging = _messageId;
-    if (logging != null) unawaited(_enqueue(() => _appendChanged(logging)));
+    if (logging != null && _logs) unawaited(_enqueue(() => _appendChanged(logging)));
   }
 
   /// Fold everything buffered into the reply's trailing part of the same kind.
