@@ -3,6 +3,7 @@ import "dart:io";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/workspace.dart";
 import "package:agent_chat/ui/chat/chat_settings_page.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
@@ -114,14 +115,96 @@ void main() {
       expect(find.text("Chat workspace"), findsOneWidget);
     });
 
-    testWidgets("tapping a file hands it to the platform's viewer", (tester) async {
+    testWidgets("tapping a file it cannot read hands it to the platform",
+        (tester) async {
+      seed(files: ["photo.png"]);
+      await open(tester);
+
+      await tester.tap(find.text("photo.png"));
+      await settleIo(tester);
+
+      expect(app.handoff.opened, ["$root/photo.png"]);
+    });
+  });
+
+  group("viewing a text file", () {
+    setUp(() => start(handoff: FakeFileHandoff.desktop()));
+
+    Future<void> view(WidgetTester tester, String name) async {
+      await tester.tap(find.text(name));
+      await settleIo(tester);
+    }
+
+    testWidgets("tapping one reads it in the app rather than handing it over",
+        (tester) async {
       seed(files: ["notes.md"]);
       await open(tester);
 
-      await tester.tap(find.text("notes.md"));
+      await view(tester, "notes.md");
+
+      expect(find.text("contents of notes.md"), findsOneWidget);
+      expect(app.handoff.opened, isEmpty);
+    });
+
+    testWidgets("the app bar still opens it in another app", (tester) async {
+      seed(files: ["notes.md"]);
+      await open(tester);
+      await view(tester, "notes.md");
+
+      await tester.tap(find.byTooltip("Open in another app"));
       await settleIo(tester);
 
       expect(app.handoff.opened, ["$root/notes.md"]);
+      expect(find.text("contents of notes.md"), findsOneWidget);
+    });
+
+    testWidgets("what is shown can be copied", (tester) async {
+      final copied = clipboard(tester);
+      seed(files: ["notes.md"]);
+      await open(tester);
+      await view(tester, "notes.md");
+
+      await tester.tap(find.byTooltip("Copy"));
+      await settleIo(tester);
+
+      expect(copied, ["contents of notes.md"]);
+    });
+
+    testWidgets("a file past the cap is cut off and says so", (tester) async {
+      File("$root/big.log")
+        ..createSync(recursive: true)
+        ..writeAsStringSync("x" * (textViewLimit + 10));
+      await open(tester);
+
+      await view(tester, "big.log");
+
+      expect(find.textContaining("Showing the first"), findsOneWidget);
+    });
+
+    // The extension is only the first half of the rule: a `.log` the agent
+    // wrote as a gzip goes back out to the platform rather than being drawn.
+    testWidgets("one whose bytes are not text falls back to the hand-off",
+        (tester) async {
+      File("$root/a.log")
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([0x1f, 0x8b, 0x00, 0x42]);
+      await open(tester);
+
+      await view(tester, "a.log");
+
+      expect(app.handoff.opened, ["$root/a.log"]);
+      expect(find.text("Chat workspace"), findsOneWidget);
+    });
+
+    testWidgets("one deleted under the reader says so rather than drawing nothing",
+        (tester) async {
+      seed(files: ["notes.md"]);
+      await open(tester);
+      File("$root/notes.md").deleteSync();
+
+      await view(tester, "notes.md");
+
+      expect(find.text("That file could not be read"), findsOneWidget);
     });
   });
 

@@ -9,7 +9,12 @@ every page would otherwise spell out), the `Default`-plus-reset pairing,
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, and `catalog.dart` — the section below.
+`AttachmentStrip`, `EmptyPane`, and `catalog.dart` — the section below.
+
+`EmptyPane` is the middle of a page with nothing on it. The workspace has two —
+a folder with no files in it, and a file the viewer could not read — and a
+placeholder differing between them by a few pixels of padding reads as a bug
+rather than as two states.
 
 `ActionIcon` is the small icon button, and it carries the height the actions
 row keeps whether or not anything is in it — the row and the buttons in it have
