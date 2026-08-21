@@ -3,14 +3,14 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/workspace.dart";
 import "../../providers.dart";
-import "../fonts.dart";
+import "../chat/widgets/code_block.dart" show codeBlockStyle;
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/empty_pane.dart";
 import "../widgets/formatting.dart";
 
-/// A text file from a workspace, read rather than handed to another app. It is
-/// a viewer and not an editor: the text is selectable and copyable and that is
-/// the whole of what it does — see CLAUDE.md, "The workspace explorer".
+/// A text file from a workspace, read rather than handed to another app — see
+/// CLAUDE.md, "The workspace explorer".
 class TextViewerPage extends ConsumerStatefulWidget {
   const TextViewerPage({super.key, required this.path, required this.name});
 
@@ -46,9 +46,10 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
       final content =
           await readTextHead(ref.read(appConfigProvider).fs, widget.path);
       if (!mounted) return;
-      // The name said text and the bytes disagree, so this was the hand-off's
-      // after all: leave rather than draw the file as mojibake.
-      if (content == null) return _fallBack();
+      // The name said text and the bytes disagree. Popping `true` puts the
+      // hand-off back on the explorer, which is what stays on screen to say so
+      // if it fails.
+      if (content == null) return Navigator.of(context).pop(true);
       setState(() => _content = content);
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -57,20 +58,6 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
 
   Future<void> _handOff() =>
       whileBusy(context, _busy, () => ref.read(fileHandoffProvider).open(widget.path));
-
-  /// The page goes first and the hand-off follows it, so nothing here can
-  /// touch a disposed state: the messenger is the app's rather than this
-  /// route's, which is what leaves somewhere to say a refusal.
-  Future<void> _fallBack() async {
-    final handoff = ref.read(fileHandoffProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
-    try {
-      await handoff.open(widget.path);
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text("That did not work: $e")));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -107,21 +94,24 @@ class _TextViewerPageState extends ConsumerState<TextViewerPage> {
   }
 
   Widget _body(WorkspaceText? content) {
-    if (_error != null) return _Failed(error: _error!, onRetry: _retry);
+    if (_error != null) {
+      return EmptyPane(
+        icon: Icons.error_outline,
+        title: "That file could not be read",
+        detail: "$_error",
+        action: TextButton(onPressed: _retry, child: const Text("Try again")),
+      );
+    }
     if (content == null) return const Center(child: CircularProgressIndicator());
     if (content.text.isEmpty) return const Center(child: Text("This file is empty"));
     return Scrollbar(
       child: SingleChildScrollView(
         primary: true,
         padding: const EdgeInsets.all(16),
-        // A long line scrolls rather than wraps: what is being read is a log or
-        // a source file, where a wrapped line is a line that lost its column.
+        // A long line scrolls rather than wraps.
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: SelectableText(
-            content.text,
-            style: const TextStyle(fontFamily: monoFamily, fontSize: 13, height: 1.4),
-          ),
+          child: SelectableText(content.text, style: codeBlockStyle(Theme.of(context))),
         ),
       ),
     );
@@ -147,38 +137,6 @@ class _Truncated extends StatelessWidget {
         "Showing the first ${formatSize(textViewLimit)}. "
         "Open the file in another app to read the rest.",
         style: theme.textTheme.bodySmall,
-      ),
-    );
-  }
-}
-
-class _Failed extends StatelessWidget {
-  const _Failed({required this.error, required this.onRetry});
-
-  final Object error;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Theme.of(context).hintColor),
-            const SizedBox(height: 12),
-            const Text("That file could not be read"),
-            const SizedBox(height: 4),
-            Text(
-              "$error",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            TextButton(onPressed: onRetry, child: const Text("Try again")),
-          ],
-        ),
       ),
     );
   }

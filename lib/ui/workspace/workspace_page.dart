@@ -6,6 +6,7 @@ import "../../domain/workspace.dart";
 import "../../providers.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/empty_pane.dart";
 import "../widgets/formatting.dart";
 import "text_viewer_page.dart";
 
@@ -115,16 +116,16 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
 
-  /// A text file is read here; everything else is another app's. The name is
-  /// all this decides on — a file whose bytes say otherwise comes straight back
-  /// out of the viewer and into the hand-off.
+  /// A text file is read here and everything else is another app's, but the
+  /// name is all this can decide on: the viewer pops `true` when the bytes turn
+  /// out not to be text, and the hand-off below runs after all.
   Future<void> _open(WorkspaceEntry entry) async {
     if (entry.isDirectory) return _goTo(entry.path);
     if (looksTextual(ref.read(appConfigProvider).fs, entry.name)) {
-      await Navigator.of(context).push(MaterialPageRoute(
+      final handOff = await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (_) => TextViewerPage(path: entry.path, name: entry.name),
       ));
-      return;
+      if (handOff != true || !mounted) return;
     }
     await _guard(() => ref.read(fileHandoffProvider).open(entry.path));
   }
@@ -217,7 +218,15 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final entries = snapshot.data!;
-                if (entries.isEmpty) return _Empty(route: _inboundRoute(handoff));
+                if (entries.isEmpty) {
+                  final route = _inboundRoute(handoff);
+                  return EmptyPane(
+                    icon: Icons.folder_open,
+                    title: "Nothing here yet",
+                    detail: "The agent's files land here."
+                        "${route == null ? "" : " $route"}",
+                  );
+                }
                 return ListView.builder(
                   itemCount: entries.length,
                   itemBuilder: (context, i) => _Row(
@@ -368,37 +377,6 @@ class _Row extends StatelessWidget {
       trailing: entry.isDirectory && !selecting ? const Icon(Icons.chevron_right) : null,
       onTap: onTap,
       onLongPress: onLongPress,
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty({required this.route});
-
-  /// How the reader could put a file here themselves, or nothing if this
-  /// platform has no way in. Decided by the page, which knows what it drew.
-  final String? route;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.folder_open, size: 48, color: Theme.of(context).hintColor),
-            const SizedBox(height: 12),
-            const Text("Nothing here yet"),
-            const SizedBox(height: 4),
-            Text(
-              "The agent's files land here.${route == null ? "" : " $route"}",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

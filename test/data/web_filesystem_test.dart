@@ -136,8 +136,8 @@ void main() {
     });
   });
 
-  /// The viewer reads a prefix rather than the file, and a prefix out of
-  /// IndexedDB is a different code path from one off a disk.
+  // The viewer reads a prefix rather than the file, and a prefix out of
+  // IndexedDB is a different code path from one off a disk.
   group("reading a workspace file", () {
     late String path;
 

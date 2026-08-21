@@ -171,8 +171,9 @@ void main() {
     });
 
     testWidgets("a file past the cap is cut off and says so", (tester) async {
-      seed(files: ["big.log"]);
-      File("$root/big.log").writeAsStringSync("x" * (textViewLimit + 10));
+      File("$root/big.log")
+        ..createSync(recursive: true)
+        ..writeAsStringSync("x" * (textViewLimit + 10));
       await open(tester);
 
       await view(tester, "big.log");
@@ -184,8 +185,9 @@ void main() {
     // wrote as a gzip goes back out to the platform rather than being drawn.
     testWidgets("one whose bytes are not text falls back to the hand-off",
         (tester) async {
-      seed(files: ["a.log"]);
-      File("$root/a.log").writeAsBytesSync([0x1f, 0x8b, 0x00, 0x42]);
+      File("$root/a.log")
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([0x1f, 0x8b, 0x00, 0x42]);
       await open(tester);
 
       await view(tester, "a.log");

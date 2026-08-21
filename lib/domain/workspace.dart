@@ -55,11 +55,10 @@ Future<List<WorkspaceEntry>> listWorkspace(FileSystem fs, String dir) async {
 }
 
 /// The most of a file the viewer reads. A workspace holds the agent's logs, so
-/// there is no upper bound on what a tap can land on, and one paragraph of
-/// unwrapped monospace is laid out in full whether it is looked at or not.
+/// there is no upper bound on what a tap can land on; what drawing that much
+/// costs is in `lib/ui/workspace/CLAUDE.md`.
 const textViewLimit = 128 * 1024;
 
-/// The start of a text file, and whether it goes on past [textViewLimit].
 class WorkspaceText {
   const WorkspaceText(this.text, {required this.truncated});
 
@@ -67,13 +66,12 @@ class WorkspaceText {
   final bool truncated;
 }
 
-/// Whether the viewer should try [name] at all. The name is only the first
-/// half of the rule — [readTextHead] answers `null` when the bytes turn out
-/// not to be text — but it is the half that decides without a read.
+/// Whether the viewer should try [name] at all — the half of the rule that
+/// decides without a read, [readTextHead] being the other.
 ///
-/// No extension counts: `README`, `Makefile` and every dotfile the agent
-/// writes have none, and `package:path` reads a leading dot as a name rather
-/// than an extension.
+/// No extension counts, since `README` and `Makefile` have none; a dotfile
+/// reaches that same branch because `package:path` reads a leading dot as a
+/// name rather than as an extension.
 bool looksTextual(FileSystem fs, String name) {
   final extension = fs.path.extension(name).toLowerCase();
   return extension.isEmpty || _textExtensions.contains(extension.substring(1));
@@ -91,10 +89,6 @@ const _textExtensions = {
 /// Read at most [textViewLimit] bytes of [path] as UTF-8, or `null` if what
 /// came back is not text after all — a `.log` the agent wrote as a gzip is a
 /// hand-off rather than a page of mojibake.
-///
-/// A prefix rather than the file: the cap is what keeps a multi-megabyte log
-/// out of a `Text` widget, and reading past it only to throw it away would
-/// still have loaded it.
 Future<WorkspaceText?> readTextHead(FileSystem fs, String path) async {
   final stat = await fs.file(path).stat();
   if (stat.type != FileSystemEntityType.file) {
@@ -118,15 +112,16 @@ Future<WorkspaceText?> readTextHead(FileSystem fs, String path) async {
 
 /// The cap falls on a byte, so the last character can be half of one. Dropping
 /// it is the difference between a truncated file and one that reads as binary.
+///
+/// The walk back stops at four, since no UTF-8 rune is longer than that.
 Uint8List _withoutCutRune(Uint8List bytes) {
-  for (var i = bytes.length - 1; i >= 0 && bytes.length - i <= 4; i--) {
-    if (bytes[i] & 0x80 == 0) break;
-    if (bytes[i] & 0xc0 == 0xc0) {
-      final needed = bytes[i] >= 0xf0 ? 4 : (bytes[i] >= 0xe0 ? 3 : 2);
-      return bytes.length - i >= needed ? bytes : Uint8List.sublistView(bytes, 0, i);
-    }
+  var start = bytes.length - 1;
+  while (start >= 0 && bytes.length - start < 4 && bytes[start] & 0xc0 == 0x80) {
+    start--;
   }
-  return bytes;
+  if (start < 0 || bytes[start] < 0xc0) return bytes;
+  final needed = bytes[start] >= 0xf0 ? 4 : (bytes[start] >= 0xe0 ? 3 : 2);
+  return bytes.length - start >= needed ? bytes : Uint8List.sublistView(bytes, 0, start);
 }
 
 /// Write [files] into [dir], creating whatever folders they name. Their paths
