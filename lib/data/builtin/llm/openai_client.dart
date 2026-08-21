@@ -58,7 +58,7 @@ class OpenAiClient implements LlmClient {
       headers: _headers,
       body: {
         "model": model,
-        "messages": messages.map(_encodeMessage).toList(),
+        "messages": mergeLeadingSystem(messages).map(_encodeMessage).toList(),
         "stream": true,
         if (returnProgress) "return_progress": true,
         if (tools.isNotEmpty) ...{
@@ -222,6 +222,33 @@ class _PartialCall {
   String? id;
   String? name;
   final StringBuffer arguments = StringBuffer();
+}
+
+/// The system messages at the head of a request as one message.
+///
+/// A chat template renders `messages[0]` as the system block and nothing else:
+/// Qwen3.5's raises `System message must be at the beginning.` on the second,
+/// and llama.cpp's fallback for a template with no system role at all folds away
+/// only the first. The agent sends two — the body every chat shares and the
+/// turn's own — so on-device, and on any other server that renders a template,
+/// the second one is fatal.
+///
+/// A blank line between them, which leaves the body a byte prefix of the merged
+/// text and so still a token prefix of the rendered prompt: the warmed KV is
+/// found the way it was. Done here rather than where the two are built because
+/// `kvPrefixKeys` hashes per message and the body's own key is the shortest of
+/// them — merged any earlier, the prefill would warm a prefix no turn looks for.
+List<LlmMessage> mergeLeadingSystem(List<LlmMessage> messages) {
+  final head = messages.takeWhile((m) => m.role == LlmRole.system).toList();
+  if (head.length < 2) return messages;
+  return [
+    LlmMessage(
+      role: LlmRole.system,
+      text: head.map((m) => m.text).where((t) => t.isNotEmpty).join("\n\n"),
+      attachments: [for (final m in head) ...m.attachments],
+    ),
+    ...messages.skip(head.length),
+  ];
 }
 
 /// The message's text with its non-image attachments folded in. A text file is

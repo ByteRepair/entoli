@@ -215,6 +215,19 @@ void main() {
       expect(sentBody()["reasoning_effort"], "high");
     });
 
+    test("the system messages at the head go as one", () async {
+      await clientStreaming(["[DONE]"]).stream(const [
+        LlmMessage(role: LlmRole.system, text: "be helpful"),
+        LlmMessage(role: LlmRole.system, text: "work in /tmp"),
+        LlmMessage(role: LlmRole.user, text: "hi"),
+      ], model: "gpt-test").toList();
+
+      final messages = sentBody()["messages"] as List;
+      expect(messages, hasLength(2));
+      expect(messages[0], {"role": "system", "content": "be helpful\n\nwork in /tmp"});
+      expect(messages[1], {"role": "user", "content": "hi"});
+    });
+
     test("a tool result is addressed to the call it answers", () async {
       await clientStreaming(["[DONE]"]).stream(const [
         LlmMessage(role: LlmRole.system, text: "be helpful"),
