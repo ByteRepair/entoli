@@ -104,6 +104,7 @@ void main() {
     await for (final event in backend.sendPrompt(
       chat.state.id,
       "Read hello.txt in this directory and tell me what it says.",
+      at: DateTime.now(),
       settings: TurnSettings(
         model: model,
         provider: _providerId,

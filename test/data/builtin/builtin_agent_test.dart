@@ -90,17 +90,22 @@ void main() {
       expect(observation.text, contains("no such file"));
     });
 
-    test("the first turn is the task under the system prompt", () async {
+    test("the first turn is the task under two system messages", () async {
       final client = FakeLlmClient([
         [finish],
       ]);
       final agent = agentOver(client);
       await agent.run("fix the bug").toList();
 
-      expect(client.sent.first.first.role, LlmRole.system);
-      expect(client.sent.first.first.text, contains(agent.workspace));
+      // The body first and this conversation's own directories second: split so
+      // the body is one string every chat on the device shares, which is what
+      // the on-device cache warms. See [turnPrompt].
+      expect(client.sent.first.take(2).map((m) => m.role),
+          [LlmRole.system, LlmRole.system]);
       expect(client.sent.first.first.text, contains("TestOS 1.0 test"));
-      expect(client.sent.first[1].text, contains("fix the bug"));
+      expect(client.sent.first.first.text, isNot(contains(agent.workspace)));
+      expect(client.sent.first[1].text, contains(agent.workspace));
+      expect(client.sent.first[2].text, contains("fix the bug"));
     });
 
     test("a later turn continues the session instead of restarting it", () async {
@@ -112,8 +117,10 @@ void main() {
       await agent.run("first").toList();
       await agent.run("second").toList();
 
-      expect(client.sent.last.where((m) => m.role == LlmRole.system), hasLength(1));
-      expect(client.sent.last.first.text, contains(agent.workspace));
+      // Rewritten rather than added to: a second turn must not stack another
+      // pair of system messages on the first.
+      expect(client.sent.last.where((m) => m.role == LlmRole.system), hasLength(2));
+      expect(client.sent.last[1].text, contains(agent.workspace));
       expect(client.sent.last.last.text, contains("second"));
       expect(client.sent.last.map((m) => m.text).join(), contains("first"));
     });
@@ -126,7 +133,11 @@ void main() {
           .run("look at it", agentPrompt: "You only read; you never edit.")
           .toList();
 
-      expect(client.sent.first.first.text, contains("You only read; you never edit."));
+      // In the per-turn message, not the body: an @agent is this turn's, and
+      // the body has to stay the same string for every chat.
+      expect(client.sent.first.first.text,
+          isNot(contains("You only read; you never edit.")));
+      expect(client.sent.first[1].text, contains("You only read; you never edit."));
     });
   });
 
@@ -635,7 +646,7 @@ void main() {
       await agentOver(client).resume(agentPrompt: "Be brief.").toList();
 
       expect(client.sent.single.first.role, LlmRole.system);
-      expect(client.sent.single.first.text, contains("Be brief."));
+      expect(client.sent.single[1].text, contains("Be brief."));
       expect(client.sent.single.map((m) => m.text).join(), isNot(contains("stale")));
     });
 

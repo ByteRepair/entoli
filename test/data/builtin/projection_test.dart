@@ -32,10 +32,35 @@ void main() {
       said(MessageRole.assistant, const [MessagePart.text(text: "four")]),
     ]);
 
+    // The user's turn is worded by [userTurnText] rather than handed back raw:
+    // it is what the live turn sent, so it is what a rebuilt session has to
+    // send too — the date off the message, and the task framing on the one that
+    // opened the chat.
     expect(projected.map((m) => (m.role, m.text)), [
-      (LlmRole.user, "what is 2+2?"),
+      (LlmRole.user, userTurnText("what is 2+2?", at: at, first: true)),
       (LlmRole.assistant, "four"),
     ]);
+  });
+
+  test("only the message that opens the conversation is dressed as a task", () {
+    final projected = projectionOf([
+      asked("first"),
+      said(MessageRole.assistant, const [MessagePart.text(text: "ok")]),
+      asked("second"),
+    ]);
+
+    expect(projected.first.text, userTurnText("first", at: at, first: true));
+    expect(projected.last.text, userTurnText("second", at: at, first: false));
+    expect(projected.last.text, isNot(contains("The user asks")));
+  });
+
+  test("a fragment appended to a session already holding the rest opens nothing",
+      () {
+    // What `_runBypass` projects: the two messages its turn is writing, onto a
+    // session that already has the conversation.
+    final projected = projectionOf([asked("later")], first: false);
+
+    expect(projected.single.text, userTurnText("later", at: at, first: false));
   });
 
   test("thinking travels with the response it belongs to, signature and all", () {
@@ -168,7 +193,8 @@ void main() {
       ]),
     ]);
 
-    expect(projected.single.text, "what is this?\n\n(attached: diagram.png)");
+    expect(projected.single.text,
+        userTurnText("what is this?\n\n(attached: diagram.png)", at: at, first: true));
     expect(projected.single.attachments, isEmpty);
   });
 

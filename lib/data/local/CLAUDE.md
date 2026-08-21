@@ -496,15 +496,29 @@ chat: when a local model is the default and the On-device toggle is on, the
 system prompt is warmed in the background so the server has its KV in a slot
 before a chat asks.
 
-The reorder is what makes it cheap. The system prompt used to open with the
+**The split is what makes it cheap.** The system prompt used to open with the
 conversation's workspace path, which is per-chat, so no two chats shared a
-cacheable prefix. It now ends with the workspace (`## Your workspace`), so the
-long body above it is identical for every chat and is one prefix the pool's slot
-cache reuses across them. The warm-up sends that body with the workspace left
-empty (`createLocalPrefill` in `core/platform/`), so the shared head lands in a
-slot and every chat after only pays its own short tail. The date rides on the
-user message rather than the prompt (`withNow`), so the one value that changes
+cacheable prefix. Moving the workspace to the end of the prompt bought most of
+that back — the long body above it is the same text for every chat, and
+llama.cpp's slot cache matches tokens, so it reused the head — but it left the
+whole thing one message, and a message is what `kvPrefixKeys` hashes. Two chats
+therefore agreed on no *key*, and the body the warm-up wrote to disk was filed
+under a name no chat ever looked for: the live slot helped, the dump could not.
+
+So the per-chat half is its own system message now. `systemPrompt` is the body
+and nothing else; `turnPrompt` is the workspace and whatever an `@agent` added,
+sent after it. The warm-up sends the body alone (`createLocalPrefill` in
+`core/platform/`), so its shortest key *is* every chat's shortest key — the two
+hash the same message — and a chat reopened on a cold server restores what the
+warm-up left rather than reading the body again. The date rides on the user
+message rather than the prompt (`userTurnText`), so the one value that changes
 every turn is never in the cached prefix.
+
+What it costs is two system messages on the wire. `AnthropicClient` already
+joined every system message into its one `system` parameter, so that provider
+sees no change at all, and the OpenAI shape takes a list of messages with roles
+on them. A chat template that assumed exactly one system message would be the
+thing to watch; the bundled server renders each message under its own role.
 
 **It is the on-device provider's own feature and touches no shared interface.**
 `LocalPrefill` drives the existing `LocalLlm.serve` and an `OpenAiClient` with
@@ -525,9 +539,32 @@ profile reuses it, and one after a profile edit reuses only the body above it
 and reprocesses the profile in its tail, which is small and self-heals on that
 first turn — so nothing rewarms on a profile change.
 
-The warm-up's own cache is the running server's slots, which a reload loses —
-but the body is also written to disk by the same mechanism the next section
-describes, so a reopen after a restart restores it rather than warming again.
+**A warm-up reads the disk before it reads the prompt.** The body is written to
+disk by the mechanism the next section describes, so the second launch has one
+already: `LocalPrefill` serves the model, asks `LocalKvCache.warm` for the body,
+and — where that hits — is finished, having sent no prompt at all. It is why
+`warm` answers `bool` where a turn ignores it; a turn sends its prompt either
+way, and only this can be over before it starts. Without it the disk cache only
+ever helped a chat, and the minutes came back at every launch.
+
+**Stopping is the user's, and the work is this object's.** The notification's
+Stop reaches `BackgroundWork.stopRequests` as `BackgroundJob.prefill` and
+`LocalPrefill` is what subscribes — the button asks, the owner of the work acts,
+the way a download's does and for the reason `TurnKeepAlive` does it in its own
+constructor. It closes the request rather than only marking the run superseded:
+a generation is noticed at the next chunk, and while a prompt is being read that
+is however long the rest of it takes, which is the whole reason there is a Stop.
+
+**A warm-up must not outlive the server it is warming**, and that invariant is
+in `LocalPrefill` rather than at any of the places that stop one. Unload all is
+the way it was first noticed; deleting a model is another, since `unpick` stops
+everything; and a turn asking for a second model past `maxLocalModels` is a
+third, which no button could have known about. What all three share is
+`LocalLlm.running` losing the row — published *before* the pool kills anything —
+so `_whileServed` watches that and cancels. It arms before the serve and fires
+only after the model has been seen running, because until the pool has published
+the row "not in the list" is a warm-up that has not started rather than one
+whose server has gone.
 
 ### Persisting the KV cache to disk
 
@@ -563,7 +600,7 @@ namespace, because `--slot-save-path` takes a basename and the name is where the
 namespace rides; the pool and the cache are built from the one join
 (`_kvCacheDir`) so they cannot disagree on it.
 
-**On by default at ten prefixes** (the "Cached chats" picker; `Off` writes
+**On by default at ten prefixes** (the "Cached prompts" picker; `Off` writes
 nothing), because the win is large and the reopen is the common case. The dumps
 are not small — a few thousand tokens of a 2B's KV is on the order of hundreds of
 megabytes even at the `q8_0` quant the server runs with when the cache is on — so
@@ -572,11 +609,36 @@ across every namespace so an abandoned model's dumps cannot pile up. The quant i
 near-lossless but still a change to generation, so it rides on the cache being
 on: turn it off and the server runs f16, the behaviour it had before this.
 
+**The number counts prompts, and the picker used to say chats.** One dump is one
+request: `LocalPoolClient.stream` saves after each, and the agent calls it once
+per step, so a turn that runs five commands writes five — and the bound is over
+every chat at once rather than per chat. "10 chats" promised ten conversations
+kept warm and, for a turn of any length, meant closer to two. The setting is
+`localModelKvCachePrompts` now and still reads the old key, so nobody's choice is
+reset. Which bound actually bites is the disk budget more often than the count:
+at 128 KiB a token for the 4B, halved by `q8_0`, a 3,000-token prompt is around
+190 MB and four gigabytes holds about twenty.
+
 The prefill persists too, but the shortest key — the system+tools body every
-chat shares (`bodyOnly`) — so the warmed body survives a reload and every chat's
-own restore finds it. It serves with the same threads and cache flags a real turn
-does, or the first turn would find the server launched differently and relaunch
-it, throwing the warm away.
+chat shares (`keys.last`) — so the warmed body survives a reload and every
+chat's own restore finds it. That last clause is only true because the body is
+its own message: while the workspace was in it, a chat's shortest key was over
+its own directories and the warm-up's dump sat there unread. It serves with the
+same threads and cache flags a real turn does, or the first turn would find the
+server launched differently and relaunch it, throwing the warm away.
+
+**Eviction reads a dump's date as when it was last used, not when it was
+written**, and `FileKvCache.warm` touching the file it restored is the whole of
+what makes that true. It matters because of the body: nothing but the prefill
+ever writes it, so on write order it is the oldest of its namespace within a
+chat or two and the oldest file outright soon after, and both bounds reap from
+that end — the count set to thirty being what deletes the prefix all thirty
+restore from, so the next launch prefills from nothing again. Exempting that one
+file by name was the first answer and a worse one: it left a second model's body
+just as exposed, made an abandoned model's immortal, and threaded which key is
+special through three signatures to reach the sort. Sorting on use fixes all of
+it in one line, and an abandoned body then ages out the way everything else
+does.
 
 The **cores** setting is the other half of the On-device machine questions:
 `localModelThreads` caps how many the server runs on (the slider, from every big

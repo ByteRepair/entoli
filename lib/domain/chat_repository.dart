@@ -192,12 +192,14 @@ class ChatRepository {
   Stream<AgentEvent> sendPrompt(String chatId, String text,
       {List<Attachment> attachments = const [],
       List<Message> history = const [],
-      bool replaces = false}) async* {
+      bool replaces = false,
+      required DateTime at}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, text,
         attachments: attachments,
         history: history,
-        settings: await _turnSettings(chatId));
+        settings: await _turnSettings(chatId),
+        at: at);
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It

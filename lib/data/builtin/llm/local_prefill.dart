@@ -34,7 +34,12 @@ class LocalPrefill {
     required this.background,
     required this.warmup,
     this.kvCache,
-  });
+  }) {
+    // The Stop on its own notification.
+    _stops = background.stopRequests
+        .where((job) => job == BackgroundJob.prefill)
+        .listen((_) => cancel());
+  }
 
   final LocalLlm llm;
   final BackgroundWork background;
@@ -57,6 +62,15 @@ class LocalPrefill {
   /// the current one has been superseded and stops where it notices.
   var _generation = 0;
 
+  /// The warm-up request in flight, so a cancel can close it. Noticing the
+  /// generation only happens on the next chunk, and while a prompt is being
+  /// read that is however long the rest of it takes — minutes, which is the
+  /// whole reason there is a Stop. Closing a finished one again does nothing,
+  /// so it is left pointing at the last rather than cleared.
+  OpenAiClient? _client;
+
+  late final StreamSubscription<BackgroundJob> _stops;
+
   /// Warm [modelId], unless it is already the one being warmed. Cancels a warm
   /// of any other model first: the active default is the one to have ready, and
   /// two prefills would only evict each other in the pool's slots.
@@ -74,6 +88,7 @@ class LocalPrefill {
   Future<void> cancel() async {
     if (_active == null) return;
     _generation++;
+    _client?.close();
     await _clear();
   }
 
@@ -88,6 +103,17 @@ class LocalPrefill {
     state.value = LocalPrefillState(name: name);
     await background.prefilling(name);
 
+    // Armed before the serve rather than after it, so a model unloaded while it
+    // is still coming up is noticed too. See [_whileServed].
+    final unwatch = _whileServed(modelId, gen);
+    try {
+      await _warm(modelId, gen, name);
+    } finally {
+      unwatch();
+    }
+  }
+
+  Future<void> _warm(String modelId, int gen, String name) async {
     final spec = warmup();
     final LocalEndpoint endpoint;
     try {
@@ -109,11 +135,34 @@ class LocalPrefill {
     }
     if (gen != _generation) return;
 
+    final kv = kvLookup(
+      kvCache,
+      on: spec.options.kvCacheOn,
+      modelId: modelId,
+      at: endpoint,
+      device: spec.options.device,
+      messages: spec.messages,
+      tools: spec.tools,
+    );
+    // An earlier run already wrote this body to disk, so restoring it is the
+    // whole of the warm-up and there is nothing to read again. Without this the
+    // cache only ever helped a chat, and every launch paid the prompt.
+    try {
+      if (kv != null &&
+          await kv.cache.warm(endpoint, namespace: kv.namespace, keys: kv.keys)) {
+        return;
+      }
+    } catch (_) {
+      // A cache that will not answer leaves the prompt to be read below, which
+      // is where this was before there was one.
+    }
+
     final client = OpenAiClient(
       baseUrl: Uri.parse(endpoint.baseUrl),
       apiKey: endpoint.apiKey,
       returnProgress: true,
     );
+    _client = client;
     try {
       await for (final chunk in client.stream(
         spec.messages,
@@ -132,20 +181,14 @@ class LocalPrefill {
         break;
       }
       // Persist the warmed body so it survives a reload — the disk half of what
-      // the live slot already holds. The shortest key (`keys.last`) is the
-      // system+tools body every chat shares. Best-effort, like the warm-up.
-      final kv = kvCache;
-      final keys = kvPrefixKeys(spec.messages, spec.tools);
-      if (gen == _generation && kv != null && spec.options.kvCacheOn && keys.isNotEmpty) {
-        await kv.keep(
+      // the live slot already holds. The shortest key is the system+tools body
+      // every chat shares. Best-effort, like the warm-up.
+      if (gen == _generation && kv != null) {
+        await kv.cache.keep(
           endpoint,
-          namespace: kvNamespace(
-            modelId: modelId,
-            contextLength: endpoint.contextLength,
-            device: spec.options.device,
-          ),
-          key: keys.last,
-          count: spec.options.kvCacheChats,
+          namespace: kv.namespace,
+          key: kv.keys.last,
+          count: spec.options.kvCachePrompts,
         );
       }
     } catch (_) {
@@ -156,8 +199,37 @@ class LocalPrefill {
     }
   }
 
+  /// Cancels the warm-up if the model it is warming leaves the pool, and
+  /// answers with how to stop watching.
+  ///
+  /// **The invariant is here rather than at the button that broke it first.**
+  /// Unload all is one way a warmed server goes; deleting a model is another
+  /// (`unpick` stops everything), and a turn asking for a second model past
+  /// `maxLocalModels` is a third, which no button could have known about. What
+  /// they share is [LocalLlm.running] losing the row, and the pool publishes
+  /// that before it kills anything.
+  ///
+  /// It fires only after the model has been seen running, since before the pool
+  /// has published the row "not in the list" is a warm-up that has not started
+  /// rather than one whose server has gone.
+  VoidCallback _whileServed(String modelId, int gen) {
+    var seen = false;
+    void check() {
+      if (llm.running.value.any((each) => each.modelId == modelId)) {
+        seen = true;
+      } else if (seen && gen == _generation) {
+        unawaited(cancel());
+      }
+    }
+
+    llm.running.addListener(check);
+    return () => llm.running.removeListener(check);
+  }
+
   void dispose() {
     _generation++;
+    _client?.close();
+    _stops.cancel();
     state.dispose();
   }
 }

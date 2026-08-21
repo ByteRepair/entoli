@@ -40,21 +40,22 @@ class FileKvCache implements LocalKvCache {
   static const _budgetBytes = 4 * 1024 * 1024 * 1024;
 
   @override
-  Future<void> warm(
+  Future<bool> warm(
     LocalEndpoint at, {
     required String namespace,
     required List<String> keys,
   }) async {
     final candidate = await _longestSaved(namespace, keys);
-    if (candidate == null) return;
+    if (candidate == null) return false;
     // Skip if the live slot already holds this much of the prefix: the server's
     // own longest-prefix cache serves a continuation, and restoring a shorter
     // or equal dump would only throw that progress away.
     final live = _live[at.baseUrl];
-    if (live != null && _upto(keys, live) >= _upto(keys, candidate)) return;
-    if (await _slot(at, "restore", kvFilename(namespace, candidate))) {
-      _live[at.baseUrl] = candidate;
-    }
+    if (live != null && _upto(keys, live) >= _upto(keys, candidate)) return true;
+    if (!await _slot(at, "restore", kvFilename(namespace, candidate))) return false;
+    _live[at.baseUrl] = candidate;
+    await _touch(namespace, candidate);
+    return true;
   }
 
   @override
@@ -73,6 +74,21 @@ class FileKvCache implements LocalKvCache {
     // Cleanup, not correctness — nothing waits on it, so it does not gate the
     // turn's completion behind a directory listing.
     unawaited(_evict(namespace, count));
+  }
+
+  /// What makes [kvEvictions] an LRU rather than a first-in-first-out: a dump's
+  /// date is when it was last restored, not when it was written. The body every
+  /// chat starts from is written once by the prefill and read forever after, so
+  /// on write order it is the oldest file in the directory within a chat or two
+  /// and both bounds reap it first — the one dump they should reach last.
+  ///
+  /// Best-effort, like everything else here: a filesystem that will not set it
+  /// leaves the eviction order where it already was.
+  Future<void> _touch(String namespace, String key) async {
+    try {
+      await File(p.join(_dir, kvFilename(namespace, key)))
+          .setLastModified(DateTime.now());
+    } catch (_) {}
   }
 
   /// The longest of [keys] (already longest-first) with a dump on disk.

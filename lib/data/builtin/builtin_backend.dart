@@ -31,6 +31,11 @@ import "task_tool.dart";
 /// this is what Entoli talks to: it holds a session per chat, resolves which
 /// endpoint a turn runs against, and turns the composer's `/` and `@` syntax
 /// into a task and a system prompt before the agent ever sees it.
+/// What the user said and when it was logged. One value rather than two, so
+/// "there is a prompt" and "it is dated" cannot come apart — a resumed turn has
+/// neither, and nothing below this has to stand a date in.
+typedef Prompt = ({String text, DateTime at});
+
 class BuiltinBackend implements AgentBackend {
   BuiltinBackend({
     required this.config,
@@ -112,8 +117,9 @@ class BuiltinBackend implements AgentBackend {
     List<Attachment> attachments = const [],
     List<Message> history = const [],
     TurnSettings settings = const TurnSettings(),
+    required DateTime at,
   }) =>
-      _start(chatId, text,
+      _start(chatId, (text: text, at: at),
           attachments: attachments, history: history, settings: settings);
 
   @override
@@ -129,14 +135,14 @@ class BuiltinBackend implements AgentBackend {
   /// completes.
   Stream<AgentEvent> _start(
     String chatId,
-    String? text, {
+    Prompt? prompt, {
     List<Attachment> attachments = const [],
     List<Message> history = const [],
     required TurnSettings settings,
   }) {
     final controller = StreamController<AgentEvent>();
     _controllers[chatId] = controller;
-    unawaited(_runTurn(chatId, text, controller,
+    unawaited(_runTurn(chatId, prompt, controller,
         attachments: attachments, history: history, settings: settings));
     return controller.stream;
   }
@@ -147,19 +153,23 @@ class BuiltinBackend implements AgentBackend {
   /// asked and in how much of the session is rebuilt first.
   Future<void> _runTurn(
     String chatId,
-    String? text,
+    Prompt? prompt,
     StreamController<AgentEvent> controller, {
     List<Attachment> attachments = const [],
     List<Message> history = const [],
     required TurnSettings settings,
   }) async {
     final project = settings.project;
+    final text = prompt?.text;
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
-      if (text != null && shellBypassCommand(text) != null) {
-        await _runBypass(chatId, text, controller,
-            attachments: attachments, history: history, project: project);
+      if (prompt != null && shellBypassCommand(prompt.text) != null) {
+        await _runBypass(chatId, prompt.text, controller,
+            attachments: attachments,
+            history: history,
+            project: project,
+            at: prompt.at);
         return;
       }
 
@@ -245,6 +255,7 @@ class BuiltinBackend implements AgentBackend {
               _taskOf(text),
               attachments: attachments.map(_toLlmAttachment).toList(),
               agentPrompt: agentPrompt,
+              at: prompt!.at,
             );
 
       await for (final event in events) {
@@ -285,6 +296,7 @@ class BuiltinBackend implements AgentBackend {
     required List<Attachment> attachments,
     required List<Message> history,
     required String? project,
+    required DateTime at,
   }) async {
     final command = shellBypassCommand(prompt)!;
     await config.ensureChatDirs(chatId, project: project);
@@ -312,9 +324,12 @@ class BuiltinBackend implements AgentBackend {
     // exactly what a reload would build out of the log — attachments named the
     // way the projection names them included. These are the two messages the
     // turn is writing; only their ids differ from the ones being logged, and
-    // the projection reads neither those nor the time.
-    _sessionOf(chatId, history).messages.addAll(projectionOf([
-          _turnMessage(MessageRole.user, [
+    // the projection does not read those. It does read the date, which is why
+    // [at] is the one the prompt is logged under rather than the clock.
+    final session = _sessionOf(chatId, history);
+    final opens = session.isFresh;
+    session.messages.addAll(projectionOf([
+          _turnMessage(MessageRole.user, at, [
             for (final a in attachments)
               MessagePart.file(
                   resource: a.resource ?? "",
@@ -322,12 +337,12 @@ class BuiltinBackend implements AgentBackend {
                   mimeType: a.mimeType),
             MessagePart.text(text: prompt),
           ]),
-          _turnMessage(MessageRole.assistant, [part]),
-        ]));
+          _turnMessage(MessageRole.assistant, at, [part]),
+        ], first: opens));
   }
 
-  Message _turnMessage(MessageRole role, List<MessagePart> parts) =>
-      Message(id: "", role: role, createdAt: DateTime.now(), parts: parts);
+  Message _turnMessage(MessageRole role, DateTime at, List<MessagePart> parts) =>
+      Message(id: "", role: role, createdAt: at, parts: parts);
 
   /// The chat's session, filled from [history] where it is one this backend was
   /// not already holding — which is a chat opened after a restart, and empty.

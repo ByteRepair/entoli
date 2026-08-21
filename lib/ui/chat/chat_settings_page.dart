@@ -1,5 +1,4 @@
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_meta.dart";
@@ -11,6 +10,7 @@ import "../sidebar/sidebar.dart";
 import "chat_controller.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
+import "../widgets/dialogs.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../workspace/workspace_page.dart";
@@ -170,12 +170,7 @@ class _IdField extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.copy),
             tooltip: "Copy chat ID",
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: id));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Copied chat ID")),
-              );
-            },
+            onPressed: () => copyToClipboard(context, id, said: "Copied chat ID"),
           ),
         ],
       ),

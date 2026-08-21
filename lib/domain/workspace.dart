@@ -1,3 +1,6 @@
+import "dart:convert";
+import "dart:typed_data";
+
 import "package:fs_shim/fs.dart";
 
 import "file_handoff.dart";
@@ -49,6 +52,76 @@ Future<List<WorkspaceEntry>> listWorkspace(FileSystem fs, String dir) async {
     ..sort((a, b) => a.isDirectory == b.isDirectory
         ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
         : (a.isDirectory ? -1 : 1));
+}
+
+/// The most of a file the viewer reads. A workspace holds the agent's logs, so
+/// there is no upper bound on what a tap can land on; what drawing that much
+/// costs is in `lib/ui/workspace/CLAUDE.md`.
+const textViewLimit = 128 * 1024;
+
+class WorkspaceText {
+  const WorkspaceText(this.text, {required this.truncated});
+
+  final String text;
+  final bool truncated;
+}
+
+/// Whether the viewer should try [name] at all — the half of the rule that
+/// decides without a read, [readTextHead] being the other.
+///
+/// No extension counts, since `README` and `Makefile` have none; a dotfile
+/// reaches that same branch because `package:path` reads a leading dot as a
+/// name rather than as an extension.
+bool looksTextual(FileSystem fs, String name) {
+  final extension = fs.path.extension(name).toLowerCase();
+  return extension.isEmpty || _textExtensions.contains(extension.substring(1));
+}
+
+const _textExtensions = {
+  "txt", "md", "markdown", "rst", "log", "csv", "tsv",
+  "json", "jsonl", "yaml", "yml", "toml", "ini", "cfg", "conf", "env", "lock",
+  "xml", "html", "htm", "css", "scss", "svg", "diff", "patch", "properties",
+  "dart", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "sh", "bash", "zsh",
+  "fish", "c", "h", "cc", "cpp", "hpp", "rs", "go", "java", "kt", "kts",
+  "swift", "rb", "php", "lua", "sql", "r", "m", "pl", "vim", "gradle",
+};
+
+/// Read at most [textViewLimit] bytes of [path] as UTF-8, or `null` if what
+/// came back is not text after all — a `.log` the agent wrote as a gzip is a
+/// hand-off rather than a page of mojibake.
+Future<WorkspaceText?> readTextHead(FileSystem fs, String path) async {
+  final stat = await fs.file(path).stat();
+  if (stat.type != FileSystemEntityType.file) {
+    throw Exception("$path is no longer there");
+  }
+  final truncated = stat.size > textViewLimit;
+  final end = truncated ? textViewLimit : stat.size;
+  final read = BytesBuilder(copy: false);
+  await for (final chunk in fs.file(path).openRead(0, end)) {
+    read.add(chunk);
+  }
+  var bytes = read.takeBytes();
+  if (bytes.contains(0)) return null;
+  if (truncated) bytes = _withoutCutRune(bytes);
+  try {
+    return WorkspaceText(utf8.decode(bytes), truncated: truncated);
+  } on FormatException {
+    return null;
+  }
+}
+
+/// The cap falls on a byte, so the last character can be half of one. Dropping
+/// it is the difference between a truncated file and one that reads as binary.
+///
+/// The walk back stops at four, since no UTF-8 rune is longer than that.
+Uint8List _withoutCutRune(Uint8List bytes) {
+  var start = bytes.length - 1;
+  while (start >= 0 && bytes.length - start < 4 && bytes[start] & 0xc0 == 0x80) {
+    start--;
+  }
+  if (start < 0 || bytes[start] < 0xc0) return bytes;
+  final needed = bytes[start] >= 0xf0 ? 4 : (bytes[start] >= 0xe0 ? 3 : 2);
+  return bytes.length - start >= needed ? bytes : Uint8List.sublistView(bytes, 0, start);
 }
 
 /// Write [files] into [dir], creating whatever folders they name. Their paths

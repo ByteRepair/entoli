@@ -13,6 +13,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/project_settings.dart";
+import "package:agent_chat/domain/workspace.dart";
 
 import "../harness.dart";
 
@@ -133,6 +134,35 @@ void main() {
 
       await store.delete("c1");
       expect(await store.readResource("c1", resource), isNull);
+    });
+  });
+
+  // The viewer reads a prefix rather than the file, and a prefix out of
+  // IndexedDB is a different code path from one off a disk.
+  group("reading a workspace file", () {
+    late String path;
+
+    setUp(() async {
+      await fs.directory(config.projectWorkspaceDir()).create(recursive: true);
+      path = "${config.projectWorkspaceDir()}/notes.md";
+    });
+
+    test("a small one comes back whole", () async {
+      await fs.file(path).writeAsString("hello");
+
+      final content = await readTextHead(fs, path);
+
+      expect(content!.text, "hello");
+      expect(content.truncated, isFalse);
+    });
+
+    test("a big one stops at the cap", () async {
+      await fs.file(path).writeAsString("x" * (textViewLimit + 500));
+
+      final content = await readTextHead(fs, path);
+
+      expect(content!.text.length, textViewLimit);
+      expect(content.truncated, isTrue);
     });
   });
 

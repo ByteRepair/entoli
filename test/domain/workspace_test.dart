@@ -1,3 +1,4 @@
+import "dart:convert";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -57,6 +58,83 @@ void main() {
     // missing one is empty rather than a page that fails to draw.
     test("a folder that is not there is empty", () async {
       expect(await listWorkspace(fileSystemIo, "$dir/never-made"), isEmpty);
+    });
+  });
+
+  group("what the viewer will try", () {
+    test("a known extension, whatever its case", () {
+      expect(looksTextual(fileSystemIo, "notes.md"), isTrue);
+      expect(looksTextual(fileSystemIo, "README.MD"), isTrue);
+      expect(looksTextual(fileSystemIo, "main.dart"), isTrue);
+    });
+
+    test("anything else is another app's", () {
+      expect(looksTextual(fileSystemIo, "photo.png"), isFalse);
+      expect(looksTextual(fileSystemIo, "clip.mp4"), isFalse);
+      expect(looksTextual(fileSystemIo, "archive.zip"), isFalse);
+    });
+
+    // What the agent writes without one: README, Makefile, every dotfile.
+    test("a name with no extension", () {
+      expect(looksTextual(fileSystemIo, "Makefile"), isTrue);
+      expect(looksTextual(fileSystemIo, ".gitignore"), isTrue);
+    });
+  });
+
+  group("reading a text file", () {
+    test("a small one comes back whole", () async {
+      File("$dir/a.txt").writeAsStringSync("hello\nthere");
+
+      final content = await readTextHead(fileSystemIo, "$dir/a.txt");
+
+      expect(content!.text, "hello\nthere");
+      expect(content.truncated, isFalse);
+    });
+
+    test("a big one stops at the cap and says so", () async {
+      File("$dir/big.log").writeAsStringSync("x" * (textViewLimit + 500));
+
+      final content = await readTextHead(fileSystemIo, "$dir/big.log");
+
+      expect(content!.text.length, textViewLimit);
+      expect(content.truncated, isTrue);
+    });
+
+    // The cap falls on a byte, so the last character can be half of one.
+    test("a character the cap cut in half is dropped, not decoded", () async {
+      File("$dir/big.log").writeAsBytesSync([
+        ...utf8.encode("x" * (textViewLimit - 1)),
+        ...utf8.encode("é" * 10),
+      ]);
+
+      final content = await readTextHead(fileSystemIo, "$dir/big.log");
+
+      expect(content!.text.length, textViewLimit - 1);
+      expect(content.truncated, isTrue);
+    });
+
+    test("one whose bytes are not text is not the viewer's", () async {
+      File("$dir/a.log").writeAsBytesSync([0x1f, 0x8b, 0x00, 0x42, 0x00]);
+
+      expect(await readTextHead(fileSystemIo, "$dir/a.log"), isNull);
+    });
+
+    test("nor is one that is not UTF-8", () async {
+      File("$dir/a.txt").writeAsBytesSync([0x68, 0xc3, 0x28, 0x69]);
+
+      expect(await readTextHead(fileSystemIo, "$dir/a.txt"), isNull);
+    });
+
+    test("an empty file is text with nothing in it", () async {
+      File("$dir/a.txt").writeAsStringSync("");
+
+      expect((await readTextHead(fileSystemIo, "$dir/a.txt"))!.text, isEmpty);
+    });
+
+    // The listing under the explorer is re-read, and the agent writes to the
+    // same folder, so a tapped file can be gone by the time this runs.
+    test("one that is no longer there is an error rather than an empty page", () {
+      expect(readTextHead(fileSystemIo, "$dir/gone.txt"), throwsException);
     });
   });
 

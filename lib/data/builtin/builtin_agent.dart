@@ -127,6 +127,26 @@ class BuiltinSession {
     ..addAll(conversation);
 }
 
+/// The body of the system prompt as the message a turn sends, so the turn and
+/// the warm-up that caches it cannot build two different strings. One function
+/// for the reason [agentTools] is one: this message is the whole of what the
+/// prefill's key is over, and an argument added at one site and not the other
+/// leaves a warmed prefix no chat ever sends. The live turn is
+/// [BuiltinAgent._setSystemPrompt]; the cache is `createLocalPrefill`.
+LlmMessage agentSystemMessage({
+  required String platform,
+  Profile? profile,
+  required bool canRunCommands,
+}) =>
+    LlmMessage(
+      role: LlmRole.system,
+      text: systemPrompt(
+        platform: platform,
+        profile: profile,
+        canRunCommands: canRunCommands,
+      ),
+    );
+
 /// The tools a turn offers, given what this device and this agent allow. One
 /// function because the model's tool schemas are rendered into the prompt and
 /// so are part of what the prefill cache warms: a turn and its warm-up building
@@ -296,12 +316,17 @@ class BuiltinAgent {
     await subAgentRunner?.cancel();
   }
 
+  /// [at] is the date the prompt is logged under — see `userTurnText`. Null is
+  /// the clock, which is right only where nothing logs the turn to word again:
+  /// the tests that drive the loop, and a sub-agent, whose transcript opens on
+  /// the assistant's message and so never has a prompt to project back.
   Stream<AgentEvent> run(
     String task, {
     List<LlmAttachment> attachments = const [],
     String? agentPrompt,
+    DateTime? at,
   }) async* {
-    _openTurn(task, attachments, agentPrompt);
+    _openTurn(task, attachments, agentPrompt, at ?? DateTime.now());
     yield* _loop();
   }
 
@@ -360,14 +385,13 @@ class BuiltinAgent {
     yield const DoneEvent();
   }
 
-  void _openTurn(String task, List<LlmAttachment> attachments, String? agentPrompt) {
+  void _openTurn(
+      String task, List<LlmAttachment> attachments, String? agentPrompt, DateTime at) {
     final fresh = session.isFresh;
     _setSystemPrompt(agentPrompt);
     session.messages.add(LlmMessage(
       role: LlmRole.user,
-      // Only the first prompt is dressed as a task; the rest continue it. Both
-      // carry the current time — see [withNow].
-      text: withNow(fresh ? firstTask(task) : task),
+      text: userTurnText(task, at: at, first: fresh),
       attachments: attachments,
     ));
   }
@@ -376,23 +400,29 @@ class BuiltinAgent {
   /// `@agent` mention applies to the turn that used it whether or not the
   /// session is new — and so a resumed turn runs under the prompt the turn it
   /// is continuing ran under.
+  ///
+  /// Two messages, not one: the body is the same string for every chat on this
+  /// device and the workspace is not, so splitting them leaves the body a
+  /// prefix two chats share to the byte — which is what the warm-up warms and
+  /// what a restore can find. See [turnPrompt].
   void _setSystemPrompt(String? agentPrompt) {
-    final system = LlmMessage(
-      role: LlmRole.system,
-      text: systemPrompt(
-        workspace: workspace,
-        projectWorkspace: projectWorkspace,
+    final turn = turnPrompt(
+      workspace: workspace,
+      projectWorkspace: projectWorkspace,
+      agentPrompt: agentPrompt,
+      canRunCommands: shell.canRunCommands,
+    );
+    final head = [
+      agentSystemMessage(
         platform: shell.platformDescription,
-        agentPrompt: agentPrompt,
         profile: profile,
         canRunCommands: shell.canRunCommands,
       ),
-    );
-    if (session.messages.firstOrNull?.role == LlmRole.system) {
-      session.messages[0] = system;
-    } else {
-      session.messages.insert(0, system);
-    }
+      if (turn.isNotEmpty) LlmMessage(role: LlmRole.system, text: turn),
+    ];
+    final replacing =
+        session.messages.takeWhile((m) => m.role == LlmRole.system).length;
+    session.messages.replaceRange(0, replacing, head);
   }
 
   /// Every call the model made gets an answer, including the ones we never ran:

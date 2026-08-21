@@ -157,9 +157,14 @@ class InstalledPicker extends StatelessWidget {
     required this.value,
     required this.onPick,
     this.none,
+    this.description,
   });
 
   final String label;
+
+  /// Material's own helper text under the field, the way the LLM pickers word
+  /// what their options mean.
+  final String? description;
 
   /// Id to name, in the order they should be offered.
   final Map<String, String> options;
@@ -185,6 +190,7 @@ class InstalledPicker extends StatelessWidget {
       label: label,
       child: DropdownButtonFormField<String?>(
         isExpanded: true,
+        decoration: InputDecoration(helperText: description),
         // A setting naming something since deleted is a value no item carries,
         // which `DropdownButton` asserts on. One place answers that for both
         // catalogs.
