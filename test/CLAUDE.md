@@ -252,6 +252,17 @@ the words even with `findRichText`, and those tests use `find.textContaining`.
 over for the test the same way `frameworkHandlesBack` does, so a test wanting
 both wants one of them — which is why neither is written out per file.
 
+`link_opener_test.dart` fakes the webview at the platform interface rather than
+through `TestApp`: `webview_flutter` has no implementation on a test host and
+`WebViewController()` throws without one, so the test sets
+`WebViewPlatform.instance` to a fake whose navigation delegate it then fires by
+hand. That is where `webview_flutter_platform_interface` in `dev_dependencies`
+comes from — the app-facing package re-exports the creation params but not the
+classes a fake has to extend. The fake stays in the one file that wants it. Its
+`androidTest` sets `debugDefaultTargetPlatformOverride`, since the in-app
+webview is Android's alone, and undoes it inside the body: flutter_test checks
+that variable before a tear-down runs.
+
 A test that writes `settings.json` has to go through `config.documents.write`,
 not the file: the app reads settings from the synchronous copy `Documents`
 holds, and a file written behind it is not seen. `seedSettings` is that write,

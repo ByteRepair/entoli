@@ -1,5 +1,6 @@
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:url_launcher/url_launcher.dart";
 import "package:webview_flutter/webview_flutter.dart";
 
@@ -90,6 +91,12 @@ class PlatformLinkOpener implements LinkOpener {
 /// A full-screen webview for browsing a web page on Android, so a link tap
 /// keeps the user in the app rather than bouncing them out to the browser.
 /// The back button walks webview history first and only then pops the route.
+///
+/// Copy link and Open in browser both act on the page the user has navigated
+/// to, not the link that opened the page — [_url] follows the webview, since a
+/// URL is only worth handing to another app or to the clipboard once it is the
+/// one on screen. The artifact viewer has neither action: it is served off a
+/// local port that dies with the route.
 class _WebViewPage extends StatefulWidget {
   const _WebViewPage({required this.url});
   final Uri url;
@@ -100,19 +107,28 @@ class _WebViewPage extends StatefulWidget {
 
 class _WebViewPageState extends State<_WebViewPage> {
   late final WebViewController _controller;
+  late Uri _url;
   var _title = "";
   var _canGoBack = false;
 
   @override
   void initState() {
     super.initState();
+    _url = widget.url;
     _title = widget.url.host;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
+          // Fires without a page load too, which is the only notice a
+          // history-rewriting page gives.
+          onUrlChange: (change) {
+            final url = change.url;
+            if (url != null) _url = Uri.parse(url);
+          },
           onPageFinished: (url) async {
-            _title = await _controller.getTitle() ?? Uri.parse(url).host;
+            _url = Uri.parse(url);
+            _title = await _controller.getTitle() ?? _url.host;
             _canGoBack = await _controller.canGoBack();
             if (mounted) setState(() {});
           },
@@ -121,7 +137,14 @@ class _WebViewPageState extends State<_WebViewPage> {
       ..loadRequest(widget.url);
   }
 
-  Future<void> _openExternally() => launchUrl(widget.url, mode: LaunchMode.externalApplication);
+  Future<void> _openExternally() => launchUrl(_url, mode: LaunchMode.externalApplication);
+
+  void _copyLink() {
+    Clipboard.setData(ClipboardData(text: _url.toString()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Copied link")),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => PopScope(
@@ -133,6 +156,11 @@ class _WebViewPageState extends State<_WebViewPage> {
           appBar: AppBar(
             title: Text(_title, overflow: TextOverflow.ellipsis),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.copy),
+                tooltip: "Copy link",
+                onPressed: _copyLink,
+              ),
               IconButton(
                 icon: const Icon(Icons.open_in_browser),
                 tooltip: "Open in browser",
