@@ -21,6 +21,42 @@ workspace — `../` is a name a folder can be asked for. Deleting looks each pat
 up rather than trusting what the listing said it was, since a selection is held
 as paths and the listing under it is re-read.
 
+A text file is the one thing a tap does not leave the app for. `TextViewerPage`
+reads it through the same `FileSystem` the listing came from, so it is one page
+on every platform rather than three, and it is a viewer and nothing else — the
+file is the agent's output being read, not worked on. Highlighting is the
+obvious next thing to want and is deliberately not here, though the grammars for
+it already are: `CodeBlockBuilder` registers thirty-odd and `cachedSpanOf` is
+public. What is missing is a map from an extension to a grammar name, and a
+reason to believe that running one over 128 KB in a single span costs what
+running it over a fence does. The page is useful without either.
+
+The boundary between it and the hand-off is drawn twice, because a name is not
+evidence. `looksTextual` goes by the extension alone — a known one, or none at
+all, which is what `README`, `Makefile` and every dotfile have — and it is the
+half the explorer can answer without a read. Not `package:mime` for that half:
+its table has no entry for `py`, `go`, `yaml`, `ts`, `kt`, `rb` or most of what
+a coding agent writes, and it calls `rs` an XML dialect. The bytes settle the
+rest: `readTextHead` returns null for a NUL byte or a decode that fails, and the
+viewer pops `true` to send the file back out to the explorer's hand-off, so a
+`.log` the agent wrote as a gzip ends up where it would have gone anyway. The
+hand-off stays the explorer's rather than the viewer's because the explorer is
+what will still be on screen to say so if it fails. The app bar keeps that route
+out for the files that *are* text, since a `.md` is often wanted in a real
+editor.
+
+`textViewLimit` is why the read is a prefix rather than the file. A workspace
+holds logs with no upper bound on them, and what is drawn is one paragraph of
+unwrapped monospace, laid out in full whether it is scrolled to or not — so the
+first 128 KB is read and the page says the rest is there. That much text is
+around 100 ms of layout in the frame the read lands in, paid once on a tap and
+not again on a rebuild; the alternatives that cull are worse, since a
+`SelectionArea` over a lazy list re-registers a selectable per row on every
+scroll and costs more than the layout it saves. Reading past the cap only to
+throw it away would still have loaded it. The cap falls on a byte rather than a
+character, which is the one thing `readTextHead` has to undo before it decodes:
+a rune cut in half is otherwise a file that reads as binary.
+
 Everything else the page can do is `FileHandoff`'s, and every route is gated the
 way `Shell.canRunCommands` gates the agent's commands. The three platforms do
 not differ in degree here, they differ in kind — and so there are three
