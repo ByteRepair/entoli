@@ -434,7 +434,9 @@ class BuiltinAgent {
   /// Two messages, not one: the body is the same string for every chat on this
   /// device and the workspace is not, so splitting them leaves the body a
   /// prefix two chats share to the byte — which is what the warm-up warms and
-  /// what a restore can find. See [turnPrompt].
+  /// what a restore can find. See [turnPrompt]. Two only as far as the KV keys:
+  /// a chat template renders one system block, so `mergeLeadingSystem` joins
+  /// them on the way out.
   void _setSystemPrompt(String? agentPrompt) {
     final turn = turnPrompt(
       workspace: workspace,
