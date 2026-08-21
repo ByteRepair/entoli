@@ -17,6 +17,32 @@ workspace — `../` is a name a folder can be asked for. Deleting looks each pat
 up rather than trusting what the listing said it was, since a selection is held
 as paths and the listing under it is re-read.
 
+A text file is the one thing a tap does not leave the app for. `TextViewerPage`
+reads it through the same `FileSystem` the listing came from, so it is one page
+on every platform rather than three, and it is a viewer and nothing else:
+selectable monospace, a long line scrolling rather than wrapping, and a copy of
+what is shown. No editing, and no highlighting — the file is the agent's output
+being read, not worked on. Highlighting is the obvious next thing to want and
+was deliberately left out; it needs a grammar per language and the page is
+useful without one.
+
+The boundary between it and the hand-off is drawn twice, because a name is not
+evidence. `looksTextual` goes by the extension alone — a known one, or none at
+all, which is what `README`, `Makefile` and every dotfile have — and it is the
+half the explorer can answer without a read. The bytes settle the rest:
+`readTextHead` returns null for a NUL byte or a decode that fails, and the
+viewer then pops itself and hands the file over, so a `.log` the agent wrote as
+a gzip ends up where it would have gone anyway. The app bar keeps that route out
+for the files that *are* text, since a `.md` is often wanted in a real editor.
+
+`textViewLimit` is why the read is a prefix rather than the file. A workspace
+holds logs with no upper bound on them, and what is drawn is one paragraph of
+unwrapped monospace, laid out in full whether it is scrolled to or not — so the
+first 128 KB is read and the page says the rest is there. Reading past the cap
+only to throw it away would still have loaded it. The cap falls on a byte rather
+than a character, which is the one thing `readTextHead` has to undo before it
+decodes: a rune cut in half is otherwise a file that reads as binary.
+
 Everything else the page can do is `FileHandoff`'s, and every route is gated the
 way `Shell.canRunCommands` gates the agent's commands. The three platforms do
 not differ in degree here, they differ in kind — and so there are three

@@ -7,6 +7,7 @@ import "../../providers.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/formatting.dart";
+import "text_viewer_page.dart";
 
 /// The row that opens the explorer, on the chat, project and app settings pages
 /// alike. All three hold a workspace and none has anything else to say about it.
@@ -114,8 +115,17 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
 
+  /// A text file is read here; everything else is another app's. The name is
+  /// all this decides on — a file whose bytes say otherwise comes straight back
+  /// out of the viewer and into the hand-off.
   Future<void> _open(WorkspaceEntry entry) async {
     if (entry.isDirectory) return _goTo(entry.path);
+    if (looksTextual(ref.read(appConfigProvider).fs, entry.name)) {
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => TextViewerPage(path: entry.path, name: entry.name),
+      ));
+      return;
+    }
     await _guard(() => ref.read(fileHandoffProvider).open(entry.path));
   }
 
