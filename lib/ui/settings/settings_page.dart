@@ -26,7 +26,6 @@ import "../widgets/section_header.dart";
 import "local_model_settings.dart";
 import "terminal_settings.dart";
 import "voice_settings.dart";
-import "../workspace/workspace_page.dart";
 
 /// The page's categories, in the order they are offered. Everything an
 /// endpoint is is Providers, everything a model is asked to do is LLMs, General
@@ -132,8 +131,6 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // behaviour, and the classifier picker travels with it because auto mode
       // is unusable without one.
       SettingsCategory.general => const [
-          _WorkspaceSection(),
-          Divider(),
           _AppearanceSection(),
           Divider(),
           _AgentSection(),
@@ -208,31 +205,6 @@ class _Categories extends StatelessWidget {
           ),
         ),
       );
-}
-
-/// The default project has no settings page of its own, so this is the only way
-/// to the workspace the chats outside a project share.
-class _WorkspaceSection extends ConsumerWidget {
-  const _WorkspaceSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final name = "${projectLabel(null)} workspace";
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeader(
-          name,
-          description: "Where the agent puts work meant for another chat, for "
-              "every chat outside a project.",
-        ),
-        WorkspaceTile(
-          root: ref.watch(appConfigProvider).projectWorkspaceDir(),
-          title: name,
-        ),
-      ],
-    );
-  }
 }
 
 class _AppearanceSection extends ConsumerWidget {

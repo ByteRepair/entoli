@@ -1,13 +1,17 @@
 # The workspace explorer
 
 A workspace is where the agent's work lands, and until now the only way to see
-it was to leave the app. `WorkspaceTile` on the chat, project and app settings
-pages opens `WorkspacePage` over one folder — the chat's own `workspace/`, the
-project's shared one, or the default project's, resolved by the page that knows
-which it is. The default project's is reached from the app's settings because
-there is nowhere else it could be: every other project opens its own from its
-settings page, and the default project has none — it is the data directory, so a
-settings page for it would be the app's own said twice.
+it was to leave the app. `WorkspaceTile` on the chat and project settings pages
+opens `WorkspacePage` over one folder — the chat's own `workspace/` or the
+project's shared one, resolved by the page that knows which it is.
+
+The default project's is reached from the sidebar instead, from the slot beside
+the project switcher that a named project fills with its settings gear. The
+default project has no settings page — it is the data directory, so a settings
+page for it would be the app's own said twice — and the workspace is the only
+thing such a page would have held, so the button goes straight there. It was
+under app settings before, which put one project's workspace somewhere none of
+the others were.
 
 Listing, making a folder and deleting go through the config's `FileSystem`
 (`listWorkspace`, `createFolder`, `deleteEntries`), so they are the same code on
