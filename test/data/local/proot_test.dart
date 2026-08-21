@@ -86,12 +86,13 @@ void main() {
     expect(sandbox.command, contains("-0"));
   });
 
-  test("the guest's own PATH, not the host's", () {
+  test("the guest's own PATH, not the host's, and no HOME — the chat's "
+      "workspace is that, and only the shell knows it", () {
     final sandbox = build();
 
     expect(sandbox.environment["PATH"], contains("/usr/bin"));
     expect(sandbox.environment["PATH"], isNot(contains("/system/bin")));
-    expect(sandbox.environment["HOME"], "/root");
+    expect(sandbox.environment.containsKey("HOME"), isFalse);
   });
 
   test("what the model is told is the distribution, the architecture it is "

@@ -145,6 +145,15 @@ nothing else in the app has to learn that commands are running somewhere else.
 The workspace explorer, the `DocumentsProvider` and a resend of an old turn all
 keep working with no knowledge of any of this.
 
+**`HOME` inside the guest is the chat's own workspace, not `/root`.** The
+rootfs is one directory shared by every conversation and outside what a backup
+carries, so a `~/.gitconfig`, an `npm` cache or a key written there belongs to
+whichever chat wrote it last and is gone on a reinstall. The workspace is the
+chat's, is already the working directory, and is backed up. It is `LocalShell`
+that sets it, since `prootSandbox` is built once for the app and does not know
+which chat is running. Only inside a guest: on a desktop `HOME` is the user's
+own and the tools there expect what is in it.
+
 **A `Sandbox` replaces the `Toolset` rather than layering over it.** Every path
 the host toolset names is the host's, and a `TMPDIR` under the app's own
 directory is not where a guest's `/tmp` is. So the guest gets the guest's `PATH`

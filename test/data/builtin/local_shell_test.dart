@@ -113,6 +113,12 @@ void main() {
     expect(result.output, contains("not found"));
   });
 
+  test("off a guest, home is left as the machine's own", () async {
+    final result = await run(r'echo "$HOME"');
+
+    expect(result.output.trim(), Platform.environment["HOME"]);
+  });
+
   test("what the model is told names the shell, and the tools beside it", () {
     expect(LocalShell(shell: () => "/system/bin/sh").platformDescription,
         contains("/system/bin/sh"));
@@ -172,6 +178,18 @@ void main() {
       );
 
       expect(result.output.trim(), "en_GB.UTF-8");
+    });
+
+    test("home is the chat's own workspace, not the guest's /root", () async {
+      final result = await inGuest(r'echo "$HOME"');
+
+      expect(result.output.trim(), workspace.path);
+    });
+
+    test("a home from settings still wins over the workspace", () async {
+      final result = await inGuest(r'echo "$HOME"', settings: {"HOME": "/root"});
+
+      expect(result.output.trim(), "/root");
     });
 
     test("what the model is told is the guest, not the machine it is on", () {

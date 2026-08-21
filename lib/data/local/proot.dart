@@ -57,7 +57,8 @@ Sandbox prootSandbox({
         "PROOT_TMP_DIR": proot.tmpDir,
         // Everything below this line is the guest's rather than proot's.
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "HOME": "/root",
+        // No `HOME`: it is the chat's own workspace, which only `LocalShell`
+        // knows, since it is the command's working directory.
         "LANG": "C.UTF-8",
       },
       description: "${rootfs.describe(abi)}, in which ${rootfs.packageManager} "
