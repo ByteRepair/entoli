@@ -39,7 +39,7 @@ dependencies:
   fs_shim: ^2.5.5
   # Neither a share sheet nor a browser download takes a folder, so a folder
   # leaves the workspace as a zip. See CLAUDE.md, "The workspace explorer".
-  archive: ^4.0.9
+  archive: ^4.1.0
 
   # Icons
   flutter_svg: ^2.3.0
