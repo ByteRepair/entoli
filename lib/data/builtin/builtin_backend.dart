@@ -214,6 +214,10 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         profile: settings.profile,
         rateLimitGate: rateLimitGate,
+        // A headless turn offers neither: an ask_user parks it on a completer
+        // nobody will complete, and there is nobody to watch a fan-out.
+        offerAskTool: settings.offerAsk,
+        offerTaskTool: settings.offerTask,
         saveArtifact: (path, {artifactId}) async {
           final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
           if (artifactId != null) {

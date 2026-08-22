@@ -19,6 +19,7 @@ import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/reminder.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
@@ -44,6 +45,7 @@ class TestApp {
     required this.launcher,
     required this.handoff,
     required this.assistant,
+    required this.reminderAlarms,
     required this.backups,
     required this.restart,
     required this.store,
@@ -90,6 +92,8 @@ class TestApp {
     ChatStore? store,
     FakeFileHandoff? handoff,
     FakeVoice? voice,
+    FakeReminderAlarms? reminderAlarms,
+    List<Reminder> reminders = const [],
     Set<String> voiceModels = const {},
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
     Set<String> linuxes = const {},
@@ -105,6 +109,7 @@ class TestApp {
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch();
+    final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
     final backups = FakeBackupHandoff();
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
@@ -131,6 +136,7 @@ class TestApp {
       launcher: launcher,
       handoff: files,
       assistant: assist,
+      reminderAlarms: alarms,
       backups: backups,
       restart: restart,
       store: chats,
@@ -152,6 +158,8 @@ class TestApp {
           launcherIconsProvider.overrideWithValue(launcher),
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),
+          reminderAlarmsProvider.overrideWithValue(alarms),
+          remindersProvider.overrideWith(() => Reminders(reminders)),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
@@ -186,6 +194,11 @@ class TestApp {
   final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
   final FakeAssistantLaunch assistant;
+
+  /// The clock a reminder is set against. Default unavailable, which is every
+  /// platform but Android and so what most of the suite should be pretending
+  /// to be.
+  final FakeReminderAlarms reminderAlarms;
   final FakeBackupHandoff backups;
   final FakeAppRestart restart;
   final ChatStore store;

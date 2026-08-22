@@ -26,6 +26,7 @@ import "package:agent_chat/domain/local_model.dart";
 import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/reminder_alarms.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/download.dart";
@@ -236,6 +237,93 @@ class FakeAssistantLaunch implements AssistantLaunch {
     pending = true;
     _arrived.add(null);
   }
+}
+
+/// The system clock a reminder is set against, with the answers a test wants
+/// to control. [fire] and [tap] are the two things Android does on its own:
+/// an alarm going off, and a notification being tapped.
+class FakeReminderAlarms implements ReminderAlarms {
+  FakeReminderAlarms({this.available = true});
+
+  @override
+  final bool available;
+
+  var exact = true;
+  var notifications = true;
+
+  final scheduled = <int, DateTime>{};
+  final cancelled = <int>[];
+  final posted = <({String title, String body, String? chatId})>[];
+
+  List<String> pendingFired = [];
+  String? pendingOpen;
+
+  final _nudges = StreamController<void>.broadcast();
+  final _opens = StreamController<String>.broadcast();
+
+  /// An alarm firing: held like the real one is, then nudged.
+  void fire(String id) {
+    pendingFired = [...pendingFired, id];
+    _nudges.add(null);
+  }
+
+  /// A completion notification tapped.
+  void tap(String chatId) {
+    pendingOpen = chatId;
+    _opens.add(chatId);
+  }
+
+  @override
+  Future<bool> exactAllowed() async => exact;
+
+  @override
+  Future<void> requestExact() async {
+    exact = true;
+  }
+
+  @override
+  Future<bool> notificationsAllowed() async => notifications;
+
+  @override
+  Future<void> requestNotifications() async {
+    notifications = true;
+  }
+
+  @override
+  Future<void> schedule(int requestCode, DateTime at) async {
+    scheduled[requestCode] = at;
+  }
+
+  @override
+  Future<void> cancel(int requestCode) async {
+    cancelled.add(requestCode);
+    scheduled.remove(requestCode);
+  }
+
+  @override
+  Future<void> notify({required String title, required String body, String? chatId}) async {
+    posted.add((title: title, body: body, chatId: chatId));
+  }
+
+  @override
+  Future<List<String>> takeFired() async {
+    final taken = pendingFired;
+    pendingFired = [];
+    return taken;
+  }
+
+  @override
+  Stream<void> get fired => _nudges.stream;
+
+  @override
+  Future<String?> takeOpenChat() async {
+    final taken = pendingOpen;
+    pendingOpen = null;
+    return taken;
+  }
+
+  @override
+  Stream<String> get openChat => _opens.stream;
 }
 
 /// What a workspace file can do outside the app, which no test can drive: no

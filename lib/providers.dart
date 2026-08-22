@@ -1,8 +1,10 @@
+import "dart:async";
 import "dart:typed_data";
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
+import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
@@ -27,6 +29,10 @@ import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
+import "domain/reminder.dart";
+import "domain/reminder_alarms.dart";
+import "domain/reminder_runner.dart";
+import "domain/reminder_scheduler.dart";
 import "domain/rootfs_store.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
@@ -449,6 +455,87 @@ final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
       ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));
   ref.onDispose(keepAlive.dispose);
   return keepAlive;
+});
+
+final reminderAlarmsProvider =
+    Provider<ReminderAlarms>((ref) => const UnavailableReminderAlarms());
+
+/// The user's reminders, seeded from disk before the container exists and
+/// written through on every change — the same bargain [InstalledRootfs] makes.
+class Reminders extends Notifier<List<Reminder>> implements ReminderList {
+  Reminders(this._seed);
+
+  final List<Reminder> _seed;
+  late FileReminderStore _store;
+
+  @override
+  List<Reminder> build() {
+    _store = FileReminderStore(ref.watch(appConfigProvider));
+    return _seed;
+  }
+
+  @override
+  List<Reminder> get reminders => state;
+
+  @override
+  Future<void> write(List<Reminder> reminders) async {
+    state = reminders;
+    await _store.save(reminders);
+  }
+
+  @override
+  Future<void> replace(Reminder reminder) => write([
+        for (final r in state) if (r.id == reminder.id) reminder else r,
+      ]);
+
+  /// Add with its alarm request code assigned: the one place codes are handed
+  /// out, so they stay unique for the reminder's life.
+  Future<void> add(Reminder reminder) => write([
+        ...state,
+        reminder.copyWith(requestCode: nextRequestCode(state)),
+      ]);
+
+  Future<void> remove(String id) =>
+      write([for (final r in state) if (r.id != id) r]);
+
+  Future<void> setEnabled(String id, bool enabled) async {
+    final at = state.indexWhere((r) => r.id == id);
+    if (at < 0) return;
+    final reminder = state[at];
+    final next = enabled ? reminder.nextOccurrence(DateTime.now()) : null;
+    // Disabling disarms it; re-enabling re-aims at the next occurrence.
+    await replace(reminder.copyWith(enabled: enabled, clearNextFireAt: true)
+        .copyWith(nextFireAt: next));
+  }
+}
+
+final remindersProvider =
+    NotifierProvider<Reminders, List<Reminder>>(() => Reminders(const []));
+
+final reminderRunnerProvider = Provider<ReminderRunner>((ref) {
+  return ReminderRunner(
+    repo: ref.watch(chatRepositoryProvider),
+    onListChanged: (_) => ref.invalidate(chatListProvider),
+    onReminderFired: (reminder) =>
+        ref.read(remindersProvider.notifier).replace(reminder),
+  );
+});
+
+/// Started once beside the sweep timer. It listens to the list from here, so
+/// an edit anywhere re-arms the timer and re-syncs the alarms without the
+/// editor having to know the scheduler exists.
+final reminderSchedulerProvider = Provider<ReminderScheduler>((ref) {
+  final scheduler = ReminderScheduler(
+    alarms: ref.watch(reminderAlarmsProvider),
+    runner: ref.watch(reminderRunnerProvider),
+    list: ref.watch(remindersProvider.notifier),
+    projects: () => ref.read(chatRepositoryProvider).listProjects(),
+  );
+  ref.onDispose(scheduler.dispose);
+  ref.listen(remindersProvider, (_, _) {
+    unawaited(scheduler.reload());
+  });
+  return scheduler;
 });
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
