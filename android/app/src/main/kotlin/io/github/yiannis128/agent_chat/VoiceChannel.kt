@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognitionService
@@ -141,6 +142,10 @@ object VoiceChannel {
 
     // --- Speech synthesis ---
 
+    // `TextToSpeech` may be constructed long before it can speak: a `speak` in
+    // that window returns an error code and nothing else — no callback, so
+    // nothing above would ever learn the utterance never happened. Dart holds
+    // its queue until `speechReady` says otherwise.
     private fun ensureTts(context: Context) {
         if (tts != null) return
         tts = TextToSpeech(context) { status ->
@@ -148,6 +153,7 @@ object VoiceChannel {
                 send("speechError", "Text-to-speech is not available.")
                 return@TextToSpeech
             }
+            send("speechReady", null)
             tts?.language = Locale.getDefault()
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
@@ -156,13 +162,16 @@ object VoiceChannel {
                     send("speechDone", utteranceId?.toIntOrNull() ?: 0)
                 }
 
+                // One utterance failing is not the engine failing: named by its
+                // batch, dropped by Dart, and only repeated failure is reported
+                // up. Init failure alone comes through as `speechError`.
                 @Deprecated("Kept for the platforms that still call it.")
                 override fun onError(utteranceId: String?) {
-                    send("speechError", "Speech playback failed.")
+                    onError(utteranceId, -1)
                 }
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
-                    send("speechError", "Speech playback failed.")
+                    send("speechUtteranceError", utteranceId?.toIntOrNull() ?: -1)
                 }
             })
         }
@@ -198,6 +207,15 @@ object VoiceChannel {
     // Transient faults since anything was last heard — see [retry].
     private var faults = 0
 
+    // When the current request went out, and how many silences have come back
+    // almost instantly. A room with nobody in it answers after the service's
+    // own timeout; a rung that cannot work at all refuses within a fraction of
+    // a second. Two fast ones in a row is a refusal dressed as silence, and is
+    // asked again — see [onError]. Speech resets it: a working rung never
+    // descends.
+    private var listenedAt = 0L
+    private var fastRefusals = 0
+
     // The services already asked for a model. A fetch rather than a retry, so
     // once each, and it outlives the session that discovered the gap.
     private val downloadAsked = mutableSetOf<ComponentName>()
@@ -207,6 +225,10 @@ object VoiceChannel {
         wantListening = true
         listen()
     }
+
+    // How quickly a silence has to come back to count as a refusal rather
+    // than as a room with nobody in it — see [onError].
+    private const val FAST_REFUSAL_MS = 1500L
 
     // An error voice mode will show. The recognizer goes with it: the Dart side
     // is in its failed state from here, and one left bound is one the next
@@ -221,6 +243,7 @@ object VoiceChannel {
         val recognizer = ensureRecognizer() ?: return
         try {
             recognizer.startListening(recognizerIntent(ask))
+            listenedAt = SystemClock.elapsedRealtime()
         } catch (e: Exception) {
             fail(e.message ?: "Recognition could not start.")
         }
@@ -367,6 +390,7 @@ object VoiceChannel {
         service = 0
         ask = Ask.OnDevice
         faults = 0
+        fastRefusals = 0
     }
 
     private val recognitionListener = object : RecognitionListener {
@@ -376,6 +400,9 @@ object VoiceChannel {
         }
 
         override fun onBeginningOfSpeech() {
+            // The service is hearing something. Whatever comes back now is a
+            // real cycle, not a rung refusing to listen — see [onError].
+            fastRefusals = 0
             send("interrupted", null)
         }
 
@@ -391,11 +418,31 @@ object VoiceChannel {
             // Silence is not a fault while listening continuously: a room with
             // nobody talking in it produces one of these every few seconds, and
             // reporting them would put voice mode in the failed state for the
-            // ordinary case of waiting to be spoken to.
+            // ordinary case of waiting to be spoken to. But a rung that cannot
+            // hear at all — offline preferred where no model is downloaded,
+            // say — refuses within a fraction of a second rather than after
+            // the timeout window, and some services answer that way instead of
+            // with a language error. Two near-instant silences in a row is a
+            // refusal dressed as silence, and is asked again like one.
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> restart()
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    val elapsed = SystemClock.elapsedRealtime() - listenedAt
+                    fastRefusals = if (elapsed < FAST_REFUSAL_MS) fastRefusals + 1 else 0
+                    if (fastRefusals >= 2) {
+                        fastRefusals = 0
+                        askDifferently()
+                    } else restart()
+                }
+
+                // What the service answers while it still has the previous
+                // session open. Cancelled and retried on the fault budget:
+                // retrying into a busy recognizer immediately, forever, was a
+                // silent spin.
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    recognizer?.cancel()
+                    retry("Speech recognition did not answer.")
+                }
 
                 // What the service answers a restart that landed while it still
                 // had the last session open, and also a session that never

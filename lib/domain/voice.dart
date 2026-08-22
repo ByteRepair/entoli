@@ -99,9 +99,10 @@ class VoiceHeard extends VoiceEvent {
   final String text;
 }
 
-/// The user started talking over the reply. The engine has already stopped
-/// speaking by the time this arrives; it is up to the controller whether the
-/// turn is worth aborting too.
+/// Someone talked over the reply, confirmed by words that were not just said —
+/// onset alone is the phone hearing itself as readily as it is a person. The
+/// speaker has already been stopped by the time this arrives; it is up to the
+/// controller whether the turn is worth aborting too.
 class VoiceInterrupted extends VoiceEvent {
   const VoiceInterrupted();
 }

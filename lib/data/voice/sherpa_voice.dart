@@ -186,7 +186,10 @@ class SherpaListener implements Listener {
     await _recorder.stop();
     _recorder.dispose();
     _worker.close();
-    await _events.close();
+    // Not awaited: on a single-subscription stream the future from close waits
+    // for a listener to take the done event off the buffer, and a session
+    // nobody subscribed to would hang here forever.
+    unawaited(_events.close());
     _levelOf.dispose();
   }
 
