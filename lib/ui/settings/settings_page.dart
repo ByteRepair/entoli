@@ -24,6 +24,7 @@ import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "local_model_settings.dart";
+import "sync_settings.dart";
 import "terminal_settings.dart";
 import "voice_settings.dart";
 
@@ -38,6 +39,7 @@ enum SettingsCategory {
   onDevice("On-device", Icons.memory),
   voice("Voice", Icons.graphic_eq),
   assistant("Assistant", Icons.assistant_outlined),
+  sync("Sync", Icons.sync),
   providers("Providers", Icons.cloud_outlined),
   llms("LLMs", Icons.auto_awesome_outlined),
   data("Data", Icons.inventory_2_outlined),
@@ -173,6 +175,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // app's whatever it is running on, the way the voice category is drawn
       // where `Voice.available` is false.
       SettingsCategory.assistant => const [_AssistantSection()],
+      SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],
       SettingsCategory.data => const [_BackupSection()],

@@ -30,7 +30,7 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is nine categories, picked from a panel beside it or, below
+The settings page is ten categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:
 **Appearance** — the theme and the app icon, which are the two things the app
 looks like — the **Agent** — command approval mode and the classifier model,
@@ -46,7 +46,10 @@ like any other. **Voice** is what listens and what speaks,
 over the catalog they are downloaded from — its own category rather than a
 section under General because the two pickers are two lines and the catalog
 under them is the rest of the page. **Assistant** is where Android's assistant
-gesture lands — see "Being the assistant". **Providers** is the endpoints.
+gesture lands — see "Being the assistant". **Sync** is paired devices —
+this device's identity and name, the relay and TURN settings for internet
+pairing, the paired-device list, and the pairing window. See
+`lib/data/sync/CLAUDE.md` for the threat model and handshake. **Providers** is the endpoints.
 **LLMs** is what a new chat is answered by and what names it. **Data** is all of
 it at once, out as one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app

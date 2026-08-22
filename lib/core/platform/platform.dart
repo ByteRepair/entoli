@@ -21,7 +21,9 @@ import "../../domain/local_llm.dart";
 import "../../domain/local_model_store.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/rootfs_store.dart";
+import "../../domain/secret_store.dart";
 import "../../domain/shell.dart";
+import "../../domain/sync/lan_signaling.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model_store.dart";
 import "../config.dart";
@@ -246,6 +248,15 @@ Voice createVoice(VoiceModelStore store, String cacheDir) =>
 Future<void> persist() => platformPersist();
 
 ChatStore createChatStore(AppConfig config) => FileChatStore(config);
+
+/// Where this device's sync secrets are held: the system keyring where one
+/// exists, the plain file under the data directory where none does. See
+/// [SecretStore] for what each of those means to the Sync page.
+SecretStore createSecretStore(AppConfig config) => platformSecretStore(config);
+
+/// The LAN rendezvous a desktop hosts while pairing. Null where the platform
+/// cannot listen — a browser pairs as the joiner instead.
+LanSignaling? createLanSignaling() => platformLanSignaling();
 
 /// What a workspace file can do outside Entoli: a viewer, a file manager, a
 /// share sheet, a download. The one part of the app that still varies three

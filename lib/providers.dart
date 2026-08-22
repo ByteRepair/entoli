@@ -28,6 +28,8 @@ import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
 import "domain/rootfs_store.dart";
+import "domain/sync/devices.dart";
+import "data/sync/sync_hub.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
@@ -384,6 +386,19 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setLocalKvCachePrompts(int? prompts) =>
       _applyLocal((s) => s.localModelKvCachePrompts = prompts);
 
+  Future<void> setDeviceName(String? name) =>
+      _update((s) => s.deviceName = name);
+
+  Future<void> setSyncRelayUrl(String? url) =>
+      _update((s) => s.syncRelayUrl = url);
+
+  Future<void> setTurnUrl(String? url) => _update((s) => s.turnUrl = url);
+
+  Future<void> setTurnCredentials(String? username, String? password) =>
+      _update((s) => s
+        ..turnUsername = username
+        ..turnPassword = password);
+
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value
   /// a picker is *showing* as Default be silently written back.
@@ -434,6 +449,11 @@ final linkOpenerProvider =
 
 final backgroundWorkProvider =
     Provider<BackgroundWork>((ref) => throw UnimplementedError());
+
+final deviceRegistryProvider =
+    Provider<DeviceRegistry>((ref) => throw UnimplementedError());
+
+final syncHubProvider = Provider<SyncHub>((ref) => throw UnimplementedError());
 
 /// Read once in `main` for its effect: it listens to the backend from the
 /// moment it exists, and nothing ever asks it anything. Here rather than a bare

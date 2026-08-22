@@ -33,6 +33,8 @@ named in a cross-reference is findable from this list.
   Carrying one on, Web search
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
+- `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
+  layer, three rendezvous transports, the SyncHub, secrets at rest
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files

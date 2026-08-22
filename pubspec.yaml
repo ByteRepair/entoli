@@ -72,6 +72,13 @@ dependencies:
   collection: ^1.19.1
   # navigator.storage.persist(), so what the browser stored is not evicted.
   web: ^1.1.1
+  flutter_webrtc: ^1.6.0
+  cryptography: ^2.9.0
+  cryptography_flutter: ^2.3.4
+  web_socket_channel: ^3.0.3
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.4.0
+  freedesktop_secret: ^0.1.2
 
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a

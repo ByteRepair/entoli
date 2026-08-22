@@ -1,0 +1,82 @@
+import "dart:async";
+import "dart:convert";
+
+import "package:http/http.dart" as http;
+
+/// The joiner's half of a LAN exchange: POST an offer to the first address
+/// that answers, and wait in the same request for the host's answer — one
+/// round trip, no polling.
+class LanSignaler {
+  LanSignaler({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
+  /// Posts [offerSdp] under [code] — or, for a reconnect, under the [token]
+  /// derived from this pair's secret — and returns the answer SDP. The
+  /// server holds the request open until its host replies or gives up.
+  Future<String> exchange({
+    required List<String> hosts,
+    required int port,
+    String code = "",
+    String token = "",
+    required String offerSdp,
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    Object? last;
+    for (final host in hosts) {
+      try {
+        return await _exchange(host, port, code, token, offerSdp, timeout);
+      } catch (error) {
+        last = error;
+      }
+    }
+    throw SignalingException(
+        "could not reach the other device${last == null ? "" : ": $last"}");
+  }
+
+  Future<String> _exchange(String host, int port, String code, String token,
+      String offerSdp, Duration timeout) async {
+    final uri = Uri.parse("http://$host:$port/entoli/offer");
+    final response = await _client
+        .post(uri,
+            headers: const {"content-type": "application/json"},
+            body: jsonEncode({
+              if (code.isNotEmpty) "code": code,
+              if (token.isNotEmpty) "token": token,
+              "sdp": offerSdp,
+            }))
+        .timeout(timeout);
+    if (response.statusCode != 200) {
+      throw SignalingException(
+          "the other device answered ${response.statusCode}");
+    }
+    final answer =
+        (jsonDecode(response.body) as Map<String, dynamic>)["sdp"] as String?;
+    if (answer == null || answer.isEmpty) {
+      throw const SignalingException("the other device sent no answer");
+    }
+    return answer;
+  }
+
+  /// Cheap check that a remembered address is still this app's server.
+  Future<bool> alive({required String host, required int port}) async {
+    try {
+      final response = await _client
+          .get(Uri.parse("http://$host:$port/entoli/health"))
+          .timeout(const Duration(seconds: 3));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void close() => _client.close();
+}
+
+class SignalingException implements Exception {
+  const SignalingException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}

@@ -10,8 +10,12 @@ import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
 import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
+import "data/sync/file_devices.dart";
+import "data/sync/sync_hub.dart";
+import "domain/app_settings.dart";
 import "domain/app_restart.dart";
 import "domain/prompt_library.dart";
+import "domain/sync/identity.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/app_shell.dart";
@@ -100,6 +104,24 @@ class AppSession {
     // first. Both at once — they are two directories and neither needs the
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
+    // Sync: identity from the keyring (or file fallback), registry on disk.
+    // The hub reads settings from the container; the closure below defers
+    // that read until after the container exists — the same pattern the
+    // repository uses with `() => ref.read(appSettingsProvider)`.
+    final secretStore = platform.createSecretStore(config);
+    final identity = await SyncIdentity.load(secretStore);
+    final registry = FileDeviceRegistry(config, secretStore);
+    var settingsContainer = <ProviderContainer>[];
+    final syncHub = SyncHub(
+      identity: identity,
+      registry: registry,
+      config: config,
+      settings: () {
+        final c = settingsContainer.firstOrNull;
+        return c?.read(appSettingsProvider) ?? AppSettings();
+      },
+      lanSignaling: platform.createLanSignaling,
+    );
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -129,8 +151,14 @@ class AppSession {
         localPrefillProvider.overrideWithValue(prefill),
         installedLocalModelsProvider
             .overrideWith(() => InstalledLocalModels(scans.last)),
+        deviceRegistryProvider.overrideWithValue(registry),
+        syncHubProvider.overrideWithValue(syncHub),
       ],
     );
+    // Arming reconnects for paired devices, so a desktop that has paired once
+    // can be dialed again after a restart without opening a window first.
+    settingsContainer.add(container);
+    await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
     // Read once to set going, like the keep-alive above: it wires itself to the
@@ -155,6 +183,7 @@ class AppSession {
   /// goes, which is what lets a restore replace the files underneath.
   Future<void> dispose() async {
     _sweep.cancel();
+    await container.read(syncHubProvider).dispose();
     await container.read(agentBackendProvider).shutdown();
     // Before the container goes: each is a subprocess holding a gigabyte of the
     // phone's memory, and nothing else would ever kill them.

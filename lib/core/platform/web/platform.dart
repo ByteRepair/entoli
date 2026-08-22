@@ -8,6 +8,7 @@ import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
+import "../../../data/local/file_secret_store.dart";
 import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
@@ -15,10 +16,14 @@ import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
 import "../../../domain/rootfs_store.dart";
+import "../../../domain/secret_store.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/sync/lan_signaling.dart";
 import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
+import "../../config.dart";
+import "signaling.dart";
 
 Shell platformShell({
   required Map<String, String> Function() environment,
@@ -119,4 +124,13 @@ Future<void> platformPersist() async {
 }
 
 String? processEnv(String name) => null;
+
+/// A browser has no keyring to ask. The file under the data directory —
+/// origin-scoped IndexedDB — is the ceiling this platform has; the Sync page
+/// says so rather than pretending otherwise.
+SecretStore platformSecretStore(AppConfig config) =>
+    FileSecretStore(config.fs, config.dataDir);
+
+/// Nowhere to bind: see `signaling.dart`. A web device pairs as the joiner.
+LanSignaling? platformLanSignaling() => createWebLanSignaling();
 
