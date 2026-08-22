@@ -288,13 +288,29 @@ recognizer, or the assistant setting — would otherwise keep paying for what wa
 true when voice mode was last opened. Within a session it is kept, so pausing
 for a reply and unpausing does not walk it again.
 
+**A refusal does not always arrive dressed as a language error.** A rung that
+cannot work at all — offline preferred where nothing is downloaded, say — is
+answered by plenty of services with `ERROR_NO_MATCH` or `ERROR_SPEECH_TIMEOUT`
+instead, which are silence's codes and would restart forever a few hundred
+milliseconds in, voice mode listening and deaf. What separates that from a room
+with nobody in it is speed: genuine silence takes the service's own timeout to
+report, several seconds, while a refusal comes back almost instantly. Each
+request is timestamped, and two near-instant silences in a row descend the same
+ladder a language error does — `onBeginningOfSpeech` clears the count, so a
+rung that hears never steps down for being quiet. The worst case of being wrong
+is two fast cycles nobody noticed.
+
 **The remaining codes are three kinds rather than a list.** Silence restarts and
-says nothing. Something happening elsewhere — the network, the server, one
-request too many, a service that went away under the session — is backed off and
-tried again, three times before it is called a fault, since each of those is a
-blink at least as often as it is a wall. Everything else reports: no microphone,
-no permission, and an error code nothing here has a name for, which is still
-worth showing with its number rather than swallowing.
+says nothing — except as above, where it refuses fast enough to be asked again.
+Something happening elsewhere — the network, the server, one request too many,
+a service that went away under the session — is backed off and tried again,
+three times before it is called a fault, since each of those is a blink at least
+as often as it is a wall; `ERROR_RECOGNIZER_BUSY` is here rather than among the
+silences, cancelled first, because restarting into a recognizer still holding
+its last session was an immediate retry landing on the same error, forever.
+Everything else reports: no microphone, no permission, and an error code nothing
+here has a name for, which is still worth showing with its number rather than
+swallowing.
 
 
 ### Per side, not per session
@@ -314,13 +330,26 @@ rather than by either engine knowing what reading one message out is.
 
 `Speaker.speaking` is on the interface for one reason, and it is the reason the
 split needed care: voice activity opens **every** utterance, not only the ones
-landing on top of a reply, and `VoiceController` aborts the running turn on a
-`VoiceInterrupted`. So the session forwards one only while something is actually
-being said. That guard was inside the old single class as `_playing ||
-_queue.isNotEmpty`, where it read as an optimisation; on the interface it is the
-contract, and each speaker answers it its own way — the sherpa one from its
-queue, the native one from what `TextToSpeech` has been handed and not reported
-done.
+landing on top of a reply, so onset alone decides nothing. What a barge-in is,
+the session decides from content — see `isEcho` — and it stops the speaker only
+once words arrive that were not just said, which is why `speaking` has to be an
+answer the session can ask rather than an event it waits for. Each speaker
+answers it its own way: the sherpa one from its queue, the native one from what
+`TextToSpeech` has been handed and not reported done.
+
+**Barge-in is confirmed, never assumed.** The recogniser hears the reply as
+readily as it hears the room — the two are one acoustic event to it, and every
+sentence spoken trips voice activity on the way out of the speaker. The old
+forwarding cut the turn off on onset alone, which made the phone interrupt
+itself within a sentence wherever echo cancellation did not cover the
+recogniser's input — which is most phones. Now a `VoiceHeard` landing while the
+speaker is talking goes through `isEcho`: substantially the same words as what
+was just said are dropped as the phone hearing itself, anything else stops the
+speaker and emits the `VoiceInterrupted` the controller aborts the turn on.
+`VoiceInterrupted` arriving on its own forwards nothing. The cost is that an
+interruption takes until the utterance is transcribed rather than firing at
+onset; the Stop button under the orb remains the instant way to cut a reply
+off, and garbled transcriptions of speech can still slip past the match.
 
 ### The Kotlin
 
@@ -335,9 +364,20 @@ callback, and starting the next one there is what `ERROR_RECOGNIZER_BUSY` is.
 
 **Silence is not a fault.** A room with nobody talking in it produces
 `ERROR_NO_MATCH` or `ERROR_SPEECH_TIMEOUT` every few seconds, so those restart
-without a word; reporting them would leave voice mode in the failed state for
-the ordinary case of waiting to be spoken to. `ERROR_INSUFFICIENT_PERMISSIONS`
-is the one that stops.
+without a word — unless they come back near-instantly twice running, which the
+refusal section above covers. `ERROR_INSUFFICIENT_PERMISSIONS` is the one that
+stops.
+
+**The synthesiser answers only once it is up.** `TextToSpeech` is constructed
+long before its init callback runs, and a `speak` in that window returns an
+error code and no callback — Dart would count an utterance that never happened,
+and a `_pending` that never drains makes `speaking` permanently true, turning
+every later sound into a barge-in and silence into something never reported.
+So Kotlin says `speechReady` when init succeeds, and Dart holds what it is
+handed until then; an engine that has not answered within five seconds is said
+rather than waited for. One utterance failing is likewise not the engine
+failing: `speechUtteranceError` drops just that sentence, and three in a row
+with nothing heard between them are what fail the session.
 
 **`TextToSpeech` answers on a binder thread**, and a `MethodChannel` may only be
 touched from the main one. Everything Dart hears goes through `send`, which
@@ -491,10 +531,10 @@ out would stop it after the first sentence. The WAV of what is playing is kept
 until something else is: `play` returns when playback *starts*.
 
 **Talking over the reply stops the turn as well as the speech.** The session
-goes quiet the moment the detector fires, before the controller has decided
-anything; the controller then aborts the turn, because interrupting means stop
-and listen to me — which is Stop and then type, in one gesture, and leaves the
-same aborted turn in the log. That rides on the platform's echo cancellation,
-without which the model hears itself and every sentence is a barge-in; the Stop
-button under the orb is the fallback, and shuts the reply up without leaving
-voice mode.
+goes quiet once words arrive that were not just said — confirmed, not on onset,
+which is what kept the phone from cutting itself off wherever echo cancellation
+did not cover the recogniser's input; see "Per side, not per session" for the
+whole of it. The controller then aborts the turn, because interrupting means
+stop and listen to me — which is Stop and then type, in one gesture, and leaves
+the same aborted turn in the log. The Stop button under the orb remains the way
+to cut a reply off for certain: instantly, and without trusting a transcription.
