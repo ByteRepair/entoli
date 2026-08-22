@@ -9,6 +9,7 @@ import "core/config.dart";
 import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
 import "core/platform/platform.dart" as platform;
+import "data/local/file_reminder_store.dart";
 import "data/local/file_selector_picker.dart";
 import "domain/app_restart.dart";
 import "domain/prompt_library.dart";
@@ -20,6 +21,7 @@ import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
 import "ui/link_opener.dart";
 import "ui/share/incoming_shares.dart";
+import "ui/reminders/incoming_open.dart";
 import "ui/sidebar/sidebar.dart";
 import "ui/theme.dart";
 
@@ -100,6 +102,7 @@ class AppSession {
     // first. Both at once — they are two directories and neither needs the
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
+    final reminders = await FileReminderStore(config).load();
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -112,6 +115,8 @@ class AppSession {
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
+        reminderAlarmsProvider.overrideWithValue(platform.createReminderAlarms()),
+        remindersProvider.overrideWith(() => Reminders(reminders)),
         backupHandoffProvider
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),
@@ -144,6 +149,9 @@ class AppSession {
         .read(chatRepositoryProvider)
         .sweepExpired(exceptId: container.read(selectedChatIdProvider));
     await sweep();
+    // Started, not awaited: catch-up can run turns, and startup must not wait
+    // on a model. Whatever it finds overdue was already stamped fired.
+    unawaited(container.read(reminderSchedulerProvider).start());
     return AppSession._(
       container,
       Timer.periodic(const Duration(minutes: 30), (_) => sweep()),
@@ -294,7 +302,9 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       // Navigator that only exists below here; and the keyboard is the app's to
       // answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
-        child: IncomingAssistant(child: IncomingShares(child: AppShell())),
+        child: IncomingAssistant(
+          child: IncomingShares(child: IncomingReminderOpen(child: AppShell())),
+        ),
       ),
     );
   }

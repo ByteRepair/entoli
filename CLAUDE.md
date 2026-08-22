@@ -26,7 +26,7 @@ named in a cross-reference is findable from this list.
 
 - `lib/domain/CLAUDE.md` — The conversation log, Threads, The projection,
   Carrying on an interrupted turn, Starting a chat, and naming it, Commands
-  and agents, Resending a message, Attachments
+  and agents, Resending a message, Attachments, Reminders
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
@@ -36,7 +36,8 @@ named in a cross-reference is findable from this list.
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
-  app, Being the assistant, The app icon, The debug build's own
+  app, Being the assistant, Waking for a reminder, The app icon, The debug
+  build's own
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, The chat page
@@ -86,7 +87,9 @@ Every project is a directory under `projects/`, the default one included.
 files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, and
-`llmProviders`.
+`llmProviders`. `<dataDir>/reminders.json` is the user's reminders, one JSON
+list; the boot receiver reads it with no engine running, which is why writes go
+through a rename.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android), and `/agent-chat` in a browser — where it is a
 name in IndexedDB rather than a path, and load-bearing all the same.

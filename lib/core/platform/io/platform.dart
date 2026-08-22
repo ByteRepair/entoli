@@ -10,6 +10,7 @@ import "package:path_provider/path_provider.dart";
 import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
+import "../../../data/local/android_reminder_alarms.dart";
 import "../../../data/local/bundled_tools.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
@@ -29,6 +30,7 @@ import "../../../domain/backup_handoff.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
+import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs.dart";
 import "../../../domain/rootfs_store.dart";
 import "../../../domain/shell.dart";
@@ -157,6 +159,12 @@ BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
 AssistantLaunch platformAssistantLaunch() => Platform.isAndroid
     ? AndroidAssistantLaunch()
     : const UnavailableAssistantLaunch();
+
+/// AlarmManager on Android, nothing anywhere else — the desktops have no
+/// scheduler to hand over, and a browser's timers die with its tab.
+ReminderAlarms platformReminderAlarms() => Platform.isAndroid
+    ? AndroidReminderAlarms()
+    : const UnavailableReminderAlarms();
 
 FileSystem platformFileSystem() => fileSystemIo;
 

@@ -1,0 +1,82 @@
+import "dart:async";
+
+import "package:flutter/services.dart";
+
+import "../../domain/reminder_alarms.dart";
+
+/// Android's AlarmManager, behind `agent_chat/reminders` and
+/// `RemindersChannel.kt`.
+///
+/// The held-pending split again, and both halves are needed for the same
+/// reason the assistant gesture's are: the alarm may be what starts the
+/// process, so a fire waits in Kotlin until [takeFired] asks, and [fired] is
+/// only a nudge for an isolate that was already up. A tapped notification
+/// splits the same way, carrying its chat id through [takeOpenChat].
+class AndroidReminderAlarms implements ReminderAlarms {
+  AndroidReminderAlarms() {
+    _channel.setMethodCallHandler(_onCall);
+  }
+
+  static const _channel = MethodChannel("agent_chat/reminders");
+
+  final _nudges = StreamController<void>.broadcast();
+  final _opens = StreamController<String>.broadcast();
+
+  @override
+  bool get available => true;
+
+  @override
+  Stream<void> get fired => _nudges.stream;
+
+  @override
+  Stream<String> get openChat => _opens.stream;
+
+  Future<dynamic> _onCall(MethodCall call) async {
+    switch (call.method) {
+      case "fired":
+        _nudges.add(null);
+      case "open":
+        final chatId = call.arguments as String?;
+        if (chatId != null) _opens.add(chatId);
+    }
+  }
+
+  @override
+  Future<bool> exactAllowed() async =>
+      await _channel.invokeMethod<bool>("exactAllowed") ?? false;
+
+  @override
+  Future<void> requestExact() => _channel.invokeMethod("requestExact");
+
+  @override
+  Future<bool> notificationsAllowed() async =>
+      await _channel.invokeMethod<bool>("notificationsAllowed") ?? false;
+
+  @override
+  Future<void> requestNotifications() =>
+      _channel.invokeMethod("requestNotifications");
+
+  @override
+  Future<void> schedule(int requestCode, DateTime at) => _channel
+      .invokeMethod("schedule", {"code": requestCode, "at": at.millisecondsSinceEpoch});
+
+  @override
+  Future<void> cancel(int requestCode) =>
+      _channel.invokeMethod("cancel", {"code": requestCode});
+
+  @override
+  Future<void> notify({required String title, required String body, String? chatId}) =>
+      _channel.invokeMethod("notify", {
+        "title": title,
+        "body": body,
+        "chatId": ?chatId,
+      });
+
+  @override
+  Future<List<String>> takeFired() async =>
+      await _channel.invokeListMethod<String>("takeFired") ?? const [];
+
+  @override
+  Future<String?> takeOpenChat() async =>
+      await _channel.invokeMethod<String>("takeOpenChat");
+}
