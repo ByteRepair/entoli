@@ -209,6 +209,13 @@ abstract class ForegroundWork : Service() {
             val intent = Intent(context, service)
             if (!wanted) {
                 context.stopService(intent)
+                // The last piece of work just ended. If no activity ever
+                // attached — the process was woken by an alarm and nobody came
+                // — the isolate it built is a full app nobody is looking at
+                // and nothing will reattach to except through a launch that
+                // must then skip main, which is the restart contract quietly
+                // broken. Release it; see AppEngine.
+                AppEngine.releaseIfUnwanted()
                 return
             }
             describe(intent)

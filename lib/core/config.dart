@@ -11,6 +11,7 @@ import "migrations.dart";
 ///
 /// Layout:
 ///   `<dataDir>/settings.json`
+///   `<dataDir>/reminders.json`
 ///   `<dataDir>/commands/*.md`, `<dataDir>/agents/*.md`
 ///   `<dataDir>/projects/<project>/`
 ///     `project.json`
@@ -186,6 +187,11 @@ class AppConfig {
   String get versionFile => fs.path.join(dataDir, "version");
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");
+
+  /// The user's reminders, one JSON list. Not a document in [Documents]:
+  /// nothing needs to read it synchronously, and Kotlin reads it behind the
+  /// app's back to re-arm alarms — which is why writes go through a rename.
+  String get remindersFile => fs.path.join(dataDir, "reminders.json");
 
   /// Project-scoped overrides, in the project's own directory — the default
   /// project's included, which is what makes them one kind of file in one

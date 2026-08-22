@@ -24,6 +24,15 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
 
+    <!-- Reminders. Exact alarms need the user's grant from Android 12 on
+         (denied by default from 13); where it is not held the alarm falls back
+         to inexact, which can fire minutes late under Doze — the Reminders
+         settings page says so and links to the grant. Boot re-arms every armed
+         reminder, since Android forgets its alarms when it shuts down; the
+         time-set action covers the user moving the clock underneath them. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
     <!-- The Android-system voice engines, which the sentinel picks resolve to.
          From Android 11 an app sees only the packages it declares an interest
          in, and the queries for a recognition service and for a TTS engine are
@@ -141,6 +150,20 @@
             android:name=".VoiceService"
             android:exported="false"
             android:foregroundServiceType="microphone"/>
+
+        <!-- Reminders. Both are system-only entry points and hold no state of
+             their own: the alarm receiver hands the id to Dart and holds the
+             process, the boot receiver re-arms what reminders.json lists. Not
+             exported — the system delivers its own protected broadcasts to
+             them regardless, and no other app may wake either. -->
+        <receiver android:name=".ReminderReceiver" android:exported="false"/>
+        <receiver android:name=".ReminderBootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+            </intent-filter>
+        </receiver>
 
         <!-- What lets another app read a workspace file Entoli hands it. The
              paths it will mint a URI for are one cache directory: everything

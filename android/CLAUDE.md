@@ -350,3 +350,61 @@ build's tab says it as well, which is honest and free. Linux is left alone:
 `my_application.cc` hardcodes the window title, `MaterialApp.title` does nothing
 on GTK, and there is no second install to tell apart. Profile builds have no
 `res/` of their own and so carry the release name and artwork.
+
+## Waking for a reminder
+
+A reminder set while the app was closed fires through AlarmManager, and the
+process may have been dead since it was set. `ReminderReceiver` is the entry
+point: it stashes the reminder id in `RemindersChannel`'s held-pending list
+(the same shape `AssistantChannel` has for the assistant gesture), starts
+`AgentService` synchronously inside the alarm's temporary allowlist window, and
+calls `AppEngine.runIfIdle` to cold-start the Flutter isolate if nothing was
+running.
+
+**The service starts in Kotlin, not Dart.** `TurnKeepAlive`'s
+`BackgroundWork.running(1)` goes through a MethodChannel round trip that may
+fall outside the allowlist window; starting `AgentService` directly in the
+receiver is what lets the turn run at all. A refusal is caught — an uncaught one
+in a broadcast receiver is a crash — and the turn then runs merely killable,
+which is where every other platform already is.
+
+**`AppEngine` is the one place the engine is built.** Every way the process
+comes to be running Dart goes through `AppEngine.ensure` — an activity launch,
+or an alarm waking nothing — so channels and `GeneratedPluginRegistrant` are
+registered exactly once and both paths get an identical engine.
+`MainActivity.provideFlutterEngine` delegates to it; `configureFlutterEngine`
+is a no-op because plugin registration moved into `ensure`, where the default
+would otherwise register them a second time. `runIfIdle` executes the Dart
+entrypoint headlessly (runApp builds the widget tree with no surface; frames
+begin when an activity eventually attaches), guarded by `isExecutingDart` so
+`main` never runs twice.
+
+**A cold-started engine is released when its work drains.** `AppEngine.everAttached`
+tracks whether an activity ever came up; `ForegroundWork.hold`, when the last
+piece of work ends and `!everAttached && !busy`, calls `AppEngine.releaseIfUnwanted`
+to destroy the cached engine. Without this, a sticky isolate nobody opened is a
+restart that never comes — `main` would not re-run, so a settings file or prompt
+edited behind its back would go on being ignored. An engine an activity did
+attach to belongs to `MainActivity.onDestroy`'s rules instead.
+
+**The boot receiver re-arms from `reminders.json`**, reading `nextFireAt` (the
+epoch millis Dart precomputed) rather than doing recurrence math of its own —
+a second copy of that math in Kotlin would drift across DST and month ends.
+`TIME_SET` and `TIMEZONE_CHANGED` trigger the same resync. The file is read
+through `PathUtils.getDataDirectory` + `"agent-chat"`, the same path
+`WorkspaceProvider` uses with no engine running.
+
+**`POST_NOTIFICATIONS` cannot be requested from a receiver**, which is why the
+Reminders settings page asks for it when the first reminder is scheduled — an
+activity is present there. A device where the app was never opened post-install
+gets no notifications from a cold-started reminder; the service still runs, the
+turn still completes, and the chat is on disk for the next open.
+
+**The completion notification's tap deep-links to the chat.** `RemindersChannel`
+builds an explicit `Intent` to `MainActivity` carrying the chat id (using the
+runtime `packageName`, not the namespace — the debug-suffix lesson from
+`IconChannel`); `MainActivity.onCreate` and `onNewIntent` hand it to
+`RemindersChannel.receive`, which stashes it held-pending and nudges Dart.
+`IncomingReminderOpen` (`lib/ui/reminders/incoming_open.dart`) drains it on the
+first frame and on each nudge, validates the chat still exists (a temporary
+reminder chat can have been swept), and calls `openChat`.

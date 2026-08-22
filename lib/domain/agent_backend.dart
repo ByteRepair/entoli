@@ -158,16 +158,6 @@ class InfoEvent extends AgentEvent {
 /// way of starting a turn takes all of it, and a forwarding site that drops one
 /// field is silent.
 class TurnSettings {
-  const TurnSettings({
-    this.model,
-    this.provider,
-    this.project,
-    this.approveMode = ApproveMode.ask,
-    this.classifierProvider,
-    this.classifierModel,
-    this.profile,
-  });
-
   /// Only ever a matched pair: the registry keys clients by provider id.
   final String? model;
   final String? provider;
@@ -183,6 +173,25 @@ class TurnSettings {
   final String? classifierModel;
 
   final Profile? profile;
+
+  /// Whether the turn may put questions to the user, or spawn sub-agents. True
+  /// for a turn somebody is watching; a headless one turns both off, since an
+  /// `ask_user` parks it on a completer nobody will complete — there is no
+  /// timeout behind that wait anywhere.
+  final bool offerAsk;
+  final bool offerTask;
+
+  const TurnSettings({
+    this.model,
+    this.provider,
+    this.project,
+    this.approveMode = ApproveMode.ask,
+    this.classifierProvider,
+    this.classifierModel,
+    this.profile,
+    this.offerAsk = true,
+    this.offerTask = true,
+  });
 }
 
 /// What runs a turn, and the app's one route to a provider. `BuiltinBackend`
