@@ -42,10 +42,10 @@ named in a cross-reference is findable from this list.
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, The chat page
 - `lib/data/voice/CLAUDE.md` — Voice mode, What listens and what speaks, The
-  Android system engines, Ending the utterance, What counts as being spoken
-  to, One listener, two engines, Mute is the user, not the conversation, Per
-  side, not per session, The Kotlin, Where the models live, Hearing and
-  speaking
+  Android system engines, Which language it is asked in, Ending the utterance,
+  What counts as being spoken to, One listener, two engines, Mute is the user,
+  not the conversation, Per side, not per session, The Kotlin, Where the models
+  live, Hearing and speaking
 - `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `lib/ui/workspace/CLAUDE.md` — The workspace explorer

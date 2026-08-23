@@ -30,7 +30,7 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is ten categories, picked from a panel beside it or, below
+The settings page is nine categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
@@ -45,13 +45,20 @@ that installing one is Android's. **On-device** is the model that answers
 without a network — the pick, what it runs on, and the catalog it is downloaded
 from; beside Terminal rather than under LLMs, since it is a machine question
 rather than a question about models, and a model loaded there appears under LLMs
-like any other. **Voice** is what listens and what speaks,
-over the catalog they are downloaded from — its own category rather than a
-section under General because the two pickers are two lines and the catalog
-under them is the rest of the page. **Assistant** is where Android's assistant
-gesture lands — see "Being the assistant". **Reminders** is Android's only — a
-reminder runs a prompt in a new chat at a time you pick, even when the app is
-closed — and where the port is unavailable the page says so and offers nothing,
+like any other. **Voice** is what listens and what speaks, over the catalog they
+are downloaded from — its own category rather than a section under General
+because the two pickers are two lines and the catalog under them is the rest of
+the page. Under the pickers are two fields that never appear together, because
+each belongs to a kind of engine: which voice, for a downloaded model, and which
+language, for the device's own — see "Which language it is asked in". Where
+Android's assistant gesture lands is a section under the same category rather
+than a category of its own: what the gesture opens is voice mode, so it is the
+same feature approached from the other end, and its two questions were a
+category with two lines in it. It keeps a file of its own all the same, since
+every other file here is one subject; see "Being the assistant". **Reminders**
+is Android's only — a reminder runs a prompt in a new chat at a time you pick,
+even when the app is closed — and where the port is unavailable the page says so
+and offers nothing,
 the way a row for a missing device would. The editor page is a route of its own;
 see "The reminder editor" below, and "Waking for a reminder" in
 `android/CLAUDE.md`. **Providers** is the endpoints.

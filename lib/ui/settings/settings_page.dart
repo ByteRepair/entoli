@@ -3,13 +3,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_icon.dart";
 import "../../domain/app_theme.dart";
-import "../../domain/assistant_view.dart";
 import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
-import "../../domain/project.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../chat/widgets/activity_label.dart";
@@ -25,6 +23,7 @@ import "../widgets/provider_dialog.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "assistant_settings.dart";
 import "local_model_settings.dart";
 import "reminders.dart";
 import "terminal_settings.dart";
@@ -40,7 +39,6 @@ enum SettingsCategory {
   terminal("Terminal", Icons.terminal),
   onDevice("On-device", Icons.memory),
   voice("Voice", Icons.graphic_eq),
-  assistant("Assistant", Icons.assistant_outlined),
   reminders("Reminders", Icons.alarm),
   providers("Providers", Icons.cloud_outlined),
   llms("LLMs", Icons.auto_awesome_outlined),
@@ -168,15 +166,13 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // are two lines and the catalog under them is the rest of the page.
       SettingsCategory.voice => const [
           VoiceSection(),
+          Divider(),
+          AssistantSection(),
           // Draws its own dividers, since on Android there is no catalog and a
           // divider with nothing under it is a line across the bottom of the
           // page.
           VoiceCatalogSections(),
         ],
-      // Android's only, and shown everywhere all the same: the settings are the
-      // app's whatever it is running on, the way the voice category is drawn
-      // where `Voice.available` is false.
-      SettingsCategory.assistant => const [_AssistantSection()],
       // Says so and offers nothing where there is no clock to schedule with —
       // see the section itself.
       SettingsCategory.reminders => const [RemindersSection()],
@@ -497,57 +493,6 @@ class _AboutSection extends ConsumerWidget {
               child: AppMark(size: 48),
             ),
             applicationLegalese: _madeBy,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Where the system's assistant gesture lands. Two questions and nothing else:
-/// which project the new chat belongs to, and which of the two views opens on
-/// it. Both are the app's rather than a chat's — the gesture makes the chat.
-class _AssistantSection extends ConsumerWidget {
-  const _AssistantSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final named = ref.watch(projectListProvider).value ?? const <String>[];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          "Assistant",
-          description: "Android's assistant gesture opens Entoli on a new chat, "
-              "once Entoli is picked as the assistant in the system's settings. "
-              "Nothing else uses these.",
-        ),
-        LabelledField(
-          label: "Project",
-          child: DropdownButtonFormField<String?>(
-            initialValue: projectOrDefault(settings.assistantProject, named),
-            isExpanded: true,            items: [
-              for (final project in everyProject(named))
-                DropdownMenuItem(value: project, child: Text(projectLabel(project))),
-            ],
-            onChanged: (project) =>
-                ref.read(appSettingsProvider.notifier).setAssistantProject(project),
-          ),
-        ),
-        LabelledField(
-          label: "Opens",
-          child: DropdownButtonFormField<AssistantView>(
-            initialValue: settings.assistantView,
-            isExpanded: true,            items: [
-              for (final view in AssistantView.values)
-                DropdownMenuItem(value: view, child: Text(view.label)),
-            ],
-            onChanged: (view) {
-              if (view != null) {
-                ref.read(appSettingsProvider.notifier).setAssistantView(view);
-              }
-            },
           ),
         ),
       ],

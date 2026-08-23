@@ -2,9 +2,11 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/voice.dart";
+import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/voice_settings.dart";
+import "package:agent_chat/ui/widgets/resettable_field.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -219,5 +221,73 @@ void main() {
 
       expect(find.textContaining("This device has nothing to"), findsNothing);
     });
+
+    /// An Android with both engines, its sentinels picked, and [speaks] as what
+    /// the synthesiser says it can speak.
+    Future<void> pumpNative(
+      WidgetTester tester, {
+      List<VoiceLanguage> speaks = const [],
+    }) async {
+      app = TestApp.create(
+        voice: FakeVoice(downloadsModels: false)..languages = speaks,
+        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+      );
+      await pick(tester,
+          recognition: nativeRecognition.id, speech: nativeSpeech.id);
+      await pumpVoice(tester);
+    }
+
+    testWidgets("the language is picked here, and written down", (tester) async {
+      await pumpNative(tester, speaks: const [
+        VoiceLanguage(tag: "el-GR", name: "Greek"),
+        VoiceLanguage(tag: "en-GB", name: "English"),
+      ]);
+
+      // Nothing picked is the device's own, which is what it did before there
+      // was a field.
+      expect(app.container.read(appSettingsProvider).voiceLanguage, isNull);
+      expect(find.text("Device language"), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(LabelledField, "Language"));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text("Greek").last);
+      await settleIo(tester);
+
+      expect(app.container.read(appSettingsProvider).voiceLanguage, "el-GR");
+    });
+
+    testWidgets("a device that names no languages is offered no field",
+        (tester) async {
+      // A picker holding only "the device's own" is a control that cannot be
+      // used to say anything.
+      await pumpNative(tester);
+
+      expect(find.text("Language"), findsNothing);
+    });
+
+    testWidgets("a language this device has no entry for is kept",
+        (tester) async {
+      // A settings file carried off another phone. Reset silently, it would be
+      // the one that knew what the tag meant.
+      await pumpNative(tester, speaks: const [
+        VoiceLanguage(tag: "en-GB", name: "English"),
+      ]);
+      await io(tester,
+          () => app.container.read(appSettingsProvider.notifier)
+              .setVoiceLanguage("el-GR"));
+      await settleIo(tester);
+
+      expect(find.text("el-GR"), findsOneWidget);
+    });
+  });
+
+  testWidgets("a downloaded model has no language to pick: it is one already",
+      (tester) async {
+    app = TestApp.create(voiceModels: const {"piper-en_US-amy"})
+      ..voice.languages = const [VoiceLanguage(tag: "el-GR", name: "Greek")];
+    await pick(tester, speech: "piper-en_US-amy");
+    await pumpVoice(tester);
+
+    expect(find.text("Language"), findsNothing);
   });
 }

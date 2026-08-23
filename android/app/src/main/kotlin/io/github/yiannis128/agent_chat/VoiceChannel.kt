@@ -50,6 +50,18 @@ object VoiceChannel {
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
 
+    // What Settings picked, or null for whatever the device is set to. One
+    // field for both engines: the two halves are built separately in Dart but
+    // land in this one object, and a language each would be two answers to a
+    // question the user was asked once. Set by whichever half starts first —
+    // see "Which language it is asked in".
+    private var language: String? = null
+
+    // The locale the engines are asked for. Null being the device's is settled
+    // here rather than at each call site.
+    private fun asked(): Locale =
+        language?.let { Locale.forLanguageTag(it) } ?: Locale.getDefault()
+
     // Held rather than captured in the handler's closure the way the other
     // channels do it: the recognition listener binds a service from inside a
     // callback nothing hands a context to.
@@ -90,7 +102,12 @@ object VoiceChannel {
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "engines" -> result.success(engines(appContext))
-            "initSpeech" -> { ensureTts(appContext); result.success(null) }
+            "languages" -> languages(appContext, result)
+            "initSpeech" -> {
+                language = call.argument<String>("language")
+                ensureTts(appContext)
+                result.success(null)
+            }
             "speak" -> {
                 val text = call.argument<String>("text") ?: ""
                 val generation = call.argument<Int>("generation") ?: 0
@@ -104,6 +121,7 @@ object VoiceChannel {
                 setRecognitionListening(
                     call.argument<Boolean>("on") ?: true,
                     call.argument<Boolean>("finish") ?: false,
+                    call.argument<String>("language"),
                 )
                 result.success(null)
             }
@@ -129,6 +147,40 @@ object VoiceChannel {
             "speech" to speech,
         )
     }
+
+    // What the settings page offers as a language, and the device's own where
+    // it offers nothing. The synthesiser is the one engine that will simply
+    // list them — see `systemLanguages` in `android_voice.dart` for why the
+    // recogniser is not the one asked.
+    //
+    // The answer is deferred rather than returned: `getAvailableLanguages` is
+    // nothing until the engine says it is ready. A throwaway is shut down
+    // again — a settings page that leaves a synthesiser bound is one the
+    // notification shade shows as speaking.
+    private fun languages(context: Context, result: MethodChannel.Result) {
+        tts?.let { return result.success(languagesOf(it)) }
+        var engine: TextToSpeech? = null
+        engine = TextToSpeech(context) { status ->
+            if (status != TextToSpeech.SUCCESS) {
+                Log.w(TAG, "no synthesiser to ask what this device can speak")
+            }
+            val answer = engine?.takeIf { status == TextToSpeech.SUCCESS }
+                ?.let { languagesOf(it) } ?: emptyList()
+            main.post {
+                result.success(answer)
+                engine?.shutdown()
+            }
+        }
+    }
+
+    // Tag and display name, the name being what this device calls the language
+    // in its own — `getDisplayName` with no argument, so a phone set to Greek
+    // reads a list in Greek. Sorted by it, since that is what is read.
+    private fun languagesOf(engine: TextToSpeech): List<Map<String, String>> =
+        runCatching { engine.availableLanguages ?: emptySet<Locale>() }
+            .getOrDefault(emptySet())
+            .sortedBy { it.displayName }
+            .map { mapOf("tag" to it.toLanguageTag(), "name" to it.displayName) }
 
     // The recognition services a session may connect to, best first, and empty
     // where there are none. Named rather than left to the one-argument
@@ -166,7 +218,7 @@ object VoiceChannel {
                 return@TextToSpeech
             }
             send("speechReady", null)
-            tts?.language = Locale.getDefault()
+            tts?.let { speakIn(it) }
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
 
@@ -187,6 +239,18 @@ object VoiceChannel {
                 }
             })
         }
+    }
+
+    // `setLanguage` refuses by return code rather than by throwing, and an
+    // ignored one leaves the engine speaking whatever it spoke last — a reply
+    // read out in the wrong language with nothing anywhere saying why.
+    private fun speakIn(engine: TextToSpeech) {
+        val locale = asked()
+        val set = runCatching { engine.setLanguage(locale) }
+            .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
+        if (set >= TextToSpeech.LANG_AVAILABLE) return
+        Log.w(TAG, "the synthesiser cannot speak ${locale.toLanguageTag()}")
+        engine.language = Locale.getDefault()
     }
 
     private fun speak(text: String, generation: Int) {
@@ -358,10 +422,8 @@ object VoiceChannel {
     // is a calendar or a numbering system rather than a language — and a tag a
     // service cannot parse is a language it does not support. The script is
     // left on, since for `sr-Latn` and `zh-Hant` it is the language.
-    private fun languageTag(): String? {
-        val locale = Locale.getDefault().stripExtensions()
-        return if (locale.language.isEmpty()) null else locale.toLanguageTag()
-    }
+    private fun languageTag(): String? =
+        asked().stripExtensions().takeIf { it.language.isNotEmpty() }?.toLanguageTag()
 
     // A recognizer that has just finished an utterance is asked for the next
     // one. Posted rather than called straight from the callback: it is still
@@ -386,8 +448,8 @@ object VoiceChannel {
             ask = next
             restart()
         } else {
-            val language = Locale.getDefault().displayLanguage
-            nextService("This device has no speech recognition for $language.")
+            nextService(
+                "This device has no speech recognition for ${asked().displayLanguage}.")
         }
     }
 
@@ -457,8 +519,9 @@ object VoiceChannel {
     // the result that comes back is wanted is not decided here — a closed
     // session flushes results nobody asked for too, and `ComposedVoiceSession`
     // is where the one rule about those lives.
-    private fun setRecognitionListening(on: Boolean, finish: Boolean) {
+    private fun setRecognitionListening(on: Boolean, finish: Boolean, language: String?) {
         if (on) {
+            this.language = language
             startRecognition()
         } else {
             wantListening = false
