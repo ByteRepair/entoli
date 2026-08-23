@@ -294,33 +294,50 @@ void main() {
   });
 
   group("the sidebar", () {
-    Future<void> openSidebar(WidgetTester tester) async {
+    /// The switcher, then the paired device's default project in it — which
+    /// is the device's name alone, since its default project has no name.
+    Future<void> pickRemote(WidgetTester tester) async {
       await app.pump(tester, const Sidebar());
+      await settleIo(tester);
+      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await settleIo(tester);
+      await tester.tap(find.text("Desktop").last);
       await settleIo(tester);
     }
 
-    testWidgets("lists the chat under Remotes with its device", (tester) async {
+    testWidgets("the paired device's project is offered in the switcher",
+        (tester) async {
       app = appWith(online: true);
-      await openSidebar(tester);
+      await app.pump(tester, const Sidebar());
+      await settleIo(tester);
 
-      expect(find.text("Remotes"), findsOneWidget);
-      expect(find.text("On the desktop"), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await settleIo(tester);
+
+      // Its default project, so the device's name alone — the local default
+      // has no name either.
       expect(find.text("Desktop"), findsOneWidget);
     });
 
-    testWidgets("says which device is gone rather than dropping the row",
-        (tester) async {
-      app = appWith(online: false);
-      await openSidebar(tester);
+    testWidgets("picking it lists that device's chats", (tester) async {
+      app = appWith(online: true);
+      await pickRemote(tester);
 
       expect(find.text("On the desktop"), findsOneWidget);
-      expect(find.text("Desktop — offline"), findsOneWidget);
+    });
+
+    testWidgets("a row says when the device is gone", (tester) async {
+      app = appWith(online: false);
+      await pickRemote(tester);
+
+      expect(find.text("On the desktop"), findsOneWidget);
+      expect(find.text("offline"), findsOneWidget);
     });
 
     testWidgets("a remote row carries none of a local chat's menu",
         (tester) async {
       app = appWith(online: true);
-      await openSidebar(tester);
+      await pickRemote(tester);
 
       await tester.longPress(find.text("On the desktop"));
       await settleIo(tester);
@@ -331,7 +348,7 @@ void main() {
 
     testWidgets("tapping one selects it", (tester) async {
       app = appWith(online: true);
-      await openSidebar(tester);
+      await pickRemote(tester);
 
       await tester.tap(find.text("On the desktop"));
       await settleIo(tester);

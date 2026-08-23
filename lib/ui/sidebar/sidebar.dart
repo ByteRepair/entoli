@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/models.dart";
 import "../../domain/project.dart";
+import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../profile/profile_page.dart";
@@ -35,6 +36,42 @@ class SelectedProject extends Notifier<String?> {
 final selectedProjectProvider =
     NotifierProvider<SelectedProject, String?>(SelectedProject.new);
 
+/// A project on a paired device, as the switcher names one. Device *and*
+/// project together, because `work` on a laptop and `work` on a phone are
+/// different directories that happen to share a name — there is nothing to
+/// gain by folding them together and a conversation to lose by it.
+class RemoteScope {
+  const RemoteScope({required this.deviceId, required this.project});
+
+  final String deviceId;
+
+  /// Null is that device's default project, the same as it is here.
+  final String? project;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteScope &&
+      other.deviceId == deviceId &&
+      other.project == project;
+
+  @override
+  int get hashCode => Object.hash(deviceId, project);
+}
+
+class SelectedRemote extends Notifier<RemoteScope?> {
+  @override
+  RemoteScope? build() => null;
+
+  void select(RemoteScope? scope) => state = scope;
+}
+
+/// Which paired device's project the sidebar is listing, or null for one of
+/// this device's own. Separate from [selectedProjectProvider] because they
+/// answer different questions: this one is what is being *read*, and that one
+/// is where new work goes — and new work never goes on somebody else's device.
+final selectedRemoteProvider =
+    NotifierProvider<SelectedRemote, RemoteScope?>(SelectedRemote.new);
+
 void openChat(BuildContext context, WidgetRef ref, String chatId) {
   ref.read(selectedChatIdProvider.notifier).select(chatId);
   closeNavDrawer(context);
@@ -46,6 +83,15 @@ void openChat(BuildContext context, WidgetRef ref, String chatId) {
 /// are all this.
 void selectProject(WidgetRef ref, String? project) {
   ref.read(selectedProjectProvider.notifier).select(project);
+  ref.read(selectedRemoteProvider.notifier).select(null);
+  ref.read(selectedChatIdProvider.notifier).select(null);
+}
+
+/// Switch to a project on a paired device. The local project is left where it
+/// was: it is where the next new chat goes, and coming back from a remote
+/// should land where the user was, not wherever they were reading.
+void selectRemote(WidgetRef ref, RemoteScope scope) {
+  ref.read(selectedRemoteProvider.notifier).select(scope);
   ref.read(selectedChatIdProvider.notifier).select(null);
 }
 
@@ -60,6 +106,10 @@ Future<String?> startChat(BuildContext context, WidgetRef ref) async {
   final project = ref.read(selectedProjectProvider);
   final chat = await ref.read(chatRepositoryProvider).createChat(project: project);
   if (!context.mounted) return null;
+  // A new chat is this device's, so the sidebar comes back from whatever
+  // paired device it was reading — the alternative is a list that denies the
+  // chat now on screen.
+  ref.read(selectedRemoteProvider.notifier).select(null);
   openChat(context, ref, chat.state.id);
   return chat.state.id;
 }
@@ -105,6 +155,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
   Widget build(BuildContext context) {
     final async = ref.watch(chatListProvider);
     final project = ref.watch(selectedProjectProvider);
+    final remote = ref.watch(selectedRemoteProvider);
     // The list the query was written against has just been replaced, the same
     // reason switching clears the selected chat. Kept, it would answer a
     // project the user has left with "nothing matches".
@@ -149,36 +200,32 @@ class _SidebarState extends ConsumerState<Sidebar> {
               ),
             ),
             Expanded(
-              child: async.when(
-                 data: (all) {
-                   // Expired chats are hidden here and deleted by the sweep;
-                   // showing one in the list that is about to vanish reads as a
-                   // deletion on the next refresh.
-                   final chats = all
-                       .where((c) =>
-                           c.project == project && !c.isExpired())
-                       .toList();
-                  // Remotes stay below an empty local list too: a device
-                  // that only ever mirrors has nothing of its own to show.
-                  return Column(
-                    children: [
-                      if (chats.isEmpty)
-                        const Expanded(
-                            child: _Nothing("No chats in this project yet."))
-                      else ...[
-                        _SearchField(controller: _search, query: _query),
-                        Expanded(child: _ChatList(chats: chats, query: _query)),
-                      ],
-                      // Below the local list, not among its date groups: a
-                      // mirror lives on another device, so it answers to no
-                      // date this sidebar could place.
-                      const _Remotes(),
-                    ],
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text("Error: $e")),
-              ),
+              child: remote != null
+                  ? _RemoteChatList(scope: remote, query: _query, search: _search)
+                  : async.when(
+                      data: (all) {
+                        // Expired chats are hidden here and deleted by the
+                        // sweep; showing one in the list that is about to
+                        // vanish reads as a deletion on the next refresh.
+                        final chats = all
+                            .where((c) =>
+                                c.project == project && !c.isExpired())
+                            .toList();
+                        if (chats.isEmpty) {
+                          return const _Nothing("No chats in this project yet.");
+                        }
+                        return Column(
+                          children: [
+                            _SearchField(controller: _search, query: _query),
+                            Expanded(
+                                child: _ChatList(chats: chats, query: _query)),
+                          ],
+                        );
+                      },
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (e, _) => Center(child: Text("Error: $e")),
+                    ),
             ),
             const Divider(height: 1),
             Stack(
@@ -222,63 +269,80 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
 }
 
-/// The Remotes section: chats mirrored from a paired device, one row each
-/// with the owning device as its subtitle. Read-only by nature — the home
-/// device owns the log — so the rows carry none of the local chat's menu:
-/// no pin, rename, move or delete, which would all write to a disk this
-/// device does not have. A gone connection keeps the row: the snapshot is
-/// still readable, and the subtitle says the device is offline.
-class _Remotes extends ConsumerWidget {
-  const _Remotes();
+/// One paired device's project, listed. Read-only by nature — the home device
+/// owns the log — so the rows carry none of a local chat's menu: no pin,
+/// rename, move or delete, which would all write to a disk this device does
+/// not have. Nor any date grouping: a mirror answers to no date this sidebar
+/// could place it under.
+///
+/// A gone connection keeps the rows. The snapshot is still readable, and each
+/// one says the device is offline.
+class _RemoteChatList extends ConsumerWidget {
+  const _RemoteChatList({
+    required this.scope,
+    required this.query,
+    required this.search,
+  });
+
+  final RemoteScope scope;
+  final ValueNotifier<String> query;
+  final TextEditingController search;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final remotes = ref.watch(remoteChatsProvider);
-    if (remotes.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    final selectedId = ref.watch(selectedChatIdProvider);
+    final chats = ref
+        .watch(remoteChatsProvider)
+        .where((entry) =>
+            entry.deviceId == scope.deviceId &&
+            entry.state.project == scope.project)
+        .toList()
+      ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
+    if (chats.isEmpty) {
+      return const _Nothing("Nothing mirrored from this device yet.");
+    }
     return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        const Divider(height: 1),
-        const Align(alignment: Alignment.centerLeft, child: _Heading("Remotes")),
-        for (final entry in remotes)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: ListTile(
-              dense: true,
-              title: Text(entry.state.title.orUntitled,
-                  overflow: TextOverflow.ellipsis),
-              subtitle: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    entry.online
-                        ? Icons.computer
-                        : Icons.cloud_off_outlined,
-                    size: 13,
-                    color: entry.online
-                        ? theme.colorScheme.onSurfaceVariant
-                        : theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      entry.online
-                          ? entry.deviceName
-                          : "${entry.deviceName} — offline",
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: entry.online
-                            ? theme.colorScheme.onSurfaceVariant
-                            : theme.colorScheme.error,
-                      ),
+        _SearchField(controller: search, query: query),
+        Expanded(
+          child: ValueListenableBuilder<String>(
+            valueListenable: query,
+            builder: (context, text, _) {
+              final matching = chats
+                  .where((entry) => entry.state.title.orUntitled
+                      .toLowerCase()
+                      .contains(text.toLowerCase()))
+                  .toList();
+              if (matching.isEmpty) {
+                return const _Nothing("Nothing matches that.");
+              }
+              return ListView.builder(
+                itemCount: matching.length,
+                itemBuilder: (context, i) {
+                  final entry = matching[i];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: ListTile(
+                      dense: true,
+                      selected: entry.chatId == selectedId,
+                      title: Text(entry.state.title.orUntitled,
+                          overflow: TextOverflow.ellipsis),
+                      subtitle: entry.online
+                          ? null
+                          : Text(
+                              "offline",
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: theme.colorScheme.error),
+                            ),
+                      onTap: () => openChat(context, ref, entry.chatId),
                     ),
-                  ),
-                ],
-              ),
-              onTap: () => openChat(context, ref, entry.chatId),
-            ),
+                  );
+                },
+              );
+            },
           ),
+        ),
       ],
     );
   }
@@ -544,6 +608,37 @@ class _ChatTile extends ConsumerWidget {
 
 /// The project being shown, and everything that changes it. Its name is what
 /// the chats and the shared workspace sit under on disk.
+/// One entry in the switcher for a project on a paired device, named the way
+/// it is read out. A device's default project is the device's name alone —
+/// the local default has no name either, and inventing one here would be the
+/// only place in the app that gives it one.
+class _RemoteEntry {
+  const _RemoteEntry(this.scope, this.deviceName);
+
+  final RemoteScope scope;
+  final String deviceName;
+
+  String get label =>
+      scope.project == null ? deviceName : "$deviceName · ${scope.project}";
+}
+
+/// Every project that has a mirrored chat in it, one entry each, device
+/// first. A device with nothing mirrored has no projects to offer — the
+/// welcome is what says a project exists at all.
+List<_RemoteEntry> _remoteEntries(List<RemoteChatEntry> remotes) {
+  final byScope = <RemoteScope, String>{};
+  for (final entry in remotes) {
+    byScope[RemoteScope(
+        deviceId: entry.deviceId, project: entry.state.project)] ??=
+        entry.deviceName;
+  }
+  final entries = [
+    for (final scope in byScope.keys) _RemoteEntry(scope, byScope[scope]!),
+  ];
+  entries.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+  return entries;
+}
+
 class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
@@ -568,7 +663,16 @@ class _ProjectMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedProjectProvider);
+    final remote = ref.watch(selectedRemoteProvider);
     final projects = ref.watch(projectListProvider).value ?? const [];
+    final remotes = _remoteEntries(ref.watch(remoteChatsProvider));
+    final label = remote == null
+        ? projectLabel(selected)
+        : remotes
+                .where((entry) => entry.scope == remote)
+                .map((entry) => entry.label)
+                .firstOrNull ??
+            projectLabel(selected);
     return Align(
       alignment: Alignment.centerLeft,
       // The button's own context, which is what the menu is anchored under.
@@ -577,11 +681,11 @@ class _ProjectMenu extends ConsumerWidget {
           iconAlignment: IconAlignment.end,
           icon: const Icon(Icons.arrow_drop_down),
           label: Text(
-            projectLabel(selected),
+            label,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          onPressed: () => _open(context, ref, selected, projects),
+          onPressed: () => _open(context, ref, selected, remote, projects, remotes),
         ),
       ),
     );
@@ -591,7 +695,9 @@ class _ProjectMenu extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     String? selected,
+    RemoteScope? remote,
     List<String> projects,
+    List<_RemoteEntry> remotes,
   ) async {
     final chosen = await showAnchoredMenu<VoidCallback>(context, [
       for (final project in everyProject(projects))
@@ -602,10 +708,29 @@ class _ProjectMenu extends ConsumerWidget {
               Icon(
                 Icons.check,
                 size: 18,
-                color: project == selected ? null : Colors.transparent,
+                color: remote == null && project == selected
+                    ? null
+                    : Colors.transparent,
               ),
               const SizedBox(width: 12),
               Expanded(child: Text(projectLabel(project), overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+        ),
+      if (remotes.isNotEmpty) const PopupMenuDivider(),
+      for (final entry in remotes)
+        PopupMenuItem(
+          value: () => selectRemote(ref, entry.scope),
+          child: Row(
+            children: [
+              Icon(
+                Icons.check,
+                size: 18,
+                color: entry.scope == remote ? null : Colors.transparent,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Text(entry.label, overflow: TextOverflow.ellipsis)),
             ],
           ),
         ),

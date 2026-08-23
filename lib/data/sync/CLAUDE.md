@@ -175,11 +175,27 @@ home device is elsewhere. Records replay through the same pure
 second rendering of it.
 
 `ChatPage` branches on `isMirroredChatProvider` and draws a read-only page:
-`ViewOnlyBar` where the composer goes, an `OfflineBanner` over the conversation
+`ViewOnlyBar` where the composer goes, a `MirrorStrip` over the conversation
 when the home device is away, no expiry check and no chat settings — nothing on
-that page may touch the repository. The sidebar's Remotes section sits below
-the local list rather than among its date groups, since a mirror answers to no
-date this device could place, and its rows carry none of a local chat's menu.
+that page may touch the repository.
+
+**A paired device's projects are in the project switcher**, named
+`Device · project` — and a device's default project is the device's name
+alone, since the local default has no name either and this would be the one
+place in the app that invented one. Picking one lists that device's chats in
+that project, read-only, with no date grouping: a mirror answers to no date
+this sidebar could place it under.
+
+Device *and* project together is the whole point of `RemoteScope`. `work` on a
+laptop and `work` on a phone are different directories that happen to share a
+name; folding them into one entry would put two conversations under a heading
+that is true of neither. It also means a device offers only the projects it
+has something mirrored in — the welcome is what says a project exists at all.
+
+`selectedRemoteProvider` is what is being *read*; `selectedProjectProvider`
+stays what it was, where new work goes — and new work never goes on somebody
+else's device, so `startChat` clears the remote scope rather than asking what
+a new chat in a mirror would mean.
 
 `remoteChatsProvider` bridges the hub's `ValueNotifier` into Riverpod, and is
 deliberately separate from `chatListProvider`, which reads the local store and
