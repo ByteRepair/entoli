@@ -26,6 +26,8 @@ class _FakeListener implements Listener {
     if (!on && finish) finished++;
   }
 
+
+
   @override
   Future<void> dispose() async {
     disposed = true;
@@ -33,7 +35,6 @@ class _FakeListener implements Listener {
   }
 
   void hear(String text) => _events.add(VoiceHeard(text));
-  void interrupt() => _events.add(const VoiceInterrupted());
   void fail(String m) => _events.add(VoiceFailed(m));
 }
 
@@ -43,9 +44,6 @@ class _FakeSpeaker implements Speaker {
   final spoken = <String>[];
   var stopCount = 0;
   var disposed = false;
-
-  @override
-  var speaking = false;
 
   @override
   Stream<SpeechSignal> get signals => _signals.stream;
@@ -62,12 +60,7 @@ class _FakeSpeaker implements Speaker {
     await _signals.close();
   }
 
-  // The contract a real speaker keeps: what it has been handed and not
-  // reported done, so silence means it is not speaking any more.
-  void silent() {
-    speaking = false;
-    _signals.add(const SpeechSilent());
-  }
+  void silent() => _signals.add(const SpeechSilent());
 
   void fail(String m) => _signals.add(SpeechFailed(m));
 }
@@ -78,89 +71,15 @@ List<VoiceEvent> collectEvents(ComposedVoiceSession session) {
   return events;
 }
 
-/// A reply being said: handed to the speaker, which now reports itself as
-/// speaking — the state under which what the listener picks up has to be
-/// judged against what was said.
-Future<void> _replyBeingSaid(
-    ComposedVoiceSession session, _FakeSpeaker speaker) async {
-  await session.speak("The weather looks nice today.");
-  speaker.speaking = true;
-}
-
 void main() {
   group("ComposedVoiceSession", () {
-    test("barge-in stops the speaker and forwards VoiceInterrupted", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-
-      await _replyBeingSaid(session, speaker);
-      listener.hear("stop talking please");
-      await Future.delayed(Duration.zero);
-
-      expect(speaker.stopCount, 1);
-      expect(events.single, isA<VoiceInterrupted>(),
-          reason: "the turn above aborts on this, as any barge-in");
-      await session.dispose();
-    });
-
-    test("an echo of the reply is neither sent nor treated as an interruption",
-        () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-
-      await _replyBeingSaid(session, speaker);
-      listener.interrupt();
-      listener.hear("weather looks nice today");
-      await Future.delayed(Duration.zero);
-
-      expect(speaker.stopCount, 0,
-          reason: "the phone hearing itself cuts nothing off");
-      expect(events, isEmpty);
-      await session.dispose();
-    });
-
-    test("onset alone interrupts nothing", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-
-      await _replyBeingSaid(session, speaker);
-      listener.interrupt();
-      listener.interrupt();
-      await Future.delayed(Duration.zero);
-
-      expect(events, isEmpty);
-      expect(speaker.stopCount, 0);
-      await session.dispose();
-    });
-
-    test("with nothing being said, starting to talk is not a barge-in", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker()..speaking = true;
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-
-      listener.hear("hello there");
-      listener.interrupt();
-      await Future.delayed(Duration.zero);
-
-      // Nothing has been handed to the speaker, so whatever was heard cannot
-      // be its own voice coming back — it goes through like anyone else's.
-      expect(speaker.stopCount, 0);
-      expect(events.single, isA<VoiceHeard>());
-      await session.dispose();
-    });
 
     test("VoiceHeard is forwarded unchanged", () async {
       final listener = _FakeListener();
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       listener.hear("hello there");
       await Future.delayed(Duration.zero);
@@ -176,25 +95,23 @@ void main() {
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       await session.setListening(false);
       // What a cancelled recognition session hands back on its way out, and
-      // what sherpa's worker decodes from audio it already had. Forwarded, it
-      // is a barge-in over a reply still being read — the Mute button stopping
-      // the answer.
+      // what sherpa's worker decodes from audio it already had — words nobody
+      // spoke into a microphone that is off.
       listener.hear("the reply, half transcribed");
-      listener.interrupt();
       await Future.delayed(Duration.zero);
 
       expect(events, isEmpty);
       await session.dispose();
     });
 
-    test("a session opened shut says nothing until it is asked to", () async {
+    test("a session opens shut and says nothing until it is asked to", () async {
       final listener = _FakeListener();
       final speaker = _FakeSpeaker();
-      final session =
-          ComposedVoiceSession(listener, speaker, listening: false);
+      final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
 
       listener.hear("nobody asked for this");
@@ -213,6 +130,7 @@ void main() {
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       await session.setListening(false, finish: true);
       expect(listener.finished, 1);
@@ -234,6 +152,7 @@ void main() {
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       await session.setListening(false);
       listener.fail("The microphone could not be read.");
@@ -244,30 +163,12 @@ void main() {
       await session.dispose();
     });
 
-    test("silence empties the echo window", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-
-      await _replyBeingSaid(session, speaker);
-      speaker.silent();
-      await Future.delayed(Duration.zero);
-      expect(events.single, isA<VoiceFellSilent>());
-
-      // The very same words now arrive with nothing being said behind them.
-      listener.hear("the weather looks nice today");
-      await Future.delayed(Duration.zero);
-
-      expect(events.last, isA<VoiceHeard>());
-      await session.dispose();
-    });
-
     test("speaker silence becomes VoiceFellSilent", () async {
       final listener = _FakeListener();
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       speaker.silent();
       await Future.delayed(Duration.zero);
@@ -281,6 +182,7 @@ void main() {
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       speaker.fail("boom");
       await Future.delayed(Duration.zero);
@@ -325,30 +227,4 @@ void main() {
     });
   });
 
-  group("isEcho", () {
-    test("the same words back are an echo", () {
-      expect(isEcho("The weather looks nice today.",
-          "Hello there! The weather looks nice today."), isTrue);
-    });
-
-    test("case and punctuation do not hide one", () {
-      expect(isEcho("WEATHER, LOOKS NICE", "the weather looks nice"), isTrue);
-    });
-
-    test("half the words shared still reads as one", () {
-      expect(isEcho("weather nice today", "the weather looks nice today"),
-          isTrue);
-    });
-
-    test("words that were not said are someone talking", () {
-      expect(
-          isEcho("what is the weather tomorrow",
-              "the weather looks nice today"),
-          isFalse);
-    });
-
-    test("nothing said yet is never an echo", () {
-      expect(isEcho("anything at all", ""), isFalse);
-    });
-  });
 }

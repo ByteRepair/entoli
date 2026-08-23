@@ -1,6 +1,31 @@
-import "package:flutter/foundation.dart" show ValueListenable;
+import "package:flutter/foundation.dart"
+    show ValueListenable, debugPrint, kDebugMode;
 
 import "voice_model.dart";
+
+/// A voice-mode failure, or a decision that silently stops one from answering.
+///
+/// **Not gated on [kDebugMode].** Every way voice mode goes wrong arrives as
+/// "it did not answer me" — a microphone nothing opened, a recogniser that
+/// never ended the utterance, a gate that refused it — and they are
+/// indistinguishable from the outside. A release build is the one a user is
+/// running when they report it, so it has to be able to say which.
+///
+/// **Never what was said.** A transcript is the conversation: it is in
+/// `conv.jsonl` already, where the user put it, and a second copy in a device
+/// log is somebody's speech somewhere nobody chose. Assume every line here is
+/// pasted into an issue unread.
+void voiceFailed(String what) => debugPrint("voice: $what");
+
+/// What voice mode is doing, in debug builds only. A log of every transition is
+/// unreadable and nobody sends it; what earns a line above is the arm nothing
+/// draws.
+///
+/// Taken as a closure so a release build does not build the string it is about
+/// to throw away — some of these are on the path an audio frame takes.
+void voiceLog(String Function() action) {
+  if (kDebugMode) debugPrint("voice: ${action()}");
+}
 
 /// Listening and speaking, on whatever this platform can do it with. Like
 /// [Shell] for commands: desktop and Android have the models and the
@@ -36,15 +61,15 @@ abstract class Voice {
   /// microphone is opened and the session only speaks. That is the button
   /// under a message, which reads one message out and is not voice mode.
   ///
-  /// [listening] false opens the session with the microphone shut, which is
-  /// touch to speak. Asked for here rather than undone afterwards: opening a
-  /// capture and closing it again is a real start and stop of the device, and
-  /// the system's own microphone indicator flashing for nothing.
+  /// **A session opens with the microphone shut**, whatever it was built with,
+  /// and something has to ask for it — which is the whole of the turn-taking
+  /// above this. Opening a capture at the door and closing it again for the
+  /// first turn would be a real start and stop of the device and the system's
+  /// own microphone indicator flashing for nothing.
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
-    bool listening = true,
   });
 }
 
@@ -76,17 +101,21 @@ abstract class VoiceSession {
   /// transcript above the circle has no business rebuilding for it.
   ValueListenable<double> get level;
 
-  /// Open or shut the microphone, which is what pausing is. A release rather
-  /// than a stream left running and thrown away: paused has to mean the device
-  /// is no longer recording, which is what the system's own microphone
-  /// indicator will say either way. Nothing to listen with makes it a no-op.
+  /// Open or shut the microphone. A release rather than a stream left running
+  /// and thrown away: shut has to mean the device is no longer recording, which
+  /// is what the system's own microphone indicator will say either way. Nothing
+  /// to listen with makes it a no-op.
   ///
-  /// Shutting it drops whatever was being said into it, which is what mute has
-  /// to mean — a result flushed out of a cancelled session is the microphone
-  /// answering back after it was closed, and lands as a barge-in over the reply
-  /// that is still being read. [finish] keeps that last utterance instead,
-  /// which is what releasing a touch-to-speak button means: the microphone
-  /// closes because the sentence is over, not to throw it away.
+  /// **Asking for what it is already doing is a no-op too**, so a caller does
+  /// not have to keep its own copy of the answer to avoid a platform call — the
+  /// turn-taking above this runs after every state change and most of them
+  /// change nothing here.
+  ///
+  /// Shutting it drops whatever was being said into it, which is right where
+  /// the microphone is closing because it is no longer the user's turn to
+  /// speak. [finish] keeps that last utterance instead, and is what the user
+  /// saying they have finished talking asks for — mute, and letting go of the
+  /// Talk button.
   Future<void> setListening(bool on, {bool finish = false});
 
   /// Say [text], after anything already queued. Sentence-sized chunks: the
@@ -110,14 +139,6 @@ class VoiceHeard extends VoiceEvent {
   const VoiceHeard(this.text);
 
   final String text;
-}
-
-/// Someone talked over the reply, confirmed by words that were not just said —
-/// onset alone is the phone hearing itself as readily as it is a person. The
-/// speaker has already been stopped by the time this arrives; it is up to the
-/// controller whether the turn is worth aborting too.
-class VoiceInterrupted extends VoiceEvent {
-  const VoiceInterrupted();
 }
 
 /// Everything queued has been said.
@@ -147,7 +168,6 @@ class UnavailableVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
-    bool listening = true,
   }) async =>
       throw UnsupportedError("Voice mode is not available in a browser.");
 }

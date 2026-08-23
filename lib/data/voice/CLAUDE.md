@@ -330,10 +330,20 @@ that has not moved for `QUIET_MS` — or `MAX_UTTERANCE_MS` of anything at all �
 is answered with `stopListening`, which is the same call the Talk button's
 release makes and asks the service for what it has.
 
-A service that ignores `stopListening` too is not asked twice: the second time
-the endpoint fires, the session is cancelled and a fresh one started. What was
-said into it is lost, which is worse than a turn and much better than a voice
-mode that never has another.
+**One timer and one call, and it is worth knowing what a second and a third
+cost.** The first version also capped the utterance's length and escalated to
+cancelling the session where `stopListening` went unanswered — three mechanisms
+interleaved with the restart machine, which already has timers of its own. The
+cap's arithmetic ran against a clock field that was still zero, so the timer
+fired immediately, `stopListening` landed on a session that had not opened, and
+the escalation raced the restart that the resulting error was already
+scheduling. Two `startListening` calls in flight is `ERROR_CLIENT` before a
+session opens, which walks the service list and reports "Speech recognition
+could not start." — on a phone whose recogniser works fine.
+
+So a service that ignores `stopListening` is left exactly where it was before
+any of this, which is the honest fallback, and `restart` now keeps at most one
+pending relisten so nothing else can stack them either.
 
 ### What counts as being spoken to
 
@@ -389,51 +399,40 @@ not a broken engine and three in a row is, which was the system synthesiser's
 rule and only its own — so on the desktops one sentence a voice would not say,
 or one wav the player refused, ended voice mode. The sherpa worker also answers
 every sentence now, including the ones it generates no samples for: a sentence
-that came back as nothing left the count standing, so `speaking` was true for
-the rest of the session, every later sound was a barge-in, and silence was never
-reported.
+that came back as nothing left the count standing, so the queue never drained,
+silence was never reported — and with it the status that puts the microphone
+back. A reply that said nothing would have ended the conversation.
 
-### Mute is the microphone and nothing else
+### Mute is the user, not the conversation
 
-**Neither engine stops on the instant it is asked to.** A cancelled
-`SpeechRecognizer` session flushes what it had, and audio already handed to
-sherpa's worker decodes after the recorder is released. Forwarded, that arrives
-as words nobody spoke into a microphone that is off — and landing on a reply
-still being read, it is not an echo of what was just said, so `isEcho` lets it
-through, so it is a barge-in, so the speaker stops and the turn is aborted. That
-is the Mute button stopping the answer, which is not what it promises.
+**Mute mutes the person, the way it does on a call.** The reply being read out
+goes on being read out, the next turn still runs, and — the part that is easy to
+get wrong — what was already being said into the microphone is handed over
+rather than dropped. Somebody who speaks and then mutes is saying they have
+finished talking and is waiting for an answer; a mute that threw that sentence
+away left the turn unsaid and voice mode looking broken.
 
-**So the rule is `ComposedVoiceSession`'s, and there is one of it.** The session
-owns `setListening` and owns the event stream, so it is the one place that knows
-both that the microphone was shut and what is about to be said about it — and
-the flags are set before the call goes down, since what the engine does with the
-request takes a platform hop and what it flushes in between is exactly what this
-drops. Written in each `Listener` instead it was two copies, and the second one
-was not written: the sherpa path still forwarded what its worker decoded after
-the recorder had gone. A failure is not covered by it — that is the session's
-whatever the microphone is doing, since it is why it is doing nothing.
-
-Kotlin still guards `onBeginningOfSpeech` and `onRmsChanged` on `wantListening`,
-and that is about traffic rather than about the rule: `onRmsChanged` is a codec
-encode and a main-thread hop many times a second, and in touch-to-speak mode the
-microphone is shut almost all of the time.
-
-The one exception is `finish`, which is `setListening(false, finish: true)`:
-`stopListening` rather than `cancel`, and the one result it brings back is
-allowed past. Sherpa honours it too: the detector is holding a segment that no
+That is `setListening(false, finish: true)`, the same call letting go of the
+Talk button makes: `stopListening` rather than `cancel`, so the service delivers
+what it has. Sherpa honours it too — the detector is holding a segment that no
 further audio is coming to end, so the worker is told to flush it.
 
-**Both ways of shutting the microphone ask for it**, which is what Mute means to
-the person pressing it: they speak, they mute, they expect an answer. A mute
-that discarded the sentence in flight left the turn unsaid and voice mode
-looking broken. Nothing is measured once the microphone is shut, so the gate has
-nothing to judge that last result on and lets it through, which is the right
-answer for a sentence somebody deliberately spoke.
+**Everything else a shut microphone flushes is dropped**, and that rule is
+`ComposedVoiceSession`'s. Neither engine stops on the instant it is asked to: a
+cancelled `SpeechRecognizer` session hands back what it had, and audio already
+given to sherpa's worker decodes after the recorder is released. Forwarded, that
+is words nobody spoke into a microphone that is off, landing in the middle of
+somebody else's turn. The session owns `setListening` and owns the event stream,
+so it is the one place that knows both — and the flags are set before the call
+goes down, since what the engine does with the request takes a platform hop and
+what it flushes in between is exactly what this drops. Written in each
+`Listener` instead it was two copies, and the second one was not written: the
+sherpa path forwarded what its worker decoded after the recorder had gone. A
+failure is not covered by it, since it is why the microphone is doing nothing.
 
-**A session can also open shut**, which is what `Voice.start`'s `listening`
-answers. Opening the microphone and closing it again is a real capture started
-and stopped and the system's own indicator flashing for nothing, so touch to
-speak asks at the door rather than undoing it afterwards.
+Kotlin still guards `onRmsChanged` on `wantListening`, and that is about traffic
+rather than about the rule: it is a codec encode and a main-thread hop many
+times a second, and the microphone is shut for most of a conversation.
 
 ### Per side, not per session
 
@@ -446,32 +445,9 @@ knows which the other is.
 The split was built to let the two kinds mix per side, which no platform now
 does — Android is native on both and the desktops are sherpa on both. It earns
 its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
-barge-in wiring and the silence reporting were already somewhere neither engine
-owned, and `read_aloud` gets a speak-only session by passing a null [Listener]
-rather than by either engine knowing what reading one message out is.
-
-`Speaker.speaking` is on the interface for one reason, and it is the reason the
-split needed care: voice activity opens **every** utterance, not only the ones
-landing on top of a reply, so onset alone decides nothing. What a barge-in is,
-the session decides from content — see `isEcho` — and it stops the speaker only
-once words arrive that were not just said, which is why `speaking` has to be an
-answer the session can ask rather than an event it waits for. Each speaker
-answers it its own way: the sherpa one from its queue, the native one from what
-`TextToSpeech` has been handed and not reported done.
-
-**Barge-in is confirmed, never assumed.** The recogniser hears the reply as
-readily as it hears the room — the two are one acoustic event to it, and every
-sentence spoken trips voice activity on the way out of the speaker. The old
-forwarding cut the turn off on onset alone, which made the phone interrupt
-itself within a sentence wherever echo cancellation did not cover the
-recogniser's input — which is most phones. Now a `VoiceHeard` landing while the
-speaker is talking goes through `isEcho`: substantially the same words as what
-was just said are dropped as the phone hearing itself, anything else stops the
-speaker and emits the `VoiceInterrupted` the controller aborts the turn on.
-`VoiceInterrupted` arriving on its own forwards nothing. The cost is that an
-interruption takes until the utterance is transcribed rather than firing at
-onset; the Stop button under the orb remains the instant way to cut a reply
-off, and garbled transcriptions of speech can still slip past the match.
+shut-microphone rule and the silence reporting were already somewhere neither
+engine owned, and `read_aloud` gets a speak-only session by passing a null
+`Listener` rather than by either engine knowing what reading one message out is.
 
 ### The Kotlin
 
@@ -493,8 +469,8 @@ stops.
 **The synthesiser answers only once it is up.** `TextToSpeech` is constructed
 long before its init callback runs, and a `speak` in that window returns an
 error code and no callback — Dart would count an utterance that never happened,
-and a `_pending` that never drains makes `speaking` permanently true, turning
-every later sound into a barge-in and silence into something never reported.
+and a `_pending` that never drains is a queue that never reports itself silent,
+which is the status stuck on `speaking` and a microphone that never reopens.
 So Kotlin says `speechReady` when init succeeds, and Dart holds what it is
 handed until then; an engine that has not answered within five seconds is said
 rather than waited for. One utterance failing is likewise not the engine
@@ -556,8 +532,9 @@ half-written directory when its listener goes.
 
 ## Hearing and speaking
 
-`SherpaVoice.start` loads the two models and opens the microphone; what comes
-back is a `VoiceSession`, which is where **two worker isolates** live. sherpa's
+`SherpaVoice.start` loads the two models and takes the microphone's grant; what
+comes back is a `VoiceSession` with the microphone still shut, and where **two
+worker isolates** live. sherpa's
 calls block, so on the UI isolate a Whisper encode is a frozen screen. They are
 two rather than one because generating a spoken sentence takes about a second,
 and a single worker would have the microphone's frames queued behind it — which
@@ -652,11 +629,6 @@ sentences, which in voice mode flickers the circle and in a message being read
 out would stop it after the first sentence. The WAV of what is playing is kept
 until something else is: `play` returns when playback *starts*.
 
-**Talking over the reply stops the turn as well as the speech.** The session
-goes quiet once words arrive that were not just said — confirmed, not on onset,
-which is what kept the phone from cutting itself off wherever echo cancellation
-did not cover the recogniser's input; see "Per side, not per session" for the
-whole of it. The controller then aborts the turn, because interrupting means
-stop and listen to me — which is Stop and then type, in one gesture, and leaves
-the same aborted turn in the log. The Stop button under the orb remains the way
-to cut a reply off for certain: instantly, and without trusting a transcription.
+**Nothing here has to tell the reply from the room**, because the microphone is
+shut while one is being read out — see "Taking turns" for what that replaced and
+what it costs. Stop, under the orb, is how a reply is cut off.
