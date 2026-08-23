@@ -676,22 +676,30 @@ class FakeVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool listening = true,
   }) async {
     if (refusal != null) throw StateError(refusal!);
     listeningWith = recognition;
-    return session = FakeVoiceSession();
+    return session = FakeVoiceSession(listening: listening);
   }
 }
 
 class FakeVoiceSession implements VoiceSession {
+  FakeVoiceSession({this.listening = true});
+
   final List<String> spoken = [];
   final _events = StreamController<VoiceEvent>.broadcast();
 
   var hushed = 0;
   var disposed = false;
 
-  /// Whether the microphone is open, which pausing shuts.
-  var listening = true;
+  /// Whether the microphone is open, which pausing shuts. A session can be
+  /// opened with it already shut, which is touch to speak.
+  bool listening;
+
+  /// How many times it was shut on the utterance in progress rather than over
+  /// it, which is what releasing the Talk button asks for.
+  var finished = 0;
 
   @override
   final ValueNotifier<double> level = ValueNotifier(0);
@@ -706,7 +714,10 @@ class FakeVoiceSession implements VoiceSession {
   Future<void> stopSpeaking() async => hushed++;
 
   @override
-  Future<void> setListening(bool on) async => listening = on;
+  Future<void> setListening(bool on, {bool finish = false}) async {
+    listening = on;
+    if (!on && finish) finished++;
+  }
 
   @override
   Future<void> dispose() async {

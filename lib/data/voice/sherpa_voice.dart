@@ -38,6 +38,7 @@ class SherpaVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool listening = true,
   }) async {
     Listener? listener;
     if (recognition != null) {
@@ -50,14 +51,15 @@ class SherpaVoice extends Voice {
       final recorder = await openMicrophone();
       final vad = await _vadPath();
       final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
-      listener = SherpaListener(recorder, worker);
+      listener = SherpaListener(recorder, worker, listening: listening);
     }
 
     final speakDir = await _store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
     final worker = await Worker.spawn(_speakWorker, (speech, speakDir, speaker));
 
-    return ComposedVoiceSession(listener, SherpaSpeaker(worker));
+    return ComposedVoiceSession(listener, SherpaSpeaker(worker),
+        listening: listening);
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
@@ -86,9 +88,9 @@ String get _speechDir => p.join(Directory.systemTemp.path, "entoli-speech");
 /// [VoiceInterrupted]; the [ComposedVoiceSession] turns the latter into a
 /// speaker stop.
 class SherpaListener implements Listener {
-  SherpaListener(this._recorder, this._worker) {
+  SherpaListener(this._recorder, this._worker, {bool listening = true}) {
     _worker.messages.listen(_fromWorker);
-    unawaited(_open());
+    if (listening) unawaited(_open());
   }
 
   final AudioRecorder _recorder;
@@ -111,6 +113,14 @@ class SherpaListener implements Listener {
   final _pcm = Pcm16Reader();
   var _closed = false;
 
+  /// What was last asked for, which is what the early return below compares
+  /// against rather than `_mic`. Opening the microphone is a platform call, so
+  /// a shut arriving while an open is still in flight would otherwise find
+  /// `_mic` null, read that as already shut, and leave a recorder running for
+  /// the rest of the session. False to start with because the microphone is
+  /// not open yet — [_open] is what asks for it.
+  var _wantListening = false;
+
   Future<void> _open() async {
     await setListening(true);
   }
@@ -122,9 +132,14 @@ class SherpaListener implements Listener {
   ValueListenable<double> get level => _levelOf;
 
   @override
-  Future<void> setListening(bool on) async {
-    if (_closed || on == (_mic != null)) return;
+  Future<void> setListening(bool on, {bool finish = false}) async {
+    if (_closed || on == _wantListening) return;
+    _wantListening = on;
     if (!on) {
+      // The detector is holding whatever has not fallen silent yet, and no more
+      // audio is coming to end it. Flushed rather than dropped where the
+      // microphone closed because the sentence was over.
+      if (finish) _worker.send(("flush",));
       await _mic?.cancel();
       _mic = null;
       await _recorder.stop();
@@ -142,6 +157,12 @@ class SherpaListener implements Listener {
         echoCancel: true,
         noiseSuppress: true,
       ));
+      // Shut while this was opening, which is a Talk button let go inside the
+      // platform's own latency. What was asked for last wins.
+      if (_closed || !_wantListening) {
+        await _recorder.stop();
+        return;
+      }
       _mic = stream.listen(_onAudio, onError: (Object e) => _fail("$e"));
     } catch (e) {
       _fail("$e");
@@ -405,6 +426,21 @@ void _listenWorker((SendPort, (String, RecognitionModel, String)) init) async {
     reply.send(("failed", "$e"));
   }
 
+  void drain(sherpa.VoiceActivityDetector vad, sherpa.OfflineRecognizer engine) {
+    while (!vad.isEmpty()) {
+      final segment = vad.front();
+      vad.pop();
+      final stream = engine.createStream();
+      stream.acceptWaveform(samples: segment.samples, sampleRate: sampleRate);
+      engine.decode(stream);
+      final text = engine.getResult(stream).text.trim();
+      stream.free();
+      // A cough is a speech segment to a detector and nothing to a
+      // conversation.
+      if (text.isNotEmpty) reply.send(("heard", text));
+    }
+  }
+
   var wasSpeaking = false;
   await for (final message in port) {
     if (message case ("close",)) break;
@@ -414,19 +450,14 @@ void _listenWorker((SendPort, (String, RecognitionModel, String)) init) async {
       final speaking = vad.isDetected();
       if (speaking && !wasSpeaking) reply.send(("detected",));
       wasSpeaking = speaking;
-
-      while (!vad.isEmpty()) {
-        final segment = vad.front();
-        vad.pop();
-        final stream = recognizer.createStream();
-        stream.acceptWaveform(samples: segment.samples, sampleRate: sampleRate);
-        recognizer.decode(stream);
-        final text = recognizer.getResult(stream).text.trim();
-        stream.free();
-        // A cough is a speech segment to a detector and nothing to a
-        // conversation.
-        if (text.isNotEmpty) reply.send(("heard", text));
-      }
+      drain(vad, recognizer);
+    }
+    // No more audio is coming to end the segment the detector is holding, so
+    // it is ended here — the microphone closed because the sentence was over.
+    else if (message case ("flush",)) {
+      vad.flush();
+      wasSpeaking = false;
+      drain(vad, recognizer);
     }
   }
   vad?.free();

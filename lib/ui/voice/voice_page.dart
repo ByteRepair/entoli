@@ -121,6 +121,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
             VoiceControls(
               state: voice,
               onMute: _voice.togglePaused,
+              onTalk: _voice.talk,
               onStop: _voice.hush,
               onDone: () => Navigator.of(context).maybePop(),
             ),

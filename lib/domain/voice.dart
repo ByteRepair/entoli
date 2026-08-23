@@ -35,10 +35,16 @@ abstract class Voice {
   /// **With no [recognition] model there is nothing to listen with**: no
   /// microphone is opened and the session only speaks. That is the button
   /// under a message, which reads one message out and is not voice mode.
+  ///
+  /// [listening] false opens the session with the microphone shut, which is
+  /// touch to speak. Asked for here rather than undone afterwards: opening a
+  /// capture and closing it again is a real start and stop of the device, and
+  /// the system's own microphone indicator flashing for nothing.
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool listening = true,
   });
 }
 
@@ -74,7 +80,14 @@ abstract class VoiceSession {
   /// than a stream left running and thrown away: paused has to mean the device
   /// is no longer recording, which is what the system's own microphone
   /// indicator will say either way. Nothing to listen with makes it a no-op.
-  Future<void> setListening(bool on);
+  ///
+  /// Shutting it drops whatever was being said into it, which is what mute has
+  /// to mean — a result flushed out of a cancelled session is the microphone
+  /// answering back after it was closed, and lands as a barge-in over the reply
+  /// that is still being read. [finish] keeps that last utterance instead,
+  /// which is what releasing a touch-to-speak button means: the microphone
+  /// closes because the sentence is over, not to throw it away.
+  Future<void> setListening(bool on, {bool finish = false});
 
   /// Say [text], after anything already queued. Sentence-sized chunks: the
   /// first is being read while the rest of the reply is still being written.
@@ -134,6 +147,7 @@ class UnavailableVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool listening = true,
   }) async =>
       throw UnsupportedError("Voice mode is not available in a browser.");
 }
