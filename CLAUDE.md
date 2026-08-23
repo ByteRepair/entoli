@@ -47,7 +47,8 @@ named in a cross-reference is findable from this list.
 - `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen
 - `lib/ui/workspace/CLAUDE.md` — The workspace explorer
 - `lib/ui/share/CLAUDE.md` — Sharing to Entoli
-- `lib/ui/CLAUDE.md` — Opening a link, The theme, The keyboard and the caret
+- `lib/ui/CLAUDE.md` — Opening a link, The theme, What the settings page can
+  change about it, The keyboard and the caret
 - `lib/ui/settings/CLAUDE.md` — Setting overrides, What the app is, Backing it
   all up
 - `lib/ui/widgets/CLAUDE.md` — Shared UI, A catalog of things to download
@@ -86,8 +87,9 @@ Every project is a directory under `projects/`, the default one included.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
-`appTheme`, and
-`llmProviders`. `<dataDir>/reminders.json` is the user's reminders, one JSON
+`appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
+`cornerRadius` and `systemPalette` — and `llmProviders`.
+`<dataDir>/reminders.json` is the user's reminders, one JSON
 list; the boot receiver reads it with no engine running, which is why writes go
 through a rename.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),

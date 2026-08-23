@@ -35,6 +35,7 @@ import "domain/reminder_runner.dart";
 import "domain/reminder_scheduler.dart";
 import "domain/rootfs_store.dart";
 import "domain/temp_chat_ttl.dart";
+import "domain/theme_colour.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model.dart"
@@ -338,6 +339,20 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
 
+  Future<void> setPrimaryColour(ThemeColour colour) =>
+      _update((s) => s.primaryColour = colour);
+
+  Future<void> setSecondaryColour(ThemeColour colour) =>
+      _update((s) => s.secondaryColour = colour);
+
+  Future<void> setCornerRadius(double radius) =>
+      _update((s) => s.cornerRadius = radius);
+
+  /// Whether the palette follows the system's. The two colours are left where
+  /// they were, so turning it off again returns to what was picked.
+  Future<void> setSystemPalette(bool follow) =>
+      _update((s) => s.systemPalette = follow);
+
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.
   Future<void> setAssistantProject(String? project) =>
@@ -434,6 +449,12 @@ final appSettingsProvider =
 
 final launcherIconsProvider =
     Provider<LauncherIcons>((ref) => throw UnimplementedError());
+
+/// The system's own accent, read once in `main` and overridden with what it
+/// found. Null is a platform with none, which is what takes the Material 3
+/// Expressive switch off the settings page — so the default here is every
+/// platform but a recent Android.
+final systemAccentProvider = Provider<int?>((ref) => null);
 
 final linkOpenerProvider =
     Provider<LinkOpener>((ref) => throw UnimplementedError());

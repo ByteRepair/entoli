@@ -4,6 +4,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_icon.dart";
 import "../../domain/app_theme.dart";
 import "../../domain/assistant_view.dart";
+import "../../domain/corner_radius.dart";
+import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
@@ -219,6 +221,9 @@ class _AppearanceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final switchesLauncher = ref.watch(launcherIconsProvider).available;
+    // No accent is a platform with no palette of its own to follow, so the
+    // switch is not drawn rather than drawn dead.
+    final followsSystem = ref.watch(systemAccentProvider) != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -243,6 +248,50 @@ class _AppearanceSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setAppTheme(picked.first),
           ),
         ),
+        if (followsSystem)
+          SwitchListTile(
+            title: const Text("Material 3 Expressive"),
+            subtitle: const Text(
+                "Build the palette from the colour the system is themed to, so "
+                "the app follows the wallpaper the way the rest of the phone "
+                "does."),
+            value: settings.systemPalette,
+            onChanged: ref.read(appSettingsProvider.notifier).setSystemPalette,
+          ),
+        // Nothing to pick while the system is picking: one accent is the seed
+        // of the whole palette, secondary included.
+        if (!(followsSystem && settings.systemPalette)) ...[
+          LabelledField(
+            label: "Primary colour",
+            child: _ColourChoices(
+              selected: settings.primaryColour,
+              onPick: ref.read(appSettingsProvider.notifier).setPrimaryColour,
+            ),
+          ),
+          LabelledField(
+            label: "Secondary colour",
+            child: _ColourChoices(
+              selected: settings.secondaryColour,
+              onPick: ref.read(appSettingsProvider.notifier).setSecondaryColour,
+            ),
+          ),
+        ],
+        LabelledField(
+          label: "Corners",
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final radius in cornerRadii)
+                _CornerChoice(
+                  radius: radius,
+                  selected: radius == settings.cornerRadius,
+                  onTap: () =>
+                      ref.read(appSettingsProvider.notifier).setCornerRadius(radius),
+                ),
+            ],
+          ),
+        ),
         LabelledField(
           label: "Icon",
           child: Row(
@@ -259,6 +308,119 @@ class _AppearanceSection extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The eight seeds, as the colours themselves: a swatch says what it does and
+/// a name in a dropdown would not.
+class _ColourChoices extends StatelessWidget {
+  const _ColourChoices({required this.selected, required this.onPick});
+
+  final ThemeColour selected;
+  final void Function(ThemeColour) onPick;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final colour in ThemeColour.values)
+            _ColourChoice(
+              colour: colour,
+              selected: colour == selected,
+              onTap: () => onPick(colour),
+            ),
+        ],
+      );
+}
+
+class _ColourChoice extends StatelessWidget {
+  const _ColourChoice({
+    required this.colour,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ThemeColour colour;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: colour.label,
+      child: Tooltip(
+        message: colour.label,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: colour.colour,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? scheme.onSurface : scheme.outlineVariant,
+                width: selected ? 3 : 1,
+              ),
+            ),
+            // Against the swatch rather than the surface: the tick sits on the
+            // colour itself, and half of the eight are dark.
+            child: selected
+                ? const Icon(Icons.check, size: 18, color: Colors.white)
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A radius drawn at its own radius. The number is in the tooltip, since what
+/// the choice is about is the shape.
+class _CornerChoice extends StatelessWidget {
+  const _CornerChoice({
+    required this.radius,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final double radius;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final corners = BorderRadius.circular(radius);
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: "${radius.round()}",
+      child: Tooltip(
+        message: "${radius.round()}",
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: corners,
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: corners,
+              color: selected ? scheme.secondaryContainer : null,
+              border: Border.all(
+                color: selected ? scheme.primary : scheme.outlineVariant,
+                width: selected ? 2 : 1,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

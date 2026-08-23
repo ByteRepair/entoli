@@ -32,9 +32,12 @@ next save.
 
 The settings page is ten categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:
-**Appearance** — the theme and the app icon, which are the two things the app
-looks like — the **Agent** — command approval mode and the classifier model,
-which travel together because auto mode is unusable without one — the
+**Appearance** — the theme, the two colours the palette is seeded from, how
+round a corner is, and the app icon, which are what the app looks like; where
+the system has a palette of its own a Material 3 Expressive switch takes the
+place of the colours, and what any of it reaches is "What the settings page can
+change about it" — the **Agent** — command approval mode and the classifier
+model, which travel together because auto mode is unusable without one — the
 environment, and deleting every chat. **Terminal** is where commands run —
 Android itself, or a Linux downloaded from the catalog under it; a category of
 its own for the reason Voice is one, and drawn on every platform, where it says

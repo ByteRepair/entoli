@@ -4,11 +4,13 @@ import "../core/config.dart";
 import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
+import "corner_radius.dart";
 import "llm_provider.dart";
 import "local_llm.dart";
 import "permission.dart";
 import "profile.dart";
 import "temp_chat_ttl.dart";
+import "theme_colour.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
@@ -25,6 +27,10 @@ class AppSettings {
     this.profile,
     this.appIcon = AppIcon.cookie,
     this.appTheme = AppTheme.system,
+    this.primaryColour = ThemeColour.indigo,
+    this.secondaryColour = ThemeColour.indigo,
+    this.cornerRadius = defaultCornerRadius,
+    this.systemPalette = false,
     this.tempChatTtl = TempChatTtl.off,
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
@@ -77,6 +83,22 @@ class AppSettings {
 
   /// Which palette the app draws. App-level only, for the same reason.
   AppTheme appTheme;
+
+  /// The two colours the palette is built from: the primary is the seed, and
+  /// the secondary seeds the accent group beside it. Both indigo is the app's
+  /// own scheme, where the secondary is whatever Material derives from the one
+  /// seed. App-level, like the theme and the icon.
+  ThemeColour primaryColour;
+  ThemeColour secondaryColour;
+
+  /// How round every corner the app draws is, in logical pixels. One of
+  /// [cornerRadii].
+  double cornerRadius;
+
+  /// Whether the palette comes from the system instead of the two colours
+  /// above — Android's Material 3 Expressive, which follows the wallpaper.
+  /// Ignored where the platform has no accent to give — see `SystemPalette`.
+  bool systemPalette;
 
   /// How long a temporary chat lives once its TTL is enabled. App-level
   /// default; a project and a chat can override it. [TempChatTtl.off] means
@@ -179,6 +201,10 @@ class AppSettings {
         profile: Profile.fromJson(json["profile"]),
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
         appTheme: AppTheme.fromName(json["appTheme"] as String?),
+        primaryColour: ThemeColour.fromName(json["primaryColour"] as String?),
+        secondaryColour: ThemeColour.fromName(json["secondaryColour"] as String?),
+        cornerRadius: cornerRadiusFrom(json["cornerRadius"]),
+        systemPalette: json["systemPalette"] as bool? ?? false,
         tempChatTtl: TempChatTtl.fromName(json["tempChatTtl"] as String?),
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
@@ -244,6 +270,10 @@ class AppSettings {
         profile: profile,
         appIcon: appIcon,
         appTheme: appTheme,
+        primaryColour: primaryColour,
+        secondaryColour: secondaryColour,
+        cornerRadius: cornerRadius,
+        systemPalette: systemPalette,
         tempChatTtl: tempChatTtl,
         voiceRecognitionModelId: voiceRecognitionModelId,
         voiceSpeechModelId: voiceSpeechModelId,
@@ -274,6 +304,10 @@ class AppSettings {
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
       "appIcon": appIcon.name,
       "appTheme": appTheme.name,
+      "primaryColour": primaryColour.name,
+      "secondaryColour": secondaryColour.name,
+      "cornerRadius": cornerRadius,
+      if (systemPalette) "systemPalette": systemPalette,
       "tempChatTtl": tempChatTtl.name,
       if (voiceRecognitionModelId != null)
         "voiceRecognitionModelId": voiceRecognitionModelId,
