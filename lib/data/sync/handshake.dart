@@ -173,7 +173,13 @@ class Handshake {
       remotePublicKey: SimplePublicKey(remoteEph, type: KeyPairType.x25519),
     );
     final dh = await shared.extractBytes();
-    final ikm = Uint8List.fromList([...dh, ...base64Decode(pairingSecret)]);
+    // Normalised before decoding: `generatePsk` strips the padding so the
+    // secret fits in a QR without an `=` in it, and a bare `base64Decode`
+    // refuses a length that is not a multiple of four — which every real
+    // secret is, being 32 bytes. `normalize` also accepts either alphabet, so
+    // a secret that came through a QR and one typed by hand agree.
+    final ikm = Uint8List.fromList(
+        [...dh, ...base64Url.decode(base64Url.normalize(pairingSecret))]);
 
     Future<SecretKey> derive(String suffix) => Hkdf(hmac: Hmac.sha256(), outputLength: 32)
         .deriveKey(secretKey: SecretKey(ikm), info: utf8.encode("$info/$suffix"));

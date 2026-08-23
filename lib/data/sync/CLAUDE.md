@@ -247,6 +247,15 @@ that nobody here typed are otherwise unexplained.
 
 ### Testing it
 
+### The pairing secret is not a valid base64 length
+
+`generatePsk` is 32 random bytes as base64url with the padding stripped, so a
+secret fits a QR without an `=` in it — 43 characters, which is not a multiple
+of four. `base64Decode` refuses that outright, so the handshake normalises
+first. Every literal anyone reached for in a test happened to be a length the
+strict decoder accepted, which is why no test found it and the first real
+pairing did.
+
 ### Two things a loopback channel will not tell you
 
 Both of these shipped, and both passed every test over a loopback

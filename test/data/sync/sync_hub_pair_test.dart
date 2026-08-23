@@ -49,8 +49,12 @@ void main() {
       ByteChannel joinLink,
       {String? knownToOfferer,
       String? knownToJoiner,
-      // Decoded into the key material, so it has to be base64.
-      String psk = "test-psk"}) async {
+      // A real one by default. A hand-written stand-in was what hid the
+      // padding bug: 32 bytes of base64url with the `=` stripped is 43
+      // characters, and every short literal anyone reached for happened to
+      // be a length `base64Decode` would accept.
+      String? psk}) async {
+    psk ??= generatePsk();
     final a = offers.hub.establishForTest(
       link: offerLink,
       weOffered: true,
@@ -88,6 +92,15 @@ void main() {
     await eventually(() => away.hub.mirror(state.id) != null);
     return state;
   }
+
+  test("a real pairing secret is not a valid base64 length", () {
+    // The property the bug turned on, pinned so nobody 'tidies' the padding
+    // strip in `generatePsk` back out from under the handshake.
+    final psk = generatePsk();
+    expect(psk, hasLength(43));
+    expect(psk.length % 4, isNot(0));
+    expect(psk, isNot(contains("=")));
+  });
 
   test("pairing files each device in the other's registry", () async {
     final links = loopbackPair();
@@ -303,7 +316,7 @@ void main() {
       final other = await _Device.create("${tempDir.path}/other");
       addTearDown(other.hub.dispose);
       final links = loopbackPair();
-      await pairing(home, other, links.$1, links.$2, psk: "otherpsk");
+      await pairing(home, other, links.$1, links.$2, psk: generatePsk());
       other.hub.followChat(state.id);
       await eventually(() => other.hub.mirror(state.id) != null);
 
