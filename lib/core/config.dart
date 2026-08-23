@@ -63,6 +63,11 @@ class AppConfig {
 
   String get projectsDir => fs.path.join(dataDir, "projects");
 
+  /// This device's sync identity, its paired devices, and their secrets where
+  /// there is no keyring to hold them. A backup skips it whole — see
+  /// `writeBackup` — so a restore leaves it to [ensureDirs] to make again.
+  String get syncDir => fs.path.join(dataDir, "sync");
+
   /// Every project-scoped path goes through here, so this is where a name that
   /// would reach outside `projects/` is refused rather than joined.
   String projectDir({String? project}) {
@@ -169,6 +174,7 @@ class AppConfig {
     await _ensure([
       dataDir,
       projectsDir,
+      syncDir,
       for (final kind in CompletionKind.values) promptsDir(kind),
     ]);
     await ensureProjectDirs();

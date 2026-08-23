@@ -114,6 +114,9 @@ void main() {
 
     expect(Directory(config.chatsDir()).existsSync(), isTrue);
     expect(Directory(config.projectWorkspaceDir()).existsSync(), isTrue);
+    // A backup carries no `sync/` at all, so a restore is the one path that
+    // deletes it and unpacks nothing over it.
+    expect(Directory(config.syncDir).existsSync(), isTrue);
   });
 
   test("chats are counted from the state.json each one has", () async {
