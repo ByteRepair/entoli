@@ -1,5 +1,6 @@
 package io.github.yiannis128.agent_chat
 
+import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -55,6 +56,11 @@ object RemindersChannel {
             }
             "cancel" -> {
                 cancel(context, call.argument<Number>("code")!!.toInt())
+                result.success(null)
+            }
+            "canHoldTurn" -> result.success(canHoldTurn())
+            "doneFiring" -> {
+                ForegroundWork.releaseAlarmHold(context)
                 result.success(null)
             }
             "exactAllowed" -> result.success(exactAllowed(context))
@@ -117,6 +123,21 @@ object RemindersChannel {
                 .setAction(ReminderReceiver.ACTION_FIRE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+
+    /// Whether a turn started right now could hold the process. A backgrounded
+    /// app may not start a foreground service at all — so a reminder's timer
+    /// firing off screen would run a turn nothing keeps alive, and Android
+    /// kills the process halfway through it. Already holding one is the other
+    /// yes: a receiver's hold, or another turn's, is a service that is already
+    /// up and may be started again.
+    private fun canHoldTurn(): Boolean {
+        if (ForegroundWork.busy) return true
+        val state = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(state)
+        // Lower is nearer the user; foreground is the one importance that is
+        // allowed to start a service of its own accord.
+        return state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }
 
     private fun exactAllowed(context: Context): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||

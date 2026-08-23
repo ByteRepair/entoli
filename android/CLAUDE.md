@@ -368,6 +368,27 @@ receiver is what lets the turn run at all. A refusal is caught — an uncaught o
 in a broadcast receiver is a crash — and the turn then runs merely killable,
 which is where every other platform already is.
 
+**What the receiver started counts as a hold.** `ForegroundWork.holdForAlarm`
+is that bookkeeping, and `busy` reads it with the rest: without it the statics
+say the process is idle while a reminder is being woken for, and the first
+`hold(false)` from anything else — a download finishing, a prefill clearing —
+takes `AppEngine.releaseIfUnwanted` at its word and destroys the engine under a
+turn that has not registered itself yet. Dart releases it through `doneFiring`
+once the scheduler has dealt with the fires, which is also what stops a wake
+with nothing to run from holding the process open for good.
+
+**A turn nobody can hold is not started.** The scheduler's own timer fires on
+time whether or not anyone is looking, and a backgrounded app may not start a
+foreground service at all — so off screen that timer was starting turns nothing
+kept alive, and the system killed the process partway through the reply. It now
+asks `canHoldTurn` first (`ForegroundWork.busy`, or this process being in the
+foreground) and, where the answer is no, hands the fire back to AlarmManager for
+the time it was already due. The broadcast comes back within seconds, the
+receiver takes the hold inside its window, and the same fire runs held. Once per
+reminder: a second refusal means the broadcast is not getting a hold either — a
+device with exact alarms denied — and by then running it killable beats not
+running it.
+
 **`AppEngine` is the one place the engine is built.** Every way the process
 comes to be running Dart goes through `AppEngine.ensure` — an activity launch,
 or an alarm waking nothing — so channels and `GeneratedPluginRegistrant` are

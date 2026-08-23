@@ -26,6 +26,11 @@ class ReminderReceiver : BroadcastReceiver() {
                 Intent(appContext, AgentService::class.java)
                     .putExtra(AgentService.EXTRA_TURNS, 1),
             )
+            // What this started is a hold like any other and ForegroundWork has
+            // to count it: `busy` is what stops the engine being thrown away
+            // under a turn that has not registered itself yet. Dart releases it
+            // once the fire is dealt with, through `doneFiring`.
+            ForegroundWork.holdForAlarm()
         } catch (e: Exception) {
             Log.w(TAG, "Could not hold the process for reminder $id: $e")
         }

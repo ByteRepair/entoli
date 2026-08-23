@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
+import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
@@ -8,9 +9,13 @@ import "../../domain/project.dart";
 import "../../domain/reminder.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
+import "../chat/widgets/code_block.dart";
+import "../chat/widgets/reply_style.dart";
+import "../widgets/completion_field.dart";
 import "../widgets/dialogs.dart" show confirm;
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "../widgets/temp_chat_ttl_field.dart";
 
 /// The Reminders category. Android's feature — the system clock is what fires
 /// a reminder with the app closed, and nothing here can wake any other
@@ -81,7 +86,10 @@ class _RemindersSectionState extends ConsumerState<RemindersSection> {
           ListTile(
             leading: const Icon(Icons.alarm_off_outlined),
             title: const Text("Exact times are not granted"),
-            subtitle: const Text("Without them reminders may fire minutes late."),
+            subtitle: const Text(
+              "Without them a reminder may fire minutes late, and its turn can "
+              "be cut short while the app is closed.",
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
               await ref.read(reminderAlarmsProvider).requestExact();
@@ -165,8 +173,10 @@ class _ReminderTile extends ConsumerWidget {
   }
 }
 
-/// The add/edit page, pushed over whatever listed the reminders. The prompt is
-/// the middle of the page and grows with it: it is what the reminder is.
+/// The add/edit page, pushed over whatever listed the reminders. What the
+/// reminder is stays the middle of the page, but as the message it will send
+/// rather than as a box to type in: writing it is [ReminderPromptPage]'s, and
+/// this shows what was written the way the chat will.
 class ReminderEditorPage extends ConsumerStatefulWidget {
   const ReminderEditorPage({super.key, this.reminder});
 
@@ -178,28 +188,30 @@ class ReminderEditorPage extends ConsumerStatefulWidget {
 
 class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
   late final TextEditingController _name;
-  late final TextEditingController _prompt;
+
+  /// Held as text rather than in a controller: nothing on this page types into
+  /// it, and the page that does hands back what it ended up with.
+  late String _prompt;
   late DateTime _at;
   late ReminderRepeat _repeat;
   late String? _project;
-  late bool _temporary;
+  late TempChatTtl? _tempChatTtl;
 
   @override
   void initState() {
     super.initState();
     final reminder = widget.reminder;
     _name = TextEditingController(text: reminder?.name ?? "");
-    _prompt = TextEditingController(text: reminder?.prompt ?? "");
+    _prompt = reminder?.prompt ?? "";
     _at = reminder?.at ?? _defaultAt();
     _repeat = reminder?.repeat ?? ReminderRepeat.off;
     _project = reminder?.project;
-    _temporary = reminder?.temporary ?? true;
+    _tempChatTtl = reminder?.tempChatTtl;
   }
 
   @override
   void dispose() {
     _name.dispose();
-    _prompt.dispose();
     super.dispose();
   }
 
@@ -213,9 +225,6 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
   @override
   Widget build(BuildContext context) {
     final named = ref.watch(projectListProvider).value ?? const <String>[];
-    final effectiveTtl =
-        ref.watch(projectSettingsProvider(_project)).tempChatTtl ??
-            ref.watch(appSettingsProvider).tempChatTtl;
     final isNew = widget.reminder == null;
 
     return Scaffold(
@@ -231,97 +240,83 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
           TextButton(onPressed: _save, child: const Text("Save")),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: ListView(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: TextFormField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: "Name"),
+            ),
+          ),
+          // The second row: what a reminder is set for is a date and a time
+          // together, and either on its own is half an answer.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: _name,
-                    decoration: const InputDecoration(labelText: "Name"),
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.event_outlined, size: 18),
+                    label: Text(shortDate(_at)),
                   ),
                 ),
                 const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: _pickDate,
-                  child: Text(shortDate(_at)),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _pickTime,
-                  child: Text(timeOfDay(_at)),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickTime,
+                    icon: const Icon(Icons.schedule_outlined, size: 18),
+                    label: Text(timeOfDay(_at)),
+                  ),
                 ),
               ],
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: TextField(
-                controller: _prompt,
-                expands: true,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                textAlignVertical: TextAlignVertical.top,
-                decoration: const InputDecoration(
-                  hintText: "What should the agent do?",
-                  alignLabelWithHint: true,
-                  labelText: "Prompt",
-                ),
-              ),
-            ),
-          ),
+          _PromptPreview(prompt: _prompt, onEdit: _editPrompt),
           const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Column(
-              children: [
-                LabelledField(
-                  label: "Repeat",
-                  child: DropdownButtonFormField<ReminderRepeat>(
-                    initialValue: _repeat,
-                    isExpanded: true,
-                    items: [
-                      for (final repeat in ReminderRepeat.values)
-                        DropdownMenuItem(value: repeat, child: Text(repeat.label)),
-                    ],
-                    onChanged: (repeat) =>
-                        setState(() => _repeat = repeat ?? ReminderRepeat.off),
-                  ),
-                ),
-                SwitchListTile(
-                  title: const Text("Temporary chat"),
-                  subtitle: Text(effectiveTtl == TempChatTtl.off
-                      ? "The chat is kept"
-                      : "The chat expires after "
-                          "${tempChatTtlLabels[effectiveTtl] ?? effectiveTtl.name}"),
-                  value: _temporary,
-                  onChanged: (value) => setState(() => _temporary = value),
-                ),
-                LabelledField(
-                  label: "Project",
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: projectOrDefault(
-                        _project, named),
-                    isExpanded: true,
-                    items: [
-                      for (final project in everyProject(named))
-                        DropdownMenuItem(
-                            value: project, child: Text(projectLabel(project))),
-                    ],
-                    onChanged: (project) => setState(() => _project = project),
-                  ),
-                ),
+          LabelledField(
+            label: "Repeat",
+            child: DropdownButtonFormField<ReminderRepeat>(
+              initialValue: _repeat,
+              isExpanded: true,
+              items: [
+                for (final repeat in ReminderRepeat.values)
+                  DropdownMenuItem(value: repeat, child: Text(repeat.label)),
               ],
+              onChanged: (repeat) =>
+                  setState(() => _repeat = repeat ?? ReminderRepeat.off),
+            ),
+          ),
+          TempChatTtlField(
+            value: _tempChatTtl,
+            onChanged: (ttl) => setState(() => _tempChatTtl = ttl),
+            project: _project,
+          ),
+          LabelledField(
+            label: "Project",
+            child: DropdownButtonFormField<String?>(
+              initialValue: projectOrDefault(_project, named),
+              isExpanded: true,
+              items: [
+                for (final project in everyProject(named))
+                  DropdownMenuItem(
+                      value: project, child: Text(projectLabel(project))),
+              ],
+              onChanged: (project) => setState(() => _project = project),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _editPrompt() async {
+    final edited = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => ReminderPromptPage(prompt: _prompt)),
+    );
+    if (edited == null || !mounted) return;
+    setState(() => _prompt = edited);
   }
 
   Future<void> _pickDate() async {
@@ -347,7 +342,7 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
   }
 
   Future<void> _save() async {
-    final prompt = _prompt.text.trim();
+    final prompt = _prompt.trim();
     if (prompt.isEmpty) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -372,7 +367,8 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
           at: _at,
           repeat: _repeat,
           project: _project,
-          temporary: _temporary,
+          tempChatTtl: _tempChatTtl,
+          clearTempChatTtl: _tempChatTtl == null,
           enabled: true,
           clearNextFireAt: true,
         )
@@ -394,7 +390,7 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
         at: _at,
         repeat: _repeat,
         project: _project,
-        temporary: _temporary,
+        tempChatTtl: _tempChatTtl,
       );
 
   Future<void> _delete() async {
@@ -409,6 +405,166 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
     await ref.read(remindersProvider.notifier).remove(widget.reminder!.id);
     if (!mounted) return;
     Navigator.of(context).pop();
+  }
+}
+
+/// The prompt as the chat will render it, over the button that changes it.
+/// Formatted rather than raw: what a reminder sends is a message, and a
+/// message is read as markdown everywhere else in the app — so a prompt with a
+/// list in it is checked here rather than in the chat it eventually runs in.
+class _PromptPreview extends StatelessWidget {
+  const _PromptPreview({required this.prompt, required this.onEdit});
+
+  final String prompt;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return LabelledField(
+      label: "Prompt",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onEdit,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+              ),
+              child: prompt.trim().isEmpty
+                  ? Text(
+                      "What should the agent do?",
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    )
+                  : MarkdownBody(
+                      data: prompt,
+                      styleSheet: replyStyleSheet(theme),
+                      builders: codeBlockBuilders,
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text("Edit prompt"),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The prompt on a page of its own: the box is the page, and it is the
+/// composer's own field, so `/commands` and `@agents` complete here the way
+/// they do in a chat — a reminder's prompt is dispatched through the same
+/// library, and being offered them anywhere else and not here was the tell.
+///
+/// Pops the new prompt, or nothing where it was discarded.
+class ReminderPromptPage extends StatefulWidget {
+  const ReminderPromptPage({super.key, required this.prompt});
+
+  final String prompt;
+
+  @override
+  State<ReminderPromptPage> createState() => _ReminderPromptPageState();
+}
+
+class _ReminderPromptPageState extends State<ReminderPromptPage> {
+  final GlobalKey<CompletionFieldState> _field = GlobalKey();
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.prompt);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _edited => _controller.text != widget.prompt;
+
+  /// Discarding is the one way out that loses what was typed, so it asks —
+  /// and the back key comes through here for the same reason.
+  Future<void> _discard() async {
+    if (_edited) {
+      final ok = await confirm(
+        context,
+        title: "Discard changes",
+        message: "Throw away the edits to this prompt?",
+        confirmLabel: "Discard",
+        destructive: true,
+      );
+      if (!ok) return;
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_discard());
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Prompt"),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: "Discard",
+            onPressed: _discard,
+          ),
+          actions: [
+            PopupMenuButton<VoidCallback>(
+              icon: const Icon(Icons.add),
+              tooltip: "Insert",
+              onSelected: (action) => action(),
+              itemBuilder: (context) => completionInsertItems(context, _field),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(_controller.text),
+              child: const Text("Save"),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: CompletionField(
+            key: _field,
+            controller: _controller,
+            expands: true,
+            maxLines: null,
+            autofocus: true,
+            textAlignVertical: TextAlignVertical.top,
+            decoration: const InputDecoration(
+              hintText: "What should the agent do?",
+              alignLabelWithHint: true,
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            // The box is the page, so the menu goes under it — where the
+            // composer's is, which is against the edge the field is on.
+            layout: (menu, field) => Column(
+              children: [
+                Expanded(child: field),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: menu,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

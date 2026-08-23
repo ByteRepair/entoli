@@ -139,6 +139,9 @@ void main() {
     final sched = scheduler(list, runner, alarms);
 
     final first = sched.catchUp();
+    // Far enough in for the run to have started: asking the platform for the
+    // hold comes first, and it is a round trip.
+    await pumpEventQueue();
     // While the first run hangs, another trigger arrives for the same id.
     await sched.catchUp();
     expect(runner.firedIds, ["r1"]);
@@ -159,6 +162,67 @@ void main() {
 
     expect(alarms.cancelled, [4]);
     expect(alarms.scheduled.keys, [3]);
+  });
+
+  group("the hold a turn needs", () {
+    test("a fire the platform will not hold is handed back to the alarm", () async {
+      alarms.canHold = false;
+      list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9), code: 5)];
+      await scheduler(list, runner, alarms).catchUp();
+
+      expect(runner.firedIds, isEmpty);
+      // Re-armed for the time it was already due, which the system delivers at
+      // once — and its receiver is what may hold the process.
+      expect(alarms.scheduled[5], DateTime(2026, 8, 22, 9));
+      expect(list.reminders.single.lastFiredAt, isNull);
+    });
+
+    test("the fire that comes back runs, held", () async {
+      alarms.canHold = false;
+      list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9), code: 5)];
+      final sched = scheduler(list, runner, alarms);
+      await sched.catchUp();
+
+      alarms.canHold = true;
+      alarms.fire("r1");
+      await sched.onNudged();
+
+      expect(runner.firedIds, ["r1"]);
+    });
+
+    test("a hold refused twice runs it anyway rather than never", () async {
+      alarms.canHold = false;
+      list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9), code: 5)];
+      final sched = scheduler(list, runner, alarms);
+      await sched.catchUp();
+      await sched.catchUp();
+
+      expect(runner.firedIds, ["r1"]);
+    });
+
+    test("a platform with no alarms runs it where it is", () async {
+      final none = FakeReminderAlarms(available: false)..canHold = false;
+      list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9))];
+      await scheduler(list, runner, none).catchUp();
+
+      expect(runner.firedIds, ["r1"]);
+    });
+
+    test("the wake is released once the fires are dealt with", () async {
+      list.reminders = [reminder(nextFireAt: DateTime(2000))];
+      final sched = scheduler(list, runner, alarms);
+      alarms.fire("r1");
+      await sched.onNudged();
+
+      expect(runner.firedIds, ["r1"]);
+      expect(alarms.released, 1);
+    });
+
+    test("a launch with nothing due releases it too", () async {
+      await scheduler(list, runner, alarms).reload();
+
+      expect(alarms.released, 1);
+    });
   });
 
   test("the nudge path claims only what the system noticed", () async {
