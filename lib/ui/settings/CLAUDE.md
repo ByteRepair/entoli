@@ -49,13 +49,41 @@ under them is the rest of the page. **Assistant** is where Android's assistant
 gesture lands — see "Being the assistant". **Reminders** is Android's only — a
 reminder runs a prompt in a new chat at a time you pick, even when the app is
 closed — and where the port is unavailable the page says so and offers nothing,
-the way a row for a missing device would. The editor page is a route of its own
-with the prompt as the middle of the page; see "Waking for a reminder" in
+the way a row for a missing device would. The editor page is a route of its own;
+see "The reminder editor" below, and "Waking for a reminder" in
 `android/CLAUDE.md`. **Providers** is the endpoints.
 **LLMs** is what a new chat is answered by and what names it. **Data** is all of
 it at once, out as one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app
 is".
+
+## The reminder editor
+
+Four questions and the prompt, in `reminders.dart`. The name is one row and the
+date and time the next, sharing it half and half: what a reminder is set for is
+both of them, and either alone is half an answer — while a name beside them made
+the row three controls where two of them are one.
+
+**The prompt is not typed here.** The middle of the page is what the reminder
+will send, rendered the way the chat will render it, over the button that opens
+`ReminderPromptPage` — a box that is the whole page, Save and Discard, and
+nothing else. A reminder is written once and read many times afterwards, so the
+page it is read on shows the message; and a prompt long enough to need the room
+had a box a few lines tall to grow in before. Discarding asks, and so does the
+back key through a `PopScope`, since it is the one way out that loses what was
+typed.
+
+What is typed in it is `CompletionField` — the composer's, so `/commands` and
+`@agents` complete there and the `+` offers them; a reminder's prompt is
+dispatched through the same library, and being offered them in a chat and not
+here was the tell. The preview is `MarkdownBody` under `replyStyleSheet`, which
+is the reply's own sheet rather than a second answer to how markdown is set.
+
+**Temporary chat is `TempChatTtlField`**, the chat settings page's combobox and
+nothing new: the reminder's chat is a chat, and its TTL is written onto
+`meta.json` as it is. It was a switch over a bool, which could name only one of
+the five windows the field offers — see "Reminders" in `lib/domain/CLAUDE.md`
+for what the old key reads as.
 
 ## What the app is
 

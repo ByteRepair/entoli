@@ -1,6 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/reminder.dart";
+import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 void main() {
   group("nextOccurrence", () {
@@ -126,7 +127,7 @@ void main() {
         at: DateTime(2026, 8, 22, 9),
         repeat: ReminderRepeat.daily,
         project: "work",
-        temporary: false,
+        tempChatTtl: TempChatTtl.days7,
         enabled: false,
         lastFiredAt: DateTime(2026, 8, 21, 9),
         nextFireAt: DateTime(2026, 8, 23, 9),
@@ -140,7 +141,7 @@ void main() {
       expect(back.at, DateTime(2026, 8, 22, 9));
       expect(back.repeat, ReminderRepeat.daily);
       expect(back.project, "work");
-      expect(back.temporary, isFalse);
+      expect(back.tempChatTtl, TempChatTtl.days7);
       expect(back.enabled, isFalse);
       expect(back.lastFiredAt, DateTime(2026, 8, 21, 9));
       expect(back.nextFireAt, DateTime(2026, 8, 23, 9));
@@ -159,9 +160,21 @@ void main() {
     test("a file written by an older build reads with defaults", () {
       final reminder = Reminder.fromJson({"id": "old", "at": DateTime(2026, 1).toIso8601String()});
       expect(reminder.name, "");
-      expect(reminder.temporary, isTrue);
+      expect(reminder.tempChatTtl, isNull);
       expect(reminder.enabled, isTrue);
       expect(reminder.requestCode, isNull);
+    });
+
+    test("the temporary bool an older build wrote reads as the TTL it meant", () {
+      final at = DateTime(2026, 1).toIso8601String();
+      expect(
+        Reminder.fromJson({"id": "kept", "at": at, "temporary": false}).tempChatTtl,
+        TempChatTtl.off,
+      );
+      expect(
+        Reminder.fromJson({"id": "temp", "at": at, "temporary": true}).tempChatTtl,
+        isNull,
+      );
     });
   });
 }

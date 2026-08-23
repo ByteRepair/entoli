@@ -64,6 +64,16 @@ class AndroidReminderAlarms implements ReminderAlarms {
   Future<void> cancel(int requestCode) =>
       _channel.invokeMethod("cancel", {"code": requestCode});
 
+  // No answer means yes: a platform that cannot say is not a reason to leave a
+  // reminder unrun, and running it merely killable is where every other
+  // platform already is.
+  @override
+  Future<bool> canHoldTurn() async =>
+      await _channel.invokeMethod<bool>("canHoldTurn") ?? true;
+
+  @override
+  Future<void> doneFiring() => _channel.invokeMethod("doneFiring");
+
   @override
   Future<void> notify({required String title, required String body, String? chatId}) =>
       _channel.invokeMethod("notify", {

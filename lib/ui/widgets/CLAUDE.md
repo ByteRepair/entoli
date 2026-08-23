@@ -9,7 +9,27 @@ every page would otherwise spell out), the `Default`-plus-reset pairing,
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `EmptyPane`, and `catalog.dart` — the section below.
+`AttachmentStrip`, `EmptyPane`, `TempChatTtlField`, `CompletionField` — the
+section below — and `catalog.dart`.
+
+`CompletionField` is the field a prompt is written in: the menu of `/commands`
+and `@agents` that matches what has been typed, the arrows and tab and return
+that take one, and escape. It was the composer's, and it is here because the
+reminder editor writes a prompt too — one that is dispatched through the same
+library, so being offered them in a chat and not there was the tell. Where the
+menu goes is the caller's, through `layout`: the composer's spans the whole
+composer rather than the field, since the `+` and Send are either side of it,
+and the reminder's prompt page puts it under a box that is the whole page.
+`completionInsertItems` is the `+` button's two entries, for a menu that offers
+other things too — the composer's also attaches files. What a caller must not
+do is write its own trigger handling: `activeCompletionToken` has to keep
+agreeing with `prompt_library.dart`, and one copy of it can.
+
+`TempChatTtlField` is how long a chat lives, as the chat settings page asks it —
+`Default` naming the project's or the app's answer, and the value written
+straight onto `meta.json`. The reminder editor asks with the same field: a
+reminder's chat is a chat, and a bool there could only ever have named one of
+the five TTLs.
 
 `EmptyPane` is the middle of a page with nothing on it. The workspace has two —
 a folder with no files in it, and a file the viewer could not read — and a

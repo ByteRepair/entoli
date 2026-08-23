@@ -251,6 +251,12 @@ class FakeReminderAlarms implements ReminderAlarms {
   var exact = true;
   var notifications = true;
 
+  /// Whether the platform would hold the process for a turn started now.
+  var canHold = true;
+
+  /// How many times the hold an alarm took has been released.
+  var released = 0;
+
   final scheduled = <int, DateTime>{};
   final cancelled = <int>[];
   final posted = <({String title, String body, String? chatId})>[];
@@ -298,6 +304,14 @@ class FakeReminderAlarms implements ReminderAlarms {
   Future<void> cancel(int requestCode) async {
     cancelled.add(requestCode);
     scheduled.remove(requestCode);
+  }
+
+  @override
+  Future<bool> canHoldTurn() async => canHold;
+
+  @override
+  Future<void> doneFiring() async {
+    released++;
   }
 
   @override

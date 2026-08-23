@@ -48,6 +48,9 @@ class ReminderScheduler {
   /// under way finds the id here and stands down.
   final Set<String> _runningIds = {};
 
+  /// Reminders handed back to the alarm once already — see [_deferToAlarm].
+  final Set<String> _deferred = {};
+
   /// What is currently registered with the system, by request code — the diff
   /// between this and the list is what [sync] cancels.
   final Map<int, DateTime> _armed = {};
@@ -66,10 +69,16 @@ class ReminderScheduler {
 
   /// The list changed: re-register everything with the system, run anything
   /// the change made due, and re-aim the timer.
+  ///
+  /// The release at the end is for the launch this is the first call of: an
+  /// alarm that woke the process holds it, and by here whatever it woke us for
+  /// has run. Every other caller is an edit, where there is no hold to release
+  /// and this says so to a platform that already agrees.
   Future<void> reload() async {
     await sync();
     await catchUp();
     _arm();
+    await alarms.doneFiring();
   }
 
   /// The system noticed a fire while Dart was not listening — or while it was,
@@ -79,6 +88,9 @@ class ReminderScheduler {
     if (ids.isEmpty) return;
     await catchUp(only: ids.toSet());
     _arm();
+    // The receiver held the process for these; they are dealt with now, one
+    // way or the other.
+    await alarms.doneFiring();
   }
 
   void _tick() => unawaited(_onTick());
@@ -109,10 +121,38 @@ class ReminderScheduler {
   /// under Doze, which is honest lateness and worth saying.
   static const late = Duration(minutes: 2);
 
+  /// Hand [reminder] back to the alarm rather than run it, where the platform
+  /// will not hold the process for its turn. Answers whether it was.
+  ///
+  /// This timer fires on time whether or not anyone is looking, and off screen
+  /// on Android the only moment the process may take the hold that keeps it
+  /// alive is inside the broadcast its own alarm delivers. So a fire nothing
+  /// can hold is re-armed for the time it was already due, which AlarmManager
+  /// delivers at once: the receiver holds the process and the fire comes back
+  /// through [onNudged] seconds later, held. A turn nobody holds is one the
+  /// system kills halfway, and half a turn costs the user the Continue button.
+  ///
+  /// Never twice without a run in between. Coming back still unable to hold
+  /// means the broadcast is not getting a hold either — a device where exact
+  /// alarms are denied — and by then running it merely killable beats not
+  /// running it at all.
+  Future<bool> _deferToAlarm(Reminder reminder) async {
+    if (!alarms.available || reminder.requestCode == null) return false;
+    if (_deferred.contains(reminder.id)) return false;
+    if (await alarms.canHoldTurn()) return false;
+    _deferred.add(reminder.id);
+    await alarms.schedule(reminder.requestCode!, reminder.nextFireAt ?? reminder.at);
+    return true;
+  }
+
   Future<void> _fire(Reminder reminder, {required bool late}) async {
-    if (_runningIds.contains(reminder.id)) return;
-    _runningIds.add(reminder.id);
+    // Claimed before the first await, not after: asking the platform whether it
+    // can hold us is a round trip, and two triggers either side of it would
+    // both find nothing running and both start a turn.
+    if (!_runningIds.add(reminder.id)) return;
     try {
+      if (await _deferToAlarm(reminder)) return;
+      _deferred.remove(reminder.id);
       final result = await runner.run(reminder, await projects());
       await alarms.notify(
         title: reminder.name.isEmpty ? "Reminder" : reminder.name,

@@ -11,6 +11,7 @@ import "../sidebar/sidebar.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
+import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
