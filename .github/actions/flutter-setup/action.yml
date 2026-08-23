@@ -1,0 +1,29 @@
+name: Flutter setup
+description: >
+  The pinned SDK, the packages and codegen: one answer to what a job needs
+  before it can analyze, test or build, rather than the same steps copied into
+  every workflow.
+
+runs:
+  using: composite
+  steps:
+    # The one pin. No caller passes a version in.
+    - uses: subosito/flutter-action@v2.23.0
+      with:
+        flutter-version: 3.44.8
+        channel: stable
+        cache: true
+
+    # Most of build_runner's minute is compiling its own entrypoint, which the
+    # packages alone decide — so the key is pubspec rather than the sources.
+    # Restoring a graph built against older ones is safe: build_runner rebuilds
+    # whatever its recorded input digests say is stale.
+    - name: Restore build_runner's cache
+      uses: actions/cache@v6.1.0
+      with:
+        path: .dart_tool/build
+        key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+        restore-keys: codegen-${{ runner.os }}-
+
+    - shell: bash
+      run: tool/prepare.sh

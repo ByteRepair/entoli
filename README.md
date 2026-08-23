@@ -19,14 +19,10 @@ tool/prepare.sh
 ```
 
 Fetches the packages and generates the sources that `freezed` and
-`json_serializable` produce. Those are not in the repository, so **nothing
-compiles until this has run** — an editor opened on a fresh clone shows an
-error on every file with a `part` directive. Run it again whenever a
-`@freezed` or `@JsonSerializable` type changes; it is idempotent and takes a
-few seconds when nothing moved.
-
-The CI runners call the same script, so there is one answer to "what does a
-build need" rather than one per workflow.
+`json_serializable` produce, which are not in the repository — so **no Dart
+target compiles until this has run**. Run it again after changing a `@freezed`
+or `@JsonSerializable` type. The first run is about a minute; later ones are a
+few seconds.
 
 ### Linux
 
