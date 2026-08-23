@@ -58,7 +58,7 @@ final class SecureChannel implements ByteChannel {
 
   Uint8List _nonce(int counter) {
     final nonce = Uint8List(12);
-    ByteData.view(nonce.buffer).setUint64(4, counter);
+    ByteData.sublistView(nonce).setUint64(4, counter);
     return nonce;
   }
 
@@ -72,7 +72,7 @@ final class SecureChannel implements ByteChannel {
     final mac = box.mac.bytes;
     final frame = Uint8List(5 + box.cipherText.length + mac.length);
     frame[0] = type;
-    ByteData.view(frame.buffer).setUint32(1, _sendCounter);
+    ByteData.sublistView(frame).setUint32(1, _sendCounter);
     frame.setAll(5, box.cipherText);
     frame.setAll(5 + box.cipherText.length, mac);
     _sendCounter++;
@@ -126,7 +126,13 @@ final class SecureChannel implements ByteChannel {
       throw const FrameFormatException("frame too short");
     }
     final type = frame[0];
-    final counter = ByteData.view(frame.buffer).getUint32(1);
+    // `sublistView` rather than `ByteData.view(frame.buffer)`: a frame off a
+    // real data channel is a view into a larger receive buffer, and reading
+    // through the buffer ignores where the view starts — so the header came
+    // out of whatever happened to be in front of it. A loopback channel hands
+    // back freshly allocated lists, which is why this only ever showed up
+    // over WebRTC.
+    final counter = ByteData.sublistView(frame).getUint32(1);
     if (counter != _recvCounter) {
       throw FrameFormatException("counter jumped: $counter != $_recvCounter");
     }

@@ -223,6 +223,32 @@ Do not reach for the memory filesystem to avoid all this. It was tried: sembast
 resolves through timers, not microtasks, so a widget test hangs on it exactly as
 it hangs on a disk. `runAsync` is the only answer.
 
+## The one test that needs an engine
+
+`integration_test/rtc_pairing_test.dart` is the WebRTC data channel, and it is
+outside `test/` because it cannot run there: `flutter_webrtc` is a native
+plugin, so a peer connection needs a real engine with the plugin registered
+and a `flutter test` on the Dart VM has neither. Run it by hand against a
+desktop:
+
+```sh
+toolbox run --container flutter-dev flutter test -d linux integration_test/rtc_pairing_test.dart
+```
+
+Both peers are in the one process, connected over loopback ICE, with the SDP
+handed across in memory — which rendezvous carried it is the signaling
+layer's business and has its own tests over real sockets
+(`lan_signaling_test.dart`, `relay_signaling_test.dart`). It proves nothing
+about NAT or TURN, and nothing running on one machine could.
+
+It earns its keep. Two bugs that every loopback test passed were sitting under
+it: the frame header was read through `frame.buffer`, which ignores where a
+view starts, so a frame off a real data channel had its counter read out of
+whatever was in front of it; and the hello exchange subscribed *after* it
+sent, so the reply — and the welcome behind it — fell into a gap that is a
+microtask on a loopback channel and a whole turn of the event loop on a real
+one.
+
 ## The live test
 
 `test/live/builtin_live.dart` drives a real provider through the production

@@ -1345,32 +1345,31 @@ class SyncHub {
         throw const HandshakeException("the codes did not match");
       }
 
-      await channel.sendJson({
-        "t": "hello",
-        "proto": SyncIdentity.protocolVersion,
-        "id": identity.id,
-        "name": deviceName,
-      });
-      final reply = await channel.jsonIncoming
-          .firstWhere((m) => m["t"] == "hello")
-          .timeout(const Duration(seconds: 15));
-      if (reply["proto"] != SyncIdentity.protocolVersion) {
-        throw HandshakeException("the other device runs protocol ${reply["proto"]}");
-      }
-
-      // The peer exists — and starts pumping — before anything below awaits.
-      // The channel's streams are broadcast, so a message arriving while
-      // nobody listens is dropped rather than buffered; everything either
-      // side sends from here on (welcome first) must already have its reader.
+      // Everything from here reads through one subscription, attached before
+      // a byte goes out. The channel's stream is broadcast, so anything
+      // arriving with no listener on it is dropped rather than queued — and
+      // the peer answers the hello below the instant it has ours, then sends
+      // its welcome straight after. Subscribing after the send, or awaiting
+      // anything between the reply and this listener, loses whichever of
+      // those two lands in the gap. On a loopback channel the gap is a
+      // microtask and nothing ever fell into it; over a real data channel
+      // messages arrive on their own turns of the event loop and both did.
       final deviceId = peer.id;
       final peerDevice = await registry.byId(deviceId);
       final live = _LivePeer(channel,
           deviceId: deviceId,
           deviceName: _nameOf(peerDevice, peer),
           onClose: () => _peerGone(deviceId));
+      final hello = Completer<Map<String, dynamic>>();
       live.handle = (message) => _dispatch(live, message);
       live.pump = channel.jsonIncoming.listen(
         (json) {
+          // The hello is not a [SyncMessage]: it is the version check either
+          // side runs before agreeing to speak the protocol at all.
+          if (!hello.isCompleted) {
+            if (json["t"] == "hello") hello.complete(json);
+            return;
+          }
           try {
             live.enqueue(SyncMessage.fromJson(json));
           } catch (_) {
@@ -1382,6 +1381,18 @@ class SyncHub {
         onError: (_) => unawaited(live.close()),
         onDone: () => unawaited(live.close()),
       );
+
+      await channel.sendJson({
+        "t": "hello",
+        "proto": SyncIdentity.protocolVersion,
+        "id": identity.id,
+        "name": deviceName,
+      });
+      final reply = await hello.future.timeout(const Duration(seconds: 15));
+      if (reply["proto"] != SyncIdentity.protocolVersion) {
+        throw HandshakeException(
+            "the other device runs protocol ${reply["proto"]}");
+      }
 
       var device = peerDevice;
       if (device == null) {

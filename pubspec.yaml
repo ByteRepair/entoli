@@ -93,6 +93,12 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+  # The WebRTC data channel is the one layer no VM test can reach: it is a
+  # native plugin, so it needs a real engine with the plugin registered.
+  # `integration_test/` is run by hand against a device — see test/CLAUDE.md.
+  integration_test:
+    sdk: flutter
+
   # Faking the webview: webview_flutter re-exports the creation params but not
   # the classes a fake implementation has to extend.
   webview_flutter_platform_interface: ^2.15.1

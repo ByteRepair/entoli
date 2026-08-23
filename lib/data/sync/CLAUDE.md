@@ -53,7 +53,10 @@ who speaks first.
     [type: 1 byte][counter: 4 bytes BE][AEAD(cleartext)]
 
 Counters are per-direction and monotonic — a replayed, reordered or spliced
-frame fails its MAC. The type byte (control or binary) is associated data, so
+frame fails its MAC. The header is read with `ByteData.sublistView(frame)`
+rather than through `frame.buffer`: a frame off a real data channel is a view
+into a larger receive buffer, and going through the buffer ignores where the
+view starts. The type byte (control or binary) is associated data, so
 a control message can never be mistaken for a resource chunk. `SecureChannel`
 exposes `sendJson` / `jsonIncoming` for the NDJSON control protocol and
 `sendBinary` for 16KB resource chunks.
@@ -243,6 +246,14 @@ driving it, and the local chat page draws it as a title line. Prompts arriving
 that nobody here typed are otherwise unexplained.
 
 ### Testing it
+
+One subscription is attached to the channel before the hello goes out, and
+the hello is read off it rather than through a second `firstWhere`. Both sides
+answer the moment they have the other's hello and send their welcome straight
+after, and the stream is broadcast — so subscribing after the send, or
+awaiting anything between the reply and the pump, drops whichever message
+lands in the gap. That gap is a microtask on a loopback channel and a turn of
+the event loop on a real one.
 
 `SyncHub.establishForTest` is the seam: it runs the shared tail of every route
 — handshake, codes-matched gate, hello, filing the peer — over a `ByteChannel`
