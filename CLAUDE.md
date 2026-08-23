@@ -34,14 +34,15 @@ named in a cross-reference is findable from this list.
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
-  layer, three rendezvous transports, the SyncHub, secrets at rest
+  layer, three rendezvous transports, the SyncHub, mirroring a chat, control
+  and driving a turn from the other end, secrets at rest
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, The app icon, The debug build's own
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
-  the user ran, The chat page
+  the user ran, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/CLAUDE.md` — Voice mode, What listens and what speaks, The
   Android system engines, Per side, not per session, The Kotlin, Where the
   models live, Hearing and speaking

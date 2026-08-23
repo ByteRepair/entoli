@@ -89,7 +89,9 @@ class TestApp {
   /// [remotes] is the Remotes section of the sidebar: chats mirrored from a
   /// paired device. Empty by default, which is every test with no sync in it —
   /// and load-bearing, because it is also what stands in for the [SyncHub]
-  /// nothing here builds. [mirrors] is what one of those chats reads as.
+  /// nothing here builds. [mirrors] is what one of those chats reads as, and
+  /// [control] whether this device is driving one. [drivenBy] is the other
+  /// direction: chats of this device a paired one is typing into.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -106,6 +108,8 @@ class TestApp {
     String? abi,
     List<RemoteChatEntry> remotes = const [],
     Map<String, ChatViewState> mirrors = const {},
+    Map<String, String> drivenBy = const {},
+    MirrorControl control = const MirrorControl(),
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -184,8 +188,11 @@ class TestApp {
           appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),
           remoteChatsProvider.overrideWith(() => FakeRemoteChats(remotes)),
+          drivenChatsProvider.overrideWith(() => FakeDrivenChats(drivenBy)),
           mirrorChatControllerProvider
               .overrideWith2((id) => FakeMirrorChat(id, mirrors)),
+          mirrorControlProvider
+              .overrideWith2((id) => FakeMirrorControl(id, control)),
         ],
       ),
     );

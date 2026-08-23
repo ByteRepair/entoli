@@ -18,6 +18,7 @@ import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
+import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
@@ -161,6 +162,10 @@ class AppSession {
     await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
+    // The same again for a chat being read, or typed into, from a paired
+    // device: it holds a controller open per watched chat so the turn is
+    // visible there, and runs a teleported prompt here.
+    container.read(remoteTurnDriverProvider);
     // Read once to set going, like the keep-alive above: it wires itself to the
     // settings and drives the prefill from there.
     container.read(localPrefillTriggerProvider);

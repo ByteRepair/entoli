@@ -73,18 +73,30 @@ void main() {
         equals(const SyncMessage.resourceChunk(id: "r0", bytesB64: "")));
   });
 
-  test("phase 3 arms are declared and travel too", () {
+  test("the control arms travel too", () {
     roundTrips(const SyncMessage.controlState(chatId: "c1"));
+    roundTrips(const SyncMessage.controlState(chatId: "c1", holder: "d1"));
     roundTrips(const SyncMessage.controlRequest(chatId: "c1"));
     roundTrips(const SyncMessage.controlGrant(chatId: "c1", granted: true));
     roundTrips(const SyncMessage.controlRelease(chatId: "c1"));
-    roundTrips(const SyncMessage.turnStarted(chatId: "c1"));
-    roundTrips(const SyncMessage.turnEnded(chatId: "c1"));
     roundTrips(const SyncMessage.promptSend(chatId: "c1", text: "hi"));
     roundTrips(const SyncMessage.approvalRespond(
         chatId: "c1", approvalId: "a", allow: false));
     roundTrips(const SyncMessage.questionsRespond(
         chatId: "c1", requestId: "q", answers: [null]));
     roundTrips(const SyncMessage.turnAbort(chatId: "c1"));
+    roundTrips(const SyncMessage.turnResume(chatId: "c1"));
+  });
+
+  test("a turn's pending work travels whole", () {
+    roundTrips(const SyncMessage.turnState(chatId: "c1"));
+    roundTrips(const SyncMessage.turnState(
+      chatId: "c1",
+      running: true,
+      approvals: [ToolApproval(id: "a1", toolName: "bash", argumentsText: "ls")],
+      asks: [SyncAsk(id: "q1", argumentsJson: '{"question":"which?"}')],
+      status: "Thinking",
+      retry: "attempt 2",
+    ));
   });
 }

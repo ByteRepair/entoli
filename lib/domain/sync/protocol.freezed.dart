@@ -83,12 +83,8 @@ SyncMessage _$SyncMessageFromJson(
           return SyncControlRelease.fromJson(
             json
           );
-                case 'turnStarted':
-          return SyncTurnStarted.fromJson(
-            json
-          );
-                case 'turnEnded':
-          return SyncTurnEnded.fromJson(
+                case 'turnState':
+          return SyncTurnState.fromJson(
             json
           );
                 case 'promptSend':
@@ -105,6 +101,10 @@ SyncMessage _$SyncMessageFromJson(
           );
                 case 'turnAbort':
           return SyncTurnAbort.fromJson(
+            json
+          );
+                case 'turnResume':
+          return SyncTurnResume.fromJson(
             json
           );
         
@@ -165,7 +165,7 @@ extension SyncMessagePatterns on SyncMessage {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( SyncWelcome value)?  welcome,TResult Function( SyncChatsChanged value)?  chatsChanged,TResult Function( SyncChatOpen value)?  chatOpen,TResult Function( SyncChatSnapshot value)?  chatSnapshot,TResult Function( SyncRecordAppend value)?  recordAppend,TResult Function( SyncStateDiff value)?  stateDiff,TResult Function( SyncMetaPatch value)?  metaPatch,TResult Function( SyncChatDeleted value)?  chatDeleted,TResult Function( SyncChatMoved value)?  chatMoved,TResult Function( SyncResourceRequest value)?  resourceRequest,TResult Function( SyncResourceChunk value)?  resourceChunk,TResult Function( SyncPing value)?  ping,TResult Function( SyncPong value)?  pong,TResult Function( SyncControlState value)?  controlState,TResult Function( SyncControlRequest value)?  controlRequest,TResult Function( SyncControlGrant value)?  controlGrant,TResult Function( SyncControlRelease value)?  controlRelease,TResult Function( SyncTurnStarted value)?  turnStarted,TResult Function( SyncTurnEnded value)?  turnEnded,TResult Function( SyncPromptSend value)?  promptSend,TResult Function( SyncApprovalRespond value)?  approvalRespond,TResult Function( SyncQuestionsRespond value)?  questionsRespond,TResult Function( SyncTurnAbort value)?  turnAbort,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( SyncWelcome value)?  welcome,TResult Function( SyncChatsChanged value)?  chatsChanged,TResult Function( SyncChatOpen value)?  chatOpen,TResult Function( SyncChatSnapshot value)?  chatSnapshot,TResult Function( SyncRecordAppend value)?  recordAppend,TResult Function( SyncStateDiff value)?  stateDiff,TResult Function( SyncMetaPatch value)?  metaPatch,TResult Function( SyncChatDeleted value)?  chatDeleted,TResult Function( SyncChatMoved value)?  chatMoved,TResult Function( SyncResourceRequest value)?  resourceRequest,TResult Function( SyncResourceChunk value)?  resourceChunk,TResult Function( SyncPing value)?  ping,TResult Function( SyncPong value)?  pong,TResult Function( SyncControlState value)?  controlState,TResult Function( SyncControlRequest value)?  controlRequest,TResult Function( SyncControlGrant value)?  controlGrant,TResult Function( SyncControlRelease value)?  controlRelease,TResult Function( SyncTurnState value)?  turnState,TResult Function( SyncPromptSend value)?  promptSend,TResult Function( SyncApprovalRespond value)?  approvalRespond,TResult Function( SyncQuestionsRespond value)?  questionsRespond,TResult Function( SyncTurnAbort value)?  turnAbort,TResult Function( SyncTurnResume value)?  turnResume,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case SyncWelcome() when welcome != null:
@@ -185,13 +185,13 @@ return pong(_that);case SyncControlState() when controlState != null:
 return controlState(_that);case SyncControlRequest() when controlRequest != null:
 return controlRequest(_that);case SyncControlGrant() when controlGrant != null:
 return controlGrant(_that);case SyncControlRelease() when controlRelease != null:
-return controlRelease(_that);case SyncTurnStarted() when turnStarted != null:
-return turnStarted(_that);case SyncTurnEnded() when turnEnded != null:
-return turnEnded(_that);case SyncPromptSend() when promptSend != null:
+return controlRelease(_that);case SyncTurnState() when turnState != null:
+return turnState(_that);case SyncPromptSend() when promptSend != null:
 return promptSend(_that);case SyncApprovalRespond() when approvalRespond != null:
 return approvalRespond(_that);case SyncQuestionsRespond() when questionsRespond != null:
 return questionsRespond(_that);case SyncTurnAbort() when turnAbort != null:
-return turnAbort(_that);case _:
+return turnAbort(_that);case SyncTurnResume() when turnResume != null:
+return turnResume(_that);case _:
   return orElse();
 
 }
@@ -209,7 +209,7 @@ return turnAbort(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( SyncWelcome value)  welcome,required TResult Function( SyncChatsChanged value)  chatsChanged,required TResult Function( SyncChatOpen value)  chatOpen,required TResult Function( SyncChatSnapshot value)  chatSnapshot,required TResult Function( SyncRecordAppend value)  recordAppend,required TResult Function( SyncStateDiff value)  stateDiff,required TResult Function( SyncMetaPatch value)  metaPatch,required TResult Function( SyncChatDeleted value)  chatDeleted,required TResult Function( SyncChatMoved value)  chatMoved,required TResult Function( SyncResourceRequest value)  resourceRequest,required TResult Function( SyncResourceChunk value)  resourceChunk,required TResult Function( SyncPing value)  ping,required TResult Function( SyncPong value)  pong,required TResult Function( SyncControlState value)  controlState,required TResult Function( SyncControlRequest value)  controlRequest,required TResult Function( SyncControlGrant value)  controlGrant,required TResult Function( SyncControlRelease value)  controlRelease,required TResult Function( SyncTurnStarted value)  turnStarted,required TResult Function( SyncTurnEnded value)  turnEnded,required TResult Function( SyncPromptSend value)  promptSend,required TResult Function( SyncApprovalRespond value)  approvalRespond,required TResult Function( SyncQuestionsRespond value)  questionsRespond,required TResult Function( SyncTurnAbort value)  turnAbort,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( SyncWelcome value)  welcome,required TResult Function( SyncChatsChanged value)  chatsChanged,required TResult Function( SyncChatOpen value)  chatOpen,required TResult Function( SyncChatSnapshot value)  chatSnapshot,required TResult Function( SyncRecordAppend value)  recordAppend,required TResult Function( SyncStateDiff value)  stateDiff,required TResult Function( SyncMetaPatch value)  metaPatch,required TResult Function( SyncChatDeleted value)  chatDeleted,required TResult Function( SyncChatMoved value)  chatMoved,required TResult Function( SyncResourceRequest value)  resourceRequest,required TResult Function( SyncResourceChunk value)  resourceChunk,required TResult Function( SyncPing value)  ping,required TResult Function( SyncPong value)  pong,required TResult Function( SyncControlState value)  controlState,required TResult Function( SyncControlRequest value)  controlRequest,required TResult Function( SyncControlGrant value)  controlGrant,required TResult Function( SyncControlRelease value)  controlRelease,required TResult Function( SyncTurnState value)  turnState,required TResult Function( SyncPromptSend value)  promptSend,required TResult Function( SyncApprovalRespond value)  approvalRespond,required TResult Function( SyncQuestionsRespond value)  questionsRespond,required TResult Function( SyncTurnAbort value)  turnAbort,required TResult Function( SyncTurnResume value)  turnResume,}){
 final _that = this;
 switch (_that) {
 case SyncWelcome():
@@ -229,13 +229,13 @@ return pong(_that);case SyncControlState():
 return controlState(_that);case SyncControlRequest():
 return controlRequest(_that);case SyncControlGrant():
 return controlGrant(_that);case SyncControlRelease():
-return controlRelease(_that);case SyncTurnStarted():
-return turnStarted(_that);case SyncTurnEnded():
-return turnEnded(_that);case SyncPromptSend():
+return controlRelease(_that);case SyncTurnState():
+return turnState(_that);case SyncPromptSend():
 return promptSend(_that);case SyncApprovalRespond():
 return approvalRespond(_that);case SyncQuestionsRespond():
 return questionsRespond(_that);case SyncTurnAbort():
-return turnAbort(_that);}
+return turnAbort(_that);case SyncTurnResume():
+return turnResume(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -249,7 +249,7 @@ return turnAbort(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( SyncWelcome value)?  welcome,TResult? Function( SyncChatsChanged value)?  chatsChanged,TResult? Function( SyncChatOpen value)?  chatOpen,TResult? Function( SyncChatSnapshot value)?  chatSnapshot,TResult? Function( SyncRecordAppend value)?  recordAppend,TResult? Function( SyncStateDiff value)?  stateDiff,TResult? Function( SyncMetaPatch value)?  metaPatch,TResult? Function( SyncChatDeleted value)?  chatDeleted,TResult? Function( SyncChatMoved value)?  chatMoved,TResult? Function( SyncResourceRequest value)?  resourceRequest,TResult? Function( SyncResourceChunk value)?  resourceChunk,TResult? Function( SyncPing value)?  ping,TResult? Function( SyncPong value)?  pong,TResult? Function( SyncControlState value)?  controlState,TResult? Function( SyncControlRequest value)?  controlRequest,TResult? Function( SyncControlGrant value)?  controlGrant,TResult? Function( SyncControlRelease value)?  controlRelease,TResult? Function( SyncTurnStarted value)?  turnStarted,TResult? Function( SyncTurnEnded value)?  turnEnded,TResult? Function( SyncPromptSend value)?  promptSend,TResult? Function( SyncApprovalRespond value)?  approvalRespond,TResult? Function( SyncQuestionsRespond value)?  questionsRespond,TResult? Function( SyncTurnAbort value)?  turnAbort,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( SyncWelcome value)?  welcome,TResult? Function( SyncChatsChanged value)?  chatsChanged,TResult? Function( SyncChatOpen value)?  chatOpen,TResult? Function( SyncChatSnapshot value)?  chatSnapshot,TResult? Function( SyncRecordAppend value)?  recordAppend,TResult? Function( SyncStateDiff value)?  stateDiff,TResult? Function( SyncMetaPatch value)?  metaPatch,TResult? Function( SyncChatDeleted value)?  chatDeleted,TResult? Function( SyncChatMoved value)?  chatMoved,TResult? Function( SyncResourceRequest value)?  resourceRequest,TResult? Function( SyncResourceChunk value)?  resourceChunk,TResult? Function( SyncPing value)?  ping,TResult? Function( SyncPong value)?  pong,TResult? Function( SyncControlState value)?  controlState,TResult? Function( SyncControlRequest value)?  controlRequest,TResult? Function( SyncControlGrant value)?  controlGrant,TResult? Function( SyncControlRelease value)?  controlRelease,TResult? Function( SyncTurnState value)?  turnState,TResult? Function( SyncPromptSend value)?  promptSend,TResult? Function( SyncApprovalRespond value)?  approvalRespond,TResult? Function( SyncQuestionsRespond value)?  questionsRespond,TResult? Function( SyncTurnAbort value)?  turnAbort,TResult? Function( SyncTurnResume value)?  turnResume,}){
 final _that = this;
 switch (_that) {
 case SyncWelcome() when welcome != null:
@@ -269,13 +269,13 @@ return pong(_that);case SyncControlState() when controlState != null:
 return controlState(_that);case SyncControlRequest() when controlRequest != null:
 return controlRequest(_that);case SyncControlGrant() when controlGrant != null:
 return controlGrant(_that);case SyncControlRelease() when controlRelease != null:
-return controlRelease(_that);case SyncTurnStarted() when turnStarted != null:
-return turnStarted(_that);case SyncTurnEnded() when turnEnded != null:
-return turnEnded(_that);case SyncPromptSend() when promptSend != null:
+return controlRelease(_that);case SyncTurnState() when turnState != null:
+return turnState(_that);case SyncPromptSend() when promptSend != null:
 return promptSend(_that);case SyncApprovalRespond() when approvalRespond != null:
 return approvalRespond(_that);case SyncQuestionsRespond() when questionsRespond != null:
 return questionsRespond(_that);case SyncTurnAbort() when turnAbort != null:
-return turnAbort(_that);case _:
+return turnAbort(_that);case SyncTurnResume() when turnResume != null:
+return turnResume(_that);case _:
   return null;
 
 }
@@ -292,7 +292,7 @@ return turnAbort(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( List<ChatState> chats,  int proto)?  welcome,TResult Function( List<ChatState> chats)?  chatsChanged,TResult Function( String chatId,  int fromLine)?  chatOpen,TResult Function( String chatId,  ChatState state,  ChatMeta meta,  List<ChatRecord> records,  int totalLines)?  chatSnapshot,TResult Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult Function( String chatId,  ChatState state)?  stateDiff,TResult Function( String chatId,  ChatMeta meta)?  metaPatch,TResult Function( String chatId)?  chatDeleted,TResult Function( String chatId,  String? project)?  chatMoved,TResult Function( String id,  String chatId,  String resource)?  resourceRequest,TResult Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult Function()?  ping,TResult Function()?  pong,TResult Function( String chatId,  String? holder)?  controlState,TResult Function( String chatId)?  controlRequest,TResult Function( String chatId,  bool granted)?  controlGrant,TResult Function( String chatId)?  controlRelease,TResult Function( String chatId)?  turnStarted,TResult Function( String chatId)?  turnEnded,TResult Function( String chatId,  String text)?  promptSend,TResult Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult Function( String chatId)?  turnAbort,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( List<ChatState> chats,  int proto)?  welcome,TResult Function( List<ChatState> chats)?  chatsChanged,TResult Function( String chatId,  int fromLine)?  chatOpen,TResult Function( String chatId,  ChatState state,  ChatMeta meta,  List<ChatRecord> records,  int totalLines)?  chatSnapshot,TResult Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult Function( String chatId,  ChatState state)?  stateDiff,TResult Function( String chatId,  ChatMeta meta)?  metaPatch,TResult Function( String chatId)?  chatDeleted,TResult Function( String chatId,  String? project)?  chatMoved,TResult Function( String id,  String chatId,  String resource)?  resourceRequest,TResult Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult Function()?  ping,TResult Function()?  pong,TResult Function( String chatId,  String? holder)?  controlState,TResult Function( String chatId)?  controlRequest,TResult Function( String chatId,  bool granted)?  controlGrant,TResult Function( String chatId)?  controlRelease,TResult Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)?  turnState,TResult Function( String chatId,  String text)?  promptSend,TResult Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult Function( String chatId)?  turnAbort,TResult Function( String chatId)?  turnResume,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case SyncWelcome() when welcome != null:
 return welcome(_that.chats,_that.proto);case SyncChatsChanged() when chatsChanged != null:
@@ -311,13 +311,13 @@ return pong();case SyncControlState() when controlState != null:
 return controlState(_that.chatId,_that.holder);case SyncControlRequest() when controlRequest != null:
 return controlRequest(_that.chatId);case SyncControlGrant() when controlGrant != null:
 return controlGrant(_that.chatId,_that.granted);case SyncControlRelease() when controlRelease != null:
-return controlRelease(_that.chatId);case SyncTurnStarted() when turnStarted != null:
-return turnStarted(_that.chatId);case SyncTurnEnded() when turnEnded != null:
-return turnEnded(_that.chatId);case SyncPromptSend() when promptSend != null:
+return controlRelease(_that.chatId);case SyncTurnState() when turnState != null:
+return turnState(_that.chatId,_that.running,_that.approvals,_that.asks,_that.status,_that.retry);case SyncPromptSend() when promptSend != null:
 return promptSend(_that.chatId,_that.text);case SyncApprovalRespond() when approvalRespond != null:
 return approvalRespond(_that.chatId,_that.approvalId,_that.allow);case SyncQuestionsRespond() when questionsRespond != null:
 return questionsRespond(_that.chatId,_that.requestId,_that.answers);case SyncTurnAbort() when turnAbort != null:
-return turnAbort(_that.chatId);case _:
+return turnAbort(_that.chatId);case SyncTurnResume() when turnResume != null:
+return turnResume(_that.chatId);case _:
   return orElse();
 
 }
@@ -335,7 +335,7 @@ return turnAbort(_that.chatId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( List<ChatState> chats,  int proto)  welcome,required TResult Function( List<ChatState> chats)  chatsChanged,required TResult Function( String chatId,  int fromLine)  chatOpen,required TResult Function( String chatId,  ChatState state,  ChatMeta meta,  List<ChatRecord> records,  int totalLines)  chatSnapshot,required TResult Function( String chatId,  List<ChatRecord> records)  recordAppend,required TResult Function( String chatId,  ChatState state)  stateDiff,required TResult Function( String chatId,  ChatMeta meta)  metaPatch,required TResult Function( String chatId)  chatDeleted,required TResult Function( String chatId,  String? project)  chatMoved,required TResult Function( String id,  String chatId,  String resource)  resourceRequest,required TResult Function( String id,  String bytesB64,  bool done)  resourceChunk,required TResult Function()  ping,required TResult Function()  pong,required TResult Function( String chatId,  String? holder)  controlState,required TResult Function( String chatId)  controlRequest,required TResult Function( String chatId,  bool granted)  controlGrant,required TResult Function( String chatId)  controlRelease,required TResult Function( String chatId)  turnStarted,required TResult Function( String chatId)  turnEnded,required TResult Function( String chatId,  String text)  promptSend,required TResult Function( String chatId,  String approvalId,  bool allow)  approvalRespond,required TResult Function( String chatId,  String requestId,  List<String?> answers)  questionsRespond,required TResult Function( String chatId)  turnAbort,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( List<ChatState> chats,  int proto)  welcome,required TResult Function( List<ChatState> chats)  chatsChanged,required TResult Function( String chatId,  int fromLine)  chatOpen,required TResult Function( String chatId,  ChatState state,  ChatMeta meta,  List<ChatRecord> records,  int totalLines)  chatSnapshot,required TResult Function( String chatId,  List<ChatRecord> records)  recordAppend,required TResult Function( String chatId,  ChatState state)  stateDiff,required TResult Function( String chatId,  ChatMeta meta)  metaPatch,required TResult Function( String chatId)  chatDeleted,required TResult Function( String chatId,  String? project)  chatMoved,required TResult Function( String id,  String chatId,  String resource)  resourceRequest,required TResult Function( String id,  String bytesB64,  bool done)  resourceChunk,required TResult Function()  ping,required TResult Function()  pong,required TResult Function( String chatId,  String? holder)  controlState,required TResult Function( String chatId)  controlRequest,required TResult Function( String chatId,  bool granted)  controlGrant,required TResult Function( String chatId)  controlRelease,required TResult Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)  turnState,required TResult Function( String chatId,  String text)  promptSend,required TResult Function( String chatId,  String approvalId,  bool allow)  approvalRespond,required TResult Function( String chatId,  String requestId,  List<String?> answers)  questionsRespond,required TResult Function( String chatId)  turnAbort,required TResult Function( String chatId)  turnResume,}) {final _that = this;
 switch (_that) {
 case SyncWelcome():
 return welcome(_that.chats,_that.proto);case SyncChatsChanged():
@@ -354,13 +354,13 @@ return pong();case SyncControlState():
 return controlState(_that.chatId,_that.holder);case SyncControlRequest():
 return controlRequest(_that.chatId);case SyncControlGrant():
 return controlGrant(_that.chatId,_that.granted);case SyncControlRelease():
-return controlRelease(_that.chatId);case SyncTurnStarted():
-return turnStarted(_that.chatId);case SyncTurnEnded():
-return turnEnded(_that.chatId);case SyncPromptSend():
+return controlRelease(_that.chatId);case SyncTurnState():
+return turnState(_that.chatId,_that.running,_that.approvals,_that.asks,_that.status,_that.retry);case SyncPromptSend():
 return promptSend(_that.chatId,_that.text);case SyncApprovalRespond():
 return approvalRespond(_that.chatId,_that.approvalId,_that.allow);case SyncQuestionsRespond():
 return questionsRespond(_that.chatId,_that.requestId,_that.answers);case SyncTurnAbort():
-return turnAbort(_that.chatId);}
+return turnAbort(_that.chatId);case SyncTurnResume():
+return turnResume(_that.chatId);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -374,7 +374,7 @@ return turnAbort(_that.chatId);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( List<ChatState> chats,  int proto)?  welcome,TResult? Function( List<ChatState> chats)?  chatsChanged,TResult? Function( String chatId,  int fromLine)?  chatOpen,TResult? Function( String chatId,  ChatState state,  ChatMeta meta,  List<ChatRecord> records,  int totalLines)?  chatSnapshot,TResult? Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult? Function( String chatId,  ChatState state)?  stateDiff,TResult? Function( String chatId,  ChatMeta meta)?  metaPatch,TResult? Function( String chatId)?  chatDeleted,TResult? Function( String chatId,  String? project)?  chatMoved,TResult? Function( String id,  String chatId,  String resource)?  resourceRequest,TResult? Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult? Function()?  ping,TResult? Function()?  pong,TResult? Function( String chatId,  String? holder)?  controlState,TResult? Function( String chatId)?  controlRequest,TResult? Function( String chatId,  bool granted)?  controlGrant,TResult? Function( String chatId)?  controlRelease,TResult? Function( String chatId)?  turnStarted,TResult? Function( String chatId)?  turnEnded,TResult? Function( String chatId,  String text)?  promptSend,TResult? Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult? Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult? Function( String chatId)?  turnAbort,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( List<ChatState> chats,  int proto)?  welcome,TResult? Function( List<ChatState> chats)?  chatsChanged,TResult? Function( String chatId,  int fromLine)?  chatOpen,TResult? Function( String chatId,  ChatState state,  ChatMeta meta,  List<ChatRecord> records,  int totalLines)?  chatSnapshot,TResult? Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult? Function( String chatId,  ChatState state)?  stateDiff,TResult? Function( String chatId,  ChatMeta meta)?  metaPatch,TResult? Function( String chatId)?  chatDeleted,TResult? Function( String chatId,  String? project)?  chatMoved,TResult? Function( String id,  String chatId,  String resource)?  resourceRequest,TResult? Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult? Function()?  ping,TResult? Function()?  pong,TResult? Function( String chatId,  String? holder)?  controlState,TResult? Function( String chatId)?  controlRequest,TResult? Function( String chatId,  bool granted)?  controlGrant,TResult? Function( String chatId)?  controlRelease,TResult? Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)?  turnState,TResult? Function( String chatId,  String text)?  promptSend,TResult? Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult? Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult? Function( String chatId)?  turnAbort,TResult? Function( String chatId)?  turnResume,}) {final _that = this;
 switch (_that) {
 case SyncWelcome() when welcome != null:
 return welcome(_that.chats,_that.proto);case SyncChatsChanged() when chatsChanged != null:
@@ -393,13 +393,13 @@ return pong();case SyncControlState() when controlState != null:
 return controlState(_that.chatId,_that.holder);case SyncControlRequest() when controlRequest != null:
 return controlRequest(_that.chatId);case SyncControlGrant() when controlGrant != null:
 return controlGrant(_that.chatId,_that.granted);case SyncControlRelease() when controlRelease != null:
-return controlRelease(_that.chatId);case SyncTurnStarted() when turnStarted != null:
-return turnStarted(_that.chatId);case SyncTurnEnded() when turnEnded != null:
-return turnEnded(_that.chatId);case SyncPromptSend() when promptSend != null:
+return controlRelease(_that.chatId);case SyncTurnState() when turnState != null:
+return turnState(_that.chatId,_that.running,_that.approvals,_that.asks,_that.status,_that.retry);case SyncPromptSend() when promptSend != null:
 return promptSend(_that.chatId,_that.text);case SyncApprovalRespond() when approvalRespond != null:
 return approvalRespond(_that.chatId,_that.approvalId,_that.allow);case SyncQuestionsRespond() when questionsRespond != null:
 return questionsRespond(_that.chatId,_that.requestId,_that.answers);case SyncTurnAbort() when turnAbort != null:
-return turnAbort(_that.chatId);case _:
+return turnAbort(_that.chatId);case SyncTurnResume() when turnResume != null:
+return turnResume(_that.chatId);case _:
   return null;
 
 }
@@ -1657,11 +1657,28 @@ as String,
 /// @nodoc
 @JsonSerializable()
 
-class SyncTurnStarted implements SyncMessage {
-  const SyncTurnStarted({required this.chatId, final  String? $type}): $type = $type ?? 'turnStarted';
-  factory SyncTurnStarted.fromJson(Map<String, dynamic> json) => _$SyncTurnStartedFromJson(json);
+class SyncTurnState implements SyncMessage {
+  const SyncTurnState({required this.chatId, this.running = false, final  List<ToolApproval> approvals = const <ToolApproval>[], final  List<SyncAsk> asks = const <SyncAsk>[], this.status, this.retry, final  String? $type}): _approvals = approvals,_asks = asks,$type = $type ?? 'turnState';
+  factory SyncTurnState.fromJson(Map<String, dynamic> json) => _$SyncTurnStateFromJson(json);
 
  final  String chatId;
+@JsonKey() final  bool running;
+ final  List<ToolApproval> _approvals;
+@JsonKey() List<ToolApproval> get approvals {
+  if (_approvals is EqualUnmodifiableListView) return _approvals;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_approvals);
+}
+
+ final  List<SyncAsk> _asks;
+@JsonKey() List<SyncAsk> get asks {
+  if (_asks is EqualUnmodifiableListView) return _asks;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_asks);
+}
+
+ final  String? status;
+ final  String? retry;
 
 @JsonKey(name: 'runtimeType')
 final String $type;
@@ -1671,36 +1688,36 @@ final String $type;
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
-$SyncTurnStartedCopyWith<SyncTurnStarted> get copyWith => _$SyncTurnStartedCopyWithImpl<SyncTurnStarted>(this, _$identity);
+$SyncTurnStateCopyWith<SyncTurnState> get copyWith => _$SyncTurnStateCopyWithImpl<SyncTurnState>(this, _$identity);
 
 @override
 Map<String, dynamic> toJson() {
-  return _$SyncTurnStartedToJson(this, );
+  return _$SyncTurnStateToJson(this, );
 }
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SyncTurnStarted&&(identical(other.chatId, chatId) || other.chatId == chatId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SyncTurnState&&(identical(other.chatId, chatId) || other.chatId == chatId)&&(identical(other.running, running) || other.running == running)&&const DeepCollectionEquality().equals(other._approvals, _approvals)&&const DeepCollectionEquality().equals(other._asks, _asks)&&(identical(other.status, status) || other.status == status)&&(identical(other.retry, retry) || other.retry == retry));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,chatId);
+int get hashCode => Object.hash(runtimeType,chatId,running,const DeepCollectionEquality().hash(_approvals),const DeepCollectionEquality().hash(_asks),status,retry);
 
 @override
 String toString() {
-  return 'SyncMessage.turnStarted(chatId: $chatId)';
+  return 'SyncMessage.turnState(chatId: $chatId, running: $running, approvals: $approvals, asks: $asks, status: $status, retry: $retry)';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class $SyncTurnStartedCopyWith<$Res> implements $SyncMessageCopyWith<$Res> {
-  factory $SyncTurnStartedCopyWith(SyncTurnStarted value, $Res Function(SyncTurnStarted) _then) = _$SyncTurnStartedCopyWithImpl;
+abstract mixin class $SyncTurnStateCopyWith<$Res> implements $SyncMessageCopyWith<$Res> {
+  factory $SyncTurnStateCopyWith(SyncTurnState value, $Res Function(SyncTurnState) _then) = _$SyncTurnStateCopyWithImpl;
 @useResult
 $Res call({
- String chatId
+ String chatId, bool running, List<ToolApproval> approvals, List<SyncAsk> asks, String? status, String? retry
 });
 
 
@@ -1708,92 +1725,24 @@ $Res call({
 
 }
 /// @nodoc
-class _$SyncTurnStartedCopyWithImpl<$Res>
-    implements $SyncTurnStartedCopyWith<$Res> {
-  _$SyncTurnStartedCopyWithImpl(this._self, this._then);
+class _$SyncTurnStateCopyWithImpl<$Res>
+    implements $SyncTurnStateCopyWith<$Res> {
+  _$SyncTurnStateCopyWithImpl(this._self, this._then);
 
-  final SyncTurnStarted _self;
-  final $Res Function(SyncTurnStarted) _then;
+  final SyncTurnState _self;
+  final $Res Function(SyncTurnState) _then;
 
 /// Create a copy of SyncMessage
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? chatId = null,}) {
-  return _then(SyncTurnStarted(
+@pragma('vm:prefer-inline') $Res call({Object? chatId = null,Object? running = null,Object? approvals = null,Object? asks = null,Object? status = freezed,Object? retry = freezed,}) {
+  return _then(SyncTurnState(
 chatId: null == chatId ? _self.chatId : chatId // ignore: cast_nullable_to_non_nullable
-as String,
-  ));
-}
-
-
-}
-
-/// @nodoc
-@JsonSerializable()
-
-class SyncTurnEnded implements SyncMessage {
-  const SyncTurnEnded({required this.chatId, final  String? $type}): $type = $type ?? 'turnEnded';
-  factory SyncTurnEnded.fromJson(Map<String, dynamic> json) => _$SyncTurnEndedFromJson(json);
-
- final  String chatId;
-
-@JsonKey(name: 'runtimeType')
-final String $type;
-
-
-/// Create a copy of SyncMessage
-/// with the given fields replaced by the non-null parameter values.
-@JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-$SyncTurnEndedCopyWith<SyncTurnEnded> get copyWith => _$SyncTurnEndedCopyWithImpl<SyncTurnEnded>(this, _$identity);
-
-@override
-Map<String, dynamic> toJson() {
-  return _$SyncTurnEndedToJson(this, );
-}
-
-@override
-bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SyncTurnEnded&&(identical(other.chatId, chatId) || other.chatId == chatId));
-}
-
-@JsonKey(includeFromJson: false, includeToJson: false)
-@override
-int get hashCode => Object.hash(runtimeType,chatId);
-
-@override
-String toString() {
-  return 'SyncMessage.turnEnded(chatId: $chatId)';
-}
-
-
-}
-
-/// @nodoc
-abstract mixin class $SyncTurnEndedCopyWith<$Res> implements $SyncMessageCopyWith<$Res> {
-  factory $SyncTurnEndedCopyWith(SyncTurnEnded value, $Res Function(SyncTurnEnded) _then) = _$SyncTurnEndedCopyWithImpl;
-@useResult
-$Res call({
- String chatId
-});
-
-
-
-
-}
-/// @nodoc
-class _$SyncTurnEndedCopyWithImpl<$Res>
-    implements $SyncTurnEndedCopyWith<$Res> {
-  _$SyncTurnEndedCopyWithImpl(this._self, this._then);
-
-  final SyncTurnEnded _self;
-  final $Res Function(SyncTurnEnded) _then;
-
-/// Create a copy of SyncMessage
-/// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? chatId = null,}) {
-  return _then(SyncTurnEnded(
-chatId: null == chatId ? _self.chatId : chatId // ignore: cast_nullable_to_non_nullable
-as String,
+as String,running: null == running ? _self.running : running // ignore: cast_nullable_to_non_nullable
+as bool,approvals: null == approvals ? _self._approvals : approvals // ignore: cast_nullable_to_non_nullable
+as List<ToolApproval>,asks: null == asks ? _self._asks : asks // ignore: cast_nullable_to_non_nullable
+as List<SyncAsk>,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
+as String?,retry: freezed == retry ? _self.retry : retry // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -2102,6 +2051,345 @@ class _$SyncTurnAbortCopyWithImpl<$Res>
   return _then(SyncTurnAbort(
 chatId: null == chatId ? _self.chatId : chatId // ignore: cast_nullable_to_non_nullable
 as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class SyncTurnResume implements SyncMessage {
+  const SyncTurnResume({required this.chatId, final  String? $type}): $type = $type ?? 'turnResume';
+  factory SyncTurnResume.fromJson(Map<String, dynamic> json) => _$SyncTurnResumeFromJson(json);
+
+ final  String chatId;
+
+@JsonKey(name: 'runtimeType')
+final String $type;
+
+
+/// Create a copy of SyncMessage
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$SyncTurnResumeCopyWith<SyncTurnResume> get copyWith => _$SyncTurnResumeCopyWithImpl<SyncTurnResume>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$SyncTurnResumeToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SyncTurnResume&&(identical(other.chatId, chatId) || other.chatId == chatId));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,chatId);
+
+@override
+String toString() {
+  return 'SyncMessage.turnResume(chatId: $chatId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $SyncTurnResumeCopyWith<$Res> implements $SyncMessageCopyWith<$Res> {
+  factory $SyncTurnResumeCopyWith(SyncTurnResume value, $Res Function(SyncTurnResume) _then) = _$SyncTurnResumeCopyWithImpl;
+@useResult
+$Res call({
+ String chatId
+});
+
+
+
+
+}
+/// @nodoc
+class _$SyncTurnResumeCopyWithImpl<$Res>
+    implements $SyncTurnResumeCopyWith<$Res> {
+  _$SyncTurnResumeCopyWithImpl(this._self, this._then);
+
+  final SyncTurnResume _self;
+  final $Res Function(SyncTurnResume) _then;
+
+/// Create a copy of SyncMessage
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? chatId = null,}) {
+  return _then(SyncTurnResume(
+chatId: null == chatId ? _self.chatId : chatId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$SyncAsk {
+
+ String get id; String? get argumentsJson;
+/// Create a copy of SyncAsk
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$SyncAskCopyWith<SyncAsk> get copyWith => _$SyncAskCopyWithImpl<SyncAsk>(this as SyncAsk, _$identity);
+
+  /// Serializes this SyncAsk to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SyncAsk&&(identical(other.id, id) || other.id == id)&&(identical(other.argumentsJson, argumentsJson) || other.argumentsJson == argumentsJson));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,argumentsJson);
+
+@override
+String toString() {
+  return 'SyncAsk(id: $id, argumentsJson: $argumentsJson)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $SyncAskCopyWith<$Res>  {
+  factory $SyncAskCopyWith(SyncAsk value, $Res Function(SyncAsk) _then) = _$SyncAskCopyWithImpl;
+@useResult
+$Res call({
+ String id, String? argumentsJson
+});
+
+
+
+
+}
+/// @nodoc
+class _$SyncAskCopyWithImpl<$Res>
+    implements $SyncAskCopyWith<$Res> {
+  _$SyncAskCopyWithImpl(this._self, this._then);
+
+  final SyncAsk _self;
+  final $Res Function(SyncAsk) _then;
+
+/// Create a copy of SyncAsk
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? argumentsJson = freezed,}) {
+  return _then(_self.copyWith(
+id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String,argumentsJson: freezed == argumentsJson ? _self.argumentsJson : argumentsJson // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [SyncAsk].
+extension SyncAskPatterns on SyncAsk {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _SyncAsk value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _SyncAsk() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _SyncAsk value)  $default,){
+final _that = this;
+switch (_that) {
+case _SyncAsk():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _SyncAsk value)?  $default,){
+final _that = this;
+switch (_that) {
+case _SyncAsk() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String? argumentsJson)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _SyncAsk() when $default != null:
+return $default(_that.id,_that.argumentsJson);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String? argumentsJson)  $default,) {final _that = this;
+switch (_that) {
+case _SyncAsk():
+return $default(_that.id,_that.argumentsJson);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String? argumentsJson)?  $default,) {final _that = this;
+switch (_that) {
+case _SyncAsk() when $default != null:
+return $default(_that.id,_that.argumentsJson);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _SyncAsk implements SyncAsk {
+  const _SyncAsk({required this.id, this.argumentsJson});
+  factory _SyncAsk.fromJson(Map<String, dynamic> json) => _$SyncAskFromJson(json);
+
+@override final  String id;
+@override final  String? argumentsJson;
+
+/// Create a copy of SyncAsk
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$SyncAskCopyWith<_SyncAsk> get copyWith => __$SyncAskCopyWithImpl<_SyncAsk>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$SyncAskToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SyncAsk&&(identical(other.id, id) || other.id == id)&&(identical(other.argumentsJson, argumentsJson) || other.argumentsJson == argumentsJson));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,argumentsJson);
+
+@override
+String toString() {
+  return 'SyncAsk(id: $id, argumentsJson: $argumentsJson)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$SyncAskCopyWith<$Res> implements $SyncAskCopyWith<$Res> {
+  factory _$SyncAskCopyWith(_SyncAsk value, $Res Function(_SyncAsk) _then) = __$SyncAskCopyWithImpl;
+@override @useResult
+$Res call({
+ String id, String? argumentsJson
+});
+
+
+
+
+}
+/// @nodoc
+class __$SyncAskCopyWithImpl<$Res>
+    implements _$SyncAskCopyWith<$Res> {
+  __$SyncAskCopyWithImpl(this._self, this._then);
+
+  final _SyncAsk _self;
+  final $Res Function(_SyncAsk) _then;
+
+/// Create a copy of SyncAsk
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? argumentsJson = freezed,}) {
+  return _then(_SyncAsk(
+id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String,argumentsJson: freezed == argumentsJson ? _self.argumentsJson : argumentsJson // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

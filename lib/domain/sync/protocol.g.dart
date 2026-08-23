@@ -230,23 +230,35 @@ SyncControlRelease _$SyncControlReleaseFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$SyncControlReleaseToJson(SyncControlRelease instance) =>
     <String, dynamic>{'chatId': instance.chatId, 'runtimeType': instance.$type};
 
-SyncTurnStarted _$SyncTurnStartedFromJson(Map<String, dynamic> json) =>
-    SyncTurnStarted(
+SyncTurnState _$SyncTurnStateFromJson(Map<String, dynamic> json) =>
+    SyncTurnState(
       chatId: json['chatId'] as String,
+      running: json['running'] as bool? ?? false,
+      approvals:
+          (json['approvals'] as List<dynamic>?)
+              ?.map((e) => ToolApproval.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const <ToolApproval>[],
+      asks:
+          (json['asks'] as List<dynamic>?)
+              ?.map((e) => SyncAsk.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const <SyncAsk>[],
+      status: json['status'] as String?,
+      retry: json['retry'] as String?,
       $type: json['runtimeType'] as String?,
     );
 
-Map<String, dynamic> _$SyncTurnStartedToJson(SyncTurnStarted instance) =>
-    <String, dynamic>{'chatId': instance.chatId, 'runtimeType': instance.$type};
-
-SyncTurnEnded _$SyncTurnEndedFromJson(Map<String, dynamic> json) =>
-    SyncTurnEnded(
-      chatId: json['chatId'] as String,
-      $type: json['runtimeType'] as String?,
-    );
-
-Map<String, dynamic> _$SyncTurnEndedToJson(SyncTurnEnded instance) =>
-    <String, dynamic>{'chatId': instance.chatId, 'runtimeType': instance.$type};
+Map<String, dynamic> _$SyncTurnStateToJson(SyncTurnState instance) =>
+    <String, dynamic>{
+      'chatId': instance.chatId,
+      'running': instance.running,
+      'approvals': instance.approvals.map((e) => e.toJson()).toList(),
+      'asks': instance.asks.map((e) => e.toJson()).toList(),
+      'status': instance.status,
+      'retry': instance.retry,
+      'runtimeType': instance.$type,
+    };
 
 SyncPromptSend _$SyncPromptSendFromJson(Map<String, dynamic> json) =>
     SyncPromptSend(
@@ -305,3 +317,22 @@ SyncTurnAbort _$SyncTurnAbortFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$SyncTurnAbortToJson(SyncTurnAbort instance) =>
     <String, dynamic>{'chatId': instance.chatId, 'runtimeType': instance.$type};
+
+SyncTurnResume _$SyncTurnResumeFromJson(Map<String, dynamic> json) =>
+    SyncTurnResume(
+      chatId: json['chatId'] as String,
+      $type: json['runtimeType'] as String?,
+    );
+
+Map<String, dynamic> _$SyncTurnResumeToJson(SyncTurnResume instance) =>
+    <String, dynamic>{'chatId': instance.chatId, 'runtimeType': instance.$type};
+
+_SyncAsk _$SyncAskFromJson(Map<String, dynamic> json) => _SyncAsk(
+  id: json['id'] as String,
+  argumentsJson: json['argumentsJson'] as String?,
+);
+
+Map<String, dynamic> _$SyncAskToJson(_SyncAsk instance) => <String, dynamic>{
+  'id': instance.id,
+  'argumentsJson': instance.argumentsJson,
+};

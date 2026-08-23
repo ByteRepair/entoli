@@ -16,9 +16,10 @@ part "protocol.g.dart";
 /// before any application traffic (`handshake.dart`, `_establish`) and stay
 /// hand-rolled JSON beside them.
 ///
-/// Control messages (`control.*`, `prompt.send`, `approval.respond`,
-/// `questions.respond`, `turn.abort`) are declared but unhandled in Phase 2;
-/// the mirror renders view-only and nothing dispatches them yet.
+/// Commands never travel. A prompt sent from a mirror is *run* on the chat's
+/// home device, through the same `ChatController` a local one goes through —
+/// what comes back is the ordinary record stream. What the control arms move
+/// is who may type, not where the work happens.
 @freezed
 sealed class SyncMessage with _$SyncMessage {
   /// The home device's chat list, sent right after `hello` and again
@@ -99,8 +100,11 @@ sealed class SyncMessage with _$SyncMessage {
 
   const factory SyncMessage.pong() = SyncPong;
 
-  // ---- Phase 3: declared now, unhandled until control lands. ------------
+  // ---- Control, and driving a turn from the other end. ------------------
 
+  /// Who holds the chat, as the home device sees it — a device id, or null
+  /// for nobody. Pushed to every subscriber whenever it changes, so a second
+  /// mirror watching the same chat sees that someone else has it.
   const factory SyncMessage.controlState({
     required String chatId,
     String? holder,
@@ -117,11 +121,18 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.controlRelease({required String chatId}) =
       SyncControlRelease;
 
-  const factory SyncMessage.turnStarted({required String chatId}) =
-      SyncTurnStarted;
-
-  const factory SyncMessage.turnEnded({required String chatId}) =
-      SyncTurnEnded;
+  /// The turn-scoped view state a mirror cannot get from the log: whether one
+  /// is running, what it is waiting to be allowed or told, and the line the
+  /// spinner is on. Sent whole on every change — it is small, and a diff
+  /// would be a second account of what is pending.
+  const factory SyncMessage.turnState({
+    required String chatId,
+    @Default(false) bool running,
+    @Default(<ToolApproval>[]) List<ToolApproval> approvals,
+    @Default(<SyncAsk>[]) List<SyncAsk> asks,
+    String? status,
+    String? retry,
+  }) = SyncTurnState;
 
   const factory SyncMessage.promptSend({
     required String chatId,
@@ -143,6 +154,26 @@ sealed class SyncMessage with _$SyncMessage {
   const factory SyncMessage.turnAbort({required String chatId}) =
       SyncTurnAbort;
 
+  /// Carry on a turn the home device was cut off in.
+  const factory SyncMessage.turnResume({required String chatId}) =
+      SyncTurnResume;
+
   factory SyncMessage.fromJson(Map<String, dynamic> json) =>
       _$SyncMessageFromJson(json);
+}
+
+/// One `ask_user` call on the wire. The questions themselves are not sent:
+/// they are read out of the call's arguments by `askQuestionsFrom`, which is
+/// what the home device did with the same string — so a mirror renders the
+/// panel from the model's own words rather than from a second encoding of
+/// them.
+@freezed
+abstract class SyncAsk with _$SyncAsk {
+  const factory SyncAsk({
+    required String id,
+    String? argumentsJson,
+  }) = _SyncAsk;
+
+  factory SyncAsk.fromJson(Map<String, dynamic> json) =>
+      _$SyncAskFromJson(json);
 }

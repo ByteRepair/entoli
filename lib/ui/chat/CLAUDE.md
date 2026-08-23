@@ -317,6 +317,20 @@ command that printed nothing says so on the exit row, rather than leaving a
 strip that reads as an answer cut off. What is behind all this is "Running a
 command yourself".
 
+## A chat whose home device is elsewhere
+
+`MirrorChatController` is the counterpart of `ChatController` for a chat being
+mirrored from a paired device, and `TurnDriver` is what both implement so that
+every widget between them — the composer, the turn surface, the question panel,
+the approval banner — is the same widget at either end. One runs the turn; the
+other sends it to the device that will. See "Control, and driving a turn from
+the other end" for the lock and what refuses what.
+
+`ChatPage` branches on `isMirroredChatProvider` before anything else, because
+almost none of the local page applies: no expiry check, no chat settings, no
+edit or regenerate row, and nothing that would write to a disk this device does
+not have. What control changes is only whether the composer is drawn.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s

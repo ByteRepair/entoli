@@ -376,7 +376,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       _checkExpiry(context, chat.state);
     }
 
-    final details = _details(chat.state);
+    // A chat being typed into from a paired device says so: the prompts
+    // arriving are somebody else's, and nothing else on the page would tell.
+    final drivenBy = ref.watch(drivenChatsProvider)[widget.chatId];
+    final details = [
+      ..._details(chat.state),
+      if (drivenBy != null)
+        _TitleLine(icon: Icons.edit_outlined, text: "Driven from $drivenBy"),
+    ];
     final barHeight = _barHeight(context, details.length);
     return Scaffold(
       drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
@@ -449,11 +456,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
-  /// A mirrored chat's page: same conversation, read-only. Nothing here
-  /// touches the repository or the store — every byte came over the wire and
-  /// stays in RAM, so expiry, settings, and all mutation callbacks are out.
+  /// A mirrored chat's page. Nothing here touches the repository or the store
+  /// — every byte came over the wire and stays in RAM, so expiry, settings and
+  /// the whole message-editing row are out whether or not this device is
+  /// driving. What control changes is only whether there is a composer: the
+  /// turn itself runs on the home device either way.
   Widget _mirrorBuild(BuildContext context) {
     final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
+    final notifier = ref.read(mirrorChatControllerProvider(widget.chatId).notifier);
+    final control = ref.watch(mirrorControlProvider(widget.chatId));
     ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
     final online = ref.watch(remoteChatsProvider).any((c) => c.chatId == widget.chatId && c.online);
     final deviceName = ref
@@ -499,11 +510,42 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               Column(
                 children: [
                   Expanded(child: _mirrorConversation(chat, view)),
-                  ViewOnlyBar(online: online),
+                  if (control.held && online) ...[
+                    TurnSurface(view: view, notifier: notifier),
+                    if (view.questions.isEmpty)
+                      Composer(
+                        controller: _controller,
+                        isRunning: view.isRunning,
+                        onSend: (text, attachments) => notifier.send(text),
+                        onAbort: notifier.abort,
+                      )
+                    else
+                      TurnQuestions(view: view, notifier: notifier),
+                  ] else
+                    ViewOnlyBar(
+                      online: online,
+                      asking: control.asking,
+                      takenByAnother: control.takenByAnother,
+                      onTakeControl: ref
+                          .read(mirrorControlProvider(widget.chatId).notifier)
+                          .take,
+                    ),
                 ],
               ),
               if (!online)
-                Positioned(left: 0, right: 0, top: 0, child: OfflineBanner(deviceName: deviceName ?? "Home device")),
+                Positioned(left: 0, right: 0, top: 0, child: OfflineBanner(deviceName: deviceName ?? "Home device"))
+              else if (control.held)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: InControlBar(
+                    deviceName: deviceName ?? "the home device",
+                    onRelease: ref
+                        .read(mirrorControlProvider(widget.chatId).notifier)
+                        .release,
+                  ),
+                ),
             ],
           ),
         ),
@@ -525,7 +567,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         return MessageBubble(
           chatId: widget.chatId,
           message: m,
-          isWaiting: false,
+          isWaiting: view.isRunning && i == chat.messages.length - 1,
+          waitingNotice: view.retry,
           waitingStatus: view.status,
           onTapLink: (href) {
             final uri = Uri.tryParse(href);

@@ -33,7 +33,7 @@ import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/rootfs_store.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
-import "package:agent_chat/providers.dart" show RemoteChats;
+import "package:agent_chat/providers.dart" show DrivenChats, RemoteChats;
 import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:uuid/uuid.dart";
@@ -870,6 +870,36 @@ class FakeRemoteChats extends RemoteChats {
 
   @override
   List<RemoteChatEntry> build() => entries;
+}
+
+/// Chats of this device a paired one is driving, by the name of the device
+/// driving them. Empty for every test that is not about sync.
+class FakeDrivenChats extends DrivenChats {
+  FakeDrivenChats(this.driven);
+
+  final Map<String, String> driven;
+
+  @override
+  Map<String, String> build() => driven;
+}
+
+/// Who holds a mirrored chat, with no hub to ask. `take` and `release` record
+/// rather than send: what the wire does with them is `sync_hub_pair_test`'s.
+class FakeMirrorControl extends MirrorControlNotifier {
+  FakeMirrorControl(super.chatId, this.control);
+
+  final MirrorControl control;
+  final List<String> taken = [];
+  final List<String> released = [];
+
+  @override
+  MirrorControl build() => control;
+
+  @override
+  Future<void> take() async => taken.add(chatId);
+
+  @override
+  Future<void> release() async => released.add(chatId);
 }
 
 /// A mirrored chat's view, already resolved. What the real controller derives

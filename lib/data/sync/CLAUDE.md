@@ -165,6 +165,63 @@ date this device could place, and its rows carry none of a local chat's menu.
 deliberately separate from `chatListProvider`, which reads the local store and
 stays sync-unaware. Two sources of truth, never merged.
 
+## Control, and driving a turn from the other end
+
+**Nothing about a turn ever moves.** A prompt typed on a mirror is *run* on the
+chat's home device, by the same `ChatController` a locally typed one goes
+through — same model, same workspace, same log, and the reply comes back as the
+ordinary record stream that was already mirroring. What crosses the wire is the
+asking and the answering. The commands stay where the files are, which is the
+whole reason the chat has a home device at all.
+
+**The lock is the home device's answer.** `controlRequest` is a request:
+`_control` maps a chat to the one device id holding it, first asker wins, and
+`controlGrant` plus a `controlState` to every subscriber says what happened. A
+mirror never decides it has control — `holdsControl` compares the holder the
+home end sent against this device's own id — which is what makes a race between
+two phones resolve rather than double up. Re-asking while already holding it is
+granted, since a mirror that reconnected does not know it never lost the lock.
+
+Every arm that drives a turn — `promptSend`, `turnResume`, `turnAbort`,
+`approvalRespond`, `questionsRespond` — is refused at the home device unless
+the sender holds the chat. **A page drawing a composer is not what permits a
+turn**; the guard on the mirror side only exists so it does not shout into the
+void. A lock is released by `controlRelease`, by the chat being deleted, or by
+the connection carrying it going away — one that outlived its connection would
+leave the chat unusable at both ends until somebody restarted.
+
+**The turn-scoped state is its own message.** Whether a turn is running, what
+it is waiting to be allowed, what it is waiting to be told, the line the
+spinner is on: none of that is in `conv.jsonl`, so `turnState` carries the lot
+on every change. Whole rather than a diff — it is small, and a diff would be a
+second account of what is pending. An `ask_user` travels as `SyncAsk{id,
+argumentsJson}` and the mirror rebuilds the questions with the same
+`askQuestionsFrom` the home device used, so the panel is the model's own words
+rather than a second encoding of them. `AskRequest.argumentsJson` exists for
+that and nothing else reads it.
+
+`RemoteTurnDriver` is the home end, read once in `main` for its effect the way
+`TurnKeepAlive` is. It holds one `ChatController` open per **watched** chat —
+not per held one — because a mirror that is only reading still has to see a
+turn happening; that is what `SyncHub.servedChats` is for. Publishing is the
+same subscription's other half.
+
+`TurnDriver` is the interface the two controllers meet on, so `TurnSurface`,
+`TurnQuestions`, `Composer` and the approval banner are the same widgets at
+both ends. `ChatController` implements it by running the turn;
+`MirrorChatController` implements it by sending. Attachments are the one verb
+missing: their bytes would have to cross to be saved under a chat on the other
+side.
+
+Offline outranks everything a mirror last heard. A status line from before the
+connection dropped is a turn claiming to still be alive, and an approval
+nothing can carry the answer to is worse than no approval — so `_viewOf` blanks
+them all.
+
+The home device says so too: `drivenChats` is chat id to the name of the device
+driving it, and the local chat page draws it as a title line. Prompts arriving
+that nobody here typed are otherwise unexplained.
+
 ### Testing it
 
 `SyncHub.establishForTest` is the seam: it runs the shared tail of every route
@@ -176,9 +233,11 @@ pairing card first, because every real route does and the codes-matched gate
 has nowhere to ask otherwise.
 
 Widget tests do not go through a hub at all: `TestApp.create(remotes:,
-mirrors:)` overrides `remoteChatsProvider` and `mirrorChatControllerProvider`,
+mirrors:, control:, drivenBy:)` overrides the four providers the pages read,
 which is also what keeps every sync-unaware test working, since there is no
-`SyncHub` in the container to throw.
+`SyncHub` in the container to throw. `sendForTest` is the other seam on the
+hub: it sends past the mirror-side guard, which is the only way to check that
+the *home* device is what refuses a peer holding nothing.
 
 ## Secrets at rest
 

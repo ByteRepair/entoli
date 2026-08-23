@@ -475,6 +475,22 @@ class RemoteChats extends Notifier<List<RemoteChatEntry>> {
 final remoteChatsProvider =
     NotifierProvider<RemoteChats, List<RemoteChatEntry>>(RemoteChats.new);
 
+/// The other direction: chats of *this* device a paired one is driving, by
+/// the name of the device driving them. Bridged the same way [RemoteChats] is.
+class DrivenChats extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() {
+    final hub = ref.watch(syncHubProvider);
+    void changed() => state = hub.drivenChats.value;
+    hub.drivenChats.addListener(changed);
+    ref.onDispose(() => hub.drivenChats.removeListener(changed));
+    return hub.drivenChats.value;
+  }
+}
+
+final drivenChatsProvider =
+    NotifierProvider<DrivenChats, Map<String, String>>(DrivenChats.new);
+
 final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
   return ref
       .watch(remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)));

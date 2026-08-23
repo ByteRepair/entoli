@@ -1,15 +1,40 @@
 import "package:flutter/material.dart";
 
-/// What sits where the composer does on a mirrored chat. A mirror sends
-/// nothing itself in this phase — prompts travel with Take Control, which
-/// lands later — so there is nothing to type into and the bar says so.
-/// Offline it says why the content is not moving either.
+/// What sits where the composer does on a mirrored chat nobody here is
+/// driving: why there is nothing to type into, and the way to change that.
+///
+/// Taking control is a request. The button says what this device asked for,
+/// never what it decided — the home device is the only thing that knows
+/// whether somebody else got there first.
 class ViewOnlyBar extends StatelessWidget {
-  const ViewOnlyBar({super.key, required this.online});
+  const ViewOnlyBar({
+    super.key,
+    required this.online,
+    this.onTakeControl,
+    this.asking = false,
+    this.takenByAnother = false,
+  });
 
   /// Whether the connection to the chat's home device is up. False means
   /// everything above is a stale snapshot.
   final bool online;
+
+  /// Null where there is nothing to ask — offline, or somebody else has it.
+  final VoidCallback? onTakeControl;
+
+  /// Asked for, waiting on the home device.
+  final bool asking;
+
+  /// Another device holds it. There is nothing to press: the lock is theirs
+  /// until they let it go or their connection does.
+  final bool takenByAnother;
+
+  String get _said {
+    if (!online) return "Offline — showing what this device last had";
+    if (takenByAnother) return "Another device is driving this chat";
+    if (asking) return "Asking to take control…";
+    return "View only";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +54,69 @@ class ViewOnlyBar extends StatelessWidget {
             Icon(online ? Icons.visibility_outlined : Icons.cloud_off_outlined,
                 size: 16, color: color),
             const SizedBox(width: 8),
-            Text(
-              online ? "View only" : "Offline — showing what this device last had",
-              style: TextStyle(color: color, fontSize: 13),
+            Flexible(
+              child: Text(
+                _said,
+                style: TextStyle(color: color, fontSize: 13),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
+            if (online && !takenByAnother) ...[
+              const SizedBox(width: 12),
+              TextButton.icon(
+                onPressed: asking ? null : onTakeControl,
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text("Take control"),
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The strip over a chat this device is driving from afar. It is the one
+/// thing on the page that says the commands are running somewhere else, which
+/// is the whole difference between this and a chat of one's own.
+class InControlBar extends StatelessWidget {
+  const InControlBar({
+    super.key,
+    required this.deviceName,
+    required this.onRelease,
+  });
+
+  final String deviceName;
+  final VoidCallback onRelease;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.primaryContainer,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+          child: Row(
+            children: [
+              Icon(Icons.play_circle_outline,
+                  size: 16, color: theme.colorScheme.onPrimaryContainer),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "Running on $deviceName",
+                  style: TextStyle(
+                      color: theme.colorScheme.onPrimaryContainer, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              TextButton(
+                onPressed: onRelease,
+                child: const Text("Hand back"),
+              ),
+            ],
+          ),
         ),
       ),
     );

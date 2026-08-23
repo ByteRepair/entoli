@@ -10,7 +10,7 @@ import "../../domain/app_settings.dart";
 import "../../domain/chat_log.dart" show ChatRecord;
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_repository.dart";
-import "../../domain/models.dart" show ChatState;
+import "../../domain/models.dart" show ChatState, ToolApproval;
 import "../../domain/sync/devices.dart";
 import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
@@ -81,6 +81,7 @@ class MirrorChat {
 
   final String peerId;
 
+
   /// The home device's name, as its hello carried it — what the sidebar's
   /// Remotes rows show under the title.
   final String deviceName;
@@ -92,8 +93,39 @@ class MirrorChat {
   /// whose record count is short of this is stale by that many records.
   int totalLines;
 
+  /// Which device the home end says holds the chat, or null for nobody.
+  /// Never assumed locally: taking control is the home device's answer, so
+  /// a request that lost a race reads as somebody else's id rather than as
+  /// this device's own.
+  String? controlHolder;
+
+  /// The turn, as the home device last reported it. None of this is in the
+  /// log — a running turn, a command waiting to be allowed, a question
+  /// waiting to be answered — so it arrives as its own message.
+  bool running = false;
+  List<ToolApproval> approvals = const [];
+  List<SyncAsk> asks = const [];
+  String? status;
+  String? retry;
+
   @override
   String toString() => "MirrorChat(${state.id}, ${records.length}/$totalLines)";
+}
+
+/// What a chat's home device does when the mirror holding it drives a turn.
+/// Registered on the [SyncHub] by the container, because running a turn is
+/// `ChatController`'s and the hub has no way to reach one — the same reason
+/// the repository arrives through [SyncHub.attach].
+abstract interface class RemoteTurns {
+  void prompt(String chatId, String text);
+  void resume(String chatId);
+  void abort(String chatId);
+  void approve(String chatId, String approvalId, bool allow);
+  void answer(String chatId, String requestId, List<String?> answers);
+
+  /// A chat somebody else is now driving. The home device opens it so the
+  /// turn has a controller, and keeps it open until control is released.
+  void hold(String chatId, bool held);
 }
 
 /// What the sidebar's Remotes section draws: one remote chat with who owns
@@ -190,6 +222,15 @@ class SyncHub {
 
   /// Chat ids whose content changed since the last notice. The mirror
   /// controllers rebuild from here.
+  /// Chats of this device somebody else is driving: chat id to the device id
+  /// holding it. One holder at a time, and the home device is never in it —
+  /// this device typing is not a lock, it is the absence of one.
+  final _control = <String, String>{};
+
+  /// Set by the container once there is a way to run a turn. Null until then,
+  /// which is every test that is only about the wire.
+  RemoteTurns? remoteTurns;
+
   /// Mirrored attachments, held only as long as the mirror is. Owned here
   /// rather than beside the page that shows them so that a mirror going
   /// takes its megabytes with it.
@@ -203,7 +244,36 @@ class SyncHub {
   /// rebuilt whenever anything under it moves.
   final remotes = ValueNotifier<List<RemoteChatEntry>>(const []);
 
+  /// Chats of this device somebody else is driving, by the name of the device
+  /// driving them — what the local chat page says over a conversation being
+  /// typed into from elsewhere. Names rather than ids: it is read out.
+  final drivenChats = ValueNotifier<Map<String, String>>(const {});
+
+  /// Chats of this device that some peer is watching. The home end keeps a
+  /// controller open for each — that is what makes a turn's progress, and the
+  /// approvals and questions it stops on, visible at the other end, none of
+  /// which is in the log.
+  final servedChats = ValueNotifier<Set<String>>(const {});
+
+  void _refreshServed() {
+    final served = {for (final peer in _live.values) ...peer.subscriptions};
+    if (served.length == servedChats.value.length &&
+        served.containsAll(servedChats.value)) {
+      return;
+    }
+    servedChats.value = served;
+  }
+
   MirrorChat? mirror(String chatId) => _mirrors[chatId];
+
+  /// Which device is driving one of *this* device's chats, or null. What the
+  /// local chat page reads to say it is being typed in from elsewhere.
+  String? heldBy(String chatId) => _control[chatId];
+
+  /// Whether this device holds a mirrored chat — the home device's answer,
+  /// never a local guess.
+  bool holdsControl(String chatId) =>
+      _mirrors[chatId]?.controlHolder == identity.id;
 
   /// Whether the connection to [chatId]'s home device is up. False for a
   /// stale snapshot: the page disables the composer and shows its banner.
@@ -319,11 +389,68 @@ class SyncHub {
         await _serveResource(peer, id, chatId, resource);
       case SyncResourceChunk(:final id, :final bytesB64, :final done):
         _collectResourceChunk(id, bytesB64, done);
-      default:
-        break;
+
+      // -- serving: somebody else driving one of this device's chats
+      case SyncControlRequest(:final chatId):
+        await _serveControlRequest(peer, chatId);
+      case SyncControlRelease(:final chatId):
+        await _serveControlRelease(peer, chatId);
+      case SyncPromptSend(:final chatId, :final text):
+        if (_holds(peer, chatId)) remoteTurns?.prompt(chatId, text);
+      case SyncTurnResume(:final chatId):
+        if (_holds(peer, chatId)) remoteTurns?.resume(chatId);
+      case SyncTurnAbort(:final chatId):
+        if (_holds(peer, chatId)) remoteTurns?.abort(chatId);
+      case SyncApprovalRespond(:final chatId, :final approvalId, :final allow):
+        if (_holds(peer, chatId)) {
+          remoteTurns?.approve(chatId, approvalId, allow);
+        }
+      case SyncQuestionsRespond(
+          :final chatId,
+          :final requestId,
+          :final answers
+        ):
+        if (_holds(peer, chatId)) {
+          remoteTurns?.answer(chatId, requestId, answers);
+        }
+
+      // -- mirroring: what the home device says about a chat we follow
+      case SyncControlState(:final chatId, :final holder):
+        final existing = _mirrors[chatId];
+        if (existing == null || existing.peerId != peer.deviceId) break;
+        existing.controlHolder = holder;
+        _mirrorUpdates.add(chatId);
+      case SyncControlGrant(:final chatId, :final granted):
+        // The state message that follows is what actually moves the holder;
+        // a refusal is worth nothing more than dropping the asking flag.
+        if (!granted) _requesting.remove(chatId);
+        _mirrorUpdates.add(chatId);
+      case SyncTurnState(
+          :final chatId,
+          :final running,
+          :final approvals,
+          :final asks,
+          :final status,
+          :final retry
+        ):
+        final existing = _mirrors[chatId];
+        if (existing == null || existing.peerId != peer.deviceId) break;
+        existing
+          ..running = running
+          ..approvals = approvals
+          ..asks = asks
+          ..status = status
+          ..retry = retry;
+        _mirrorUpdates.add(chatId);
     }
     _rebuildRemotes();
   }
+
+  /// Whether [peer] is the device this chat's control was granted to. Every
+  /// arm that drives a turn goes through it: a peer that never asked, or that
+  /// lost the race, must not be able to type into somebody's conversation.
+  bool _holds(_LivePeer peer, String chatId) =>
+      _control[chatId] == peer.deviceId;
 
   /// A fresh listing from the peer. Mirrors of this peer not in it go; those
   /// in it are added or refreshed — keeping records already held, so the
@@ -368,6 +495,7 @@ class SyncHub {
     if (mirror == null || mirror.peerId != peerId) return;
     _mirrors.remove(chatId);
     byteCache.drop(chatId);
+    _requesting.remove(chatId);
     _mirrorUpdates.add(chatId);
   }
 
@@ -385,6 +513,10 @@ class SyncHub {
       final meta = await repo.loadMeta(chatId);
       final records = await repo.readRecords(chatId);
       peer.subscriptions.add(chatId);
+      // Who holds it goes with the snapshot: a mirror that reconnects mid-
+      // turn must not draw a Take control button for a chat it already has.
+      await peer.send(
+          SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
       await peer.send(SyncMessage.chatSnapshot(
         chatId: chatId,
         state: chat.state,
@@ -398,6 +530,7 @@ class SyncHub {
       peer.subscriptions.remove(chatId);
       await peer.send(SyncMessage.chatDeleted(chatId: chatId));
     }
+    _refreshServed();
   }
 
   /// Everything written through the repository, fanned out to whichever
@@ -430,6 +563,9 @@ class SyncHub {
           peer.subscriptions.remove(chatId);
           unawaited(peer.send(SyncMessage.chatDeleted(chatId: chatId)));
         }
+        _control.remove(chatId);
+        _refreshDriven();
+        _refreshServed();
       case Moved(:final chatId, :final project):
         for (final peer in _live.values) {
           if (peer.subscriptions.contains(chatId)) {
@@ -438,6 +574,129 @@ class SyncHub {
         }
     }
   }
+
+  // -------------------------------------------------------------- control
+
+  /// One holder at a time, first asker wins. Re-asking while already holding
+  /// it is granted rather than refused: a mirror that reconnected does not
+  /// know it never lost the lock.
+  Future<void> _serveControlRequest(_LivePeer peer, String chatId) async {
+    final held = _control[chatId];
+    final granted = held == null || held == peer.deviceId;
+    if (granted) {
+      _control[chatId] = peer.deviceId;
+      remoteTurns?.hold(chatId, true);
+    }
+    await peer.send(
+        SyncMessage.controlGrant(chatId: chatId, granted: granted));
+    _announceControl(chatId);
+  }
+
+  Future<void> _serveControlRelease(_LivePeer peer, String chatId) async {
+    if (_control[chatId] != peer.deviceId) return;
+    _control.remove(chatId);
+    remoteTurns?.hold(chatId, false);
+    _announceControl(chatId);
+  }
+
+  /// Everyone watching the chat hears who holds it, not only the asker — a
+  /// second mirror has to see that the first one took it.
+  void _announceControl(String chatId) {
+    _refreshDriven();
+    final message =
+        SyncMessage.controlState(chatId: chatId, holder: _control[chatId]);
+    for (final peer in _live.values) {
+      if (peer.subscriptions.contains(chatId)) unawaited(peer.send(message));
+    }
+  }
+
+  void _refreshDriven() => drivenChats.value = {
+        for (final entry in _control.entries)
+          entry.key: _live[entry.value]?.deviceName ?? entry.value,
+      };
+
+  /// The turn as this device's own controller has it, on its way to whoever
+  /// is watching. Called by the container on every change: none of this is in
+  /// the log, so nothing else would carry it.
+  void publishTurn(
+    String chatId, {
+    required bool running,
+    List<ToolApproval> approvals = const [],
+    List<SyncAsk> asks = const [],
+    String? status,
+    String? retry,
+  }) {
+    final message = SyncMessage.turnState(
+      chatId: chatId,
+      running: running,
+      approvals: approvals,
+      asks: asks,
+      status: status,
+      retry: retry,
+    );
+    for (final peer in _live.values) {
+      if (peer.subscriptions.contains(chatId)) unawaited(peer.send(message));
+    }
+  }
+
+  /// Chats this device holds on a peer, asked for and not yet answered. Only
+  /// so a button can say "asking"; the holder itself is the home device's.
+  final _requesting = <String>{};
+
+  bool isRequestingControl(String chatId) => _requesting.contains(chatId);
+
+  Future<void> requestControl(String chatId) async {
+    final peer = _peerHosting(chatId);
+    if (peer == null) return;
+    _requesting.add(chatId);
+    _mirrorUpdates.add(chatId);
+    await peer.send(SyncMessage.controlRequest(chatId: chatId));
+  }
+
+  Future<void> releaseControl(String chatId) async {
+    _requesting.remove(chatId);
+    final peer = _peerHosting(chatId);
+    if (peer == null) return;
+    await peer.send(SyncMessage.controlRelease(chatId: chatId));
+  }
+
+  /// Drive a turn on the chat's home device. Every one of these is refused
+  /// there unless this device holds the chat, so the check here is about not
+  /// sending into the void rather than about permission.
+  Future<void> sendRemotePrompt(String chatId, String text) =>
+      _drive(chatId, SyncMessage.promptSend(chatId: chatId, text: text));
+
+  Future<void> resumeRemote(String chatId) =>
+      _drive(chatId, SyncMessage.turnResume(chatId: chatId));
+
+  Future<void> abortRemote(String chatId) =>
+      _drive(chatId, SyncMessage.turnAbort(chatId: chatId));
+
+  Future<void> respondRemoteApproval(
+          String chatId, String approvalId, bool allow) =>
+      _drive(
+          chatId,
+          SyncMessage.approvalRespond(
+              chatId: chatId, approvalId: approvalId, allow: allow));
+
+  Future<void> answerRemoteQuestions(
+          String chatId, String requestId, List<String?> answers) =>
+      _drive(
+          chatId,
+          SyncMessage.questionsRespond(
+              chatId: chatId, requestId: requestId, answers: answers));
+
+  Future<void> _drive(String chatId, SyncMessage message) async {
+    if (!holdsControl(chatId)) return;
+    await _peerHosting(chatId)?.send(message);
+  }
+
+  /// Straight to the chat's home device, past the guard in [_drive]. That
+  /// guard is about not shouting into the void; what refuses a peer holding
+  /// nothing is the home device, and this is how a test reaches it.
+  @visibleForTesting
+  Future<void> sendForTest(String chatId, SyncMessage message) async =>
+      _peerHosting(chatId)?.send(message);
 
   // ------------------------------------------------------------ resources
 
@@ -502,6 +761,14 @@ class SyncHub {
   /// and a reconnect replaces the whole lot with fresh data.
   void _peerGone(String deviceId) {
     final live = _live.remove(deviceId);
+    // A lock outliving the connection that took it would leave the chat
+    // unusable at both ends until one side restarted.
+    for (final entry in _control.entries.toList()) {
+      if (entry.value != deviceId) continue;
+      _control.remove(entry.key);
+      remoteTurns?.hold(entry.key, false);
+      _announceControl(entry.key);
+    }
     // Both directions: the chats this device served them, and the ones it
     // mirrors from them — a mirror's page has a banner to raise, and nothing
     // else tells it the snapshot has stopped moving.
@@ -513,6 +780,7 @@ class SyncHub {
     }
     _setStatus(deviceId,
         name: live?.deviceName ?? deviceId, status: PeerStatus.offline);
+    _refreshServed();
     _rebuildRemotes();
   }
 
@@ -560,6 +828,10 @@ class SyncHub {
     _live.clear();
     _mirrors.clear();
     byteCache.dispose();
+    _control.clear();
+    _requesting.clear();
+    drivenChats.value = const {};
+    servedChats.value = const {};
     _desired.clear();
     remotes.value = const [];
     await _mirrorUpdates.close();
@@ -1212,9 +1484,17 @@ class _LivePeer {
   /// Set once the peer exists; reads [SyncHub._dispatch].
   void Function(SyncMessage message)? handle;
 
-  Future<void> send(SyncMessage message) {
-    if (_closed) return Future.value();
-    return channel.sendJson(message.toJson());
+  /// A send that throws is a connection that has gone. Dropping the peer is
+  /// the only thing to do with that, and letting the error out instead turns
+  /// one vanishing mid-broadcast into an unhandled exception in whichever
+  /// loop happened to be writing to it.
+  Future<void> send(SyncMessage message) async {
+    if (_closed) return;
+    try {
+      await channel.sendJson(message.toJson());
+    } catch (_) {
+      await close();
+    }
   }
 
   Future<void> close() async {

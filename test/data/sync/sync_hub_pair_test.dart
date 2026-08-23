@@ -12,6 +12,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/secret_store.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
+import "package:agent_chat/domain/sync/protocol.dart";
 import "package:agent_chat/providers.dart" show syncHubProvider;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -43,29 +44,48 @@ void main() {
 
   /// Establishes both ends of one pairing. First contact, so both stop at
   /// the codes-matched gate and are confirmed by hand.
-  Future<void> pair(ByteChannel homeLink, ByteChannel awayLink,
-      {String? knownToHome, String? knownToAway}) async {
-    final a = home.hub.establishForTest(
-      link: homeLink,
+  Future<void> pairing(_Device offers, _Device joins, ByteChannel offerLink,
+      ByteChannel joinLink,
+      {String? knownToOfferer,
+      String? knownToJoiner,
+      // Decoded into the key material, so it has to be base64.
+      String psk = "test-psk"}) async {
+    final a = offers.hub.establishForTest(
+      link: offerLink,
       weOffered: true,
-      psk: "test-psk",
-      knownDeviceId: knownToHome,
+      psk: psk,
+      knownDeviceId: knownToOfferer,
     );
-    final b = away.hub.establishForTest(
-      link: awayLink,
+    final b = joins.hub.establishForTest(
+      link: joinLink,
       weOffered: false,
-      psk: "test-psk",
-      knownDeviceId: knownToAway,
+      psk: psk,
+      knownDeviceId: knownToJoiner,
     );
-    if (knownToHome == null || knownToAway == null) {
+    if (knownToOfferer == null || knownToJoiner == null) {
       await eventually(
           () =>
-              home.hub.pairing.value?.stage == PairingStage.confirming &&
-              away.hub.pairing.value?.stage == PairingStage.confirming);
-      home.hub.confirmPairing(true);
-      away.hub.confirmPairing(true);
+              offers.hub.pairing.value?.stage == PairingStage.confirming &&
+              joins.hub.pairing.value?.stage == PairingStage.confirming);
+      offers.hub.confirmPairing(true);
+      joins.hub.confirmPairing(true);
     }
     await Future.wait([a, b]);
+  }
+
+  Future<void> pair(ByteChannel homeLink, ByteChannel awayLink,
+          {String? knownToHome, String? knownToAway}) =>
+      pairing(home, away, homeLink, awayLink,
+          knownToOfferer: knownToHome, knownToJoiner: knownToAway);
+
+  /// A chat on the home device, mirrored on [away] and ready to be driven.
+  Future<ChatState> mirrored() async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await eventually(() => away.hub.mirror(state.id) != null);
+    return state;
   }
 
   test("pairing files each device in the other's registry", () async {
@@ -244,6 +264,141 @@ void main() {
     expect(await away.registry.list(), isEmpty);
   });
 
+  /// Control and teleport, over the same two real hubs. What is being proven
+  /// is that the lock is the *home* device's answer and that nothing runs
+  /// without it — a mirror drawing a composer is a consequence, not a
+  /// permission.
+  group("control", () {
+    late _Turns turns;
+
+    setUp(() => home.hub.remoteTurns = turns = _Turns());
+
+    test("asking for a free chat is granted and told to everyone", () async {
+      final state = await mirrored();
+
+      await away.hub.requestControl(state.id);
+      await eventually(() => away.hub.holdsControl(state.id));
+
+      expect(home.hub.heldBy(state.id), away.identity.id);
+      expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
+      expect(away.hub.mirror(state.id)!.controlHolder, away.identity.id);
+    });
+
+    test("a second device is refused, and hears who has it", () async {
+      final state = await mirrored();
+      final other = await _Device.create("${tempDir.path}/other");
+      addTearDown(other.hub.dispose);
+      final links = loopbackPair();
+      await pairing(home, other, links.$1, links.$2, psk: "otherpsk");
+      other.hub.followChat(state.id);
+      await eventually(() => other.hub.mirror(state.id) != null);
+
+      await away.hub.requestControl(state.id);
+      await eventually(() => away.hub.holdsControl(state.id));
+      await other.hub.requestControl(state.id);
+      await eventually(
+          () => other.hub.mirror(state.id)!.controlHolder != null);
+
+      expect(other.hub.holdsControl(state.id), isFalse);
+      expect(other.hub.mirror(state.id)!.controlHolder, away.identity.id);
+      expect(home.hub.heldBy(state.id), away.identity.id);
+    });
+
+    test("the holder's prompt runs on the home device", () async {
+      final state = await mirrored();
+      await away.hub.requestControl(state.id);
+      await eventually(() => away.hub.holdsControl(state.id));
+
+      await away.hub.sendRemotePrompt(state.id, "do the thing");
+      await eventually(() => turns.prompts.isNotEmpty);
+
+      expect(turns.prompts.single, (state.id, "do the thing"));
+    });
+
+    test("every verb reaches the home device's own controller", () async {
+      final state = await mirrored();
+      await away.hub.requestControl(state.id);
+      await eventually(() => away.hub.holdsControl(state.id));
+
+      await away.hub.resumeRemote(state.id);
+      await away.hub.respondRemoteApproval(state.id, "a1", true);
+      await away.hub.answerRemoteQuestions(state.id, "q1", ["yes"]);
+      await away.hub.abortRemote(state.id);
+      await eventually(() => turns.aborted.isNotEmpty);
+
+      expect(turns.resumed, [state.id]);
+      expect(turns.approved, [(state.id, "a1", true)]);
+      expect(turns.aborted, [state.id]);
+      // Compared field by field: the answers arrive as freezed's own
+      // unmodifiable list, which is not `==` to a literal one.
+      expect(turns.answered.single.$1, state.id);
+      expect(turns.answered.single.$2, "q1");
+      expect(turns.answered.single.$3, ["yes"]);
+    });
+
+    test("a prompt from a device holding nothing is dropped", () async {
+      final state = await mirrored();
+
+      // Past the local guard, which is about not shouting into the void
+      // rather than about permission: the home device is what refuses.
+      await away.hub.sendForTest(
+          state.id, SyncMessage.promptSend(chatId: state.id, text: "hi"));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(turns.prompts, isEmpty);
+    });
+
+    test("releasing hands it back", () async {
+      final state = await mirrored();
+      await away.hub.requestControl(state.id);
+      await eventually(() => away.hub.holdsControl(state.id));
+
+      await away.hub.releaseControl(state.id);
+      await eventually(() => home.hub.heldBy(state.id) == null);
+
+      await eventually(
+          () => away.hub.mirror(state.id)!.controlHolder == null);
+      expect(home.hub.drivenChats.value, isEmpty);
+    });
+
+    test("a lock does not outlive the connection that took it", () async {
+      final state = _seedChat(home);
+      final links = loopbackPair();
+      await pair(links.$1, links.$2);
+      away.hub.followChat(state.id);
+      await eventually(() => away.hub.mirror(state.id) != null);
+      await away.hub.requestControl(state.id);
+      await eventually(() => away.hub.holdsControl(state.id));
+
+      await links.$1.close();
+      await links.$2.close();
+
+      await eventually(() => home.hub.heldBy(state.id) == null);
+      expect(home.hub.drivenChats.value, isEmpty);
+    });
+
+    test("the turn the home device is running reaches the mirror", () async {
+      final state = await mirrored();
+      await eventually(() => home.hub.servedChats.value.contains(state.id));
+
+      home.hub.publishTurn(
+        state.id,
+        running: true,
+        approvals: const [
+          ToolApproval(id: "a1", toolName: "bash", argumentsText: "ls"),
+        ],
+        asks: const [SyncAsk(id: "q1", argumentsJson: "{}")],
+        status: "Thinking",
+      );
+      await eventually(() => away.hub.mirror(state.id)!.running);
+
+      final mirror = away.hub.mirror(state.id)!;
+      expect(mirror.approvals.single.argumentsText, "ls");
+      expect(mirror.asks.single.id, "q1");
+      expect(mirror.status, "Thinking");
+    });
+  });
+
   /// The controller the read-only page is built on, over a real mirror. The
   /// page's own tests fake this out; what the wire actually resolves to is
   /// here, where there is a peer to lose.
@@ -275,6 +430,38 @@ void main() {
 }
 
 // ------------------------------------------------------------------ harness
+
+/// The home device's end of a teleported turn, with no controller under it.
+/// What the real one does with these is `RemoteTurnDriver`'s; what is being
+/// checked here is that they arrive at all, and only from the holder.
+class _Turns implements RemoteTurns {
+  final prompts = <(String, String)>[];
+  final resumed = <String>[];
+  final aborted = <String>[];
+  final approved = <(String, String, bool)>[];
+  final answered = <(String, String, List<String?>)>[];
+  final holds = <(String, bool)>[];
+
+  @override
+  void prompt(String chatId, String text) => prompts.add((chatId, text));
+
+  @override
+  void resume(String chatId) => resumed.add(chatId);
+
+  @override
+  void abort(String chatId) => aborted.add(chatId);
+
+  @override
+  void approve(String chatId, String approvalId, bool allow) =>
+      approved.add((chatId, approvalId, allow));
+
+  @override
+  void answer(String chatId, String requestId, List<String?> answers) =>
+      answered.add((chatId, requestId, answers));
+
+  @override
+  void hold(String chatId, bool held) => holds.add((chatId, held));
+}
 
 class _Device {
   _Device(this.identity, this.hub, this.registry, this.store, this.repo);
