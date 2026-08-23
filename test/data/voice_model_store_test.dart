@@ -7,43 +7,32 @@ import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-/// Downloading is tested against a real socket rather than a faked client: what
-/// is worth pinning is the shape of what lands on disk — the marker that says a
-/// model is whole, and the nothing a cancelled download leaves behind.
+import "fake_network.dart";
+
+/// What is worth pinning is the shape of what lands on disk — the marker that
+/// says a model is whole, and the nothing a cancelled download leaves behind.
+/// The network itself is [FakeNetwork], so a suite run binds no port.
 void main() {
   late Directory root;
-  late HttpServer server;
+  late FakeNetwork net;
   late FileVoiceModelStore store;
-
-  /// Blocks the response until it is completed, so a test can cancel mid-flight.
-  Completer<void>? held;
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp("voice-models");
-    held = null;
-    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    unawaited(server.forEach((request) async {
-      final body = switch (request.uri.path) {
-        "/archive.tar.bz2" => _archive(),
-        _ => List.filled(64, 7),
-      };
-      request.response.headers.contentType = ContentType.binary;
-      request.response.add(body.sublist(0, body.length ~/ 2));
-      await request.response.flush();
-      if (held != null) await held!.future;
-      request.response.add(body.sublist(body.length ~/ 2));
-      await request.response.close();
-    }));
-    store = FileVoiceModelStore(p.join(root.path, "models"));
+    net = FakeNetwork.inHalves({
+      "/archive.tar.bz2": _archive(),
+      "/model.onnx": List.filled(64, 7),
+      "/tokens.txt": List.filled(64, 7),
+    });
+    store = FileVoiceModelStore(p.join(root.path, "models"), client: net);
   });
 
   tearDown(() async {
-    held?.complete();
-    await server.close(force: true);
+    net.hold?.complete();
     await root.delete(recursive: true);
   });
 
-  String url(String path) => "http://${server.address.address}:${server.port}$path";
+  String url(String path) => net.url(path);
 
   RecognitionModel plainModel({List<VoiceDownload>? downloads}) => RecognitionModel(
         id: "test-stt",
@@ -75,7 +64,7 @@ void main() {
   });
 
   test("a cancelled download leaves nothing, installed or otherwise", () async {
-    held = Completer<void>();
+    net.hold = Completer<void>();
     final model = plainModel();
     final sub = store.install(model).listen(null);
     // Enough for the first half of the first file to have been written.
@@ -90,8 +79,8 @@ void main() {
   test("a model that will not download is not left half-installed", () async {
     final model = plainModel(downloads: [
       VoiceFile(url: url("/model.onnx"), bytes: 64),
-      // Nothing is listening on this port.
-      const VoiceFile(url: "http://127.0.0.1:1/gone.onnx", bytes: 64),
+      // Nothing answers for this one.
+      VoiceFile(url: url("/gone.onnx"), bytes: 64),
     ]);
 
     await expectLater(store.install(model), emitsThrough(emitsError(isA<Object>())));

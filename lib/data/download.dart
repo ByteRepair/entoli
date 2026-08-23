@@ -15,7 +15,8 @@ import "../domain/download.dart";
 /// directory with it, and nothing is left to tell. Two copies of that is one
 /// copy that gets fixed.
 class DownloadRun {
-  DownloadRun({required this.run, required this.discard}) {
+  DownloadRun({required this.run, required this.discard, http.Client? client})
+      : _client = client ?? http.Client() {
     _out = StreamController<DownloadProgress>(
       onListen: () => run(this).then(
         (_) async {
@@ -50,7 +51,7 @@ class DownloadRun {
   /// run throws, which are the two ways this ends badly.
   final Future<void> Function() discard;
 
-  final _client = http.Client();
+  final http.Client _client;
   late final StreamController<DownloadProgress> _out;
   var _cancelled = false;
 

@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:flutter/foundation.dart";
+import "package:http/http.dart" as http;
 
 import "../../../domain/background_work.dart";
 import "../../../domain/local_llm.dart";
@@ -34,6 +35,7 @@ class LocalPrefill {
     required this.background,
     required this.warmup,
     this.kvCache,
+    this.httpClient,
   }) {
     // The Stop on its own notification.
     _stops = background.stopRequests
@@ -44,6 +46,10 @@ class LocalPrefill {
   final LocalLlm llm;
   final BackgroundWork background;
   final Warmup Function() warmup;
+
+  /// What the warm-up's own client sends over. Injected only by the tests,
+  /// which have no server to reach.
+  final http.Client? httpClient;
 
   /// Where the warmed body is persisted, so it survives a reload and every
   /// chat's own `warm` finds it — the same cache a turn uses, null off Android.
@@ -161,6 +167,7 @@ class LocalPrefill {
       baseUrl: Uri.parse(endpoint.baseUrl),
       apiKey: endpoint.apiKey,
       returnProgress: true,
+      httpClient: httpClient,
     );
     _client = client;
     try {

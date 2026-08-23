@@ -3,10 +3,11 @@ import "dart:convert";
 import "dart:io";
 
 import "../../../domain/sync/lan_signaling.dart";
+import "../../../domain/sync/signaling_routes.dart";
 
 /// The rendezvous two devices on one network meet at before WebRTC can take
-/// over. Binds all interfaces on an ephemeral port; the port and a one-time
-/// code travel to the other device in the QR, never through any registry.
+/// over. Binds all interfaces on the well-known port; that and a one-time code
+/// travel to the other device in the QR, never through any registry.
 ///
 /// Three routes:
 ///
@@ -14,43 +15,31 @@ import "../../../domain/sync/lan_signaling.dart";
 ///   POST /entoli/offer    — a joiner's SDP, held open until an answer or 30s
 ///   POST /entoli/answer   — the host's answer, completing one waiting offer
 ///
-/// The offer route validates the code or reconnect token and nothing else —
-/// it only gates who can make the host do work. Everything the channel later
-/// needs is authenticated by the pairing secret in the handshake, so a
-/// stranger who guesses either has bought themselves a connection nobody
-/// accepts.
-///
-/// Every response carries permissive CORS plus Chrome's Private-Network
-/// preflight answer: a browser tab served from anywhere must be able to dial
-/// this server on the LAN it sits on.
+/// What each of them decides is [SignalingRoutes]. All this adds is the
+/// socket: bind, read the request, write the reply back.
 class SignalingServer implements LanSignaling {
   SignalingServer();
 
-  String? _code;
-
-  /// Reconnect tokens: derived from stored pairing secrets, armed for the
-  /// hub's lifetime so paired devices can dial again without re-pairing.
-  final _tokens = <String>{};
-
+  final _routes = SignalingRoutes();
   HttpServer? _server;
-  final _pending = <String, Completer<String>>{};
-
-  final _offers = StreamController<IncomingOffer>.broadcast();
 
   @override
-  Stream<IncomingOffer> get offers => _offers.stream;
+  Stream<IncomingOffer> get offers => _routes.offers;
 
   @override
-  void arm(String code) => _code = code;
+  void arm(String code) => _routes.arm(code);
 
   @override
-  void disarm() => _code = null;
+  void disarm() => _routes.disarm();
 
   @override
-  void allowReconnect(String token) => _tokens.add(token);
+  void allowReconnect(String token) => _routes.allowReconnect(token);
 
   @override
-  void refuseReconnect(String token) => _tokens.remove(token);
+  void refuseReconnect(String token) => _routes.refuseReconnect(token);
+
+  @override
+  void postAnswer(String id, String sdp) => _routes.postAnswer(id, sdp);
 
   @override
   int? get port => _server?.port;
@@ -64,8 +53,8 @@ class SignalingServer implements LanSignaling {
     // the reachable one, and this one can still dial out.
     HttpServer? server;
     try {
-      server =
-          await HttpServer.bind(InternetAddress.anyIPv4, preferredSignalingPort);
+      server = await HttpServer.bind(
+          InternetAddress.anyIPv4, preferredSignalingPort);
     } catch (_) {
       server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     }
@@ -87,92 +76,36 @@ class SignalingServer implements LanSignaling {
   }
 
   @override
-  void postAnswer(String id, String sdp) {
-    final pending = _pending.remove(id);
-    if (pending != null && !pending.isCompleted) {
-      pending.complete(sdp);
-    }
-  }
-
-  @override
   Future<void> close() async {
     await _server?.close(force: true);
     _server = null;
-    await _offers.close();
+    await _routes.close();
   }
 
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
-    response.headers
-      ..set("Access-Control-Allow-Origin", "*")
-      ..set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-      ..set("Access-Control-Allow-Headers", "content-type")
-      ..set("Access-Control-Max-Age", "600");
-    if (request.method == "OPTIONS") {
-      // Chrome asks before letting a public origin reach this private address.
-      response.headers.set("Access-Control-Allow-Private-Network", "true");
-      response.statusCode = HttpStatus.noContent;
-      await response.close();
-      return;
-    }
-
+    // Before anything that can throw: a browser has to be able to read a 500
+    // as well as an answer.
+    SignalingRoutes.cors.forEach(response.headers.set);
     try {
-      switch (request.uri.path) {
-        case "/entoli/health":
-          response.statusCode = HttpStatus.ok;
-          await response.close();
-        case "/entoli/offer":
-          await _onOffer(request, response);
-        case "/entoli/answer":
-          final body =
-              jsonDecode(await utf8.decodeStream(request)) as Map<String, dynamic>;
-          postAnswer(body["id"] as String? ?? "", body["sdp"] as String? ?? "");
-          response.statusCode = HttpStatus.ok;
-          await response.close();
-        default:
-          response.statusCode = HttpStatus.notFound;
-          await response.close();
-      }
+      final reply = await _routes.handle(SignalingRequest(
+        request.method,
+        request.uri.path,
+        body: SignalingRoutes.carriesBody(request.method, request.uri.path)
+            ? await utf8.decodeStream(request)
+            : "",
+      ));
+      reply.headers.forEach(response.headers.set);
+      response.statusCode = reply.status;
+      if (reply.body.isNotEmpty) response.write(reply.body);
     } catch (_) {
+      // Throws in its own right once the headers have gone out.
       try {
         response.statusCode = HttpStatus.internalServerError;
-        await response.close();
       } catch (_) {}
     }
-  }
-
-  Future<void> _onOffer(HttpRequest request, HttpResponse response) async {
-    if (request.method != "POST") {
-      response.statusCode = HttpStatus.methodNotAllowed;
-      await response.close();
-      return;
-    }
-    final body =
-        jsonDecode(await utf8.decodeStream(request)) as Map<String, dynamic>;
-    final sdp = body["sdp"] as String?;
-    final token = body["token"] as String?;
-    final accepted = sdp != null &&
-        ((token != null && _tokens.contains(token)) ||
-            (_code != null && _code!.isNotEmpty && body["code"] == _code));
-    if (!accepted) {
-      response.statusCode = HttpStatus.forbidden;
-      await response.close();
-      return;
-    }
-
-    final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-    final answered = _pending[id] = Completer<String>();
-    // Which token let it in travels with it: a reconnect's handshake runs
-    // against that pair's secret, and only the caller knows which that is.
-    _offers.add(IncomingOffer(
-        id: id, sdp: sdp, token: _tokens.contains(token) ? token : null));
     try {
-      final answer =
-          await answered.future.timeout(const Duration(seconds: 30), onTimeout: () => throw TimeoutException("no answer"));
-      response.write(jsonEncode({"sdp": answer}));
-    } finally {
-      _pending.remove(id);
-    }
-    await response.close();
+      await response.close();
+    } catch (_) {}
   }
 }
