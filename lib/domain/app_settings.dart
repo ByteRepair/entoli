@@ -35,6 +35,7 @@ class AppSettings {
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
     this.voiceSpeaker = 0,
+    this.voiceLanguage,
     this.voicePushToTalk = false,
     this.assistantProject,
     this.assistantView = AssistantView.chat,
@@ -119,6 +120,10 @@ class AppSettings {
   String? voiceRecognitionModelId;
   String? voiceSpeechModelId;
   int voiceSpeaker;
+
+  /// Which language the device's own engines are asked to hear and speak in,
+  /// as a BCP-47 tag. Null is the device's own — see `Voice.systemLanguages`.
+  String? voiceLanguage;
 
   /// Whether the microphone is open only while a button is held. Off is voice
   /// mode listening for as long as it is on screen, which is what it is for;
@@ -239,6 +244,7 @@ class AppSettings {
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
+        voiceLanguage: _orNull(json["voiceLanguage"] as String?),
         voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
         assistantProject: _orNull(json["assistantProject"] as String?),
         assistantView: AssistantView.fromName(json["assistantView"] as String?),
@@ -314,6 +320,7 @@ class AppSettings {
         voiceRecognitionModelId: voiceRecognitionModelId,
         voiceSpeechModelId: voiceSpeechModelId,
         voiceSpeaker: voiceSpeaker,
+        voiceLanguage: voiceLanguage,
         voicePushToTalk: voicePushToTalk,
         assistantProject: assistantProject,
         assistantView: assistantView,
@@ -355,6 +362,7 @@ class AppSettings {
         "voiceRecognitionModelId": voiceRecognitionModelId,
       if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
       if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
+      if (voiceLanguage != null) "voiceLanguage": voiceLanguage,
       if (voicePushToTalk) "voicePushToTalk": voicePushToTalk,
       if (assistantProject != null) "assistantProject": assistantProject,
       "assistantView": assistantView.name,

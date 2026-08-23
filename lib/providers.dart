@@ -269,6 +269,13 @@ final voiceReadyProvider = Provider<bool>((ref) {
       voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.id);
 });
 
+/// The languages the device's own engines offer. A future rather than
+/// something seeded at startup like [installedVoiceModelsProvider]: only the
+/// settings page reads it, and answering it on Android means starting a
+/// synthesiser to ask.
+final systemVoiceLanguagesProvider =
+    FutureProvider<List<VoiceLanguage>>((ref) => ref.watch(voiceProvider).systemLanguages());
+
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.
 final promptLibraryProvider = Provider<PromptLibrary>((ref) => PromptLibrary.empty);
@@ -374,6 +381,13 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setVoiceSpeaker(int speaker) =>
       _update((s) => s.voiceSpeaker = speaker);
+
+  /// Which language the system engines are asked for, or null for the
+  /// device's. It reaches the next session rather than the one running: the
+  /// language is in the intent a recognition is started with and in the
+  /// synthesiser's own state, both settled when a session is built.
+  Future<void> setVoiceLanguage(String? tag) =>
+      _update((s) => s.voiceLanguage = tag);
 
   /// Whether the microphone waits for a button to be held. Reaches a session
   /// already running: the controller listens for it.

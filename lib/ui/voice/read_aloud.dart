@@ -57,7 +57,11 @@ class ReadAloud extends Notifier<String?> {
     try {
       final session = await ref
           .read(voiceProvider)
-          .start(speech: speech, speaker: settings.voiceSpeaker);
+          .start(
+            speech: speech,
+            speaker: settings.voiceSpeaker,
+            language: settings.voiceLanguage,
+          );
       // Tapped again while it loaded, or the app was left. The session is the
       // only thing that has to be undone; the state already is.
       if (state != id) {

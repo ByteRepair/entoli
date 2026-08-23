@@ -237,6 +237,7 @@ class VoiceController extends Notifier<VoiceViewState> {
             recognition: recognition,
             speech: speech,
             speaker: settings.voiceSpeaker,
+            language: settings.voiceLanguage,
           );
       if (!ref.mounted) return unawaited(session.dispose());
       _session = session;

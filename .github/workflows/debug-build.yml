@@ -11,9 +11,6 @@ concurrency:
   group: debug-build-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  FLUTTER_VERSION: 3.44.8
-
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -28,13 +25,7 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - uses: subosito/flutter-action@v2.23.0
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - run: flutter pub get
+      - uses: ./.github/actions/flutter-setup
 
       - uses: ./.github/actions/bundled-tools
 
@@ -61,7 +52,6 @@ jobs:
         uses: ./.github/actions/linux-appimage
         with:
           mode: debug
-          flutter-version: ${{ env.FLUTTER_VERSION }}
           # Unversioned: dispatched from a branch, so pubspec's version would
           # name a build nobody released.
           name: entoli-debug-x86_64.AppImage
@@ -87,13 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: subosito/flutter-action@v2.23.0
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - run: flutter pub get
+      - uses: ./.github/actions/flutter-setup
 
       - run: flutter build web --debug
 

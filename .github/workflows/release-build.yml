@@ -40,9 +40,6 @@ on:
 permissions:
   contents: read
 
-env:
-  FLUTTER_VERSION: 3.44.8
-
 jobs:
   # A job of its own because both builds are named after what it resolves, and
   # a tag that disagrees with pubspec then costs seconds rather than two
@@ -134,13 +131,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: subosito/flutter-action@v2.23.0
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - run: flutter pub get
+      - uses: ./.github/actions/flutter-setup
 
       # Cheap on a job that already has the SDK warm, and this is the build
       # whose output cannot be quietly replaced once people have downloaded it.
@@ -245,7 +236,6 @@ jobs:
         uses: ./.github/actions/linux-appimage
         with:
           mode: release
-          flutter-version: ${{ env.FLUTTER_VERSION }}
           name: ${{ needs.version.outputs.appimage }}
           # The version code, so the AppImage and the APK report the same build.
           build-number: ${{ needs.version.outputs.code }}

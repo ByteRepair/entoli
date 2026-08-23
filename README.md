@@ -12,6 +12,18 @@ Entoli is a Flutter app targeting Linux, Android, and the web. Beyond the
 Flutter SDK, each platform needs a few native dev libraries; the lists below are
 the complete set, copy-pasteable into whichever package manager you use.
 
+### First, after cloning
+
+```sh
+tool/prepare.sh
+```
+
+Fetches the packages and generates the sources that `freezed` and
+`json_serializable` produce, which are not in the repository — so **no Dart
+target compiles until this has run**. Run it again after changing a `@freezed`
+or `@JsonSerializable` type. The first run is about a minute; later ones are a
+few seconds.
+
 ### Linux
 
 GTK 3 and GStreamer dev headers (the latter come from `audioplayers_linux`),

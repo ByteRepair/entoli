@@ -46,10 +46,10 @@ named in a cross-reference is findable from this list.
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/CLAUDE.md` — Voice mode, What listens and what speaks, The
-  Android system engines, Ending the utterance, What counts as being spoken
-  to, One listener, two engines, Mute is the user, not the conversation, Per
-  side, not per session, The Kotlin, Where the models live, Hearing and
-  speaking
+  Android system engines, Which language it is asked in, Ending the utterance,
+  What counts as being spoken to, One listener, two engines, Mute is the user,
+  not the conversation, Per side, not per session, The Kotlin, Where the models
+  live, Hearing and speaking
 - `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen, Touch to
   speak, Taking turns
 - `lib/ui/workspace/CLAUDE.md` — The workspace explorer
@@ -287,7 +287,11 @@ is `logDetail`, which is debug-only.
   Vulkan GPU backend, so a build without the SDK still accelerates most phones,
   and the settings page says the device has no accelerator only when it has
   neither an NPU nor a Vulkan-1.1 GPU — see "What the NPU actually is".
-- Codegen: `dart run build_runner build` (freezed + json_serializable).
+- Setup: `tool/prepare.sh` — packages plus codegen. The generated sources are
+  not in the repository, so a fresh clone does not compile until it has run,
+  and it wants running again whenever a `@freezed` or `@JsonSerializable` type
+  changes. `dart run build_runner watch` is the answer while editing
+  `lib/domain/`. CI runs the script through `.github/actions/flutter-setup`.
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you
   are in rather than reformatting it.

@@ -685,14 +685,26 @@ class FakeVoice extends Voice {
   /// only speaks, which is what reading one message out asks for.
   RecognitionModel? listeningWith;
 
+  /// What the last [start] was asked to hear and speak in.
+  String? startedIn;
+
+  /// What the settings page is offered as languages. Empty is every platform
+  /// but Android, and an Android one whose synthesiser would not say.
+  List<VoiceLanguage> languages = const [];
+
+  @override
+  Future<List<VoiceLanguage>> systemLanguages() async => languages;
+
   @override
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    String? language,
   }) async {
     if (refusal != null) throw StateError(refusal!);
     listeningWith = recognition;
+    startedIn = language;
     return session = FakeVoiceSession();
   }
 }

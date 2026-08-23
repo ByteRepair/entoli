@@ -244,15 +244,15 @@ had one installed while the app was open gets it that way.
 
 `startListening` takes an intent, and the two things Entoli puts in that intent
 are exactly the two a phone can refuse: `EXTRA_PREFER_OFFLINE`, and the language
-the device is set to. A phone with no downloaded model for its own language
+it is to be heard in. A phone with no downloaded model for its own language
 refuses both together as `ERROR_LANGUAGE_NOT_SUPPORTED` — **"Recognition failed
 (error 12)", which is what voice mode said instead of hearing anything, on a
 device whose recognizer would have worked perfectly well over the network.**
 `ERROR_LANGUAGE_UNAVAILABLE` is the same thing said one step more precisely, and
 means the same to us.
 
-So the intent has three shapes and they are a ladder: on-device in the device's
-language, over the network in the device's language, and over the network in
+So the intent has three shapes and they are a ladder: on-device in the language
+asked for, over the network in the language asked for, and over the network in
 whatever language the service itself is set to. A language error is a step down
 rather than a fault, and only a device that has refused every shape is told it
 has no speech recognition for that language. **On-device stays the first rung**,
@@ -273,14 +273,15 @@ Once per service, since it is a fetch rather than a retry. The platform decides
 whether to prompt and whether to wait for wifi, and nothing here waits for it or
 hears how it went.
 
-**The tag is stripped rather than taken.** `Locale.getDefault()` carries
-whatever `u-` extension the locale was set with — a calendar, a numbering system
-— and a tag a service cannot parse is a language it does not support, which is
-the same error 12 arriving for a reason that has nothing to do with what the
-device can hear. The script stays on: for `sr-Latn` and `zh-Hant` it *is* the
-language. `EXTRA_CALLING_PACKAGE` goes in beside it because nothing fills it in
-for a `SpeechRecognizer` session, and a service that wants to know who is asking
+**The tag is stripped rather than taken.** A locale carries whatever `u-`
+extension it was set with — a calendar, a numbering system — and a tag a service
+cannot parse is a language it does not support, which is the same error 12
+arriving for a reason that has nothing to do with what the device can hear. The
+script stays on: for `sr-Latn` and `zh-Hant` it *is* the language.
+`EXTRA_CALLING_PACKAGE` goes in beside it because nothing fills it in for a
+`SpeechRecognizer` session, and a service that wants to know who is asking
 answers a request without it as `ERROR_CLIENT`.
+
 
 Everything the walk learned is dropped when the session ends. It was learned by
 failing, and a phone that has since been given the language pack — or the
@@ -311,6 +312,45 @@ its last session was an immediate retry landing on the same error, forever.
 Everything else reports: no microphone, no permission, and an error code nothing
 here has a name for, which is still worth showing with its number rather than
 swallowing.
+
+### Which language it is asked in
+
+`Locale.getDefault()` until the Settings page offered anything else, and still
+the answer where it is left alone. A phone is set to one language and its owner
+speaks the phone's language at it — until they do not, which is the ordinary
+case for anyone bilingual, and there was no way to say so.
+
+So `settings.json` carries a `voiceLanguage`, a BCP-47 tag or null for the
+device's, and it reaches both halves: the recogniser's intent, and `setLanguage`
+on the synthesiser. Dart carries it per strategy, since that is where a session
+is composed, but **`VoiceChannel` keeps one field for both** — the two halves
+are built separately and land in the same object, and a language each would be
+two answers to a question the user was asked once. Null is not a special case
+below that field either: `asked()` resolves it to the device's locale in one
+place, and the recogniser and the synthesiser both read it from there.
+
+**The list is the synthesiser's.** `getAvailableLanguages` is a plain getter on
+a ready `TextToSpeech`, and every phone that can speak at all answers it. Naming
+what the *recogniser* can hear is the harder half of the same question:
+`checkRecognitionSupport` is Android 13 and up and needs a service bound, and
+before that it is `ACTION_GET_LANGUAGE_DETAILS`, an ordered broadcast plenty of
+services never answer. Asking the engine that will answer, and letting a tag the
+recogniser dislikes descend the ladder above, is the cheaper shape of the same
+outcome — and the ladder was already there for the device's own language.
+
+A language is a **new session** rather than a live one. Changing it under a
+running one would mean rebuilding the intent mid-utterance and setting a locale
+on an engine with sentences queued behind it, for a setting nobody changes while
+talking; the field is written by whichever half of the next session starts
+first, and read from then on.
+
+**A pick either engine cannot do is said out loud.** The recogniser's refusal
+already walks the ladder and, at the end of it, names the language on screen.
+The synthesiser's does not refuse at all — `setLanguage` returns a code, and
+ignoring it leaves the engine speaking whatever it was speaking before, which is
+an answer read out in the wrong language with nothing anywhere to explain it. So
+the code is checked, the device's own is put back, and the fallback is a `Log.w`
+in a release build like any other arm nothing draws.
 
 ### Ending the utterance
 

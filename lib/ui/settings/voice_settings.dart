@@ -54,6 +54,7 @@ class VoiceSection extends ConsumerWidget {
           onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
         ),
         _SpeakerField(settings: settings),
+        _LanguageField(settings: settings),
         if (canListen) const _TouchToSpeak(),
         if (!voice.downloadsModels) _MissingEngines(installed: installed),
       ],
@@ -334,6 +335,44 @@ class _SpeakerField extends ConsumerWidget {
     );
   }
 
+}
+
+/// Which language the device's own engines are asked to hear and speak in —
+/// the question [_SpeakerField] answers for a downloaded model, which is why
+/// the two are siblings that never draw together.
+///
+/// Nothing is drawn where the device names no languages: a browser, a desktop,
+/// and a phone whose synthesiser would not answer. A picker holding only the
+/// device's own language is a control that cannot say anything.
+class _LanguageField extends ConsumerWidget {
+  const _LanguageField({required this.settings});
+
+  final AppSettings settings;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final native =
+        voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId)?.isNative ==
+                true ||
+            voiceModelOf<SpeechModel>(settings.voiceSpeechModelId)?.isNative == true;
+    if (!native) return const SizedBox.shrink();
+    final offered = ref.watch(systemVoiceLanguagesProvider).value ?? const [];
+    if (offered.isEmpty) return const SizedBox.shrink();
+    final picked = settings.voiceLanguage;
+    return InstalledPicker(
+      label: "Language",
+      none: "Device language",
+      value: picked,
+      options: {
+        for (final language in offered) language.tag: language.name,
+        // A settings file carried off another phone names a language this one
+        // has no entry for. Kept and named by its tag rather than reset to the
+        // device's: the phone it came from is the one that knows what it meant.
+        if (picked != null && !offered.any((l) => l.tag == picked)) picked: picked,
+      },
+      onPick: ref.read(appSettingsProvider.notifier).setVoiceLanguage,
+    );
+  }
 }
 
 class _Badge extends StatelessWidget {

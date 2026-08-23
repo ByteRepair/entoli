@@ -21,6 +21,16 @@ what they do with what comes back, which is a bundle and an AppImage either
 way. The four signing secrets are named at the call site rather than
 `inherit`ed, since only one of the two jobs signs anything.
 
+**Every job that touches Dart starts with `.github/actions/flutter-setup`** —
+the SDK pin, the packages and codegen in one step, `linux-appimage`'s own job
+included, so no workflow spells a Flutter version out. The generated sources
+are not committed, so build_runner runs on every job; the action caches its
+asset graph, since the minute it takes is mostly compiling its own entrypoint
+rather than producing the four files. It also means the release workflows now
+need `tool/prepare.sh` to exist *in the tagged tree*, where before they needed
+only `flutter pub get`: rebuilding an older release breaks if the script is
+renamed.
+
 **The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
 job of its own before either build. Both file names are composed there, because
 an attestation records its subject by name and the file attested is uploaded
