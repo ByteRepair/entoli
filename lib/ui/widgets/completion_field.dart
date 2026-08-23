@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/models.dart";
 import "../../domain/shell.dart";
 import "../../providers.dart";
+import "text_input.dart";
 
 class _MoveIntent extends Intent {
   const _MoveIntent(this.delta);
@@ -59,13 +60,6 @@ int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
         value.selection.isValid ? value.selection.baseOffset : value.text.length,
     };
 
-void _replaceIn(TextEditingController controller, int start, int end, String text) {
-  controller.value = TextEditingValue(
-    text: controller.text.replaceRange(start, end, text),
-    selection: TextSelection.collapsed(offset: start + text.length),
-  );
-}
-
 /// Type a whole completion into [controller] — the trigger, the name, and the
 /// trailing space that makes what follows arguments rather than more name.
 ///
@@ -81,7 +75,7 @@ void insertCompletion(
   final value = controller.value;
   final at = _triggerAt(value, kind);
   final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
-  _replaceIn(controller, at, at, "$space${kind.trigger}$name ");
+  replaceIn(controller, at, at, "$space${kind.trigger}$name ");
 }
 
 /// The menu entries that open a completion menu by typing its trigger, for a
@@ -248,7 +242,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
   }
 
   void _replace(int start, int end, String text) =>
-      _replaceIn(widget.controller, start, end, text);
+      replaceIn(widget.controller, start, end, text);
 
   @override
   Widget build(BuildContext context) {
@@ -301,7 +295,12 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
 
     return widget.layout(
       token == null ? const SizedBox.shrink() : _menu(token.kind, matches),
-      field,
+      // Strictly outside the bindings above, so Tab reaches the indent only
+      // when the menu had nothing to take it for. A one-line field is left
+      // alone, since there Tab is how the caret leaves.
+      widget.maxLines == 1
+          ? field
+          : TabIndents(controller: widget.controller, child: field),
     );
   }
 
