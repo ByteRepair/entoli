@@ -158,13 +158,21 @@ class _SidebarState extends ConsumerState<Sidebar> {
                        .where((c) =>
                            c.project == project && !c.isExpired())
                        .toList();
-                  if (chats.isEmpty) {
-                    return const _Nothing("No chats in this project yet.");
-                  }
+                  // Remotes stay below an empty local list too: a device
+                  // that only ever mirrors has nothing of its own to show.
                   return Column(
                     children: [
-                      _SearchField(controller: _search, query: _query),
-                      Expanded(child: _ChatList(chats: chats, query: _query)),
+                      if (chats.isEmpty)
+                        const Expanded(
+                            child: _Nothing("No chats in this project yet."))
+                      else ...[
+                        _SearchField(controller: _search, query: _query),
+                        Expanded(child: _ChatList(chats: chats, query: _query)),
+                      ],
+                      // Below the local list, not among its date groups: a
+                      // mirror lives on another device, so it answers to no
+                      // date this sidebar could place.
+                      const _Remotes(),
                     ],
                   );
                 },
@@ -212,6 +220,80 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
+}
+
+/// The Remotes section: chats mirrored from a paired device, one row each
+/// with the owning device as its subtitle. Read-only by nature — the home
+/// device owns the log — so the rows carry none of the local chat's menu:
+/// no pin, rename, move or delete, which would all write to a disk this
+/// device does not have. A gone connection keeps the row: the snapshot is
+/// still readable, and the subtitle says the device is offline.
+class _Remotes extends ConsumerWidget {
+  const _Remotes();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final remotes = ref.watch(remoteChatsProvider);
+    if (remotes.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              "Remotes",
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        for (final entry in remotes)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: ListTile(
+              dense: true,
+              title: Text(entry.state.title.orUntitled,
+                  overflow: TextOverflow.ellipsis),
+              subtitle: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    entry.online
+                        ? Icons.computer
+                        : Icons.cloud_off_outlined,
+                    size: 13,
+                    color: entry.online
+                        ? theme.colorScheme.onSurfaceVariant
+                        : theme.colorScheme.error,
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      entry.online
+                          ? entry.deviceName
+                          : "${entry.deviceName} — offline",
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: entry.online
+                            ? theme.colorScheme.onSurfaceVariant
+                            : theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              onTap: () => openChat(context, ref, entry.chatId),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 /// What the sidebar says where it would otherwise be blank: a project with no

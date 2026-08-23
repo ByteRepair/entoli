@@ -7,6 +7,7 @@ import "package:flutter/widgets.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
+import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_restart.dart";
@@ -32,6 +33,9 @@ import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/rootfs_store.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
+import "package:agent_chat/providers.dart" show RemoteChats;
+import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
+import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:uuid/uuid.dart";
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
@@ -464,6 +468,9 @@ class FakeChatStore implements ChatStore {
   }
 
   @override
+  Future<List<ChatRecord>> readRecords(String chatId) async => records(chatId);
+
+  @override
   Future<List<ChatState>> list() async =>
       _states.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
@@ -852,4 +859,28 @@ class FakeVoiceModelStore extends VoiceModelStore {
     deleted.add(model.id);
     _installed.remove(model.id);
   }
+}
+
+/// The Remotes half of the sidebar with no hub under it. Every test that is
+/// not about sync gets an empty list; a sync one seeds the rows it wants.
+class FakeRemoteChats extends RemoteChats {
+  FakeRemoteChats(this.entries);
+
+  final List<RemoteChatEntry> entries;
+
+  @override
+  List<RemoteChatEntry> build() => entries;
+}
+
+/// A mirrored chat's view, already resolved. What the real controller derives
+/// from a live mirror — and the offline status line it puts there — is pinned
+/// in `sync_hub_pair_test.dart` over two real hubs; here the page is the
+/// subject and there is no wire.
+class FakeMirrorChat extends MirrorChatController {
+  FakeMirrorChat(super.chatId, this.views);
+
+  final Map<String, ChatViewState> views;
+
+  @override
+  ChatViewState build() => views[chatId] ?? ChatViewState();
 }

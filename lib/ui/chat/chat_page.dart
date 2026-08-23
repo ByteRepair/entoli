@@ -15,10 +15,12 @@ import "../widgets/nav_drawer.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
+import "mirror_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
 import "widgets/turn_surface.dart";
+import "widgets/view_only_bar.dart";
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key, this.withDrawer = false});
@@ -347,6 +349,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   @override
   Widget build(BuildContext context) {
+    // A mirrored chat is read through the hub's mirror, not the local store:
+    // different controller, no expiry check, no settings to open, and a bar
+    // that says view only where the composer would be.
+    if (ref.watch(isMirroredChatProvider(widget.chatId))) {
+      return _mirrorBuild(context);
+    }
     final view = ref.watch(chatControllerProvider(widget.chatId));
     final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
     ref.listen(chatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
@@ -438,6 +446,96 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           ),
         ),
       ),
+    );
+  }
+
+  /// A mirrored chat's page: same conversation, read-only. Nothing here
+  /// touches the repository or the store — every byte came over the wire and
+  /// stays in RAM, so expiry, settings, and all mutation callbacks are out.
+  Widget _mirrorBuild(BuildContext context) {
+    final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
+    ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
+    final online = ref.watch(remoteChatsProvider).any((c) => c.chatId == widget.chatId && c.online);
+    final deviceName = ref
+        .watch(remoteChatsProvider)
+        .where((c) => c.chatId == widget.chatId)
+        .map((c) => c.deviceName)
+        .firstOrNull;
+    final chat = view.chat;
+    if (chat == null) {
+      return _Waiting(
+        withDrawer: widget.withDrawer,
+        child: const CircularProgressIndicator(),
+      );
+    }
+    if (_opened != widget.chatId) {
+      _opened = widget.chatId;
+      _settleAtBottom();
+    }
+    final details = [
+      ..._details(chat.state),
+      if (deviceName != null) _TitleLine(icon: Icons.devices_other, text: deviceName),
+    ];
+    final barHeight = _barHeight(context, details.length);
+    return Scaffold(
+      drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
+      appBar: AppBar(
+        titleSpacing: 0,
+        toolbarHeight: barHeight,
+        title: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [Text(chat.state.title.orUntitled), ...details],
+          ),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _readableWidth),
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  Expanded(child: _mirrorConversation(chat, view)),
+                  ViewOnlyBar(online: online),
+                ],
+              ),
+              if (!online)
+                Positioned(left: 0, right: 0, top: 0, child: OfflineBanner(deviceName: deviceName ?? "Home device")),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mirrorConversation(Chat chat, ChatViewState view) {
+    final speechReady = ref.watch(speechReadyProvider);
+    final reading = ref.watch(readAloudProvider);
+    if (chat.messages.isEmpty) {
+      return const Center(child: Text("No messages yet"));
+    }
+    return ListView.builder(
+      controller: _scroll,
+      itemCount: chat.messages.length,
+      itemBuilder: (context, i) {
+        final m = chat.messages[i];
+        return MessageBubble(
+          chatId: widget.chatId,
+          message: m,
+          isWaiting: false,
+          waitingStatus: view.status,
+          onTapLink: (href) {
+            final uri = Uri.tryParse(href);
+            if (uri != null) ref.read(linkOpenerProvider).open(context, uri);
+          },
+          onSpeak:
+              speechReady && m.hasText ? () => readAloud(context, ref, m.id, m.plainText) : null,
+          isSpeaking: reading == m.id,
+        );
+      },
     );
   }
 

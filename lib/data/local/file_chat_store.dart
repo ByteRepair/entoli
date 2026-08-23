@@ -150,6 +150,14 @@ class FileChatStore implements ChatStore {
   }
 
   @override
+  Future<List<ChatRecord>> readRecords(String chatId) async {
+    final project = await _projectOf(chatId);
+    final text =
+        await _readOrNull(config.convFile(chatId, project: project));
+    return text == null ? const [] : decodeLog(text);
+  }
+
+  @override
   Future<void> append(String chatId, List<ChatRecord> records) async {
     if (records.isEmpty) return;
     // No `ensureChatDirs`: every append follows the `saveState` that created

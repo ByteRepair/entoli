@@ -7,6 +7,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
@@ -278,5 +279,79 @@ void main() {
     final chat = await repo.createChat();
 
     expect(await repo.readResource(chat.state.id, "gone.txt"), isNull);
+  });
+
+  /// The sync layer's whole view of this device. Mirroring is proven end to
+  /// end in `sync_hub_pair_test.dart`; what is here is the two arms that
+  /// pairing never reaches — a chat moved between projects, and its own
+  /// overrides changing.
+  group("the change feed", () {
+    test("reports what was appended, to which chat", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      final seen = <RepoEvent>[];
+      repo.changes.listen(seen.add);
+
+      final record =
+          ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done);
+      await repo.append(chat.state.id, [record]);
+      await pumpEventQueue();
+
+      final event = seen.whereType<Appended>().single;
+      expect(event.chatId, chat.state.id);
+      expect(event.records, [record]);
+    });
+
+    test("a retitle is a state change carrying the new state", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      final seen = <RepoEvent>[];
+      repo.changes.listen(seen.add);
+
+      await repo.retitle(chat.state, "Renamed");
+      await pumpEventQueue();
+
+      expect(seen.whereType<StateChanged>().last.state.title, "Renamed");
+    });
+
+    test("a chat's own overrides are their own event", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      final seen = <RepoEvent>[];
+      repo.changes.listen(seen.add);
+
+      await repo.saveMeta(chat.state.id, ChatMeta(model: "qwen-2.5"));
+      await pumpEventQueue();
+
+      final event = seen.whereType<MetaChanged>().single;
+      expect(event.chatId, chat.state.id);
+      expect(event.meta.model, "qwen-2.5");
+    });
+
+    test("a move says where the chat went", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      final seen = <RepoEvent>[];
+      repo.changes.listen(seen.add);
+
+      await repo.moveChat(chat.state.id, "work");
+      await pumpEventQueue();
+
+      final event = seen.whereType<Moved>().single;
+      expect(event.chatId, chat.state.id);
+      expect(event.project, "work");
+    });
+
+    test("a delete names the chat that is gone", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      final seen = <RepoEvent>[];
+      repo.changes.listen(seen.add);
+
+      await repo.deleteChat(chat.state.id);
+      await pumpEventQueue();
+
+      expect(seen.whereType<Deleted>().single.chatId, chat.state.id);
+    });
   });
 }

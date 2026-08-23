@@ -146,6 +146,16 @@ without one the chat reads as a turn the process was killed in the middle of and
 is offered to be carried on, which is the point of `finished: false` and a
 surprise everywhere else.
 
+`TestApp.create(remotes: …, mirrors: …)` is a chat mirrored from a paired
+device — the rows the sidebar's Remotes section draws, and what one of them
+reads as when it is opened. Both are provider overrides rather than a faked
+`SyncHub`, and the empty default is load-bearing: the sidebar and the chat page
+both ask whether a chat is mirrored, and there is no hub in a test container to
+ask. What the real controller derives from a live mirror is pinned in
+`data/sync/sync_hub_pair_test.dart` instead, over two hubs on a loopback
+`ByteChannel` — the only place the handshake, the framing and the resource
+chunking actually run.
+
 ## The filesystem a test runs on
 
 `tempConfig` is a real temp directory over `fileSystemIo`, torn down when the

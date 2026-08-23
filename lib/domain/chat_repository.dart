@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:typed_data";
 
 import "package:uuid/uuid.dart";
@@ -14,6 +15,49 @@ import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
 import "../domain/temp_chat_ttl.dart";
+
+/// What changed on disk, as [ChatRepository.changes] reports it. The sync
+/// layer's whole view of this device: everything a mirror needs to follow.
+///
+/// The repository knows nothing about who listens; the stream is broadcast,
+/// and nobody subscribed is the ordinary case for every test that predates
+/// sync.
+sealed class RepoEvent {
+  const RepoEvent();
+}
+
+class Appended extends RepoEvent {
+  const Appended(this.chatId, this.records);
+
+  final String chatId;
+  final List<ChatRecord> records;
+}
+
+class StateChanged extends RepoEvent {
+  const StateChanged(this.state);
+
+  final ChatState state;
+}
+
+class MetaChanged extends RepoEvent {
+  const MetaChanged(this.chatId, this.meta);
+
+  final String chatId;
+  final ChatMeta meta;
+}
+
+class Deleted extends RepoEvent {
+  const Deleted(this.chatId);
+
+  final String chatId;
+}
+
+class Moved extends RepoEvent {
+  const Moved(this.chatId, this.project);
+
+  final String chatId;
+  final String? project;
+}
 
 /// The UI's door to storage and the agent. Resolves which model a chat runs
 /// on, and owns which thread of a conversation is being read. The turn itself
@@ -44,6 +88,12 @@ class ChatRepository {
   ChatMeta? _draftMeta;
 
   bool _isDraft(String id) => _draft?.state.id == id;
+
+  final _changes = StreamController<RepoEvent>.broadcast();
+
+  /// Everything written through this repository, as it lands. Drafts are not
+  /// reported: they are nowhere on disk for a peer to mirror.
+  Stream<RepoEvent> get changes => _changes.stream;
 
   void _forgetDraft(String id) {
     if (!_isDraft(id)) return;
@@ -80,8 +130,10 @@ class ChatRepository {
 
   /// File a chat under another project. Its own workspace travels with it; the
   /// shared one it can reach is the new project's from the next turn on.
-  Future<void> moveChat(String chatId, String? project) =>
-      _store.moveChat(chatId, project);
+  Future<void> moveChat(String chatId, String? project) async {
+    await _store.moveChat(chatId, project);
+    _changes.add(Moved(chatId, project));
+  }
 
   Future<Chat> openChat(String id) async => _isDraft(id) ? _draft! : await _store.load(id);
 
@@ -123,6 +175,7 @@ class ChatRepository {
     final anchored = state.copyWith(tempTtlSince: since, tempTtlExpiresAt: expiresAt);
     await _store.saveState(anchored);
     if (pinned != null) await _store.saveMeta(state.id, pinned);
+    _changes.add(StateChanged(anchored));
     return anchored;
   }
 
@@ -145,18 +198,22 @@ class ChatRepository {
 
   /// Add to a chat's log. What a running turn does with everything it produces,
   /// and the only way a conversation is written.
-  Future<void> append(String chatId, List<ChatRecord> records) =>
-      _store.append(chatId, records);
+  Future<void> append(String chatId, List<ChatRecord> records) async {
+    await _store.append(chatId, records);
+    _changes.add(Appended(chatId, records));
+  }
 
   /// A title change on its own. The conversation is deliberately not written:
   /// a turn may still be adding to it.
-  Future<void> retitle(ChatState state, String title) async {
+  Future<ChatState> retitle(ChatState state, String title) async {
     final renamed = state.copyWith(title: title);
     if (_isDraft(state.id)) {
       _draft = _draft!.copyWith(state: renamed);
     } else {
       await _store.saveState(renamed);
+      _changes.add(StateChanged(renamed));
     }
+    return renamed;
   }
 
   /// A name for a new chat, from the first thing said in it. Null when no
@@ -185,7 +242,14 @@ class ChatRepository {
       return;
     }
     await _store.saveMeta(chatId, meta);
+    _changes.add(MetaChanged(chatId, meta));
   }
+
+  /// The chat's raw log, in order — what [openChat] replays and discards. The
+  /// sync layer streams these to a mirror asking to follow from where it
+  /// already is.
+  Future<List<ChatRecord>> readRecords(String chatId) =>
+      _isDraft(chatId) ? Future.value(const []) : _store.readRecords(chatId);
 
   /// [history] is what was said before this prompt, for a backend that is not
   /// holding the chat's session — see `AgentBackend.sendPrompt`. It comes from
@@ -317,6 +381,7 @@ class ChatRepository {
   Future<void> deleteChat(String id) async {
     await _dropSession(id);
     await _store.delete(id);
+    _changes.add(Deleted(id));
   }
 
   /// Everything a chat holds outside the store: the draft it may still be, and

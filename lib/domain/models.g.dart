@@ -50,8 +50,8 @@ _Chat _$ChatFromJson(Map<String, dynamic> json) => _Chat(
 );
 
 Map<String, dynamic> _$ChatToJson(_Chat instance) => <String, dynamic>{
-  'state': instance.state,
-  'messages': instance.messages,
+  'state': instance.state.toJson(),
+  'messages': instance.messages.map((e) => e.toJson()).toList(),
   'branches': instance.branches,
   'unfinished': instance.unfinished,
 };
@@ -76,7 +76,7 @@ Map<String, dynamic> _$MessageToJson(_Message instance) => <String, dynamic>{
   'id': instance.id,
   'role': _$MessageRoleEnumMap[instance.role]!,
   'createdAt': instance.createdAt.toIso8601String(),
-  'parts': instance.parts,
+  'parts': instance.parts.map((e) => e.toJson()).toList(),
   'documents': instance.documents,
 };
 
@@ -125,7 +125,7 @@ ToolCallPart _$ToolCallPartFromJson(Map<String, dynamic> json) => ToolCallPart(
 
 Map<String, dynamic> _$ToolCallPartToJson(ToolCallPart instance) =>
     <String, dynamic>{
-      'toolCall': instance.toolCall,
+      'toolCall': instance.toolCall.toJson(),
       'responseId': instance.responseId,
       'runtimeType': instance.$type,
     };
@@ -137,7 +137,10 @@ ToolResultPart _$ToolResultPartFromJson(Map<String, dynamic> json) =>
     );
 
 Map<String, dynamic> _$ToolResultPartToJson(ToolResultPart instance) =>
-    <String, dynamic>{'result': instance.result, 'runtimeType': instance.$type};
+    <String, dynamic>{
+      'result': instance.result.toJson(),
+      'runtimeType': instance.$type,
+    };
 
 ShellRunPart _$ShellRunPartFromJson(Map<String, dynamic> json) => ShellRunPart(
   command: json['command'] as String,

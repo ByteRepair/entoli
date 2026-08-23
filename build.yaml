@@ -1,0 +1,10 @@
+targets:
+  $default:
+    builders:
+      json_serializable:
+        options:
+          # Nested freezed objects must come out of toJson as maps, not live
+          # instances — SyncMessage carries ChatState and ChatRecord lists
+          # over a JSON wire, and a raw _ChatState in the payload is a cast
+          # failure on the far side.
+          explicit_to_json: true

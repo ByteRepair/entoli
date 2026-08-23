@@ -11,6 +11,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -25,6 +26,7 @@ import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
+import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
@@ -84,6 +86,10 @@ class TestApp {
   /// Android and so what most of the suite should be pretending to be.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
+  /// [remotes] is the Remotes section of the sidebar: chats mirrored from a
+  /// paired device. Empty by default, which is every test with no sync in it —
+  /// and load-bearing, because it is also what stands in for the [SyncHub]
+  /// nothing here builds. [mirrors] is what one of those chats reads as.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -98,6 +104,8 @@ class TestApp {
     FakeLocalLlm? localLlm,
     bool prefill = false,
     String? abi,
+    List<RemoteChatEntry> remotes = const [],
+    Map<String, ChatViewState> mirrors = const {},
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -175,6 +183,9 @@ class TestApp {
           prootAvailableProvider.overrideWithValue(proot),
           appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),
+          remoteChatsProvider.overrideWith(() => FakeRemoteChats(remotes)),
+          mirrorChatControllerProvider
+              .overrideWith2((id) => FakeMirrorChat(id, mirrors)),
         ],
       ),
     );

@@ -46,6 +46,7 @@ class SignalingServer implements LanSignaling {
   @override
   void disarm() => _code = null;
 
+  @override
   void allowReconnect(String token) => _tokens.add(token);
 
   @override

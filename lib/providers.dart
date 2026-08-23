@@ -455,6 +455,31 @@ final deviceRegistryProvider =
 
 final syncHubProvider = Provider<SyncHub>((ref) => throw UnimplementedError());
 
+/// The Remotes half of the sidebar: every mirrored chat with who owns it and
+/// whether the connection to them is up. Driven off the hub's notifier —
+/// Riverpod has no watch over a `ValueNotifier`, so a listener bridges it.
+///
+/// Deliberately separate from [chatListProvider], which reads the local
+/// store and stays sync-unaware: two sources of truth, never merged.
+class RemoteChats extends Notifier<List<RemoteChatEntry>> {
+  @override
+  List<RemoteChatEntry> build() {
+    final hub = ref.watch(syncHubProvider);
+    void changed() => state = hub.remotes.value;
+    hub.remotes.addListener(changed);
+    ref.onDispose(() => hub.remotes.removeListener(changed));
+    return hub.remotes.value;
+  }
+}
+
+final remoteChatsProvider =
+    NotifierProvider<RemoteChats, List<RemoteChatEntry>>(RemoteChats.new);
+
+final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
+  return ref
+      .watch(remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)));
+});
+
 /// Read once in `main` for its effect: it listens to the backend from the
 /// moment it exists, and nothing ever asks it anything. Here rather than a bare
 /// object in `main` so that its lifetime is the container's and `dispose` has a
@@ -513,12 +538,25 @@ final sortedModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
   return models..sort((a, b) => name(a).compareTo(name(b)));
 });
 
-/// An attachment's bytes, read back from the chat's `resources/`, so a message
-/// that has already been sent can still show what it carried. Auto-disposed:
-/// held, a scrolled-past image would keep its megabytes for the whole session.
+/// An attachment's bytes: the sync cache for a mirrored image, `resources/`
+/// for a local one. Auto-disposed — held, a scrolled-past image would keep
+/// its megabytes for the whole session; the mirror cache outlives it either
+/// way, so re-showing one costs no second fetch.
 final attachmentBytesProvider =
-    FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>((ref, key) =>
-        ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource));
+    FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>(
+        (ref, key) async {
+  if (ref.watch(isMirroredChatProvider(key.chatId))) {
+    final hub = ref.watch(syncHubProvider);
+    final cached = hub.byteCache.get(key.chatId, key.resource);
+    if (cached != null) return cached;
+    final bytes = await hub.fetchResource(key.chatId, key.resource);
+    if (bytes != null) {
+      hub.byteCache.put(key.chatId, key.resource, bytes);
+      return bytes;
+    }
+  }
+  return ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource);
+});
 
 /// The composer's `/` and `@` menus, read straight off the library: Entoli
 /// owns its commands and agents, so nothing has to be asked what it knows.

@@ -1,13 +1,20 @@
 import "dart:async";
+import "dart:convert";
+import "dart:typed_data";
 
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
 import "../../core/config.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/chat_log.dart" show ChatRecord;
+import "../../domain/chat_meta.dart";
+import "../../domain/chat_repository.dart";
+import "../../domain/models.dart" show ChatState;
 import "../../domain/sync/devices.dart";
 import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
+import "../../domain/sync/protocol.dart";
 import "channel.dart";
 import "framing.dart";
 import "handshake.dart";
@@ -15,6 +22,7 @@ import "rtc_channel.dart";
 import "signaling/lan_signaler.dart";
 import "signaling/pairing_payload.dart";
 import "signaling/relay_signaler.dart";
+import "sync_byte_cache.dart";
 
 export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
@@ -58,6 +66,54 @@ class PairingActivity {
 
 enum PairingStage { connecting, confirming, done, failed }
 
+/// One of a peer's chats, as this device mirrors it. RAM-only: nothing here
+/// is ever written to the data directory, so no backup and no IndexedDB
+/// carries it.
+class MirrorChat {
+  MirrorChat({
+    required this.peerId,
+    required this.deviceName,
+    required this.state,
+    required this.meta,
+    List<ChatRecord>? records,
+    required this.totalLines,
+  }) : records = records ?? [];
+
+  final String peerId;
+
+  /// The home device's name, as its hello carried it — what the sidebar's
+  /// Remotes rows show under the title.
+  final String deviceName;
+  ChatState state;
+  ChatMeta meta;
+  List<ChatRecord> records;
+
+  /// How long the log was at the peer's end when last heard from. A mirror
+  /// whose record count is short of this is stale by that many records.
+  int totalLines;
+
+  @override
+  String toString() => "MirrorChat(${state.id}, ${records.length}/$totalLines)";
+}
+
+/// What the sidebar's Remotes section draws: one remote chat with who owns
+/// it and whether the connection to them is up.
+class RemoteChatEntry {
+  const RemoteChatEntry({
+    required this.chatId,
+    required this.deviceId,
+    required this.deviceName,
+    required this.state,
+    required this.online,
+  });
+
+  final String chatId;
+  final String deviceId;
+  final String deviceName;
+  final ChatState state;
+  final bool online;
+}
+
 /// Everything two Entolis do together before there are chats involved: find
 /// each other, prove who they are, and stay online.
 ///
@@ -79,11 +135,10 @@ class SyncHub {
     required this.identity,
     required this.registry,
     required AppConfig config,
-    required AppSettings Function() settings,
+    required this._settings,
     required LanSignaling? Function() lanSignaling,
     http.Client? client,
-  })  : _settings = settings,
-        _lanFactory = lanSignaling,
+  })  : _lanFactory = lanSignaling,
         _client = client ?? http.Client();
 
   final SyncIdentity identity;
@@ -118,6 +173,367 @@ class SyncHub {
   /// The pairing happening right now, if any.
   final pairing = ValueNotifier<PairingActivity?>(null);
 
+  // ------------------------------------------------------------- mirroring
+
+  ChatRepository? _repo;
+  StreamSubscription<RepoEvent>? _changesSub;
+  Timer? _pingTimer;
+
+  /// The peer's chats this device mirrors, by chat id. Survives a disconnect
+  /// as a stale snapshot; a reconnect replaces it wholesale with fresh data.
+  final _mirrors = <String, MirrorChat>{};
+
+  /// Chat ids being followed across reconnects — what [followChat] added and
+  /// [unfollowChat] has not removed. On every welcome these are re-opened
+  /// from where the mirror already is.
+  final _desired = <String>{};
+
+  /// Chat ids whose content changed since the last notice. The mirror
+  /// controllers rebuild from here.
+  /// Mirrored attachments, held only as long as the mirror is. Owned here
+  /// rather than beside the page that shows them so that a mirror going
+  /// takes its megabytes with it.
+  final byteCache = SyncByteCache();
+
+  final _mirrorUpdates = StreamController<String>.broadcast();
+
+  Stream<String> get mirrorUpdates => _mirrorUpdates.stream;
+
+  /// The Remotes section of the sidebar: one entry per mirrored chat, flat,
+  /// rebuilt whenever anything under it moves.
+  final remotes = ValueNotifier<List<RemoteChatEntry>>(const []);
+
+  MirrorChat? mirror(String chatId) => _mirrors[chatId];
+
+  /// Whether the connection to [chatId]'s home device is up. False for a
+  /// stale snapshot: the page disables the composer and shows its banner.
+  bool isChatOnline(String chatId) =>
+      _live.containsKey(_mirrors[chatId]?.peerId);
+
+  int _resourceSeq = 0;
+  final _pendingResources = <String, _ResourceTransfer>{};
+
+  /// The repository arrives after construction — the container that holds it
+  /// does not exist yet when [SyncHub] is built. Serving-side everything is
+  /// inert until this is called.
+  void attach(ChatRepository repo) {
+    if (_repo != null) return;
+    _repo = repo;
+    _changesSub = repo.changes.listen(_onRepoEvent);
+    _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) => _ping());
+  }
+
+  void followChat(String chatId) {
+    _desired.add(chatId);
+    final peer = _peerHosting(chatId);
+    if (peer != null) _openOnPeer(peer, chatId);
+  }
+
+  void unfollowChat(String chatId) {
+    _desired.remove(chatId);
+    // No unsubscribe message: the home side drops a subscription when the
+    // mirror vanishes from its welcome round-trip, and an unwatched stream
+    // costs nothing until a turn runs in it.
+  }
+
+  Future<Uint8List?> fetchResource(String chatId, String resource) async {
+    final peer = _peerHosting(chatId);
+    if (peer == null) return null;
+    final id = "r${_resourceSeq++}";
+    final transfer = _pendingResources[id] = _ResourceTransfer();
+    try {
+      await peer.send(SyncMessage.resourceRequest(
+          id: id, chatId: chatId, resource: resource));
+      return await transfer.completer.future
+          .timeout(const Duration(seconds: 30), onTimeout: () => null);
+    } finally {
+      _pendingResources.remove(id);
+    }
+  }
+
+  _LivePeer? _peerHosting(String chatId) {
+    final mirror = _mirrors[chatId];
+    if (mirror == null) return null;
+    return _live[mirror.peerId];
+  }
+
+  // ------------------------------------------------------------ dispatch
+
+  /// Every arm of [SyncMessage] lands here, in arrival order per peer.
+  /// Serving arms read the repository; mirror arms update [_mirrors] and
+  /// notify whoever is watching. The control arms are Phase 3: declared on
+  /// the wire, unimplemented here — a peer sending one gets nothing back,
+  /// which a view-only mirror is the honest answer to for now.
+  Future<void> _dispatch(_LivePeer peer, SyncMessage message) async {
+    switch (message) {
+      case SyncPing():
+        await peer.send(const SyncMessage.pong());
+      case SyncPong():
+        peer.lastPong = DateTime.now();
+      case SyncWelcome(:final chats):
+        await _applyWelcome(peer, chats);
+      case SyncChatsChanged(:final chats):
+        await _applyWelcome(peer, chats);
+      case SyncChatOpen(:final chatId, :final fromLine):
+        await _serveOpen(peer, chatId, fromLine);
+      case SyncChatSnapshot(
+          :final chatId,
+          :final state,
+          :final meta,
+          :final records,
+          :final totalLines
+        ):
+        final existing = _mirrors[chatId];
+        if (existing == null || existing.peerId != peer.deviceId) break;
+        existing
+          ..state = state
+          ..meta = meta
+          ..totalLines = totalLines;
+        existing.records.addAll(records);
+        _mirrorUpdates.add(chatId);
+      case SyncRecordAppend(:final chatId, :final records):
+        final existing = _mirrors[chatId];
+        if (existing == null || existing.peerId != peer.deviceId) break;
+        existing.records.addAll(records);
+        existing.totalLines += records.length;
+        _mirrorUpdates.add(chatId);
+      case SyncStateDiff(:final chatId, :final state):
+        final existing = _mirrors[chatId];
+        if (existing == null || existing.peerId != peer.deviceId) break;
+        existing.state = state;
+        _mirrorUpdates.add(chatId);
+      case SyncMetaPatch(:final chatId, :final meta):
+        final existing = _mirrors[chatId];
+        if (existing == null || existing.peerId != peer.deviceId) break;
+        existing.meta = meta;
+        _mirrorUpdates.add(chatId);
+      case SyncChatDeleted(:final chatId):
+        _dropMirror(peer.deviceId, chatId);
+      case SyncChatMoved(:final chatId, :final project):
+        final existing = _mirrors[chatId];
+        if (existing == null || existing.peerId != peer.deviceId) break;
+        existing.state =
+            existing.state.copyWith(project: project);
+        _mirrorUpdates.add(chatId);
+      case SyncResourceRequest(:final id, :final chatId, :final resource):
+        await _serveResource(peer, id, chatId, resource);
+      case SyncResourceChunk(:final id, :final bytesB64, :final done):
+        _collectResourceChunk(id, bytesB64, done);
+      default:
+        break;
+    }
+    _rebuildRemotes();
+  }
+
+  /// A fresh listing from the peer. Mirrors of this peer not in it go; those
+  /// in it are added or refreshed — keeping records already held, so the
+  /// re-opens below resume rather than restart. Then everything this device
+  /// follows and still sees is asked for again, from where it got to.
+  Future<void> _applyWelcome(_LivePeer peer, List<ChatState> chats) async {
+    final listed = {for (final c in chats) c.id: c};
+    for (final id in _mirrors.keys.toList()) {
+      if (_mirrors[id]!.peerId == peer.deviceId && !listed.containsKey(id)) {
+        _dropMirror(peer.deviceId, id);
+      }
+    }
+    for (final state in chats) {
+      final existing = _mirrors[state.id];
+      if (existing != null && existing.peerId != peer.deviceId) continue;
+      _mirrors[state.id] ??= MirrorChat(
+        peerId: peer.deviceId,
+        deviceName: peer.deviceName,
+        state: state,
+        meta: ChatMeta(),
+        totalLines: 0,
+      );
+      final mirror = _mirrors[state.id]!;
+      if (state.updatedAt.isAfter(mirror.state.updatedAt)) {
+        mirror.state = state;
+      }
+    }
+    for (final id in _desired) {
+      if (listed.containsKey(id)) _openOnPeer(peer, id);
+    }
+  }
+
+  void _openOnPeer(_LivePeer peer, String chatId) {
+    unawaited(peer.send(SyncMessage.chatOpen(
+      chatId: chatId,
+      fromLine: _mirrors[chatId]?.records.length ?? 0,
+    )));
+  }
+
+  void _dropMirror(String peerId, String chatId) {
+    final mirror = _mirrors[chatId];
+    if (mirror == null || mirror.peerId != peerId) return;
+    _mirrors.remove(chatId);
+    byteCache.drop(chatId);
+    _mirrorUpdates.add(chatId);
+  }
+
+  // -------------------------------------------------------------- serving
+
+  /// A peer wants to follow one of this device's chats. Unknown ids get an
+  /// explicit deletion rather than silence — a mirror that opened a chat
+  /// deleted moments ago must hear that it is gone.
+  Future<void> _serveOpen(
+      _LivePeer peer, String chatId, int fromLine) async {
+    final repo = _repo;
+    if (repo == null) return;
+    try {
+      final chat = await repo.openChat(chatId);
+      final meta = await repo.loadMeta(chatId);
+      final records = await repo.readRecords(chatId);
+      peer.subscriptions.add(chatId);
+      await peer.send(SyncMessage.chatSnapshot(
+        chatId: chatId,
+        state: chat.state,
+        meta: meta,
+        records: fromLine < records.length
+            ? records.sublist(fromLine)
+            : const [],
+        totalLines: records.length,
+      ));
+    } on StateError {
+      peer.subscriptions.remove(chatId);
+      await peer.send(SyncMessage.chatDeleted(chatId: chatId));
+    }
+  }
+
+  /// Everything written through the repository, fanned out to whichever
+  /// peers follow the chat it happened in. Deletions reach everyone: a peer
+  /// holding a mirror of something gone must be told even if it never
+  /// opened the chat's records yet.
+  void _onRepoEvent(RepoEvent event) {
+    switch (event) {
+      case Appended(:final chatId, :final records):
+        for (final peer in _live.values) {
+          if (peer.subscriptions.contains(chatId)) {
+            unawaited(peer.send(SyncMessage.recordAppend(
+                chatId: chatId, records: records)));
+          }
+        }
+      case StateChanged(:final state):
+        for (final peer in _live.values) {
+          if (peer.subscriptions.contains(state.id)) {
+            unawaited(peer.send(SyncMessage.stateDiff(chatId: state.id, state: state)));
+          }
+        }
+      case MetaChanged(:final chatId, :final meta):
+        for (final peer in _live.values) {
+          if (peer.subscriptions.contains(chatId)) {
+            unawaited(peer.send(SyncMessage.metaPatch(chatId: chatId, meta: meta)));
+          }
+        }
+      case Deleted(:final chatId):
+        for (final peer in _live.values) {
+          peer.subscriptions.remove(chatId);
+          unawaited(peer.send(SyncMessage.chatDeleted(chatId: chatId)));
+        }
+      case Moved(:final chatId, :final project):
+        for (final peer in _live.values) {
+          if (peer.subscriptions.contains(chatId)) {
+            unawaited(peer.send(SyncMessage.chatMoved(chatId: chatId, project: project)));
+          }
+        }
+    }
+  }
+
+  // ------------------------------------------------------------ resources
+
+  static const _chunkBytes = 48 * 1024;
+
+  /// Streams an attachment to a subscribing peer, base64 inside control
+  /// frames — correlation stays trivial and every frame rides the same AEAD
+  /// as the rest of the traffic. Binary framing can come later without a
+  /// protocol change: the type byte already separates the streams.
+  Future<void> _serveResource(
+      _LivePeer peer, String id, String chatId, String resource) async {
+    Uint8List? bytes;
+    if (peer.subscriptions.contains(chatId)) {
+      bytes = await _repo?.readResource(chatId, resource);
+    }
+    if (bytes == null || bytes.isEmpty) {
+      await peer.send(SyncMessage.resourceChunk(id: id, bytesB64: "", done: true));
+      return;
+    }
+    for (var at = 0; at < bytes.length; at += _chunkBytes) {
+      final end = at + _chunkBytes > bytes.length ? bytes.length : at + _chunkBytes;
+      final last = end >= bytes.length;
+      await peer.send(SyncMessage.resourceChunk(
+        id: id,
+        bytesB64: base64Encode(bytes.sublist(at, end)),
+        done: last,
+      ));
+    }
+  }
+
+  void _collectResourceChunk(String id, String bytesB64, bool done) {
+    final transfer = _pendingResources[id];
+    if (transfer == null || transfer.completer.isCompleted) return;
+    if (!done) {
+      transfer.buffer.add(base64Decode(bytesB64));
+      return;
+    }
+    transfer.buffer.add(base64Decode(bytesB64));
+    final bytes = transfer.buffer.takeBytes();
+    transfer.completer.complete(bytes.isEmpty ? null : Uint8List.fromList(bytes));
+    _pendingResources.remove(id);
+  }
+
+  // ------------------------------------------------------------- presence
+
+  void _ping() {
+    final cutoff = DateTime.now().subtract(const Duration(seconds: 75));
+    for (final peer in _live.values.toList()) {
+      if (peer.lastPong.isBefore(cutoff)) {
+        unawaited(peer.close());
+        continue;
+      }
+      unawaited(peer.send(const SyncMessage.ping()));
+    }
+  }
+
+  String _nameOf(PairedDevice? device, PeerIdentity peer) =>
+      (device?.name.isNotEmpty ?? false) ? device!.name : peer.name;
+
+  /// A live connection ended. The peer goes offline; its mirrors stay as
+  /// stale snapshots — the page shows its banner and disables the composer,
+  /// and a reconnect replaces the whole lot with fresh data.
+  void _peerGone(String deviceId) {
+    final live = _live.remove(deviceId);
+    // Both directions: the chats this device served them, and the ones it
+    // mirrors from them — a mirror's page has a banner to raise, and nothing
+    // else tells it the snapshot has stopped moving.
+    for (final chatId in {
+      ...?live?.subscriptions,
+      ..._mirrorsOf(deviceId),
+    }) {
+      _mirrorUpdates.add(chatId);
+    }
+    _setStatus(deviceId,
+        name: live?.deviceName ?? deviceId, status: PeerStatus.offline);
+    _rebuildRemotes();
+  }
+
+  Iterable<String> _mirrorsOf(String deviceId) => _mirrors.entries
+      .where((e) => e.value.peerId == deviceId)
+      .map((e) => e.key)
+      .toList();
+
+  void _rebuildRemotes() {
+    remotes.value = [
+      for (final mirror in _mirrors.values)
+        RemoteChatEntry(
+          chatId: mirror.state.id,
+          deviceId: mirror.peerId,
+          deviceName: mirror.deviceName,
+          state: mirror.state,
+          online: _live.containsKey(mirror.peerId),
+        ),
+    ];
+  }
+
   // ------------------------------------------------------------ lifecycle
 
   /// Starts listening for reconnects, so a desktop that has paired once can
@@ -135,10 +551,22 @@ class SyncHub {
 
   Future<void> dispose() async {
     cancelPairingWindow();
-    for (final peer in _live.values) {
+    _pingTimer?.cancel();
+    await _changesSub?.cancel();
+    // Over a copy: closing a peer takes it back out of the map.
+    for (final peer in _live.values.toList()) {
       await peer.close();
     }
     _live.clear();
+    _mirrors.clear();
+    byteCache.dispose();
+    _desired.clear();
+    remotes.value = const [];
+    await _mirrorUpdates.close();
+    for (final transfer in _pendingResources.values) {
+      if (!transfer.completer.isCompleted) transfer.completer.complete(null);
+    }
+    _pendingResources.clear();
     await _serverInstance?.close();
   }
 
@@ -381,6 +809,14 @@ class SyncHub {
   Future<void> revoke(String deviceId) async {
     await _live.remove(deviceId)?.close();
     await registry.remove(deviceId);
+    // Everything of theirs goes with them. `_refreshPeers` only fills gaps
+    // from the registry, so the row and the mirrors have to be taken out by
+    // hand or an unpaired device stays listed, and online, until a restart.
+    for (final chatId in _mirrorsOf(deviceId)) {
+      _dropMirror(deviceId, chatId);
+    }
+    peers.value = {...peers.value}..remove(deviceId);
+    _rebuildRemotes();
     _refreshPeers();
   }
 
@@ -396,9 +832,8 @@ class SyncHub {
     if (turn != null && turn.isNotEmpty) {
       servers.add({
         "urls": turn,
-        if (_settings().turnUsername case final username?) "username": username,
-        if (_settings().turnPassword case final password?)
-          "credential": password,
+        "username": ?_settings().turnUsername,
+        "credential": ?_settings().turnPassword,
       });
     }
     return servers;
@@ -544,6 +979,28 @@ class SyncHub {
     }
   }
 
+  /// Tests drive the shared tail directly: a loopback [ByteChannel] stands in
+  /// for the data channel, so everything from the handshake up is exercised
+  /// with no transport, offer, or signaling underneath.
+  @visibleForTesting
+  Future<void> establishForTest({
+    required ByteChannel link,
+    required bool weOffered,
+    required String psk,
+    String? knownDeviceId,
+  }) {
+    // Every real route opens the pairing card before the handshake; without
+    // one the codes-matched gate has nowhere to ask and never resolves.
+    if (knownDeviceId == null) pairing.value = const PairingActivity();
+    return _establish(
+      link: link,
+      weOffered: weOffered,
+      psk: psk,
+      knownDeviceId: knownDeviceId,
+      onFailed: () async {},
+    );
+  }
+
   /// Shared tail of every route: handshake across the open data channel,
   /// the codes-matched gate for first pairings, hello, and filing the peer.
   Future<void> _establish({
@@ -554,7 +1011,8 @@ class SyncHub {
     String? address,
     required Future<void> Function() onFailed,
   }) async {
-    final handshake = Handshake(identity, pairingSecret: psk);
+    final handshake =
+        Handshake(identity, pairingSecret: psk, name: deviceName);
     SecureChannel? channel;
     try {
       channel = await SecureChannel.open(
@@ -584,14 +1042,36 @@ class SyncHub {
         throw HandshakeException("the other device runs protocol ${reply["proto"]}");
       }
 
+      // The peer exists — and starts pumping — before anything below awaits.
+      // The channel's streams are broadcast, so a message arriving while
+      // nobody listens is dropped rather than buffered; everything either
+      // side sends from here on (welcome first) must already have its reader.
       final deviceId = peer.id;
-      var device = await registry.byId(deviceId);
+      final peerDevice = await registry.byId(deviceId);
+      final live = _LivePeer(channel,
+          deviceId: deviceId,
+          deviceName: _nameOf(peerDevice, peer),
+          onClose: () => _peerGone(deviceId));
+      live.handle = (message) => _dispatch(live, message);
+      live.pump = channel.jsonIncoming.listen(
+        (json) {
+          try {
+            live.enqueue(SyncMessage.fromJson(json));
+          } catch (_) {
+            // A frame that does not parse is a broken peer; drop the link
+            // rather than guess at what it meant.
+            unawaited(live.close());
+          }
+        },
+        onError: (_) => unawaited(live.close()),
+        onDone: () => unawaited(live.close()),
+      );
+
+      var device = peerDevice;
       if (device == null) {
         device = PairedDevice(
           id: deviceId,
-          name: (reply["name"] as String?)?.isNotEmpty == true
-              ? reply["name"] as String
-              : peer.name,
+          name: live.deviceName,
           publicKey: peer.publicKeyB64,
           addedAt: DateTime.now(),
         );
@@ -603,9 +1083,17 @@ class SyncHub {
       await registry.add(device);
 
       _live[deviceId]?.close();
-      _live[deviceId] = _LivePeer(channel, onClose: () => _markOffline(deviceId));
+      _live[deviceId] = live;
       _setStatus(deviceId,
           name: device.name, status: PeerStatus.online);
+
+      // What this device serves. The mirror side answers this with
+      // chatOpens for whatever it follows.
+      final repo = _repo;
+      if (repo != null) {
+        final chats = await repo.listChats();
+        live.send(SyncMessage.welcome(chats: chats));
+      }
 
       // From here on, this pair can redial without the window.
       _server?.allowReconnect(RelaySignaler.roomFor(psk));
@@ -692,16 +1180,47 @@ class SyncHub {
 }
 
 class _LivePeer {
-  _LivePeer(this.channel, {required void Function() onClose})
-      : _onClose = onClose;
+  _LivePeer(this.channel,
+      {required this.deviceId,
+      required this.deviceName,
+      required this._onClose});
 
   final SecureChannel channel;
+  final String deviceId;
+  final String deviceName;
   final void Function() _onClose;
   bool _closed = false;
+
+  DateTime lastPong = DateTime.now();
+
+  /// This device's chat ids the peer is following. Only subscribers get
+  /// record and state pushes.
+  final subscriptions = <String>{};
+
+  StreamSubscription<Map<String, dynamic>>? pump;
+
+  /// Handlers await disk I/O, so messages are chained through this to keep
+  /// their arrival order — a snapshot must land before the appends that
+  /// follow it.
+  Future<void> _queue = Future.value();
+
+  void enqueue(SyncMessage message) {
+    if (_closed) return;
+    _queue = _queue.then((_) => handle?.call(message)).catchError((_) {});
+  }
+
+  /// Set once the peer exists; reads [SyncHub._dispatch].
+  void Function(SyncMessage message)? handle;
+
+  Future<void> send(SyncMessage message) {
+    if (_closed) return Future.value();
+    return channel.sendJson(message.toJson());
+  }
 
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    await pump?.cancel();
     await channel.close();
     _onClose();
   }
@@ -713,4 +1232,10 @@ class _PendingManual {
   final RtcLink link;
   final String psk;
   String get pskTag => RelaySignaler.roomFor(psk);
+}
+
+/// One resource transfer in flight: chunks accumulate until `done`.
+class _ResourceTransfer {
+  final completer = Completer<Uint8List?>();
+  final buffer = BytesBuilder(copy: false);
 }

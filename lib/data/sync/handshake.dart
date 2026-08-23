@@ -29,7 +29,7 @@ import "channel.dart";
 /// first framed message fails to authenticate. The SAS derived beside the
 /// keys lets two humans confirm it by eye as well.
 class Handshake {
-  Handshake(this._local, {required this.pairingSecret});
+  Handshake(this._local, {required this.pairingSecret, this.name = ""});
 
   static const info = "entoli-channel-v1";
   static const _sigContext = "entoli-handshake-v1";
@@ -40,6 +40,9 @@ class Handshake {
 
   final SyncIdentity _local;
   final String pairingSecret;
+
+  /// This device's name, as the other side's registry will hold it.
+  final String name;
 
   PeerIdentity? _peer;
 
@@ -87,13 +90,14 @@ class Handshake {
         name: (remote["name"] as String?) ?? "",
       );
 
-      // Fixed order by role, so both sides hash the same bytes.
+      // Fixed order by role, so both sides hash the same bytes — local
+      // first would have each side signing its own ordering.
       List<int> transcript() => [
             ...utf8.encode(_sigContext),
-            ...ephPub,
-            ...remoteEph,
-            ..._local.publicKey,
-            ...remotePk,
+            ...(initiator ? ephPub : remoteEph),
+            ...(initiator ? remoteEph : ephPub),
+            ...(initiator ? _local.publicKey : remotePk),
+            ...(initiator ? remotePk : _local.publicKey),
           ];
 
       Signature signatureOf(List<int> bytes) => Signature(bytes,
@@ -123,11 +127,13 @@ class Handshake {
           "id": _local.id,
           "pk": _local.publicKeyB64,
           "eph": base64Encode(ephPub),
-          "name": "",
+          "name": name,
           "sig": base64Encode(await sign()),
         })));
-        final last = parse(utf8.decode(
-            await reader.next().timeout(timeout, onTimeout: _timedOut)));
+        final last = parse(
+            utf8.decode(
+                await reader.next().timeout(timeout, onTimeout: _timedOut)),
+            hello: false);
         if (last["role"] != "i" || !await verify(last["sig"])) {
           throw const HandshakeException("initiator signature invalid");
         }
@@ -155,7 +161,7 @@ class Handshake {
         "id": _local.id,
         "pk": _local.publicKeyB64,
         "eph": base64Encode(ephPub),
-        "name": "",
+        "name": name,
       };
 
   Future<SessionKeys> _keys(
@@ -184,9 +190,11 @@ class Handshake {
     );
   }
 
-  static Map<String, dynamic> parse(String line) {
+  /// [hello] is the two opening messages, which carry an identity; the
+  /// initiator's closing one is a signature and nothing else.
+  static Map<String, dynamic> parse(String line, {bool hello = true}) {
     final json = jsonDecode(line) as Map<String, dynamic>;
-    for (final field in ["v", "role", "id", "pk", "eph"]) {
+    for (final field in ["v", "role", if (hello) ...["id", "pk", "eph"]]) {
       if (!json.containsKey(field)) {
         throw HandshakeException("handshake message missing $field");
       }
@@ -196,19 +204,26 @@ class Handshake {
 
   static Never _timedOut() => throw const HandshakeException("timed out");
 
-  /// Six characters of base32 without lookalikes, grouped 3+3 — forty bits,
-  /// which an attacker gets no offline oracle for and one online guess per
-  /// connection attempt.
+  /// Eight characters of base32 without lookalikes, grouped 4+4 — the forty
+  /// bits the derivation gives, which an attacker gets no offline oracle for
+  /// and one online guess per connection attempt.
+  ///
+  /// Regrouped five bits at a time rather than through one 40-bit integer:
+  /// a shift past 32 bits is truncated on the web.
   static String formatSas(List<int> bytes) {
-    const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-    var value = 0;
+    const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    final chars = StringBuffer();
+    var held = 0, bits = 0;
     for (final b in bytes.take(5)) {
-      value = (value << 8) | b;
+      held = ((held << 8) | b) & 0xfff;
+      bits += 8;
+      while (bits >= 5) {
+        bits -= 5;
+        chars.write(alphabet[(held >> bits) & 31]);
+      }
     }
-    final chars = [
-      for (var i = 0; i < 6; i++) alphabet[(value >> (5 * (5 - i))) & 31],
-    ].join();
-    return "${chars.substring(0, 3)}-${chars.substring(3)}";
+    final text = chars.toString();
+    return "${text.substring(0, 4)}-${text.substring(4)}";
   }
 }
 

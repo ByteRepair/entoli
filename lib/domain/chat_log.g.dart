@@ -50,7 +50,7 @@ Map<String, dynamic> _$PartRecordToJson(PartRecord instance) =>
     <String, dynamic>{
       'messageId': instance.messageId,
       'index': instance.index,
-      'part': instance.part,
+      'part': instance.part.toJson(),
       'runtimeType': instance.$type,
     };
 
