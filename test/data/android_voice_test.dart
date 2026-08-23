@@ -49,13 +49,14 @@ void main() {
     addTearDown(recognizer.dispose);
     final events = <VoiceEvent>[];
     recognizer.events.listen(events.add);
+    await recognizer.setListening(true);
     await tester.pump();
     return (recognizer, events);
   }
 
-  testWidgets("listening asks to start", (tester) async {
+  testWidgets("listening asks the service for the microphone", (tester) async {
     await listening(tester);
-    wasAsked("startRecognition");
+    wasAsked("setRecognitionListening");
   });
 
   testWidgets("what is heard arrives; an empty result is nothing",
@@ -82,6 +83,7 @@ void main() {
       (tester) async {
     final recognizer = AndroidSpeechRecognizer();
     addTearDown(recognizer.dispose);
+    await recognizer.setListening(true);
     await tester.pump();
 
     await room(6.0);
@@ -99,14 +101,12 @@ void main() {
     // The whole of the rule is unit-tested over `LoudnessGate`; what this is
     // for is that the three channel methods reach it at all.
     await room(0.0);
-    await incoming("interrupted");
     await incoming("rms", 20.0);
     await incoming("heard", "somebody talking");
     await tester.pump();
     expect(events.whereType<VoiceHeard>().single.text, "somebody talking");
 
     // Well clear of the room, and a quarter of what this person sounds like.
-    await incoming("interrupted");
     await incoming("rms", 5.0);
     await incoming("heard", "the next room over");
     await tester.pump();
@@ -140,14 +140,18 @@ void main() {
     expect(recognizer.level.value, 0);
   });
 
-  testWidgets("a session can open with the microphone shut", (tester) async {
-    final recognizer = AndroidSpeechRecognizer(listening: false);
+  testWidgets("a session opens shut, and something has to ask", (tester) async {
+    final recognizer = AndroidSpeechRecognizer();
     addTearDown(recognizer.dispose);
     await tester.pump();
 
-    // Opening a capture and closing it again is a real start and stop of the
-    // device, and the microphone indicator flashing for nothing.
-    expect(invoked.where((call) => call.method == "startRecognition"), isEmpty);
+    // Opening a capture at the door and closing it again for the first turn is
+    // a real start and stop of the device, and the microphone indicator
+    // flashing for nothing.
+    expect(invoked, isEmpty);
+
+    await recognizer.setListening(true);
+    expect(invoked.single.arguments, {"on": true, "finish": false});
   });
 
   testWidgets("releasing the talk button asks for the sentence it was held for",
@@ -188,7 +192,6 @@ void main() {
     await tts.speak("held");
     expect(invoked.where((call) => call.method == "speak"), isEmpty,
         reason: "an engine that has not answered holds everything");
-    expect(tts.speaking, isTrue);
 
     await incoming("speechReady");
     await tester.pump();
@@ -281,8 +284,6 @@ void main() {
 
     expect(signals.whereType<SpeechFailed>().single.message,
         "Speech playback keeps failing.");
-    expect(tts.speaking, isFalse,
-        reason: "nothing is held any more once the engine is written off");
   });
 
   testWidgets("an engine that never starts is said, not waited for",
@@ -296,6 +297,5 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
 
     expect(signals.whereType<SpeechFailed>(), isNotEmpty);
-    expect(tts.speaking, isFalse);
   });
 }

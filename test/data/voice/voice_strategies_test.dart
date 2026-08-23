@@ -117,6 +117,7 @@ void main() {
     test("an engine is gated by being a listener, not by remembering to be",
         () async {
       final engine = _Engine();
+      await engine.setListening(true);
       final heard = <String>[];
       engine.events
           .where((e) => e is VoiceHeard)
@@ -124,14 +125,12 @@ void main() {
 
       // Loud enough to set the level, and trimmed on the way through.
       room(engine, 0.003);
-      engine.began();
       engine.measured(decibels(0.1));
       engine.heard("  somebody talking  ");
       await Future.delayed(Duration.zero);
       expect(heard, ["somebody talking"]);
 
       room(engine, 0.003);
-      engine.began();
       engine.measured(decibels(0.006));
       engine.heard("a television, two rooms away");
       await Future.delayed(Duration.zero);
@@ -140,23 +139,10 @@ void main() {
       await engine.dispose();
     });
 
-    test("onset is forwarded whatever it turns out to have been", () async {
-      final engine = _Engine();
-      final events = <VoiceEvent>[];
-      engine.events.listen(events.add);
-
-      engine.began();
-      await Future.delayed(Duration.zero);
-
-      // Onset alone interrupts nothing; the session is what decides whether
-      // someone talked over a reply.
-      expect(events.single, isA<VoiceInterrupted>());
-      await engine.dispose();
-    });
-
     test("the level is against the room, and falls rather than drops",
         () async {
       final engine = _Engine();
+      await engine.setListening(true);
 
       room(engine, 0.003);
       expect(engine.level.value, 0,
@@ -174,6 +160,7 @@ void main() {
 
     test("a shut microphone is not the room, and is not measured", () async {
       final engine = _Engine();
+      await engine.setListening(true);
 
       room(engine, 0.003);
       await engine.setListening(false);
@@ -187,6 +174,7 @@ void main() {
 
     test("what a shut microphone flushes has nothing to be judged on", () async {
       final engine = _Engine();
+      await engine.setListening(true);
       final heard = <String>[];
       engine.events
           .where((e) => e is VoiceHeard)
@@ -198,11 +186,9 @@ void main() {
       // somebody deliberately spoke. Whether anyone asked for it at all is
       // `ComposedVoiceSession`'s question, not this one.
       room(engine, 0.003);
-      engine.began();
       engine.measured(decibels(0.1));
       engine.heard("setting the level");
       room(engine, 0.003);
-      engine.began();
       engine.measured(decibels(0.006));
       await engine.setListening(false, finish: true);
       engine.heard("said while it was held");
@@ -215,6 +201,7 @@ void main() {
     test("opening again forgets what was measured before it was shut",
         () async {
       final engine = _Engine();
+      await engine.setListening(true);
       final heard = <String>[];
       engine.events
           .where((e) => e is VoiceHeard)
@@ -223,7 +210,6 @@ void main() {
       // A loud utterance measured before the microphone was shut. What is said
       // after it is opened again is judged on its own, not on that.
       room(engine, 0.003);
-      engine.began();
       engine.measured(decibels(0.2));
       engine.heard("setting the level");
       room(engine, 0.003);
@@ -232,7 +218,6 @@ void main() {
       await engine.setListening(true);
 
       room(engine, 0.003);
-      engine.began();
       engine.measured(decibels(0.006));
       engine.heard("a television, two rooms away");
       await Future.delayed(Duration.zero);

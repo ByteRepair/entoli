@@ -47,7 +47,6 @@ class AndroidVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
-    bool listening = true,
   }) async {
     if (!speech.isNative || (recognition != null && !recognition.isNative)) {
       throw StateError("Android runs the system voice engines, not a model.");
@@ -58,14 +57,13 @@ class AndroidVoice extends Voice {
       // makes the Talk button work, and a permission sheet on the first press
       // is one nobody expected.
       (await openMicrophone()).dispose();
-      listener = AndroidSpeechRecognizer(listening: listening);
+      listener = AndroidSpeechRecognizer();
     }
     // `speaker` is the sherpa catalog's idea of which voice in a model file to
     // use, and the system synthesiser has no such thing — the voice is the
     // user's, set in the OS. So the settings page draws no picker for it here
     // and nothing is passed on.
-    return ComposedVoiceSession(listener, AndroidTextToSpeech(),
-        listening: listening);
+    return ComposedVoiceSession(listener, AndroidTextToSpeech());
   }
 }
 
@@ -101,33 +99,17 @@ class AndroidVoiceBridge {
 /// this hands all three to [MicrophoneListener], which is where the gate, the
 /// level and the event stream are. What is left here is the channel.
 class AndroidSpeechRecognizer extends MicrophoneListener {
-  AndroidSpeechRecognizer({bool listening = true})
-      : super(LoudnessGate()) {
-    this.listening = listening;
+  AndroidSpeechRecognizer() : super(LoudnessGate()) {
     _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
-    if (listening) unawaited(_start());
   }
 
   late final StreamSubscription<MethodCall> _calls;
-
-  Future<void> _start() async {
-    if (closed) return;
-    try {
-      await voiceChannel.invokeMethod<String>("startRecognition");
-    } on PlatformException catch (e) {
-      fail(_message(e, "Recognition failed."));
-    } on MissingPluginException {
-      fail("Voice recognition is not available on this platform.");
-    }
-  }
 
   void _onCall(MethodCall call) {
     if (closed) return;
     switch (call.method) {
       case "heard":
         heard((call.arguments as String?) ?? "");
-      case "interrupted":
-        began();
       case "rms":
         measured((call.arguments as num?)?.toDouble() ?? 0);
       case "recognitionError":
@@ -137,12 +119,18 @@ class AndroidSpeechRecognizer extends MicrophoneListener {
 
   @override
   Future<void> setListening(bool on, {bool finish = false}) async {
-    if (closed) return;
+    if (closed || on == listening) return;
     asked(on);
     try {
       await voiceChannel.invokeMethod<String>(
           "setRecognitionListening", {"on": on, "finish": finish});
-    } catch (_) {}
+    } on PlatformException catch (e) {
+      // Only opening it is a failure worth the session: nothing that goes wrong
+      // shutting a microphone leaves anyone unable to speak.
+      if (on) fail(_message(e, "Recognition failed."));
+    } on MissingPluginException {
+      if (on) fail("Voice recognition is not available on this platform.");
+    }
   }
 
   @override
@@ -160,7 +148,7 @@ class AndroidSpeechRecognizer extends MicrophoneListener {
 /// queued behind the last; [stop] flushes the queue. Speech is held until the
 /// engine says it is ready — a `speak` that lands before init completes returns
 /// an error code and no callback, which would count an utterance that never
-/// happened and leave `speaking` true forever. One utterance failing is not a
+/// happened and leave a queue that never drains. One utterance failing is not a
 /// failed engine: it is dropped, and only repeated failures are reported up.
 class AndroidTextToSpeech implements Speaker {
   AndroidTextToSpeech() {
@@ -217,7 +205,7 @@ class AndroidTextToSpeech implements Speaker {
         }
       case "speechDone":
         // Named by the generation it was queued under, so one arriving after a
-        // barge-in is not counted against the batch that replaced it.
+        // `stop` is not counted against the batch that replaced it.
         if ((call.arguments as int? ?? 0) != _generation) return;
         _failures.spoke();
         _pending--;
@@ -227,7 +215,7 @@ class AndroidTextToSpeech implements Speaker {
         }
       case "speechUtteranceError":
         // Named by the generation it was queued under, so one arriving after a
-        // barge-in is not counted against the batch that replaced it.
+        // `stop` is not counted against the batch that replaced it.
         if ((call.arguments as int? ?? -1) != _generation) return;
         _utteranceDropped();
       case "speechError":
@@ -274,12 +262,6 @@ class AndroidTextToSpeech implements Speaker {
 
   @override
   Stream<SpeechSignal> get signals => _signals.stream;
-
-  /// What the platform has been handed and not reported done. `TextToSpeech`
-  /// says nothing about which of queueing, generating and playing it is in, so
-  /// this is as fine as the answer gets.
-  @override
-  bool get speaking => _pending > 0 || _queue.isNotEmpty;
 
   @override
   Future<void> speak(String text) async {

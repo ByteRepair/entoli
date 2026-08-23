@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognitionService
@@ -37,6 +38,14 @@ import java.util.Locale
 // declared and Dart asks for the grant before starting a session, the way the
 // sherpa path does.
 object VoiceChannel {
+    // Failures and the arms nothing draws: a service walked past, an utterance
+    // the recogniser would not end, a rung of the request ladder refused. Every
+    // one of them is a turn that silently does not happen and none of them
+    // reaches the screen, so all of them are worth a line in a release build.
+    // No per-transition chatter, and never what was heard — the Dart side draws
+    // the same line, as `voiceFailed` against `voiceLog`.
+    private const val TAG = "VoiceChannel"
+
     private var channel: MethodChannel? = null
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
@@ -186,8 +195,8 @@ object VoiceChannel {
             return
         }
         // The generation rides as the utterance id, so `onDone` names the batch
-        // it belongs to and one arriving after a barge-in is ignored rather
-        // than counted against the batch that replaced it.
+        // it belongs to and one arriving after a `stop` is ignored rather than
+        // counted against the batch that replaced it.
         engine.speak(text, TextToSpeech.QUEUE_ADD, null, generation.toString())
     }
 
@@ -247,49 +256,33 @@ object VoiceChannel {
     // So the utterance is ended here when the service will not end it. What
     // says the person has stopped is the *transcription* rather than the sound:
     // partial results stop changing while the room goes on making noise. After
-    // [QUIET_MS] of a partial that has not moved — or [MAX_UTTERANCE_MS] of
-    // anything at all — `stopListening` asks the service for what it has, which
-    // is the same call the Talk button's release makes.
+    // [QUIET_MS] of a partial that has not moved, `stopListening` asks the
+    // service for what it has, which is the same call the Talk button's release
+    // makes.
     private const val QUIET_MS = 1500L
-    private const val MAX_UTTERANCE_MS = 20_000L
 
-    // When the utterance began, and the partial transcription as it was last
-    // seen to move.
-    private var spokeAt = 0L
+    // The partial transcription as it was last seen to move.
     private var lastPartial = ""
 
-    // Whether the endpoint has already been asked for once in this utterance. A
-    // service that ignores `stopListening` would otherwise be asked forever.
-    private var forced = false
-
+    // One timer and one call, and it stays that way — see "Ending the
+    // utterance" for what a second and a third cost. A service that ignores
+    // `stopListening` is left where it was before any of this.
     private val endpoint: Runnable = Runnable {
         if (!wantListening) return@Runnable
-        val recognizer = this.recognizer ?: return@Runnable
-        if (forced) {
-            // It was asked and did not answer. Nothing is coming out of this
-            // session, so it is thrown away and a fresh one started — what was
-            // said into it is lost, which is worse than a turn and better than
-            // a voice mode that never has another.
-            forced = false
-            runCatching { recognizer.cancel() }
-            restart(after = 200)
-        } else {
-            forced = true
-            runCatching { recognizer.stopListening() }
-            main.postDelayed(endpoint, QUIET_MS)
-        }
+        Log.i(TAG, "ending the utterance: the service did not")
+        runCatching { recognizer?.stopListening() }
     }
 
-    // Re-armed every time the transcription moves, and never past the cap.
+    // Re-armed every time the transcription moves, and never before there is a
+    // session to end.
     private fun armEndpoint() {
+        if (!sessionOpened) return
         main.removeCallbacks(endpoint)
-        val left = MAX_UTTERANCE_MS - (SystemClock.elapsedRealtime() - spokeAt)
-        main.postDelayed(endpoint, minOf(QUIET_MS, left.coerceAtLeast(0)))
+        main.postDelayed(endpoint, QUIET_MS)
     }
 
     private fun disarmEndpoint() {
         main.removeCallbacks(endpoint)
-        forced = false
         lastPartial = ""
     }
 
@@ -297,12 +290,14 @@ object VoiceChannel {
     // is in its failed state from here, and one left bound is one the next
     // unpause drives on rather than resolving a service again.
     private fun fail(message: String) {
+        Log.w(TAG, "recognition failed: $message")
         stopRecognition()
         send("recognitionError", message)
     }
 
     private fun listen() {
         if (!wantListening) return
+        main.removeCallbacks(relisten)
         disarmEndpoint()
         val recognizer = ensureRecognizer() ?: return
         try {
@@ -373,9 +368,12 @@ object VoiceChannel {
     // inside the old recognition when `onResults` runs, and starting a new one
     // there is what `ERROR_RECOGNIZER_BUSY` is. [after] is for the cases where
     // a turn of the looper is not enough — see [onError].
+    private val relisten: Runnable = Runnable { listen() }
+
     private fun restart(after: Long = 0) {
         if (!wantListening) return
-        main.postDelayed({ listen() }, after)
+        main.removeCallbacks(relisten)
+        main.postDelayed(relisten, after)
     }
 
     // The service cannot hear in the language it was asked for, or has no model
@@ -384,6 +382,7 @@ object VoiceChannel {
         if (ask == Ask.OnDevice) offerDownload()
         val next = Ask.entries.getOrNull(ask.ordinal + 1)
         if (next != null) {
+            Log.i(TAG, "asking again as $next")
             ask = next
             restart()
         } else {
@@ -395,6 +394,7 @@ object VoiceChannel {
     // [message] is what to say when this was the last service.
     private fun nextService(message: String) {
         if (service + 1 >= services.size) return fail(message)
+        Log.i(TAG, "walking past a recognition service that would not answer")
         service++
         ask = Ask.OnDevice
         rebind()
@@ -413,6 +413,7 @@ object VoiceChannel {
     // these is something happening elsewhere.
     private fun retry(message: String) {
         faults++
+        Log.i(TAG, "retrying after a transient fault ($faults)")
         if (faults > 3) return fail(message)
         restart(after = 500L * faults)
     }
@@ -495,13 +496,10 @@ object VoiceChannel {
             // The service is hearing something. Whatever comes back now is a
             // real cycle, not a rung refusing to listen — see [onError].
             fastRefusals = 0
-            spokeAt = SystemClock.elapsedRealtime()
-            forced = false
             lastPartial = ""
             // Armed here rather than on the first partial: a service that
             // reports none at all still has to end its utterance somewhere.
             armEndpoint()
-            if (wantListening) send("interrupted", null)
         }
 
         override fun onRmsChanged(rmsdB: Float) {
@@ -611,7 +609,6 @@ object VoiceChannel {
                 .orEmpty()
             if (text == lastPartial) return
             lastPartial = text
-            forced = false
             armEndpoint()
         }
 

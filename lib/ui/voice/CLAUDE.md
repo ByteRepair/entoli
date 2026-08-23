@@ -172,18 +172,54 @@ for it: a microphone waiting to be asked was never paused, so the orb says
 The button works on pointer down and up rather than on a long press: a gesture
 that has to be recognised before it fires is a gesture the microphone opens late
 for, and what is said in that half second is the half nobody hears. Pressing it
-stops the reply outright instead of going through barge-in — whoever holds a
-button down to speak has already said what they think of the answer, and there
-is nothing to confirm from a transcription. Releasing it keeps the sentence it
-was held for, which is `setListening(false, finish: true)`.
+stops the reply: whoever holds a button down to speak is not waiting for the
+rest of the answer. Releasing it keeps the sentence it was held for, which is
+`setListening(false, finish: true)`.
 
 The setting reaches a session that is already running, through a `ref.listen`
 rather than a `ref.watch`: watching it rebuilds the notifier, and a rebuild
 resets the state the session is being held in. A session started with it on
-never opens the microphone at all — `Voice.start` takes `listening`, since
-opening a capture and closing it again is a real start and stop of the device.
+never opens the microphone at all, which falls out of the rule below rather than
+being arranged: every session opens shut and `_holdMicrophone` is what asks.
 
 Pressing it stops the reply without waiting for it to be quiet, and the press
 does not wait either: stopping speech is a platform call of its own, and the
 whole reason the button is on pointer-down is that the first half second is the
 half nobody hears.
+
+## Taking turns
+
+**The microphone is open only when it is the user's turn to speak** — not while
+a turn runs, not while the reply is read out. `VoiceController._wantsMicrophone`
+is the whole of the rule and `_holdMicrophone` the only thing that acts on it,
+running after every state write, so turn-taking is a consequence of the status
+rather than something each transition has to remember. A session opens shut and
+asking it for what it is already doing is a no-op, so nothing up here keeps its
+own copy of whether the microphone is open.
+
+It is worth writing down what this replaced. The microphone used to stay open,
+and the phone hears its own voice as readily as it hears the person — one
+acoustic event to a recogniser — so two mechanisms downstream existed to guess
+which of the two it was: the words just spoken were kept in a buffer and matched
+against what came back (`isEcho`), and onset was not trusted as an interruption
+until a transcription confirmed it. Both were inference about a question that
+did not need asking, and neither could be reliable. Not listening cannot be
+wrong about it. `isEcho`, `Speaker.speaking` and `VoiceInterrupted` went with the
+machinery they were written for.
+
+**The loudness gate is not one of these and is still here.** It answers a
+different question — whether what was heard was meant for the phone at all — and
+a television two rooms away is that whether or not anybody is speaking. See
+"What counts as being spoken to".
+
+What this costs is talking over a reply to interrupt it, which is now Stop:
+under the orb the whole time, instant, and not a transcription anyone has to
+trust.
+
+Two arms are worth knowing. A turn that says nothing out loud — one that only
+ran a command, or was aborted — never reports silence, so the status is put back
+to `listening` when the turn ends rather than when the speaking does; without it
+the microphone never opens again. And a session opens *shut*, then
+`_holdMicrophone` opens it like any other transition: opening a capture and
+closing it again is a real start and stop of the device and the system's own
+indicator flashing for nothing.
