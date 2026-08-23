@@ -1,9 +1,9 @@
 import "dart:async";
 
-import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
 import "../../domain/background_work.dart";
+import "../../core/log.dart";
 
 /// Android's foreground services, on the other end of `agent_chat/background`
 /// and implemented by `ForegroundWork.kt` and the three services beside it. Not
@@ -51,7 +51,7 @@ class ForegroundService implements BackgroundWork {
     try {
       await _channel.invokeMethod<void>(method, argument);
     } on PlatformException catch (e) {
-      debugPrint("Background work not held: $e");
+      logFailure("background", "the platform would not hold the process", e);
     } on MissingPluginException catch (_) {}
   }
 

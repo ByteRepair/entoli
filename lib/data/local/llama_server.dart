@@ -10,6 +10,7 @@ import "../../domain/llm_provider.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model.dart";
 import "../../domain/local_model_store.dart";
+import "../../core/log.dart";
 
 /// What is bundled to run a model with: llama.cpp's server, and the directory
 /// its libraries and the NPU's own are in.
@@ -535,7 +536,7 @@ class _Server {
   void _say(String line) {
     _log.add(line);
     if (_log.length > _logLines) _log.removeAt(0);
-    if (kDebugMode) debugPrint("llama-server[${model.id}]: $line");
+    logDetail("llama", "${model.id}: $line");
   }
 
   void _exited(Process process, int code, void Function() onChange) {

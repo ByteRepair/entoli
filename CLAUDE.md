@@ -229,9 +229,10 @@ reasons to drop most of them, is otherwise indistinguishable from nothing
 having happened: sync shipped with nine such places and "it will not pair"
 came with nothing at all to go on, in a log or on screen.
 
-`syncLog` in `lib/data/sync/sync_log.dart` is the shape: a `[tag]` prefix, one
-line, the reason and enough to say which thing it was about. Prefer that over
-a bare `debugPrint`, so a log can be read by whoever gets sent it.
+`logFailure` in `lib/core/log.dart` is how: a `[tag]` prefix naming the layer,
+one line, the reason and enough to say which thing it was about. Nothing calls
+`debugPrint` directly, so a log reads the same whoever it is sent to.
+`syncLog` is a wrapper over it, since nine call sites read better for one.
 
 Three rules for what goes in one.
 
@@ -247,12 +248,7 @@ an issue without reading it; assume this one will be. An id and a reason.
 **Failures are not gated on `kDebugMode`, chatter is.** A release build has to
 be able to say why it did not work, since that is the build a user is running
 when they tell you it did not. Volume — a subprocess's output, a cache hit —
-is debug-only.
-
-Sync is the only layer that does this properly today; the handful of older
-`debugPrint`s elsewhere predate the rule and are inconsistent about all three.
-New code follows this, and one of those is worth converting whenever it is
-being touched anyway.
+is `logDetail`, which is debug-only.
 
 ## Development
 

@@ -2,6 +2,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
 import "../../domain/app_icon.dart";
+import "../../core/log.dart";
 
 /// Tells `MainActivity.kt` which launcher entry to show. The default icon
 /// (cookie) is what `MainActivity` itself wears via the app-level
@@ -33,7 +34,7 @@ class LauncherAliases implements LauncherIcons {
     try {
       await _channel.invokeMethod<void>("use", _components[icon]);
     } on PlatformException catch (e) {
-      debugPrint("Launcher icon not changed: $e");
+      logFailure("icon", "the launcher refused the icon", e);
     } on MissingPluginException catch (_) {}
   }
 }

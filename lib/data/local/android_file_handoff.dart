@@ -1,6 +1,5 @@
 import "dart:async";
 
-import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 import "package:fs_shim/fs.dart";
 import "package:path_provider/path_provider.dart";
@@ -8,6 +7,7 @@ import "package:path_provider/path_provider.dart";
 import "../../domain/file_handoff.dart";
 import "../mime.dart";
 import "../zip.dart";
+import "../../core/log.dart";
 
 /// Android, where every route runs through an intent and `FilesChannel.kt` is
 /// the other end of `agent_chat/files`. There is no file manager to point at a
@@ -119,7 +119,7 @@ class AndroidFileHandoff implements FileHandoff {
     try {
       return await _channel.invokeMethod<T>(method, arguments);
     } on PlatformException catch (e) {
-      debugPrint("File handoff failed: $e");
+      logFailure("files", "handing a file to the system failed", e);
     } on MissingPluginException catch (_) {}
     return null;
   }
