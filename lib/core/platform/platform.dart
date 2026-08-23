@@ -279,3 +279,8 @@ AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 /// config's filesystem, so it exists on every platform now.
 List<PromptSource> createPromptSources(AppConfig config) =>
     [const BundledPrompts(), DirectoryPrompts(config)];
+
+/// What this machine calls itself, where it has a name. The sync device name
+/// starts here, so two paired machines are told apart by something the user
+/// already recognises rather than by a slice of a key fingerprint.
+String? deviceHostname() => platformHostname();

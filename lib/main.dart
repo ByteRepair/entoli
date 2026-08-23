@@ -120,6 +120,7 @@ class AppSession {
       config: config,
       settings: () => settingsHome.read(appSettingsProvider),
       lanSignaling: platform.createLanSignaling,
+      hostname: platform.deviceHostname(),
     );
     final container = ProviderContainer(
       overrides: [

@@ -247,13 +247,27 @@ that nobody here typed are otherwise unexplained.
 
 ### Testing it
 
-One subscription is attached to the channel before the hello goes out, and
+### Two things a loopback channel will not tell you
+
+Both of these shipped, and both passed every test over a loopback
+`ByteChannel`. They are here because the next change to this layer can make
+either mistake again and nothing automated will notice.
+
+**A frame off a real data channel is a view into a larger buffer.** The header
+is read with `ByteData.sublistView(frame)`; `ByteData.view(frame.buffer)`
+ignores where the view starts, so the counter came out of whatever happened to
+be in front of it. A loopback channel hands back freshly allocated lists at
+offset zero, where the two spellings agree.
+
+**Nothing may be awaited between subscribing and the first message.** One
+subscription is attached to the channel before the hello goes out, and
 the hello is read off it rather than through a second `firstWhere`. Both sides
 answer the moment they have the other's hello and send their welcome straight
 after, and the stream is broadcast — so subscribing after the send, or
 awaiting anything between the reply and the pump, drops whichever message
-lands in the gap. That gap is a microtask on a loopback channel and a turn of
-the event loop on a real one.
+lands in the gap. That gap is a microtask on a loopback channel — where it
+never once opened — and a whole turn of the event loop on a real one, where it
+opened every time.
 
 `SyncHub.establishForTest` is the seam: it runs the shared tail of every route
 — handshake, codes-matched gate, hello, filing the peer — over a `ByteChannel`
@@ -269,6 +283,15 @@ which is also what keeps every sync-unaware test working, since there is no
 `SyncHub` in the container to throw. `sendForTest` is the other seam on the
 hub: it sends past the mirror-side guard, which is the only way to check that
 the *home* device is what refuses a peer holding nothing.
+
+## What a device is called
+
+The sync device name is the machine's own hostname where it has one, falling
+back to the first characters of the key fingerprint. A user's own name for it
+wins over both. The hostname comes in as a constructor argument rather than
+being read in the hub: `Platform.localHostname` is `dart:io`'s, and a browser
+has no name of its own to give — `location.hostname` is the server the page
+came from, which is a different machine entirely.
 
 ## What the Sync page can do about a peer
 

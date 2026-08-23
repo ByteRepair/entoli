@@ -41,8 +41,10 @@ class SyncSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setDeviceName(null),
             child: TextFormField(
               initialValue: settings.deviceName ?? "",
-              decoration: const InputDecoration(
-                hintText: "Entoli",
+              decoration: InputDecoration(
+                // The name the other device would file this one under with
+                // nothing typed here, rather than a stand-in for it.
+                hintText: hub.deviceName,
                 isDense: true,
               ),
               onChanged: (value) => ref

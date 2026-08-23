@@ -134,3 +134,7 @@ SecretStore platformSecretStore(AppConfig config) =>
 /// Nowhere to bind: see `signaling.dart`. A web device pairs as the joiner.
 LanSignaling? platformLanSignaling() => createWebLanSignaling();
 
+
+/// A browser has no hostname of its own to give. `location.hostname` is the
+/// server the page came from, which is a different machine's name entirely.
+String? platformHostname() => null;

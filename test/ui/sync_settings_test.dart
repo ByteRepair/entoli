@@ -26,13 +26,17 @@ void main() {
     WidgetTester tester, {
     List<PairedDevice> paired = const [],
     String? relayUrl,
+    String? hostname,
+    String? deviceName,
   }) async {
     final config = tempConfig();
     registry = FakeDeviceRegistry(paired);
     hub = await testSyncHub(
       config,
       devices: registry,
-      settings: () => AppSettings(syncRelayUrl: relayUrl),
+      hostname: hostname,
+      settings: () =>
+          AppSettings(syncRelayUrl: relayUrl, deviceName: deviceName),
     );
     app = TestApp.create(hub: hub, devices: registry);
     await pumpSettings(tester, app, SettingsCategory.sync);
@@ -43,6 +47,30 @@ void main() {
     await open(tester);
 
     expect(find.text(hub.identity.fingerprint), findsOneWidget);
+  });
+
+  group("what the other device files this one under", () {
+    testWidgets("the machine's own name, where it has one", (tester) async {
+      await open(tester, hostname: "yiannis-laptop");
+
+      expect(hub.deviceName, "yiannis-laptop");
+      // The field is empty and the hint is what the default would be, rather
+      // than a stand-in for it.
+      expect(
+          find.widgetWithText(TextFormField, "yiannis-laptop"), findsOneWidget);
+    });
+
+    testWidgets("a typed name wins over the hostname", (tester) async {
+      await open(tester, hostname: "yiannis-laptop", deviceName: "Desk");
+
+      expect(hub.deviceName, "Desk");
+    });
+
+    testWidgets("with no hostname it falls back to the key", (tester) async {
+      await open(tester);
+
+      expect(hub.deviceName, startsWith("Entoli "));
+    });
   });
 
   testWidgets("with nothing paired it says how to start", (tester) async {

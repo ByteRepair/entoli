@@ -256,3 +256,15 @@ SecretStore platformSecretStore(AppConfig config) =>
 /// Desktops listen while pairing. The one-time code is armed per pairing
 /// window by the hub, so the factory needs nothing from its caller.
 LanSignaling? platformLanSignaling() => SignalingServer();
+
+/// What this machine calls itself, for the sync device name. Guarded: a host
+/// with no resolvable name throws rather than answering, and a pairing that
+/// failed over the machine's name would be a strange way to lose.
+String? platformHostname() {
+  try {
+    final name = Platform.localHostname.trim();
+    return name.isEmpty ? null : name;
+  } catch (_) {
+    return null;
+  }
+}

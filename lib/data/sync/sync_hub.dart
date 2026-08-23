@@ -180,6 +180,7 @@ class SyncHub {
     required AppConfig config,
     required this._settings,
     required LanSignaling? Function() lanSignaling,
+    this._hostname,
     http.Client? client,
   })  : _lanFactory = lanSignaling,
         _client = client ?? http.Client();
@@ -188,6 +189,11 @@ class SyncHub {
   final DeviceRegistry registry;
 
   final AppSettings Function() _settings;
+
+  /// What the machine calls itself, where it has a name — the default device
+  /// name before the user picks one. Passed in rather than read here: it is
+  /// `dart:io`'s, and a browser has none.
+  final String? _hostname;
   final LanSignaling? Function() _lanFactory;
   final http.Client _client;
 
@@ -1136,8 +1142,12 @@ class SyncHub {
     _refreshPeers();
   }
 
+  /// What the other device files this one under. The machine's own name
+  /// where there is one, since that is what its owner already calls it; the
+  /// key's first characters otherwise, which at least cannot collide.
   String get deviceName =>
       _settings().deviceName ??
+      _hostname ??
       "Entoli ${identity.fingerprint.substring(0, 5)}";
 
   List<Map<String, Object>> iceServers() {

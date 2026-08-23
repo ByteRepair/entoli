@@ -320,6 +320,7 @@ Future<SyncHub> testSyncHub(
   AppConfig config, {
   DeviceRegistry? devices,
   AppSettings Function()? settings,
+  String? hostname,
 }) async =>
     SyncHub(
       identity: await SyncIdentity.load(FakeSecretStore()),
@@ -327,6 +328,7 @@ Future<SyncHub> testSyncHub(
       config: config,
       settings: settings ?? AppSettings.new,
       lanSignaling: () => null,
+      hostname: hostname,
     );
 
 /// Put a whole chat on disk the way the app would have: its state, then its

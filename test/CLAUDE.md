@@ -223,31 +223,24 @@ Do not reach for the memory filesystem to avoid all this. It was tried: sembast
 resolves through timers, not microtasks, so a widget test hangs on it exactly as
 it hangs on a disk. `runAsync` is the only answer.
 
-## The one test that needs an engine
+## What the wire is not tested against
 
-`integration_test/rtc_pairing_test.dart` is the WebRTC data channel, and it is
-outside `test/` because it cannot run there: `flutter_webrtc` is a native
-plugin, so a peer connection needs a real engine with the plugin registered
-and a `flutter test` on the Dart VM has neither. Run it by hand against a
-desktop:
+Everything above the transport is exercised on a loopback `ByteChannel` —
+`data/sync/sync_hub_pair_test.dart` stands two real hubs on one. The
+rendezvous under it is exercised over real sockets: `lan_signaling_test.dart`
+against a real `HttpServer`, `relay_signaling_test.dart` against a real
+WebSocket.
 
-```sh
-toolbox run --container flutter-dev flutter test -d linux integration_test/rtc_pairing_test.dart
-```
+**The WebRTC data channel itself has no automated coverage**, and cannot have
+any under `flutter test`: `flutter_webrtc` is a native plugin, so a peer
+connection needs an engine with the plugin registered and the Dart VM has
+neither. It is confirmed by hand, between two running instances.
 
-Both peers are in the one process, connected over loopback ICE, with the SDP
-handed across in memory — which rendezvous carried it is the signaling
-layer's business and has its own tests over real sockets
-(`lan_signaling_test.dart`, `relay_signaling_test.dart`). It proves nothing
-about NAT or TURN, and nothing running on one machine could.
-
-It earns its keep. Two bugs that every loopback test passed were sitting under
-it: the frame header was read through `frame.buffer`, which ignores where a
-view starts, so a frame off a real data channel had its counter read out of
-whatever was in front of it; and the hello exchange subscribed *after* it
-sent, so the reply — and the welcome behind it — fell into a gap that is a
-microtask on a loopback channel and a whole turn of the event loop on a real
-one.
+That gap has already cost two bugs that every loopback test passed — the frame
+header read through `frame.buffer`, and the hello exchange subscribing after
+it sent. Both are written up in `lib/data/sync/CLAUDE.md`; both would have
+been silent again. Anything changed in `framing.dart` or in `SyncHub._establish`
+is worth confirming between two instances before it is believed.
 
 ## The live test
 
