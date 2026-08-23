@@ -292,13 +292,13 @@ return turnResume(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( List<ChatState> chats,  int proto)?  welcome,TResult Function( List<ChatState> chats)?  chatsChanged,TResult Function( String chatId,  int fromLine)?  chatOpen,TResult Function( String chatId,  ChatState state,  ChatMeta meta,  int totalLines)?  chatSnapshot,TResult Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult Function( String chatId,  ChatState state)?  stateDiff,TResult Function( String chatId,  ChatMeta meta)?  metaPatch,TResult Function( String chatId)?  chatDeleted,TResult Function( String chatId,  String? project)?  chatMoved,TResult Function( String id,  String chatId,  String resource)?  resourceRequest,TResult Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult Function()?  ping,TResult Function()?  pong,TResult Function( String chatId,  String? holder)?  controlState,TResult Function( String chatId)?  controlRequest,TResult Function( String chatId,  bool granted)?  controlGrant,TResult Function( String chatId)?  controlRelease,TResult Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)?  turnState,TResult Function( String chatId,  String text)?  promptSend,TResult Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult Function( String chatId)?  turnAbort,TResult Function( String chatId)?  turnResume,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( List<ChatState> chats,  int proto)?  welcome,TResult Function( List<ChatState> chats)?  chatsChanged,TResult Function( String chatId,  int fromLine)?  chatOpen,TResult Function( String chatId,  ChatState state,  ChatMeta meta)?  chatSnapshot,TResult Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult Function( String chatId,  ChatState state)?  stateDiff,TResult Function( String chatId,  ChatMeta meta)?  metaPatch,TResult Function( String chatId)?  chatDeleted,TResult Function( String chatId,  String? project)?  chatMoved,TResult Function( String id,  String chatId,  String resource)?  resourceRequest,TResult Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult Function()?  ping,TResult Function()?  pong,TResult Function( String chatId,  String? holder)?  controlState,TResult Function( String chatId)?  controlRequest,TResult Function( String chatId,  bool granted)?  controlGrant,TResult Function( String chatId)?  controlRelease,TResult Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)?  turnState,TResult Function( String chatId,  String text)?  promptSend,TResult Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult Function( String chatId)?  turnAbort,TResult Function( String chatId)?  turnResume,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case SyncWelcome() when welcome != null:
 return welcome(_that.chats,_that.proto);case SyncChatsChanged() when chatsChanged != null:
 return chatsChanged(_that.chats);case SyncChatOpen() when chatOpen != null:
 return chatOpen(_that.chatId,_that.fromLine);case SyncChatSnapshot() when chatSnapshot != null:
-return chatSnapshot(_that.chatId,_that.state,_that.meta,_that.totalLines);case SyncRecordAppend() when recordAppend != null:
+return chatSnapshot(_that.chatId,_that.state,_that.meta);case SyncRecordAppend() when recordAppend != null:
 return recordAppend(_that.chatId,_that.records);case SyncStateDiff() when stateDiff != null:
 return stateDiff(_that.chatId,_that.state);case SyncMetaPatch() when metaPatch != null:
 return metaPatch(_that.chatId,_that.meta);case SyncChatDeleted() when chatDeleted != null:
@@ -335,13 +335,13 @@ return turnResume(_that.chatId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( List<ChatState> chats,  int proto)  welcome,required TResult Function( List<ChatState> chats)  chatsChanged,required TResult Function( String chatId,  int fromLine)  chatOpen,required TResult Function( String chatId,  ChatState state,  ChatMeta meta,  int totalLines)  chatSnapshot,required TResult Function( String chatId,  List<ChatRecord> records)  recordAppend,required TResult Function( String chatId,  ChatState state)  stateDiff,required TResult Function( String chatId,  ChatMeta meta)  metaPatch,required TResult Function( String chatId)  chatDeleted,required TResult Function( String chatId,  String? project)  chatMoved,required TResult Function( String id,  String chatId,  String resource)  resourceRequest,required TResult Function( String id,  String bytesB64,  bool done)  resourceChunk,required TResult Function()  ping,required TResult Function()  pong,required TResult Function( String chatId,  String? holder)  controlState,required TResult Function( String chatId)  controlRequest,required TResult Function( String chatId,  bool granted)  controlGrant,required TResult Function( String chatId)  controlRelease,required TResult Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)  turnState,required TResult Function( String chatId,  String text)  promptSend,required TResult Function( String chatId,  String approvalId,  bool allow)  approvalRespond,required TResult Function( String chatId,  String requestId,  List<String?> answers)  questionsRespond,required TResult Function( String chatId)  turnAbort,required TResult Function( String chatId)  turnResume,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( List<ChatState> chats,  int proto)  welcome,required TResult Function( List<ChatState> chats)  chatsChanged,required TResult Function( String chatId,  int fromLine)  chatOpen,required TResult Function( String chatId,  ChatState state,  ChatMeta meta)  chatSnapshot,required TResult Function( String chatId,  List<ChatRecord> records)  recordAppend,required TResult Function( String chatId,  ChatState state)  stateDiff,required TResult Function( String chatId,  ChatMeta meta)  metaPatch,required TResult Function( String chatId)  chatDeleted,required TResult Function( String chatId,  String? project)  chatMoved,required TResult Function( String id,  String chatId,  String resource)  resourceRequest,required TResult Function( String id,  String bytesB64,  bool done)  resourceChunk,required TResult Function()  ping,required TResult Function()  pong,required TResult Function( String chatId,  String? holder)  controlState,required TResult Function( String chatId)  controlRequest,required TResult Function( String chatId,  bool granted)  controlGrant,required TResult Function( String chatId)  controlRelease,required TResult Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)  turnState,required TResult Function( String chatId,  String text)  promptSend,required TResult Function( String chatId,  String approvalId,  bool allow)  approvalRespond,required TResult Function( String chatId,  String requestId,  List<String?> answers)  questionsRespond,required TResult Function( String chatId)  turnAbort,required TResult Function( String chatId)  turnResume,}) {final _that = this;
 switch (_that) {
 case SyncWelcome():
 return welcome(_that.chats,_that.proto);case SyncChatsChanged():
 return chatsChanged(_that.chats);case SyncChatOpen():
 return chatOpen(_that.chatId,_that.fromLine);case SyncChatSnapshot():
-return chatSnapshot(_that.chatId,_that.state,_that.meta,_that.totalLines);case SyncRecordAppend():
+return chatSnapshot(_that.chatId,_that.state,_that.meta);case SyncRecordAppend():
 return recordAppend(_that.chatId,_that.records);case SyncStateDiff():
 return stateDiff(_that.chatId,_that.state);case SyncMetaPatch():
 return metaPatch(_that.chatId,_that.meta);case SyncChatDeleted():
@@ -374,13 +374,13 @@ return turnResume(_that.chatId);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( List<ChatState> chats,  int proto)?  welcome,TResult? Function( List<ChatState> chats)?  chatsChanged,TResult? Function( String chatId,  int fromLine)?  chatOpen,TResult? Function( String chatId,  ChatState state,  ChatMeta meta,  int totalLines)?  chatSnapshot,TResult? Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult? Function( String chatId,  ChatState state)?  stateDiff,TResult? Function( String chatId,  ChatMeta meta)?  metaPatch,TResult? Function( String chatId)?  chatDeleted,TResult? Function( String chatId,  String? project)?  chatMoved,TResult? Function( String id,  String chatId,  String resource)?  resourceRequest,TResult? Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult? Function()?  ping,TResult? Function()?  pong,TResult? Function( String chatId,  String? holder)?  controlState,TResult? Function( String chatId)?  controlRequest,TResult? Function( String chatId,  bool granted)?  controlGrant,TResult? Function( String chatId)?  controlRelease,TResult? Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)?  turnState,TResult? Function( String chatId,  String text)?  promptSend,TResult? Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult? Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult? Function( String chatId)?  turnAbort,TResult? Function( String chatId)?  turnResume,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( List<ChatState> chats,  int proto)?  welcome,TResult? Function( List<ChatState> chats)?  chatsChanged,TResult? Function( String chatId,  int fromLine)?  chatOpen,TResult? Function( String chatId,  ChatState state,  ChatMeta meta)?  chatSnapshot,TResult? Function( String chatId,  List<ChatRecord> records)?  recordAppend,TResult? Function( String chatId,  ChatState state)?  stateDiff,TResult? Function( String chatId,  ChatMeta meta)?  metaPatch,TResult? Function( String chatId)?  chatDeleted,TResult? Function( String chatId,  String? project)?  chatMoved,TResult? Function( String id,  String chatId,  String resource)?  resourceRequest,TResult? Function( String id,  String bytesB64,  bool done)?  resourceChunk,TResult? Function()?  ping,TResult? Function()?  pong,TResult? Function( String chatId,  String? holder)?  controlState,TResult? Function( String chatId)?  controlRequest,TResult? Function( String chatId,  bool granted)?  controlGrant,TResult? Function( String chatId)?  controlRelease,TResult? Function( String chatId,  bool running,  List<ToolApproval> approvals,  List<SyncAsk> asks,  String? status,  String? retry)?  turnState,TResult? Function( String chatId,  String text)?  promptSend,TResult? Function( String chatId,  String approvalId,  bool allow)?  approvalRespond,TResult? Function( String chatId,  String requestId,  List<String?> answers)?  questionsRespond,TResult? Function( String chatId)?  turnAbort,TResult? Function( String chatId)?  turnResume,}) {final _that = this;
 switch (_that) {
 case SyncWelcome() when welcome != null:
 return welcome(_that.chats,_that.proto);case SyncChatsChanged() when chatsChanged != null:
 return chatsChanged(_that.chats);case SyncChatOpen() when chatOpen != null:
 return chatOpen(_that.chatId,_that.fromLine);case SyncChatSnapshot() when chatSnapshot != null:
-return chatSnapshot(_that.chatId,_that.state,_that.meta,_that.totalLines);case SyncRecordAppend() when recordAppend != null:
+return chatSnapshot(_that.chatId,_that.state,_that.meta);case SyncRecordAppend() when recordAppend != null:
 return recordAppend(_that.chatId,_that.records);case SyncStateDiff() when stateDiff != null:
 return stateDiff(_that.chatId,_that.state);case SyncMetaPatch() when metaPatch != null:
 return metaPatch(_that.chatId,_that.meta);case SyncChatDeleted() when chatDeleted != null:
@@ -646,13 +646,12 @@ as int,
 @JsonSerializable()
 
 class SyncChatSnapshot implements SyncMessage {
-  const SyncChatSnapshot({required this.chatId, required this.state, required this.meta, required this.totalLines, final  String? $type}): $type = $type ?? 'chatSnapshot';
+  const SyncChatSnapshot({required this.chatId, required this.state, required this.meta, final  String? $type}): $type = $type ?? 'chatSnapshot';
   factory SyncChatSnapshot.fromJson(Map<String, dynamic> json) => _$SyncChatSnapshotFromJson(json);
 
  final  String chatId;
  final  ChatState state;
  final  ChatMeta meta;
- final  int totalLines;
 
 @JsonKey(name: 'runtimeType')
 final String $type;
@@ -671,16 +670,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SyncChatSnapshot&&(identical(other.chatId, chatId) || other.chatId == chatId)&&(identical(other.state, state) || other.state == state)&&(identical(other.meta, meta) || other.meta == meta)&&(identical(other.totalLines, totalLines) || other.totalLines == totalLines));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SyncChatSnapshot&&(identical(other.chatId, chatId) || other.chatId == chatId)&&(identical(other.state, state) || other.state == state)&&(identical(other.meta, meta) || other.meta == meta));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,chatId,state,meta,totalLines);
+int get hashCode => Object.hash(runtimeType,chatId,state,meta);
 
 @override
 String toString() {
-  return 'SyncMessage.chatSnapshot(chatId: $chatId, state: $state, meta: $meta, totalLines: $totalLines)';
+  return 'SyncMessage.chatSnapshot(chatId: $chatId, state: $state, meta: $meta)';
 }
 
 
@@ -691,7 +690,7 @@ abstract mixin class $SyncChatSnapshotCopyWith<$Res> implements $SyncMessageCopy
   factory $SyncChatSnapshotCopyWith(SyncChatSnapshot value, $Res Function(SyncChatSnapshot) _then) = _$SyncChatSnapshotCopyWithImpl;
 @useResult
 $Res call({
- String chatId, ChatState state, ChatMeta meta, int totalLines
+ String chatId, ChatState state, ChatMeta meta
 });
 
 
@@ -708,13 +707,12 @@ class _$SyncChatSnapshotCopyWithImpl<$Res>
 
 /// Create a copy of SyncMessage
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? chatId = null,Object? state = null,Object? meta = null,Object? totalLines = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? chatId = null,Object? state = null,Object? meta = null,}) {
   return _then(SyncChatSnapshot(
 chatId: null == chatId ? _self.chatId : chatId // ignore: cast_nullable_to_non_nullable
 as String,state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as ChatState,meta: null == meta ? _self.meta : meta // ignore: cast_nullable_to_non_nullable
-as ChatMeta,totalLines: null == totalLines ? _self.totalLines : totalLines // ignore: cast_nullable_to_non_nullable
-as int,
+as ChatMeta,
   ));
 }
 

@@ -42,6 +42,10 @@ abstract interface class LanSignaling {
   /// re-pairing. Derived from the pair's secret by the hub.
   void allowReconnect(String token);
 
+  /// Disarms one. Revoking a device has to reach here, or it goes on being
+  /// let in and answered for as long as the process lives.
+  void refuseReconnect(String token);
+
   /// The bound port, or null while not running.
   int? get port;
 

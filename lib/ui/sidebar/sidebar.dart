@@ -233,14 +233,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
 }
 
-/// One paired device's project, listed. Read-only by nature — the home device
-/// owns the log — so the rows carry none of a local chat's menu: no pin,
-/// rename, move or delete, which would all write to a disk this device does
-/// not have. Nor any date grouping: a mirror answers to no date this sidebar
-/// could place it under.
-///
-/// A gone connection keeps the rows. The snapshot is still readable, and each
-/// one says the device is offline.
+const _noMatch = "No chat's title matches that.";
+
 /// This device's chats in the project being shown. Its own widget so that
 /// [chatListProvider] — which re-reads every chat's `state.json` when it is
 /// invalidated, and every local turn invalidates it — is watched only while
@@ -282,6 +276,14 @@ class _LocalChatList extends ConsumerWidget {
   }
 }
 
+/// One paired device's project, listed. Read-only by nature — the home device
+/// owns the log — so the rows carry none of a local chat's menu: no pin,
+/// rename, move or delete, which would all write to a disk this device does
+/// not have. Nor any date grouping: a mirror answers to no date this sidebar
+/// could place it under.
+///
+/// A gone connection keeps the rows. The snapshot is still readable, and each
+/// one says the device is offline.
 class _RemoteChatList extends ConsumerWidget {
   const _RemoteChatList({
     required this.scope,
@@ -317,7 +319,7 @@ class _RemoteChatList extends ConsumerWidget {
                   .where((entry) => titleMatches(entry.state, needle))
                   .toList();
               if (matching.isEmpty) {
-                return const _Nothing("No chat's title matches that.");
+                return const _Nothing(_noMatch);
               }
               return ListView.builder(
                 itemCount: matching.length,
@@ -435,7 +437,7 @@ class _ChatList extends ConsumerWidget {
       valueListenable: query,
       builder: (context, text, _) {
         final found = chatsMatching(chats, text);
-        if (found.isEmpty) return const _Nothing("No chat's title matches that.");
+        if (found.isEmpty) return const _Nothing(_noMatch);
         // A sliver per group rather than one list over headings and chats
         // flattened together: the flat form has to say which of the two each
         // row is, and there is no shape for that which is not two nullable

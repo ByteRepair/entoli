@@ -536,7 +536,7 @@ class _Server {
   void _say(String line) {
     _log.add(line);
     if (_log.length > _logLines) _log.removeAt(0);
-    logDetail("llama", "${model.id}: $line");
+    logDetail("llama", () => "${model.id}: $line");
   }
 
   void _exited(Process process, int code, void Function() onChange) {

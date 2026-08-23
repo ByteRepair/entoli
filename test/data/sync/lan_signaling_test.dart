@@ -228,15 +228,6 @@ void main() {
     });
   });
 
-  test("health says this is still the Entoli server", () async {
-    expect(await client.alive(host: "127.0.0.1", port: port), isTrue);
-  });
-
-  test("health on a port nothing is on is false, not a throw", () async {
-    await server.close();
-    expect(await client.alive(host: "127.0.0.1", port: port), isFalse);
-  });
-
   test("a second device here falls back rather than failing to start",
       () async {
     // One port, so the second Entoli on a machine is dialable only until it

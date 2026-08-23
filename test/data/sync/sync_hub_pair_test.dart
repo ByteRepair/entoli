@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io" show Directory;
 import "dart:typed_data";
 
@@ -70,7 +71,7 @@ void main() {
       knownDeviceId: knownToJoiner,
     );
     if (knownToOfferer == null || knownToJoiner == null) {
-      await eventually(
+      await waitForSync(
           () =>
               offers.hub.pairing.value?.stage == PairingStage.confirming &&
               joins.hub.pairing.value?.stage == PairingStage.confirming);
@@ -91,7 +92,7 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
     return state;
   }
 
@@ -128,12 +129,10 @@ void main() {
     links.$1.watchSends(sent.add);
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() =>
+    await waitForSync(() =>
         away.hub.mirror(state.id)?.records.length ==
         (home.store as FakeChatStore).records(state.id).length);
 
-    final mirror = away.hub.mirror(state.id)!;
-    expect(mirror.totalLines, mirror.records.length);
     // Well over 400KB of records, so it cannot have been one message.
     expect(sent.reduce((a, b) => a > b ? a : b), lessThan(64 * 1024));
   });
@@ -169,8 +168,8 @@ void main() {
     final links = loopbackPair();
     await pairing(onDisk, away, links.$1, links.$2);
     away.hub.followChat("on-disk");
-    await eventually(() => away.hub.mirror("on-disk") != null);
-    await eventually(() => away.hub.mirror("on-disk")!.records.isNotEmpty);
+    await waitForSync(() => away.hub.mirror("on-disk") != null);
+    await waitForSync(() => away.hub.mirror("on-disk")!.records.isNotEmpty);
 
     final mirrored = chatFrom(
         away.hub.mirror("on-disk")!.state, away.hub.mirror("on-disk")!.records);
@@ -209,7 +208,7 @@ void main() {
         link: links.$1, weOffered: true, psk: psk);
     final b = away.hub.establishForTest(
         link: links.$2, weOffered: false, psk: psk);
-    await eventually(() =>
+    await waitForSync(() =>
         home.hub.pairing.value?.stage == PairingStage.confirming &&
         away.hub.pairing.value?.stage == PairingStage.confirming);
     // Both screens show the same code, which is the whole point of showing it.
@@ -221,7 +220,7 @@ void main() {
     await Future.wait([a, b]);
 
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
     expect(away.hub.peers.value[home.identity.id]?.status, PeerStatus.online);
   });
 
@@ -234,7 +233,7 @@ void main() {
         link: links.$1, weOffered: true, psk: psk);
     final b = away.hub.establishForTest(
         link: links.$2, weOffered: false, psk: psk);
-    await eventually(() =>
+    await waitForSync(() =>
         away.hub.pairing.value?.stage == PairingStage.confirming);
 
     // The other side has already sent its welcome by the time this one says
@@ -265,11 +264,10 @@ void main() {
     await pair(links.$1, links.$2);
 
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     final mirror = away.hub.mirror(state.id)!;
     expect(mirror.records.length, (home.store as FakeChatStore).records(state.id).length);
-    expect(mirror.totalLines, mirror.records.length);
     expect(mirror.deviceName, home.hub.deviceName);
     expect(away.hub.isChatOnline(state.id), isTrue);
 
@@ -284,12 +282,12 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     final before = away.hub.mirror(state.id)!.records.length;
     await home.repo.append(state.id,
         [ChatRecord.turnEnd(messageId: "m1", reason: TurnEnd.done)]);
-    await eventually(() =>
+    await waitForSync(() =>
         away.hub.mirror(state.id)!.records.length > before);
   });
 
@@ -298,11 +296,11 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     await home.repo.retitle(
         await home.repo.openChat(state.id).then((c) => c.state), "Renamed");
-    await eventually(
+    await waitForSync(
         () => away.hub.mirror(state.id)?.state.title == "Renamed");
   });
 
@@ -312,10 +310,10 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     await home.repo.deleteChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) == null);
+    await waitForSync(() => away.hub.mirror(state.id) == null);
   });
 
   test("an attachment crosses as base64 chunks and reassembles", () async {
@@ -323,7 +321,7 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     // Large enough to need more than one chunk at the wire's 48KB frame.
     final bytes = Uint8List.fromList(
@@ -340,7 +338,7 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     expect(await away.hub.fetchResource(state.id, "gone.bin"), isNull);
   });
@@ -350,11 +348,11 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     await links.$1.close();
     await links.$2.close();
-    await eventually(() =>
+    await waitForSync(() =>
         away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline);
 
     // The point of keeping it: what was read stays readable.
@@ -368,12 +366,12 @@ void main() {
     var links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
     final heldBefore = away.hub.mirror(state.id)!.records.length;
 
     await links.$1.close();
     await links.$2.close();
-    await eventually(() =>
+    await waitForSync(() =>
         away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline);
 
     // Said while the peer was gone.
@@ -384,13 +382,12 @@ void main() {
     await pair(links.$1, links.$2,
         knownToHome: away.identity.id, knownToAway: home.identity.id);
     // followChat is still desired, so the reconnecting welcome re-opens it.
-    await eventually(() =>
+    await waitForSync(() =>
         away.hub.mirror(state.id)!.records.length ==
         (home.store as FakeChatStore).records(state.id).length);
 
     final mirror = away.hub.mirror(state.id)!;
     expect(mirror.records.length, heldBefore + 1);
-    expect(mirror.totalLines, mirror.records.length);
     // No duplicate of what the first session already carried.
     expect(mirror.records.whereType<MessageRecord>().map((m) => m.id),
         ["m1", "r1"]);
@@ -399,11 +396,11 @@ void main() {
   test("a chat made after pairing appears in the mirror's list", () async {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
-    await eventually(() => away.hub.peers.value.isNotEmpty);
+    await waitForSync(() => away.hub.peers.value.isNotEmpty);
 
     final state = _seedChat(home);
     await home.repo.saveState(state);
-    await eventually(() =>
+    await waitForSync(() =>
         away.hub.remotes.value.any((e) => e.chatId == state.id));
 
     expect(away.hub.remotes.value.single.state.title, "Home chat");
@@ -414,13 +411,28 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
     away.hub.byteCache.put(state.id, "photo.bin", Uint8List(8));
 
     await home.repo.deleteChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) == null);
+    await waitForSync(() => away.hub.mirror(state.id) == null);
 
     expect(away.hub.byteCache.get(state.id, "photo.bin"), isNull);
+  });
+
+  test("a revoked device is not let back in", () async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    final psk = generatePsk();
+    await pairing(home, away, links.$1, links.$2, psk: psk);
+    away.hub.followChat(state.id);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
+
+    await home.hub.revoke(away.identity.id);
+
+    // The token derived from the pair's secret is what admits a redial, and
+    // clearing everything but that left a revoked device still getting in.
+    expect(home.hub.admitsReconnect(psk), isFalse);
   });
 
   test("revoking a device takes its mirrors and its row with it", () async {
@@ -428,7 +440,7 @@ void main() {
     final links = loopbackPair();
     await pair(links.$1, links.$2);
     away.hub.followChat(state.id);
-    await eventually(() => away.hub.mirror(state.id) != null);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
 
     await away.hub.revoke(home.identity.id);
 
@@ -451,7 +463,7 @@ void main() {
       final state = await mirrored();
 
       await away.hub.requestControl(state.id);
-      await eventually(() => away.hub.holdsControl(state.id));
+      await waitForSync(() => away.hub.holdsControl(state.id));
 
       expect(home.hub.heldBy(state.id), away.identity.id);
       expect(home.hub.drivenChats.value[state.id], away.hub.deviceName);
@@ -465,12 +477,12 @@ void main() {
       final links = loopbackPair();
       await pairing(home, other, links.$1, links.$2, psk: generatePsk());
       other.hub.followChat(state.id);
-      await eventually(() => other.hub.mirror(state.id) != null);
+      await waitForSync(() => other.hub.mirror(state.id) != null);
 
       await away.hub.requestControl(state.id);
-      await eventually(() => away.hub.holdsControl(state.id));
+      await waitForSync(() => away.hub.holdsControl(state.id));
       await other.hub.requestControl(state.id);
-      await eventually(
+      await waitForSync(
           () => other.hub.mirror(state.id)!.controlHolder != null);
 
       expect(other.hub.holdsControl(state.id), isFalse);
@@ -481,10 +493,10 @@ void main() {
     test("the holder's prompt runs on the home device", () async {
       final state = await mirrored();
       await away.hub.requestControl(state.id);
-      await eventually(() => away.hub.holdsControl(state.id));
+      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.sendRemotePrompt(state.id, "do the thing");
-      await eventually(() => turns.prompts.isNotEmpty);
+      await waitForSync(() => turns.prompts.isNotEmpty);
 
       expect(turns.prompts.single, (state.id, "do the thing"));
     });
@@ -492,13 +504,13 @@ void main() {
     test("every verb reaches the home device's own controller", () async {
       final state = await mirrored();
       await away.hub.requestControl(state.id);
-      await eventually(() => away.hub.holdsControl(state.id));
+      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.resumeRemote(state.id);
       await away.hub.respondRemoteApproval(state.id, "a1", true);
       await away.hub.answerRemoteQuestions(state.id, "q1", ["yes"]);
       await away.hub.abortRemote(state.id);
-      await eventually(() => turns.aborted.isNotEmpty);
+      await waitForSync(() => turns.aborted.isNotEmpty);
 
       expect(turns.resumed, [state.id]);
       expect(turns.approved, [(state.id, "a1", true)]);
@@ -525,12 +537,12 @@ void main() {
     test("releasing hands it back", () async {
       final state = await mirrored();
       await away.hub.requestControl(state.id);
-      await eventually(() => away.hub.holdsControl(state.id));
+      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await away.hub.releaseControl(state.id);
-      await eventually(() => home.hub.heldBy(state.id) == null);
+      await waitForSync(() => home.hub.heldBy(state.id) == null);
 
-      await eventually(
+      await waitForSync(
           () => away.hub.mirror(state.id)!.controlHolder == null);
       expect(home.hub.drivenChats.value, isEmpty);
     });
@@ -540,20 +552,20 @@ void main() {
       final links = loopbackPair();
       await pair(links.$1, links.$2);
       away.hub.followChat(state.id);
-      await eventually(() => away.hub.mirror(state.id) != null);
+      await waitForSync(() => away.hub.mirror(state.id) != null);
       await away.hub.requestControl(state.id);
-      await eventually(() => away.hub.holdsControl(state.id));
+      await waitForSync(() => away.hub.holdsControl(state.id));
 
       await links.$1.close();
       await links.$2.close();
 
-      await eventually(() => home.hub.heldBy(state.id) == null);
+      await waitForSync(() => home.hub.heldBy(state.id) == null);
       expect(home.hub.drivenChats.value, isEmpty);
     });
 
     test("the turn the home device is running reaches the mirror", () async {
       final state = await mirrored();
-      await eventually(() => home.hub.servedChats.value.contains(state.id));
+      await waitForSync(() => home.hub.servedChats.value.contains(state.id));
 
       home.hub.publishTurn(
         state.id,
@@ -564,7 +576,7 @@ void main() {
         asks: const [SyncAsk(id: "q1", argumentsJson: "{}")],
         status: "Thinking",
       );
-      await eventually(() => away.hub.mirror(state.id)!.running);
+      await waitForSync(() => away.hub.mirror(state.id)!.running);
 
       final mirror = away.hub.mirror(state.id)!;
       expect(mirror.approvals.single.argumentsText, "ls");
@@ -590,13 +602,13 @@ void main() {
     // Listened, not read: a provider nobody holds is disposed again, and
     // disposing this one unfollows the chat.
     container.listen(provider, (_, _) {});
-    await eventually(() => container.read(provider).chat != null);
+    await waitForSync(() => container.read(provider).chat != null);
     expect(container.read(provider).chat!.messages, hasLength(2));
     expect(container.read(provider).status, isNull);
 
     await links.$1.close();
     await links.$2.close();
-    await eventually(() => container.read(provider).status != null);
+    await waitForSync(() => container.read(provider).status != null);
     expect(container.read(provider).status, contains("offline"));
     // The snapshot is what stays readable.
     expect(container.read(provider).chat!.messages, hasLength(2));
@@ -666,13 +678,7 @@ ChatState _seedChat(_Device device) {
   return state;
 }
 
-Future<void> eventually(bool Function() done,
-    {Duration limit = const Duration(seconds: 5)}) async {
-  final end = DateTime.now().add(limit);
-  while (!done()) {
-    if (DateTime.now().isAfter(end)) {
-      fail("condition not met within $limit");
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-  }
-}
+/// [waitFor] with the headroom this file needs: everything here runs a real
+/// handshake, and two seconds of elliptic curve work is not a lot.
+Future<void> waitForSync(FutureOr<bool> Function() done) =>
+    waitFor(done, limit: const Duration(seconds: 10));

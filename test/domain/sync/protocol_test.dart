@@ -26,7 +26,6 @@ void main() {
     if (message is SyncChatSnapshot && back is SyncChatSnapshot) {
       expect(back.chatId, message.chatId);
       expect(back.state, message.state);
-      expect(back.totalLines, message.totalLines);
       expect(back.meta.model, message.meta.model);
       return;
     }
@@ -46,7 +45,6 @@ void main() {
       chatId: "c1",
       state: state,
       meta: ChatMeta(model: "m", tempChatTtl: null),
-      totalLines: 3,
     ));
     roundTrips(SyncMessage.recordAppend(chatId: "c1", records: [record]));
     roundTrips(SyncMessage.stateDiff(chatId: "c1", state: state));

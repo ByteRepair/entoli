@@ -63,18 +63,6 @@ class LanSignaler {
     return answer;
   }
 
-  /// Cheap check that a remembered address is still this app's server.
-  Future<bool> alive({required String host, required int port}) async {
-    try {
-      final response = await _client
-          .get(Uri.parse("http://$host:$port/entoli/health"))
-          .timeout(const Duration(seconds: 3));
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
-  }
-
   void close() => _client.close();
 }
 

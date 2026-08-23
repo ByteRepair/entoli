@@ -23,7 +23,7 @@ import "signaling/lan_signaler.dart";
 import "signaling/pairing_payload.dart";
 import "signaling/relay_signaler.dart";
 import "sync_byte_cache.dart";
-import "sync_log.dart";
+import "../../core/log.dart";
 
 export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
@@ -89,9 +89,7 @@ class MirrorChat {
     required this.deviceName,
     required this.state,
     required this.meta,
-    List<ChatRecord>? records,
-    required this.totalLines,
-  }) : records = records ?? [];
+  });
 
   final String peerId;
 
@@ -101,11 +99,7 @@ class MirrorChat {
   final String deviceName;
   ChatState state;
   ChatMeta meta;
-  List<ChatRecord> records;
-
-  /// How long the log was at the peer's end when last heard from. A mirror
-  /// whose record count is short of this is stale by that many records.
-  int totalLines;
+  final List<ChatRecord> records = [];
 
   /// Which device the home end says holds the chat, or null for nobody.
   /// Never assumed locally: taking control is the home device's answer, so
@@ -123,7 +117,7 @@ class MirrorChat {
   String? retry;
 
   @override
-  String toString() => "MirrorChat(${state.id}, ${records.length}/$totalLines)";
+  String toString() => "MirrorChat(${state.id}, ${records.length} records)";
 }
 
 /// What a chat's home device does when the mirror holding it drives a turn.
@@ -392,30 +386,14 @@ class SyncHub {
         await _applyWelcome(peer, chats);
       case SyncChatOpen(:final chatId, :final fromLine):
         await _serveOpen(peer, chatId, fromLine);
-      case SyncChatSnapshot(
-          :final chatId,
-          :final state,
-          :final meta,
-          :final totalLines
-        ):
+      case SyncChatSnapshot(:final chatId, :final state, :final meta):
         // The head only. Records already held are kept: a resume asks from
         // the line this mirror got to, so what follows is the tail.
-        _onMirror(peer, chatId, (mirror) {
-          mirror
-            ..state = state
-            ..meta = meta
-            ..totalLines = totalLines;
-        });
+        _onMirror(peer, chatId, (mirror) => mirror
+          ..state = state
+          ..meta = meta);
       case SyncRecordAppend(:final chatId, :final records):
-        _onMirror(peer, chatId, (mirror) {
-          mirror.records.addAll(records);
-          // The greater of what is held and what the peer last said its log
-          // was: pages of a snapshot climb towards a total already known,
-          // while a live append is what makes the total bigger.
-          if (mirror.records.length > mirror.totalLines) {
-            mirror.totalLines = mirror.records.length;
-          }
-        });
+        _onMirror(peer, chatId, (mirror) => mirror.records.addAll(records));
       case SyncStateDiff(:final chatId, :final state):
         _onMirror(peer, chatId, (mirror) => mirror.state = state);
       case SyncMetaPatch(:final chatId, :final meta):
@@ -461,7 +439,7 @@ class SyncHub {
         // The state message that follows is what actually moves the holder;
         // a refusal is worth nothing more than dropping the asking flag.
         if (!granted) _requesting.remove(chatId);
-        _mirrorUpdates.add(chatId);
+        _touch(chatId);
       case SyncTurnState(
           :final chatId,
           :final running,
@@ -492,7 +470,22 @@ class SyncHub {
     if (mirror == null || mirror.peerId != peer.deviceId) return;
     change(mirror);
     _rebuildRemotes();
-    _mirrorUpdates.add(chatId);
+    _touch(chatId);
+  }
+
+  final _touched = <String>{};
+
+  /// Says a mirror moved, once per burst. Whoever listens rebuilds the whole
+  /// conversation from its records, so a snapshot arriving as a dozen pages
+  /// would replay the log a dozen times, each one longer than the last — and
+  /// a turn's records land in bursts too. Collapsed on a microtask, the pages
+  /// of one snapshot are one projection.
+  void _touch(String chatId) {
+    if (!_touched.add(chatId)) return;
+    scheduleMicrotask(() {
+      _touched.remove(chatId);
+      if (!_mirrorUpdates.isClosed) _mirrorUpdates.add(chatId);
+    });
   }
 
   /// Whether [peer] is the device this chat's control was granted to. Every
@@ -520,7 +513,6 @@ class SyncHub {
         deviceName: peer.deviceName,
         state: state,
         meta: ChatMeta(),
-        totalLines: 0,
       );
       final mirror = _mirrors[state.id]!;
       if (state.updatedAt.isAfter(mirror.state.updatedAt)) {
@@ -547,7 +539,7 @@ class SyncHub {
     byteCache.drop(chatId);
     _requesting.remove(chatId);
     _rebuildRemotes();
-    _mirrorUpdates.add(chatId);
+    _touch(chatId);
   }
 
   // -------------------------------------------------------------- serving
@@ -578,7 +570,6 @@ class SyncHub {
         chatId: chatId,
         state: state,
         meta: meta,
-        totalLines: records.length,
       ));
       await _sendRecords(
           peer,
@@ -587,7 +578,7 @@ class SyncHub {
               ? records.sublist(fromLine)
               : const []);
     } on StateError {
-      syncLog("asked for chat $chatId, which is not here");
+      logFailure("sync", "asked for chat $chatId, which is not here");
       peer.subscriptions.remove(chatId);
       await peer.send(SyncMessage.chatDeleted(chatId: chatId));
     }
@@ -725,7 +716,7 @@ class SyncHub {
     final peer = _peerHosting(chatId);
     if (peer == null) return;
     _requesting.add(chatId);
-    _mirrorUpdates.add(chatId);
+    _touch(chatId);
     await peer.send(SyncMessage.controlRequest(chatId: chatId));
   }
 
@@ -779,6 +770,14 @@ class SyncHub {
   /// far past it — half a megabyte of `conv.jsonl` is an ordinary size, and
   /// sending that whole was a mirror that opened empty and said nothing about
   /// why. Measured rather than counted: one record can be a whole file.
+  /// What one message may carry. A data channel refuses more, and both the
+  /// things that can exceed it — a chat's log, an attachment — are paged
+  /// against it. Records are measured as encoded JSON; resource chunks are
+  /// measured as source bytes, which base64 expands by a third, so they get
+  /// their own smaller bound rather than sharing this one and overshooting.
+  static const _messageBytes = 48 * 1024;
+  static const _chunkBytes = 32 * 1024;
+
   Future<void> _sendRecords(
       _LivePeer peer, String chatId, List<ChatRecord> records) async {
     var page = <ChatRecord>[];
@@ -791,8 +790,12 @@ class SyncHub {
     }
 
     for (final record in records) {
+      // Encoded to be measured and then thrown away: `sendJson` encodes the
+      // page again below. Reusing it would mean carrying the strings through
+      // `SyncMessage`, or the store handing back the line lengths it already
+      // split on — neither worth it for one extra encode per chat opened.
       final size = jsonEncode(record.toJson()).length;
-      if (bytes + size > _chunkBytes) await flush();
+      if (bytes + size > _messageBytes) await flush();
       page.add(record);
       bytes += size;
     }
@@ -801,7 +804,6 @@ class SyncHub {
 
   // ------------------------------------------------------------ resources
 
-  static const _chunkBytes = 48 * 1024;
 
   /// Streams an attachment to a subscribing peer, base64 inside control
   /// frames — correlation stays trivial and every frame rides the same AEAD
@@ -878,7 +880,7 @@ class SyncHub {
       ...?live?.subscriptions,
       ..._mirrorsOf(deviceId),
     }) {
-      _mirrorUpdates.add(chatId);
+      _touch(chatId);
     }
     _setStatus(deviceId,
         name: live?.deviceName ?? deviceId, status: PeerStatus.offline);
@@ -1152,35 +1154,20 @@ class SyncHub {
     final address = device.lastAddress;
     if (address != null && address.contains(":")) {
       final at = address.lastIndexOf(":");
-      final host = address.substring(0, at);
-      final port = int.parse(address.substring(at + 1));
       try {
-        final link = await RtcLink.create(iceServers: iceServers());
-        final sdp = await link.offer();
-        final signaler = LanSignaler(client: _client);
-        try {
+        await _dialOverLan(
+          hosts: [address.substring(0, at)],
           // The port it was last seen on, then the one it would normally be
           // on: a device that restarted onto an ephemeral port is at neither,
           // but one that simply restarted is at the second.
-          final answer = await signaler.exchange(
-            hosts: [host],
-            ports: {port, preferredSignalingPort}.toList(),
-            token: token,
-            offerSdp: sdp,
-          );
-          await link.acceptAnswer(answer);
-          await _establish(
-            link: await link.open(),
-            weOffered: true,
-            psk: secret,
-            knownDeviceId: deviceId,
-            address: address,
-            onFailed: () => link.close(),
-          );
-          return;
-        } finally {
-          signaler.close();
-        }
+          ports: {int.parse(address.substring(at + 1)), preferredSignalingPort}
+              .toList(),
+          token: token,
+          psk: secret,
+          knownDeviceId: deviceId,
+          address: address,
+        );
+        return;
       } catch (error) {
         failure = error;
       }
@@ -1212,6 +1199,12 @@ class SyncHub {
   /// other device keeps ours until someone revokes there too.
   Future<void> revoke(String deviceId) async {
     await _live.remove(deviceId)?.close();
+    // Before the registry read below loses the secret: the token derived from
+    // it is what admits this device, and clearing everything *except* that
+    // left a revoked device still dialling in and still being answered, until
+    // something restarted.
+    final secret = await registry.pairingSecret(deviceId);
+    if (secret != null) _forgetReconnect(secret);
     await registry.remove(deviceId);
     // Everything of theirs goes with them. `_refreshPeers` only fills gaps
     // from the registry, so the row and the mirrors have to be taken out by
@@ -1224,9 +1217,7 @@ class SyncHub {
     _refreshPeers();
   }
 
-  /// What the other device files this one under. The machine's own name
-  /// where there is one, since that is what its owner already calls it; the
-  /// key's first characters otherwise, which at least cannot collide.
+  /// What the other device files this one under.
   String get deviceName => _settings().deviceName ?? defaultDeviceName;
 
   /// What it would be called with nothing set — the machine's own name where
@@ -1294,7 +1285,7 @@ class SyncHub {
             onFailed: () => link!.close(),
           );
         } catch (error) {
-          syncLog("answering an offer failed", error);
+          logFailure("sync", "answering an offer failed", error);
           await link?.close();
           _fail(error);
         }
@@ -1316,6 +1307,18 @@ class SyncHub {
     final token = RelaySignaler.roomFor(psk);
     _reconnects[token] = (deviceId: deviceId, psk: psk);
     _server?.allowReconnect(token);
+  }
+
+  /// Whether a device holding [psk] would be let in again. False after a
+  /// revoke, which is the whole point of one.
+  @visibleForTesting
+  bool admitsReconnect(String psk) =>
+      _reconnects.containsKey(RelaySignaler.roomFor(psk));
+
+  void _forgetReconnect(String psk) {
+    final token = RelaySignaler.roomFor(psk);
+    _reconnects.remove(token);
+    _server?.refuseReconnect(token);
   }
 
   /// The generator's route over the relay: sit in the room derived from the
@@ -1354,18 +1357,41 @@ class SyncHub {
 
   Future<void> _joinOverLan(PairingOffer payload) async {
     pairing.value = const PairingActivity();
+    try {
+      await _dialOverLan(
+        hosts: payload.hosts,
+        ports: [payload.port],
+        code: payload.code,
+        psk: payload.psk,
+        address: "${payload.hosts.first}:${payload.port}",
+      );
+    } catch (error) {
+      _fail(error);
+      rethrow;
+    }
+  }
+
+  /// Offer, exchange, establish — the whole of a dial over a local network.
+  /// Both callers are the same seven steps; written out twice they had
+  /// already diverged, with only one of them learning to try more than the
+  /// port it was told about.
+  Future<void> _dialOverLan({
+    required List<String> hosts,
+    required List<int> ports,
+    required String psk,
+    String code = "",
+    String token = "",
+    String? knownDeviceId,
+    String? address,
+  }) async {
     final link = await RtcLink.create(iceServers: iceServers());
     try {
       final sdp = await link.offer();
       final signaler = LanSignaler(client: _client);
-      String answer;
+      final String answer;
       try {
         answer = await signaler.exchange(
-          hosts: payload.hosts,
-          ports: [payload.port],
-          code: payload.code,
-          offerSdp: sdp,
-        );
+            hosts: hosts, ports: ports, code: code, token: token, offerSdp: sdp);
       } finally {
         signaler.close();
       }
@@ -1373,14 +1399,13 @@ class SyncHub {
       await _establish(
         link: await link.open(),
         weOffered: true,
-        psk: payload.psk,
-        knownDeviceId: null,
-        address: "${payload.hosts.first}:${payload.port}",
+        psk: psk,
+        knownDeviceId: knownDeviceId,
+        address: address,
         onFailed: () => link.close(),
       );
-    } catch (error) {
+    } catch (_) {
       await link.close();
-      _fail(error);
       rethrow;
     }
   }
@@ -1506,7 +1531,7 @@ class SyncHub {
           } catch (error) {
             // A frame that does not parse is a broken peer; drop the link
             // rather than guess at what it meant.
-            syncLog("unreadable frame from $deviceId", error);
+            logFailure("sync", "unreadable frame from $deviceId", error);
             unawaited(live.close());
           }
         },
@@ -1581,7 +1606,7 @@ class SyncHub {
       unawaited(ensureReady());
       _note(PairingStage.done);
     } catch (error) {
-      syncLog("could not establish a channel", error);
+      logFailure("sync", "could not establish a channel", error);
       await channel?.close();
       unawaited(onFailed());
       _fail(error);
@@ -1651,7 +1676,7 @@ class SyncHub {
   }
 
   void _fail(Object error) {
-    syncLog("pairing failed", error);
+    logFailure("sync", "pairing failed", error);
     final current = pairing.value;
     if (current == null || current.stage == PairingStage.done) return;
     pairing.value = PairingActivity(
@@ -1692,7 +1717,7 @@ class _LivePeer {
   void enqueue(SyncMessage message) {
     if (_closed) return;
     _queue = _queue.then((_) => handle?.call(message)).catchError(
-        (Object error) => syncLog("handling a message from $deviceId", error));
+        (Object error) => logFailure("sync", "handling a message from $deviceId", error));
   }
 
   /// Set once the peer exists; reads [SyncHub._dispatch].
@@ -1709,7 +1734,7 @@ class _LivePeer {
     } catch (error) {
       // Almost always a message the transport refused as too large, which is
       // silent otherwise: the peer simply goes away.
-      syncLog("send to $deviceId failed", error);
+      logFailure("sync", "send to $deviceId failed", error);
       await close();
     }
   }

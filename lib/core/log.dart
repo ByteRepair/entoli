@@ -16,14 +16,22 @@ import "package:flutter/foundation.dart";
 /// contents, no prompt, no model output. A user pastes a log into an issue
 /// without reading it; assume this one will be. An id and a reason.
 ///
-/// Not gated on the build: a release is what somebody is running when they
-/// tell you it did not work. For volume rather than failure — a subprocess's
-/// output, a cache hit — use [logDetail].
+/// Not gated on the build: a release build is the one somebody is running
+/// when they tell you it did not work, and it goes to the terminal a desktop
+/// was launched from or to `logcat`. Neither is somewhere an ordinary user
+/// can reach, so this is for a developer reproducing a report rather than for
+/// the report itself — a copyable log in Settings is what would change that.
+///
+/// For volume rather than failure — a subprocess's output, a cache hit — use
+/// [logDetail].
 void logFailure(String tag, String what, [Object? error]) =>
     debugPrint(error == null ? "[$tag] $what" : "[$tag] $what: $error");
 
 /// The same, for what is worth seeing while developing and would drown a real
 /// log: a subprocess line by line, a hit that is not a failure at all.
-void logDetail(String tag, String what) {
-  if (kDebugMode) debugPrint("[$tag] $what");
+///
+/// [what] is a callback so a release build allocates nothing: these run per
+/// line of a model server's output, which is thousands of them a turn.
+void logDetail(String tag, String Function() what) {
+  if (kDebugMode) debugPrint("[$tag] ${what()}");
 }

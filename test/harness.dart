@@ -632,12 +632,13 @@ List<String?> popupLabels(WidgetTester tester) => tester
 ///
 /// For `test`, not `testWidgets`: it waits on the real clock, which a widget
 /// test's fake one only advances when the tree is pumped.
-Future<void> waitFor(FutureOr<bool> Function() done, {String what = "it"}) async {
-  for (var i = 0; i < 2000; i++) {
-    if (await done()) return;
+Future<void> waitFor(FutureOr<bool> Function() done,
+    {String what = "it", Duration limit = const Duration(seconds: 2)}) async {
+  final end = DateTime.now().add(limit);
+  while (!await done()) {
+    if (DateTime.now().isAfter(end)) fail("$what never happened");
     await Future<void>.delayed(const Duration(milliseconds: 1));
   }
-  fail("$what never happened");
 }
 
 /// A data directory that cleans itself up when the test ends. `forDirectory`

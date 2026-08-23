@@ -390,8 +390,14 @@ one is then the reachable one, which is the right way round since this one can
 still dial out. Binding ephemeral always was why a stored address was refused
 the moment either side restarted, and so why a LAN reconnect never worked
 twice. A dial therefore tries the port a device was last seen on and then the
-one it would normally be on. Nothing is exposed by a predictable port: the
+one it would normally be on — the fixed port being a bootstrap for the first
+reconnect after a restart, not the mechanism. What a peer announces in its
+`hello` is the durable answer. Nothing is exposed by a predictable port: the
 routes refuse everything without a code or a token.
+
+Revoking has to reach the token as well as the registry. It did not, and a
+revoked device went on being admitted and answered until something restarted —
+everything else about it was cleared.
 
 **Somebody has to go on answering.** `cancelPairingWindow` disarms the code
 but leaves the offers subscription up, because every pairing ends by closing
@@ -407,16 +413,9 @@ reason to be doing.
 
 ## When something on the wire goes wrong
 
-`syncLog` — one line per failure, on the paths that catch and drop. They have
-to drop: none of a refused send, an unreadable frame, an unanswered offer or a
-peer vanishing mid-handshake is worth taking the app down for. But every one
-of them was silent, in a log and on screen, so "it will not pair" came with
-nothing at all to go on, and running the app from a terminal printed exactly
-nothing while it failed.
-
-It is not a trace of the traffic, which would be enormous and full of things
-that must not be written down. Nothing logged may carry a secret, an SDP blob,
-or anything out of a conversation — a device id and a reason, no more.
+`logFailure("sync", …)` on the paths that catch and drop — see "Saying what it
+did" in the root `CLAUDE.md` for the rule. Nothing logged here may carry a
+pairing secret, an SDP blob, or anything out of a conversation.
 
 ## What the Sync page can do about a peer
 

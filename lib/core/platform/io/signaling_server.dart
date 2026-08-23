@@ -50,6 +50,9 @@ class SignalingServer implements LanSignaling {
   void allowReconnect(String token) => _tokens.add(token);
 
   @override
+  void refuseReconnect(String token) => _tokens.remove(token);
+
+  @override
   int? get port => _server?.port;
 
   @override
