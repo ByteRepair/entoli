@@ -358,6 +358,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setVoiceSpeaker(int speaker) =>
       _update((s) => s.voiceSpeaker = speaker);
 
+  /// Whether the microphone waits for a button to be held. Reaches a session
+  /// already running: the controller listens for it.
+  Future<void> setVoicePushToTalk(bool on) =>
+      _update((s) => s.voicePushToTalk = on);
+
   /// Which Linux the agent's commands run inside, or null for Android itself.
   /// It reaches the next command rather than the next turn: the shell resolves
   /// this per command.

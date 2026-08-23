@@ -41,20 +41,26 @@ void main() {
       invoked.where((call) => call.method == method), isNotEmpty,
       reason: "$method was never asked");
 
-  testWidgets("listening asks to start", (tester) async {
-    final recognizer = AndroidSpeechRecognizer();
-    addTearDown(recognizer.dispose);
-    await tester.pump();
-    wasAsked("startRecognition");
-  });
-
-  testWidgets("what is heard arrives; an empty result is nothing",
-      (tester) async {
+  /// A listener that has started, and everything it has said since. The four
+  /// lines were at the head of every test here.
+  Future<(AndroidSpeechRecognizer, List<VoiceEvent>)> listening(
+      WidgetTester tester) async {
     final recognizer = AndroidSpeechRecognizer();
     addTearDown(recognizer.dispose);
     final events = <VoiceEvent>[];
     recognizer.events.listen(events.add);
     await tester.pump();
+    return (recognizer, events);
+  }
+
+  testWidgets("listening asks to start", (tester) async {
+    await listening(tester);
+    wasAsked("startRecognition");
+  });
+
+  testWidgets("what is heard arrives; an empty result is nothing",
+      (tester) async {
+    final (recognizer, events) = await listening(tester);
 
     await incoming("heard", "hello there");
     await incoming("heard", "   ");
@@ -64,21 +70,121 @@ void main() {
         isA<VoiceHeard>().having((e) => e.text, "text", "hello there"));
   });
 
-  testWidgets("loudness follows the rms the service reports", (tester) async {
+  /// A room with nothing happening in it, reported long enough for the gate to
+  /// have measured it and be entitled to refuse something.
+  Future<void> room(double rms) async {
+    for (var i = 0; i < 10; i++) {
+      await incoming("rms", rms);
+    }
+  }
+
+  testWidgets("loudness is measured against the room, not against a scale",
+      (tester) async {
     final recognizer = AndroidSpeechRecognizer();
     addTearDown(recognizer.dispose);
     await tester.pump();
 
-    await incoming("rms", 4.0);
-    expect(recognizer.level.value, closeTo(0.5, 0.001));
+    await room(6.0);
+    expect(recognizer.level.value, 0,
+        reason: "a room at any level is the level nothing is happening at");
+
+    await incoming("rms", 14.0);
+    expect(recognizer.level.value, greaterThan(0.9));
+  });
+
+  testWidgets("what never rose above the room was not said to the phone",
+      (tester) async {
+    final (recognizer, events) = await listening(tester);
+
+    await room(0.0);
+    await incoming("interrupted");
+    await incoming("rms", 1.0);
+    await incoming("heard", "a fan, transcribed");
+    await tester.pump();
+    expect(events.whereType<VoiceHeard>(), isEmpty);
+
+    await incoming("interrupted");
+    await incoming("rms", 9.0);
+    await incoming("heard", "somebody talking");
+    await tester.pump();
+    expect(events.whereType<VoiceHeard>().single.text, "somebody talking");
+  });
+
+  testWidgets("the bar follows the person, not only the room", (tester) async {
+    final (recognizer, events) = await listening(tester);
+
+    await room(0.0);
+    await incoming("interrupted");
+    await incoming("rms", 20.0);
+    await incoming("heard", "somebody talking");
+    await tester.pump();
+    expect(events.whereType<VoiceHeard>().length, 1);
+
+    // Well clear of the room, and a fifth of what this person sounds like.
+    await incoming("interrupted");
+    await incoming("rms", 5.0);
+    await incoming("heard", "the next room over");
+    await tester.pump();
+    expect(events.whereType<VoiceHeard>().length, 1);
+  });
+
+  testWidgets("nothing is refused before the room has been measured",
+      (tester) async {
+    final (recognizer, events) = await listening(tester);
+
+    // The first thing anyone says may be the first thing the microphone ever
+    // heard, and a floor seeded from a voice is a bar above the voice that set
+    // it.
+    await incoming("rms", 8.0);
+    await incoming("heard", "the first thing said");
+    await tester.pump();
+
+    expect(events.whereType<VoiceHeard>().single.text, "the first thing said");
+  });
+
+  testWidgets("a shut microphone is not the room, and is not measured",
+      (tester) async {
+    final (recognizer, _) = await listening(tester);
+
+    await room(0.0);
+    await recognizer.setListening(false);
+    expect(recognizer.level.value, 0);
+
+    // What the service reports on its way out of a cancelled session. Measured,
+    // it would be a room nobody is in.
+    await incoming("rms", 9.0);
+    expect(recognizer.level.value, 0);
+  });
+
+  testWidgets("a session can open with the microphone shut", (tester) async {
+    final recognizer = AndroidSpeechRecognizer(listening: false);
+    addTearDown(recognizer.dispose);
+    await tester.pump();
+
+    // Opening a capture and closing it again is a real start and stop of the
+    // device, and the microphone indicator flashing for nothing.
+    expect(invoked.where((call) => call.method == "startRecognition"), isEmpty);
+  });
+
+  testWidgets("releasing the talk button asks for the sentence it was held for",
+      (tester) async {
+    final (recognizer, events) = await listening(tester);
+
+    await recognizer.setListening(false, finish: true);
+    expect(invoked.last.arguments, {"on": false, "finish": true});
+
+    // The gate is not asked about it: holding a button down and speaking is not
+    // something to second-guess by loudness.
+    await room(0.0);
+    await incoming("rms", 0.5);
+    await incoming("heard", "what was said while it was held");
+    await tester.pump();
+    expect(events.whereType<VoiceHeard>().single.text,
+        "what was said while it was held");
   });
 
   testWidgets("a recognition error fails the listener", (tester) async {
-    final recognizer = AndroidSpeechRecognizer();
-    addTearDown(recognizer.dispose);
-    final events = <VoiceEvent>[];
-    recognizer.events.listen(events.add);
-    await tester.pump();
+    final (recognizer, events) = await listening(tester);
 
     await incoming("recognitionError", "Recognition failed (error 7).");
     await tester.pump();

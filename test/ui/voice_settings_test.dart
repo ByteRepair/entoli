@@ -128,6 +128,28 @@ void main() {
     expect(voicePicker(), findsOneWidget);
   });
 
+  testWidgets("touch to speak is offered, and off until it is asked for",
+      (tester) async {
+    app = TestApp.create();
+    await pumpVoice(tester);
+
+    final toggle = find.widgetWithText(SwitchListTile, "Touch to speak");
+    await scrollTo(tester, toggle);
+    expect(app.container.read(appSettingsProvider).voicePushToTalk, isFalse);
+
+    await tester.tap(toggle);
+    await settleIo(tester);
+    expect(app.container.read(appSettingsProvider).voicePushToTalk, isTrue);
+  });
+
+  testWidgets("a browser is not offered it: there is no microphone to hold",
+      (tester) async {
+    app = TestApp.create(voice: FakeVoice(available: false));
+    await pumpVoice(tester);
+
+    expect(find.text("Touch to speak"), findsNothing);
+  });
+
   testWidgets("the preview reads one line in the voice picked", (tester) async {
     app = TestApp.create(voiceModels: const {"piper-en_US-amy"});
     await pick(tester, speech: "piper-en_US-amy");

@@ -14,6 +14,7 @@ class VoiceControls extends StatelessWidget {
     super.key,
     required this.state,
     required this.onMute,
+    required this.onTalk,
     required this.onStop,
     required this.onDone,
   });
@@ -22,6 +23,13 @@ class VoiceControls extends StatelessWidget {
 
   /// Shut the microphone, or open it again.
   final VoidCallback onMute;
+
+  /// Hold the microphone open, and let it go. Takes the microphone button's
+  /// place under [VoiceViewState.pushToTalk] rather than standing beside it:
+  /// both are the same promise about the microphone, made the other way round,
+  /// and two of them would leave a muted session with a Talk button that could
+  /// not be answered.
+  final ValueChanged<bool> onTalk;
 
   /// Stop the reply. Dead unless there is one being read out.
   final VoidCallback onStop;
@@ -36,13 +44,22 @@ class VoiceControls extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       spacing: 28,
       children: [
-        _Key(
-          icon: state.paused ? Icons.mic_off_outlined : Icons.mic_none,
-          label: state.paused ? "Listen" : "Mute",
-          tooltip: state.paused ? "Open the microphone" : "Shut the microphone",
-          held: state.paused,
-          onPressed: state.isOn ? onMute : null,
-        ),
+        if (state.pushToTalk)
+          _Key(
+            icon: state.paused ? Icons.mic_none : Icons.mic,
+            label: "Talk",
+            tooltip: "Hold to talk",
+            held: !state.paused,
+            onHold: state.isOn ? onTalk : null,
+          )
+        else
+          _Key(
+            icon: state.paused ? Icons.mic_off_outlined : Icons.mic_none,
+            label: state.paused ? "Listen" : "Mute",
+            tooltip: state.paused ? "Open the microphone" : "Shut the microphone",
+            held: state.paused,
+            onPressed: state.isOn ? onMute : null,
+          ),
         _Key(
           icon: Icons.stop_rounded,
           label: "Stop",
@@ -71,6 +88,7 @@ class _Key extends StatelessWidget {
     this.accent,
     this.held = false,
     this.onPressed,
+    this.onHold,
   });
 
   final IconData icon;
@@ -81,39 +99,58 @@ class _Key extends StatelessWidget {
   /// ordinary look.
   final Color? accent;
 
-  /// Whether this is the button that is currently engaged, which is the muted
-  /// microphone and nothing else.
+  /// Whether this is the button that is currently engaged: the muted
+  /// microphone, and the Talk button while it is down.
   final bool held;
 
   final VoidCallback? onPressed;
+
+  /// Pressed and released, for the one button that does its work while it is
+  /// down. Pointer events rather than a long press: a gesture that has to be
+  /// recognised before it fires is a gesture the microphone opens late for, and
+  /// what is said in that half second is the half nobody hears.
+  final ValueChanged<bool>? onHold;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final dead = onPressed == null;
+    final hold = onHold;
+    // Held down rather than tapped, and an `IconButton` with nothing on
+    // `onPressed` is a dead one — greyed, and no ink under the finger.
+    final press = onPressed ?? (hold == null ? null : () {});
+    final dead = press == null;
     final colour = accent ?? scheme.onSurface;
+    Widget button = IconButton(
+      onPressed: press,
+      tooltip: tooltip,
+      icon: Icon(icon),
+      style: IconButton.styleFrom(
+        fixedSize: const Size.square(52),
+        shape: const CircleBorder(),
+        foregroundColor: held ? scheme.onSecondaryContainer : colour,
+        backgroundColor:
+            held ? scheme.secondaryContainer : scheme.surfaceContainerLow,
+        disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.3),
+        side: BorderSide(
+          color: dead
+              ? scheme.outlineVariant.withValues(alpha: 0.5)
+              : accent?.withValues(alpha: 0.7) ?? scheme.outlineVariant,
+        ),
+      ),
+    );
+    if (hold != null) {
+      button = Listener(
+        onPointerDown: (_) => hold(true),
+        onPointerUp: (_) => hold(false),
+        onPointerCancel: (_) => hold(false),
+        child: button,
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          onPressed: onPressed,
-          tooltip: tooltip,
-          icon: Icon(icon),
-          style: IconButton.styleFrom(
-            fixedSize: const Size.square(52),
-            shape: const CircleBorder(),
-            foregroundColor: held ? scheme.onSecondaryContainer : colour,
-            backgroundColor:
-                held ? scheme.secondaryContainer : scheme.surfaceContainerLow,
-            disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.3),
-            side: BorderSide(
-              color: dead
-                  ? scheme.outlineVariant.withValues(alpha: 0.5)
-                  : accent?.withValues(alpha: 0.7) ?? scheme.outlineVariant,
-            ),
-          ),
-        ),
+        button,
         const SizedBox(height: 6),
         Text(
           label,

@@ -14,13 +14,17 @@ class _FakeListener implements Listener {
   final level = ValueNotifier(0.0);
 
   var listening = true;
+  var finished = 0;
   var disposed = false;
 
   @override
   Stream<VoiceEvent> get events => _events.stream;
 
   @override
-  Future<void> setListening(bool on) async => listening = on;
+  Future<void> setListening(bool on, {bool finish = false}) async {
+    listening = on;
+    if (!on && finish) finished++;
+  }
 
   @override
   Future<void> dispose() async {
@@ -163,6 +167,80 @@ void main() {
 
       expect(events, contains(predicate<VoiceEvent>((e) =>
           e is VoiceHeard && e.text == "hello there")));
+      await session.dispose();
+    });
+
+    test("a shut microphone says nothing, whatever the engine flushes",
+        () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session = ComposedVoiceSession(listener, speaker);
+      final events = collectEvents(session);
+
+      await session.setListening(false);
+      // What a cancelled recognition session hands back on its way out, and
+      // what sherpa's worker decodes from audio it already had. Forwarded, it
+      // is a barge-in over a reply still being read — the Mute button stopping
+      // the answer.
+      listener.hear("the reply, half transcribed");
+      listener.interrupt();
+      await Future.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+      await session.dispose();
+    });
+
+    test("a session opened shut says nothing until it is asked to", () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session =
+          ComposedVoiceSession(listener, speaker, listening: false);
+      final events = collectEvents(session);
+
+      listener.hear("nobody asked for this");
+      await Future.delayed(Duration.zero);
+      expect(events, isEmpty);
+
+      await session.setListening(true);
+      listener.hear("now they did");
+      await Future.delayed(Duration.zero);
+      expect(events.whereType<VoiceHeard>().single.text, "now they did");
+      await session.dispose();
+    });
+
+    test("a finish keeps the one sentence it was held for", () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session = ComposedVoiceSession(listener, speaker);
+      final events = collectEvents(session);
+
+      await session.setListening(false, finish: true);
+      expect(listener.finished, 1);
+
+      listener.hear("what was said while it was held");
+      await Future.delayed(Duration.zero);
+      expect(events.whereType<VoiceHeard>().single.text,
+          "what was said while it was held");
+
+      // One, and only the one that was asked for.
+      listener.hear("and whatever came after");
+      await Future.delayed(Duration.zero);
+      expect(events.whereType<VoiceHeard>().length, 1);
+      await session.dispose();
+    });
+
+    test("a failure arrives whatever the microphone is doing", () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session = ComposedVoiceSession(listener, speaker);
+      final events = collectEvents(session);
+
+      await session.setListening(false);
+      listener.fail("The microphone could not be read.");
+      await Future.delayed(Duration.zero);
+
+      expect(events.whereType<VoiceFailed>().single.message,
+          "The microphone could not be read.");
       await session.dispose();
     });
 

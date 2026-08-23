@@ -374,13 +374,14 @@ void main() {
 
   group("the controls", () {
     Future<void> pumpControls(WidgetTester tester, VoiceViewState state,
-            {VoidCallback? onDone}) =>
+            {VoidCallback? onDone, ValueChanged<bool>? onTalk}) =>
         app.pump(
           tester,
           Scaffold(
             body: VoiceControls(
               state: state,
               onMute: () {},
+              onTalk: onTalk ?? (_) {},
               onStop: () {},
               onDone: onDone ?? () {},
             ),
@@ -407,6 +408,30 @@ void main() {
           const VoiceViewState(status: VoiceStatus.listening, paused: true));
       expect(find.text("Listen"), findsOneWidget);
       expect(find.byIcon(Icons.mic_off_outlined), findsOneWidget);
+    });
+
+    testWidgets("touch to speak puts Talk where the microphone button was",
+        (tester) async {
+      final held = <bool>[];
+      await pumpControls(
+        tester,
+        const VoiceViewState(
+            status: VoiceStatus.listening, paused: true, pushToTalk: true),
+        onTalk: held.add,
+      );
+      expect(find.text("Mute"), findsNothing);
+      expect(find.text("Talk"), findsOneWidget);
+
+      // Down and up rather than a tap: the microphone is open for as long as
+      // the finger is on it.
+      final gesture = await tester.startGesture(
+          tester.getCenter(find.byTooltip("Hold to talk")));
+      await tester.pump();
+      expect(held, [true]);
+
+      await gesture.up();
+      await tester.pump();
+      expect(held, [true, false]);
     });
 
     testWidgets("done is offered whatever the session is doing", (tester) async {
@@ -459,6 +484,92 @@ void main() {
 
       await voice.start();
       expect(app.container.read(voiceControllerProvider(id)).paused, isFalse);
+    });
+
+    test("shuts the microphone and nothing else: the reply goes on", () async {
+      app.backend.scriptedEvents = [
+        const TextDelta("A whole sentence. "),
+        const DoneEvent(),
+      ];
+      final id = await startVoice();
+      app.voice.session!.hear("say something");
+      await waitFor(() => app.voice.session!.spoken.isNotEmpty,
+          what: "the reply to start being read");
+
+      await app.container.read(voiceControllerProvider(id).notifier).setPaused(true);
+
+      expect(app.voice.session!.hushed, 0,
+          reason: "mute is about what the phone hears, not what it is saying");
+      expect(app.container.read(voiceControllerProvider(id)).status,
+          VoiceStatus.speaking);
+    });
+  });
+
+  group("touch to speak", () {
+    Future<void> turnOn() =>
+        app.container.read(appSettingsProvider.notifier).setVoicePushToTalk(true);
+
+    test("a session opens with the microphone shut", () async {
+      await turnOn();
+      final id = await startVoice();
+
+      expect(app.voice.session!.listening, isFalse);
+      final view = app.container.read(voiceControllerProvider(id));
+      expect(view.paused, isTrue);
+      expect(view.pushToTalk, isTrue);
+      expect(view.word, "Ready", reason: "nobody paused it");
+    });
+
+    test("holding opens the microphone and stops the reply", () async {
+      app.backend.scriptedEvents = [
+        const TextDelta("A long answer. "),
+        const DoneEvent(),
+      ];
+      await turnOn();
+      final id = await startVoice();
+      final voice = app.container.read(voiceControllerProvider(id).notifier);
+
+      // Held once to say something, which is the only way in with the
+      // microphone shut.
+      await voice.talk(true);
+      app.voice.session!.hear("go on then");
+      await waitFor(() => app.voice.session!.spoken.isNotEmpty,
+          what: "the reply to start being read");
+
+      await voice.talk(true);
+      expect(app.voice.session!.hushed, greaterThan(0),
+          reason: "whoever holds the button down is about to talk over it");
+      expect(app.voice.session!.listening, isTrue);
+    });
+
+    test("releasing keeps the sentence it was held for", () async {
+      await turnOn();
+      final id = await startVoice();
+      final voice = app.container.read(voiceControllerProvider(id).notifier);
+
+      await voice.talk(true);
+      await voice.talk(false);
+
+      expect(app.voice.session!.listening, isFalse);
+      expect(app.voice.session!.finished, 1);
+      expect(app.container.read(voiceControllerProvider(id)).paused, isTrue);
+    });
+
+    test("turning it off under a running session opens the microphone",
+        () async {
+      await turnOn();
+      final id = await startVoice();
+      expect(app.voice.session!.listening, isFalse);
+
+      await app.container
+          .read(appSettingsProvider.notifier)
+          .setVoicePushToTalk(false);
+      await waitFor(() => app.voice.session!.listening,
+          what: "the microphone to open");
+
+      final view = app.container.read(voiceControllerProvider(id));
+      expect(view.pushToTalk, isFalse);
+      expect(view.paused, isFalse);
     });
   });
 

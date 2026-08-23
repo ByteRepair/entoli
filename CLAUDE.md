@@ -42,9 +42,10 @@ named in a cross-reference is findable from this list.
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, The chat page
 - `lib/data/voice/CLAUDE.md` — Voice mode, What listens and what speaks, The
-  Android system engines, Per side, not per session, The Kotlin, Where the
+  Android system engines, What counts as being spoken to, Mute is the
+  microphone and nothing else, Per side, not per session, The Kotlin, Where the
   models live, Hearing and speaking
-- `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen
+- `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen, Touch to speak
 - `lib/ui/workspace/CLAUDE.md` — The workspace explorer
 - `lib/ui/share/CLAUDE.md` — Sharing to Entoli
 - `lib/ui/CLAUDE.md` — Opening a link, The theme, The keyboard and the caret

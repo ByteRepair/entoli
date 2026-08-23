@@ -101,7 +101,10 @@ the system's own microphone indicator will say either way. It is a flag beside
 the status rather than one of its values, because a turn can be running and its
 reply being read out while the microphone is shut, and those are what the status
 is for. Starting a session clears it: a fresh one listens whatever the last one
-was doing.
+was doing. **It is the microphone and nothing else** — a reply being read out
+goes on being read out, and the button that stops it is the one beside it. That
+promise is kept below this as well as here; see "Mute is the microphone and
+nothing else".
 
 **The transcript is a five-line window that scrolls**, not five lines that roll
 past and are gone: it is a viewport over every line said, so the start of the
@@ -148,3 +151,39 @@ about, and is silently wrong when it is not. **It gives the field its width back
 a message in it**: something typed is something to send rather than to say. That
 is an `AnimatedSize` around the button and nothing else — the row is laid out
 again on every frame of it, and the `Expanded` field takes whatever it gives up.
+
+## Touch to speak
+
+Voice mode listens for as long as it is on screen, which is the point of it. The
+setting in `VoiceSection` is the answer for a room where that does not work: the
+microphone is open only while a Talk button is held. It is what a noisy room
+leaves once the loudness gate has done what it can — a recogniser transcribes
+whatever is loud enough, and past some amount of room the only reliable way to
+say what was meant for the phone is to say when.
+
+**Talk replaces Mute rather than standing beside it.** They are the same promise
+about the microphone made the other way round, and two of them would leave a
+muted session showing a Talk button that could not be answered. So it is
+`VoiceViewState.pushToTalk` and not a fourth `_Key`, and `paused` carries the
+same meaning it always did — the microphone is shut. What changes is the word
+for it: a microphone waiting to be asked was never paused, so the orb says
+`Ready` rather than `Paused`.
+
+The button works on pointer down and up rather than on a long press: a gesture
+that has to be recognised before it fires is a gesture the microphone opens late
+for, and what is said in that half second is the half nobody hears. Pressing it
+stops the reply outright instead of going through barge-in — whoever holds a
+button down to speak has already said what they think of the answer, and there
+is nothing to confirm from a transcription. Releasing it keeps the sentence it
+was held for, which is `setListening(false, finish: true)`.
+
+The setting reaches a session that is already running, through a `ref.listen`
+rather than a `ref.watch`: watching it rebuilds the notifier, and a rebuild
+resets the state the session is being held in. A session started with it on
+never opens the microphone at all — `Voice.start` takes `listening`, since
+opening a capture and closing it again is a real start and stop of the device.
+
+Pressing it stops the reply without waiting for it to be quiet, and the press
+does not wait either: stopping speech is a platform call of its own, and the
+whole reason the button is on pointer-down is that the first half second is the
+half nobody hears.

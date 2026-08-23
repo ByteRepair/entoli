@@ -29,6 +29,7 @@ class AppSettings {
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
     this.voiceSpeaker = 0,
+    this.voicePushToTalk = false,
     this.assistantProject,
     this.assistantView = AssistantView.chat,
     this.rootfsId,
@@ -91,6 +92,13 @@ class AppSettings {
   String? voiceRecognitionModelId;
   String? voiceSpeechModelId;
   int voiceSpeaker;
+
+  /// Whether the microphone is open only while a button is held. Off is voice
+  /// mode listening for as long as it is on screen, which is what it is for;
+  /// on is for a room where that does not work — a recogniser transcribes
+  /// whatever is loud enough, and somewhere noisy enough the only reliable
+  /// answer is for the user to say when.
+  bool voicePushToTalk;
 
   /// Which project the system's assistant gesture opens a chat in. Null is the
   /// default project, the same null `selectedProjectProvider` uses. App-level:
@@ -183,6 +191,7 @@ class AppSettings {
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
+        voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
         assistantProject: _orNull(json["assistantProject"] as String?),
         assistantView: AssistantView.fromName(json["assistantView"] as String?),
         rootfsId: _orNull(json["rootfsId"] as String?),
@@ -248,6 +257,7 @@ class AppSettings {
         voiceRecognitionModelId: voiceRecognitionModelId,
         voiceSpeechModelId: voiceSpeechModelId,
         voiceSpeaker: voiceSpeaker,
+        voicePushToTalk: voicePushToTalk,
         assistantProject: assistantProject,
         assistantView: assistantView,
         rootfsId: rootfsId,
@@ -279,6 +289,7 @@ class AppSettings {
         "voiceRecognitionModelId": voiceRecognitionModelId,
       if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
       if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
+      if (voicePushToTalk) "voicePushToTalk": voicePushToTalk,
       if (assistantProject != null) "assistantProject": assistantProject,
       "assistantView": assistantView.name,
       if (rootfsId != null) "rootfsId": rootfsId,
