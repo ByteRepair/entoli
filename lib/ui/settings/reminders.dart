@@ -11,6 +11,7 @@ import "../../providers.dart";
 import "../widgets/dialogs.dart" show confirm;
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "../widgets/tab_indent.dart";
 
 /// The Reminders category. Android's feature — the system clock is what fires
 /// a reminder with the app closed, and nothing here can wake any other
@@ -261,16 +262,19 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: TextField(
+              child: TabIndents(
                 controller: _prompt,
-                expands: true,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                textAlignVertical: TextAlignVertical.top,
-                decoration: const InputDecoration(
-                  hintText: "What should the agent do?",
-                  alignLabelWithHint: true,
-                  labelText: "Prompt",
+                child: TextField(
+                  controller: _prompt,
+                  expands: true,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  textAlignVertical: TextAlignVertical.top,
+                  decoration: const InputDecoration(
+                    hintText: "What should the agent do?",
+                    alignLabelWithHint: true,
+                    labelText: "Prompt",
+                  ),
                 ),
               ),
             ),

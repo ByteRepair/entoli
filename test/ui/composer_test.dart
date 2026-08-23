@@ -162,6 +162,27 @@ void main() {
     expect(sent, isEmpty);
   });
 
+  testWidgets("with no menu open, tab indents the message", (tester) async {
+    await pump(tester);
+    await type(tester, "hello");
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await settleIo(tester);
+
+    expect(controller.text, "hello  ");
+    expect(sent, isEmpty);
+  });
+
+  testWidgets("with the menu open, tab still takes the highlight", (tester) async {
+    await pump(tester);
+    await type(tester, "/rev");
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await settleIo(tester);
+
+    expect(controller.text, "/revert ");
+  });
+
   testWidgets("ctrl+enter still sends", (tester) async {
     await pump(tester);
     await type(tester, "hello");

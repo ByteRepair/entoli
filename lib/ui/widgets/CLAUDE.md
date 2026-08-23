@@ -9,7 +9,16 @@ every page would otherwise spell out), the `Default`-plus-reset pairing,
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `EmptyPane`, and `catalog.dart` — the section below.
+`AttachmentStrip`, `EmptyPane`, `TabIndents`, and `catalog.dart` — the section
+below.
+
+`TabIndents` makes Tab type two spaces into the controller it is given rather
+than move the focus on, and every field a prompt is written in has it: the
+composer and a reminder's prompt. It wraps a field instead of being one,
+because the composer's field already carries bindings of its own — shortcuts
+resolve from the focus outwards, so those nest *inside* this and Tab reaches
+the indent only once the completion menu has nothing to accept with it.
+Shift+Tab is left alone, so there is always a key that leaves the field.
 
 `EmptyPane` is the middle of a page with nothing on it. The workspace has two —
 a folder with no files in it, and a file the viewer could not read — and a
@@ -47,9 +56,10 @@ walks the parts and decides which of the two each one is.
 token, over a library that is already loaded — so it takes no chat id, has no
 loading state, and starts nothing. Enter, Tab and the arrows are bound only
 while the menu has a match — the rest of the time they have to keep doing what
-they do in a text box. The `+` button left of the field is a second way in: for
-a command or an agent it types the trigger character rather than opening its own
-list, so both routes share one code path; for a file it opens the chooser.
+they do in a text box, which for Tab is `TabIndents` above. The `+` button left
+of the field is a second way in: for a command or an agent it types the trigger
+character rather than opening its own list, so both routes share one code path;
+for a file it opens the chooser.
 
 Send is dead while there is nothing to send, which `_worthSending` decides —
 whitespace is nothing, a file on its own is something. `_submit` asks it again
