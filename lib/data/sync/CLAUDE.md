@@ -320,15 +320,17 @@ the *home* device is what refuses a peer holding nothing.
 
 ## The container's half of the hub
 
-The hub is built in `main` before the container, so what lives in the
-container has to be handed to it afterwards: the repository the whole serving
-side is built on — the chat list in a welcome, the change feed behind every
-append, the records a `chatOpen` is answered with. `RemoteTurnDriver` does it
-in its constructor, so the one `container.read(remoteTurnDriverProvider)` in
-`main` wires both halves rather than two lines either of which can be
-forgotten. One of them was: `attach` was called by every test's own harness
-and by nothing in the app, so a real device paired, went green, and served
-nothing at all. `SyncHub.isServing` is what a test asks about that now.
+The hub is built in `main` before the container, so the repository the whole
+serving side is built on — the chat list in a welcome, the change feed behind
+every append, the records a `chatOpen` is answered with — has to be handed to
+it afterwards. `attach` is called in `main`, **before `ensureReady`**: that is
+what starts listening, and a peer landing during it would otherwise run the
+whole handshake against a hub with no repository and be sent no welcome.
+
+It shipped called from nowhere. Every test called it in its own harness, so a
+real device paired, went green, and served nothing at all. `main` is not
+reachable from a test, so what is pinned instead is the symptom —
+`SyncHub.isServing`, false for a hub that will serve nothing.
 
 The Sync page's device list is `peers` and not the registry, for the same
 kind of reason: the registry read the page was holding was made when the page
