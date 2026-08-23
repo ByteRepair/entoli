@@ -86,6 +86,9 @@ class TestApp {
   /// Android and so what most of the suite should be pretending to be.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
+  /// [systemAccent] is the colour the system is themed to, which is the other
+  /// thing only an Android answers: null is every platform without one, and so
+  /// a settings page with no Material 3 Expressive switch on it.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -102,6 +105,7 @@ class TestApp {
     FakeLocalLlm? localLlm,
     bool prefill = false,
     String? abi,
+    int? systemAccent,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -156,6 +160,7 @@ class TestApp {
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           launcherIconsProvider.overrideWithValue(launcher),
+          systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
