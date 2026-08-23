@@ -345,7 +345,9 @@ project, and the pin or the countdown. It followed the scroll position at
 first — the mark and "Entoli" at the top of the list, the title once past it —
 and that put the app's name where the chat's belongs for every conversation
 short enough not to scroll, which is most of the ones being started. The mark is
-still on the bar with no chat open, where there is no title to draw instead.
+still on the bar for the two moments there is no chat to name — the frame a
+draft is being made in, and a paired device's list with nothing picked out of
+it.
 
 **The bar grows with what it has to say.** Every line is counted, the title's
 own included, and Material's 56dp toolbar is only the floor. Counting up from
@@ -368,27 +370,51 @@ whole screen and a monitor gets a line that can be read back to the start of.
 The composer is inside that column rather than under it: a centred conversation
 over a full-width field is a field twice the width of what it is answering.
 
-With nothing selected the pane is the ways to have a conversation — New Chat,
-New Voice Chat and Open Chat — over the project they happen in. The second is
-an extension of the first rather than a third thing: it makes a chat and opens
-it in voice mode, and it sits with New Chat rather than beside the way to open
-an old one. Open Chat is the drawer, so it
-is drawn only where there is one: beside a sidebar that is already out it would
-open what is on screen. It asks the `Scaffold` above it rather than taking a
-flag beside the one that built that Scaffold, since two answers to "is there a
-drawer here" can disagree. New Chat is `startChat`, which the sidebar's own
-button also calls, so there is one answer to what a new chat is and which
-project it lands in.
+**Nothing selected is a new chat.** There is one empty screen rather than two,
+and it is `_EmptyChat` — the chat is open, so what is missing is the first
+thing to say, and the composer to say it in is already under it. The pane that
+used to stand in front of it offered New Chat, New Voice Chat and Open Chat,
+and all three had become the same thing said twice: New Chat was a button that
+led to a page whose only content was somewhere to type, the voice one is the
+composer's own circle, and Open Chat is the drawer the bar already opens. So
+`_StartingChat` asks `SelectedChatId.startIfEmpty` and draws nothing while it
+runs: the draft is made in memory, so what a spinner would show is one frame of
+one, which reads as a page that could not load rather than as a page arriving.
 
-Above them are the projects, as badges, and that is the same discovery
-`_EmptyChat` does for commands: the switcher at the top of the sidebar is the
-only place a project is named, and the sidebar is what this pane is drawn
-instead of. Picking one is `selectProject` — the switcher's own action, lifted
-out of `_ProjectMenu` so that nothing that switches projects can come to
-disagree about what switching means. Deleting one goes through it too. **The
-badge is where the project changes, not either button**: New Chat and Open Chat
-act on what is already picked out, so pressing one is never also a choice about
-where it lands.
+**Making it belongs to `SelectedChatId` rather than to the widget**, because
+the widget is not the only one asking and is not stable while it asks. Every
+`select(null)` in the app is now also "and start one" — switching project,
+deleting the open chat, deleting them all — and `AppShell` swaps `ChatPage`
+into a different tree either side of `navBreakpoint`, which remounts the
+starter mid-flight. The repository holds **one** draft, so two in flight leave
+the selection pointing at the one that lost the slot; `startNew` is therefore
+held to one at a time and `startChat` — the sidebar's button and the assistant
+gesture — is that same call with the drawer closed after it.
+
+The one place nothing selected is not a new chat is a paired device's list,
+which `ChatPage` checks before it makes anything: a new chat is this device's
+and takes the sidebar home with it, so picking a device would bounce straight
+back off it. That arm says to pick a chat and makes nothing.
+
+`_EmptyChat` draws the mark, the question, the projects as badges, and a chip
+per `/command` and `@agent` the library holds. The chips are discovery: the
+composer's menus are the only place those are named, and nothing names them
+until the character that opens one has been typed, so a user who does not know
+they exist never finds out. Six at most, because everything the user has
+written is a menu and `/` is what opens the menu; with nothing at all in the
+library it says how to reach them instead.
+
+The badges are the same discovery for projects: the switcher at the top of the
+sidebar is the only other place one is named, and on a phone the sidebar is a
+drawer. Picking one is `selectProject` — the switcher's own action, lifted out
+of `_ProjectMenu` so that nothing that switches projects can come to disagree
+about what switching means. Deleting one goes through it too. **The badge is
+where the project changes, and it takes the chat with it**: `selectProject`
+drops the selection, which makes a fresh draft in the project just picked.
+Nothing is left behind — the chat it replaced had nothing in it, and
+`createChat` holds one draft slot anyway. Which badge is picked out is the open
+chat's own project rather than `selectedProjectProvider`, so the row says where
+this conversation is rather than where the next one would go.
 
 **The default project is nothing selected**, and so has no badge. It is not a
 project beside the others — it is the absence of one, which is what `null`
@@ -400,15 +426,6 @@ toggles rather than a set with one always down.
 So a user who has never made a project sees nothing here, which is right: with
 none there is no choice to offer, and the row would be one badge that is always
 selected and can lead nowhere.
-
-A chat with nothing *said* in it is `_EmptyChat`, and it is a different question
-— the chat is open, so what is missing is the first thing to say. It draws the
-mark, the question, and a chip per `/command` and `@agent` the library holds.
-That list is the point of it: the composer's menus are the only place those are
-named, and nothing names them until the character that opens one has been typed,
-so a user who does not know they exist never finds out. Six at most, because
-everything the user has written is a menu and `/` is what opens the menu; with
-nothing at all in the library it says how to reach them instead.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it

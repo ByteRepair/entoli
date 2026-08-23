@@ -14,6 +14,7 @@ import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
+import "../widgets/nothing.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
@@ -34,10 +35,17 @@ class ChatPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
-    if (chatId == null) {
-      return _Waiting(withDrawer: withDrawer, child: const _NoChat());
+    if (chatId != null) return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+    // Reading a paired device's list is the one place nothing selected does not
+    // mean a new chat: making one is this device's, and would take the sidebar
+    // home from whatever it was showing.
+    if (ref.watch(selectedRemoteProvider) != null) {
+      return _Waiting(
+        withDrawer: withDrawer,
+        child: const Nothing("Pick a chat to follow."),
+      );
     }
-    return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+    return _StartingChat(withDrawer: withDrawer);
   }
 }
 
@@ -45,72 +53,59 @@ class ChatPage extends ConsumerWidget {
 /// text too long to track back to the start of.
 const double _readableWidth = 760;
 
-/// Nothing selected: the two ways to have a conversation, and which project
-/// they happen in.
-class _NoChat extends ConsumerWidget {
-  const _NoChat();
+/// Nothing selected is a new chat, so this is the whole of what stood between
+/// them: `startIfEmpty`, and the frame it takes. Nothing is drawn while it
+/// runs — the draft is made in memory, so a spinner would be one frame of one
+/// and would read as a page that could not load.
+class _StartingChat extends ConsumerStatefulWidget {
+  const _StartingChat({required this.withDrawer});
+
+  final bool withDrawer;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Opening one is the sidebar, so this is offered only where the sidebar is
-    // out of sight. The Scaffold above already answers that, and a flag threaded
-    // down beside it is a second answer that can disagree.
-    final scaffold = Scaffold.maybeOf(context);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const AppMark(size: 64),
-            const SizedBox(height: 32),
-            const _ProjectBadges(),
-            FilledButton(
-              onPressed: () => startChat(context, ref),
-              child: const Text("New Chat"),
-            ),
-            // An extension of New Chat rather than a third thing: it makes one
-            // and opens it in voice mode. Drawn wherever the platform can
-            // listen rather than only where the models are, which is the rule
-            // the composer's circle keeps — with none downloaded it leads to
-            // the settings that download them.
-            if (ref.watch(voiceProvider).available) ...[
-              const SizedBox(height: 12),
-              FilledButton.tonal(
-                onPressed: () => startVoiceChat(context, ref),
-                child: const Text("New Voice Chat"),
-              ),
-            ],
-            if (scaffold?.hasDrawer ?? false) ...[
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: scaffold!.openDrawer,
-                child: const Text("Open Chat"),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  ConsumerState<_StartingChat> createState() => _StartingChatState();
 }
 
-/// The named projects, as badges, with the one a new chat would land in picked
-/// out. The default project is nothing selected, so it has no badge — see
-/// "The chat page" in CLAUDE.md.
+class _StartingChatState extends ConsumerState<_StartingChat> {
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Not during the build: it writes the selection this page is reading.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final id = await ref.read(selectedChatIdProvider.notifier).startIfEmpty();
+      // The reason is already logged. Said here as well because there is
+      // nothing else left on the page to say it — no chat, and no button.
+      if (id == null && mounted) setState(() => _failed = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => _Waiting(
+        withDrawer: widget.withDrawer,
+        child: _failed
+            ? const Nothing("Could not start a chat. Open one from the list.")
+            : const SizedBox.shrink(),
+      );
+}
+
+/// The named projects, as badges, with the one this chat is in picked out. The
+/// default project is nothing selected, so it has no badge — see "The chat
+/// page" in CLAUDE.md.
 class _ProjectBadges extends ConsumerWidget {
-  const _ProjectBadges();
+  const _ProjectBadges({required this.selected});
+
+  final String? selected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final named = ref.watch(projectListProvider).value ?? const [];
     // The padding would otherwise be a gap under nothing.
     if (named.isEmpty) return const SizedBox.shrink();
-    final selected = ref.watch(selectedProjectProvider);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(top: 20),
       child: Wrap(
         alignment: WrapAlignment.center,
         spacing: 8,
@@ -128,11 +123,15 @@ class _ProjectBadges extends ConsumerWidget {
   }
 }
 
-/// A chat with nothing said in it yet. The mark, the question, and what the
+/// A chat with nothing said in it yet, which is also the page the app opens
+/// on. The mark, the question, the project it would happen in, and what the
 /// composer's `/` and `@` menus hold — which is the only place those are named
 /// before the user has typed the character that opens them.
 class _EmptyChat extends ConsumerWidget {
-  const _EmptyChat({required this.onStart});
+  const _EmptyChat({required this.project, required this.onStart});
+
+  /// The project this chat is in, which is the badge picked out.
+  final String? project;
 
   final void Function(CompletionKind kind, String name) onStart;
 
@@ -162,6 +161,7 @@ class _EmptyChat extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium,
             ),
+            _ProjectBadges(selected: project),
             const SizedBox(height: 20),
             if (starters.isEmpty)
               Text(
@@ -211,10 +211,15 @@ class _AppBrand extends StatelessWidget {
       );
 }
 
-/// The page with no conversation in it yet — nothing selected, or one still
-/// being read off disk. Carries the drawer and bar the real page would.
+/// The page with no conversation in it yet — a chat being made, one still
+/// being read off disk, or a paired device's list with nothing picked out of
+/// it. Carries the drawer and bar the real page would. The default child is
+/// the spinner, which is what reading one off disk wants.
 class _Waiting extends StatelessWidget {
-  const _Waiting({required this.withDrawer, required this.child});
+  const _Waiting({
+    required this.withDrawer,
+    this.child = const CircularProgressIndicator(),
+  });
 
   final bool withDrawer;
   final Widget child;
@@ -383,6 +388,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
       ),
       whenEmpty: _EmptyChat(
+        project: chat.state.project,
         // `insertCompletion` rather than writing the field here: where a
         // trigger lands is the composer's rule, and a `/command` appended at
         // the caret is text nothing would ever expand. It does not ask for the
@@ -449,10 +455,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
-  Widget _waiting() => _Waiting(
-        withDrawer: widget.withDrawer,
-        child: const CircularProgressIndicator(),
-      );
+  Widget _waiting() => _Waiting(withDrawer: widget.withDrawer);
 
   /// Land at the end of the conversation the first time this chat is drawn.
   void _opening(Chat chat) {

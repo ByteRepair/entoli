@@ -16,8 +16,8 @@ import "widgets/voice_controls.dart";
 
 /// Open voice mode over [chatId], or offer the settings that would make it
 /// possible. Every way in goes through here — the composer's circle and the
-/// empty pane's New Voice Chat — so there is one answer to what pressing one
-/// means with the models not downloaded.
+/// assistant gesture's voice view — so there is one answer to what asking for
+/// it means with the models not downloaded.
 Future<void> openVoice(BuildContext context, WidgetRef ref, String chatId) async {
   if (!await _haveModels(context, ref) || !context.mounted) return;
   await _push(context, chatId);

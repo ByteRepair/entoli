@@ -11,7 +11,6 @@ import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/ui/voice/voice_page.dart";
 
 import "../harness.dart";
 
@@ -53,81 +52,62 @@ void main() {
       });
 
   group("with nothing selected", () {
-    Future<void> openEmpty(WidgetTester tester) =>
-        app.pump(tester, const ChatPage(withDrawer: true));
-
-    testWidgets("the ways to have a conversation are offered, in order",
-        (tester) async {
-      await openEmpty(tester);
-
-      expect(find.text("New Chat"), findsOneWidget);
-      expect(find.text("New Voice Chat"), findsOneWidget);
-      expect(find.text("Open Chat"), findsOneWidget);
-      // New Voice Chat is an extension of New Chat, so it sits with it rather
-      // than beside the way to open an old one.
-      expect(tester.getCenter(find.text("New Voice Chat")).dy,
-          greaterThan(tester.getCenter(find.text("New Chat")).dy));
-      expect(tester.getCenter(find.text("New Voice Chat")).dy,
-          lessThan(tester.getCenter(find.text("Open Chat")).dy));
-    });
-
-    testWidgets("New Voice Chat makes one and opens it in voice mode",
-        (tester) async {
-      app.dispose();
-      app = TestApp.create(voiceModels: voiceModelIds);
-      await io(tester, app.pickVoiceModels);
-      await openEmpty(tester);
-
-      await tester.tap(find.text("New Voice Chat"));
-      // Not settled: the orb listens on, so a screen with one on it never
-      // falls still.
-      await pumpUntil(tester, find.byType(VoicePage));
-
-      expect(app.container.read(selectedChatIdProvider), isNotNull);
-      expect(find.byType(VoicePage), findsOneWidget);
-    });
-
-    testWidgets("with no models it offers settings and makes no chat",
-        (tester) async {
-      await openEmpty(tester);
-
-      await tester.tap(find.text("New Voice Chat"));
+    // Nothing selected is a new chat, so the pane is the empty conversation
+    // rather than a screen offering to start one. Not settled: there is a
+    // spinner on screen while the draft is made.
+    Future<void> openEmpty(WidgetTester tester) async {
+      await app.pump(tester, const ChatPage(withDrawer: true), settle: false);
+      await pumpUntil(tester, find.byType(Composer));
       await settleIo(tester);
+    }
 
-      expect(find.text("Open settings"), findsOneWidget);
-      // A chat created and then left behind because there is nothing to say it
-      // with is a worse answer than not creating one.
-      expect(app.container.read(selectedChatIdProvider), isNull);
-    });
-
-    testWidgets("New Chat opens one", (tester) async {
+    testWidgets("a chat is made and opened, with somewhere to type",
+        (tester) async {
       await openEmpty(tester);
-
-      await tester.tap(find.text("New Chat"));
-      await settleIo(tester);
 
       expect(app.container.read(selectedChatIdProvider), isNotNull);
       expect(find.byType(Composer), findsOneWidget);
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
     });
 
-    testWidgets("Open Chat slides the sidebar out", (tester) async {
+    // The bar's own, wherever the sidebar is out of sight — there is no
+    // button for it on the page any more.
+    testWidgets("an old chat is opened through the drawer", (tester) async {
       await io(tester, () => app.seedChat(title: "old chat"));
       await openEmpty(tester);
 
-      await tester.tap(find.text("Open Chat"));
+      await tester.tap(find.byIcon(Icons.menu));
       await settleIo(tester);
 
       expect(find.byType(Sidebar), findsOneWidget);
       expect(find.text("old chat"), findsOneWidget);
     });
 
-    // The sidebar is already beside the pane there, so there is nothing to open.
-    testWidgets("and there is nothing to open where the sidebar is already out",
-        (tester) async {
-      await app.pump(tester, const ChatPage());
+    // The pane is remounted by a window crossing the sidebar's breakpoint, so
+    // two asks can be in flight — and the repository holds one draft, so a
+    // second would take the slot while the first took the selection.
+    testWidgets("two asks at once make one chat", (tester) async {
+      final made = await io(tester, () {
+        final selection = app.container.read(selectedChatIdProvider.notifier);
+        return Future.wait([selection.startIfEmpty(), selection.startIfEmpty()]);
+      });
 
-      expect(find.text("New Chat"), findsOneWidget);
-      expect(find.text("Open Chat"), findsNothing);
+      expect(made.first, made.last);
+      expect(app.container.read(selectedChatIdProvider), made.first);
+      expect(await io(tester, () => app.repo.projectOf(made.first!)), isNull);
+    });
+
+    // A paired device's list is the one place nothing selected is not a new
+    // chat: making one is this device's and would take the sidebar home.
+    testWidgets("reading a paired device makes no chat", (tester) async {
+      app.container
+          .read(selectedRemoteProvider.notifier)
+          .select((deviceId: "phone", project: null));
+
+      await app.pump(tester, const ChatPage(withDrawer: true));
+
+      expect(find.text("Pick a chat to follow."), findsOneWidget);
+      expect(app.container.read(selectedChatIdProvider), isNull);
     });
 
     Future<void> openWithProject(WidgetTester tester) async {
@@ -135,6 +115,8 @@ void main() {
       await openEmpty(tester);
     }
 
+    /// The badge takes the chat with it, so there is a new draft to wait for —
+    /// which `settleIo` does, the draft being made in memory.
     Future<void> pick(WidgetTester tester, String project) async {
       await tester.tap(find.widgetWithText(ChoiceChip, project));
       await settleIo(tester);
@@ -143,11 +125,8 @@ void main() {
     bool selectedOf(WidgetTester tester, String label) =>
         tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label)).selected;
 
-    Future<String?> projectOfNewChat(WidgetTester tester) async {
-      await tester.tap(find.text("New Chat"));
-      await settleIo(tester);
-      return io(tester, () => app.repo.projectOf(app.container.read(selectedChatIdProvider)!));
-    }
+    Future<String?> projectOfOpenChat(WidgetTester tester) => io(tester,
+        () => app.repo.projectOf(app.container.read(selectedChatIdProvider)!));
 
     // The default project has no badge: it is nothing selected.
     testWidgets("the named projects are badges", (tester) async {
@@ -164,7 +143,9 @@ void main() {
       expect(find.byType(ChoiceChip), findsNothing);
     });
 
-    testWidgets("picking one highlights it and takes the next chat with it",
+    // The chat on screen has nothing in it, so switching project replaces it
+    // rather than leaving one behind in the project being left.
+    testWidgets("picking one highlights it and takes the chat with it",
         (tester) async {
       await openWithProject(tester);
 
@@ -172,7 +153,7 @@ void main() {
 
       expect(selectedOf(tester, "work"), isTrue);
       expect(app.container.read(selectedProjectProvider), "work");
-      expect(await projectOfNewChat(tester), "work");
+      expect(await projectOfOpenChat(tester), "work");
     });
 
     // Nothing selected is the default project, so leaving one is pressing it
@@ -186,24 +167,24 @@ void main() {
 
       expect(selectedOf(tester, "work"), isFalse);
       expect(app.container.read(selectedProjectProvider), isNull);
+      expect(await projectOfOpenChat(tester), isNull);
     });
 
-    // Pressing a button is not where the project changes — the badge is.
-    testWidgets("New Chat lands in the default until a badge is picked",
+    testWidgets("the chat opens in the default until a badge is picked",
         (tester) async {
       await openWithProject(tester);
 
-      expect(await projectOfNewChat(tester), isNull);
+      expect(await projectOfOpenChat(tester), isNull);
     });
 
-    testWidgets("Open Chat shows the picked project's chats", (tester) async {
+    testWidgets("the drawer shows the picked project's chats", (tester) async {
       await io(tester, () => app.repo.createProject("work"));
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await io(tester, () => app.seedChat(title: "at home"));
       await openEmpty(tester);
 
       await pick(tester, "work");
-      await tester.tap(find.text("Open Chat"));
+      await tester.tap(find.byIcon(Icons.menu));
       await settleIo(tester);
 
       expect(find.text("at work"), findsOneWidget);
