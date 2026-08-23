@@ -19,8 +19,7 @@ class FileDeviceRegistry implements DeviceRegistry {
   final AppConfig _config;
   final SecretStore _secrets;
 
-  String get _file => _config.fs
-      .path.join(_config.dataDir, "sync", "devices.json");
+  String get _file => _config.fs.path.join(_config.syncDir, "devices.json");
 
   Future<Map<String, dynamic>> _read() async {
     try {
@@ -33,10 +32,7 @@ class FileDeviceRegistry implements DeviceRegistry {
   }
 
   Future<void> _write(Map<String, dynamic> json) async {
-    await _config.fs.directory(_config.fs.path.join(_config.dataDir, "sync"))
-        .create(recursive: true);
-    final temp =
-        _config.fs.file("$_file$writingSuffix");
+    final temp = _config.fs.file("$_file$writingSuffix");
     await temp.writeAsString(jsonEncode(json));
     await temp.rename(_file);
   }

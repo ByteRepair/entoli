@@ -133,7 +133,7 @@ String? processEnv(String name) => null;
 /// origin-scoped IndexedDB — is the ceiling this platform has; the Sync page
 /// says so rather than pretending otherwise.
 SecretStore platformSecretStore(AppConfig config) =>
-    FileSecretStore(config.fs, config.dataDir);
+    FileSecretStore(config);
 
 /// Nowhere to bind: see `signaling.dart`. A web device pairs as the joiner.
 LanSignaling? platformLanSignaling() => createWebLanSignaling();

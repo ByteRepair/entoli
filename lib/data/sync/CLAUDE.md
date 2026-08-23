@@ -467,4 +467,13 @@ first — so `sync/` in a backup would silently unpair this device on every
 restore. The identity key itself lives in the keyring where there is one, not
 in `identity.json`, which holds only public facts.
 
+**`AppConfig.ensureDirs` is what creates the directory**, beside `projects/`
+and the prompt directories, and neither writer here makes it. That is not a
+detail either could have kept to itself: the identity is written before the
+registry on a fresh install, so whichever writes first would have had to make
+it for the other, and both did — until one of them didn't and the app died in
+`main` before a frame on Android and the web, where there is no keyring to
+write to instead. The restore path calls `ensureDirs` for the same reason, and
+it is the only one that deletes `sync/` and unpacks nothing over it.
+
 No migration entry: the chain is additive and nothing existing moved.

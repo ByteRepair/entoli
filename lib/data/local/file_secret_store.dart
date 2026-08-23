@@ -4,6 +4,7 @@ import "dart:typed_data";
 
 import "package:fs_shim/fs.dart";
 
+import "../../core/config.dart";
 import "../../domain/documents.dart" show writingSuffix;
 import "../../domain/secret_store.dart";
 
@@ -15,8 +16,9 @@ import "../../domain/secret_store.dart";
 /// The Sync page says when this is behind a device's secrets rather than the
 /// keyring; nothing else in the app can tell the difference.
 class FileSecretStore implements SecretStore {
-  FileSecretStore(this._fs, String dataDir)
-      : _file = _fs.file(_fs.path.join(dataDir, "sync", "secrets.json"));
+  FileSecretStore(AppConfig config)
+      : _fs = config.fs,
+        _file = config.fs.file(config.fs.path.join(config.syncDir, "secrets.json"));
 
   final FileSystem _fs;
   final File _file;
@@ -39,9 +41,6 @@ class FileSecretStore implements SecretStore {
 
   Future<void> _write(Map<String, String> values) async {
     _loaded = values;
-    // Nothing else has made `sync/` yet: the identity is written before the
-    // registry, on the first launch of a fresh install.
-    await _fs.directory(_fs.path.dirname(_file.path)).create(recursive: true);
     final temp = _fs.file("${_file.path}$writingSuffix");
     await temp.writeAsString(jsonEncode(values));
     await temp.rename(_file.path);
