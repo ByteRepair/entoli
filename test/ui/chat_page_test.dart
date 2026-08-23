@@ -20,6 +20,11 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
+  /// What is in the composer. The text rather than a finder over it: a
+  /// `find.text` would match the same words drawn anywhere else on the page.
+  String typed(WidgetTester tester) =>
+      tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
   Future<void> open(WidgetTester tester, String chatId) async {
     app.container.read(selectedChatIdProvider.notifier).select(chatId);
     await app.pump(tester, const ChatPage(), settle: false);
@@ -115,8 +120,6 @@ void main() {
       await openEmpty(tester);
     }
 
-    /// The badge takes the chat with it, so there is a new draft to wait for —
-    /// which `settleIo` does, the draft being made in memory.
     Future<void> pick(WidgetTester tester, String project) async {
       await tester.tap(find.widgetWithText(ChoiceChip, project));
       await settleIo(tester);
@@ -143,8 +146,8 @@ void main() {
       expect(find.byType(ChoiceChip), findsNothing);
     });
 
-    // The chat on screen has nothing in it, so switching project replaces it
-    // rather than leaving one behind in the project being left.
+    // The chat on screen has nothing in it, so switching project takes it
+    // along rather than leaving one behind in the project being left.
     testWidgets("picking one highlights it and takes the chat with it",
         (tester) async {
       await openWithProject(tester);
@@ -154,6 +157,26 @@ void main() {
       expect(selectedOf(tester, "work"), isTrue);
       expect(app.container.read(selectedProjectProvider), "work");
       expect(await projectOfOpenChat(tester), "work");
+    });
+
+    // The same chat, not another empty one in its place: a swap remounts the
+    // page, which throws away the animation the badge is in the middle of.
+    testWidgets("the chat is refiled rather than replaced", (tester) async {
+      await openWithProject(tester);
+      final before = app.container.read(selectedChatIdProvider);
+
+      await pick(tester, "work");
+
+      expect(app.container.read(selectedChatIdProvider), before);
+    });
+
+    testWidgets("what was typed survives the switch", (tester) async {
+      await openWithProject(tester);
+      await tester.enterText(find.byType(TextField), "in which project?");
+
+      await pick(tester, "work");
+
+      expect(typed(tester), "in which project?");
     });
 
     // Nothing selected is the default project, so leaving one is pressing it
@@ -310,9 +333,6 @@ void main() {
       final chat = await io(tester, () => app.seedChat(title: "brand new"));
       await open(tester, chat.state.id);
     }
-
-    String typed(WidgetTester tester) =>
-        tester.widget<TextField>(find.byType(TextField)).controller!.text;
 
     // The composer's menus are the only place these are named, and nothing
     // names them until the character that opens one has been typed.

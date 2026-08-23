@@ -101,14 +101,31 @@ void openChat(BuildContext context, WidgetRef ref, String chatId) {
   closeNavDrawer(context);
 }
 
-/// Switch to a project. A chat of the one being left is not in the list any
-/// more, so keeping it selected would leave the pane showing something the
-/// sidebar denies — and dropping it is also what starts a chat in the project
-/// just picked. The switcher, the empty chat's badges and deleting a project
-/// are all this.
+/// Switch to a project. **An unsent chat comes along**: it is the draft, so
+/// the move is one field in memory, and the page it is on stays the page it
+/// was rather than being replaced by an identical empty one — which keeps what
+/// was typed into it, and the animation the badge pressed is in the middle of
+/// running. See "Switching project under an unsent chat".
+///
+/// Anything else is dropped, because a chat of the project being left is not
+/// in the list any more and keeping it selected would leave the pane showing
+/// something the sidebar denies. Nothing selected is a new chat, so dropping
+/// it is also what starts one in the project just picked. The switcher, the
+/// empty chat's badges and deleting a project are all this.
 void selectProject(WidgetRef ref, String? project) {
   ref.read(selectedProjectProvider.notifier).select(project);
   ref.read(selectedRemoteProvider.notifier).select(null);
+  final open = ref.read(selectedChatIdProvider);
+  if (open != null) {
+    final refiled = ref.read(chatRepositoryProvider).refileDraft(open, project);
+    if (refiled != null) {
+      // Safe to reach for the notifier: this is the open chat, so the pane is
+      // already watching it — see `_ChatTile._setPinned` for the other half of
+      // that rule.
+      ref.read(chatControllerProvider(open).notifier).applyState(refiled);
+      return;
+    }
+  }
   ref.read(selectedChatIdProvider.notifier).select(null);
 }
 

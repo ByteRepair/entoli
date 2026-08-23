@@ -409,12 +409,11 @@ sidebar is the only other place one is named, and on a phone the sidebar is a
 drawer. Picking one is `selectProject` — the switcher's own action, lifted out
 of `_ProjectMenu` so that nothing that switches projects can come to disagree
 about what switching means. Deleting one goes through it too. **The badge is
-where the project changes, and it takes the chat with it**: `selectProject`
-drops the selection, which makes a fresh draft in the project just picked.
-Nothing is left behind — the chat it replaced had nothing in it, and
-`createChat` holds one draft slot anyway. Which badge is picked out is the open
-chat's own project rather than `selectedProjectProvider`, so the row says where
-this conversation is rather than where the next one would go.
+where the project changes, and it takes the chat with it** — see "Switching
+project under an unsent chat" for what that costs and what it does instead.
+Which badge is picked out is the open chat's own project rather than
+`selectedProjectProvider`, so the row says where this conversation is rather
+than where the next one would go.
 
 **The default project is nothing selected**, and so has no badge. It is not a
 project beside the others — it is the absence of one, which is what `null`
@@ -492,3 +491,34 @@ a button appears to go back down. The same slack decides both, so the button
 turns up exactly when the view stops keeping up. Both edges are
 `ValueNotifier`s, since a `setState` mid-drag would rebuild every visible bubble
 to swap a title or a button.
+
+## Switching project under an unsent chat
+
+`selectProject` used to drop the selection, and nothing selected is a new chat,
+so picking a badge made a fresh draft in the project just picked. The chat it
+replaced had nothing in it, so nothing was lost on disk — but the page was: the
+pane swapped to `_StartingChat` for a frame and back, which is a remount rather
+than a rebuild. Everything holding state went with it. The composer's text, the
+mark's decoded SVG, and the badge's own selection animation, which is the one
+the user is looking at as they press it — a `ChoiceChip` that is torn down
+mid-transition comes back already in its end state, so the row snaps.
+
+So an unsent chat comes along instead. It is the draft, and a draft is one
+field in memory: `refileDraft` rewrites `project` on it and hands the state
+back, and `applyState` puts that on the open controller the way pinning from
+the sidebar does. The chat id does not change, so the page is the same page —
+`_ChatBody`'s `State` and everything under it survive, and what happens is the
+rebuild a streaming turn does forty times a second rather than a teardown.
+
+`refileDraft` is a separate method rather than `moveChat`'s draft arm because
+the caller wants the decision as much as the move. A chat with a turn in it is
+on disk and in the list, so it refuses one and the selection is dropped as
+before: that chat belongs to the project being left, and carrying it off would
+be a move nobody asked for. One method that moved either would do exactly that.
+
+Deleting a project goes through the same call, and either arm is right. The
+repository has already forgotten a draft that was in the project being deleted,
+so there is nothing to refile and a new chat is made. A draft in some *other*
+project is refiled into the default along with the switch, which is where it
+was headed anyway — the difference is that what was typed into it is still
+there.

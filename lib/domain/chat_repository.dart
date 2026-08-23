@@ -161,6 +161,22 @@ class ChatRepository {
     _changes.add(Moved(chatId, project));
   }
 
+  /// File the draft under another project, returning what it now says, or null
+  /// where [chatId] is not the draft. Nothing of a draft is on disk, so where
+  /// it would be written is the whole of the move — there is no [moveChat] to
+  /// do, and no event, since no peer has anything to mirror.
+  ///
+  /// Separate from [moveChat] rather than its draft arm because the caller
+  /// wants the *decision* as well as the move: switching project takes an
+  /// unsent chat along and leaves a real one where it is, so a method that
+  /// moved either would carry off a conversation nobody asked to move. See
+  /// "Switching project under an unsent chat".
+  ChatState? refileDraft(String chatId, String? project) {
+    if (!_isDraft(chatId)) return null;
+    _draft = _draft!.copyWith(state: _draft!.state.copyWith(project: project));
+    return _draft!.state;
+  }
+
   Future<Chat> openChat(String id) async => _isDraft(id) ? _draft! : await _store.load(id);
 
   /// Write `state.json` and the directories under it, promoting the draft if it
