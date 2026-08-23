@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/log.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
@@ -11,6 +12,7 @@ import "../settings/settings_page.dart";
 import "../widgets/anchored_menu.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/nothing.dart";
 import "../workspace/workspace_page.dart";
 import "chat_groups.dart";
 import "project_settings_page.dart";
@@ -20,6 +22,41 @@ class SelectedChatId extends Notifier<String?> {
   String? build() => null;
 
   void select(String? id) => state = id;
+
+  /// A new chat in the project being shown, selected. Nothing is listed for it
+  /// yet: an empty chat is not on disk, and joins the list when its first
+  /// message is saved.
+  ///
+  /// **One at a time.** The pane asks for one whenever it finds nothing
+  /// selected, and a window crossing the sidebar's breakpoint rebuilds it into
+  /// a different tree — so two asks can be in flight, and the repository holds
+  /// one draft. The second would take the slot while the first took the
+  /// selection, leaving the page pointed at a chat nothing holds.
+  Future<String?> startNew() =>
+      _starting ??= _start().whenComplete(() => _starting = null);
+
+  /// What the pane does with nothing selected. Already having one is the
+  /// answer, not a reason to make another.
+  Future<String?> startIfEmpty() async => state ?? await startNew();
+
+  Future<String?>? _starting;
+
+  Future<String?> _start() async {
+    try {
+      final project = ref.read(selectedProjectProvider);
+      final chat =
+          await ref.read(chatRepositoryProvider).createChat(project: project);
+      // A new chat is this device's, so the sidebar comes back from whatever
+      // paired device it was reading — the alternative is a list that denies
+      // the chat now on screen.
+      ref.read(selectedRemoteProvider.notifier).select(null);
+      state = chat.state.id;
+      return state;
+    } catch (e) {
+      logFailure("chat", "could not start a chat", e);
+      return null;
+    }
+  }
 }
 
 final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(SelectedChatId.new);
@@ -66,7 +103,8 @@ void openChat(BuildContext context, WidgetRef ref, String chatId) {
 
 /// Switch to a project. A chat of the one being left is not in the list any
 /// more, so keeping it selected would leave the pane showing something the
-/// sidebar denies. The switcher, the empty pane's badges and deleting a project
+/// sidebar denies — and dropping it is also what starts a chat in the project
+/// just picked. The switcher, the empty chat's badges and deleting a project
 /// are all this.
 void selectProject(WidgetRef ref, String? project) {
   ref.read(selectedProjectProvider.notifier).select(project);
@@ -82,23 +120,18 @@ void selectRemote(WidgetRef ref, RemoteScope scope) {
   ref.read(selectedChatIdProvider.notifier).select(null);
 }
 
-/// A new chat in the project being shown, opened. Nothing is listed here yet:
-/// an empty chat is not on disk, and joins the list when its first message is
-/// saved. The sidebar's button and the empty pane's are the same action.
+/// [SelectedChatId.startNew] with the drawer it was pressed in closed — the
+/// sidebar's button and the assistant gesture. The pane with nothing selected
+/// has no drawer open to close, so it asks the notifier directly.
 ///
 /// Returns the chat's id, so that `startVoiceChat` can carry on into voice mode
 /// with the one it just made; null is a caller that went away while it was
-/// being created.
+/// being created, or a chat that could not be made.
 Future<String?> startChat(BuildContext context, WidgetRef ref) async {
-  final project = ref.read(selectedProjectProvider);
-  final chat = await ref.read(chatRepositoryProvider).createChat(project: project);
-  if (!context.mounted) return null;
-  // A new chat is this device's, so the sidebar comes back from whatever
-  // paired device it was reading — the alternative is a list that denies the
-  // chat now on screen.
-  ref.read(selectedRemoteProvider.notifier).select(null);
-  openChat(context, ref, chat.state.id);
-  return chat.state.id;
+  final id = await ref.read(selectedChatIdProvider.notifier).startNew();
+  if (!context.mounted || id == null) return null;
+  closeNavDrawer(context);
+  return id;
 }
 
 /// The button's tooltip and the title of the page it opens.
@@ -261,7 +294,7 @@ class _LocalChatList extends ConsumerWidget {
                 .where((c) => c.project == project && !c.isExpired())
                 .toList();
             if (chats.isEmpty) {
-              return const _Nothing("No chats in this project yet.");
+              return const Nothing("No chats in this project yet.");
             }
             return Column(
               children: [
@@ -305,7 +338,7 @@ class _RemoteChatList extends ConsumerWidget {
         .toList()
       ..sort((a, b) => b.state.updatedAt.compareTo(a.state.updatedAt));
     if (chats.isEmpty) {
-      return const _Nothing("Nothing mirrored from this device yet.");
+      return const Nothing("Nothing mirrored from this device yet.");
     }
     return Column(
       children: [
@@ -319,7 +352,7 @@ class _RemoteChatList extends ConsumerWidget {
                   .where((entry) => titleMatches(entry.state, needle))
                   .toList();
               if (matching.isEmpty) {
-                return const _Nothing(_noMatch);
+                return const Nothing(_noMatch);
               }
               return ListView.builder(
                 itemCount: matching.length,
@@ -346,30 +379,6 @@ class _RemoteChatList extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// What the sidebar says where it would otherwise be blank: a project with no
-/// chats in it, or a search nothing answered.
-class _Nothing extends StatelessWidget {
-  const _Nothing(this.said);
-
-  final String said;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Center(
-        child: Text(
-          said,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      ),
     );
   }
 }
@@ -437,7 +446,7 @@ class _ChatList extends ConsumerWidget {
       valueListenable: query,
       builder: (context, text, _) {
         final found = chatsMatching(chats, text);
-        if (found.isEmpty) return const _Nothing(_noMatch);
+        if (found.isEmpty) return const Nothing(_noMatch);
         // A sliver per group rather than one list over headings and chats
         // flattened together: the flat form has to say which of the two each
         // row is, and there is no shape for that which is not two nullable
