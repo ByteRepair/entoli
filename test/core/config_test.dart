@@ -25,6 +25,10 @@ void main() {
         p.join("projects", "default", "chats", "c1"));
   });
 
+  test("sync is one directory in the data dir, not a project's", () {
+    expect(relative(config.syncDir), "sync");
+  });
+
   test("a project's settings sit in the project, the app's in the data dir", () {
     expect(relative(config.projectSettingsFile()),
         p.join("projects", "default", "project.json"));

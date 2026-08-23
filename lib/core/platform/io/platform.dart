@@ -259,7 +259,7 @@ String? processEnv(String name) => Platform.environment[name];
 /// its app-private directory is already out of every other app's reach —
 /// until its Keystore wiring lands.
 SecretStore platformSecretStore(AppConfig config) =>
-    KeyringSecretStore(FileSecretStore(config.fs, config.dataDir));
+    KeyringSecretStore(FileSecretStore(config));
 
 /// Desktops listen while pairing. The one-time code is armed per pairing
 /// window by the hub, so the factory needs nothing from its caller.
