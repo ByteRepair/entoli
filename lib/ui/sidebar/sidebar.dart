@@ -66,7 +66,8 @@ void openChat(BuildContext context, WidgetRef ref, String chatId) {
 
 /// Switch to a project. A chat of the one being left is not in the list any
 /// more, so keeping it selected would leave the pane showing something the
-/// sidebar denies. The switcher, the empty pane's badges and deleting a project
+/// sidebar denies — and dropping it is also what starts a chat in the project
+/// just picked. The switcher, the empty chat's badges and deleting a project
 /// are all this.
 void selectProject(WidgetRef ref, String? project) {
   ref.read(selectedProjectProvider.notifier).select(project);
@@ -84,7 +85,8 @@ void selectRemote(WidgetRef ref, RemoteScope scope) {
 
 /// A new chat in the project being shown, opened. Nothing is listed here yet:
 /// an empty chat is not on disk, and joins the list when its first message is
-/// saved. The sidebar's button and the empty pane's are the same action.
+/// saved. The sidebar's button, the pane with nothing selected and the
+/// assistant gesture are all this.
 ///
 /// Returns the chat's id, so that `startVoiceChat` can carry on into voice mode
 /// with the one it just made; null is a caller that went away while it was

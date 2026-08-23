@@ -4,6 +4,7 @@ import "dart:math" as math;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/log.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../fonts.dart";
@@ -34,10 +35,21 @@ class ChatPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chatId = ref.watch(selectedChatIdProvider);
-    if (chatId == null) {
-      return _Waiting(withDrawer: withDrawer, child: const _NoChat());
+    if (chatId != null) return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+    // Reading a paired device's list is the one place nothing selected does not
+    // mean a new chat: making one is this device's, and would take the sidebar
+    // home from whatever it was showing.
+    if (ref.watch(selectedRemoteProvider) != null) {
+      return _Waiting(
+        withDrawer: withDrawer,
+        child: Text(
+          "Pick a chat to follow.",
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      );
     }
-    return _ChatBody(chatId: chatId, withDrawer: withDrawer);
+    return _StartingChat(withDrawer: withDrawer);
   }
 }
 
@@ -45,72 +57,55 @@ class ChatPage extends ConsumerWidget {
 /// text too long to track back to the start of.
 const double _readableWidth = 760;
 
-/// Nothing selected: the two ways to have a conversation, and which project
-/// they happen in.
-class _NoChat extends ConsumerWidget {
-  const _NoChat();
+/// Nothing selected is a new chat, so this is the whole of what stood between
+/// them: one round trip to make the draft, and the frame it takes.
+class _StartingChat extends ConsumerStatefulWidget {
+  const _StartingChat({required this.withDrawer});
+
+  final bool withDrawer;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Opening one is the sidebar, so this is offered only where the sidebar is
-    // out of sight. The Scaffold above already answers that, and a flag threaded
-    // down beside it is a second answer that can disagree.
-    final scaffold = Scaffold.maybeOf(context);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const AppMark(size: 64),
-            const SizedBox(height: 32),
-            const _ProjectBadges(),
-            FilledButton(
-              onPressed: () => startChat(context, ref),
-              child: const Text("New Chat"),
-            ),
-            // An extension of New Chat rather than a third thing: it makes one
-            // and opens it in voice mode. Drawn wherever the platform can
-            // listen rather than only where the models are, which is the rule
-            // the composer's circle keeps — with none downloaded it leads to
-            // the settings that download them.
-            if (ref.watch(voiceProvider).available) ...[
-              const SizedBox(height: 12),
-              FilledButton.tonal(
-                onPressed: () => startVoiceChat(context, ref),
-                child: const Text("New Voice Chat"),
-              ),
-            ],
-            if (scaffold?.hasDrawer ?? false) ...[
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: scaffold!.openDrawer,
-                child: const Text("Open Chat"),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  ConsumerState<_StartingChat> createState() => _StartingChatState();
 }
 
-/// The named projects, as badges, with the one a new chat would land in picked
-/// out. The default project is nothing selected, so it has no badge — see
-/// "The chat page" in CLAUDE.md.
+class _StartingChatState extends ConsumerState<_StartingChat> {
+  @override
+  void initState() {
+    super.initState();
+    // Not during the build: `startChat` writes the selection this page is
+    // reading, and closes a drawer that may be part of the frame being built.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        await startChat(context, ref);
+      } catch (e) {
+        logFailure("chat", "could not start a chat", e);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => _Waiting(
+        withDrawer: widget.withDrawer,
+        child: const CircularProgressIndicator(),
+      );
+}
+
+/// The named projects, as badges, with the one this chat is in picked out. The
+/// default project is nothing selected, so it has no badge — see "The chat
+/// page" in CLAUDE.md.
 class _ProjectBadges extends ConsumerWidget {
-  const _ProjectBadges();
+  const _ProjectBadges({required this.selected});
+
+  final String? selected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final named = ref.watch(projectListProvider).value ?? const [];
     // The padding would otherwise be a gap under nothing.
     if (named.isEmpty) return const SizedBox.shrink();
-    final selected = ref.watch(selectedProjectProvider);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(top: 20),
       child: Wrap(
         alignment: WrapAlignment.center,
         spacing: 8,
@@ -128,11 +123,15 @@ class _ProjectBadges extends ConsumerWidget {
   }
 }
 
-/// A chat with nothing said in it yet. The mark, the question, and what the
+/// A chat with nothing said in it yet, which is also the page the app opens
+/// on. The mark, the question, the project it would happen in, and what the
 /// composer's `/` and `@` menus hold — which is the only place those are named
 /// before the user has typed the character that opens them.
 class _EmptyChat extends ConsumerWidget {
-  const _EmptyChat({required this.onStart});
+  const _EmptyChat({required this.project, required this.onStart});
+
+  /// The project this chat is in, which is the badge picked out.
+  final String? project;
 
   final void Function(CompletionKind kind, String name) onStart;
 
@@ -162,6 +161,7 @@ class _EmptyChat extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium,
             ),
+            _ProjectBadges(selected: project),
             const SizedBox(height: 20),
             if (starters.isEmpty)
               Text(
@@ -383,6 +383,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
       ),
       whenEmpty: _EmptyChat(
+        project: chat.state.project,
         // `insertCompletion` rather than writing the field here: where a
         // trigger lands is the composer's rule, and a `/command` appended at
         // the caret is text nothing would ever expand. It does not ask for the

@@ -135,9 +135,9 @@ The way in is a circle left of the composer's send button, drawn wherever the
 platform can listen rather than only where models are installed — with none
 picked it leads to the settings that pick them, which is a better answer than a
 button nobody can find. `openVoice` is that rule, and `startVoiceChat` beside it
-is the empty pane's New Voice Chat: it asks about the models *before* it makes
-the chat, since one created and then left on screen with nothing to say it with
-is a worse answer than not making one. Both read `voiceReadyProvider`
+is the assistant gesture's voice view: it asks about the models *before* it
+makes the chat, since one created and then left on screen with nothing to say
+it with is a worse answer than not making one. Both read `voiceReadyProvider`
 themselves, which they can because **which models are installed is read before
 the app is built** — `AppSession.start` scans for them and seeds
 `InstalledVoiceModels` with what it found, the bargain `promptLibraryProvider`
