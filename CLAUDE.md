@@ -220,6 +220,40 @@ the other way: a directory that could not have been created as a project is not
 listed as one, so a stray `.git` beside them is not a project with no chats in
 it.
 
+## Saying what it did
+
+**Anything the app catches and carries on from gets a line.** Not a trace of
+what it is doing — a line where something did not work and the user cannot see
+it any other way. A failure that is caught and dropped, and there are good
+reasons to drop most of them, is otherwise indistinguishable from nothing
+having happened: sync shipped with nine such places and "it will not pair"
+came with nothing at all to go on, in a log or on screen.
+
+`syncLog` in `lib/data/sync/sync_log.dart` is the shape: a `[tag]` prefix, one
+line, the reason and enough to say which thing it was about. Prefer that over
+a bare `debugPrint`, so a log can be read by whoever gets sent it.
+
+Three rules for what goes in one.
+
+**Failures, not traffic.** A log of everything that happened is unreadable and
+nobody sends it. What earns a line is the arm nothing draws: a send that
+threw, a file that would not parse, a request nobody answered, a plugin that
+refused.
+
+**Nothing that should not leave the machine.** No secrets or keys, no message
+or file contents, no prompt, no model output, no SDP. A user pastes a log into
+an issue without reading it; assume this one will be. An id and a reason.
+
+**Failures are not gated on `kDebugMode`, chatter is.** A release build has to
+be able to say why it did not work, since that is the build a user is running
+when they tell you it did not. Volume — a subprocess's output, a cache hit —
+is debug-only.
+
+Sync is the only layer that does this properly today; the handful of older
+`debugPrint`s elsewhere predate the rule and are inconsistent about all three.
+New code follows this, and one of those is worth converting whenever it is
+being touched anyway.
+
 ## Development
 
 - Build/test Linux desktop inside the `flutter-dev` toolbox (host lacks
