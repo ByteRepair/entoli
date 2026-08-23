@@ -33,7 +33,6 @@ import "../../core/log.dart";
 export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
 
-/// How one paired device stands right now, as the Sync page draws it.
 /// What a pairing window looks like while it is open. Replaced wholesale on
 /// every change, so listeners see an immutable snapshot.
 class PairingActivity {
@@ -213,7 +212,6 @@ class SyncHub {
 
   ChatRepository? _repo;
   StreamSubscription<RepoEvent>? _changesSub;
-  Timer? _pingTimer;
 
   /// The peer's chats this device mirrors, by chat id. Survives a disconnect
   /// as a stale snapshot; a reconnect replaces it wholesale with fresh data.
@@ -224,8 +222,6 @@ class SyncHub {
   /// from where the mirror already is.
   final _desired = <String>{};
 
-  /// Chat ids whose content changed since the last notice. The mirror
-  /// controllers rebuild from here.
   /// Chats of this device somebody else is driving: chat id to the device id
   /// holding it. One holder at a time, and the home device is never in it —
   /// this device typing is not a lock, it is the absence of one.
@@ -293,7 +289,7 @@ class SyncHub {
     if (_repo != null) return;
     _repo = repo;
     _changesSub = repo.changes.listen(_onRepoEvent);
-    _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) => _ping());
+    _peers.watchLiveness();
   }
 
   void followChat(String chatId) {
@@ -615,9 +611,6 @@ class SyncHub {
     }
   }
 
-  /// To every peer following [chatId]. The one shape every serving-side
-  /// message takes, so an arm cannot forget the subscription check.
-
   // -------------------------------------------------------------- control
 
   /// One holder at a time, first asker wins. Re-asking while already holding
@@ -817,17 +810,6 @@ class SyncHub {
 
   // ------------------------------------------------------------- presence
 
-  void _ping() {
-    final cutoff = DateTime.now().subtract(const Duration(seconds: 75));
-    for (final peer in _peers.live.toList()) {
-      if (peer.lastPong.isBefore(cutoff)) {
-        unawaited(peer.close());
-        continue;
-      }
-      unawaited(peer.send(const SyncMessage.ping()));
-    }
-  }
-
   String _nameOf(PairedDevice? device, PeerIdentity peer) =>
       (device?.name.isNotEmpty ?? false) ? device!.name : peer.name;
 
@@ -910,18 +892,16 @@ class SyncHub {
 
   Future<void> dispose() async {
     cancelPairingWindow();
-    _pingTimer?.cancel();
     await _changesSub?.cancel();
-    // Over a copy: closing a peer takes it back out of the map.
-    for (final peer in _peers.live.toList()) {
-      await peer.close();
-    }
+    // Before the mirror state below: closing a peer runs [_peerGone], which
+    // reads it. [_mirrorUpdates] closes after both, and [_touch]'s microtask
+    // is why that one is guarded rather than ordered.
+    await _peers.dispose();
     _mirrors.clear();
     byteCache.dispose();
     _control.clear();
     _requesting.clear();
     drivenChats.value = const {};
-    servedChats.value = const {};
     _desired.clear();
     remotes.value = const [];
     await _mirrorUpdates.close();
@@ -1181,7 +1161,7 @@ class SyncHub {
     for (final chatId in _mirrorsOf(deviceId)) {
       _dropMirror(deviceId, chatId);
     }
-    peers.value = {...peers.value}..remove(deviceId);
+    _peers.forget(deviceId);
     _rebuildRemotes();
     unawaited(_peers.refresh());
   }
