@@ -43,6 +43,11 @@ abstract class ChatStore {
   /// a chat is written by something that has already been through here.
   Future<void> saveState(ChatState state);
 
+  /// Set a stored chat's title, leaving every other field as it is on disk —
+  /// the namer's copy of the rest is older than the turn's own save. Does
+  /// nothing for an id nothing has been written under.
+  Future<void> retitle(String chatId, String title);
+
   Future<void> delete(String id);
 
   /// Save an attachment's bytes under `resources/` and return the name they

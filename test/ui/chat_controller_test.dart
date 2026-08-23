@@ -8,6 +8,7 @@ import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
+import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
 import "../fakes.dart";
@@ -72,6 +73,13 @@ void main() {
   });
 
   group("a new chat", () {
+    /// The name is applied on screen before it is written, and the turn ending
+    /// no longer writes `state.json` on its way past — so a test reading the
+    /// name off disk has to wait for it separately.
+    Future<void> waitForNameOnDisk(String id) => waitFor(
+        () async => (await app.repo.openChat(id)).state.title != "New chat",
+        what: "the title reaching disk");
+
     test("is not on disk until its first message is sent", () async {
       final chat = await app.repo.createChat();
       expect(File(app.config.stateFile(chat.state.id)).existsSync(), isFalse);
@@ -98,11 +106,7 @@ void main() {
       app.backend.scriptedAnswer = "Sorting a list of records";
       final (id, _) = await chatWithOneTurn("how do I sort a list?");
       await waitFor(() => titleOf(id) != "New chat", what: "the title");
-      // On disk, not just on screen: the name is applied before it is written,
-      // and the turn ending no longer writes `state.json` on its way past.
-      await waitFor(
-          () async => (await app.repo.openChat(id)).state.title != "New chat",
-          what: "the title reaching disk");
+      await waitForNameOnDisk(id);
 
       expect(app.backend.questions.single.prompt, contains("how do I sort a list?"));
       expect((await app.repo.openChat(id)).state.title, "Sorting a list of records");
@@ -112,6 +116,9 @@ void main() {
       app.seedSettings(_withTitleModel);
       app.backend.scriptedAnswer = "The first thing asked";
       final (id, controller) = await chatWithOneTurn("first");
+      // Naming runs beside the turn rather than in it, so it is waited for here
+      // rather than left to land after the directory is torn down.
+      await waitForNameOnDisk(id);
       await controller.send("second");
       await waitIdle(id);
 
@@ -137,6 +144,19 @@ void main() {
 
       expect(titleOf(id), "New chat");
       expect((await app.repo.openChat(id)).state.title, "New chat");
+    });
+
+    // Naming happens on the same turn that first anchors a temporary chat, and
+    // used to write the state from before it back — leaving the chat with a TTL
+    // and nothing to count from, on disk and in the bar both.
+    test("naming a temporary chat keeps its countdown", () async {
+      app.seedSettings(_withTitleModel..tempChatTtl = TempChatTtl.hours24);
+      app.backend.scriptedAnswer = "Saying hello";
+      final (id, _) = await chatWithOneTurn("hello");
+      await waitForNameOnDisk(id);
+
+      expect((await app.repo.openChat(id)).state.tempTtlExpiresAt, isNotNull);
+      expect(chatOf(id).state.tempTtlExpiresAt, isNotNull);
     });
   });
 

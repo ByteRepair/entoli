@@ -179,6 +179,14 @@ class FileChatStore implements ChatStore {
   }
 
   @override
+  Future<void> retitle(String chatId, String title) async {
+    final project = await _projectOf(chatId);
+    final state = await _readState(chatId, project);
+    if (state == null) return;
+    await saveState(state.copyWith(title: title));
+  }
+
+  @override
   Future<void> delete(String id) async {
     final project = await _projectOf(id);
     for (final path in [

@@ -559,6 +559,12 @@ class FakeChatStore implements ChatStore {
   Future<void> saveState(ChatState state) async => _states[state.id] = state;
 
   @override
+  Future<void> retitle(String chatId, String title) async {
+    final state = _states[chatId];
+    if (state != null) _states[chatId] = state.copyWith(title: title);
+  }
+
+  @override
   Future<Chat> load(String id) async {
     final state = _states[id];
     if (state == null) throw StateError("no chat $id");
