@@ -676,26 +676,23 @@ class FakeVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
-    bool listening = true,
   }) async {
     if (refusal != null) throw StateError(refusal!);
     listeningWith = recognition;
-    return session = FakeVoiceSession(listening: listening);
+    return session = FakeVoiceSession();
   }
 }
 
 class FakeVoiceSession implements VoiceSession {
-  FakeVoiceSession({this.listening = true});
-
   final List<String> spoken = [];
   final _events = StreamController<VoiceEvent>.broadcast();
 
   var hushed = 0;
   var disposed = false;
 
-  /// Whether the microphone is open, which pausing shuts. A session can be
-  /// opened with it already shut, which is touch to speak.
-  bool listening;
+  /// Whether the microphone is open. A session opens shut and the controller
+  /// asks for it, which is what taking turns is.
+  var listening = false;
 
   /// How many times it was shut on the utterance in progress rather than over
   /// it, which is what releasing the Talk button asks for.
@@ -715,6 +712,9 @@ class FakeVoiceSession implements VoiceSession {
 
   @override
   Future<void> setListening(bool on, {bool finish = false}) async {
+    // The contract a real session keeps: asking for what it is already doing
+    // costs nothing. Without it a fake counts calls the platform never sees.
+    if (on == listening) return;
     listening = on;
     if (!on && finish) finished++;
   }
@@ -726,7 +726,6 @@ class FakeVoiceSession implements VoiceSession {
   }
 
   void hear(String text) => _events.add(VoiceHeard(text));
-  void interrupt() => _events.add(const VoiceInterrupted());
   void fallSilent() => _events.add(const VoiceFellSilent());
   void fail(String message) => _events.add(VoiceFailed(message));
 }

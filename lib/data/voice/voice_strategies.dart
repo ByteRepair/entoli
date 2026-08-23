@@ -21,10 +21,8 @@ Future<AudioRecorder> openMicrophone() async {
 }
 
 /// The listening half of a voice session: a microphone, voice activity, and
-/// recognition. Emits [VoiceHeard] for transcribed utterances, [VoiceInterrupted]
-/// on detected speech onset, and [VoiceFailed] on a fault it cannot recover
-/// from. Onset alone interrupts nothing — the session decides, from what was
-/// heard and what is being said, whether someone actually talked over a reply.
+/// recognition. Emits [VoiceHeard] for transcribed utterances and [VoiceFailed]
+/// on a fault it cannot recover from.
 ///
 /// Extracted from `SherpaVoice` so a session can compose a [Listener] and a
 /// [Speaker] independently: sherpa's pair on the desktops, the system engines'
@@ -54,8 +52,8 @@ abstract class Listener {
 /// this before it: two implementations of one thing, one of which was written.
 /// Held here, an engine gets it by being a listener rather than by remembering
 /// to be one. What a subclass supplies is only what its engine gives it —
-/// readings through [measured], onset through [began], words through [heard] —
-/// and which [LoudnessGate] those readings are on.
+/// readings through [measured] and words through [heard] — and which
+/// [LoudnessGate] those readings are on.
 abstract class MicrophoneListener implements Listener {
   MicrophoneListener(this.gate);
 
@@ -71,10 +69,11 @@ abstract class MicrophoneListener implements Listener {
   final _events = StreamController<VoiceEvent>();
   final _levelOf = ValueNotifier(0.0);
 
-  /// Whether the microphone is open. What a shut microphone is allowed to *say*
-  /// is [ComposedVoiceSession]'s; what is here is what only this side knows — a
+  /// Whether the microphone is open. False until something asks: a session
+  /// opens shut. What a shut microphone is allowed to *say* is
+  /// [ComposedVoiceSession]'s; what is here is what only this side knows — a
   /// reading taken while it is shut is not a reading of the room.
-  bool listening = true;
+  bool listening = false;
 
   bool closed = false;
 
@@ -117,14 +116,6 @@ abstract class MicrophoneListener implements Listener {
 
   static const _levelFall = 0.8;
 
-  /// The engine says an utterance has started. Forwarded whatever it turns out
-  /// to have been: onset alone interrupts nothing, and the session is what
-  /// decides whether someone talked over a reply.
-  void began() {
-    if (closed) return;
-    _events.add(const VoiceInterrupted());
-  }
-
   /// An utterance, transcribed — emitted only if it was loud enough to have
   /// been meant for the phone.
   void heard(String text) {
@@ -132,11 +123,17 @@ abstract class MicrophoneListener implements Listener {
     final spoken = gate.spoken();
     final words = text.trim();
     // A cough is a speech segment to a detector and nothing to a conversation.
-    if (words.isNotEmpty && spoken) _events.add(VoiceHeard(words));
+    if (words.isEmpty) return;
+    // The arm nothing draws: a turn that never happens, and no way to tell it
+    // from a microphone that is not working.
+    if (!spoken) return voiceFailed("utterance refused: too quiet for this room");
+    _events.add(VoiceHeard(words));
   }
 
   void fail(String message) {
-    if (!closed) _events.add(VoiceFailed(message));
+    if (closed) return;
+    voiceFailed("listening failed: $message");
+    _events.add(VoiceFailed(message));
   }
 
   /// The half of [dispose] that is the same either way, called once the engine
@@ -174,12 +171,6 @@ class SpeechFailed extends SpeechSignal {
 /// drained, nothing pending) and failure.
 abstract class Speaker {
   Stream<SpeechSignal> get signals;
-
-  /// Whether a reply is being said right now. What makes a [VoiceInterrupted]
-  /// from the listener a barge-in rather than someone simply starting to talk:
-  /// voice activity is detected at the start of every utterance, and only the
-  /// ones landing on top of a reply are an interruption of anything.
-  bool get speaking;
 
   Future<void> speak(String text);
 
@@ -219,15 +210,12 @@ class SpeechFailures {
 }
 
 /// A [VoiceSession] composed of a [Listener] and a [Speaker], neither knowing
-/// about the other. The session wires barge-in — confirmed, not assumed: the
-/// recogniser cannot tell its own playback from the room acoustically, so a
-/// reply is cut off only once words arrive that were not just said (see
-/// [isEcho]) — and forwards the rest of both halves' events unchanged. Each
-/// `Voice` picks its own pair in `start`, which is what makes `AndroidVoice` a
-/// dozen lines and gives read-aloud a speak-only session for free.
+/// about the other. It forwards both halves' events and owns one rule: what a
+/// microphone that has been shut is still allowed to say. Each `Voice` picks
+/// its own pair in `start`, which is what makes `AndroidVoice` a dozen lines
+/// and gives read-aloud a speak-only session for free.
 class ComposedVoiceSession implements VoiceSession {
-  ComposedVoiceSession(this._listener, this._speaker, {bool listening = true}) {
-    _listening = listening;
+  ComposedVoiceSession(this._listener, this._speaker) {
     _listener?.events.listen(_onListener);
     _speaker.signals.listen(_onSpeaker);
   }
@@ -238,78 +226,44 @@ class ComposedVoiceSession implements VoiceSession {
   final _events = StreamController<VoiceEvent>.broadcast();
   final _levelOf = ValueNotifier(0.0);
 
-  /// What has been handed to the speaker since it last went quiet — what the
-  /// recogniser may be hearing back. Kept to its tail: an echo can only be of
-  /// recent speech.
-  static const _saidWindow = 1200;
-  final _said = StringBuffer();
-
   /// What [setListening] was last told, and whether one more utterance is still
   /// wanted after it was shut. Held here rather than in each [Listener] because
   /// it is one rule about what the session is allowed to say, and a listener
   /// that forgot it would be silently back to the bug below.
-  bool _listening = true;
+  bool _listening = false;
   bool _finishing = false;
 
   /// **A shut microphone says nothing.** Neither engine stops on the instant it
   /// is asked to: a cancelled `SpeechRecognizer` session flushes what it had,
   /// and audio already handed to sherpa's worker decodes after the recorder is
-  /// released. Forwarded, that arrives as words nobody spoke into a microphone
-  /// that is off — and landing on a reply still being read, it is not an echo
-  /// of what was just said, so it is a barge-in, so the speaker stops and the
-  /// turn is aborted. That is the Mute button stopping the answer, which is not
-  /// what it promises.
+  /// released. Forwarded, that is words nobody spoke into a microphone that is
+  /// off, landing in the middle of somebody else's turn.
   ///
-  /// The exception is the utterance a `finish` asked for, which is the release
-  /// of a touch-to-speak button: the microphone closed because the sentence was
-  /// over, not to throw it away.
+  /// The exception is the utterance a `finish` asked for — mute, and letting go
+  /// of the Talk button: the microphone closed because the sentence was over,
+  /// not to throw it away.
   bool _wanted(VoiceEvent event) {
     if (_listening) return true;
-    if (event is! VoiceHeard || !_finishing) return false;
+    if (event is! VoiceHeard || !_finishing) {
+      voiceLog(() => "dropped ${event.runtimeType}: the microphone is shut");
+      return false;
+    }
     _finishing = false;
     return true;
   }
 
+  /// A failure is the session's whatever the microphone is doing, since it is
+  /// why it is doing nothing. Everything else is [_wanted]'s to allow.
   void _onListener(VoiceEvent event) {
-    // A failure is the session's whatever the microphone is doing, since it is
-    // why it is doing nothing.
-    if (event is! VoiceFailed && !_wanted(event)) return;
-    switch (event) {
-      case VoiceHeard(:final text):
-        // Onset alone interrupts nothing: every sentence said trips voice
-        // activity on its way out of the speaker. What was heard decides — if
-        // it reads like the reply coming back it is dropped as echo; if not,
-        // someone talked over the reply, which is Stop and then listen to me,
-        // in one gesture. Nothing said yet is nothing that could come back, so
-        // it passes straight through.
-        if (_speaker.speaking && _said.isNotEmpty) {
-          if (!isEcho(text, _said.toString())) {
-            unawaited(_speaker.stop());
-            _events.add(const VoiceInterrupted());
-          }
-          return;
-        }
-        _events.add(event);
-      case VoiceInterrupted():
-        // Never forwarded on its own: without words behind it there is no
-        // telling the user from the phone's own voice. The Stop button remains
-        // the instant way to cut a reply off.
-        break;
-      case VoiceFailed():
-        _events.add(event);
-      case VoiceFellSilent():
-        // The listener never emits this; silence is the speaker's to report.
-        break;
-    }
+    if (event is VoiceFailed || _wanted(event)) _events.add(event);
   }
 
   void _onSpeaker(SpeechSignal signal) {
     switch (signal) {
       case SpeechSilent():
-        _said.clear();
         _events.add(const VoiceFellSilent());
       case SpeechFailed(:final message):
-        _said.clear();
+        voiceFailed("speaking failed: $message");
         _events.add(VoiceFailed(message));
     }
   }
@@ -325,29 +279,24 @@ class ComposedVoiceSession implements VoiceSession {
 
   @override
   Future<void> setListening(bool on, {bool finish = false}) {
-    // Before the call rather than after it: what the engine does with the
+    // The one place that knows whether this is a change, so the one place that
+    // can drop the call when it is not — every caller gets that rather than the
+    // one that remembered to keep a copy of the answer.
+    if (on == _listening) return Future.value();
+    // Set before the call rather than after it: what the engine does with the
     // request takes a platform hop, and anything it flushes in between is
-    // exactly what this is here to drop.
+    // exactly what these are here to drop.
     _listening = on;
     _finishing = !on && finish;
+    voiceLog(() => on ? "microphone open" : "microphone shut");
     return _listener?.setListening(on, finish: finish) ?? Future.value();
   }
 
   @override
-  Future<void> speak(String text) async {
-    _said..write(" ")..write(text);
-    if (_said.length > _saidWindow) {
-      final said = _said.toString();
-      _said..clear()..write(said.substring(said.length - _saidWindow));
-    }
-    await _speaker.speak(text);
-  }
+  Future<void> speak(String text) => _speaker.speak(text);
 
   @override
-  Future<void> stopSpeaking() async {
-    _said.clear();
-    await _speaker.stop();
-  }
+  Future<void> stopSpeaking() => _speaker.stop();
 
   @override
   Future<void> dispose() async {
@@ -357,27 +306,3 @@ class ComposedVoiceSession implements VoiceSession {
     _levelOf.dispose();
   }
 }
-
-/// Whether [heard] reads like [spoken] coming back off the speaker rather than
-/// the person the microphone is pointed at. The two are one acoustic event to a
-/// recogniser — the reply is in the room with the user — and what separates
-/// them is content: we know exactly what was just said, so words substantially
-/// made of those same words are an echo, and anything else is someone talking.
-/// Garbled transcriptions of it can still slip past this; the Stop button under
-/// the orb remains the way to cut a reply off for certain.
-bool isEcho(String heard, String spoken) {
-  final said = words(spoken);
-  if (said.isEmpty) return false;
-  final pickedUp = words(heard);
-  if (pickedUp.isEmpty) return false;
-  return pickedUp.intersection(said).length / pickedUp.length >= 0.5;
-}
-
-// Letters and numbers are kept and everything else separates: `\w` would strip
-// every non-Latin script to nothing, and a Greek or Japanese echo must still be
-// recognised as one.
-Set<String> words(String text) => text
-    .toLowerCase()
-    .split(RegExp(r"[^\p{L}\p{N}]+", unicode: true))
-    .where((word) => word.isNotEmpty)
-    .toSet();

@@ -92,35 +92,50 @@ void main() {
     });
   });
 
-  test("talking over the reply stops it and abandons the turn",
+  test("the microphone is shut for as long as it is not the user's turn",
       () async {
     final held = Completer<void>();
     // No DoneEvent: the turn is left open on the hold, the way a real one is
-    // while the backend is still working. With one, it would be over before
-    // there was anything to talk over.
+    // while the backend is still working.
     app.backend
       ..scriptedEvents = [const TextDelta("A long answer. ")]
       ..hold = held;
     final id = await startVoice();
+    expect(app.voice.session!.listening, isTrue,
+        reason: "waiting to be spoken to");
+
     app.voice.session!.hear("go on then");
-    // Not merely running: a reply cannot be talked over until it has started
-    // saying something, and waiting for that is also what puts this past the
-    // turn's own opening writes.
-    await waitFor(() {
-      final view = app.container.read(chatControllerProvider(id));
-      return view.isRunning && (view.chat?.messages.last.hasText ?? false);
-    }, what: "the reply to start");
+    // A turn running, and then a reply being read out. The phone hears its own
+    // voice as readily as it hears the person, so the answer is not to listen:
+    // everything that used to decide which sounds to ignore was a guess.
+    await waitFor(() => !app.voice.session!.listening,
+        what: "the microphone to shut");
+    await waitFor(() => app.voice.session!.spoken.isNotEmpty,
+        what: "the reply to start being read");
+    expect(app.voice.session!.listening, isFalse);
 
-    app.voice.session!.interrupt();
-    await waitFor(
-        () => !app.container.read(chatControllerProvider(id)).isRunning,
-        what: "the turn to be abandoned");
     held.complete();
+    await waitFor(() => !app.container.read(chatControllerProvider(id)).isRunning,
+        what: "the turn to finish");
+    app.voice.session!.fallSilent();
+    await waitFor(() => app.voice.session!.listening,
+        what: "the microphone to open again");
+  });
 
-    final chat = await app.store.load(id);
-    // Stopped, not finished: an aborted turn is not one to offer to resume.
-    expect(chat.unfinished, isFalse);
-    expect(chat.messages.last.plainText.trim(), "A long answer.");
+  test("a turn that says nothing out loud still hands the turn back",
+      () async {
+    // Nothing to read out, so silence is never reported — and without an
+    // answer to that the microphone would never open again.
+    app.backend.scriptedEvents = [const DoneEvent()];
+    final id = await startVoice();
+    app.voice.session!.hear("run something");
+    await waitFor(() => !app.container.read(chatControllerProvider(id)).isRunning,
+        what: "the turn");
+
+    await waitFor(() => app.voice.session!.listening,
+        what: "the microphone to open again");
+    expect(app.container.read(voiceControllerProvider(id)).status,
+        VoiceStatus.listening);
   });
 
   test("a reply that was already written is not read out on the way in", () async {
