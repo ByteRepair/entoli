@@ -39,6 +39,9 @@ class FileSecretStore implements SecretStore {
 
   Future<void> _write(Map<String, String> values) async {
     _loaded = values;
+    // Nothing else has made `sync/` yet: the identity is written before the
+    // registry, on the first launch of a fresh install.
+    await _fs.directory(_fs.path.dirname(_file.path)).create(recursive: true);
     final temp = _fs.file("${_file.path}$writingSuffix");
     await temp.writeAsString(jsonEncode(values));
     await temp.rename(_file.path);
