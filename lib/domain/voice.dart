@@ -53,6 +53,13 @@ abstract class Voice {
   /// so there is one set to consult rather than a second question beside it.
   Future<NativeVoiceEngines> systemEngines() async => NativeVoiceEngines.none;
 
+  /// Which languages the device's own engines can be asked for, and empty
+  /// where there are none to ask. **Only the system engines have this
+  /// question**: a downloaded model is one language already, so picking the
+  /// language there is picking the model — which is why [start]'s `language`
+  /// reaches Android and nothing else.
+  Future<List<VoiceLanguage>> systemLanguages() async => const [];
+
   /// Load the models and open the microphone. Throws if a model is not
   /// installed or will not load, which the caller shows rather than swallows —
   /// a voice screen that opens silent is worse than one that says why.
@@ -66,11 +73,26 @@ abstract class Voice {
   /// above this. Opening a capture at the door and closing it again for the
   /// first turn would be a real start and stop of the device and the system's
   /// own microphone indicator flashing for nothing.
+  ///
+  /// [language] is a BCP-47 tag the system engines are asked to hear and speak
+  /// in, null being whatever the device is set to. See [systemLanguages].
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    String? language,
   });
+}
+
+/// A language the device's own engines can be asked for: a BCP-47 [tag] and
+/// the [name] the device itself calls it by. The name is composed over there
+/// rather than from a table here — it is the platform that knows what the user
+/// reads Greek as.
+class VoiceLanguage {
+  const VoiceLanguage({required this.tag, required this.name});
+
+  final String tag;
+  final String name;
 }
 
 /// Which of the device's own engines are actually there, which is what the
@@ -168,6 +190,7 @@ class UnavailableVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    String? language,
   }) async =>
       throw UnsupportedError("Voice mode is not available in a browser.");
 }

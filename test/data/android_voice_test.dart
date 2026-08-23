@@ -151,7 +151,22 @@ void main() {
     expect(invoked, isEmpty);
 
     await recognizer.setListening(true);
-    expect(invoked.single.arguments, {"on": true, "finish": false});
+    expect(invoked.single.arguments,
+        {"on": true, "finish": false, "language": null});
+  });
+
+  testWidgets("the language rides on every open: each one is a new request",
+      (tester) async {
+    final recognizer = AndroidSpeechRecognizer(language: "el-GR");
+    addTearDown(recognizer.dispose);
+
+    await recognizer.setListening(true);
+    await recognizer.setListening(false);
+    await recognizer.setListening(true);
+
+    expect(
+        invoked.where((c) => c.arguments["on"] == true).map((c) => c.arguments["language"]),
+        ["el-GR", "el-GR"]);
   });
 
   testWidgets("releasing the talk button asks for the sentence it was held for",
@@ -159,6 +174,7 @@ void main() {
     final (recognizer, events) = await listening(tester);
 
     await recognizer.setListening(false, finish: true);
+    // No language on the way out: shutting a microphone cannot change it.
     expect(invoked.last.arguments, {"on": false, "finish": true});
 
     // The gate is not asked about it: holding a button down and speaking is not

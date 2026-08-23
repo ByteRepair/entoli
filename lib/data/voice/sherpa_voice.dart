@@ -39,6 +39,7 @@ class SherpaVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    String? language,
   }) async {
     Listener? listener;
     if (recognition != null) {
