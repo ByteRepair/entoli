@@ -174,14 +174,13 @@ class ChatRepository {
   Future<void> append(String chatId, List<ChatRecord> records) =>
       _store.append(chatId, records);
 
-  /// A title change on its own. The conversation is deliberately not written:
-  /// a turn may still be adding to it.
-  Future<void> retitle(ChatState state, String title) async {
-    final renamed = state.copyWith(title: title);
-    if (_isDraft(state.id)) {
-      _draft = _draft!.copyWith(state: renamed);
+  /// A title change on its own — the title and nothing else. The conversation
+  /// is deliberately not written: a turn may still be adding to it.
+  Future<void> retitle(String chatId, String title) async {
+    if (_isDraft(chatId)) {
+      _draft = _draft!.copyWith(state: _draft!.state.copyWith(title: title));
     } else {
-      await _store.saveState(renamed);
+      await _store.retitle(chatId, title);
     }
   }
 
