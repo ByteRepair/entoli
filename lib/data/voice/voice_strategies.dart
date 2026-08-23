@@ -1,8 +1,10 @@
 import "dart:async";
+import "dart:math" as math;
 
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
 import "package:record/record.dart";
 
+import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 
 /// The microphone, once the user has allowed it. `AudioRecorder` is the only
@@ -42,6 +44,113 @@ abstract class Listener {
   Future<void> dispose();
 }
 
+/// Everything a [Listener] with a microphone behind it is made of, which turned
+/// out to be everything except the engine: the event stream, the level, and the
+/// [LoudnessGate] that decides whether what was heard was meant for the phone.
+///
+/// It exists because the gate did not. It was written for the system recogniser
+/// and lived in that class, so the desktops answered the fan and the television
+/// for as long as Android had stopped — and the same was true of the rest of
+/// this before it: two implementations of one thing, one of which was written.
+/// Held here, an engine gets it by being a listener rather than by remembering
+/// to be one. What a subclass supplies is only what its engine gives it —
+/// readings through [measured], onset through [began], words through [heard] —
+/// and which [LoudnessGate] those readings are on.
+abstract class MicrophoneListener implements Listener {
+  MicrophoneListener(this.gate);
+
+  /// Whether what was heard was meant for the phone. One gate serves both
+  /// engines and is handed in rather than built here only so a test can watch
+  /// one: there is nothing scale-dependent left in it to configure.
+  final LoudnessGate gate;
+
+  /// Single-subscription, not broadcast: a failure to start is emitted before
+  /// anything has subscribed, and a broadcast controller drops it on the floor.
+  /// That was voice mode sitting there showing a microphone that was never
+  /// going to hear anything.
+  final _events = StreamController<VoiceEvent>();
+  final _levelOf = ValueNotifier(0.0);
+
+  /// Whether the microphone is open. What a shut microphone is allowed to *say*
+  /// is [ComposedVoiceSession]'s; what is here is what only this side knows — a
+  /// reading taken while it is shut is not a reading of the room.
+  bool listening = true;
+
+  bool closed = false;
+
+  @override
+  Stream<VoiceEvent> get events => _events.stream;
+
+  @override
+  ValueListenable<double> get level => _levelOf;
+
+  /// The shared half of [setListening]: the microphone's state, and the gate
+  /// and the level going quiet with it. Each engine does its own half around
+  /// this.
+  ///
+  /// **The utterance is over whichever way this went**, and that is also what a
+  /// `finish` needs. Nothing more is measured with the microphone shut, so the
+  /// result that arrives after one — the sentence a touch-to-speak button was
+  /// held for — is one the gate has nothing to judge on and lets through, which
+  /// is the right answer for a sentence somebody deliberately spoke. Whether
+  /// anyone asked for it at all is a different question, and
+  /// [ComposedVoiceSession] is where it is answered.
+  void asked(bool on) {
+    listening = on;
+    gate.quiet();
+    _levelOf.value = 0;
+  }
+
+  /// One reading of how loud it is, on this gate's scale. Ignored with the
+  /// microphone shut: what a cancelled engine reports on its way out is not the
+  /// room this gate is measuring.
+  void measured(double loudness) {
+    if (closed || !listening) return;
+    gate.measure(loudness);
+    // Falls rather than drops, so the circle follows a voice instead of
+    // flickering with it — and rounded, so a floor creeping by a hundredth does
+    // not wake the orb at all: a `ValueNotifier` drops a write of what it
+    // already holds, and this is on the audio path.
+    final level = math.max(gate.level, _levelOf.value * _levelFall);
+    _levelOf.value = (level * 100).round() / 100;
+  }
+
+  static const _levelFall = 0.8;
+
+  /// The engine says an utterance has started. Forwarded whatever it turns out
+  /// to have been: onset alone interrupts nothing, and the session is what
+  /// decides whether someone talked over a reply.
+  void began() {
+    if (closed) return;
+    _events.add(const VoiceInterrupted());
+  }
+
+  /// An utterance, transcribed — emitted only if it was loud enough to have
+  /// been meant for the phone.
+  void heard(String text) {
+    if (closed) return;
+    final spoken = gate.spoken();
+    final words = text.trim();
+    // A cough is a speech segment to a detector and nothing to a conversation.
+    if (words.isNotEmpty && spoken) _events.add(VoiceHeard(words));
+  }
+
+  void fail(String message) {
+    if (!closed) _events.add(VoiceFailed(message));
+  }
+
+  /// The half of [dispose] that is the same either way, called once the engine
+  /// has been let go.
+  void disposeParts() {
+    // Not awaited: on a single-subscription stream the future from close waits
+    // for a listener to take the done event off the buffer, and a listener
+    // nobody subscribed to — which is what disposing one without starting it
+    // means — would hang there forever.
+    unawaited(_events.close());
+    _levelOf.dispose();
+  }
+}
+
 /// A signal from the speaker that the queue has drained and nothing is still
 /// being generated — the session forwards it as [VoiceFellSilent]. Distinct
 /// from [VoiceEvent] because a speaker has nothing to say about hearing or
@@ -79,6 +188,34 @@ abstract class Speaker {
   Future<void> stop();
 
   Future<void> dispose();
+}
+
+/// How many sentences in a row a speaker may lose before the engine, rather
+/// than the sentence, is what failed.
+///
+/// **One dropped sentence is not a broken engine.** A synthesiser refuses the
+/// odd utterance, a voice comes back with no samples in it, a file will not
+/// play; reported up, each of those ends voice mode over a sentence that could
+/// have been skipped. But an engine that has stopped working answers every
+/// sentence that way, and a reply nobody can hear with a session that will not
+/// say so is worse.
+///
+/// It was the system synthesiser's rule and only its own, so on the desktops
+/// one bad sentence still ended the session. A count is small enough to have
+/// been written twice and was instead written once — which is the same shape as
+/// the gate above it.
+class SpeechFailures {
+  static const _budget = 3;
+
+  int _run = 0;
+
+  /// A sentence was said, which is what clears the run: three failures
+  /// straddling one that worked are three separate sentences, not an engine.
+  void spoke() => _run = 0;
+
+  /// A sentence will not be. True once enough of them have gone in a row that
+  /// the engine is what to report.
+  bool dropped() => ++_run >= _budget;
 }
 
 /// A [VoiceSession] composed of a [Listener] and a [Speaker], neither knowing
