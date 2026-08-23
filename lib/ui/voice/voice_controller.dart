@@ -227,8 +227,7 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// The Talk button, pressed and released. Pressing it stops the reply
   /// outright rather than waiting to be talked over: someone holding a button
   /// down to speak has already said what they think of the answer, and there is
-  /// nothing to confirm from the transcription. Releasing it keeps the sentence
-  /// it was held for — see [VoiceSession.setListening].
+  /// nothing to confirm from the transcription.
   Future<void> talk(bool on) async {
     if (!ref.mounted || !state.isOn) return;
     // The microphone first, and the reply's silence not waited for: stopping
@@ -237,19 +236,24 @@ class VoiceController extends Notifier<VoiceViewState> {
     // nobody hears.
     final speaking = on && state.status == VoiceStatus.speaking;
     if (speaking) unawaited(hush());
-    await setPaused(!on, finish: !on);
+    await setPaused(!on);
   }
 
-  /// Shut the microphone, or open it again. Voice mode listens for as long as
-  /// it is on screen, and until this there was no way to stop it short of
-  /// leaving.
+  /// Shut the microphone, or open it again.
+  ///
+  /// **Shutting it hands over what was being said into it**, rather than
+  /// dropping it. Mute is how someone says they have finished talking — they
+  /// speak, they mute, they expect an answer — and a mute that threw the
+  /// sentence away left the turn unsaid and voice mode looking broken. It is
+  /// the same `finish` the Talk button's release asks for, and for the same
+  /// reason: the microphone closed because the sentence was over.
   ///
   /// **The microphone and nothing else.** A reply being read out goes on being
   /// read out: muting is about what the phone hears, and the button that stops
   /// the answer is the one next to it.
-  Future<void> setPaused(bool paused, {bool finish = false}) async {
+  Future<void> setPaused(bool paused) async {
     if (!ref.mounted || !state.isOn || paused == state.paused) return;
-    await _session?.setListening(!paused, finish: finish);
+    await _session?.setListening(!paused, finish: paused);
     if (ref.mounted) _show(state.status, paused: paused);
   }
 

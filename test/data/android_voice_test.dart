@@ -92,35 +92,20 @@ void main() {
     expect(recognizer.level.value, greaterThan(0.9));
   });
 
-  testWidgets("what never rose above the room was not said to the phone",
+  testWidgets("what the service reports is judged against the person",
       (tester) async {
     final (recognizer, events) = await listening(tester);
 
-    await room(0.0);
-    await incoming("interrupted");
-    await incoming("rms", 1.0);
-    await incoming("heard", "a fan, transcribed");
-    await tester.pump();
-    expect(events.whereType<VoiceHeard>(), isEmpty);
-
-    await incoming("interrupted");
-    await incoming("rms", 9.0);
-    await incoming("heard", "somebody talking");
-    await tester.pump();
-    expect(events.whereType<VoiceHeard>().single.text, "somebody talking");
-  });
-
-  testWidgets("the bar follows the person, not only the room", (tester) async {
-    final (recognizer, events) = await listening(tester);
-
+    // The whole of the rule is unit-tested over `LoudnessGate`; what this is
+    // for is that the three channel methods reach it at all.
     await room(0.0);
     await incoming("interrupted");
     await incoming("rms", 20.0);
     await incoming("heard", "somebody talking");
     await tester.pump();
-    expect(events.whereType<VoiceHeard>().length, 1);
+    expect(events.whereType<VoiceHeard>().single.text, "somebody talking");
 
-    // Well clear of the room, and a fifth of what this person sounds like.
+    // Well clear of the room, and a quarter of what this person sounds like.
     await incoming("interrupted");
     await incoming("rms", 5.0);
     await incoming("heard", "the next room over");
@@ -128,13 +113,12 @@ void main() {
     expect(events.whereType<VoiceHeard>().length, 1);
   });
 
-  testWidgets("nothing is refused before the room has been measured",
-      (tester) async {
+  testWidgets("the first thing said carries, whatever it was", (tester) async {
     final (recognizer, events) = await listening(tester);
 
-    // The first thing anyone says may be the first thing the microphone ever
-    // heard, and a floor seeded from a voice is a bar above the voice that set
-    // it.
+    // Nothing has been heard to compare it against. A gate that refuses on no
+    // evidence is a microphone that looks broken, and that is what a fixed
+    // margin on a scale nobody promised turned out to be.
     await incoming("rms", 8.0);
     await incoming("heard", "the first thing said");
     await tester.pump();
