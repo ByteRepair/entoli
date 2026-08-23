@@ -482,6 +482,21 @@ alone because the turn is still adding to `conv.jsonl`. A model that cannot
 answer names nothing and the chat keeps the name it has; there is no turn to
 report that on.
 
+**`retitle` takes a chat id, not a `ChatState`.** The namer's copy of the chat
+is from before the turn it is naming, and that turn's own `saveState` has since
+resolved the TTL and written an anchor onto the stored one — so `ChatStore.retitle`
+re-reads what is on disk and sets the title on that. It used to write the
+caller's copy back whole, which took the anchor with it: a temporary chat that
+got named then had a TTL to be deleted on and no `tempTtlSince` to count from,
+so no hourglass in the sidebar and no countdown in the bar, until a second turn
+re-anchored it a day late. Taking an id is the fix that keeps: there is no
+stale state to write.
+
+`ChatController` is the other half. `saveState` returns what it wrote *because*
+it is not what went in, and the head of a turn keeps that return rather than
+the copy it passed — otherwise the bar draws a chat with no anchor for the rest
+of the turn, and everything the controller writes from there carries the gap.
+
 A `!` message names nothing either, and `suggestTitle` is where that is decided
 rather than in the controller that calls it — it is the same kind of rule as "no
 title model is configured", and it belongs beside it. A command is not a thing
