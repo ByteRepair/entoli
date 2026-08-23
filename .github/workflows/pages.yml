@@ -43,13 +43,7 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.tag }}
 
-      - uses: subosito/flutter-action@v2.23.0
-        with:
-          flutter-version: 3.44.8
-          channel: stable
-          cache: true
-
-      - run: tool/prepare.sh
+      - uses: ./.github/actions/flutter-setup
 
       # Project pages live under /<repo>/, and canvaskit is served from the
       # site rather than gstatic so the page has no third-party dependency.

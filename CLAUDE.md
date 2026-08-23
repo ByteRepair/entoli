@@ -256,7 +256,8 @@ it.
 - Setup: `tool/prepare.sh` — packages plus codegen. The generated sources are
   not in the repository, so a fresh clone does not compile until it has run,
   and it wants running again whenever a `@freezed` or `@JsonSerializable` type
-  changes. Every CI workflow calls the same script rather than its own steps.
+  changes. `dart run build_runner watch` is the answer while editing
+  `lib/domain/`. CI runs the script through `.github/actions/flutter-setup`.
 - Analyze: `flutter analyze`. Tests: `flutter test` — see `test/CLAUDE.md`.
 - The repo is not `dart format` clean and is not meant to be; match the file you
   are in rather than reformatting it.
