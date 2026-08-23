@@ -156,9 +156,6 @@ void main() {
       );
     });
 
-    // The whole group, not the one role: a `secondary` on its own would leave
-    // `secondaryContainer` a tone of the primary seed beside a colour that is
-    // not.
     testWidgets("the secondary colour brings its container with it", (tester) async {
       app.seedSettings(AppSettings(secondaryColour: ThemeColour.amber));
       final scheme = (await pumpApp(tester)).theme!.colorScheme;
@@ -171,16 +168,17 @@ void main() {
 
     testWidgets("the corner radius reaches the shapes the theme sets",
         (tester) async {
-      app.seedSettings(AppSettings(cornerRadius: 24));
+      app.seedSettings(AppSettings(cornerRadius: CornerRadius.extraLarge));
       final theme = (await pumpApp(tester)).theme!;
 
+      final corners = BorderRadius.circular(CornerRadius.extraLarge.radius);
       expect(
         (theme.dialogTheme.shape as RoundedRectangleBorder).borderRadius,
-        BorderRadius.circular(24),
+        corners,
       );
       expect(
         (theme.inputDecorationTheme.border as OutlineInputBorder).borderRadius,
-        BorderRadius.circular(24),
+        corners,
       );
     });
 
@@ -200,7 +198,7 @@ void main() {
 
       await tapChoice(tester, "Corners", "20");
 
-      expect(AppSettings.load(app.config).cornerRadius, 20);
+      expect(AppSettings.load(app.config).cornerRadius, CornerRadius.largeIncreased);
     });
   });
 
@@ -276,12 +274,12 @@ void main() {
 
     test("a colour or a radius this build does not offer falls back", () async {
       await app.config.documents.write(app.config.settingsFile,
-          '{"primaryColour":"chartreuse","secondaryColour":"teal","cornerRadius":7}');
+          '{"primaryColour":"chartreuse","secondaryColour":"teal","cornerRadius":"sharp"}');
 
       final saved = AppSettings.load(app.config);
       expect(saved.primaryColour, ThemeColour.indigo);
       expect(saved.secondaryColour, ThemeColour.teal);
-      expect(saved.cornerRadius, defaultCornerRadius);
+      expect(saved.cornerRadius, CornerRadius.medium);
     });
   });
 }

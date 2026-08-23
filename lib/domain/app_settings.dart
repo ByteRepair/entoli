@@ -29,7 +29,7 @@ class AppSettings {
     this.appTheme = AppTheme.system,
     this.primaryColour = ThemeColour.indigo,
     this.secondaryColour = ThemeColour.indigo,
-    this.cornerRadius = defaultCornerRadius,
+    this.cornerRadius = CornerRadius.medium,
     this.systemPalette = false,
     this.tempChatTtl = TempChatTtl.off,
     this.voiceRecognitionModelId,
@@ -91,13 +91,13 @@ class AppSettings {
   ThemeColour primaryColour;
   ThemeColour secondaryColour;
 
-  /// How round every corner the app draws is, in logical pixels. One of
-  /// [cornerRadii].
-  double cornerRadius;
+  /// How round the corners the theme rounds are — fields, dialogs, menus,
+  /// sheets and buttons.
+  CornerRadius cornerRadius;
 
   /// Whether the palette comes from the system instead of the two colours
   /// above — Android's Material 3 Expressive, which follows the wallpaper.
-  /// Ignored where the platform has no accent to give — see `SystemPalette`.
+  /// Ignored where the platform has no accent to give.
   bool systemPalette;
 
   /// How long a temporary chat lives once its TTL is enabled. App-level
@@ -203,7 +203,7 @@ class AppSettings {
         appTheme: AppTheme.fromName(json["appTheme"] as String?),
         primaryColour: ThemeColour.fromName(json["primaryColour"] as String?),
         secondaryColour: ThemeColour.fromName(json["secondaryColour"] as String?),
-        cornerRadius: cornerRadiusFrom(json["cornerRadius"]),
+        cornerRadius: CornerRadius.fromName(json["cornerRadius"] as String?),
         systemPalette: json["systemPalette"] as bool? ?? false,
         tempChatTtl: TempChatTtl.fromName(json["tempChatTtl"] as String?),
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
@@ -306,8 +306,8 @@ class AppSettings {
       "appTheme": appTheme.name,
       "primaryColour": primaryColour.name,
       "secondaryColour": secondaryColour.name,
-      "cornerRadius": cornerRadius,
-      if (systemPalette) "systemPalette": systemPalette,
+      "cornerRadius": cornerRadius.name,
+      "systemPalette": systemPalette,
       "tempChatTtl": tempChatTtl.name,
       if (voiceRecognitionModelId != null)
         "voiceRecognitionModelId": voiceRecognitionModelId,

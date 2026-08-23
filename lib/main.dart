@@ -60,9 +60,7 @@ class AppSession {
     // Started with them and awaited below: an asset read off a disk, or a fetch
     // in a browser, and nothing between wants it.
     final version = platform.appVersion();
-    // And one more, awaited at the container: the colour the system is themed
-    // to, which the palette follows when the user asked it to.
-    final accent = const SystemAccent().accent();
+    final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
@@ -295,30 +293,16 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
 
   @override
   Widget build(BuildContext context) {
-    // A record of the five fields the look is built from rather than the
-    // settings object: without the `select`, adding a provider or editing an
-    // environment variable would rebuild the whole app under the user.
-    final look = ref.watch(appSettingsProvider.select((s) => (
-          mode: s.appTheme.mode,
-          primary: s.primaryColour,
-          secondary: s.secondaryColour,
-          radius: s.cornerRadius,
-          system: s.systemPalette,
-        )));
-    // The system's palette is one seed, the way Android derives its own from
-    // the wallpaper — so with it on there is no secondary to pick either.
-    final accent = look.system ? ref.watch(systemAccentProvider) : null;
-    ThemeData themed(Brightness brightness) => entoliTheme(
-          brightness,
-          primary: accent == null ? look.primary.colour : Color(accent),
-          secondary: accent == null ? look.secondary.colour : null,
-          radius: look.radius,
-        );
+    // Both narrowed rather than the settings object: without the `select`,
+    // adding a provider or editing an environment variable would rebuild the
+    // whole app under the user.
+    final mode = ref.watch(appSettingsProvider.select((s) => s.appTheme.mode));
+    final look = ref.watch(appLookProvider);
     return MaterialApp(
       title: appTitle,
-      theme: themed(Brightness.light),
-      darkTheme: themed(Brightness.dark),
-      themeMode: look.mode,
+      theme: entoliTheme(Brightness.light, look),
+      darkTheme: entoliTheme(Brightness.dark, look),
+      themeMode: mode,
       // All three wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a

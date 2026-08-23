@@ -1,3 +1,9 @@
+/// The indigo the app's icon sits on, and the seed of the palette it has by
+/// default. Here rather than beside `entoliIndigo`, which is this number as a
+/// `Color`: a const one cannot be built from an enum's field, so one of the two
+/// has to be the literal and the layer that has no `Color` is it.
+const entoliIndigoArgb = 0xFF4F46E5;
+
 /// A colour the palette is seeded from, offered for the primary and the
 /// secondary alike. Declaration order is the order the settings page draws
 /// them in, and [indigo] — the app's own — is first because it is the default.
@@ -6,7 +12,7 @@
 /// `ThemeMode`: nothing in `domain/` takes a UI dependency. `ui/theme.dart`
 /// maps one to the other.
 enum ThemeColour {
-  indigo("Indigo", 0xFF4F46E5),
+  indigo("Indigo", entoliIndigoArgb),
   violet("Violet", 0xFF7C3AED),
   blue("Blue", 0xFF2563EB),
   teal("Teal", 0xFF0D9488),

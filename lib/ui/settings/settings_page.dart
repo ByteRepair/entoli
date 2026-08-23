@@ -220,10 +220,9 @@ class _AppearanceSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
+    final notifier = ref.read(appSettingsProvider.notifier);
     final switchesLauncher = ref.watch(launcherIconsProvider).available;
-    // No accent is a platform with no palette of its own to follow, so the
-    // switch is not drawn rather than drawn dead.
-    final followsSystem = ref.watch(systemAccentProvider) != null;
+    final hasSystemPalette = ref.watch(systemAccentProvider) != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -244,11 +243,10 @@ class _AppearanceSection extends ConsumerWidget {
                 ButtonSegment(value: theme, label: Text(theme.label)),
             ],
             selected: {settings.appTheme},
-            onSelectionChanged: (picked) =>
-                ref.read(appSettingsProvider.notifier).setAppTheme(picked.first),
+            onSelectionChanged: (picked) => notifier.setAppTheme(picked.first),
           ),
         ),
-        if (followsSystem)
+        if (hasSystemPalette)
           SwitchListTile(
             title: const Text("Material 3 Expressive"),
             subtitle: const Text(
@@ -256,85 +254,78 @@ class _AppearanceSection extends ConsumerWidget {
                 "the app follows the wallpaper the way the rest of the phone "
                 "does."),
             value: settings.systemPalette,
-            onChanged: ref.read(appSettingsProvider.notifier).setSystemPalette,
+            onChanged: notifier.setSystemPalette,
           ),
-        // Nothing to pick while the system is picking: one accent is the seed
-        // of the whole palette, secondary included.
-        if (!(followsSystem && settings.systemPalette)) ...[
-          LabelledField(
+        // One accent is the seed of the whole palette, secondary included, so
+        // while the system is picking there is nothing here to pick.
+        if (ref.watch(paletteAccentProvider) == null) ...[
+          _ChoiceRow(
             label: "Primary colour",
-            child: _ColourChoices(
-              selected: settings.primaryColour,
-              onPick: ref.read(appSettingsProvider.notifier).setPrimaryColour,
-            ),
+            children: [
+              for (final colour in ThemeColour.values)
+                _ColourChoice(
+                  colour: colour,
+                  selected: colour == settings.primaryColour,
+                  onTap: () => notifier.setPrimaryColour(colour),
+                ),
+            ],
           ),
-          LabelledField(
+          _ChoiceRow(
             label: "Secondary colour",
-            child: _ColourChoices(
-              selected: settings.secondaryColour,
-              onPick: ref.read(appSettingsProvider.notifier).setSecondaryColour,
-            ),
+            children: [
+              for (final colour in ThemeColour.values)
+                _ColourChoice(
+                  colour: colour,
+                  selected: colour == settings.secondaryColour,
+                  onTap: () => notifier.setSecondaryColour(colour),
+                ),
+            ],
           ),
         ],
-        LabelledField(
+        _ChoiceRow(
           label: "Corners",
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final radius in cornerRadii)
-                _CornerChoice(
-                  radius: radius,
-                  selected: radius == settings.cornerRadius,
-                  onTap: () =>
-                      ref.read(appSettingsProvider.notifier).setCornerRadius(radius),
-                ),
-            ],
-          ),
+          children: [
+            for (final corner in CornerRadius.values)
+              _CornerChoice(
+                corner: corner,
+                selected: corner == settings.cornerRadius,
+                onTap: () => notifier.setCornerRadius(corner),
+              ),
+          ],
         ),
-        LabelledField(
+        _ChoiceRow(
           label: "Icon",
-          child: Row(
-            spacing: 12,
-            children: [
-              for (final icon in AppIcon.values)
-                _IconChoice(
-                  icon: icon,
-                  selected: icon == settings.appIcon,
-                  onTap: () =>
-                      ref.read(appSettingsProvider.notifier).setAppIcon(icon),
-                ),
-            ],
-          ),
+          children: [
+            for (final icon in AppIcon.values)
+              _IconChoice(
+                icon: icon,
+                selected: icon == settings.appIcon,
+                onTap: () => notifier.setAppIcon(icon),
+              ),
+          ],
         ),
       ],
     );
   }
 }
 
-/// The eight seeds, as the colours themselves: a swatch says what it does and
-/// a name in a dropdown would not.
-class _ColourChoices extends StatelessWidget {
-  const _ColourChoices({required this.selected, required this.onPick});
+/// A labelled row of choices, wrapping where the window is too narrow for all
+/// of them.
+class _ChoiceRow extends StatelessWidget {
+  const _ChoiceRow({required this.label, required this.children});
 
-  final ThemeColour selected;
-  final void Function(ThemeColour) onPick;
+  final String label;
+  final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (final colour in ThemeColour.values)
-            _ColourChoice(
-              colour: colour,
-              selected: colour == selected,
-              onTap: () => onPick(colour),
-            ),
-        ],
+  Widget build(BuildContext context) => LabelledField(
+        label: label,
+        child: Wrap(spacing: 12, runSpacing: 12, children: children),
       );
 }
 
+/// The eight seeds, as the colours themselves: a swatch says what it does and
+/// a name in a dropdown would not.
 class _ColourChoice extends StatelessWidget {
   const _ColourChoice({
     required this.colour,
@@ -347,77 +338,112 @@ class _ColourChoice extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      selected: selected,
-      button: true,
-      label: colour.label,
-      child: Tooltip(
-        message: colour.label,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: colour.colour,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: selected ? scheme.onSurface : scheme.outlineVariant,
-                width: selected ? 3 : 1,
-              ),
-            ),
-            // Against the swatch rather than the surface: the tick sits on the
-            // colour itself, and half of the eight are dark.
-            child: selected
-                ? const Icon(Icons.check, size: 18, color: Colors.white)
-                : null,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _Choice(
+        tooltip: colour.label,
+        label: colour.label,
+        selected: selected,
+        onTap: onTap,
+        fill: colour.colour,
+        width: 40,
+        height: 40,
+        // The tick sits on the swatch rather than on the surface, so it is read
+        // against the colour it is marking.
+        child: selected
+            ? Icon(Icons.check,
+                size: 18,
+                color: ThemeData.estimateBrightnessForColor(colour.colour) ==
+                        Brightness.dark
+                    ? Colors.white
+                    : Colors.black)
+            : null,
+      );
 }
 
-/// A radius drawn at its own radius. The number is in the tooltip, since what
-/// the choice is about is the shape.
+/// A corner drawn at its own radius, which is the whole of what the choice is.
 class _CornerChoice extends StatelessWidget {
   const _CornerChoice({
-    required this.radius,
+    required this.corner,
     required this.selected,
     required this.onTap,
   });
 
-  final double radius;
+  final CornerRadius corner;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final pixels = "${corner.radius.round()}";
+    return _Choice(
+      tooltip: pixels,
+      label: pixels,
+      selected: selected,
+      onTap: onTap,
+      corners: BorderRadius.circular(corner.radius),
+      fill: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
+      width: 44,
+      height: 44,
+    );
+  }
+}
+
+/// One of a row of things to pick: a swatch, a corner, an app icon. A [corners]
+/// of null is a circle. The ring the selected one wears is here rather than at
+/// each of the three, which is what keeps them the same ring.
+class _Choice extends StatelessWidget {
+  const _Choice({
+    required this.tooltip,
+    required this.selected,
+    required this.onTap,
+    this.label,
+    this.corners,
+    this.fill,
+    this.width,
+    this.height,
+    this.padding,
+    this.child,
+  });
+
+  final String tooltip;
+  final bool selected;
+  final VoidCallback onTap;
+
+  /// What a reader is told, where the choice draws no text of its own.
+  final String? label;
+  final BorderRadius? corners;
+  final Color? fill;
+  final double? width;
+  final double? height;
+  final EdgeInsets? padding;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final corners = BorderRadius.circular(radius);
     return Semantics(
       selected: selected,
       button: true,
-      label: "${radius.round()}",
+      label: label,
       child: Tooltip(
-        message: "${radius.round()}",
+        message: tooltip,
         child: InkWell(
           onTap: onTap,
           borderRadius: corners,
+          customBorder: corners == null ? const CircleBorder() : null,
           child: Container(
-            width: 44,
-            height: 44,
+            width: width,
+            height: height,
+            padding: padding,
             decoration: BoxDecoration(
+              color: fill,
+              shape: corners == null ? BoxShape.circle : BoxShape.rectangle,
               borderRadius: corners,
-              color: selected ? scheme.secondaryContainer : null,
               border: Border.all(
                 color: selected ? scheme.primary : scheme.outlineVariant,
                 width: selected ? 2 : 1,
               ),
             ),
+            child: child,
           ),
         ),
       ),
@@ -541,38 +567,21 @@ class _IconChoice extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: Tooltip(
-        message: icon.description,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            width: 104,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
-                width: selected ? 2 : 1,
-              ),
-            ),
-            child: Column(
-              children: [
-                AppIconImage(icon, size: 48),
-                const SizedBox(height: 10),
-                Text(icon.label, style: theme.textTheme.labelLarge),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) => _Choice(
+        tooltip: icon.description,
+        selected: selected,
+        onTap: onTap,
+        corners: BorderRadius.circular(16),
+        width: 104,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Column(
+          children: [
+            AppIconImage(icon, size: 48),
+            const SizedBox(height: 10),
+            Text(icon.label, style: Theme.of(context).textTheme.labelLarge),
+          ],
         ),
-      ),
-    );
-  }
+      );
 }
 
 /// What a new chat gets. A live reference, not a snapshot: retargeting it

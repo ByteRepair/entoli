@@ -16,6 +16,7 @@ import "domain/attachment_picker.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
 import "domain/chat_repository.dart";
+import "domain/corner_radius.dart";
 import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
@@ -345,8 +346,8 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSecondaryColour(ThemeColour colour) =>
       _update((s) => s.secondaryColour = colour);
 
-  Future<void> setCornerRadius(double radius) =>
-      _update((s) => s.cornerRadius = radius);
+  Future<void> setCornerRadius(CornerRadius corner) =>
+      _update((s) => s.cornerRadius = corner);
 
   /// Whether the palette follows the system's. The two colours are left where
   /// they were, so turning it off again returns to what was picked.
@@ -455,6 +456,14 @@ final launcherIconsProvider =
 /// Expressive switch off the settings page — so the default here is every
 /// platform but a recent Android.
 final systemAccentProvider = Provider<int?>((ref) => null);
+
+/// The accent the palette is actually built from: the system's, where it has
+/// one and the user asked for it. Null is the two colours the settings page
+/// offers instead, and is what draws them.
+final paletteAccentProvider = Provider<int?>((ref) =>
+    ref.watch(appSettingsProvider.select((s) => s.systemPalette))
+        ? ref.watch(systemAccentProvider)
+        : null);
 
 final linkOpenerProvider =
     Provider<LinkOpener>((ref) => throw UnimplementedError());

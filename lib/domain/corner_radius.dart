@@ -1,13 +1,24 @@
-/// The corner radii the settings page offers, in the order it draws them. One
-/// number rounds every corner the app draws — see "The theme".
-const cornerRadii = [0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 28.0];
+/// How round every corner the theme rounds is. Declaration order is the order
+/// the settings page draws them in.
+///
+/// Named after Material's shape scale, which is where the numbers come from —
+/// `medium` is the radius a card had before any of this was a setting.
+enum CornerRadius {
+  none(0),
+  extraSmall(4),
+  small(8),
+  medium(12),
+  large(16),
+  largeIncreased(20),
+  extraLarge(28),
+  extraLargeIncreased(32);
 
-/// Material's own card radius, and so the middle of the row.
-const defaultCornerRadius = 12.0;
+  const CornerRadius(this.radius);
 
-/// A radius this build does not offer is a file written by a later one, so it
-/// falls back rather than theming the app to a corner no chip is selected for.
-double cornerRadiusFrom(Object? value) {
-  final radius = value is num ? value.toDouble() : null;
-  return cornerRadii.contains(radius) ? radius! : defaultCornerRadius;
+  final double radius;
+
+  /// An unknown name is a file written by a later build, so it falls back
+  /// rather than failing the whole settings load.
+  static CornerRadius fromName(String? name) =>
+      values.firstWhere((corner) => corner.name == name, orElse: () => medium);
 }
