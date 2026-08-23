@@ -120,7 +120,7 @@ void main() {
       app = appWith(online: false);
       await openMirror(tester);
 
-      expect(find.byType(OfflineBanner), findsOneWidget);
+      expect(find.byType(MirrorStrip), findsOneWidget);
       expect(find.text("Desktop is offline"), findsOneWidget);
       expect(find.text("Offline — showing what this device last had"),
           findsOneWidget);
@@ -132,7 +132,7 @@ void main() {
       app = appWith(online: true);
       await openMirror(tester);
 
-      expect(find.byType(OfflineBanner), findsNothing);
+      expect(find.byType(MirrorStrip), findsNothing);
     });
   });
 
@@ -197,7 +197,7 @@ void main() {
       );
       app.container.read(selectedChatIdProvider.notifier).select(chatId);
       await app.pump(tester, const ChatPage(), settle: false);
-      await pumpUntil(tester, find.byType(InControlBar));
+      await pumpUntil(tester, find.byType(MirrorStrip));
       // A running turn ends in a caret, which never comes to rest.
       if (!running) await settleIo(tester);
     }

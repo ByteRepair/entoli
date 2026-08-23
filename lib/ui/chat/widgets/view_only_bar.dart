@@ -76,82 +76,57 @@ class ViewOnlyBar extends StatelessWidget {
   }
 }
 
-/// The strip over a chat this device is driving from afar. It is the one
-/// thing on the page that says the commands are running somewhere else, which
-/// is the whole difference between this and a chat of one's own.
-class InControlBar extends StatelessWidget {
-  const InControlBar({
+/// The strip a mirrored chat floats over its conversation: the one thing on
+/// the page that says the chat belongs somewhere else. Over rather than
+/// above, because the point of keeping a stale snapshot is that it stays
+/// readable — and the two states it has are the same shape, so they are one
+/// widget with two sets of colours.
+class MirrorStrip extends StatelessWidget {
+  /// This device is driving. The commands are still the home device's.
+  const MirrorStrip.inControl({
     super.key,
     required this.deviceName,
     required this.onRelease,
-  });
+  })  : offline = false;
+
+  /// The home device has gone. Nothing here is moving any more.
+  const MirrorStrip.offline({super.key, required this.deviceName})
+      : offline = true,
+        onRelease = null;
 
   final String deviceName;
-  final VoidCallback onRelease;
+  final bool offline;
+  final VoidCallback? onRelease;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final on = offline ? scheme.onErrorContainer : scheme.onPrimaryContainer;
     return Material(
-      color: theme.colorScheme.primaryContainer,
+      color: offline ? scheme.errorContainer : scheme.primaryContainer,
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+          padding: EdgeInsets.fromLTRB(16, offline ? 8 : 4, offline ? 16 : 8,
+              offline ? 8 : 4),
           child: Row(
             children: [
-              Icon(Icons.play_circle_outline,
-                  size: 16, color: theme.colorScheme.onPrimaryContainer),
+              Icon(
+                  offline ? Icons.wifi_off_outlined : Icons.play_circle_outline,
+                  size: 16,
+                  color: on),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  "Running on $deviceName",
-                  style: TextStyle(
-                      color: theme.colorScheme.onPrimaryContainer, fontSize: 13),
+                  offline
+                      ? "$deviceName is offline"
+                      : "Running on $deviceName",
+                  style: TextStyle(color: on, fontSize: 13),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              TextButton(
-                onPressed: onRelease,
-                child: const Text("Hand back"),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The banner over a mirrored chat whose home device has gone away. Floating
-/// over the conversation rather than displacing it: the point of keeping the
-/// snapshot is that it stays readable.
-class OfflineBanner extends StatelessWidget {
-  const OfflineBanner({super.key, required this.deviceName});
-
-  final String deviceName;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.errorContainer,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.wifi_off_outlined,
-                  size: 16, color: theme.colorScheme.onErrorContainer),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  "$deviceName is offline",
-                  style: TextStyle(
-                      color: theme.colorScheme.onErrorContainer, fontSize: 13),
-                ),
-              ),
+              if (onRelease != null)
+                TextButton(onPressed: onRelease, child: const Text("Hand back")),
             ],
           ),
         ),

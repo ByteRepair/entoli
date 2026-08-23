@@ -9,7 +9,6 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/models.dart";
-import "package:agent_chat/domain/secret_store.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
@@ -19,7 +18,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:flutter_test/flutter_test.dart";
 
-import "../../fakes.dart" show FakeBackend, FakeChatStore;
+import "../../fakes.dart"
+    show FakeBackend, FakeChatStore, FakeDeviceRegistry;
+import "../../harness.dart" show testSyncHub;
 
 /// Two real SyncHubs over a loopback channel pair — everything from the
 /// handshake up runs for real; only the transport under the data channel is
@@ -235,6 +236,19 @@ void main() {
         ["m1", "r1"]);
   });
 
+  test("a chat made after pairing appears in the mirror's list", () async {
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    await eventually(() => away.hub.peers.value.isNotEmpty);
+
+    final state = _seedChat(home);
+    await home.repo.saveState(state);
+    await eventually(() =>
+        away.hub.remotes.value.any((e) => e.chatId == state.id));
+
+    expect(away.hub.remotes.value.single.state.title, "Home chat");
+  });
+
   test("mirrored bytes are dropped with the mirror they belong to", () async {
     final state = _seedChat(home);
     final links = loopbackPair();
@@ -440,7 +454,6 @@ class _Turns implements RemoteTurns {
   final aborted = <String>[];
   final approved = <(String, String, bool)>[];
   final answered = <(String, String, List<String?>)>[];
-  final holds = <(String, bool)>[];
 
   @override
   void prompt(String chatId, String text) => prompts.add((chatId, text));
@@ -458,9 +471,6 @@ class _Turns implements RemoteTurns {
   @override
   void answer(String chatId, String requestId, List<String?> answers) =>
       answered.add((chatId, requestId, answers));
-
-  @override
-  void hold(String chatId, bool held) => holds.add((chatId, held));
 }
 
 class _Device {
@@ -468,19 +478,12 @@ class _Device {
 
   static Future<_Device> create(String dir) async {
     final config = await AppConfig.load(fileSystemIo, dir);
-    final identity = await SyncIdentity.load(_MemorySecrets());
-    final registry = _MemoryRegistry();
+    final registry = FakeDeviceRegistry();
     final store = FakeChatStore();
     final repo = ChatRepository(store, FakeBackend(), AppSettings.new, config);
-    final hub = SyncHub(
-      identity: identity,
-      registry: registry,
-      config: config,
-      settings: AppSettings.new,
-      lanSignaling: () => null,
-    );
+    final hub = await testSyncHub(config, devices: registry);
     hub.attach(repo);
-    return _Device(identity, hub, registry, store, repo);
+    return _Device(hub.identity, hub, registry, store, repo);
   }
 
   final SyncIdentity identity;
@@ -533,49 +536,6 @@ class _Loopback implements ByteChannel {
     _closed = true;
     await _incoming.close();
   }
-}
-
-class _MemorySecrets implements SecretStore {
-  final _items = <String, Uint8List>{};
-
-  @override
-  Future<Uint8List?> read(String key) async => _items[key];
-
-  @override
-  Future<void> write(String key, Uint8List value) async => _items[key] = value;
-
-  @override
-  Future<void> delete(String key) async => _items.remove(key);
-
-  @override
-  bool get encrypted => false;
-}
-
-class _MemoryRegistry implements DeviceRegistry {
-  final _devices = <String, PairedDevice>{};
-  final _secrets = <String, String>{};
-
-  @override
-  Future<List<PairedDevice>> list() async => _devices.values.toList();
-
-  @override
-  Future<PairedDevice?> byId(String id) async => _devices[id];
-
-  @override
-  Future<void> add(PairedDevice device) async => _devices[device.id] = device;
-
-  @override
-  Future<void> remove(String id) async => _devices.remove(id);
-
-  @override
-  Future<void> markSeen(String id, {String? address}) async {}
-
-  @override
-  Future<String?> pairingSecret(String id) async => _secrets[id];
-
-  @override
-  Future<void> setPairingSecret(String id, String secret) async =>
-      _secrets[id] = secret;
 }
 
 Future<void> eventually(bool Function() done,

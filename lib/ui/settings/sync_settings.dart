@@ -1,13 +1,14 @@
 import "dart:async";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/sync/sync_hub.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/sync/devices.dart";
 import "../../providers.dart";
+import "../widgets/busy.dart";
+import "../widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
@@ -323,25 +324,15 @@ class _PairedDeviceRow extends StatelessWidget {
       };
 
   Future<void> _confirmRevoke(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Revoke device?"),
-        content: Text("Unpair from ${device.name}? They will keep this "
-            "device until someone revokes there too."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Revoke"),
-          ),
-        ],
-      ),
+    final ok = await confirm(
+      context,
+      title: "Revoke device?",
+      message: "Unpair from ${device.name}? They will keep this device until "
+          "someone revokes there too.",
+      confirmLabel: "Revoke",
+      destructive: true,
     );
-    if (ok == true) await onRevoke();
+    if (ok) await onRevoke();
   }
 }
 
@@ -357,11 +348,12 @@ class _PairingControls extends ConsumerStatefulWidget {
 
 class _PairingControlsState extends ConsumerState<_PairingControls> {
   final _joinController = TextEditingController();
-  bool _busy = false;
+  final _busy = ValueNotifier(false);
 
   @override
   void dispose() {
     _joinController.dispose();
+    _busy.dispose();
     super.dispose();
   }
 
@@ -380,40 +372,48 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
                   "from another device.",
         ),
         if (pairing == null) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
+          ValueListenableBuilder<bool>(
+            valueListenable: _busy,
+            builder: (context, busy, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FilledButton(
-                  onPressed: _busy ? null : _openWindow,
-                  child: const Text("Open pairing window"),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: _busy ? null : _createInvite,
-                  child: const Text("Manual invite"),
-                ),
-              ],
-            ),
-          ),
-          LabelledField(
-            label: "Or paste a pairing code",
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _joinController,
-                    decoration: const InputDecoration(
-                      hintText: "entoli-pair:…",
-                      isDense: true,
-                    ),
-                    onFieldSubmitted: (_) => _join(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      FilledButton(
+                        onPressed: busy ? null : _openWindow,
+                        child: const Text("Open pairing window"),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.tonal(
+                        onPressed: busy ? null : _createInvite,
+                        child: const Text("Manual invite"),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _busy ? null : _join,
-                  child: const Text("Pair"),
+                LabelledField(
+                  label: "Or paste a pairing code",
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _joinController,
+                          decoration: const InputDecoration(
+                            hintText: "entoli-pair:…",
+                            isDense: true,
+                          ),
+                          onFieldSubmitted: (_) => _join(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: busy ? null : _join,
+                        child: const Text("Pair"),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -425,54 +425,23 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
     );
   }
 
-  Future<void> _openWindow() async {
-    setState(() => _busy = true);
-    try {
-      await widget.hub.startPairingWindow();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
-    }
-    if (mounted) setState(() => _busy = false);
-  }
+  Future<void> _openWindow() =>
+      whileBusy(context, _busy, widget.hub.startPairingWindow);
 
-  Future<void> _createInvite() async {
-    setState(() => _busy = true);
-    try {
-      final blob = await widget.hub.createManualInvite();
-      if (mounted) {
-        await _showBlob(context, blob);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
-    }
-    if (mounted) setState(() => _busy = false);
-  }
+  Future<void> _createInvite() => whileBusy(context, _busy, () async {
+        final blob = await widget.hub.createManualInvite();
+        if (mounted) await _showBlob(context, blob);
+      });
 
-  Future<void> _join() async {
+  Future<void> _join() {
     final text = _joinController.text.trim();
-    if (text.isEmpty) return;
-    setState(() => _busy = true);
-    try {
+    if (text.isEmpty) return Future.value();
+    return whileBusy(context, _busy, () async {
       final reply = await widget.hub.pairWith(text);
       if (reply != null && mounted) {
         await _showBlob(context, reply, isAnswer: true);
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
-    }
-    if (mounted) setState(() => _busy = false);
+    });
   }
 
   Future<void> _showBlob(BuildContext context, String blob,
@@ -490,7 +459,7 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
         actions: [
           TextButton(
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: blob));
+              copyToClipboard(context, blob, said: "Pairing code copied");
               Navigator.pop(context);
             },
             child: const Text("Copy and close"),

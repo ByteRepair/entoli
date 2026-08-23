@@ -248,6 +248,9 @@ class ChatRepository {
   /// The chat's raw log, in order — what [openChat] replays and discards. The
   /// sync layer streams these to a mirror asking to follow from where it
   /// already is.
+  Future<ChatState?> loadState(String chatId) async =>
+      _isDraft(chatId) ? _draft!.state : _store.loadState(chatId);
+
   Future<List<ChatRecord>> readRecords(String chatId) =>
       _isDraft(chatId) ? Future.value(const []) : _store.readRecords(chatId);
 

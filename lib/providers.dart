@@ -1,5 +1,4 @@
-import "dart:typed_data";
-
+import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
@@ -455,37 +454,41 @@ final deviceRegistryProvider =
 
 final syncHubProvider = Provider<SyncHub>((ref) => throw UnimplementedError());
 
+/// One of the hub's `ValueNotifier`s, watchable. Riverpod has nothing that
+/// watches a listenable, so a listener bridges it; the subclasses below name
+/// which notifier and nothing else, which is also what lets a test override
+/// one without a hub to read.
+abstract class HubValue<T> extends Notifier<T> {
+  ValueListenable<T> of(SyncHub hub);
+
+  @override
+  T build() {
+    final source = of(ref.watch(syncHubProvider));
+    void changed() => state = source.value;
+    source.addListener(changed);
+    ref.onDispose(() => source.removeListener(changed));
+    return source.value;
+  }
+}
+
 /// The Remotes half of the sidebar: every mirrored chat with who owns it and
-/// whether the connection to them is up. Driven off the hub's notifier —
-/// Riverpod has no watch over a `ValueNotifier`, so a listener bridges it.
+/// whether the connection to them is up.
 ///
 /// Deliberately separate from [chatListProvider], which reads the local
 /// store and stays sync-unaware: two sources of truth, never merged.
-class RemoteChats extends Notifier<List<RemoteChatEntry>> {
+class RemoteChats extends HubValue<List<RemoteChatEntry>> {
   @override
-  List<RemoteChatEntry> build() {
-    final hub = ref.watch(syncHubProvider);
-    void changed() => state = hub.remotes.value;
-    hub.remotes.addListener(changed);
-    ref.onDispose(() => hub.remotes.removeListener(changed));
-    return hub.remotes.value;
-  }
+  ValueListenable<List<RemoteChatEntry>> of(SyncHub hub) => hub.remotes;
 }
 
 final remoteChatsProvider =
     NotifierProvider<RemoteChats, List<RemoteChatEntry>>(RemoteChats.new);
 
 /// The other direction: chats of *this* device a paired one is driving, by
-/// the name of the device driving them. Bridged the same way [RemoteChats] is.
-class DrivenChats extends Notifier<Map<String, String>> {
+/// the name of the device driving them.
+class DrivenChats extends HubValue<Map<String, String>> {
   @override
-  Map<String, String> build() {
-    final hub = ref.watch(syncHubProvider);
-    void changed() => state = hub.drivenChats.value;
-    hub.drivenChats.addListener(changed);
-    ref.onDispose(() => hub.drivenChats.removeListener(changed));
-    return hub.drivenChats.value;
-  }
+  ValueListenable<Map<String, String>> of(SyncHub hub) => hub.drivenChats;
 }
 
 final drivenChatsProvider =
@@ -562,14 +565,7 @@ final attachmentBytesProvider =
     FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>(
         (ref, key) async {
   if (ref.watch(isMirroredChatProvider(key.chatId))) {
-    final hub = ref.watch(syncHubProvider);
-    final cached = hub.byteCache.get(key.chatId, key.resource);
-    if (cached != null) return cached;
-    final bytes = await hub.fetchResource(key.chatId, key.resource);
-    if (bytes != null) {
-      hub.byteCache.put(key.chatId, key.resource, bytes);
-      return bytes;
-    }
+    return ref.watch(syncHubProvider).resourceBytes(key.chatId, key.resource);
   }
   return ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource);
 });

@@ -326,10 +326,15 @@ the approval banner — is the same widget at either end. One runs the turn; the
 other sends it to the device that will. See "Control, and driving a turn from
 the other end" for the lock and what refuses what.
 
-`ChatPage` branches on `isMirroredChatProvider` before anything else, because
-almost none of the local page applies: no expiry check, no chat settings, no
-edit or regenerate row, and nothing that would write to a disk this device does
-not have. What control changes is only whether the composer is drawn.
+`ChatPage` branches on `isMirroredChatProvider` before anything else, and the
+two arms meet again at `_page`: same bar, same centred column, same
+conversation. What differs is stated as arguments rather than as a second copy
+— `editing` is the controller the message row acts through and is null for a
+mirror, which takes the whole edit/regenerate/thread row out with it;
+`onOpenSettings` is null for the same reason; `banner` is the strip a mirror
+floats over the conversation, and `bottom` is a composer or a bar saying why
+there is none. Written out twice, the mirrored copy had already lost the jump
+button, the empty-chat starter and the running-turn spinner.
 
 ## The chat page
 

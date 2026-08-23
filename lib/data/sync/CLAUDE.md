@@ -113,6 +113,18 @@ each one out to the peers subscribed to that chat. Deletions reach every peer
 rather than only subscribers: one holding a mirror of something gone has to be
 told even if it never opened the records.
 
+`_onMirror` is the one door into a mirror: it looks the chat up, refuses a
+peer talking about one it is not the home device for, and notifies. An arm
+that did its own lookup could forget either. `_toSubscribers` is the same
+consolidation the other way — every serving-side message goes out through it,
+so no arm can forget the subscription check. The exception is a deletion,
+which reaches every peer rather than only subscribers.
+
+A chat created after the mirrors were told about the list would otherwise not
+appear until a reconnect, so `_announced` holds the ids last sent and a
+`StateChanged` naming one that is not in it re-sends the list. Ids rather than
+a re-read per event: `saveState` runs several times a turn.
+
 The mirroring side keeps `MirrorChat`s **in RAM only** — never under
 `<dataDir>`, so never in a backup, never in IndexedDB, and gone when the
 process is. That is what makes a mirror safe on a borrowed device, and it is
@@ -209,7 +221,10 @@ that and nothing else reads it.
 `TurnKeepAlive` is. It holds one `ChatController` open per **watched** chat —
 not per held one — because a mirror that is only reading still has to see a
 turn happening; that is what `SyncHub.servedChats` is for. Publishing is the
-same subscription's other half.
+same subscription's other half, and it is deduplicated: `ChatViewState` has no
+`==` and is replaced on every flush of a streaming reply, tens of times a
+second, while none of what `turnState` carries changes between them. The words
+themselves cross as records.
 
 `TurnDriver` is the interface the two controllers meet on, so `TurnSurface`,
 `TurnQuestions`, `Composer` and the approval banner are the same widgets at
@@ -269,8 +284,9 @@ one until somebody revokes there too.
 - **Web**: `FileSecretStore` in origin-scoped IndexedDB. The weakest of the
   three; the Sync page says so rather than pretending otherwise.
 
-`encrypted` says which a build got; the settings page warns on `false` and
-nothing else here cares, because every caller wants the same three verbs.
+`encrypted` says which a build got. Nothing reads it yet — the Sync page
+should say so on the web, where the keys sit in ordinary IndexedDB, and does
+not.
 
 ## Data dir layout
 

@@ -31,6 +31,13 @@ class RemoteTurnDriver implements RemoteTurns {
   final SyncHub _hub;
   final _watching = <String, ProviderSubscription<ChatViewState>>{};
 
+  /// What was last sent for each chat. `ChatViewState` has no `==` and is
+  /// replaced on every flush of a streaming reply — tens of times a second —
+  /// while none of what this message carries changes between them. The words
+  /// themselves reach the mirror as records; this is only the turn around
+  /// them.
+  final _published = <String, String>{};
+
   ChatController _of(String chatId) =>
       _ref.read(chatControllerProvider(chatId).notifier);
 
@@ -39,7 +46,9 @@ class RemoteTurnDriver implements RemoteTurns {
   void _served() {
     final served = _hub.servedChats.value;
     for (final chatId in _watching.keys.toList()) {
-      if (!served.contains(chatId)) _watching.remove(chatId)?.close();
+      if (served.contains(chatId)) continue;
+      _watching.remove(chatId)?.close();
+      _published.remove(chatId);
     }
     for (final chatId in served) {
       _watching.putIfAbsent(
@@ -53,22 +62,29 @@ class RemoteTurnDriver implements RemoteTurns {
     }
   }
 
-  void _publish(String chatId, ChatViewState view) => _hub.publishTurn(
-        chatId,
-        running: view.isRunning,
-        approvals: view.approvals,
-        asks: [
-          for (final asked in view.questions)
-            SyncAsk(id: asked.id, argumentsJson: asked.argumentsJson),
-        ],
-        status: view.status,
-        retry: view.retry,
-      );
-
-  /// Control changing is not what opens a controller — watching already did —
-  /// so there is nothing to do here beyond letting a lost lock be silent.
-  @override
-  void hold(String chatId, bool held) {}
+  void _publish(String chatId, ChatViewState view) {
+    final asks = [
+      for (final asked in view.questions)
+        SyncAsk(id: asked.id, argumentsJson: asked.argumentsJson),
+    ];
+    final signature = [
+      view.isRunning,
+      view.status,
+      view.retry,
+      [for (final a in view.approvals) a.id],
+      [for (final a in asks) a.id],
+    ].join("\u0000");
+    if (_published[chatId] == signature) return;
+    _published[chatId] = signature;
+    _hub.publishTurn(
+      chatId,
+      running: view.isRunning,
+      approvals: view.approvals,
+      asks: asks,
+      status: view.status,
+      retry: view.retry,
+    );
+  }
 
   @override
   void prompt(String chatId, String text) => _of(chatId).send(text);
@@ -94,6 +110,7 @@ class RemoteTurnDriver implements RemoteTurns {
       subscription.close();
     }
     _watching.clear();
+    _published.clear();
   }
 }
 

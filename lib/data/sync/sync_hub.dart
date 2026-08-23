@@ -122,10 +122,6 @@ abstract interface class RemoteTurns {
   void abort(String chatId);
   void approve(String chatId, String approvalId, bool allow);
   void answer(String chatId, String requestId, List<String?> answers);
-
-  /// A chat somebody else is now driving. The home device opens it so the
-  /// turn has a controller, and keeps it open until control is released.
-  void hold(String chatId, bool held);
 }
 
 /// What the sidebar's Remotes section draws: one remote chat with who owns
@@ -144,6 +140,21 @@ class RemoteChatEntry {
   final String deviceName;
   final ChatState state;
   final bool online;
+
+  /// By value, so a rebuild that produced the same rows is not a change. The
+  /// list is rebuilt from every message that touches a mirror, and without
+  /// this each ping-sized nudge repainted the sidebar and the open page.
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteChatEntry &&
+      other.chatId == chatId &&
+      other.deviceId == deviceId &&
+      other.deviceName == deviceName &&
+      other.online == online &&
+      other.state == state;
+
+  @override
+  int get hashCode => Object.hash(chatId, deviceId, deviceName, online, state);
 }
 
 /// Everything two Entolis do together before there are chats involved: find
@@ -257,11 +268,7 @@ class SyncHub {
 
   void _refreshServed() {
     final served = {for (final peer in _live.values) ...peer.subscriptions};
-    if (served.length == servedChats.value.length &&
-        served.containsAll(servedChats.value)) {
-      return;
-    }
-    servedChats.value = served;
+    if (!setEquals(served, servedChats.value)) servedChats.value = served;
   }
 
   MirrorChat? mirror(String chatId) => _mirrors[chatId];
@@ -304,6 +311,18 @@ class SyncHub {
     // No unsubscribe message: the home side drops a subscription when the
     // mirror vanishes from its welcome round-trip, and an unwatched stream
     // costs nothing until a turn runs in it.
+  }
+
+  /// An attachment of a mirrored chat: from the cache, or over the wire and
+  /// into it. The policy lives beside the cache rather than at the page that
+  /// draws the image, so a second caller cannot get the three steps wrong or
+  /// quietly bypass them.
+  Future<Uint8List?> resourceBytes(String chatId, String resource) async {
+    final cached = byteCache.get(chatId, resource);
+    if (cached != null) return cached;
+    final bytes = await fetchResource(chatId, resource);
+    if (bytes != null) byteCache.put(chatId, resource, bytes);
+    return bytes;
   }
 
   Future<Uint8List?> fetchResource(String chatId, String resource) async {
@@ -353,38 +372,27 @@ class SyncHub {
           :final records,
           :final totalLines
         ):
-        final existing = _mirrors[chatId];
-        if (existing == null || existing.peerId != peer.deviceId) break;
-        existing
-          ..state = state
-          ..meta = meta
-          ..totalLines = totalLines;
-        existing.records.addAll(records);
-        _mirrorUpdates.add(chatId);
+        _onMirror(peer, chatId, (mirror) {
+          mirror
+            ..state = state
+            ..meta = meta
+            ..totalLines = totalLines;
+          mirror.records.addAll(records);
+        });
       case SyncRecordAppend(:final chatId, :final records):
-        final existing = _mirrors[chatId];
-        if (existing == null || existing.peerId != peer.deviceId) break;
-        existing.records.addAll(records);
-        existing.totalLines += records.length;
-        _mirrorUpdates.add(chatId);
+        _onMirror(peer, chatId, (mirror) {
+          mirror.records.addAll(records);
+          mirror.totalLines += records.length;
+        });
       case SyncStateDiff(:final chatId, :final state):
-        final existing = _mirrors[chatId];
-        if (existing == null || existing.peerId != peer.deviceId) break;
-        existing.state = state;
-        _mirrorUpdates.add(chatId);
+        _onMirror(peer, chatId, (mirror) => mirror.state = state);
       case SyncMetaPatch(:final chatId, :final meta):
-        final existing = _mirrors[chatId];
-        if (existing == null || existing.peerId != peer.deviceId) break;
-        existing.meta = meta;
-        _mirrorUpdates.add(chatId);
+        _onMirror(peer, chatId, (mirror) => mirror.meta = meta);
       case SyncChatDeleted(:final chatId):
         _dropMirror(peer.deviceId, chatId);
       case SyncChatMoved(:final chatId, :final project):
-        final existing = _mirrors[chatId];
-        if (existing == null || existing.peerId != peer.deviceId) break;
-        existing.state =
-            existing.state.copyWith(project: project);
-        _mirrorUpdates.add(chatId);
+        _onMirror(peer, chatId,
+            (mirror) => mirror.state = mirror.state.copyWith(project: project));
       case SyncResourceRequest(:final id, :final chatId, :final resource):
         await _serveResource(peer, id, chatId, resource);
       case SyncResourceChunk(:final id, :final bytesB64, :final done):
@@ -416,10 +424,7 @@ class SyncHub {
 
       // -- mirroring: what the home device says about a chat we follow
       case SyncControlState(:final chatId, :final holder):
-        final existing = _mirrors[chatId];
-        if (existing == null || existing.peerId != peer.deviceId) break;
-        existing.controlHolder = holder;
-        _mirrorUpdates.add(chatId);
+        _onMirror(peer, chatId, (mirror) => mirror.controlHolder = holder);
       case SyncControlGrant(:final chatId, :final granted):
         // The state message that follows is what actually moves the holder;
         // a refusal is worth nothing more than dropping the asking flag.
@@ -433,17 +438,29 @@ class SyncHub {
           :final status,
           :final retry
         ):
-        final existing = _mirrors[chatId];
-        if (existing == null || existing.peerId != peer.deviceId) break;
-        existing
-          ..running = running
-          ..approvals = approvals
-          ..asks = asks
-          ..status = status
-          ..retry = retry;
-        _mirrorUpdates.add(chatId);
+        _onMirror(
+            peer,
+            chatId,
+            (mirror) => mirror
+              ..running = running
+              ..approvals = approvals
+              ..asks = asks
+              ..status = status
+              ..retry = retry);
     }
+  }
+
+  /// Apply [change] to the mirror [peer] is talking about, and tell whoever
+  /// is watching. The ownership check is here rather than in each arm: a peer
+  /// may only speak about the chats it is the home device for, and an arm
+  /// that forgot the check — or the notify — would be silently wrong.
+  void _onMirror(
+      _LivePeer peer, String chatId, void Function(MirrorChat mirror) change) {
+    final mirror = _mirrors[chatId];
+    if (mirror == null || mirror.peerId != peer.deviceId) return;
+    change(mirror);
     _rebuildRemotes();
+    _mirrorUpdates.add(chatId);
   }
 
   /// Whether [peer] is the device this chat's control was granted to. Every
@@ -481,6 +498,7 @@ class SyncHub {
     for (final id in _desired) {
       if (listed.containsKey(id)) _openOnPeer(peer, id);
     }
+    _rebuildRemotes();
   }
 
   void _openOnPeer(_LivePeer peer, String chatId) {
@@ -496,6 +514,7 @@ class SyncHub {
     _mirrors.remove(chatId);
     byteCache.drop(chatId);
     _requesting.remove(chatId);
+    _rebuildRemotes();
     _mirrorUpdates.add(chatId);
   }
 
@@ -508,10 +527,16 @@ class SyncHub {
       _LivePeer peer, String chatId, int fromLine) async {
     final repo = _repo;
     if (repo == null) return;
+    // Three independent reads, and the state one rather than `openChat`:
+    // that replays the whole log to build a `Chat` this throws away, having
+    // just read the same file again for the records it actually sends.
+    final (state, meta, records) = await (
+      repo.loadState(chatId),
+      repo.loadMeta(chatId),
+      repo.readRecords(chatId),
+    ).wait;
     try {
-      final chat = await repo.openChat(chatId);
-      final meta = await repo.loadMeta(chatId);
-      final records = await repo.readRecords(chatId);
+      if (state == null) throw StateError("no chat $chatId");
       peer.subscriptions.add(chatId);
       // Who holds it goes with the snapshot: a mirror that reconnects mid-
       // turn must not draw a Take control button for a chat it already has.
@@ -519,7 +544,7 @@ class SyncHub {
           SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
       await peer.send(SyncMessage.chatSnapshot(
         chatId: chatId,
-        state: chat.state,
+        state: state,
         meta: meta,
         records: fromLine < records.length
             ? records.sublist(fromLine)
@@ -540,38 +565,56 @@ class SyncHub {
   void _onRepoEvent(RepoEvent event) {
     switch (event) {
       case Appended(:final chatId, :final records):
-        for (final peer in _live.values) {
-          if (peer.subscriptions.contains(chatId)) {
-            unawaited(peer.send(SyncMessage.recordAppend(
-                chatId: chatId, records: records)));
-          }
-        }
+        _toSubscribers(chatId,
+            SyncMessage.recordAppend(chatId: chatId, records: records));
       case StateChanged(:final state):
-        for (final peer in _live.values) {
-          if (peer.subscriptions.contains(state.id)) {
-            unawaited(peer.send(SyncMessage.stateDiff(chatId: state.id, state: state)));
-          }
-        }
+        _toSubscribers(
+            state.id, SyncMessage.stateDiff(chatId: state.id, state: state));
+        // A chat nobody has been told about is a new one — its first save.
+        // The list goes out again so it appears in a mirror's Remotes rather
+        // than only after the next reconnect.
+        if (!_announced.contains(state.id)) unawaited(_announceChats());
       case MetaChanged(:final chatId, :final meta):
-        for (final peer in _live.values) {
-          if (peer.subscriptions.contains(chatId)) {
-            unawaited(peer.send(SyncMessage.metaPatch(chatId: chatId, meta: meta)));
-          }
-        }
+        _toSubscribers(
+            chatId, SyncMessage.metaPatch(chatId: chatId, meta: meta));
+      case Moved(:final chatId, :final project):
+        _toSubscribers(
+            chatId, SyncMessage.chatMoved(chatId: chatId, project: project));
       case Deleted(:final chatId):
+        // To everyone, not only subscribers: a peer holding a mirror of
+        // something gone has to be told even if it never opened the records.
         for (final peer in _live.values) {
           peer.subscriptions.remove(chatId);
           unawaited(peer.send(SyncMessage.chatDeleted(chatId: chatId)));
         }
         _control.remove(chatId);
+        _announced.remove(chatId);
         _refreshDriven();
         _refreshServed();
-      case Moved(:final chatId, :final project):
-        for (final peer in _live.values) {
-          if (peer.subscriptions.contains(chatId)) {
-            unawaited(peer.send(SyncMessage.chatMoved(chatId: chatId, project: project)));
-          }
-        }
+    }
+  }
+
+  /// Which of this device's chats the peers have been told about. Only so a
+  /// chat appearing can be noticed: the list is small, but reading it off
+  /// disk on every `saveState` of every turn would not be.
+  var _announced = <String>{};
+
+  Future<void> _announceChats() async {
+    final repo = _repo;
+    if (repo == null || _live.isEmpty) return;
+    final chats = await repo.listChats();
+    _announced = {for (final chat in chats) chat.id};
+    final message = SyncMessage.chatsChanged(chats: chats);
+    for (final peer in _live.values) {
+      unawaited(peer.send(message));
+    }
+  }
+
+  /// To every peer following [chatId]. The one shape every serving-side
+  /// message takes, so an arm cannot forget the subscription check.
+  void _toSubscribers(String chatId, SyncMessage message) {
+    for (final peer in _live.values) {
+      if (peer.subscriptions.contains(chatId)) unawaited(peer.send(message));
     }
   }
 
@@ -585,7 +628,6 @@ class SyncHub {
     final granted = held == null || held == peer.deviceId;
     if (granted) {
       _control[chatId] = peer.deviceId;
-      remoteTurns?.hold(chatId, true);
     }
     await peer.send(
         SyncMessage.controlGrant(chatId: chatId, granted: granted));
@@ -595,7 +637,6 @@ class SyncHub {
   Future<void> _serveControlRelease(_LivePeer peer, String chatId) async {
     if (_control[chatId] != peer.deviceId) return;
     _control.remove(chatId);
-    remoteTurns?.hold(chatId, false);
     _announceControl(chatId);
   }
 
@@ -603,11 +644,8 @@ class SyncHub {
   /// second mirror has to see that the first one took it.
   void _announceControl(String chatId) {
     _refreshDriven();
-    final message =
-        SyncMessage.controlState(chatId: chatId, holder: _control[chatId]);
-    for (final peer in _live.values) {
-      if (peer.subscriptions.contains(chatId)) unawaited(peer.send(message));
-    }
+    _toSubscribers(chatId,
+        SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
   }
 
   void _refreshDriven() => drivenChats.value = {
@@ -626,17 +664,16 @@ class SyncHub {
     String? status,
     String? retry,
   }) {
-    final message = SyncMessage.turnState(
-      chatId: chatId,
-      running: running,
-      approvals: approvals,
-      asks: asks,
-      status: status,
-      retry: retry,
-    );
-    for (final peer in _live.values) {
-      if (peer.subscriptions.contains(chatId)) unawaited(peer.send(message));
-    }
+    _toSubscribers(
+        chatId,
+        SyncMessage.turnState(
+          chatId: chatId,
+          running: running,
+          approvals: approvals,
+          asks: asks,
+          status: status,
+          retry: retry,
+        ));
   }
 
   /// Chats this device holds on a peer, asked for and not yet answered. Only
@@ -721,7 +758,8 @@ class SyncHub {
       final last = end >= bytes.length;
       await peer.send(SyncMessage.resourceChunk(
         id: id,
-        bytesB64: base64Encode(bytes.sublist(at, end)),
+        // A view rather than a copy: the chunk is encoded straight out of it.
+        bytesB64: base64Encode(Uint8List.sublistView(bytes, at, end)),
         done: last,
       ));
     }
@@ -735,8 +773,9 @@ class SyncHub {
       return;
     }
     transfer.buffer.add(base64Decode(bytesB64));
+    // `takeBytes` already hands back a Uint8List of exactly the right length.
     final bytes = transfer.buffer.takeBytes();
-    transfer.completer.complete(bytes.isEmpty ? null : Uint8List.fromList(bytes));
+    transfer.completer.complete(bytes.isEmpty ? null : bytes);
     _pendingResources.remove(id);
   }
 
@@ -766,7 +805,6 @@ class SyncHub {
     for (final entry in _control.entries.toList()) {
       if (entry.value != deviceId) continue;
       _control.remove(entry.key);
-      remoteTurns?.hold(entry.key, false);
       _announceControl(entry.key);
     }
     // Both directions: the chats this device served them, and the ones it
@@ -790,7 +828,7 @@ class SyncHub {
       .toList();
 
   void _rebuildRemotes() {
-    remotes.value = [
+    final next = [
       for (final mirror in _mirrors.values)
         RemoteChatEntry(
           chatId: mirror.state.id,
@@ -800,6 +838,7 @@ class SyncHub {
           online: _live.containsKey(mirror.peerId),
         ),
     ];
+    if (!listEquals(next, remotes.value)) remotes.value = next;
   }
 
   // ------------------------------------------------------------ lifecycle
@@ -932,6 +971,11 @@ class SyncHub {
         return null;
       case PairingOffer.offerKind:
         return _acceptManualInvite(offer);
+      case PairingOffer.answerKind:
+        // The other half of `createManualInvite`: this device made the offer
+        // and is being handed the reply, so there is nothing to send back.
+        await _completeManualPairing(offer);
+        return null;
       default:
         throw SignalingException(
             "that code asks for ${offer.kind}, not pairing");
@@ -957,14 +1001,6 @@ class SyncHub {
   /// The invited device's half: answer the invite and hand back what to
   /// paste into the inviting device. Connecting continues on its own; the
   /// reply reaching the inviter is what completes the pair.
-  Future<String> acceptManualInvite(String inviteText) async {
-    final invite = PairingOffer.decode(inviteText);
-    if (invite == null || invite.kind != PairingOffer.offerKind) {
-      throw const SignalingException("that is not an Entoli invite");
-    }
-    return _acceptManualInvite(invite);
-  }
-
   Future<String> _acceptManualInvite(PairingOffer invite) async {
     final link = await RtcLink.create(iceServers: iceServers());
     final answerSdp = await link.answer(invite.sdp);
@@ -985,11 +1021,7 @@ class SyncHub {
   }
 
   /// Takes the invited device's reply and finishes the pending invite.
-  Future<void> completeManualPairing(String answerText) async {
-    final answer = PairingOffer.decode(answerText);
-    if (answer == null || answer.kind != PairingOffer.answerKind) {
-      throw const SignalingException("that is not an Entoli answer");
-    }
+  Future<void> _completeManualPairing(PairingOffer answer) async {
     final pending = _pendingManual;
     if (pending == null) {
       throw const SignalingException("no invite waiting for an answer");
@@ -1359,12 +1391,12 @@ class SyncHub {
           publicKey: peer.publicKeyB64,
           addedAt: DateTime.now(),
         );
+        await registry.add(device);
         await registry.setPairingSecret(deviceId, psk);
       }
-      device
-        ..lastSeenAt = DateTime.now()
-        ..lastAddress = address ?? device.lastAddress;
-      await registry.add(device);
+      // The registry's own verb rather than the same two fields written here:
+      // when a device was last reached, and where, is what a registry is for.
+      await registry.markSeen(deviceId, address: address);
 
       _live[deviceId]?.close();
       _live[deviceId] = live;
@@ -1376,6 +1408,7 @@ class SyncHub {
       final repo = _repo;
       if (repo != null) {
         final chats = await repo.listChats();
+        _announced = {for (final chat in chats) chat.id};
         live.send(SyncMessage.welcome(chats: chats));
       }
 

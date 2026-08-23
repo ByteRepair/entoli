@@ -470,6 +470,9 @@ class FakeChatStore implements ChatStore {
   }
 
   @override
+  Future<ChatState?> loadState(String id) async => _states[id];
+
+  @override
   Future<List<ChatRecord>> readRecords(String chatId) async => records(chatId);
 
   @override
@@ -917,7 +920,12 @@ class FakeDeviceRegistry implements DeviceRegistry {
   Future<void> remove(String id) async => _devices.remove(id);
 
   @override
-  Future<void> markSeen(String id, {String? address}) async {}
+  Future<void> markSeen(String id, {String? address}) async {
+    final device = _devices[id];
+    if (device == null) return;
+    device.lastSeenAt = DateTime.now();
+    if (address != null) device.lastAddress = address;
+  }
 
   @override
   Future<String?> pairingSecret(String id) async => _secrets[id];

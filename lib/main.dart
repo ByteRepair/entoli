@@ -12,7 +12,6 @@ import "core/platform/platform.dart" as platform;
 import "data/local/file_selector_picker.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
-import "domain/app_settings.dart";
 import "domain/app_restart.dart";
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
@@ -112,15 +111,14 @@ class AppSession {
     final secretStore = platform.createSecretStore(config);
     final identity = await SyncIdentity.load(secretStore);
     final registry = FileDeviceRegistry(config, secretStore);
-    var settingsContainer = <ProviderContainer>[];
+    // Assigned two statements down, and read only from a running app — the
+    // hub has to exist before the container that overrides its provider.
+    late final ProviderContainer settingsHome;
     final syncHub = SyncHub(
       identity: identity,
       registry: registry,
       config: config,
-      settings: () {
-        final c = settingsContainer.firstOrNull;
-        return c?.read(appSettingsProvider) ?? AppSettings();
-      },
+      settings: () => settingsHome.read(appSettingsProvider),
       lanSignaling: platform.createLanSignaling,
     );
     final container = ProviderContainer(
@@ -158,7 +156,7 @@ class AppSession {
     );
     // Arming reconnects for paired devices, so a desktop that has paired once
     // can be dialed again after a restart without opening a window first.
-    settingsContainer.add(container);
+    settingsHome = container;
     await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);

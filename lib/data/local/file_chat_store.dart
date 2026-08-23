@@ -141,13 +141,15 @@ class FileChatStore implements ChatStore {
   @override
   Future<Chat> load(String id) async {
     final project = await _projectOf(id);
-    final stateText = await _readOrNull(config.stateFile(id, project: project));
-    if (stateText == null) throw StateError("no chat $id");
-    final json = jsonDecode(stateText) as Map<String, dynamic>;
-    final state = ChatState.fromJson(json).copyWith(project: project);
+    final state = await _readState(id, project);
+    if (state == null) throw StateError("no chat $id");
     final text = await _readOrNull(config.convFile(id, project: project));
     return chatFrom(state, text == null ? const [] : decodeLog(text));
   }
+
+  @override
+  Future<ChatState?> loadState(String id) async =>
+      _readState(id, await _projectOf(id));
 
   @override
   Future<List<ChatRecord>> readRecords(String chatId) async {

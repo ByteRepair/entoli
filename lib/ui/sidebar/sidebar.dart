@@ -240,19 +240,7 @@ class _Remotes extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              "Remotes",
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
+        const Align(alignment: Alignment.centerLeft, child: _Heading("Remotes")),
         for (final entry in remotes)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
