@@ -18,33 +18,28 @@ void main(List<String> args) {
       stdout.writeln("entoli relay listening on ws://0.0.0.0:$port"));
 }
 
-class RelayServer {
-  // room -> role -> socket. Two roles per room is all the protocol has.
-  final _rooms = <String, Map<String, WebSocket>>{};
+/// One side of a room, as the forwarding sees it. A WebSocket in earnest.
+abstract interface class RelayPeer {
+  /// Everything that side sent, done when it goes away.
+  Stream<Object?> get incoming;
 
-  /// Binds and starts serving. Returns the server so a caller can find the
-  /// port it was given (pass 0 for one of the OS's) and close it again — the
-  /// tests run this exact class rather than a copy of it.
-  Future<HttpServer> start(int port, {InternetAddress? address}) async {
-    final server =
-        await HttpServer.bind(address ?? InternetAddress.anyIPv4, port);
-    server.listen((request) async {
-      if (WebSocketTransformer.isUpgradeRequest(request)) {
-        final socket = await WebSocketTransformer.upgrade(request);
-        _adopt(socket);
-      } else {
-        request.response.statusCode = HttpStatus.notFound;
-        await request.response.close();
-      }
-    }, onError: (_) {});
-    return server;
-  }
+  void send(String message);
 
-  void _adopt(WebSocket socket) {
+  void close();
+}
+
+/// Who is in which room, and what gets passed to whom — all of the relay that
+/// is worth checking, with no socket in it. The tests drive this directly
+/// rather than binding a port and dialling themselves through it.
+class RelayRooms {
+  // room -> role -> peer. Two roles per room is all the protocol has.
+  final _rooms = <String, Map<String, RelayPeer>>{};
+
+  void adopt(RelayPeer peer) {
     String? room;
     String? role;
 
-    socket.listen(
+    peer.incoming.listen(
       (data) {
         if (data is! String) return;
         if (room == null) {
@@ -54,24 +49,56 @@ class RelayServer {
             role = join["role"] as String?;
           } catch (_) {}
           if (room == null || !{"i", "j"}.contains(role)) {
-            socket.close();
+            peer.close();
             return;
           }
           // A reconnecting role replaces its predecessor rather than piling on.
-          _rooms.putIfAbsent(room!, () => {})[role!] = socket;
+          _rooms.putIfAbsent(room!, () => {})[role!] = peer;
           return;
         }
-        final peer = _rooms[room]?[role == "i" ? "j" : "i"];
-        peer?.add(data);
+        _rooms[room]?[role == "i" ? "j" : "i"]?.send(data);
       },
       onError: (_) {},
       onDone: () {
-        if (room != null && role != null) {
-          final occupants = _rooms[room];
-          if (occupants?[role] == socket) occupants?.remove(role);
-          if (occupants != null && occupants.isEmpty) _rooms.remove(room);
-        }
+        if (room == null || role == null) return;
+        final occupants = _rooms[room];
+        if (occupants?[role] == peer) occupants?.remove(role);
+        if (occupants != null && occupants.isEmpty) _rooms.remove(room);
       },
     );
   }
+}
+
+class RelayServer {
+  final rooms = RelayRooms();
+
+  /// Binds and starts serving. Returns the server so a caller can find the
+  /// port it was given and close it again.
+  Future<HttpServer> start(int port) async {
+    final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    server.listen((request) async {
+      if (WebSocketTransformer.isUpgradeRequest(request)) {
+        rooms.adopt(_SocketPeer(await WebSocketTransformer.upgrade(request)));
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      }
+    }, onError: (_) {});
+    return server;
+  }
+}
+
+class _SocketPeer implements RelayPeer {
+  _SocketPeer(this._socket);
+
+  final WebSocket _socket;
+
+  @override
+  Stream<Object?> get incoming => _socket;
+
+  @override
+  void send(String message) => _socket.add(message);
+
+  @override
+  void close() => _socket.close();
 }

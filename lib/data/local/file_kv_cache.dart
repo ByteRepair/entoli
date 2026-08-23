@@ -14,7 +14,7 @@ import "../../core/log.dart";
 /// name it writes. The server this drives is the same one a turn reaches; these
 /// are two more requests to it, at `/slots/0` rather than `/chat/completions`.
 class FileKvCache implements LocalKvCache {
-  FileKvCache(this._dir) {
+  FileKvCache(this._dir, {http.Client? client}) : _http = client ?? http.Client() {
     // The server is launched with this as its `--slot-save-path` and will not
     // create it, so it has to exist before the first turn. Android only and a
     // single `mkdir`, so synchronously at startup is cheaper than a guard on
@@ -23,7 +23,7 @@ class FileKvCache implements LocalKvCache {
   }
 
   final String _dir;
-  final _http = http.Client();
+  final http.Client _http;
 
   /// The longest key known to be in each endpoint's live slot, so a
   /// continuation is not made to restore what the running server already holds.

@@ -5,6 +5,7 @@ import "dart:isolate";
 import "package:archive/archive.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
+import "package:http/http.dart" as http;
 
 import "../download.dart";
 import "../../domain/download.dart";
@@ -17,7 +18,11 @@ import "../../domain/workspace.dart";
 /// `FileSystem` for the same reason `LocalShell` is: this side of the
 /// conditional import is the only one that has models at all.
 class FileVoiceModelStore extends VoiceModelStore {
-  FileVoiceModelStore(this.root);
+  FileVoiceModelStore(this.root, {this.client});
+
+  /// The client downloads go through. Injected only by the tests, which have
+  /// no socket to reach.
+  final http.Client? client;
 
   /// `<cacheDir>/models`. Holds `stt/` and `tts/` under it.
   final String root;
@@ -66,6 +71,7 @@ class FileVoiceModelStore extends VoiceModelStore {
   /// whole.
   @override
   Stream<DownloadProgress> install(VoiceModel model) => DownloadRun(
+        client: client,
         discard: () => delete(model),
         run: (run) async {
           // Whatever an earlier attempt left: partial files under a name we are

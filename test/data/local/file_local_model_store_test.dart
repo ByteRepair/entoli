@@ -7,42 +7,32 @@ import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
-/// Against a real socket, for the reason `file_rootfs_store_test.dart` is: what
-/// is worth pinning is the shape of what lands on disk — the marker that says a
-/// model is whole, and the nothing a cancelled or corrupted download leaves —
-/// and a faked client would only ever prove the fake.
+import "../fake_network.dart";
+
+/// For the reason `file_rootfs_store_test.dart` is: what is worth pinning is
+/// the shape of what lands on disk — the marker that says a model is whole,
+/// and the nothing a cancelled or corrupted download leaves. The network
+/// itself is [FakeNetwork], so a suite run binds no port.
 void main() {
   late Directory root;
-  late HttpServer server;
+  late FakeNetwork net;
   late List<int> weights;
-
-  /// Blocks the response until it is completed, so a test can cancel mid-flight.
-  Completer<void>? held;
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp("local-model-store");
-    held = null;
     weights = List.generate(4096, (i) => i % 256);
-
-    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    unawaited(server.forEach((request) async {
-      final body = request.uri.path == "/rubbish" ? List.filled(64, 7) : weights;
-      request.response.headers.contentType = ContentType.binary;
-      request.response.add(body.sublist(0, body.length ~/ 2));
-      await request.response.flush();
-      if (held != null) await held!.future;
-      request.response.add(body.sublist(body.length ~/ 2));
-      await request.response.close();
-    }));
+    net = FakeNetwork.inHalves({
+      "/model.gguf": weights,
+      "/rubbish": List.filled(64, 7),
+    });
   });
 
   tearDown(() async {
-    held?.complete();
-    await server.close(force: true);
+    net.hold?.complete();
     await root.delete(recursive: true);
   });
 
-  String url(String path) => "http://${server.address.address}:${server.port}$path";
+  String url(String path) => net.url(path);
 
   LocalModel gguf({String path = "/model.gguf", String? sha}) => LocalModel(
         id: "test-model",
@@ -56,7 +46,7 @@ void main() {
         licence: "Apache-2.0",
       );
 
-  FileLocalModelStore store() => FileLocalModelStore(root.path);
+  FileLocalModelStore store() => FileLocalModelStore(root.path, client: net);
 
   test("a finished download is the weights and a marker", () async {
     final model = gguf();
@@ -84,7 +74,7 @@ void main() {
   });
 
   test("cancelling leaves nothing behind", () async {
-    held = Completer<void>();
+    net.hold = Completer<void>();
     final subscription = store().install(gguf()).listen(null);
     // Far enough in for the first half to have landed on disk.
     await Future<void>.delayed(const Duration(milliseconds: 50));

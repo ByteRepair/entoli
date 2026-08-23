@@ -1,19 +1,19 @@
-import "dart:async";
 import "dart:io";
 
 import "package:agent_chat/data/builtin/llm/local_kv_cache.dart";
 import "package:agent_chat/data/local/file_kv_cache.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:http/http.dart" as http;
+import "package:http/testing.dart";
 import "package:path/path.dart" as p;
 
-/// The disk half of the KV cache, against a real directory and a real server
-/// answering `/slots/0` — the two things it is made of. What is worth pinning
-/// is the eviction order, since the dump every chat depends on is the one that
-/// is never written twice.
+/// The disk half of the KV cache, against a real directory and a stand-in for
+/// llama.cpp's `/slots/0` — the two things it is made of. What is worth
+/// pinning is the eviction order, since the dump every chat depends on is the
+/// one that is never written twice.
 void main() {
   late Directory dir;
-  late HttpServer server;
   late LocalEndpoint at;
 
   /// The slot actions the cache asked for, in order.
@@ -23,28 +23,25 @@ void main() {
   /// (501) can be told from one that has it.
   var status = 200;
 
+  /// The cache under test. The client stands in for the running server, which
+  /// is the only part of this that was ever a socket.
+  FileKvCache cache() => FileKvCache(dir.path, client: MockClient((request) {
+        actions.add(request.url.queryParameters["action"] ?? "");
+        return Future.value(http.Response("", status));
+      }));
+
   setUp(() async {
     dir = await Directory.systemTemp.createTemp("kv_cache_test_");
     actions = [];
     status = 200;
-    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    unawaited(server.forEach((request) async {
-      actions.add(request.uri.queryParameters["action"] ?? "");
-      await request.drain<void>();
-      request.response.statusCode = status;
-      await request.response.close();
-    }));
-    at = LocalEndpoint(
-      baseUrl: "http://127.0.0.1:${server.port}/v1",
+    at = const LocalEndpoint(
+      baseUrl: "http://127.0.0.1:8080/v1",
       apiKey: "k",
       contextLength: 8192,
     );
   });
 
-  tearDown(() async {
-    await server.close(force: true);
-    await dir.delete(recursive: true);
-  });
+  tearDown(() => dir.delete(recursive: true));
 
   /// A dump already on disk, dated [daysAgo] so the eviction order is decided
   /// rather than left to the resolution of the filesystem's clock.
@@ -59,7 +56,7 @@ void main() {
     final body = dump("ns", "body", daysAgo: 30);
     final before = body.lastModifiedSync();
 
-    expect(await FileKvCache(dir.path).warm(at, namespace: "ns", keys: ["body"]),
+    expect(await cache().warm(at, namespace: "ns", keys: ["body"]),
         isTrue);
 
     // The whole of what replaced exempting this file from eviction by name: it
@@ -75,14 +72,14 @@ void main() {
     final body = dump("ns", "body", daysAgo: 30);
     final before = body.lastModifiedSync();
 
-    expect(await FileKvCache(dir.path).warm(at, namespace: "ns", keys: ["body"]),
+    expect(await cache().warm(at, namespace: "ns", keys: ["body"]),
         isFalse);
 
     expect(body.lastModifiedSync(), before);
   });
 
   test("nothing on disk is a miss, and asks the server nothing", () async {
-    expect(await FileKvCache(dir.path).warm(at, namespace: "ns", keys: ["gone"]),
+    expect(await cache().warm(at, namespace: "ns", keys: ["gone"]),
         isFalse);
     expect(actions, isEmpty);
   });
@@ -93,8 +90,7 @@ void main() {
 
     // The save is answered but writes no file — that is the real server's job —
     // so the count is over the two dumps that were already there.
-    await FileKvCache(dir.path)
-        .keep(at, namespace: "ns", key: "new", count: 1);
+    await cache().keep(at, namespace: "ns", key: "new", count: 1);
     await _settle();
 
     expect(actions, ["save"]);

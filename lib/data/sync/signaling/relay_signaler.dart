@@ -15,11 +15,32 @@ import "../../../domain/sync/relay_signaling.dart";
 /// crosses it, because the channel keys come from the handshake that runs
 /// after the data channel is up, not from anything here.
 class RelaySignaler implements RelaySignaling {
-  RelaySignaler(this._channel);
+  /// The socket as two halves rather than a `WebSocketChannel`, because
+  /// nothing below needs one — and a pair of controllers is then a whole
+  /// relay a test can hold both ends of without dialling anything.
+  ///
+  /// Joins on construction: there is no useful state before that.
+  RelaySignaler({
+    required Stream<Object?> incoming,
+    required this.outgoing,
+    required String room,
+    required String role,
+  }) {
+    _sub = incoming.listen(
+      (data) {
+        try {
+          _decoded.add(jsonDecode(data as String) as Map<String, dynamic>);
+        } catch (_) {}
+      },
+      onError: _decoded.addError,
+      onDone: _decoded.close,
+    );
+    outgoing.add(jsonEncode({"join": room, "role": role}));
+  }
 
-  final WebSocketChannel _channel;
-  final _incoming = StreamController<Map<String, dynamic>>.broadcast();
-  StreamSubscription<dynamic>? _sub;
+  final StreamSink<Object?> outgoing;
+  final _decoded = StreamController<Map<String, dynamic>>.broadcast();
+  StreamSubscription<Object?>? _sub;
 
   /// The room token for a pairing secret: 12 bytes of its SHA-256. Both ends
   /// compute the same value from the same secret; nobody without it finds the
@@ -41,27 +62,19 @@ class RelaySignaler implements RelaySignaling {
   }) async {
     final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
     await channel.ready.timeout(timeout);
-    final signaler = RelaySignaler(channel);
-    signaler._sub = channel.stream.listen(
-      (data) {
-        try {
-          signaler._incoming.add(
-              jsonDecode(data as String) as Map<String, dynamic>);
-        } catch (_) {}
-      },
-      onError: signaler._incoming.addError,
-      onDone: signaler._incoming.close,
-    );
-    channel.sink.add(jsonEncode({"join": room, "role": role}));
-    return signaler;
+    return RelaySignaler(
+        incoming: channel.stream,
+        outgoing: channel.sink,
+        room: room,
+        role: role);
   }
 
   @override
-  Stream<Map<String, dynamic>> get messages => _incoming.stream;
+  Stream<Map<String, dynamic>> get messages => _decoded.stream;
 
   @override
   Future<void> send(Map<String, Object?> json) async =>
-      _channel.sink.add(jsonEncode(json));
+      outgoing.add(jsonEncode(json));
 
   @override
   Future<Map<String, dynamic>> waitFor(String field,
@@ -74,7 +87,7 @@ class RelaySignaler implements RelaySignaling {
   @override
   Future<void> close() async {
     await _sub?.cancel();
-    await _channel.sink.close();
-    await _incoming.close();
+    await outgoing.close();
+    await _decoded.close();
   }
 }

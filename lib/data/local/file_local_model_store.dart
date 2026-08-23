@@ -2,6 +2,7 @@ import "dart:io";
 
 import "package:crypto/crypto.dart";
 import "package:path/path.dart" as p;
+import "package:http/http.dart" as http;
 
 import "../../domain/download.dart";
 import "../../domain/local_model.dart";
@@ -13,7 +14,11 @@ import "../download.dart";
 /// config's `FileSystem` for the reason `FileRootfsStore` is: what reads this
 /// file is a subprocess with a path, not the app.
 class FileLocalModelStore extends LocalModelStore {
-  FileLocalModelStore(this.root);
+  FileLocalModelStore(this.root, {this.client});
+
+  /// The client downloads go through. Injected only by the tests, which have
+  /// no socket to reach.
+  final http.Client? client;
 
   /// `<cacheDir>/llm`, holding one directory per installed model.
   final String root;
@@ -76,6 +81,7 @@ class FileLocalModelStore extends LocalModelStore {
   /// up are [DownloadRun]'s; what is left here is the checksum and the marker.
   @override
   Stream<DownloadProgress> install(LocalModel model) => DownloadRun(
+        client: client,
         discard: () => delete(model.id),
         run: (run) async {
           // Whatever an earlier attempt left: a partial file under a name we
