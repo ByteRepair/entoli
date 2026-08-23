@@ -34,7 +34,7 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
+      - run: tool/prepare.sh
 
       - uses: ./.github/actions/bundled-tools
 
@@ -93,7 +93,7 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
+      - run: tool/prepare.sh
 
       - run: flutter build web --debug
 

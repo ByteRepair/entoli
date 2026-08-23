@@ -21,7 +21,7 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
+      - run: tool/prepare.sh
 
       - run: flutter analyze
 
@@ -36,6 +36,6 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
+      - run: tool/prepare.sh
 
       - run: flutter test

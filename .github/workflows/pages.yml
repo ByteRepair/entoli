@@ -49,7 +49,7 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
+      - run: tool/prepare.sh
 
       # Project pages live under /<repo>/, and canvaskit is served from the
       # site rather than gstatic so the page has no third-party dependency.

@@ -140,7 +140,7 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter pub get
+      - run: tool/prepare.sh
 
       # Cheap on a job that already has the SDK warm, and this is the build
       # whose output cannot be quietly replaced once people have downloaded it.

@@ -43,7 +43,7 @@ runs:
         cache: true
 
     - shell: bash
-      run: flutter pub get
+      run: tool/prepare.sh
 
     - shell: bash
       env:
