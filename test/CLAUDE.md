@@ -38,16 +38,17 @@ completes when the tree is pumped. Anything asserting on what a spoken turn
 wrote belongs beside them; anything asserting on what is drawn is a widget test
 over `FakeVoice` with nothing running.
 
-Downloading is not faked. `voice_model_store_test.dart` runs the real
-`FileVoiceModelStore` against an `HttpServer` on localhost, because what is
+Downloading runs the real store over `test/data/fake_network.dart`. What is
 worth pinning is the shape of what lands on disk — the marker that says a model
-is whole, and the nothing a cancelled download leaves behind — and a faked
-client would only ever prove the fake. `file_rootfs_store_test.dart` is the same
-again for a downloaded Linux, and goes one further by unpacking with the
-machine's real `tar`: the execute bit and the symlink it writes are the whole
-reason the app shells out to it, and only a real one proves they survive.
-`file_local_model_store_test.dart` is the third, for a downloaded model, and the
-one thing it adds is the checksum: a GGUF that arrived wrong is not kept.
+is whole, and the nothing a cancelled download leaves behind — and none of that
+needs a socket. `FakeNetwork` answers each path with a body in two halves and
+holds between them, which is where a test cancels; closing it ends the response
+where it got to, because that is what a cancelled download is relying on to
+stop. `voice_model_store_test.dart` is the first, `file_local_model_store_test`
+adds the checksum — a GGUF that arrived wrong is not kept — and
+`file_rootfs_store_test.dart` goes one further by unpacking with the machine's
+real `tar`: the execute bit and the symlink it writes are the whole reason the
+app shells out to it, and only a real one proves they survive.
 
 `downloads_test.dart` is what the catalogs share rather than any one of them:
 the notification a phone gets while the app is off screen, which is the one
@@ -81,9 +82,10 @@ model still coming up and is where a warm-up sits.
 it sits between and exposes it as `app.prefill`, since what a page shows of a
 warm-up and what stopping one reaches are its own. A page drawing one has a
 spinner on it, so `pumpAndSettle` never returns and those tests pump instead.
-`FakeLocalLlm.baseUrl` is the other half, for the prefill's own tests: the
-default is a port nothing is on, and one pointed at an `HttpServer` is how
-"the prompt was never sent" is asserted at all.
+The prefill's own tests hand `LocalPrefill` an `httpClient`: one that refuses
+everything by default, and `_FakeServer` — llama.cpp's stream in two chunks,
+held in the middle — where "the prompt was never sent" has to be told from
+"nothing would have answered anyway".
 
 What the pool is actually asked to do is `llama_server_test.dart`. `llamaLaunch`
 is a pure function there for the reason `proot_test.dart` is one; the pool
@@ -226,10 +228,31 @@ it hangs on a disk. `runAsync` is the only answer.
 ## What the wire is not tested against
 
 Everything above the transport is exercised on a loopback `ByteChannel` —
-`data/sync/sync_hub_pair_test.dart` stands two real hubs on one. The
-rendezvous under it is exercised over real sockets: `lan_signaling_test.dart`
-against a real `HttpServer`, `relay_signaling_test.dart` against a real
-WebSocket — both on loopback, on a port the OS picked.
+`data/sync/sync_hub_pair_test.dart` stands two real hubs on one. The rendezvous
+under it binds nothing either. What each half of it decides is separated from
+the socket that carries it: `SignalingRoutes` is the LAN rendezvous and
+`SignalingServer` is that plus `HttpServer`; `RelayRooms` is the relay's
+forwarding and `RelayServer` is that plus a WebSocket. So
+`domain/sync/signaling_routes_test.dart` and the rooms half of
+`relay_signaling_test.dart` drive the shipped decisions directly, and
+`lan_signaler_test.dart` puts the real client in front of the real routes over
+a `MockClient`, which keeps both halves checked against each other.
+
+**No test binds a port.** One that does is a port on whichever machine runs the
+suite, and the well-known one the LAN rendezvous uses in earnest is already
+taken whenever an Entoli happens to be running there — which is how this was
+found.
+
+What that costs is the socket adapters, and it is worth being plain about:
+**neither `SignalingServer` nor `RelayServer` is covered by anything.** The
+LAN one is the port it binds and its fallback to an ephemeral one, and the
+translation of a `SignalingReply` into an `HttpResponse` — headers, status,
+body, and the 500 an exception turns into. The relay one is the WebSocket
+upgrade and `_SocketPeer`; `RelaySignaler.connect` is uncovered for the same
+reason. Master ran both halves over a real socket and valued exactly this;
+what replaced it checks the decisions on both sides of the wire and takes the
+wire itself on trust. A change to either adapter is a change nothing will
+catch, so read it twice.
 
 Nothing else dials. `testSyncHub` hands the hub a `FakeRelaySignaling` unless
 a test names its own, so a `syncRelayUrl` in a settings fixture is a string

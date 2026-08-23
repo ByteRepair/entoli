@@ -1,5 +1,5 @@
 import "dart:async";
-import "dart:io";
+import "dart:convert";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/local_kv_cache.dart";
@@ -7,7 +7,9 @@ import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/domain/background_work.dart";
 import "package:agent_chat/domain/local_llm.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:http/http.dart" as http;
 
+import "../fake_network.dart";
 import "../../fakes.dart";
 import "../../harness.dart";
 
@@ -53,11 +55,15 @@ void main() {
       FakeLocalLlm llm,
       FakeBackgroundWork background, {
       LocalKvCache? kvCache,
+      http.Client? server,
     }) =>
         LocalPrefill(
           llm: llm,
           background: background,
           kvCache: kvCache,
+          // Nothing answers unless a test says so, which is what the fake
+          // `LocalLlm`'s own endpoint amounts to.
+          httpClient: server ?? FakeNetwork(const {}),
           warmup: testWarmup(
             kvCachePrompts: kvCache == null ? 0 : 30,
             messages: messages,
@@ -97,54 +103,38 @@ void main() {
       expect(background.prefills, isEmpty);
     });
 
-    // The rest are against a real socket rather than the bogus port above: what
-    // is worth pinning is whether the prompt was sent at all, and only a server
-    // that would have answered can say it was not.
+    // The rest are against a server that answers, rather than the endpoint
+    // above that does not: what is worth pinning is whether the prompt was
+    // sent at all, and only something that would have answered can say it was
+    // not.
     group("against a server", () {
-      late HttpServer server;
+      late FakeNetwork server;
       late FakeLocalLlm llm;
 
-      /// One request per warm-up that reached the model, and whether each was
-      /// left open — a prefill still reading its prompt is one nothing has
-      /// answered yet.
-      var asked = 0;
-      Completer<void>? held;
-
-      setUp(() async {
-        asked = 0;
-        held = null;
-        server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-        unawaited(server.forEach((request) async {
-          asked++;
-          request.response.headers.contentType =
-              ContentType("text", "event-stream");
-          request.response.write(
-              'data: {"prompt_progress":{"processed":1,"total":2}}\n\n');
-          await request.response.flush();
-          if (held != null) await held!.future;
-          request.response
-              .write('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n');
-          await request.response.close();
-        }));
-        llm = FakeLocalLlm(baseUrl: "http://127.0.0.1:${server.port}/v1");
+      setUp(() {
+        server = FakeNetwork({
+          "/v1/chat/completions": [
+            utf8.encode(
+                'data: {"prompt_progress":{"processed":1,"total":2}}\n\n'),
+            utf8.encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'),
+          ],
+        }, headers: const {"content-type": "text/event-stream"});
+        llm = FakeLocalLlm(baseUrl: "${FakeNetwork.host}/v1");
       });
 
-      tearDown(() async {
-        held?.complete();
-        await server.close(force: true);
-      });
+      tearDown(() => server.hold?.complete());
 
       test("a body already on disk is restored rather than read again",
           () async {
         final kv = FakeLocalKvCache(hit: true);
         final background = FakeBackgroundWork();
 
-        await make(llm, background, kvCache: kv)
+        await make(llm, background, kvCache: kv, server: server)
             .warm("local-model");
 
         // The whole of the fix: a warm that hits is the warm-up, so the prompt
         // is not sent and nothing is written back over what was already there.
-        expect(asked, 0);
+        expect(server.asked, 0);
         expect(kv.warmed.single, kvPrefixKeys(messages, const []));
         expect(kv.kept, isEmpty);
         expect(background.prefills.last, isNull);
@@ -154,19 +144,19 @@ void main() {
         final kv = FakeLocalKvCache();
         final background = FakeBackgroundWork();
 
-        await make(llm, background, kvCache: kv)
+        await make(llm, background, kvCache: kv, server: server)
             .warm("local-model");
 
-        expect(asked, 1);
+        expect(server.asked, 1);
         expect(kv.kept, [kvPrefixKeys(messages, const []).last]);
       });
 
       test("the notification's Stop ends the warm-up", () async {
-        held = Completer<void>();
+        server.hold = Completer<void>();
         final background = FakeBackgroundWork();
-        final prefill = make(llm, background);
+        final prefill = make(llm, background, server: server);
         final warming = prefill.warm("local-model");
-        await waitFor(() => asked == 1, what: "the warm-up request");
+        await waitFor(() => server.asked == 1, what: "the warm-up request");
         expect(prefill.state.value, isNotNull);
 
         background.stop(BackgroundJob.prefill);
@@ -181,3 +171,4 @@ void main() {
     });
   });
 }
+

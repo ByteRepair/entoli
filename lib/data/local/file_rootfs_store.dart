@@ -3,6 +3,7 @@ import "dart:io";
 
 import "package:crypto/crypto.dart";
 import "package:path/path.dart" as p;
+import "package:http/http.dart" as http;
 
 import "../download.dart";
 import "../../domain/download.dart";
@@ -14,7 +15,11 @@ import "../../domain/rootfs_store.dart";
 /// `FileSystem` for the reason `LocalShell` is: this side of the conditional
 /// import is the only one that can run what is in there.
 class FileRootfsStore extends RootfsStore {
-  FileRootfsStore(this.root, {this.tar = _systemTar});
+  FileRootfsStore(this.root, {this.tar = _systemTar, this.client});
+
+  /// The client downloads go through. Injected only by the tests, which have
+  /// no socket to reach.
+  final http.Client? client;
 
   /// `<cacheDir>/rootfs`, holding one directory per installed distribution.
   final String root;
@@ -72,6 +77,7 @@ class FileRootfsStore extends RootfsStore {
   /// this download has that no other one does.
   @override
   Stream<DownloadProgress> install(Rootfs rootfs, {required String abi}) => DownloadRun(
+        client: client,
         discard: () => delete(rootfs),
         run: (run) async {
           final image = rootfs.imageFor(abi);
