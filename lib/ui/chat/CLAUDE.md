@@ -377,14 +377,24 @@ used to stand in front of it offered New Chat, New Voice Chat and Open Chat,
 and all three had become the same thing said twice: New Chat was a button that
 led to a page whose only content was somewhere to type, the voice one is the
 composer's own circle, and Open Chat is the drawer the bar already opens. So
-`_StartingChat` calls `startChat` — the sidebar's own action, so there is one
-answer to what a new chat is and which project it lands in — and shows a
-spinner for the frame it takes.
+`_StartingChat` asks `SelectedChatId.startIfEmpty` and draws nothing while it
+runs: the draft is made in memory, so what a spinner would show is one frame of
+one, which reads as a page that could not load rather than as a page arriving.
 
-The one place that is not true is a paired device's list, which `ChatPage`
-checks before it makes anything: a new chat is this device's, and `startChat`
-takes the sidebar home with it, so picking a device would bounce straight back
-off it. That arm says to pick a chat and makes nothing.
+**Making it belongs to `SelectedChatId` rather than to the widget**, because
+the widget is not the only one asking and is not stable while it asks. Every
+`select(null)` in the app is now also "and start one" — switching project,
+deleting the open chat, deleting them all — and `AppShell` swaps `ChatPage`
+into a different tree either side of `navBreakpoint`, which remounts the
+starter mid-flight. The repository holds **one** draft, so two in flight leave
+the selection pointing at the one that lost the slot; `startNew` is therefore
+held to one at a time and `startChat` — the sidebar's button and the assistant
+gesture — is that same call with the drawer closed after it.
+
+The one place nothing selected is not a new chat is a paired device's list,
+which `ChatPage` checks before it makes anything: a new chat is this device's
+and takes the sidebar home with it, so picking a device would bounce straight
+back off it. That arm says to pick a chat and makes nothing.
 
 `_EmptyChat` draws the mark, the question, the projects as badges, and a chip
 per `/command` and `@agent` the library holds. The chips are discovery: the

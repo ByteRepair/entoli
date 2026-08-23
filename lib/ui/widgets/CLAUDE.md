@@ -9,7 +9,8 @@ every page would otherwise spell out), the `Default`-plus-reset pairing,
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `EmptyPane`, `TempChatTtlField`, `CompletionField`,
+`AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`,
+`CompletionField`,
 `text_input.dart` — the sections below — and `catalog.dart`.
 
 `CompletionField` is the field a prompt is written in: the menu of `/commands`
@@ -56,6 +57,13 @@ is always a key that leaves the field.
 a folder with no files in it, and a file the viewer could not read — and a
 placeholder differing between them by a few pixels of padding reads as a bug
 rather than as two states.
+
+`Nothing` is the one-line version of the same thing, for a strip of a page
+rather than a page: a project with no chats in it, a search nothing answered,
+a paired device's list with nothing picked out of it. It is here rather than in
+the sidebar it started in because two of them are on screen at once — the
+sidebar's list beside the chat pane — and they had already drifted a text style
+apart.
 
 `ActionIcon` is the small icon button, and it carries the height the actions
 row keeps whether or not anything is in it — the row and the buttons in it have

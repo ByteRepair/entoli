@@ -83,6 +83,20 @@ void main() {
       expect(find.text("old chat"), findsOneWidget);
     });
 
+    // The pane is remounted by a window crossing the sidebar's breakpoint, so
+    // two asks can be in flight — and the repository holds one draft, so a
+    // second would take the slot while the first took the selection.
+    testWidgets("two asks at once make one chat", (tester) async {
+      final made = await io(tester, () {
+        final selection = app.container.read(selectedChatIdProvider.notifier);
+        return Future.wait([selection.startIfEmpty(), selection.startIfEmpty()]);
+      });
+
+      expect(made.first, made.last);
+      expect(app.container.read(selectedChatIdProvider), made.first);
+      expect(await io(tester, () => app.repo.projectOf(made.first!)), isNull);
+    });
+
     // A paired device's list is the one place nothing selected is not a new
     // chat: making one is this device's and would take the sidebar home.
     testWidgets("reading a paired device makes no chat", (tester) async {
@@ -101,16 +115,10 @@ void main() {
       await openEmpty(tester);
     }
 
-    /// The badge takes the chat with it, so there is a new draft to wait for.
+    /// The badge takes the chat with it, so there is a new draft to wait for —
+    /// which `settleIo` does, the draft being made in memory.
     Future<void> pick(WidgetTester tester, String project) async {
-      final was = app.container.read(selectedChatIdProvider);
       await tester.tap(find.widgetWithText(ChoiceChip, project));
-      for (var i = 0;
-          i < 50 && app.container.read(selectedChatIdProvider) == was;
-          i++) {
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
-        await tester.pump();
-      }
       await settleIo(tester);
     }
 

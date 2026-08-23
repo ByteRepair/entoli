@@ -4,7 +4,6 @@ import "dart:math" as math;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../core/log.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../fonts.dart";
@@ -15,6 +14,7 @@ import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
+import "../widgets/nothing.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
@@ -42,11 +42,7 @@ class ChatPage extends ConsumerWidget {
     if (ref.watch(selectedRemoteProvider) != null) {
       return _Waiting(
         withDrawer: withDrawer,
-        child: Text(
-          "Pick a chat to follow.",
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
+        child: const Nothing("Pick a chat to follow."),
       );
     }
     return _StartingChat(withDrawer: withDrawer);
@@ -58,7 +54,9 @@ class ChatPage extends ConsumerWidget {
 const double _readableWidth = 760;
 
 /// Nothing selected is a new chat, so this is the whole of what stood between
-/// them: one round trip to make the draft, and the frame it takes.
+/// them: `startIfEmpty`, and the frame it takes. Nothing is drawn while it
+/// runs — the draft is made in memory, so a spinner would be one frame of one
+/// and would read as a page that could not load.
 class _StartingChat extends ConsumerStatefulWidget {
   const _StartingChat({required this.withDrawer});
 
@@ -69,25 +67,27 @@ class _StartingChat extends ConsumerStatefulWidget {
 }
 
 class _StartingChatState extends ConsumerState<_StartingChat> {
+  bool _failed = false;
+
   @override
   void initState() {
     super.initState();
-    // Not during the build: `startChat` writes the selection this page is
-    // reading, and closes a drawer that may be part of the frame being built.
+    // Not during the build: it writes the selection this page is reading.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      try {
-        await startChat(context, ref);
-      } catch (e) {
-        logFailure("chat", "could not start a chat", e);
-      }
+      final id = await ref.read(selectedChatIdProvider.notifier).startIfEmpty();
+      // The reason is already logged. Said here as well because there is
+      // nothing else left on the page to say it — no chat, and no button.
+      if (id == null && mounted) setState(() => _failed = true);
     });
   }
 
   @override
   Widget build(BuildContext context) => _Waiting(
         withDrawer: widget.withDrawer,
-        child: const CircularProgressIndicator(),
+        child: _failed
+            ? const Nothing("Could not start a chat. Open one from the list.")
+            : const SizedBox.shrink(),
       );
 }
 
@@ -211,10 +211,15 @@ class _AppBrand extends StatelessWidget {
       );
 }
 
-/// The page with no conversation in it yet — nothing selected, or one still
-/// being read off disk. Carries the drawer and bar the real page would.
+/// The page with no conversation in it yet — a chat being made, one still
+/// being read off disk, or a paired device's list with nothing picked out of
+/// it. Carries the drawer and bar the real page would. The default child is
+/// the spinner, which is what reading one off disk wants.
 class _Waiting extends StatelessWidget {
-  const _Waiting({required this.withDrawer, required this.child});
+  const _Waiting({
+    required this.withDrawer,
+    this.child = const CircularProgressIndicator(),
+  });
 
   final bool withDrawer;
   final Widget child;
@@ -450,10 +455,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
-  Widget _waiting() => _Waiting(
-        withDrawer: widget.withDrawer,
-        child: const CircularProgressIndicator(),
-      );
+  Widget _waiting() => _Waiting(withDrawer: widget.withDrawer);
 
   /// Land at the end of the conversation the first time this chat is drawn.
   void _opening(Chat chat) {
