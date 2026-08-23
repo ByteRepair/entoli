@@ -42,11 +42,37 @@ class AndroidVoice extends Voice {
     }
   }
 
+  /// What the synthesiser says it can speak. The recogniser is not asked:
+  /// naming its languages means a service bound and, before Android 13, an
+  /// ordered broadcast plenty of them never answer — while any phone that can
+  /// speak at all answers this off an engine that is being started anyway. A
+  /// tag the recogniser cannot do is no dead end either: it descends the ladder
+  /// in `VoiceChannel.kt` like the device's own would.
+  @override
+  Future<List<VoiceLanguage>> systemLanguages() async {
+    try {
+      final answer = await voiceChannel
+          .invokeListMethod<Map<Object?, Object?>>("languages")
+          // An engine that never finishes starting would leave the picker
+          // spinning. Empty is the device's own language and nothing else.
+          .timeout(const Duration(seconds: 5));
+      return [
+        for (final language in answer ?? const <Map<Object?, Object?>>[])
+          if (language["tag"] case final String tag when tag.isNotEmpty)
+            VoiceLanguage(tag: tag, name: language["name"] as String? ?? tag),
+      ];
+    } catch (e) {
+      voiceFailed("the device would not say what it can speak: $e");
+      return const [];
+    }
+  }
+
   @override
   Future<VoiceSession> start({
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    String? language,
   }) async {
     if (!speech.isNative || (recognition != null && !recognition.isNative)) {
       throw StateError("Android runs the system voice engines, not a model.");
@@ -57,13 +83,14 @@ class AndroidVoice extends Voice {
       // makes the Talk button work, and a permission sheet on the first press
       // is one nobody expected.
       (await openMicrophone()).dispose();
-      listener = AndroidSpeechRecognizer();
+      listener = AndroidSpeechRecognizer(language: language);
     }
     // `speaker` is the sherpa catalog's idea of which voice in a model file to
     // use, and the system synthesiser has no such thing — the voice is the
     // user's, set in the OS. So the settings page draws no picker for it here
-    // and nothing is passed on.
-    return ComposedVoiceSession(listener, AndroidTextToSpeech());
+    // and nothing is passed on. The language is the picker it draws instead.
+    return ComposedVoiceSession(
+        listener, AndroidTextToSpeech(language: language));
   }
 }
 
@@ -99,9 +126,12 @@ class AndroidVoiceBridge {
 /// this hands all three to [MicrophoneListener], which is where the gate, the
 /// level and the event stream are. What is left here is the channel.
 class AndroidSpeechRecognizer extends MicrophoneListener {
-  AndroidSpeechRecognizer() : super(LoudnessGate()) {
+  AndroidSpeechRecognizer({this.language}) : super(LoudnessGate()) {
     _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
   }
+
+  /// The BCP-47 tag to hear in, or null for the device's own.
+  final String? language;
 
   late final StreamSubscription<MethodCall> _calls;
 
@@ -122,8 +152,8 @@ class AndroidSpeechRecognizer extends MicrophoneListener {
     if (closed || on == listening) return;
     asked(on);
     try {
-      await voiceChannel.invokeMethod<String>(
-          "setRecognitionListening", {"on": on, "finish": finish});
+      await voiceChannel.invokeMethod<String>("setRecognitionListening",
+          {"on": on, "finish": finish, if (on) "language": language});
     } on PlatformException catch (e) {
       // Only opening it is a failure worth the session: nothing that goes wrong
       // shutting a microphone leaves anyone unable to speak.
@@ -151,10 +181,13 @@ class AndroidSpeechRecognizer extends MicrophoneListener {
 /// happened and leave a queue that never drains. One utterance failing is not a
 /// failed engine: it is dropped, and only repeated failures are reported up.
 class AndroidTextToSpeech implements Speaker {
-  AndroidTextToSpeech() {
+  AndroidTextToSpeech({this.language}) {
     _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
     unawaited(_init());
   }
+
+  /// The BCP-47 tag to speak in, or null for the device's own.
+  final String? language;
 
   late final StreamSubscription<MethodCall> _calls;
   final _signals = StreamController<SpeechSignal>.broadcast();
@@ -183,7 +216,7 @@ class AndroidTextToSpeech implements Speaker {
       if (!_ready) _fatal("Speech did not start.");
     });
     try {
-      await voiceChannel.invokeMethod<String>("initSpeech");
+      await voiceChannel.invokeMethod<String>("initSpeech", {"language": language});
     } on PlatformException catch (e) {
       _fatal(_message(e, "Speech failed."));
     } on MissingPluginException {

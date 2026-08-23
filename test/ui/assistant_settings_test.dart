@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/assistant_view.dart";
+import "package:agent_chat/ui/settings/assistant_settings.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 
 import "../harness.dart";
@@ -13,8 +14,17 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
-  Future<void> pumpAssistant(WidgetTester tester) =>
-      pumpSettings(tester, app, SettingsCategory.assistant);
+  /// Under Voice, and below the pickers, so the window is a tall one and the
+  /// section is scrolled to. The finders are scoped to the section for the same
+  /// reason: the page above it has dropdowns of its own.
+  Future<void> pumpAssistant(WidgetTester tester) async {
+    useWindow(tester, const Size(1200, 1600));
+    await pumpSettings(tester, app, SettingsCategory.voice);
+    await scrollTo(tester, find.text("Assistant"));
+  }
+
+  Finder inSection(Finder matching) =>
+      find.descendant(of: find.byType(AssistantSection), matching: matching);
 
   /// What a reload would read, rather than what the notifier is holding: the
   /// setting is only worth anything if it survives to the next launch, which is
@@ -24,15 +34,15 @@ void main() {
   testWidgets("opens on the default project and the chat view", (tester) async {
     await pumpAssistant(tester);
 
-    expect(find.text("Default"), findsOneWidget);
-    expect(find.text("Chat view"), findsOneWidget);
+    expect(inSection(find.text("Default")), findsOneWidget);
+    expect(inSection(find.text("Chat view")), findsOneWidget);
   });
 
   testWidgets("every project is offered", (tester) async {
     await io(tester, () => app.repo.createProject("research"));
     await pumpAssistant(tester);
 
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.tap(inSection(find.byType(DropdownButtonFormField<String?>)));
     await tester.pumpAndSettle();
 
     expect(popupLabels(tester), containsAll(<String>["Default", "research"]));
@@ -42,7 +52,7 @@ void main() {
     await io(tester, () => app.repo.createProject("research"));
     await pumpAssistant(tester);
 
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.tap(inSection(find.byType(DropdownButtonFormField<String?>)));
     await tester.pumpAndSettle();
     await tester.tap(find.text("research").last);
     await settleIo(tester);
@@ -66,7 +76,7 @@ void main() {
     await io(tester, () => app.seedSettings(AppSettings(assistantProject: "gone")));
     await pumpAssistant(tester);
 
-    expect(find.text("Default"), findsOneWidget);
-    expect(find.text("gone"), findsNothing);
+    expect(inSection(find.text("Default")), findsOneWidget);
+    expect(inSection(find.text("gone")), findsNothing);
   });
 }

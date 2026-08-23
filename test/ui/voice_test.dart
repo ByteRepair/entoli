@@ -54,6 +54,16 @@ void main() {
     return id;
   }
 
+  test("the language Settings picked is what the session is started in",
+      () async {
+    await app.container
+        .read(appSettingsProvider.notifier)
+        .setVoiceLanguage("el-GR");
+    await startVoice();
+
+    expect(app.voice.startedIn, "el-GR");
+  });
+
   group("a spoken turn", () {
     test("is an ordinary turn: same records, same log", () async {
       app.backend.scriptedEvents = [
