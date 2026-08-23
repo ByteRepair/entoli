@@ -106,11 +106,17 @@ void main() {
     expect(settings.offerTask, isFalse);
   });
 
-  test("writes meta.json with the pins; not temporary means permanent", () async {
+  test("writes meta.json with the pins; the reminder's TTL is the chat's", () async {
     final repository = repo();
     final (run, _, _) = runner(repository);
     final result = await run.run(
-      Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now(), temporary: false),
+      Reminder(
+        id: "r1",
+        name: "n",
+        prompt: "p",
+        at: DateTime.now(),
+        tempChatTtl: TempChatTtl.off,
+      ),
       const [],
     );
 
@@ -121,7 +127,7 @@ void main() {
     expect(File(config.stateFile(result.chatId)).existsSync(), isTrue);
   });
 
-  test("temporary leaves the TTL to inherit", () async {
+  test("no TTL of its own leaves the chat's to inherit", () async {
     final repository = repo();
     final (run, _, _) = runner(repository);
     final result = await run.run(

@@ -9,23 +9,44 @@ every page would otherwise spell out), the `Default`-plus-reset pairing,
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `EmptyPane`, `text_input.dart`, and `catalog.dart` — the
-section below.
+`AttachmentStrip`, `EmptyPane`, `TempChatTtlField`, `CompletionField`,
+`text_input.dart` — the sections below — and `catalog.dart`.
+
+`CompletionField` is the field a prompt is written in: the menu of `/commands`
+and `@agents` that matches what has been typed, the arrows and tab and return
+that take one, and escape. It was the composer's, and it is here because the
+reminder editor writes a prompt too — one that is dispatched through the same
+library, so being offered them in a chat and not there was the tell. Where the
+menu goes is the caller's, through `layout`: the composer's spans the whole
+composer rather than the field, since the `+` and Send are either side of it,
+and the reminder's prompt page puts it under a box that is the whole page.
+`completionInsertItems` is the `+` button's two entries, for a menu that offers
+other things too — the composer's also attaches files. What a caller must not
+do is write its own trigger handling: `activeCompletionToken` has to keep
+agreeing with `prompt_library.dart`, and one copy of it can.
+
+`TempChatTtlField` is how long a chat lives, as the chat settings page asks it —
+`Default` naming the project's or the app's answer, and the value written
+straight onto `meta.json`. The reminder editor asks with the same field: a
+reminder's chat is a chat, and a bool there could only ever have named one of
+the five TTLs.
 
 `text_input.dart` is the pair of things a field wants and Material does not
-give it. `replaceIn` writes over a range and leaves the caret after it — the
-composer types a completion with it and `TabIndents` an indent, and they were
-the same four lines twice. `TabIndents` makes Tab type two spaces rather than
-move the focus on, which the composer, a reminder's prompt and any
-`promptForText` of more than one line have; the one-line fields are left alone,
+give it. `replaceIn` writes over a range and leaves the caret after it —
+`CompletionField` types a completion with it and `TabIndents` an indent, and
+they were the same four lines twice. `TabIndents` makes Tab type two spaces
+rather than move the focus on, which every `CompletionField` of more than one
+line has — the composer and a reminder's prompt — and so does any
+`promptForText` of more than one line; the one-line fields are left alone,
 since there Tab is how the caret reaches the buttons.
 
-It wraps a field instead of being one, because the composer's field already
-carries bindings of its own: **the wrapper has to stay strictly outside them**.
-Key events run from the focused node outwards, so the composer's `Shortcuts`
-sees Tab first and takes it while the completion menu has a match, and only
-what it ignores reaches the indent. Moving the wrapper inward, or onto the
-`TextField` itself, kills tab-completion with nothing to say so — a widget test
+It wraps a field instead of being one, because `CompletionField`'s own
+bindings are already on it: **the wrapper has to stay strictly outside them**.
+Key events run from the focused node outwards, so the completion `Shortcuts`
+sees Tab first and takes it while the menu has a match, and only what it
+ignores reaches the indent. That is why `CompletionField` wraps the field it
+has already built rather than anything nearer the `TextField`: moving the
+wrapper inward kills tab-completion with nothing to say so, and a widget test
 is what holds it. Merging the two into one shortcuts map is not the same thing
 and does not work: `SingleActivator` has no `==`, so a second Tab entry does
 not replace the first, it queues behind it. Shift+Tab is left unbound, so there
