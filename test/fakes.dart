@@ -32,6 +32,8 @@ import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/rootfs_store.dart";
+import "package:agent_chat/domain/secret_store.dart";
+import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/providers.dart" show DrivenChats, RemoteChats;
 import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
@@ -871,6 +873,68 @@ class FakeRemoteChats extends RemoteChats {
   @override
   List<RemoteChatEntry> build() => entries;
 }
+
+/// A [SecretStore] with nothing behind it. `encrypted` is false, which is
+/// what the Sync page warns about — the weakest of the three ports.
+class FakeSecretStore implements SecretStore {
+  final _items = <String, Uint8List>{};
+
+  @override
+  Future<Uint8List?> read(String key) async => _items[key];
+
+  @override
+  Future<void> write(String key, Uint8List value) async => _items[key] = value;
+
+  @override
+  Future<void> delete(String key) async => _items.remove(key);
+
+  @override
+  bool get encrypted => false;
+}
+
+/// A [DeviceRegistry] in memory: paired devices with no `devices.json` under
+/// them, for the tests about what the Sync page draws.
+class FakeDeviceRegistry implements DeviceRegistry {
+  FakeDeviceRegistry([List<PairedDevice> devices = const []]) {
+    for (final device in devices) {
+      _devices[device.id] = device;
+    }
+  }
+
+  final _devices = <String, PairedDevice>{};
+  final _secrets = <String, String>{};
+
+  @override
+  Future<List<PairedDevice>> list() async => _devices.values.toList();
+
+  @override
+  Future<PairedDevice?> byId(String id) async => _devices[id];
+
+  @override
+  Future<void> add(PairedDevice device) async => _devices[device.id] = device;
+
+  @override
+  Future<void> remove(String id) async => _devices.remove(id);
+
+  @override
+  Future<void> markSeen(String id, {String? address}) async {}
+
+  @override
+  Future<String?> pairingSecret(String id) async => _secrets[id];
+
+  @override
+  Future<void> setPairingSecret(String id, String secret) async =>
+      _secrets[id] = secret;
+}
+
+/// A device as the registry holds one, for seeding the paired list.
+PairedDevice testPairedDevice(String id, {String name = "Desktop"}) =>
+    PairedDevice(
+      id: id,
+      name: name,
+      publicKey: "cHVibGlj",
+      addedAt: DateTime.utc(2026),
+    );
 
 /// Chats of this device a paired one is driving, by the name of the device
 /// driving them. Empty for every test that is not about sync.

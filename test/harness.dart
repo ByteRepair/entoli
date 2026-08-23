@@ -11,7 +11,9 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
+import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
+import "package:agent_chat/domain/sync/devices.dart";
+import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -86,6 +88,12 @@ class TestApp {
   /// Android and so what most of the suite should be pretending to be.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
+  /// [hub] is for the one page that reads a [SyncHub] directly — the Sync
+  /// settings category, which draws this device's identity and the paired
+  /// list off it. Build one with [testSyncHub], which is asynchronous because
+  /// an identity is a generated keypair. Everything else about sync goes
+  /// through the provider overrides below and needs no hub at all.
+  ///
   /// [remotes] is the Remotes section of the sidebar: chats mirrored from a
   /// paired device. Empty by default, which is every test with no sync in it —
   /// and load-bearing, because it is also what stands in for the [SyncHub]
@@ -110,6 +118,8 @@ class TestApp {
     Map<String, ChatViewState> mirrors = const {},
     Map<String, String> drivenBy = const {},
     MirrorControl control = const MirrorControl(),
+    SyncHub? hub,
+    DeviceRegistry? devices,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -187,6 +197,8 @@ class TestApp {
           prootAvailableProvider.overrideWithValue(proot),
           appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),
+          if (hub != null) syncHubProvider.overrideWithValue(hub),
+          if (devices != null) deviceRegistryProvider.overrideWithValue(devices),
           remoteChatsProvider.overrideWith(() => FakeRemoteChats(remotes)),
           drivenChatsProvider.overrideWith(() => FakeDrivenChats(drivenBy)),
           mirrorChatControllerProvider
@@ -299,6 +311,23 @@ class TestApp {
     container.dispose();
   }
 }
+
+/// A real [SyncHub] with nothing under it: an in-memory registry and secret
+/// store, and no signaling, so it binds no socket and dials nothing. What the
+/// Sync page reads off one — the fingerprint, the peers, the pairing window —
+/// is all its own, so faking the hub would only ever prove the fake.
+Future<SyncHub> testSyncHub(
+  AppConfig config, {
+  DeviceRegistry? devices,
+  AppSettings Function()? settings,
+}) async =>
+    SyncHub(
+      identity: await SyncIdentity.load(FakeSecretStore()),
+      registry: devices ?? FakeDeviceRegistry(),
+      config: config,
+      settings: settings ?? AppSettings.new,
+      lanSignaling: () => null,
+    );
 
 /// Put a whole chat on disk the way the app would have: its state, then its
 /// conversation as the records a turn would have appended. There is no

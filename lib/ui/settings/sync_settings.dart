@@ -1,3 +1,4 @@
+import "dart:async";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
@@ -222,6 +223,8 @@ class _PairedDevices extends ConsumerWidget {
                     ref.invalidate(deviceRegistryProvider);
                   },
                   onConnect: () => hub.connect(device.id),
+                  onDisconnect: () => hub.disconnect(device.id),
+                  onFailed: (error) => _say(context, error),
                 ),
             ],
           ),
@@ -231,43 +234,79 @@ class _PairedDevices extends ConsumerWidget {
   }
 }
 
+void _say(BuildContext context, Object error) => ScaffoldMessenger.of(context)
+    .showSnackBar(SnackBar(content: Text(error.toString())));
+
 class _PairedDeviceRow extends StatelessWidget {
   const _PairedDeviceRow({
     required this.device,
     required this.state,
     required this.onRevoke,
     required this.onConnect,
+    required this.onDisconnect,
+    required this.onFailed,
   });
 
   final PairedDevice device;
   final PeerState? state;
   final Future<void> Function() onRevoke;
   final Future<void> Function() onConnect;
+  final Future<void> Function() onDisconnect;
+
+  /// A dial that could not find the device. Reported here rather than left to
+  /// the future nobody awaits: `onPressed` takes a `VoidCallback`, so an
+  /// unawaited failure is an unhandled error and a button that did nothing.
+  final void Function(Object error) onFailed;
 
   @override
   Widget build(BuildContext context) {
-    final name = device.name;
     final status = state?.status ?? PeerStatus.offline;
     final theme = Theme.of(context);
+    final failure = state?.error;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(_iconFor(status),
-              size: 16, color: _colorFor(status, theme)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(name)),
-          if (status != PeerStatus.online)
-            TextButton(onPressed: onConnect, child: const Text("Connect")),
-          TextButton(
-            onPressed: () => _confirmRevoke(context),
-            style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
-            child: const Text("Revoke"),
+          Row(
+            children: [
+              Icon(_iconFor(status), size: 16, color: _colorFor(status, theme)),
+              const SizedBox(width: 8),
+              Expanded(child: Text(device.name)),
+              if (status == PeerStatus.online)
+                TextButton(
+                    onPressed: () => _tried(onDisconnect),
+                    child: const Text("Disconnect"))
+              else
+                TextButton(
+                    onPressed: status == PeerStatus.connecting
+                        ? null
+                        : () => _tried(onConnect),
+                    child: const Text("Connect")),
+              TextButton(
+                onPressed: () => _confirmRevoke(context),
+                style:
+                    TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+                child: const Text("Revoke"),
+              ),
+            ],
           ),
+          if (failure != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 24, right: 8),
+              child: Text(
+                failure,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.error),
+              ),
+            ),
         ],
       ),
     );
   }
+
+  void _tried(Future<void> Function() work) =>
+      unawaited(work().catchError(onFailed));
 
   IconData _iconFor(PeerStatus status) => switch (status) {
         PeerStatus.online => Icons.circle,
@@ -334,8 +373,11 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
       children: [
         SectionHeader(
           "Pair a new device",
-          description: "Open a window and show the code, or paste a code "
-              "from another device.",
+          description: kIsWeb
+              ? "A browser can only join: paste a code from another device, "
+                  "or set a relay URL above and open a window over it."
+              : "Open a window and show the code, or paste a code "
+                  "from another device.",
         ),
         if (pairing == null) ...[
           Padding(
@@ -365,7 +407,7 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
                       hintText: "entoli-pair:…",
                       isDense: true,
                     ),
-                    onFieldSubmitted: (_) => _join,
+                    onFieldSubmitted: (_) => _join(),
                   ),
                 ),
                 const SizedBox(width: 8),

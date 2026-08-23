@@ -35,7 +35,8 @@ named in a cross-reference is findable from this list.
   the UI waits
 - `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
   layer, three rendezvous transports, the SyncHub, mirroring a chat, control
-  and driving a turn from the other end, secrets at rest
+  and driving a turn from the other end, what the Sync page can do about a
+  peer, secrets at rest
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files

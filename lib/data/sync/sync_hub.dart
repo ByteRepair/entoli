@@ -850,12 +850,12 @@ class SyncHub {
   /// browser pairs from the other side instead.
   ///
   /// Exactly one window runs at a time; opening one closes the last.
-  Future<PairingActivity?> startPairingWindow() async {
+  Future<PairingActivity> startPairingWindow() async {
     cancelPairingWindow();
     final server = _server;
     final lanAvailable = server != null && !kIsWeb;
     final relayUrl = _settings().syncRelayUrl ?? "";
-    if (!lanAvailable && relayUrl.isEmpty) return null;
+    if (!lanAvailable && relayUrl.isEmpty) throw SignalingException(noRoute);
 
     final psk = generatePsk();
     String? qr;
@@ -888,6 +888,15 @@ class SyncHub {
     pairing.value = activity;
     return activity;
   }
+
+  /// Why there is no window to open. A browser has no socket to bind, so it
+  /// can only ever join — which makes the relay the one thing missing rather
+  /// than one of two.
+  static String get noRoute => kIsWeb
+      ? "A browser cannot listen for a pairing. Set a relay URL above, or "
+          "use Manual invite and paste the reply back."
+      : "No way to be found: this build has no local network signaling and "
+          "no relay URL is set.";
 
   void cancelPairingWindow() {
     _confirmation?.complete(false);
@@ -1065,10 +1074,13 @@ class SyncHub {
         failure = error;
       }
     }
-    _setStatus(deviceId, name: device.name, status: PeerStatus.error,
-        error: failure?.toString());
-    throw SignalingException(
-        "could not reach ${device.name}: ${failure ?? "no route configured"}");
+    // One sentence, said twice: the row keeps the reason and the caller
+    // throws it with the device's name on the front. A null error on the row
+    // was the honest half of this going missing.
+    final reason = failure?.toString() ?? "no route configured";
+    _setStatus(deviceId,
+        name: device.name, status: PeerStatus.error, error: reason);
+    throw SignalingException("could not reach ${device.name}: $reason");
   }
 
   Future<void> disconnect(String deviceId) async {

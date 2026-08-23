@@ -73,7 +73,12 @@ exposes `sendJson` / `jsonIncoming` for the NDJSON control protocol and
    network beyond the data channel's own ICE.
 
 Web builds are relay/manual-paste only — a browser cannot bind a socket, and
-HTTPS Pages makes plain-http LAN dialing mixed-content-blocked.
+HTTPS Pages makes plain-http LAN dialing mixed-content-blocked. So a browser
+can only ever *join*: `createLanSignaling` answers null there, and the Sync
+page says as much rather than drawing a button that does nothing.
+`startPairingWindow` throws `SyncHub.noRoute` where neither route is
+available, and the wording differs by platform because what is missing does —
+a desktop is short of both, a browser only of the relay.
 
 ## The SyncHub
 
@@ -238,6 +243,18 @@ which is also what keeps every sync-unaware test working, since there is no
 `SyncHub` in the container to throw. `sendForTest` is the other seam on the
 hub: it sends past the mirror-side guard, which is the only way to check that
 the *home* device is what refuses a peer holding nothing.
+
+## What the Sync page can do about a peer
+
+Connect, disconnect, revoke, and one line saying why the last dial failed.
+`connect` words that reason once and uses it twice — the row keeps it and the
+thrown exception puts the device's name on the front — because the row holding
+a null while the snack bar held a sentence was the honest half going missing.
+A `Future` handed to `onPressed` is dropped and its failure is unhandled, so
+every one of those buttons goes through a catch that reports.
+
+Revoking asks first, and says what it does not do: the other device keeps this
+one until somebody revokes there too.
 
 ## Secrets at rest
 
