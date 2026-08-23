@@ -41,7 +41,7 @@ void main() {
     // What `main` does once the container exists: it is what puts the
     // already-paired devices into `peers`, which is what the page draws.
     await hub.ensureReady();
-    app = TestApp.create(hub: hub, devices: registry);
+    app = TestApp.create(hub: hub);
     await pumpSettings(tester, app, SettingsCategory.sync);
     await settleIo(tester);
   }

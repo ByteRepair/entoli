@@ -119,7 +119,6 @@ class TestApp {
     Map<String, String> drivenBy = const {},
     MirrorControl control = const MirrorControl(),
     SyncHub? hub,
-    DeviceRegistry? devices,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -198,7 +197,6 @@ class TestApp {
           appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),
           if (hub != null) syncHubProvider.overrideWithValue(hub),
-          if (devices != null) deviceRegistryProvider.overrideWithValue(devices),
           remoteChatsProvider.overrideWith(() => FakeRemoteChats(remotes)),
           drivenChatsProvider.overrideWith(() => FakeDrivenChats(drivenBy)),
           mirrorChatControllerProvider

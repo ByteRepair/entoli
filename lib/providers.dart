@@ -27,7 +27,6 @@ import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
 import "domain/rootfs_store.dart";
-import "domain/sync/devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/turn_keep_alive.dart";
@@ -448,9 +447,6 @@ final linkOpenerProvider =
 
 final backgroundWorkProvider =
     Provider<BackgroundWork>((ref) => throw UnimplementedError());
-
-final deviceRegistryProvider =
-    Provider<DeviceRegistry>((ref) => throw UnimplementedError());
 
 final syncHubProvider = Provider<SyncHub>((ref) => throw UnimplementedError());
 

@@ -54,10 +54,13 @@ class Handshake {
   /// What both screens show after a successful exchange, for comparing by eye.
   String? get sas => _sasText;
 
+  /// [reader] is the channel's one reader, and it outlives this: the peer
+  /// sends its first framed message the instant the handshake completes, so a
+  /// reader cancelled here and replaced afterwards drops whatever landed in
+  /// between. Whoever opened it closes it.
   Future<SessionKeys> run(ByteChannel raw,
-      {required bool initiator}) async {
-    final reader = ChannelReader(raw);
-    try {
+      {required bool initiator, required ChannelReader reader}) async {
+    {
       final eph = await X25519().newKeyPair();
       final ephPub =
           Uint8List.fromList((await eph.extractPublicKey()).bytes);
@@ -140,8 +143,6 @@ class Handshake {
         keys = await _keys(initiator: false, eph: eph, remoteEph: remoteEph);
       }
       return keys;
-    } finally {
-      await reader.cancel();
     }
   }
 

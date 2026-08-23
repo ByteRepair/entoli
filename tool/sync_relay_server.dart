@@ -14,17 +14,20 @@ void main(List<String> args) {
   final port = args.contains("--port")
       ? int.parse(args[args.indexOf("--port") + 1])
       : 8090;
-  final server = RelayServer();
-  server.start(port);
-  stdout.writeln("entoli relay listening on ws://0.0.0.0:$port");
+  RelayServer().start(port).then((_) =>
+      stdout.writeln("entoli relay listening on ws://0.0.0.0:$port"));
 }
 
 class RelayServer {
   // room -> role -> socket. Two roles per room is all the protocol has.
   final _rooms = <String, Map<String, WebSocket>>{};
 
-  Future<void> start(int port) async {
-    final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+  /// Binds and starts serving. Returns the server so a caller can find the
+  /// port it was given (pass 0 for one of the OS's) and close it again — the
+  /// tests run this exact class rather than a copy of it.
+  Future<HttpServer> start(int port, {InternetAddress? address}) async {
+    final server =
+        await HttpServer.bind(address ?? InternetAddress.anyIPv4, port);
     server.listen((request) async {
       if (WebSocketTransformer.isUpgradeRequest(request)) {
         final socket = await WebSocketTransformer.upgrade(request);
@@ -34,6 +37,7 @@ class RelayServer {
         await request.response.close();
       }
     }, onError: (_) {});
+    return server;
   }
 
   void _adopt(WebSocket socket) {

@@ -13,7 +13,6 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
-import "package:agent_chat/ui/chat/remote_turns.dart";
 import "package:agent_chat/providers.dart" show syncHubProvider;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -104,20 +103,20 @@ void main() {
     expect(psk, isNot(contains("=")));
   });
 
-  /// The hub is built before the container it reads from, so what lives in
-  /// the container has to be handed to it afterwards. Nothing structural
-  /// enforces that, and it was missed: every test here calls `attach` in its
-  /// own harness, so a real device paired happily and then served nothing —
-  /// no welcome, no chat list, no records.
-  test("reading the driver provider is what makes a device serve", () async {
+  /// The hub is built before the container it reads from, so the repository
+  /// has to be handed to it afterwards — and until it is, a device pairs
+  /// happily and serves nothing: no welcome, no chat list, no records. That
+  /// is what shipped, because every test called `attach` in its own harness
+  /// and `main` called it nowhere. `main` itself is not reachable from a test
+  /// (see `test/CLAUDE.md`), so what is pinned here is the symptom, loudly
+  /// enough to recognise if it comes back.
+  test("a hub with no repository serves nothing", () async {
     final config = tempConfig();
     final hub = await testSyncHub(config);
     addTearDown(hub.dispose);
-    final app = TestApp.create(hub: hub);
-    addTearDown(app.dispose);
 
     expect(hub.isServing, isFalse);
-    app.container.read(remoteTurnDriverProvider);
+    hub.attach(home.repo);
     expect(hub.isServing, isTrue);
   });
 
@@ -602,7 +601,9 @@ ChatState _seedChat(_Device device) {
 
 class _Loopback implements ByteChannel {
   _Loopback? other;
-  final _incoming = StreamController<Uint8List>.broadcast();
+  // Single-subscription like the real one, so a test exercises the buffering
+  // rather than a broadcast stream's dropping.
+  final _incoming = StreamController<Uint8List>();
   var _closed = false;
 
   @override
@@ -621,6 +622,10 @@ class _Loopback implements ByteChannel {
     if (_closed) return;
     _closed = true;
     await _incoming.close();
+    // Both ends, the way a real transport does: closing one side of a data
+    // channel is something the other side is told about. Closing only this
+    // one left the peer waiting out its timeouts for a channel already gone.
+    await other?.close();
   }
 }
 

@@ -127,7 +127,9 @@ class ByteRtcChannel implements ByteChannel {
   final webrtc.RTCDataChannel _channel;
   final Future<void> Function() _onClose;
   late final StreamSubscription<dynamic> _subscription;
-  final _controller = StreamController<Uint8List>.broadcast();
+  // Single-subscription, so bytes that arrive before the reader is attached
+  // are held rather than dropped. See [ByteChannel.incoming].
+  final _controller = StreamController<Uint8List>();
 
   @override
   Stream<Uint8List> get incoming => _controller.stream;

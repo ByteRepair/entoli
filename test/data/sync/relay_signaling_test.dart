@@ -1,36 +1,23 @@
 import "dart:async";
-import "dart:convert";
 import "dart:io";
 
 import "package:agent_chat/data/sync/signaling/relay_signaler.dart";
 import "package:flutter_test/flutter_test.dart";
 
-/// The relay rendezvous over a real WebSocket, against the reference relay
-/// this repo ships. Both halves are the shipped code — `tool/` is what a user
-/// would run, and a relay that forwarded to the wrong side would be found by
-/// nothing else.
-///
-/// The relay itself is copied here rather than imported: `tool/` is outside
-/// `lib/` and so not on the package's import path. If the two drift, this
-/// test is checking a relay nobody runs — so the copy is deliberately
-/// verbatim, and `tool/sync_relay_server.dart` says so.
+import "../../../tool/sync_relay_server.dart";
+
+/// The relay rendezvous over a real WebSocket. Both halves are the shipped
+/// code — `tool/sync_relay_server.dart` is what a user would run, imported
+/// here rather than copied, since a second implementation in the test would
+/// let the one people actually run drift out from under it. A relay that
+/// forwarded to the wrong side would be found by nothing else.
 void main() {
   late HttpServer server;
   late String url;
-  final rooms = <String, Map<String, WebSocket>>{};
 
   setUp(() async {
-    rooms.clear();
-    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server = await RelayServer().start(0, address: InternetAddress.loopbackIPv4);
     url = "ws://127.0.0.1:${server.port}";
-    server.listen((request) async {
-      if (!WebSocketTransformer.isUpgradeRequest(request)) {
-        request.response.statusCode = HttpStatus.notFound;
-        await request.response.close();
-        return;
-      }
-      _adopt(await WebSocketTransformer.upgrade(request), rooms);
-    }, onError: (_) {});
   });
 
   tearDown(() => server.close(force: true));
@@ -124,39 +111,4 @@ void main() {
       throwsA(anything),
     );
   });
-}
-
-/// Verbatim from `tool/sync_relay_server.dart` — see the note at the top.
-void _adopt(WebSocket socket, Map<String, Map<String, WebSocket>> rooms) {
-  String? room;
-  String? role;
-
-  socket.listen(
-    (data) {
-      if (data is! String) return;
-      if (room == null) {
-        try {
-          final join = jsonDecode(data) as Map<String, dynamic>;
-          room = join["join"] as String?;
-          role = join["role"] as String?;
-        } catch (_) {}
-        if (room == null || !{"i", "j"}.contains(role)) {
-          socket.close();
-          return;
-        }
-        rooms.putIfAbsent(room!, () => {})[role!] = socket;
-        return;
-      }
-      final peer = rooms[room]?[role == "i" ? "j" : "i"];
-      peer?.add(data);
-    },
-    onError: (_) {},
-    onDone: () {
-      if (room != null && role != null) {
-        final occupants = rooms[room];
-        if (occupants?[role] == socket) occupants?.remove(role);
-        if (occupants != null && occupants.isEmpty) rooms.remove(room);
-      }
-    },
-  );
 }

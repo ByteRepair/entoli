@@ -42,6 +42,19 @@ class PeerState {
   final String name;
   final PeerStatus status;
   final String? error;
+
+  /// By value, so republishing the same list is not a change — the page above
+  /// copies and sorts on every notification.
+  @override
+  bool operator ==(Object other) =>
+      other is PeerState &&
+      other.deviceId == deviceId &&
+      other.name == name &&
+      other.status == status &&
+      other.error == error;
+
+  @override
+  int get hashCode => Object.hash(deviceId, name, status, error);
 }
 
 /// What a pairing window looks like while it is open. Replaced wholesale on
@@ -296,14 +309,16 @@ class SyncHub {
   int _resourceSeq = 0;
   final _pendingResources = <String, _ResourceTransfer>{};
 
-  /// The repository arrives after construction — the container that holds it
-  /// does not exist yet when [SyncHub] is built. Serving-side everything is
-  /// inert until this is called.
   /// Whether the hub has been given the repository the serving side is built
-  /// on. False is a device that pairs, and then serves nothing at all.
+  /// on. False is a device that pairs, and then serves nothing at all — which
+  /// is what shipped, because `attach` was called by every test's harness and
+  /// by nothing in the app.
   @visibleForTesting
   bool get isServing => _repo != null;
 
+  /// The repository arrives after construction — the container that holds it
+  /// does not exist yet when [SyncHub] is built. Serving-side everything is
+  /// inert until this is called.
   void attach(ChatRepository repo) {
     if (_repo != null) return;
     _repo = repo;
@@ -858,14 +873,17 @@ class SyncHub {
   /// be dialed again after a restart without opening a window first.
   /// Cheap where nothing is paired: the server never starts.
   Future<void> ensureReady() async {
+    // Read once: `FileDeviceRegistry.list` re-reads and re-parses the file
+    // on every call, and this was asking three times over.
+    final devices = await registry.list();
     // Before the early return below: a web build listens for nothing and a
     // desktop with no pairings starts no server, and both still have a list
     // of paired devices to draw.
-    _refreshPeers();
+    _publishPeers(devices);
     final server = _server;
-    if (server == null || (await registry.list()).isEmpty) return;
+    if (server == null || devices.isEmpty) return;
     await server.start();
-    for (final device in await registry.list()) {
+    for (final device in devices) {
       final secret = await registry.pairingSecret(device.id);
       if (secret != null) server.allowReconnect(RelaySignaler.roomFor(secret));
     }
@@ -1154,10 +1172,15 @@ class SyncHub {
   /// What the other device files this one under. The machine's own name
   /// where there is one, since that is what its owner already calls it; the
   /// key's first characters otherwise, which at least cannot collide.
-  String get deviceName =>
-      _settings().deviceName ??
-      _hostname ??
-      "Entoli ${identity.fingerprint.substring(0, 5)}";
+  String get deviceName => _settings().deviceName ?? defaultDeviceName;
+
+  /// What it would be called with nothing set — the machine's own name where
+  /// there is one, since that is what its owner already calls it, and the
+  /// key's first characters otherwise, which at least cannot collide. Its own
+  /// getter because the Sync page's field wants exactly this: the hint has to
+  /// go on saying what the default is after a name has been typed over it.
+  String get defaultDeviceName =>
+      _hostname ?? "Entoli ${identity.fingerprint.substring(0, 5)}";
 
   List<Map<String, Object>> iceServers() {
     final servers = [
@@ -1359,14 +1382,16 @@ class SyncHub {
       final peer = handshake.peer!;
       if (knownDeviceId != null) handshake.requirePeerId(knownDeviceId);
 
-      // Everything from here reads through one subscription, and it is
-      // attached before anything else happens at all. The channel's stream is
-      // broadcast, so whatever arrives with no listener on it is dropped
-      // rather than queued — and the other side sends its hello the moment
-      // *its* human has confirmed, which may be well before ours has. Every
-      // await between the decrypt loop starting and this listener is a window
-      // messages fall into: the codes-matched gate below is the widest one
-      // there could be, since it waits for a person.
+      // The codes are compared before anything is read or sent. The other
+      // side answers the moment *its* human has confirmed, which may be well
+      // before ours has — and what it sends is held by the channel until the
+      // reader below attaches, so there is nothing to be careful about here.
+      // It cost four bugs to stop needing that care; see the framing.
+      if (await _sasGate(handshake.sas!, isNew: knownDeviceId == null) ==
+          false) {
+        throw const HandshakeException("the codes did not match");
+      }
+
       final deviceId = peer.id;
       final peerDevice = await registry.byId(deviceId);
       final live = _LivePeer(channel,
@@ -1374,12 +1399,6 @@ class SyncHub {
           deviceName: _nameOf(peerDevice, peer),
           onClose: () => _peerGone(deviceId));
       final hello = Completer<Map<String, dynamic>>();
-      // Held rather than handled until the codes have been compared: a peer
-      // whose own human confirmed first is already sending, and applying its
-      // welcome before ours has agreed would leave mirrors behind from a
-      // pairing that was then refused.
-      final held = <SyncMessage>[];
-      var confirmed = false;
       live.handle = (message) => _dispatch(live, message);
       live.pump = channel.jsonIncoming.listen(
         (json) {
@@ -1390,24 +1409,27 @@ class SyncHub {
             return;
           }
           try {
-            final message = SyncMessage.fromJson(json);
-            confirmed ? live.enqueue(message) : held.add(message);
+            live.enqueue(SyncMessage.fromJson(json));
           } catch (_) {
             // A frame that does not parse is a broken peer; drop the link
             // rather than guess at what it meant.
             unawaited(live.close());
           }
         },
-        onError: (_) => unawaited(live.close()),
-        onDone: () => unawaited(live.close()),
+        // A peer that goes away mid-exchange has to fail the hello too, or
+        // this side waits out the timeout below for an answer that can no
+        // longer come.
+        onError: (Object error) {
+          if (!hello.isCompleted) hello.completeError(error);
+          unawaited(live.close());
+        },
+        onDone: () {
+          if (!hello.isCompleted) {
+            hello.completeError(const ChannelClosedException());
+          }
+          unawaited(live.close());
+        },
       );
-
-      if (await _sasGate(handshake.sas!, isNew: knownDeviceId == null) ==
-          false) {
-        await live.close();
-        throw const HandshakeException("the codes did not match");
-      }
-      confirmed = true;
 
       await channel.sendJson({
         "t": "hello",
@@ -1440,11 +1462,6 @@ class SyncHub {
       _live[deviceId] = live;
       _setStatus(deviceId,
           name: device.name, status: PeerStatus.online);
-      // Whatever arrived while the codes were being compared, in order.
-      for (final message in held) {
-        live.enqueue(message);
-      }
-      held.clear();
 
       // What this device serves. The mirror side answers this with
       // chatOpens for whatever it follows.
@@ -1477,7 +1494,7 @@ class SyncHub {
 
   void _setStatus(String deviceId,
       {required String name, required PeerStatus status, String? error}) {
-    peers.value = {
+    final next = {
       ...peers.value,
       deviceId: PeerState(
         deviceId: deviceId,
@@ -1486,6 +1503,7 @@ class SyncHub {
         error: error,
       ),
     };
+    if (!mapEquals(next, peers.value)) peers.value = next;
   }
 
   void _markOffline(String deviceId) {
@@ -1501,18 +1519,18 @@ class SyncHub {
     };
   }
 
-  void _refreshPeers() {
-    registry.list().then((devices) {
-      final next = {...peers.value};
-      for (final device in devices) {
-        next.putIfAbsent(
-          device.id,
-          () => PeerState(
-              deviceId: device.id, name: device.name, status: PeerStatus.offline),
-        );
-      }
-      peers.value = next;
-    });
+  void _refreshPeers() => registry.list().then(_publishPeers);
+
+  void _publishPeers(List<PairedDevice> devices) {
+    final next = {...peers.value};
+    for (final device in devices) {
+      next.putIfAbsent(
+        device.id,
+        () => PeerState(
+            deviceId: device.id, name: device.name, status: PeerStatus.offline),
+      );
+    }
+    if (!mapEquals(next, peers.value)) peers.value = next;
   }
 
   void _note(PairingStage stage, {String? sas}) {

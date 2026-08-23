@@ -7,8 +7,10 @@ import "dart:typed_data";
 /// in is one message out; framing larger payloads across messages is the
 /// caller's (the resources chunking of phase 2), not a transport's.
 abstract interface class ByteChannel {
-  /// Complete incoming messages. Closes when the connection does. A broadcast
-  /// stream — attach exactly one [ChannelReader], not several listeners.
+  /// Complete incoming messages. Closes when the connection does. Exactly one
+  /// [ChannelReader] attaches to it, and it buffers until that happens —
+  /// anything else drops whatever arrives before the reader is on, which is a
+  /// window every layer above would then have to be written around.
   Stream<Uint8List> get incoming;
 
   Future<void> send(Uint8List bytes);

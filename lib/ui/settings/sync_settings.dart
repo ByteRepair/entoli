@@ -43,7 +43,7 @@ class SyncSection extends ConsumerWidget {
               decoration: InputDecoration(
                 // The name the other device would file this one under with
                 // nothing typed here, rather than a stand-in for it.
-                hintText: hub.deviceName,
+                hintText: hub.defaultDeviceName,
                 isDense: true,
               ),
               onChanged: (value) => ref

@@ -32,8 +32,13 @@ final class SecureChannel implements ByteChannel {
   int _sendCounter = 0;
   int _recvCounter = 0;
 
-  /// The stream this class exposes.
-  final _controller = StreamController<Uint8List>.broadcast();
+  /// The stream this class exposes. Deliberately *not* a broadcast one: a
+  /// broadcast controller drops what it is given while nobody is listening,
+  /// and the peer starts sending the moment the handshake is done — long
+  /// before this side has finished asking a human whether the codes match.
+  /// Single-subscription buffers instead, which is what makes "attach the
+  /// reader whenever you are ready" true rather than a rule to remember.
+  final _controller = StreamController<Uint8List>();
 
   @override
   Stream<Uint8List> get incoming => _controller.stream;
@@ -47,13 +52,17 @@ final class SecureChannel implements ByteChannel {
     required Handshake handshake,
     required bool initiator,
   }) async {
-    final keys = await handshake.run(raw, initiator: initiator);
-    return SecureChannel._(
-      raw,
-      keys.send,
-      keys.recv,
-      ChannelReader(raw),
-    );
+    // One reader for the channel's whole life, handed through the handshake
+    // rather than cancelled and replaced after it — the gap between those two
+    // is one the peer's first framed message falls into.
+    final reader = ChannelReader(raw);
+    try {
+      final keys = await handshake.run(raw, initiator: initiator, reader: reader);
+      return SecureChannel._(raw, keys.send, keys.recv, reader);
+    } catch (_) {
+      await reader.cancel();
+      rethrow;
+    }
   }
 
   Uint8List _nonce(int counter) {
@@ -159,7 +168,11 @@ final class SecureChannel implements ByteChannel {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    await _controller.close();
+    // Not awaited: closing a single-subscription controller nobody ever
+    // listened to does not complete until something does, and a channel torn
+    // down before its reader was attached — a refused pairing — is exactly
+    // that. The raw channel below has to be closed either way.
+    unawaited(_controller.close());
     await _raw.close();
   }
 }

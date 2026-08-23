@@ -20,17 +20,8 @@ import "chat_controller.dart";
 ///
 /// Read once for its effect, like `TurnKeepAlive`: it registers itself on the
 /// hub in its constructor and nothing ever asks it anything.
-///
-/// It hands the hub the repository as well, which is what the serving side is
-/// built on — the chat list in a welcome, the change feed behind every
-/// append, the records a `chatOpen` is answered with. Both halves are the
-/// same fact, that the hub is built before the container and has to be given
-/// what lives in it, so they are one thing to remember rather than two. They
-/// were two, and the second was forgotten: every test called `attach` in its
-/// own harness, so nothing noticed that a real device never served anything.
 class RemoteTurnDriver implements RemoteTurns {
   RemoteTurnDriver(this._ref, this._hub) {
-    _hub.attach(_ref.read(chatRepositoryProvider));
     _hub.remoteTurns = this;
     _hub.servedChats.addListener(_served);
     _served();
