@@ -31,6 +31,19 @@ abstract interface class ReminderAlarms {
 
   Future<void> cancel(int requestCode);
 
+  /// Whether a turn started right now could be held open. Android refuses a
+  /// backgrounded app the foreground service that holds the process, and a turn
+  /// nothing holds is one the system kills halfway — so a fire this answers
+  /// false to is handed back to the alarm rather than run. True where there is
+  /// nothing to ask: a desktop process nobody is looking at is left alone.
+  Future<bool> canHoldTurn();
+
+  /// The fires the alarm woke the process for have been dealt with. Android's
+  /// receiver takes a hold of its own, before Dart is listening, and this is
+  /// what releases it — a wake that turned out to have nothing to run would
+  /// otherwise hold the process open for good.
+  Future<void> doneFiring();
+
   /// Post the completion notification. [chatId] rides on its content intent:
   /// tapping it comes back through [takeOpenChat].
   Future<void> notify({required String title, required String body, String? chatId});
@@ -72,6 +85,12 @@ class UnavailableReminderAlarms implements ReminderAlarms {
 
   @override
   Future<void> cancel(int requestCode) async {}
+
+  @override
+  Future<bool> canHoldTurn() async => true;
+
+  @override
+  Future<void> doneFiring() async {}
 
   @override
   Future<void> notify({required String title, required String body, String? chatId}) async {}

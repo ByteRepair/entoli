@@ -516,7 +516,7 @@ scalars — `description` is all the menu needs.
 The syntax is `_command` and `_mention` in `prompt_library.dart`, beside the
 library they are read against rather than in whichever layer happened to need
 them first — `BuiltinBackend` held them when it was the only thing that expanded
-one. `activeCompletionToken` in the composer has to agree with those two
+one. `activeCompletionToken` in `CompletionField` has to agree with those two
 patterns: anything the menu offers has to dispatch.
 
 `/name args` expands to the command's body with `$ARGUMENTS` substituted (or
@@ -640,6 +640,12 @@ and a `task` fan-out could do the same through a sub-agent. `meta.approveMode` i
 pinned to `never` for the same reason: an approval banner nobody presses is a
 turn that never ends.
 
+**How long the chat lives is the reminder's `tempChatTtl`**, written onto its
+`meta.json` as it is, null and all — the same field the chat settings page sets,
+inheriting the project's or the app's answer where it is null. It was a bool,
+and a bool could name only one of the five TTLs; `fromJson` still reads the old
+key, where false meant `TempChatTtl.off` and true meant inherit.
+
 **`lastFiredAt` is stamped before the turn runs, never after.** A crash mid-turn
 costs a notification but must not re-run the whole prompt against the workspace.
 The stamp goes through `onReminderFired` before `sendPrompt` is called; the
@@ -651,7 +657,21 @@ next occurrence.
 beside `ReminderAlarms.takeFired` — so whichever of the three triggers notices
 first (the in-process timer, a nudge, startup catch-up) stamps the reminder and
 runs it, and the others find the stamp moved. A single-flight set keyed by
-reminder id guards against the overlap.
+reminder id guards against the overlap, and the id goes into it **before the
+first await** — asking the platform anything is a round trip, and two triggers
+either side of one would both find nothing running.
+
+**A fire the platform will not hold is handed back to the alarm rather than
+run.** `_deferToAlarm` asks `ReminderAlarms.canHoldTurn` and, where the answer
+is no, re-arms the reminder for the time it was already due instead of starting
+a turn — the system delivers that at once, and its broadcast is the one moment
+a backgrounded app may hold the process open. Off screen the timer was
+otherwise starting turns nothing could keep alive, which Android kills partway
+through the reply, leaving the user a chat to press Continue on. Never twice
+without a run in between; `canHoldTurn` is true wherever there is nothing to
+ask, so this is Android's problem alone. See "Waking for a reminder" in
+`android/CLAUDE.md` for the other end, and for the hold the receiver takes and
+`doneFiring` releases.
 
 **Catch-up fires overdue reminders at launch**, the same lazy semantics the
 temp-chat sweep uses. A one-shot more than two minutes past its time says

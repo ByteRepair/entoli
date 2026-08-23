@@ -8,7 +8,6 @@ import "models.dart";
 import "permission.dart";
 import "project.dart";
 import "reminder.dart";
-import "temp_chat_ttl.dart";
 import "turn_recorder.dart";
 
 /// How a reminder's turn ended, worded for the completion notification.
@@ -66,7 +65,7 @@ class ReminderRunner implements ReminderRuns {
       // not reach back into a chat that runs with nobody there to answer it.
       meta: ChatMeta(
         approveMode: ApproveMode.never,
-        tempChatTtl: reminder.temporary ? null : TempChatTtl.off,
+        tempChatTtl: reminder.tempChatTtl,
       ),
     );
     await onReminderFired(reminder.copyWith(lastFiredAt: DateTime.now()));

@@ -1,3 +1,5 @@
+import "temp_chat_ttl.dart";
+
 /// How often a reminder repeats. Declaration order is the order the editor
 /// offers them in.
 enum ReminderRepeat {
@@ -37,7 +39,7 @@ class Reminder {
     required this.at,
     this.repeat = ReminderRepeat.off,
     this.project,
-    this.temporary = true,
+    this.tempChatTtl,
     this.enabled = true,
     this.lastFiredAt,
     this.nextFireAt,
@@ -57,10 +59,10 @@ class Reminder {
   /// same null [projectOrDefault] resolves.
   final String? project;
 
-  /// Whether the chat follows the temporary-chat TTL defaults. False pins
-  /// `TempChatTtl.off` onto it; true leaves `meta.json` alone so inheritance
-  /// decides.
-  final bool temporary;
+  /// The chat's own temporary-chat TTL, written straight onto its `meta.json`
+  /// — the same field the chat settings page sets, with the same null meaning
+  /// inherit the project or app default.
+  final TempChatTtl? tempChatTtl;
   final bool enabled;
 
   /// Stamped before the turn runs, never after: a crash mid-turn costs a
@@ -81,7 +83,8 @@ class Reminder {
     DateTime? at,
     ReminderRepeat? repeat,
     String? project,
-    bool? temporary,
+    TempChatTtl? tempChatTtl,
+    bool clearTempChatTtl = false,
     bool? enabled,
     DateTime? lastFiredAt,
     bool clearLastFiredAt = false,
@@ -96,7 +99,7 @@ class Reminder {
         at: at ?? this.at,
         repeat: repeat ?? this.repeat,
         project: project ?? this.project,
-        temporary: temporary ?? this.temporary,
+        tempChatTtl: clearTempChatTtl ? null : (tempChatTtl ?? this.tempChatTtl),
         enabled: enabled ?? this.enabled,
         lastFiredAt: clearLastFiredAt ? null : (lastFiredAt ?? this.lastFiredAt),
         nextFireAt: clearNextFireAt ? null : (nextFireAt ?? this.nextFireAt),
@@ -110,7 +113,10 @@ class Reminder {
         at: DateTime.parse(json["at"] as String),
         repeat: ReminderRepeat.fromName(json["repeat"] as String?),
         project: json["project"] as String?,
-        temporary: json["temporary"] as bool? ?? true,
+        // `temporary` is what a build before the TTL field wrote, and false
+        // there meant the one TTL a bool could name.
+        tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?) ??
+            ((json["temporary"] as bool? ?? true) ? null : TempChatTtl.off),
         enabled: json["enabled"] as bool? ?? true,
         lastFiredAt: _date(json["lastFiredAt"]),
         nextFireAt: _date(json["nextFireAt"]),
@@ -124,7 +130,7 @@ class Reminder {
         "at": at.toIso8601String(),
         if (repeat != ReminderRepeat.off) "repeat": repeat.name,
         if (project != null) "project": project,
-        if (!temporary) "temporary": false,
+        if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
         if (!enabled) "enabled": false,
         if (lastFiredAt != null) "lastFiredAt": lastFiredAt!.toIso8601String(),
         if (nextFireAt != null) "nextFireAt": nextFireAt!.toIso8601String(),
