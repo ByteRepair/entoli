@@ -101,54 +101,54 @@ void main() {
     expect(backend.resumes.single.settings.model, "qwen-2.5");
   });
 
-  group("a draft chat", () {
-    test("is nowhere on disk until it is saved", () async {
+  group("creating one", () {
+    test("writes it, and lists it, straight away", () async {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat();
 
-      expect(Directory(config.chatDir(chat.state.id)).existsSync(), isFalse);
-      expect(await repo.listChats(), isEmpty);
+      expect(File(config.stateFile(chat.state.id)).existsSync(), isTrue);
+      expect((await repo.listChats()).single.id, chat.state.id);
       expect((await repo.openChat(chat.state.id)).state.id, chat.state.id);
     });
 
-    // Writing meta.json would create the directory a draft exists to do
-    // without, and leave it there whether or not the chat is ever used.
-    test("what is pinned on it is held, and written with the first save", () async {
+    // What the caller decided before there was a chat to hang it on: the
+    // reminder pinning `approveMode`, and the new-chat screen's settings page.
+    test("the settings it is handed land with it", () async {
       final repo = repoWith(AppSettings());
-      final chat = await repo.createChat();
 
-      await repo.saveMeta(chat.state.id, ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
-      expect(Directory(config.chatDir(chat.state.id)).existsSync(), isFalse);
+      final chat = await repo.createChat(
+          meta: ChatMeta(provider: "ollama-cloud", model: "qwen-2.5"));
+
       expect((await repo.loadMeta(chat.state.id)).model, "qwen-2.5");
-
-      await writeChatVia(repo, chat);
       expect(ChatMeta.parse(File(config.metaFile(chat.state.id)).readAsStringSync()).model,
           "qwen-2.5");
     });
 
-    test("renaming one keeps it a draft", () async {
+    // Written before the meta, or the store files the meta under the default
+    // project whatever the chat says.
+    test("one made in a project is written under it", () async {
       final repo = repoWith(AppSettings());
-      final chat = await repo.createChat();
+
+      final chat = await repo.createChat(
+          project: "work", meta: ChatMeta(model: "qwen-2.5"));
+
+      expect(File(config.stateFile(chat.state.id, project: "work")).existsSync(), isTrue);
+      expect(File(config.metaFile(chat.state.id, project: "work")).existsSync(), isTrue);
+      expect((await repo.listChats()).single.project, "work");
+    });
+
+    test("renaming one keeps everything else it says", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "work");
 
       await repo.retitle(chat.state.id, "Named early");
 
-      expect(await repo.listChats(), isEmpty);
-      expect((await repo.openChat(chat.state.id)).state.title, "Named early");
+      expect((await repo.listChats()).single.title, "Named early");
+      expect((await repo.openChat(chat.state.id)).state.project, "work");
     });
   });
 
   group("projects", () {
-    test("a chat created in one is written under it when it is saved", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "work");
-
-      expect(Directory(config.chatDir(chat.state.id, project: "work")).existsSync(), isFalse);
-      await writeChatVia(repo, chat);
-
-      expect(File(config.stateFile(chat.state.id, project: "work")).existsSync(), isTrue);
-      expect((await repo.listChats()).single.project, "work");
-    });
-
     test("the turn is told which project's files it works in", () async {
       final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
       final chat = await repo.createChat(project: "work");
@@ -157,15 +157,6 @@ void main() {
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
       expect(backend.prompts.single.settings.project, "work");
-    });
-
-    // A draft is not on disk to be looked up, and its first turn is sent
-    // before anything else has written it.
-    test("a draft in a project says so before it is saved", () async {
-      final repo = repoWith(AppSettings());
-      final chat = await repo.createChat(project: "work");
-
-      expect(await repo.projectOf(chat.state.id), "work");
     });
 
     test("deleting a project drops the sessions of the chats in it", () async {

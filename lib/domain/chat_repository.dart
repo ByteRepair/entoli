@@ -80,63 +80,36 @@ class ChatRepository {
   /// as it is composed — see [composeUserPrompt].
   final PromptLibrary _library;
 
-  /// A chat that has been started but not written to. It lives here until
-  /// [save] puts it on disk, which the first turn does. Its settings come with
-  /// it: writing `meta.json` would create the very directory a draft does
-  /// without.
-  Chat? _draft;
-  ChatMeta? _draftMeta;
-
-  bool _isDraft(String id) => _draft?.state.id == id;
-
   final _changes = StreamController<RepoEvent>.broadcast();
 
-  /// Everything written through this repository, as it lands. Drafts are not
-  /// reported: they are nowhere on disk for a peer to mirror.
+  /// Everything written through this repository, as it lands.
   Stream<RepoEvent> get changes => _changes.stream;
-
-  void _forgetDraft(String id) {
-    if (!_isDraft(id)) return;
-    _draft = null;
-    _draftMeta = null;
-  }
 
   Future<List<ChatState>> listChats() => _store.list();
 
-  /// The model is deliberately not pinned here: a chat with nothing in its
+  /// Make a chat and write it. **Callers create one only when there is
+  /// something to put in it** — the new-chat screen as the first message is
+  /// sent, voice mode on the way in, a reminder as it fires — so a screen
+  /// nobody used leaves nothing behind. See "Starting a chat, and naming it".
+  ///
+  /// The model is deliberately not pinned: a chat with nothing in its
   /// `meta.json` follows the app default wherever it moves. [project] is,
   /// because it is where the chat's files go — null is the default project.
-  Future<Chat> createChat({String? title, String? project}) async {
-    final chat = await _backend.createChat(title: title);
-    _draft = chat.copyWith(state: chat.state.copyWith(project: project));
-    _draftMeta = null;
-    return _draft!;
-  }
-
-  /// A chat created headlessly, with the settings it runs under already on
-  /// disk. State and meta land together and the draft pair is never touched:
-  /// [createChat] holds one draft, and two reminders firing together — or one
-  /// firing while a new chat is open unsent — would overwrite each other's
-  /// slot, orphaning a `meta.json` under the wrong project and losing the
-  /// approval pin that keeps an unattended turn from parking on a banner.
-  ///
-  /// The anchored save reads the meta back off disk, which is why it is
-  /// written first.
-  Future<Chat> createHeadlessChat({
-    String? title,
-    String? project,
-    ChatMeta? meta,
-  }) async {
+  /// [meta] is the settings it should run its first turn under, for a caller
+  /// that decided them before there was a chat to hang them on — the reminder
+  /// that pins `approveMode`, and the new-chat screen's own settings page.
+  Future<Chat> createChat({String? title, String? project, ChatMeta? meta}) async {
     final base = await _backend.createChat(title: title);
     final chat = base.copyWith(state: base.state.copyWith(project: project));
-    // State lands before meta: the store learns where this chat lives from its
-    // first saveState, and a meta written before that goes under the default
-    // project whatever [project] says.
-    await _store.saveState(chat.state);
-    if (meta != null) await _store.saveMeta(chat.state.id, meta);
-    // Re-saved through the anchoring path, which reads the meta just written.
-    final anchored = await saveState(chat.state);
-    return chat.copyWith(state: anchored);
+    // Only where there is a meta to place: the store learns where a chat lives
+    // from its first `saveState`, and a meta written before that goes under
+    // the default project whatever [project] says. With none, this write is
+    // the anchored one below over again.
+    if (meta != null && !meta.isEmpty) {
+      await _store.saveState(chat.state);
+      await _store.saveMeta(chat.state.id, meta);
+    }
+    return chat.copyWith(state: await saveState(chat.state));
   }
 
   Future<List<String>> listProjects() => _store.listProjects();
@@ -144,13 +117,11 @@ class ChatRepository {
   Future<void> createProject(String name) => _store.createProject(name);
 
   /// The chats go with it, so their sessions are dropped the way deleting one
-  /// at a time would drop them. A draft belonging to it goes too: it is not in
-  /// the list, and the project it was to be written to is about to be gone.
+  /// at a time would drop them.
   Future<void> deleteProject(String name) async {
     for (final chat in await listChats()) {
-      if (chat.project == name) await _dropSession(chat.id);
+      if (chat.project == name) await _backend.disposeChat(chat.id);
     }
-    if (_draft?.state.project == name) await _dropSession(_draft!.state.id);
     await _store.deleteProject(name);
   }
 
@@ -161,14 +132,12 @@ class ChatRepository {
     _changes.add(Moved(chatId, project));
   }
 
-  Future<Chat> openChat(String id) async => _isDraft(id) ? _draft! : await _store.load(id);
+  Future<Chat> openChat(String id) => _store.load(id);
 
-  /// Write `state.json` and the directories under it, promoting the draft if it
-  /// still is one — which is where whatever was pinned on it gets written too.
-  /// Called at the head of every turn, not only the first, and from the TTL
-  /// propagation helpers when a setting change re-anchors chats. The
-  /// conversation is deliberately not written here: it arrives as records,
-  /// through [append].
+  /// Write `state.json` and the directories under it. Called at the head of
+  /// every turn, not only the first, and from the TTL propagation helpers when
+  /// a setting change re-anchors chats. The conversation is deliberately not
+  /// written here: it arrives as records, through [append].
   ///
   /// Also maintains the chat's TTL anchor: the resolved TTL is recomputed on
   /// every save so widening the app/project window extends an existing chat
@@ -185,8 +154,6 @@ class ChatRepository {
   /// Returns what was written, anchor and all, since it is not what was passed
   /// in and a caller showing the chat has to draw the difference.
   Future<ChatState> saveState(ChatState state, {bool reanchor = false}) async {
-    final pinned = _isDraft(state.id) ? _draftMeta : null;
-    _forgetDraft(state.id);
     final ttl = await _resolveTempTtl(state.id, project: state.project);
     final dur = tempChatTtlDuration(ttl);
     DateTime? since = state.tempTtlSince;
@@ -200,14 +167,12 @@ class ChatRepository {
     }
     final anchored = state.copyWith(tempTtlSince: since, tempTtlExpiresAt: expiresAt);
     await _store.saveState(anchored);
-    if (pinned != null) await _store.saveMeta(state.id, pinned);
     _changes.add(StateChanged(anchored));
     return anchored;
   }
 
   /// Re-anchor every chat in a project to now, so a project-level TTL change
-  /// is reflected immediately. Null is the default project. Drafts are not on
-  /// disk and are skipped by [listChats].
+  /// is reflected immediately. Null is the default project.
   Future<void> reanchorProjectTtl(String? project) async {
     final chats = await listChats();
     await Future.wait([
@@ -232,15 +197,11 @@ class ChatRepository {
   /// A title change on its own — the title and nothing else. The conversation
   /// is deliberately not written: a turn may still be adding to it.
   Future<void> retitle(String chatId, String title) async {
-    if (_isDraft(chatId)) {
-      _draft = _draft!.copyWith(state: _draft!.state.copyWith(title: title));
-    } else {
-      await _store.retitle(chatId, title);
-      // A mirror is sent the whole state, and only the store knows the rest of
-      // it: the caller's copy is older than the turn writing beside it.
-      final renamed = await _store.loadState(chatId);
-      if (renamed != null) _changes.add(StateChanged(renamed));
-    }
+    await _store.retitle(chatId, title);
+    // A mirror is sent the whole state, and only the store knows the rest of
+    // it: the caller's copy is older than the turn writing beside it.
+    final renamed = await _store.loadState(chatId);
+    if (renamed != null) _changes.add(StateChanged(renamed));
   }
 
   /// A name for a new chat, from the first thing said in it. Null when no
@@ -260,26 +221,19 @@ class ChatRepository {
     return answer == null ? null : cleanTitle(answer);
   }
 
-  Future<ChatMeta> loadMeta(String chatId) async =>
-      _isDraft(chatId) ? _draftMeta ??= ChatMeta() : await _store.loadMeta(chatId);
+  Future<ChatMeta> loadMeta(String chatId) => _store.loadMeta(chatId);
 
   Future<void> saveMeta(String chatId, ChatMeta meta) async {
-    if (_isDraft(chatId)) {
-      _draftMeta = meta;
-      return;
-    }
     await _store.saveMeta(chatId, meta);
     _changes.add(MetaChanged(chatId, meta));
   }
 
+  Future<ChatState?> loadState(String chatId) => _store.loadState(chatId);
+
   /// The chat's raw log, in order — what [openChat] replays and discards. The
   /// sync layer streams these to a mirror asking to follow from where it
   /// already is.
-  Future<ChatState?> loadState(String chatId) async =>
-      _isDraft(chatId) ? _draft!.state : _store.loadState(chatId);
-
-  Future<List<ChatRecord>> readRecords(String chatId) =>
-      _isDraft(chatId) ? Future.value(const []) : _store.readRecords(chatId);
+  Future<List<ChatRecord>> readRecords(String chatId) => _store.readRecords(chatId);
 
   /// [history] is what was said before this prompt, for a backend that is not
   /// holding the chat's session — see `AgentBackend.sendPrompt`. It comes from
@@ -339,8 +293,9 @@ class ChatRepository {
       ProjectSettings.load(_config, project: project);
 
   /// Which TTL applies to a chat: its own choice wins, else the project's, else
-  /// the app default. [project] is passed in for the draft case, which has no
-  /// disk location to be found from; for a stored chat it is read back.
+  /// the app default. [project] is passed in by [saveState], which is holding
+  /// the state it is about to write and so already knows; without it the answer
+  /// is read back off disk.
   Future<TempChatTtl> _resolveTempTtl(String chatId, {String? project}) async {
     final meta = await loadMeta(chatId);
     if (meta.tempChatTtl != null) return meta.tempChatTtl!;
@@ -350,10 +305,8 @@ class ChatRepository {
     return _settings().tempChatTtl;
   }
 
-  /// Which project a chat's files are in. A draft is not on disk to be found,
-  /// so it answers for itself.
-  Future<String?> projectOf(String chatId) async =>
-      _isDraft(chatId) ? _draft!.state.project : await _store.projectOf(chatId);
+  /// Which project a chat's files are in.
+  Future<String?> projectOf(String chatId) => _store.projectOf(chatId);
 
   /// **The one place a user's message is made.** What they typed, the files it
   /// carries, and what its `/command` and `@agent` references meant when they
@@ -414,16 +367,9 @@ class ChatRepository {
   Future<void> abort(String chatId) => _backend.abort(chatId);
 
   Future<void> deleteChat(String id) async {
-    await _dropSession(id);
+    await _backend.disposeChat(id);
     await _store.delete(id);
     _changes.add(Deleted(id));
-  }
-
-  /// Everything a chat holds outside the store: the draft it may still be, and
-  /// the live session the backend is keeping for it.
-  Future<void> _dropSession(String id) async {
-    _forgetDraft(id);
-    await _backend.disposeChat(id);
   }
 
   Future<void> deleteAllChats() async {
@@ -433,7 +379,7 @@ class ChatRepository {
 
   /// Delete every expired chat except [exceptId] (the one currently open, which
   /// is handled by the on-open prompt). Called at startup and on a 30-minute
-  /// timer. Drafts are never swept — they are not on disk and have no state.
+  /// timer.
   Future<void> sweepExpired({String? exceptId}) async {
     final chats = await listChats();
     await Future.wait([

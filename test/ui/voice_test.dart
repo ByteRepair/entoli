@@ -41,9 +41,9 @@ void main() {
   tearDown(() => app.dispose());
 
   /// Voice mode running over a chat of its own, with the two models picked.
-  /// The chat is seeded rather than drafted, and the wait is not decoration:
-  /// the controller loads it asynchronously, and driving one that has not
-  /// finished loading is a `send` that quietly does nothing.
+  /// The wait is not decoration: the controller loads the chat asynchronously,
+  /// and driving one that has not finished loading is a `send` that quietly
+  /// does nothing — which is what `applyChat` spares the app itself.
   Future<String> startVoice() async {
     await app.pickVoiceModels();
     final chat = await app.seedChat();

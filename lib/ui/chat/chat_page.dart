@@ -4,6 +4,7 @@ import "dart:math" as math;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../fonts.dart";
@@ -45,7 +46,7 @@ class ChatPage extends ConsumerWidget {
         child: const Nothing("Pick a chat to follow."),
       );
     }
-    return _StartingChat(withDrawer: withDrawer);
+    return _NewChat(withDrawer: withDrawer);
   }
 }
 
@@ -53,41 +54,119 @@ class ChatPage extends ConsumerWidget {
 /// text too long to track back to the start of.
 const double _readableWidth = 760;
 
-/// Nothing selected is a new chat, so this is the whole of what stood between
-/// them: `startIfEmpty`, and the frame it takes. Nothing is drawn while it
-/// runs — the draft is made in memory, so a spinner would be one frame of one
-/// and would read as a page that could not load.
-class _StartingChat extends ConsumerStatefulWidget {
-  const _StartingChat({required this.withDrawer});
+/// The conversation and whatever answers it, centred and held to
+/// [_readableWidth] — a phone gets the whole screen, a monitor gets a line it
+/// can read back to the start of. The composer goes inside that width rather
+/// than under it, or the conversation sits over a field twice its own width.
+/// Both pages with something to type in are this. [banner] floats over the top
+/// of it.
+class _ReadableColumn extends StatelessWidget {
+  const _ReadableColumn({required this.child, required this.bottom, this.banner});
+
+  final Widget child;
+  final Widget bottom;
+  final Widget? banner;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _readableWidth),
+          child: Stack(
+            children: [
+              Column(children: [Expanded(child: child), bottom]),
+              if (banner != null)
+                Positioned(left: 0, right: 0, top: 0, child: banner!),
+            ],
+          ),
+        ),
+      );
+}
+
+/// Nothing selected: the chat that has not been made yet. Nothing here is keyed
+/// on a chat, because there is none — the project is `selectedProjectProvider`'s
+/// and the settings are this screen's own, until the first message makes one
+/// out of both. See "Nothing selected is a new chat".
+class _NewChat extends ConsumerStatefulWidget {
+  const _NewChat({required this.withDrawer});
 
   final bool withDrawer;
 
   @override
-  ConsumerState<_StartingChat> createState() => _StartingChatState();
+  ConsumerState<_NewChat> createState() => _NewChatState();
 }
 
-class _StartingChatState extends ConsumerState<_StartingChat> {
-  bool _failed = false;
+class _NewChatState extends ConsumerState<_NewChat> {
+  final TextEditingController _controller = TextEditingController();
+
+  /// What the chat this screen makes will run its first turn under. Held here
+  /// rather than in a provider so that it dies with the screen: armed
+  /// app-wide it would land on whatever chat happened to be created next,
+  /// including one started from somewhere else entirely.
+  ChatMeta _meta = ChatMeta();
 
   @override
-  void initState() {
-    super.initState();
-    // Not during the build: it writes the selection this page is reading.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      final id = await ref.read(selectedChatIdProvider.notifier).startIfEmpty();
-      // The reason is already logged. Said here as well because there is
-      // nothing else left on the page to say it — no chat, and no button.
-      if (id == null && mounted) setState(() => _failed = true);
-    });
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openSettings() async {
+    final picked = await Navigator.of(context).push<ChatMeta>(
+      MaterialPageRoute(
+        builder: (_) => NewChatSettingsPage(
+          initial: _meta,
+          project: ref.read(selectedProjectProvider),
+        ),
+      ),
+    );
+    // Null is a page backed out of rather than saved.
+    if (picked != null && mounted) setState(() => _meta = picked);
+  }
+
+  /// The composer has already cleared itself, so a chat that could not be made
+  /// would take the message with it silently. Put it back instead — the reason
+  /// is logged, and this is the only thing left on screen to say so.
+  Future<void> _send(String text, List<Attachment> attachments) async {
+    if (await startChatWith(ref, text, attachments: attachments, meta: _meta)) {
+      return;
+    }
+    if (!mounted) return;
+    _controller.text = text;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Could not start a chat.")),
+    );
   }
 
   @override
-  Widget build(BuildContext context) => _Waiting(
-        withDrawer: widget.withDrawer,
-        child: _failed
-            ? const Nothing("Could not start a chat. Open one from the list.")
-            : const SizedBox.shrink(),
+  Widget build(BuildContext context) => Scaffold(
+        drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
+        appBar: AppBar(
+          title: const _AppBrand(),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.tune),
+              tooltip: "Chat settings",
+              onPressed: _openSettings,
+            ),
+          ],
+        ),
+        body: _ReadableColumn(
+          bottom: Composer(
+            controller: _controller,
+            isRunning: false,
+            onSend: _send,
+            // Nothing to abort: `isRunning` is false until there is a chat for
+            // a turn to run in, and by then this screen is gone.
+            onAbort: () {},
+            onVoice: ref.watch(voiceProvider).available
+                ? () => startVoiceChat(context, ref, meta: _meta)
+                : null,
+          ),
+          child: _EmptyChat(
+            project: ref.watch(selectedProjectProvider),
+            controller: _controller,
+          ),
+        ),
       );
 }
 
@@ -128,12 +207,15 @@ class _ProjectBadges extends ConsumerWidget {
 /// composer's `/` and `@` menus hold — which is the only place those are named
 /// before the user has typed the character that opens them.
 class _EmptyChat extends ConsumerWidget {
-  const _EmptyChat({required this.project, required this.onStart});
+  const _EmptyChat({required this.project, required this.controller});
 
-  /// The project this chat is in, which is the badge picked out.
+  /// The project this chat is in, or on the new-chat screen the one the next
+  /// chat goes to. Either way it is the badge picked out.
   final String? project;
 
-  final void Function(CompletionKind kind, String name) onStart;
+  /// The composer's, so a chip can type into it. See [insertCompletion] for
+  /// where a trigger lands and why it does not ask for the focus.
+  final TextEditingController controller;
 
   /// Enough to say what is on offer. Everything the user has written is a menu,
   /// and `/` is what opens the menu.
@@ -184,7 +266,8 @@ class _EmptyChat extends ConsumerWidget {
                       // `Tooltip` for whatever it is given, and an empty one is
                       // a blank box on a long press.
                       tooltip: starter.option.description,
-                      onPressed: () => onStart(starter.kind, starter.option.name),
+                      onPressed: () =>
+                          insertCompletion(controller, starter.kind, starter.option.name),
                     ),
                 ],
               ),
@@ -211,10 +294,10 @@ class _AppBrand extends StatelessWidget {
       );
 }
 
-/// The page with no conversation in it yet — a chat being made, one still
-/// being read off disk, or a paired device's list with nothing picked out of
-/// it. Carries the drawer and bar the real page would. The default child is
-/// the spinner, which is what reading one off disk wants.
+/// The page with no conversation on it yet — one still being read off disk, or
+/// a paired device's list with nothing picked out of it. Carries the drawer and
+/// bar the real page would. The default child is the spinner, which is what
+/// reading one off disk wants.
 class _Waiting extends StatelessWidget {
   const _Waiting({
     required this.withDrawer,
@@ -387,15 +470,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       onOpenSettings: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
       ),
-      whenEmpty: _EmptyChat(
-        project: chat.state.project,
-        // `insertCompletion` rather than writing the field here: where a
-        // trigger lands is the composer's rule, and a `/command` appended at
-        // the caret is text nothing would ever expand. It does not ask for the
-        // focus, which is the composer's other rule — see "The keyboard and
-        // the caret".
-        onStart: (kind, name) => insertCompletion(_controller, kind, name),
-      ),
+      whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
       bottom: _turnBar(
         view: view,
         driver: notifier,
@@ -528,25 +603,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             ),
         ],
       ),
-      // A reply is full width on a phone and a centred column on a monitor:
-      // the composer goes with it, or the conversation would sit under a field
-      // twice its width.
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _readableWidth),
-          child: Stack(
-            children: [
-              Column(
-                children: [
-                  Expanded(child: _conversation(chat, view, editing, whenEmpty)),
-                  bottom,
-                ],
-              ),
-              if (banner != null)
-                Positioned(left: 0, right: 0, top: 0, child: banner),
-            ],
-          ),
-        ),
+      body: _ReadableColumn(
+        banner: banner,
+        bottom: bottom,
+        child: _conversation(chat, view, editing, whenEmpty),
       ),
     );
   }

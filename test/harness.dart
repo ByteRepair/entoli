@@ -32,6 +32,7 @@ import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
@@ -269,11 +270,16 @@ class TestApp {
     await settings.setVoiceSpeechModel(voiceModelPair.speech);
   }
 
-  /// A chat that is already in the sidebar. Creating one no longer puts it
-  /// there: it is a draft until something is said in it.
-  Future<Chat> seedChat({String title = "old chat", String? project}) async {
-    final chat = await repo.createChat(title: title, project: project);
-    await repo.saveState(chat.state);
+  /// A chat that is already in the sidebar, which creating one now is.
+  Future<Chat> seedChat({String title = "old chat", String? project}) =>
+      repo.createChat(title: title, project: project);
+
+  /// A chat open to be taken away from. Nothing selected is the new-chat
+  /// screen, so a test about arriving there has to start somewhere else for
+  /// the arrival to be visible at all.
+  Future<Chat> openSomeChat({String title = "old chat"}) async {
+    final chat = await seedChat(title: title);
+    container.read(selectedChatIdProvider.notifier).select(chat.state.id);
     return chat;
   }
 
@@ -362,8 +368,8 @@ Future<void> writeChatTo(ChatStore store, Chat chat, {bool finished = true}) asy
 }
 
 /// The same through a [ChatRepository], which is what a UI or repository test
-/// wants: going straight to the store leaves the repository still holding the
-/// chat as a draft, and everything it answers for one takes the draft path.
+/// wants: `saveState` resolves the TTL and anchors it, so a chat written
+/// straight to the store is one no turn could have produced.
 Future<void> writeChatVia(ChatRepository repo, Chat chat, {bool finished = true}) async {
   await repo.saveState(chat.state);
   await repo.append(chat.state.id, _asWritten(chat.messages, finished));
@@ -415,6 +421,23 @@ Future<T> io<T>(WidgetTester tester, Future<T> Function() body) async {
   // when the tree is pumped, which cannot happen from inside `runAsync`.
   await settleIo(tester);
   return (await tester.runAsync(body)) as T;
+}
+
+/// Type [text] into the composer and send it, then wait for the bubble.
+///
+/// Two things here are not obvious and were re-derived at every call site
+/// before this was shared. The bare `pump` is required: the send button builds
+/// off a `ValueNotifier` and is dead until the frame after the field has
+/// something in it. And the wait is for the bubble rather than for [text],
+/// which is still in the field this pump is clearing — and rather than
+/// `settleIo`, which would find an idle tree and stop while the chat was being
+/// written, there being no spinner up until a turn starts.
+Future<void> sendMessage(WidgetTester tester, String text) async {
+  await tester.enterText(find.byType(TextField).last, text);
+  await tester.pump();
+  await tester.tap(find.byIcon(Icons.send));
+  await pumpUntil(tester, find.byType(MessageBubble));
+  await settleIo(tester);
 }
 
 /// Pump until [until] matches, letting real file I/O run in between. A widget

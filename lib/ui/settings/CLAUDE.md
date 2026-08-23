@@ -210,14 +210,14 @@ without saying so is the rude way to do the same thing.
 **Then the app is built again, and that is the whole of the other half.** The
 app is full of things read out of the data directory exactly once — settings
 served from memory by `Documents`, the `PromptLibrary`, a live session per chat,
-the store's idea of which project each chat is in, the draft the repository
-holds. Telling each of those to look afresh was the first version, and it is a
+the store's idea of which project each chat is in. Telling each of those to look
+afresh was the first version, and it is a
 list that has to grow every time something new is read at startup and is
 silently wrong when it does not: the reload the user notices missing is the one
 nobody remembered to add. So `AppRestart` rebuilds instead, and everything that
 was reading the old files is thrown away with the container that held them. It
-is also what let `ChatRepository.importBackup` go — its body was
-`deleteAllChats` and a dropped draft, which is that list with two entries.
+is also what let `ChatRepository.importBackup` go — its body was that same list,
+written out by hand and already two entries long.
 
 Nothing in Flutter re-runs `main` — hot restart is the VM's, and only where
 there is a VM service to ask — so `AppSession` is `main`'s work made into a

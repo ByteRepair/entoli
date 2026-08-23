@@ -463,15 +463,28 @@ response would go with it.
 
 ## Starting a chat, and naming it
 
-`createChat` writes nothing. The chat is held in `ChatRepository` as its one
-draft — with whatever `meta.json` would have held, since writing that would
-create the directory a draft does without — and reaches the store the first
-time `save` is called, which is the first message. The sidebar lists what the
-store holds, so a chat nobody said anything in leaves nothing behind.
-`ChatController` invalidates `chatListProvider` after that first save and after
-a rename, which are the only two things that change what the sidebar shows;
-refreshing it on every message would re-read every chat off disk to draw the
-same list.
+`createChat` writes the chat — `state.json`, the `meta.json` it was handed, and
+the directories under them — and returns it. **What keeps an unused chat off
+the disk is that nothing calls it until there is something to say**: the screen
+with nothing selected is a screen rather than a chat, and it creates one as the
+first message is sent. See "Nothing selected is a new chat" for that end of it.
+
+It used to be the other way round. The repository held one *draft* — a chat
+made but not written, with whatever `meta.json` would have said held beside it —
+and the first `saveState` promoted it. That bought exactly one thing, an
+untouched chat leaving nothing behind, and charged for it in every method that
+could be handed a chat id: `openChat`, `saveState`, `retitle`, `loadMeta`,
+`saveMeta`, `loadState`, `readRecords` and `projectOf` each branched on whether
+this was the draft, `deleteProject` had to forget it, and `createHeadlessChat`
+existed as a second creation path whose whole job was not to touch the one draft
+slot — two reminders firing together would otherwise overwrite each other's.
+Deciding *when* to create instead of *whether* to write buys the same thing and
+costs none of that.
+
+`ChatController` invalidates `chatListProvider` after the first save and after a
+rename, and `createChat`'s caller does the same for the chat it just made —
+those are the only things that change what the sidebar shows. Refreshing it on
+every message would re-read every chat off disk to draw the same list.
 
 A chat is created as "New chat" and stays that way unless a **title LLM** is
 configured. When one is, `ChatRepository` sends the first message to it through
@@ -643,10 +656,9 @@ through `repo.composeUserPrompt`, writes the opening records through a
 `TurnRecorder`, drives `repo.sendPrompt` to completion, and closes the log with
 a `turnEnd`. Skipping any of those shows up elsewhere: no `turnEnd` and every
 later open offers to resume; no list invalidation and the chat is invisible until
-restart. The chat is created through `repo.createHeadlessChat`, which writes
-state and meta together and never touches the draft pair — two reminders firing
-together would otherwise overwrite each other's draft and orphan a `meta.json`
-under the wrong project.
+restart. The chat is `repo.createChat` with a `meta` — the same call the UI
+makes, since there is only one now; see "Starting a chat, and naming it" for
+the second one this replaced and why it existed.
 
 **A headless turn must not park on an answer.** `TurnSettings` carries
 `offerAsk` and `offerTask` (defaulting true); `sendPrompt(headless: true)` turns

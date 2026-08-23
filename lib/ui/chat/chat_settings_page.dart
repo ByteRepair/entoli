@@ -15,6 +15,66 @@ import "../widgets/resettable_field.dart";
 import "../widgets/temp_chat_ttl_field.dart";
 import "../workspace/workspace_page.dart";
 
+/// The settings a chat that has not been made yet will run its first turn
+/// under, popped back as a [ChatMeta] for the new-chat screen to hold until it
+/// creates one — see "Nothing selected is a new chat". Dismissed without Save
+/// it pops nothing, and the screen keeps what it had.
+///
+/// A page of its own rather than a mode of [ChatSettingsPage], because the
+/// three fields here are all it can honestly show: an id, a workspace and a
+/// Delete button all answer for a chat on disk, and there is none. Folded in,
+/// they were five null checks and two `!`s through a page whose ordinary
+/// subject exists — the same shape this change took out of the repository.
+class NewChatSettingsPage extends StatefulWidget {
+  const NewChatSettingsPage({super.key, required this.initial, this.project});
+
+  final ChatMeta initial;
+
+  /// Which project's answers the TTL field names as what null inherits.
+  final String? project;
+
+  @override
+  State<NewChatSettingsPage> createState() => _NewChatSettingsPageState();
+}
+
+class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
+  /// A copy: the fields write in place, so backing out has to leave the
+  /// screen behind this holding what it had.
+  late final ChatMeta _meta = widget.initial.copy();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text("Chat settings"),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.check),
+              tooltip: "Save",
+              onPressed: () => Navigator.of(context).pop(_meta),
+            ),
+          ],
+        ),
+        body: ListView(
+          children: [
+            // `_LlmField` writes the pair onto the meta it was given and hands
+            // back that same object, so there is nothing to take from it.
+            _LlmField(meta: _meta, onChanged: (_) => setState(() {})),
+            const Divider(),
+            _ApprovalField(
+              value: _meta.approveMode,
+              onChanged: (v) => setState(() => _meta.approveMode = v),
+            ),
+            const Divider(),
+            TempChatTtlField(
+              value: _meta.tempChatTtl,
+              onChanged: (v) => setState(() => _meta.tempChatTtl = v),
+              project: widget.project,
+            ),
+          ],
+        ),
+      );
+}
+
 class ChatSettingsPage extends ConsumerStatefulWidget {
   const ChatSettingsPage({super.key, required this.chatId});
 
@@ -48,23 +108,24 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
   }
 
   Future<void> _load() async {
+    final chatId = widget.chatId;
     final repo = ref.read(chatRepositoryProvider);
     // Together: neither answer needs the other, and all go to the store.
     final (meta, project) = await (
-      repo.loadMeta(widget.chatId),
-      repo.projectOf(widget.chatId),
+      repo.loadMeta(chatId),
+      repo.projectOf(chatId),
     ).wait;
     // The state is needed only to re-anchor the TTL in [_save]. A chat with no
-    // `state.json` (seeded with meta only, or a draft) has none, and the
-    // re-anchor is skipped — the next turn's `saveState` will anchor it.
+    // `state.json` has none, and the re-anchor is skipped — the next turn's
+    // `saveState` will anchor it.
     ChatState? state;
     try {
-      state = (await repo.openChat(widget.chatId)).state;
+      state = (await repo.openChat(chatId)).state;
     } catch (_) {
       state = null;
     }
     final workspace =
-        ref.read(appConfigProvider).workspaceDir(widget.chatId, project: project);
+        ref.read(appConfigProvider).workspaceDir(chatId, project: project);
     if (mounted) {
       setState(() {
         _meta = meta;
@@ -77,9 +138,10 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
 
   Future<void> _save() async {
     if (_meta == null) return;
+    final chatId = widget.chatId;
     setState(() => _saving = true);
     final repo = ref.read(chatRepositoryProvider);
-    await repo.saveMeta(widget.chatId, _meta!);
+    await repo.saveMeta(chatId, _meta!);
     // Re-anchor immediately so the sidebar hourglass and title-bar countdown
     // appear without waiting for a turn. `reanchor: true` so flipping the
     // chat's override on anchors to now, and off clears. The anchor is decided
@@ -87,7 +149,7 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
     // was written.
     if (_state != null) {
       final written = await repo.saveState(_state!, reanchor: true);
-      ref.read(chatControllerProvider(widget.chatId).notifier).applyState(written);
+      ref.read(chatControllerProvider(chatId).notifier).applyState(written);
     }
     ref.invalidate(chatListProvider);
     if (mounted) setState(() => _saving = false);
