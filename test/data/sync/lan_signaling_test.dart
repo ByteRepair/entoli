@@ -51,7 +51,7 @@ void main() {
 
     final answer = await client.exchange(
       hosts: ["127.0.0.1"],
-      port: port,
+      ports: [port],
       code: "123456",
       offerSdp: "v=0 offer",
     );
@@ -69,7 +69,7 @@ void main() {
 
     await client.exchange(
       hosts: ["127.0.0.1"],
-      port: port,
+      ports: [port],
       code: "123456",
       offerSdp: "v=0 offer",
     );
@@ -84,7 +84,7 @@ void main() {
     await expectLater(
       client.exchange(
           hosts: ["127.0.0.1"],
-          port: port,
+          ports: [port],
           code: "000000",
           offerSdp: "v=0 offer"),
       throwsA(isA<SignalingException>()),
@@ -99,7 +99,7 @@ void main() {
     await expectLater(
       client.exchange(
           hosts: ["127.0.0.1"],
-          port: port,
+          ports: [port],
           code: "123456",
           offerSdp: "v=0 offer"),
       throwsA(isA<SignalingException>()),
@@ -113,7 +113,7 @@ void main() {
 
     final answer = await client.exchange(
       hosts: ["127.0.0.1"],
-      port: port,
+      ports: [port],
       token: "tok",
       offerSdp: "v=0 offer",
     );
@@ -132,7 +132,7 @@ void main() {
     });
 
     await client.exchange(
-        hosts: ["127.0.0.1"], port: port, token: "tok", offerSdp: "v=0 offer");
+        hosts: ["127.0.0.1"], ports: [port], token: "tok", offerSdp: "v=0 offer");
 
     expect(seen, ["tok"]);
   });
@@ -146,7 +146,7 @@ void main() {
     });
 
     await client.exchange(
-        hosts: ["127.0.0.1"], port: port, code: "123456", offerSdp: "v=0 offer");
+        hosts: ["127.0.0.1"], ports: [port], code: "123456", offerSdp: "v=0 offer");
 
     expect(seen, [null]);
   });
@@ -158,11 +158,29 @@ void main() {
     await expectLater(
       client.exchange(
           hosts: ["127.0.0.1"],
-          port: port,
+          ports: [port],
           token: "other",
           offerSdp: "v=0 offer"),
       throwsA(isA<SignalingException>()),
     );
+  });
+
+  test("a device that moved port is found at the next one tried", () async {
+    // What a reconnect does: the port it was last seen on, then the one it
+    // would normally be on. An ephemeral port does not survive a restart, so
+    // the first is refused and the address a peer stored is worthless without
+    // the second.
+    server.allowReconnect("tok");
+    answerWith("v=0 answer");
+
+    final answer = await client.exchange(
+      hosts: ["127.0.0.1"],
+      ports: [port + 1, port],
+      token: "tok",
+      offerSdp: "v=0 offer",
+    );
+
+    expect(answer, "v=0 answer");
   });
 
   test("a dead address is passed over for one that answers", () async {
@@ -172,7 +190,7 @@ void main() {
     final answer = await client.exchange(
       // A host that refuses the connection outright, then the real one.
       hosts: ["127.0.0.2", "127.0.0.1"],
-      port: port,
+      ports: [port],
       code: "123456",
       offerSdp: "v=0 offer",
     );
@@ -184,7 +202,7 @@ void main() {
     await expectLater(
       client.exchange(
           hosts: ["127.0.0.2"],
-          port: port,
+          ports: [port],
           code: "123456",
           offerSdp: "v=0 offer"),
       throwsA(isA<SignalingException>()),

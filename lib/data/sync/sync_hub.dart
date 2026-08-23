@@ -23,6 +23,7 @@ import "signaling/lan_signaler.dart";
 import "signaling/pairing_payload.dart";
 import "signaling/relay_signaler.dart";
 import "sync_byte_cache.dart";
+import "sync_log.dart";
 
 export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
@@ -586,6 +587,7 @@ class SyncHub {
               ? records.sublist(fromLine)
               : const []);
     } on StateError {
+      syncLog("asked for chat $chatId, which is not here");
       peer.subscriptions.remove(chatId);
       await peer.send(SyncMessage.chatDeleted(chatId: chatId));
     }
@@ -1025,8 +1027,9 @@ class SyncHub {
     unawaited(_relaySocket?.close());
     _relaySocket = null;
     _server?.disarm();
-    _offers?.cancel();
-    _offers = null;
+    // The offers subscription is *not* cancelled: it answers reconnects too,
+    // and every pairing ends by closing its window. Cancelled here, the first
+    // successful pair was also the last time anything answered a dial.
     pairing.value = null;
   }
 
@@ -1149,14 +1152,19 @@ class SyncHub {
     final address = device.lastAddress;
     if (address != null && address.contains(":")) {
       final at = address.lastIndexOf(":");
+      final host = address.substring(0, at);
+      final port = int.parse(address.substring(at + 1));
       try {
         final link = await RtcLink.create(iceServers: iceServers());
         final sdp = await link.offer();
         final signaler = LanSignaler(client: _client);
         try {
+          // The port it was last seen on, then the one it would normally be
+          // on: a device that restarted onto an ephemeral port is at neither,
+          // but one that simply restarted is at the second.
           final answer = await signaler.exchange(
-            hosts: [address.substring(0, at)],
-            port: int.parse(address.substring(at + 1)),
+            hosts: [host],
+            ports: {port, preferredSignalingPort}.toList(),
             token: token,
             offerSdp: sdp,
           );
@@ -1286,6 +1294,7 @@ class SyncHub {
             onFailed: () => link!.close(),
           );
         } catch (error) {
+          syncLog("answering an offer failed", error);
           await link?.close();
           _fail(error);
         }
@@ -1353,7 +1362,7 @@ class SyncHub {
       try {
         answer = await signaler.exchange(
           hosts: payload.hosts,
-          port: payload.port,
+          ports: [payload.port],
           code: payload.code,
           offerSdp: sdp,
         );
@@ -1494,9 +1503,10 @@ class SyncHub {
           }
           try {
             live.enqueue(SyncMessage.fromJson(json));
-          } catch (_) {
+          } catch (error) {
             // A frame that does not parse is a broken peer; drop the link
             // rather than guess at what it meant.
+            syncLog("unreadable frame from $deviceId", error);
             unawaited(live.close());
           }
         },
@@ -1571,6 +1581,7 @@ class SyncHub {
       unawaited(ensureReady());
       _note(PairingStage.done);
     } catch (error) {
+      syncLog("could not establish a channel", error);
       await channel?.close();
       unawaited(onFailed());
       _fail(error);
@@ -1640,6 +1651,7 @@ class SyncHub {
   }
 
   void _fail(Object error) {
+    syncLog("pairing failed", error);
     final current = pairing.value;
     if (current == null || current.stage == PairingStage.done) return;
     pairing.value = PairingActivity(
@@ -1679,7 +1691,8 @@ class _LivePeer {
 
   void enqueue(SyncMessage message) {
     if (_closed) return;
-    _queue = _queue.then((_) => handle?.call(message)).catchError((_) {});
+    _queue = _queue.then((_) => handle?.call(message)).catchError(
+        (Object error) => syncLog("handling a message from $deviceId", error));
   }
 
   /// Set once the peer exists; reads [SyncHub._dispatch].
@@ -1693,7 +1706,10 @@ class _LivePeer {
     if (_closed) return;
     try {
       await channel.sendJson(message.toJson());
-    } catch (_) {
+    } catch (error) {
+      // Almost always a message the transport refused as too large, which is
+      // silent otherwise: the peer simply goes away.
+      syncLog("send to $deviceId failed", error);
       await close();
     }
   }

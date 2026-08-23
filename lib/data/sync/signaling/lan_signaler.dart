@@ -14,9 +14,12 @@ class LanSignaler {
   /// Posts [offerSdp] under [code] — or, for a reconnect, under the [token]
   /// derived from this pair's secret — and returns the answer SDP. The
   /// server holds the request open until its host replies or gives up.
+  /// [ports] is tried in order at each host. A reconnect passes two — where
+  /// the device was last seen, then where it would normally be — since a
+  /// device that has restarted is at the second and not the first.
   Future<String> exchange({
     required List<String> hosts,
-    required int port,
+    required List<int> ports,
     String code = "",
     String token = "",
     required String offerSdp,
@@ -24,10 +27,12 @@ class LanSignaler {
   }) async {
     Object? last;
     for (final host in hosts) {
-      try {
-        return await _exchange(host, port, code, token, offerSdp, timeout);
-      } catch (error) {
-        last = error;
+      for (final port in ports) {
+        try {
+          return await _exchange(host, port, code, token, offerSdp, timeout);
+        } catch (error) {
+          last = error;
+        }
       }
     }
     throw SignalingException(

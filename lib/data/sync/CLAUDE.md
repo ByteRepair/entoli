@@ -374,12 +374,40 @@ is the only thing in the request that says which pair it is: that decides the
 secret its handshake runs against, and that it is a reconnect at all rather
 than a stranger to show a code to.
 
+**The address has to still be there tomorrow.** The signaling server binds
+`preferredSignalingPort` and falls back to an ephemeral one only where that is
+taken — which on a desktop means a second Entoli is already running, and that
+one is then the reachable one, which is the right way round since this one can
+still dial out. Binding ephemeral always was why a stored address was refused
+the moment either side restarted, and so why a LAN reconnect never worked
+twice. A dial therefore tries the port a device was last seen on and then the
+one it would normally be on. Nothing is exposed by a predictable port: the
+routes refuse everything without a code or a token.
+
+**Somebody has to go on answering.** `cancelPairingWindow` disarms the code
+but leaves the offers subscription up, because every pairing ends by closing
+its window — cancelling it there made the first successful pair also the last
+time anything answered a dial.
+
 **Both sides have to know where the other is.** Only the device that dialled
 learns an address, so the other one had no route and said so. The `hello` now
 carries where the sender can be dialled back, and `markSeen` records it — a
 device that is not listening sends nothing, which is the honest answer. A
 completed pairing also starts this device listening, which before it had no
 reason to be doing.
+
+## When something on the wire goes wrong
+
+`syncLog` — one line per failure, on the paths that catch and drop. They have
+to drop: none of a refused send, an unreadable frame, an unanswered offer or a
+peer vanishing mid-handshake is worth taking the app down for. But every one
+of them was silent, in a log and on screen, so "it will not pair" came with
+nothing at all to go on, and running the app from a terminal printed exactly
+nothing while it failed.
+
+It is not a trace of the traffic, which would be enormous and full of things
+that must not be written down. Nothing logged may carry a secret, an SDP blob,
+or anything out of a conversation — a device id and a reason, no more.
 
 ## What the Sync page can do about a peer
 

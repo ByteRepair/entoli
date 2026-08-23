@@ -6,6 +6,7 @@ import "package:cryptography/cryptography.dart";
 
 import "channel.dart";
 import "handshake.dart" show Handshake;
+import "sync_log.dart";
 
 /// An encrypted [ByteChannel]: every message on the wire is
 ///
@@ -122,7 +123,12 @@ final class SecureChannel implements ByteChannel {
           final plain = await _open(frame);
           if (!_closed) _controller.add(plain);
         } on SecretBoxAuthenticationError {
+          syncLog("a frame failed authentication");
           _fail(const FrameAuthenticationException());
+          return;
+        } on FrameFormatException catch (error) {
+          syncLog("a frame was malformed", error);
+          _fail(error);
           return;
         }
       }

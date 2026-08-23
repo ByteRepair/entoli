@@ -1,3 +1,10 @@
+/// The port a device is normally found on. An ephemeral one changes every
+/// launch, so an address a peer stored at pairing time is refused the moment
+/// either side restarts — and a LAN reconnect could never work twice. Here
+/// rather than on the io implementation because the dialling side needs it
+/// too, to guess where a device that restarted has gone.
+const preferredSignalingPort = 47921;
+
 /// The LAN rendezvous a desktop offers while pairing: where a joiner's offer
 /// waits for an answer, and the one-time code that gates it.
 ///
