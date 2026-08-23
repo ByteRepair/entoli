@@ -15,6 +15,16 @@ abstract class ChatStore {
 
   Future<Chat> load(String id);
 
+  /// The chat's head without its conversation. [load] reads this and the log
+  /// together; the sync layer wants them separately, since it sends the raw
+  /// records on and has no use for the replay between them.
+  Future<ChatState?> loadState(String id);
+
+  /// The chat's raw log, in order — what [load] replays through `chatFrom`
+  /// and discards. The sync layer streams these to mirrors, which run their
+  /// own replay.
+  Future<List<ChatRecord>> readRecords(String chatId);
+
   /// The projects that exist, by name, sorted. The default project is not one
   /// of them: it is `null`, and it is always there.
   Future<List<String>> listProjects();

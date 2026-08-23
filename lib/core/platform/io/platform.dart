@@ -12,6 +12,7 @@ import "../../../data/local/android_assistant_launch.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/android_reminder_alarms.dart";
 import "../../../data/local/bundled_tools.dart";
+import "../../../data/local/file_secret_store.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
 import "../../../data/local/file_local_model_store.dart";
@@ -33,10 +34,15 @@ import "../../../domain/local_model_store.dart";
 import "../../../domain/reminder_alarms.dart";
 import "../../../domain/rootfs.dart";
 import "../../../domain/rootfs_store.dart";
+import "../../../domain/secret_store.dart";
 import "../../../domain/shell.dart";
+import "../../../domain/sync/lan_signaling.dart";
 import "../../../domain/voice.dart";
 import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
+import "../../config.dart";
+import "keyring_secret_store.dart";
+import "signaling_server.dart";
 
 Shell platformShell({
   required Map<String, String> Function() environment,
@@ -247,3 +253,26 @@ Voice platformVoice(VoiceModelStore store, String cacheDir) =>
 Future<void> platformPersist() async {}
 
 String? processEnv(String name) => Platform.environment[name];
+
+/// This device's sync secrets: the desktop keyring where a Secret Service
+/// answers, the plain file where none does. Android lands on the file too —
+/// its app-private directory is already out of every other app's reach —
+/// until its Keystore wiring lands.
+SecretStore platformSecretStore(AppConfig config) =>
+    KeyringSecretStore(FileSecretStore(config.fs, config.dataDir));
+
+/// Desktops listen while pairing. The one-time code is armed per pairing
+/// window by the hub, so the factory needs nothing from its caller.
+LanSignaling? platformLanSignaling() => SignalingServer();
+
+/// What this machine calls itself, for the sync device name. Guarded: a host
+/// with no resolvable name throws rather than answering, and a pairing that
+/// failed over the machine's name would be a strange way to lose.
+String? platformHostname() {
+  try {
+    final name = Platform.localHostname.trim();
+    return name.isEmpty ? null : name;
+  } catch (_) {
+    return null;
+  }
+}

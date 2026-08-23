@@ -317,6 +317,25 @@ command that printed nothing says so on the exit row, rather than leaving a
 strip that reads as an answer cut off. What is behind all this is "Running a
 command yourself".
 
+## A chat whose home device is elsewhere
+
+`MirrorChatController` is the counterpart of `ChatController` for a chat being
+mirrored from a paired device, and `TurnDriver` is what both implement so that
+every widget between them — the composer, the turn surface, the question panel,
+the approval banner — is the same widget at either end. One runs the turn; the
+other sends it to the device that will. See "Control, and driving a turn from
+the other end" for the lock and what refuses what.
+
+`ChatPage` branches on `isMirroredChatProvider` before anything else, and the
+two arms meet again at `_page`: same bar, same centred column, same
+conversation. What differs is stated as arguments rather than as a second copy
+— `editing` is the controller the message row acts through and is null for a
+mirror, which takes the whole edit/regenerate/thread row out with it;
+`onOpenSettings` is null for the same reason; `banner` is the strip a mirror
+floats over the conversation, and `bottom` is a composer or a bar saying why
+there is none. Written out twice, the mirrored copy had already lost the jump
+button, the empty-chat starter and the running-turn spinner.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s

@@ -22,7 +22,9 @@ import "../../domain/local_model_store.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/reminder_alarms.dart";
 import "../../domain/rootfs_store.dart";
+import "../../domain/secret_store.dart";
 import "../../domain/shell.dart";
+import "../../domain/sync/lan_signaling.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model_store.dart";
 import "../config.dart";
@@ -248,6 +250,15 @@ Future<void> persist() => platformPersist();
 
 ChatStore createChatStore(AppConfig config) => FileChatStore(config);
 
+/// Where this device's sync secrets are held: the system keyring where one
+/// exists, the plain file under the data directory where none does. See
+/// [SecretStore] for what each of those means to the Sync page.
+SecretStore createSecretStore(AppConfig config) => platformSecretStore(config);
+
+/// The LAN rendezvous a desktop hosts while pairing. Null where the platform
+/// cannot listen — a browser pairs as the joiner instead.
+LanSignaling? createLanSignaling() => platformLanSignaling();
+
 /// What a workspace file can do outside Entoli: a viewer, a file manager, a
 /// share sheet, a download. The one part of the app that still varies three
 /// ways rather than two, since desktop and Android disagree as much as either
@@ -273,3 +284,8 @@ ReminderAlarms createReminderAlarms() => platformReminderAlarms();
 /// config's filesystem, so it exists on every platform now.
 List<PromptSource> createPromptSources(AppConfig config) =>
     [const BundledPrompts(), DirectoryPrompts(config)];
+
+/// What this machine calls itself, where it has a name. The sync device name
+/// starts here, so two paired machines are told apart by something the user
+/// already recognises rather than by a slice of a key fingerprint.
+String? deviceHostname() => platformHostname();

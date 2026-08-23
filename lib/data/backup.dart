@@ -89,6 +89,10 @@ Future<Uint8List> writeBackup(AppConfig config) async {
     // The half of a rename that a kill landed in. Nothing reads one, and a
     // restore that put it back would put back a torn write.
     skip: (path) => path.endsWith(writingSuffix),
+    // Sync identity and pairing secrets: a backup must not carry private keys,
+    // and a restore wipes the data directory first — so `sync/` in a backup
+    // would silently unpair this device from its peers on every restore.
+    skipDir: (path) => config.fs.path.basename(path) == "sync",
   );
   archive.add(ArchiveFile.string(
     manifestName,

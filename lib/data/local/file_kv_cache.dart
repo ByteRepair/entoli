@@ -1,12 +1,12 @@
 import "dart:async";
 import "dart:io";
 
-import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 import "package:path/path.dart" as p;
 
 import "../../domain/local_llm.dart";
 import "../builtin/llm/local_kv_cache.dart";
+import "../../core/log.dart";
 
 /// [LocalKvCache] over a directory and llama.cpp's slot save/restore. One
 /// directory for every model — the dump's filename carries its namespace, and
@@ -122,7 +122,7 @@ class FileKvCache implements LocalKvCache {
       // A build without slot save/restore compiled in answers 501, and a
       // restore of a dump the current weights cannot read fails too — both are
       // a miss to fall back from, not a turn to break.
-      if (!ok && kDebugMode) debugPrint("kv-cache $action: ${response.statusCode}");
+      if (!ok) logFailure("kv-cache", "$action refused", response.statusCode);
       return ok;
     } catch (_) {
       return false;

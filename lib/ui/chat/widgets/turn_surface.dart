@@ -24,7 +24,7 @@ class TurnSurface extends StatelessWidget {
   const TurnSurface({super.key, required this.view, required this.notifier});
 
   final ChatViewState view;
-  final ChatController notifier;
+  final TurnDriver notifier;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +59,7 @@ class TurnQuestions extends StatelessWidget {
   const TurnQuestions({super.key, required this.view, required this.notifier});
 
   final ChatViewState view;
-  final ChatController notifier;
+  final TurnDriver notifier;
 
   @override
   Widget build(BuildContext context) {
