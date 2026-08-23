@@ -18,6 +18,10 @@ import "../../domain/sync/protocol.dart";
 import "../../domain/sync/relay_signaling.dart";
 import "channel.dart";
 import "framing.dart";
+import "peers.dart";
+
+// The peer registry's types are part of what a `SyncHub` hands out.
+export "peers.dart" show PeerState, PeerStatus;
 import "handshake.dart";
 import "rtc_channel.dart";
 import "signaling/lan_signaler.dart";
@@ -30,35 +34,6 @@ export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
 
 /// How one paired device stands right now, as the Sync page draws it.
-enum PeerStatus { connecting, online, offline, error }
-
-class PeerState {
-  PeerState({
-    required this.deviceId,
-    required this.name,
-    required this.status,
-    this.error,
-  });
-
-  final String deviceId;
-  final String name;
-  final PeerStatus status;
-  final String? error;
-
-  /// By value, so republishing the same list is not a change — the page above
-  /// copies and sorts on every notification.
-  @override
-  bool operator ==(Object other) =>
-      other is PeerState &&
-      other.deviceId == deviceId &&
-      other.name == name &&
-      other.status == status &&
-      other.error == error;
-
-  @override
-  int get hashCode => Object.hash(deviceId, name, status, error);
-}
-
 /// What a pairing window looks like while it is open. Replaced wholesale on
 /// every change, so listeners see an immutable snapshot.
 class PairingActivity {
@@ -226,10 +201,10 @@ class SyncHub {
 
   _PendingManual? _pendingManual;
   Completer<bool>? _confirmation;
-  final _live = <String, _LivePeer>{};
+  late final SyncPeers _peers = SyncPeers(registry);
 
   /// Every paired device with how it stands. The UI's whole view of sync.
-  final peers = ValueNotifier<Map<String, PeerState>>({});
+  ValueNotifier<Map<String, PeerState>> get peers => _peers.states;
 
   /// The pairing happening right now, if any.
   final pairing = ValueNotifier<PairingActivity?>(null);
@@ -282,12 +257,8 @@ class SyncHub {
   /// controller open for each — that is what makes a turn's progress, and the
   /// approvals and questions it stops on, visible at the other end, none of
   /// which is in the log.
-  final servedChats = ValueNotifier<Set<String>>(const {});
+  ValueNotifier<Set<String>> get servedChats => _peers.servedChats;
 
-  void _refreshServed() {
-    final served = {for (final peer in _live.values) ...peer.subscriptions};
-    if (!setEquals(served, servedChats.value)) servedChats.value = served;
-  }
 
   MirrorChat? mirror(String chatId) => _mirrors[chatId];
 
@@ -303,7 +274,7 @@ class SyncHub {
   /// Whether the connection to [chatId]'s home device is up. False for a
   /// stale snapshot: the page disables the composer and shows its banner.
   bool isChatOnline(String chatId) =>
-      _live.containsKey(_mirrors[chatId]?.peerId);
+      _peers.hasLive(_mirrors[chatId]?.peerId);
 
   int _resourceSeq = 0;
   final _pendingResources = <String, _ResourceTransfer>{};
@@ -365,10 +336,10 @@ class SyncHub {
     }
   }
 
-  _LivePeer? _peerHosting(String chatId) {
+  LivePeer? _peerHosting(String chatId) {
     final mirror = _mirrors[chatId];
     if (mirror == null) return null;
-    return _live[mirror.peerId];
+    return _peers[mirror.peerId];
   }
 
   // ------------------------------------------------------------ dispatch
@@ -378,7 +349,7 @@ class SyncHub {
   /// notify whoever is watching. The control arms are Phase 3: declared on
   /// the wire, unimplemented here — a peer sending one gets nothing back,
   /// which a view-only mirror is the honest answer to for now.
-  Future<void> _dispatch(_LivePeer peer, SyncMessage message) async {
+  Future<void> _dispatch(LivePeer peer, SyncMessage message) async {
     switch (message) {
       case SyncPing():
         await peer.send(const SyncMessage.pong());
@@ -469,7 +440,7 @@ class SyncHub {
   /// may only speak about the chats it is the home device for, and an arm
   /// that forgot the check — or the notify — would be silently wrong.
   void _onMirror(
-      _LivePeer peer, String chatId, void Function(MirrorChat mirror) change) {
+      LivePeer peer, String chatId, void Function(MirrorChat mirror) change) {
     final mirror = _mirrors[chatId];
     if (mirror == null || mirror.peerId != peer.deviceId) return;
     change(mirror);
@@ -495,14 +466,14 @@ class SyncHub {
   /// Whether [peer] is the device this chat's control was granted to. Every
   /// arm that drives a turn goes through it: a peer that never asked, or that
   /// lost the race, must not be able to type into somebody's conversation.
-  bool _holds(_LivePeer peer, String chatId) =>
+  bool _holds(LivePeer peer, String chatId) =>
       _control[chatId] == peer.deviceId;
 
   /// A fresh listing from the peer. Mirrors of this peer not in it go; those
   /// in it are added or refreshed — keeping records already held, so the
   /// re-opens below resume rather than restart. Then everything this device
   /// follows and still sees is asked for again, from where it got to.
-  Future<void> _applyWelcome(_LivePeer peer, List<ChatState> chats) async {
+  Future<void> _applyWelcome(LivePeer peer, List<ChatState> chats) async {
     final listed = {for (final c in chats) c.id: c};
     for (final id in _mirrors.keys.toList()) {
       if (_mirrors[id]!.peerId == peer.deviceId && !listed.containsKey(id)) {
@@ -529,7 +500,7 @@ class SyncHub {
     _rebuildRemotes();
   }
 
-  void _openOnPeer(_LivePeer peer, String chatId) {
+  void _openOnPeer(LivePeer peer, String chatId) {
     unawaited(peer.send(SyncMessage.chatOpen(
       chatId: chatId,
       fromLine: _mirrors[chatId]?.records.length ?? 0,
@@ -552,7 +523,7 @@ class SyncHub {
   /// explicit deletion rather than silence — a mirror that opened a chat
   /// deleted moments ago must hear that it is gone.
   Future<void> _serveOpen(
-      _LivePeer peer, String chatId, int fromLine) async {
+      LivePeer peer, String chatId, int fromLine) async {
     final repo = _repo;
     if (repo == null) return;
     // Three independent reads, and the state one rather than `openChat`:
@@ -586,7 +557,7 @@ class SyncHub {
       peer.subscriptions.remove(chatId);
       await peer.send(SyncMessage.chatDeleted(chatId: chatId));
     }
-    _refreshServed();
+    _peers.refreshServed();
   }
 
   /// Everything written through the repository, fanned out to whichever
@@ -596,35 +567,35 @@ class SyncHub {
   void _onRepoEvent(RepoEvent event) {
     switch (event) {
       case Appended(:final chatId, :final records):
-        for (final peer in _live.values) {
+        for (final peer in _peers.live) {
           if (peer.subscriptions.contains(chatId)) {
             unawaited(_sendRecords(peer, chatId, records));
           }
         }
       case StateChanged(:final state):
-        _toSubscribers(
+        _peers.toSubscribers(
             state.id, SyncMessage.stateDiff(chatId: state.id, state: state));
         // A chat nobody has been told about is a new one — its first save.
         // The list goes out again so it appears in a mirror's Remotes rather
         // than only after the next reconnect.
         if (!_announced.contains(state.id)) unawaited(_announceChats());
       case MetaChanged(:final chatId, :final meta):
-        _toSubscribers(
+        _peers.toSubscribers(
             chatId, SyncMessage.metaPatch(chatId: chatId, meta: meta));
       case Moved(:final chatId, :final project):
-        _toSubscribers(
+        _peers.toSubscribers(
             chatId, SyncMessage.chatMoved(chatId: chatId, project: project));
       case Deleted(:final chatId):
         // To everyone, not only subscribers: a peer holding a mirror of
         // something gone has to be told even if it never opened the records.
-        for (final peer in _live.values) {
+        for (final peer in _peers.live) {
           peer.subscriptions.remove(chatId);
           unawaited(peer.send(SyncMessage.chatDeleted(chatId: chatId)));
         }
         _control.remove(chatId);
         _announced.remove(chatId);
         _refreshDriven();
-        _refreshServed();
+        _peers.refreshServed();
     }
   }
 
@@ -635,29 +606,24 @@ class SyncHub {
 
   Future<void> _announceChats() async {
     final repo = _repo;
-    if (repo == null || _live.isEmpty) return;
+    if (repo == null || _peers.isEmpty) return;
     final chats = await repo.listChats();
     _announced = {for (final chat in chats) chat.id};
     final message = SyncMessage.chatsChanged(chats: chats);
-    for (final peer in _live.values) {
+    for (final peer in _peers.live) {
       unawaited(peer.send(message));
     }
   }
 
   /// To every peer following [chatId]. The one shape every serving-side
   /// message takes, so an arm cannot forget the subscription check.
-  void _toSubscribers(String chatId, SyncMessage message) {
-    for (final peer in _live.values) {
-      if (peer.subscriptions.contains(chatId)) unawaited(peer.send(message));
-    }
-  }
 
   // -------------------------------------------------------------- control
 
   /// One holder at a time, first asker wins. Re-asking while already holding
   /// it is granted rather than refused: a mirror that reconnected does not
   /// know it never lost the lock.
-  Future<void> _serveControlRequest(_LivePeer peer, String chatId) async {
+  Future<void> _serveControlRequest(LivePeer peer, String chatId) async {
     final held = _control[chatId];
     final granted = held == null || held == peer.deviceId;
     if (granted) {
@@ -668,7 +634,7 @@ class SyncHub {
     _announceControl(chatId);
   }
 
-  Future<void> _serveControlRelease(_LivePeer peer, String chatId) async {
+  Future<void> _serveControlRelease(LivePeer peer, String chatId) async {
     if (_control[chatId] != peer.deviceId) return;
     _control.remove(chatId);
     _announceControl(chatId);
@@ -678,13 +644,13 @@ class SyncHub {
   /// second mirror has to see that the first one took it.
   void _announceControl(String chatId) {
     _refreshDriven();
-    _toSubscribers(chatId,
+    _peers.toSubscribers(chatId,
         SyncMessage.controlState(chatId: chatId, holder: _control[chatId]));
   }
 
   void _refreshDriven() => drivenChats.value = {
         for (final entry in _control.entries)
-          entry.key: _live[entry.value]?.deviceName ?? entry.value,
+          entry.key: _peers[entry.value]?.deviceName ?? entry.value,
       };
 
   /// The turn as this device's own controller has it, on its way to whoever
@@ -698,7 +664,7 @@ class SyncHub {
     String? status,
     String? retry,
   }) {
-    _toSubscribers(
+    _peers.toSubscribers(
         chatId,
         SyncMessage.turnState(
           chatId: chatId,
@@ -783,7 +749,7 @@ class SyncHub {
   static const _chunkBytes = 32 * 1024;
 
   Future<void> _sendRecords(
-      _LivePeer peer, String chatId, List<ChatRecord> records) async {
+      LivePeer peer, String chatId, List<ChatRecord> records) async {
     var page = <ChatRecord>[];
     var bytes = 0;
     Future<void> flush() async {
@@ -814,7 +780,7 @@ class SyncHub {
   /// as the rest of the traffic. Binary framing can come later without a
   /// protocol change: the type byte already separates the streams.
   Future<void> _serveResource(
-      _LivePeer peer, String id, String chatId, String resource) async {
+      LivePeer peer, String id, String chatId, String resource) async {
     Uint8List? bytes;
     if (peer.subscriptions.contains(chatId)) {
       bytes = await _repo?.readResource(chatId, resource);
@@ -853,7 +819,7 @@ class SyncHub {
 
   void _ping() {
     final cutoff = DateTime.now().subtract(const Duration(seconds: 75));
-    for (final peer in _live.values.toList()) {
+    for (final peer in _peers.live.toList()) {
       if (peer.lastPong.isBefore(cutoff)) {
         unawaited(peer.close());
         continue;
@@ -869,7 +835,7 @@ class SyncHub {
   /// stale snapshots — the page shows its banner and disables the composer,
   /// and a reconnect replaces the whole lot with fresh data.
   void _peerGone(String deviceId) {
-    final live = _live.remove(deviceId);
+    final live = _peers.remove(deviceId);
     // A lock outliving the connection that took it would leave the chat
     // unusable at both ends until one side restarted.
     for (final entry in _control.entries.toList()) {
@@ -886,9 +852,9 @@ class SyncHub {
     }) {
       _touch(chatId);
     }
-    _setStatus(deviceId,
+    _peers.setStatus(deviceId,
         name: live?.deviceName ?? deviceId, status: PeerStatus.offline);
-    _refreshServed();
+    _peers.refreshServed();
     _rebuildRemotes();
   }
 
@@ -905,7 +871,7 @@ class SyncHub {
           deviceId: mirror.peerId,
           deviceName: mirror.deviceName,
           state: mirror.state,
-          online: _live.containsKey(mirror.peerId),
+          online: _peers.hasLive(mirror.peerId),
         ),
     ];
     if (!listEquals(next, remotes.value)) remotes.value = next;
@@ -930,7 +896,7 @@ class SyncHub {
     // Before the early return below: a web build listens for nothing and a
     // desktop with no pairings starts no server, and both still have a list
     // of paired devices to draw.
-    _publishPeers(devices);
+    _peers.publish(devices);
     final server = _server;
     if (server == null || devices.isEmpty) return;
     await server.start();
@@ -947,10 +913,9 @@ class SyncHub {
     _pingTimer?.cancel();
     await _changesSub?.cancel();
     // Over a copy: closing a peer takes it back out of the map.
-    for (final peer in _live.values.toList()) {
+    for (final peer in _peers.live.toList()) {
       await peer.close();
     }
-    _live.clear();
     _mirrors.clear();
     byteCache.dispose();
     _control.clear();
@@ -1151,7 +1116,7 @@ class SyncHub {
     if (device == null || secret == null) {
       throw SignalingException("$deviceId was never paired here");
     }
-    _setStatus(deviceId, name: device.name, status: PeerStatus.connecting);
+    _peers.setStatus(deviceId, name: device.name, status: PeerStatus.connecting);
     final token = RelaySignaler.roomFor(secret);
 
     Object? failure;
@@ -1189,20 +1154,20 @@ class SyncHub {
     // throws it with the device's name on the front. A null error on the row
     // was the honest half of this going missing.
     final reason = failure?.toString() ?? "no route configured";
-    _setStatus(deviceId,
+    _peers.setStatus(deviceId,
         name: device.name, status: PeerStatus.error, error: reason);
     throw SignalingException("could not reach ${device.name}: $reason");
   }
 
   Future<void> disconnect(String deviceId) async {
-    await _live.remove(deviceId)?.close();
-    _markOffline(deviceId);
+    await _peers.remove(deviceId)?.close();
+    _peers.markOffline(deviceId);
   }
 
   /// Unpairs: drops the record, its secret, and any live connection. The
   /// other device keeps ours until someone revokes there too.
   Future<void> revoke(String deviceId) async {
-    await _live.remove(deviceId)?.close();
+    await _peers.remove(deviceId)?.close();
     // Before the registry read below loses the secret: the token derived from
     // it is what admits this device, and clearing everything *except* that
     // left a revoked device still dialling in and still being answered, until
@@ -1218,7 +1183,7 @@ class SyncHub {
     }
     peers.value = {...peers.value}..remove(deviceId);
     _rebuildRemotes();
-    _refreshPeers();
+    unawaited(_peers.refresh());
   }
 
   /// What the other device files this one under.
@@ -1516,7 +1481,7 @@ class SyncHub {
 
       final deviceId = peer.id;
       final peerDevice = await registry.byId(deviceId);
-      final live = _LivePeer(channel,
+      final live = LivePeer(channel,
           deviceId: deviceId,
           deviceName: _nameOf(peerDevice, peer),
           onClose: () => _peerGone(deviceId));
@@ -1589,9 +1554,8 @@ class SyncHub {
       await registry.markSeen(deviceId,
           address: address ?? reply["addr"] as String?);
 
-      _live[deviceId]?.close();
-      _live[deviceId] = live;
-      _setStatus(deviceId,
+      _peers.adopt(live);
+      _peers.setStatus(deviceId,
           name: device.name, status: PeerStatus.online);
 
       // What this device serves. The mirror side answers this with
@@ -1627,46 +1591,8 @@ class SyncHub {
     return confirmation.future;
   }
 
-  void _setStatus(String deviceId,
-      {required String name, required PeerStatus status, String? error}) {
-    final next = {
-      ...peers.value,
-      deviceId: PeerState(
-        deviceId: deviceId,
-        name: name,
-        status: status,
-        error: error,
-      ),
-    };
-    if (!mapEquals(next, peers.value)) peers.value = next;
-  }
 
-  void _markOffline(String deviceId) {
-    final existing = peers.value[deviceId];
-    if (existing == null || existing.status == PeerStatus.error) return;
-    peers.value = {
-      ...peers.value,
-      deviceId: PeerState(
-        deviceId: deviceId,
-        name: existing.name,
-        status: PeerStatus.offline,
-      ),
-    };
-  }
 
-  void _refreshPeers() => registry.list().then(_publishPeers);
-
-  void _publishPeers(List<PairedDevice> devices) {
-    final next = {...peers.value};
-    for (final device in devices) {
-      next.putIfAbsent(
-        device.id,
-        () => PeerState(
-            deviceId: device.id, name: device.name, status: PeerStatus.offline),
-      );
-    }
-    if (!mapEquals(next, peers.value)) peers.value = next;
-  }
 
   void _note(PairingStage stage, {String? sas}) {
     final current = pairing.value;
@@ -1690,65 +1616,6 @@ class SyncHub {
       sas: current.sas,
       error: error.toString(),
     );
-  }
-}
-
-class _LivePeer {
-  _LivePeer(this.channel,
-      {required this.deviceId,
-      required this.deviceName,
-      required this._onClose});
-
-  final SecureChannel channel;
-  final String deviceId;
-  final String deviceName;
-  final void Function() _onClose;
-  bool _closed = false;
-
-  DateTime lastPong = DateTime.now();
-
-  /// This device's chat ids the peer is following. Only subscribers get
-  /// record and state pushes.
-  final subscriptions = <String>{};
-
-  StreamSubscription<Map<String, dynamic>>? pump;
-
-  /// Handlers await disk I/O, so messages are chained through this to keep
-  /// their arrival order — a snapshot must land before the appends that
-  /// follow it.
-  Future<void> _queue = Future.value();
-
-  void enqueue(SyncMessage message) {
-    if (_closed) return;
-    _queue = _queue.then((_) => handle?.call(message)).catchError(
-        (Object error) => logFailure("sync", "handling a message from $deviceId", error));
-  }
-
-  /// Set once the peer exists; reads [SyncHub._dispatch].
-  void Function(SyncMessage message)? handle;
-
-  /// A send that throws is a connection that has gone. Dropping the peer is
-  /// the only thing to do with that, and letting the error out instead turns
-  /// one vanishing mid-broadcast into an unhandled exception in whichever
-  /// loop happened to be writing to it.
-  Future<void> send(SyncMessage message) async {
-    if (_closed) return;
-    try {
-      await channel.sendJson(message.toJson());
-    } catch (error) {
-      // Almost always a message the transport refused as too large, which is
-      // silent otherwise: the peer simply goes away.
-      logFailure("sync", "send to $deviceId failed", error);
-      await close();
-    }
-  }
-
-  Future<void> close() async {
-    if (_closed) return;
-    _closed = true;
-    await pump?.cancel();
-    await channel.close();
-    _onClose();
   }
 }
 
