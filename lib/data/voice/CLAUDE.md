@@ -312,39 +312,86 @@ Everything else reports: no microphone, no permission, and an error code nothing
 here has a name for, which is still worth showing with its number rather than
 swallowing.
 
+### Ending the utterance
+
+**A session that never ends is a turn that is never sent**, and on a phone in a
+room with anything happening in it that is the ordinary way for voice mode to
+fail. `SpeechRecognizer` decides for itself when someone has stopped talking,
+and its own detector is generous: a fan, a television, a conversation elsewhere
+all read as speech continuing, so `onResults` never arrives and nothing is ever
+handed to a turn. From Dart it is indistinguishable from a microphone that is
+not working — voice mode sits there listening and apparently deaf.
+
+The intent asks for a silence length, and that is a hint every one of those
+extras is documented to be. What actually ends it is in `VoiceChannel.kt`:
+**what says the person has stopped is the transcription, not the sound.**
+Partial results stop changing while the room goes on making noise, so a partial
+that has not moved for `QUIET_MS` — or `MAX_UTTERANCE_MS` of anything at all —
+is answered with `stopListening`, which is the same call the Talk button's
+release makes and asks the service for what it has.
+
+A service that ignores `stopListening` too is not asked twice: the second time
+the endpoint fires, the session is cancelled and a fresh one started. What was
+said into it is lost, which is worse than a turn and much better than a voice
+mode that never has another.
+
 ### What counts as being spoken to
 
-**A system recogniser transcribes whatever is loud enough to be speech**, and a
-conversation across the room, a television and a fan all clear that bar. Every
-one of them was a turn: voice mode answered the room. There is no threshold on
-`SpeechRecognizer` to raise — the service decides for itself when an utterance
-starts and stops — so the utterance is judged after the fact, by `LoudnessGate`
-in `domain/loudness.dart`, fed from `onRmsChanged` and asked at each result.
+**Both engines are generous about what counts as speech**, in their own ways: a
+system recogniser transcribes a television two rooms away, and Silero calls
+plenty of it voice. Every one of those was a turn. So an utterance is judged
+after the fact by `LoudnessGate` in `domain/loudness.dart` — fed by
+`MicrophoneListener` from whatever its engine reports, and asked at each result.
 
-**Nothing in it is an absolute level, because there is no absolute level to
-compare against.** `onRmsChanged` reports dB on a scale that is the engine's:
-the documented -2..10 is a typical range rather than a contract, and a
-microphone's gain moves it further. What survives that is a *margin* — how far
-this utterance rose above the room measured moments earlier, in whatever units
-both were measured in. The floor follows a room that has gone quiet within about
-a second and a room that has got louder barely at all, since it is what the room
-does when nobody is talking and an utterance must not raise the bar it is about
-to be measured against.
+**There is not a single absolute number in it, and the first version's bug is
+why.** It compared the utterance against the room plus a fixed margin, in the
+units `onRmsChanged` reports — whose documented -2..10 is a typical range and
+not a contract. On a device reporting a narrower one the margin was unreachable,
+so nothing was ever loud enough and voice mode answered nobody. A gate that can
+be wrong that way is worse than no gate: it fails silently, and it looks exactly
+like a broken microphone.
 
-**The bar is the larger of a fixed margin and a share of the loudest utterance
-so far**, which is what makes it follow the person rather than only the room. A
-quiet room and a quiet voice work at the fixed margin; somewhere noisy the first
-thing said raises the bar behind it, and the fan does not clear it. The loudest
-decays each time something carries, so a bar raised by shouting once comes back
-down over the next few turns instead of standing for the session.
+So the bar is a share of how loud this person turns out to be, measured rather
+than assumed. Nothing is refused until a voice has been heard to compare
+against, so the first utterance always carries whatever it was; that utterance
+sets the level and the bar is a fraction of it. A level set by the wrong thing
+corrects itself upward, since a real voice is louder than the television that
+set it, and downward, since the level decays at every judgement — one shout is
+not the bar for the rest of the session.
 
-Two things it will not do. It never refuses before it has measured the room —
-the first thing anyone says may be the first thing the microphone ever heard,
-and a floor seeded from a voice is a bar above the voice that set it — and it
-never refuses where the engine reported no loudness at all. A gate that cannot
-measure has no business refusing. The same measurement is what `level` follows,
-so the orb moves the same amount in a quiet room and a noisy one where it used
-to be pinned to the nominal range.
+What is left of the room is the **floor** the utterance is measured above, and
+that is a minimum rather than an average: a floor that follows what it hears
+climbs into a long sentence and reports that nobody said anything. It is the
+quietest reading of the last two blocks, so it takes a genuinely quieter room to
+move it and no amount of talking will. That is also why nothing tells the gate
+where speech began any more — it does not need protecting from it.
+
+The same measurement is what `level` follows, against the loudest anything has
+been rather than against a scale, so the orb moves the same amount in a quiet
+room and a noisy one.
+
+### One listener, two engines
+
+`MicrophoneListener` is what a `Listener` with a microphone behind it is made
+of, which turned out to be everything except the engine: the event stream, the
+level, and the gate. It exists because the gate did not — it was written for the
+system recogniser and lived in that class, so the desktops answered the
+television for as long as Android had stopped. An engine now gets it by being a
+listener rather than by remembering to be one, and what a subclass supplies is
+only what its engine gives it: readings through `measured`, onset through
+`began`, words through `heard`. The sherpa half measures one reading per
+detector window — 32 ms of audio whatever size the platform's chunks are — on
+the `decibels` scale; the Android half passes `onRmsChanged` through. Since
+neither number is compared against anything absolute, one gate serves both.
+
+`SpeechFailures` is the same story on the speaking side: one sentence lost is
+not a broken engine and three in a row is, which was the system synthesiser's
+rule and only its own — so on the desktops one sentence a voice would not say,
+or one wav the player refused, ended voice mode. The sherpa worker also answers
+every sentence now, including the ones it generates no samples for: a sentence
+that came back as nothing left the count standing, so `speaking` was true for
+the rest of the session, every later sound was a barge-in, and silence was never
+reported.
 
 ### Mute is the microphone and nothing else
 
@@ -373,12 +420,15 @@ microphone is shut almost all of the time.
 
 The one exception is `finish`, which is `setListening(false, finish: true)`:
 `stopListening` rather than `cancel`, and the one result it brings back is
-allowed past. That is releasing a touch-to-speak button — the microphone closed
-because the sentence was over, not to throw it away — and it is ungated for the
-same reason, since holding a button down and speaking is not something to
-second-guess by loudness. Sherpa honours it too: the detector is holding a
-segment that no further audio is coming to end, so the worker is told to flush
-it.
+allowed past. Sherpa honours it too: the detector is holding a segment that no
+further audio is coming to end, so the worker is told to flush it.
+
+**Both ways of shutting the microphone ask for it**, which is what Mute means to
+the person pressing it: they speak, they mute, they expect an answer. A mute
+that discarded the sentence in flight left the turn unsaid and voice mode
+looking broken. Nothing is measured once the microphone is shut, so the gate has
+nothing to judge that last result on and lets it through, which is the right
+answer for a sentence somebody deliberately spoke.
 
 **A session can also open shut**, which is what `Voice.start`'s `listening`
 answers. Opening the microphone and closing it again is a real capture started
