@@ -6,7 +6,7 @@ import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../providers.dart";
 import "../../widgets/attachment_chip.dart";
-import "../../widgets/tab_indent.dart";
+import "../../widgets/text_input.dart";
 import "code_block.dart";
 
 class _SendIntent extends Intent {
@@ -66,13 +66,6 @@ int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
         value.selection.isValid ? value.selection.baseOffset : value.text.length,
     };
 
-void _replaceIn(TextEditingController controller, int start, int end, String text) {
-  controller.value = TextEditingValue(
-    text: controller.text.replaceRange(start, end, text),
-    selection: TextSelection.collapsed(offset: start + text.length),
-  );
-}
-
 /// Type a whole completion into [controller] — the trigger, the name, and the
 /// trailing space that makes what follows arguments rather than more name.
 ///
@@ -89,7 +82,7 @@ void insertCompletion(
   final value = controller.value;
   final at = _triggerAt(value, kind);
   final space = at > 0 && !_isSpace(value.text.codeUnitAt(at - 1)) ? " " : "";
-  _replaceIn(controller, at, at, "$space${kind.trigger}$name ");
+  replaceIn(controller, at, at, "$space${kind.trigger}$name ");
 }
 
 typedef SendCallback = void Function(String text, List<Attachment> attachments);
@@ -227,7 +220,7 @@ class _ComposerState extends ConsumerState<Composer> {
   }
 
   void _replace(int start, int end, String text) =>
-      _replaceIn(widget.controller, start, end, text);
+      replaceIn(widget.controller, start, end, text);
 
   Future<void> _attach(AttachmentKind kind) async {
     final picked = await ref.read(attachmentPickerProvider).pick(kind);

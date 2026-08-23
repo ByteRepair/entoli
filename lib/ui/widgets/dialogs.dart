@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 
 import "../../domain/project.dart";
+import "text_input.dart";
 
 /// Put [text] on the clipboard and say so. Copying is silent otherwise — the
 /// button that did it looks the same afterwards — so what was copied is
@@ -48,6 +49,11 @@ Future<({String? project})?> pickProject(
       ),
     );
 
+/// Tab indents where there is more than one line to indent; where the field is
+/// one line it is still how the caret leaves for the buttons.
+Widget _indentable(int maxLines, TextEditingController controller, Widget field) =>
+    maxLines == 1 ? field : TabIndents(controller: controller, child: field);
+
 /// Ask for a line (or a few) of text. Returns null if dismissed or left blank.
 Future<String?> promptForText(
   BuildContext context, {
@@ -67,13 +73,17 @@ Future<String?> promptForText(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        minLines: 1,
-        maxLines: maxLines,
-        decoration: InputDecoration(hintText: hint),
-        onSubmitted: maxLines == 1 ? (_) => Navigator.pop(context, submit()) : null,
+      content: _indentable(
+        maxLines,
+        controller,
+        TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 1,
+          maxLines: maxLines,
+          decoration: InputDecoration(hintText: hint),
+          onSubmitted: maxLines == 1 ? (_) => Navigator.pop(context, submit()) : null,
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
