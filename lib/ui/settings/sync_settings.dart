@@ -5,7 +5,6 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../data/sync/sync_hub.dart";
 import "../../domain/app_settings.dart";
-import "../../domain/sync/devices.dart";
 import "../../providers.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
@@ -200,39 +199,30 @@ class _PairedDevices extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final registry = ref.watch(deviceRegistryProvider);
-    return FutureBuilder(
-      future: registry.list(),
-      builder: (context, snapshot) {
-        final devices = snapshot.data ?? const [];
-        return ValueListenableBuilder(
-          valueListenable: hub.peers,
-          builder: (context, peers, _) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SectionHeader(
-                "Paired devices",
-                description: devices.isEmpty
-                    ? "No devices paired yet. Open a pairing window below and "
-                        "scan the code from another device."
-                    : null,
-              ),
-              for (final device in devices)
-                _PairedDeviceRow(
-                  device: device,
-                  state: peers[device.id],
-                  onRevoke: () async {
-                    await hub.revoke(device.id);
-                    ref.invalidate(deviceRegistryProvider);
-                  },
-                  onConnect: () => hub.connect(device.id),
-                  onDisconnect: () => hub.disconnect(device.id),
-                  onFailed: (error) => _say(context, error),
-                ),
-            ],
+    // One source for both membership and status. Reading the registry here
+    // instead meant a device paired while this page was open did not appear
+    // until the page was left and come back to.
+    final peers = ref.watch(syncPeersProvider).values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          "Paired devices",
+          description: peers.isEmpty
+              ? "No devices paired yet. Open a pairing window below and "
+                  "paste the code into another device."
+              : null,
+        ),
+        for (final peer in peers)
+          _PairedDeviceRow(
+            peer: peer,
+            onRevoke: () => hub.revoke(peer.deviceId),
+            onConnect: () => hub.connect(peer.deviceId),
+            onDisconnect: () => hub.disconnect(peer.deviceId),
+            onFailed: (error) => _say(context, error),
           ),
-        );
-      },
+      ],
     );
   }
 }
@@ -242,16 +232,14 @@ void _say(BuildContext context, Object error) => ScaffoldMessenger.of(context)
 
 class _PairedDeviceRow extends StatelessWidget {
   const _PairedDeviceRow({
-    required this.device,
-    required this.state,
+    required this.peer,
     required this.onRevoke,
     required this.onConnect,
     required this.onDisconnect,
     required this.onFailed,
   });
 
-  final PairedDevice device;
-  final PeerState? state;
+  final PeerState peer;
   final Future<void> Function() onRevoke;
   final Future<void> Function() onConnect;
   final Future<void> Function() onDisconnect;
@@ -263,9 +251,9 @@ class _PairedDeviceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = state?.status ?? PeerStatus.offline;
+    final status = peer.status;
     final theme = Theme.of(context);
-    final failure = state?.error;
+    final failure = peer.error;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -275,7 +263,7 @@ class _PairedDeviceRow extends StatelessWidget {
             children: [
               Icon(_iconFor(status), size: 16, color: _colorFor(status, theme)),
               const SizedBox(width: 8),
-              Expanded(child: Text(device.name)),
+              Expanded(child: Text(peer.name)),
               if (status == PeerStatus.online)
                 TextButton(
                     onPressed: () => _tried(onDisconnect),
@@ -329,7 +317,7 @@ class _PairedDeviceRow extends StatelessWidget {
     final ok = await confirm(
       context,
       title: "Revoke device?",
-      message: "Unpair from ${device.name}? They will keep this device until "
+      message: "Unpair from ${peer.name}? They will keep this device until "
           "someone revokes there too.",
       confirmLabel: "Revoke",
       destructive: true,

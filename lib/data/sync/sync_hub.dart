@@ -299,6 +299,11 @@ class SyncHub {
   /// The repository arrives after construction — the container that holds it
   /// does not exist yet when [SyncHub] is built. Serving-side everything is
   /// inert until this is called.
+  /// Whether the hub has been given the repository the serving side is built
+  /// on. False is a device that pairs, and then serves nothing at all.
+  @visibleForTesting
+  bool get isServing => _repo != null;
+
   void attach(ChatRepository repo) {
     if (_repo != null) return;
     _repo = repo;
@@ -853,6 +858,10 @@ class SyncHub {
   /// be dialed again after a restart without opening a window first.
   /// Cheap where nothing is paired: the server never starts.
   Future<void> ensureReady() async {
+    // Before the early return below: a web build listens for nothing and a
+    // desktop with no pairings starts no server, and both still have a list
+    // of paired devices to draw.
+    _refreshPeers();
     final server = _server;
     if (server == null || (await registry.list()).isEmpty) return;
     await server.start();

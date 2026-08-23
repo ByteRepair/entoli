@@ -38,6 +38,9 @@ void main() {
       settings: () =>
           AppSettings(syncRelayUrl: relayUrl, deviceName: deviceName),
     );
+    // What `main` does once the container exists: it is what puts the
+    // already-paired devices into `peers`, which is what the page draws.
+    await hub.ensureReady();
     app = TestApp.create(hub: hub, devices: registry);
     await pumpSettings(tester, app, SettingsCategory.sync);
     await settleIo(tester);
@@ -88,6 +91,25 @@ void main() {
       expect(find.text("Disconnect"), findsNothing);
     });
 
+    testWidgets("one that pairs while the page is open appears at once",
+        (tester) async {
+      await open(tester);
+      expect(find.textContaining("No devices paired yet"), findsOneWidget);
+
+      // What completing a pairing does: the registry gains the device and the
+      // hub publishes it online. Read off the registry instead, the page went
+      // on showing the list it had loaded when it was built.
+      await registry.add(testPairedDevice("d1", name: "Laptop"));
+      hub.peers.value = {
+        "d1": PeerState(
+            deviceId: "d1", name: "Laptop", status: PeerStatus.online),
+      };
+      await settleIo(tester);
+
+      expect(find.text("Laptop"), findsOneWidget);
+      expect(find.text("Disconnect"), findsOneWidget);
+    });
+
     testWidgets("a dial that finds nothing says so rather than throwing",
         (tester) async {
       await open(tester, paired: [testPairedDevice("d1", name: "Laptop")]);
@@ -117,6 +139,7 @@ void main() {
 
       expect(await registry.list(), hasLength(1));
       expect(find.text("Laptop"), findsOneWidget);
+      expect(hub.peers.value, hasLength(1));
     });
 
     testWidgets("confirming takes it out of the registry", (tester) async {
@@ -131,6 +154,9 @@ void main() {
       await settleIo(tester);
 
       expect(await registry.list(), isEmpty);
+      // And out of the list the page draws, without leaving and coming back.
+      await settleIo(tester);
+      expect(find.text("Laptop"), findsNothing);
     });
   });
 

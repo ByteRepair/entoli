@@ -13,6 +13,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
+import "package:agent_chat/ui/chat/remote_turns.dart";
 import "package:agent_chat/providers.dart" show syncHubProvider;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -21,7 +22,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "../../fakes.dart"
     show FakeBackend, FakeChatStore, FakeDeviceRegistry;
-import "../../harness.dart" show testSyncHub;
+import "../../harness.dart";
 
 /// Two real SyncHubs over a loopback channel pair — everything from the
 /// handshake up runs for real; only the transport under the data channel is
@@ -101,6 +102,23 @@ void main() {
     expect(psk, hasLength(43));
     expect(psk.length % 4, isNot(0));
     expect(psk, isNot(contains("=")));
+  });
+
+  /// The hub is built before the container it reads from, so what lives in
+  /// the container has to be handed to it afterwards. Nothing structural
+  /// enforces that, and it was missed: every test here calls `attach` in its
+  /// own harness, so a real device paired happily and then served nothing —
+  /// no welcome, no chat list, no records.
+  test("reading the driver provider is what makes a device serve", () async {
+    final config = tempConfig();
+    final hub = await testSyncHub(config);
+    addTearDown(hub.dispose);
+    final app = TestApp.create(hub: hub);
+    addTearDown(app.dispose);
+
+    expect(hub.isServing, isFalse);
+    app.container.read(remoteTurnDriverProvider);
+    expect(hub.isServing, isTrue);
   });
 
   /// Two humans do not press Confirm at the same instant, and the side that

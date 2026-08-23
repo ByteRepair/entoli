@@ -161,9 +161,9 @@ class AppSession {
     await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
-    // The same again for a chat being read, or typed into, from a paired
-    // device: it holds a controller open per watched chat so the turn is
-    // visible there, and runs a teleported prompt here.
+    // The same again for sync: it hands the hub the repository the serving
+    // side is built on, holds a controller open per chat a paired device is
+    // watching, and runs a teleported prompt here.
     container.read(remoteTurnDriverProvider);
     // Read once to set going, like the keep-alive above: it wires itself to the
     // settings and drives the prefill from there.

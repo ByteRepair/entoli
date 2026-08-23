@@ -302,6 +302,24 @@ which is also what keeps every sync-unaware test working, since there is no
 hub: it sends past the mirror-side guard, which is the only way to check that
 the *home* device is what refuses a peer holding nothing.
 
+## The container's half of the hub
+
+The hub is built in `main` before the container, so what lives in the
+container has to be handed to it afterwards: the repository the whole serving
+side is built on — the chat list in a welcome, the change feed behind every
+append, the records a `chatOpen` is answered with. `RemoteTurnDriver` does it
+in its constructor, so the one `container.read(remoteTurnDriverProvider)` in
+`main` wires both halves rather than two lines either of which can be
+forgotten. One of them was: `attach` was called by every test's own harness
+and by nothing in the app, so a real device paired, went green, and served
+nothing at all. `SyncHub.isServing` is what a test asks about that now.
+
+The Sync page's device list is `peers` and not the registry, for the same
+kind of reason: the registry read the page was holding was made when the page
+was built, so a device paired while it was open did not appear until the page
+was left and come back to. `ensureReady` seeds `peers` from the registry
+before anything else, so the already-paired are there from the first frame.
+
 ## What a device is called
 
 The sync device name is the machine's own hostname where it has one, falling

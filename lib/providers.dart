@@ -494,6 +494,19 @@ class DrivenChats extends HubValue<Map<String, String>> {
 final drivenChatsProvider =
     NotifierProvider<DrivenChats, Map<String, String>>(DrivenChats.new);
 
+/// Every device this one has paired with, online or not. One list rather than
+/// the registry for membership and the hub for status: a device paired while
+/// the Sync page was open landed in the hub and not in the registry read the
+/// page was still holding, so it did not appear until the page was left and
+/// come back to.
+class SyncPeers extends HubValue<Map<String, PeerState>> {
+  @override
+  ValueListenable<Map<String, PeerState>> of(SyncHub hub) => hub.peers;
+}
+
+final syncPeersProvider =
+    NotifierProvider<SyncPeers, Map<String, PeerState>>(SyncPeers.new);
+
 final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
   return ref
       .watch(remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)));
