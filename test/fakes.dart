@@ -7,6 +7,8 @@ import "package:flutter/widgets.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
+import "package:agent_chat/data/sync/channel.dart";
+import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/app_restart.dart";
@@ -32,7 +34,13 @@ import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/download.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/rootfs_store.dart";
+import "package:agent_chat/domain/secret_store.dart";
+import "package:agent_chat/domain/sync/devices.dart";
+import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
+import "package:agent_chat/providers.dart" show DrivenChats, RemoteChats;
+import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
+import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:uuid/uuid.dart";
 
 /// A [LinkOpener] that records what it was asked to open, for UI tests that
@@ -572,6 +580,12 @@ class FakeChatStore implements ChatStore {
   }
 
   @override
+  Future<ChatState?> loadState(String id) async => _states[id];
+
+  @override
+  Future<List<ChatRecord>> readRecords(String chatId) async => records(chatId);
+
+  @override
   Future<List<ChatState>> list() async =>
       _states.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
@@ -981,5 +995,219 @@ class FakeVoiceModelStore extends VoiceModelStore {
   Future<void> delete(VoiceModel model) async {
     deleted.add(model.id);
     _installed.remove(model.id);
+  }
+}
+
+/// The Remotes half of the sidebar with no hub under it. Every test that is
+/// not about sync gets an empty list; a sync one seeds the rows it wants.
+class FakeRemoteChats extends RemoteChats {
+  FakeRemoteChats(this.entries);
+
+  final List<RemoteChatEntry> entries;
+
+  @override
+  List<RemoteChatEntry> build() => entries;
+}
+
+/// A [SecretStore] with nothing behind it. `encrypted` is false, which is
+/// what the Sync page warns about — the weakest of the three ports.
+class FakeSecretStore implements SecretStore {
+  final _items = <String, Uint8List>{};
+
+  @override
+  Future<Uint8List?> read(String key) async => _items[key];
+
+  @override
+  Future<void> write(String key, Uint8List value) async => _items[key] = value;
+
+  @override
+  Future<void> delete(String key) async => _items.remove(key);
+
+  @override
+  bool get encrypted => false;
+}
+
+/// A [DeviceRegistry] in memory: paired devices with no `devices.json` under
+/// them, for the tests about what the Sync page draws.
+class FakeDeviceRegistry implements DeviceRegistry {
+  FakeDeviceRegistry([List<PairedDevice> devices = const []]) {
+    for (final device in devices) {
+      _devices[device.id] = device;
+    }
+  }
+
+  final _devices = <String, PairedDevice>{};
+  final _secrets = <String, String>{};
+
+  @override
+  Future<List<PairedDevice>> list() async => _devices.values.toList();
+
+  @override
+  Future<PairedDevice?> byId(String id) async => _devices[id];
+
+  @override
+  Future<void> add(PairedDevice device) async => _devices[device.id] = device;
+
+  @override
+  Future<void> remove(String id) async => _devices.remove(id);
+
+  @override
+  Future<void> markSeen(String id, {String? address}) async {
+    final device = _devices[id];
+    if (device == null) return;
+    device.lastSeenAt = DateTime.now();
+    if (address != null) device.lastAddress = address;
+  }
+
+  @override
+  Future<String?> pairingSecret(String id) async => _secrets[id];
+
+  @override
+  Future<void> setPairingSecret(String id, String secret) async =>
+      _secrets[id] = secret;
+}
+
+/// A relay room with nobody else in it. What the hub does with a relay URL is
+/// dial it, so a test that only wants the window open needs somewhere for the
+/// dial to land — a real one is a DNS lookup and a socket, in a test that is
+/// about neither.
+class FakeRelaySignaling implements RelaySignaling {
+  final _incoming = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Every room joined, as `(relayUrl, room, role)`.
+  final dialled = <(String, String, String)>[];
+
+  /// Everything the hub said into the room.
+  final sent = <Map<String, Object?>>[];
+
+  /// A [RelayDial] over this one, recording what it was asked for.
+  Future<RelaySignaling> dial({
+    required String relayUrl,
+    required String room,
+    required String role,
+  }) async {
+    dialled.add((relayUrl, room, role));
+    return this;
+  }
+
+  /// A message from the other side of the room.
+  void arrive(Map<String, dynamic> message) => _incoming.add(message);
+
+  @override
+  Stream<Map<String, dynamic>> get messages => _incoming.stream;
+
+  @override
+  Future<void> send(Map<String, Object?> json) async => sent.add(json);
+
+  @override
+  Future<Map<String, dynamic>> waitFor(String field,
+          {Duration timeout = const Duration(seconds: 45)}) =>
+      messages.firstWhere((m) => m.containsKey(field)).timeout(timeout);
+
+  @override
+  Future<void> close() async {
+    if (!_incoming.isClosed) await _incoming.close();
+  }
+}
+
+/// A device as the registry holds one, for seeding the paired list.
+PairedDevice testPairedDevice(String id, {String name = "Desktop"}) =>
+    PairedDevice(
+      id: id,
+      name: name,
+      publicKey: "cHVibGlj",
+      addedAt: DateTime.utc(2026),
+    );
+
+/// Chats of this device a paired one is driving, by the name of the device
+/// driving them. Empty for every test that is not about sync.
+class FakeDrivenChats extends DrivenChats {
+  FakeDrivenChats(this.driven);
+
+  final Map<String, String> driven;
+
+  @override
+  Map<String, String> build() => driven;
+}
+
+/// Who holds a mirrored chat, with no hub to ask. `take` and `release` record
+/// rather than send: what the wire does with them is `sync_hub_pair_test`'s.
+class FakeMirrorControl extends MirrorControlNotifier {
+  FakeMirrorControl(super.chatId, this.control);
+
+  final MirrorControl control;
+  final List<String> taken = [];
+  final List<String> released = [];
+
+  @override
+  MirrorControl build() => control;
+
+  @override
+  Future<void> take() async => taken.add(chatId);
+
+  @override
+  Future<void> release() async => released.add(chatId);
+}
+
+/// A mirrored chat's view, already resolved. What the real controller derives
+/// from a live mirror — and the offline status line it puts there — is pinned
+/// in `sync_hub_pair_test.dart` over two real hubs; here the page is the
+/// subject and there is no wire.
+class FakeMirrorChat extends MirrorChatController {
+  FakeMirrorChat(super.chatId, this.views);
+
+  final Map<String, ChatViewState> views;
+
+  @override
+  ChatViewState build() => views[chatId] ?? ChatViewState();
+}
+
+/// Two [ByteChannel]s wired to each other, for the tests about everything
+/// above a transport: the handshake, the framing, and the hub on top. One
+/// message in is one message out, in order — which is all a real data channel
+/// promises, and all any of that code may assume.
+(LoopbackChannel, LoopbackChannel) loopbackPair() {
+  final a = LoopbackChannel();
+  final b = LoopbackChannel();
+  a.other = b;
+  b.other = a;
+  return (a, b);
+}
+
+class LoopbackChannel implements ByteChannel {
+  LoopbackChannel? other;
+
+  /// Every frame's size as it goes out, for the tests about what has to be
+  /// paged. A real data channel refuses one past its maximum; this one does
+  /// not, so a test has to look.
+  void Function(int bytes)? _sizes;
+
+  void watchSends(void Function(int bytes) sizes) => _sizes = sizes;
+  // Single-subscription like the real one, so a test exercises the buffering
+  // rather than a broadcast stream's dropping.
+  final _incoming = StreamController<Uint8List>();
+  var _closed = false;
+
+  @override
+  Stream<Uint8List> get incoming => _incoming.stream;
+
+  @override
+  Future<void> send(Uint8List bytes) async {
+    _sizes?.call(bytes.length);
+    if (_closed) throw StateError("loopback closed");
+    final peer = other!;
+    if (peer._closed) throw StateError("peer closed");
+    peer._incoming.add(bytes);
+  }
+
+  @override
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    await _incoming.close();
+    // Both ends, the way a real transport does: closing one side of a data
+    // channel is something the other side is told about. Closing only this
+    // one left the peer waiting out its timeouts for a channel already gone.
+    await other?.close();
   }
 }

@@ -744,7 +744,10 @@ class BuiltinAgent {
 
     yield ToolCallEvent(
         ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
-    final request = AskRequest(id: call.id, questions: questions);
+    final request = AskRequest(
+        id: call.id,
+        questions: questions,
+        argumentsJson: call.argumentsJson);
     // Emitted before it is awaited, for the same reason an approval is: the
     // panel is where the answers come from.
     yield QuestionRequestEvent(request);

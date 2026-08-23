@@ -46,6 +46,11 @@ class AppSettings {
     this.localModelPrefill = false,
     this.localModelThreads,
     this.localModelKvCachePrompts,
+    this.deviceName,
+    this.syncRelayUrl,
+    this.turnUrl,
+    this.turnUsername,
+    this.turnPassword,
   });
 
   String? defaultModelId;
@@ -187,6 +192,23 @@ class AppSettings {
   /// "Persisting the KV cache to disk" in `lib/data/local/CLAUDE.md`.
   int? localModelKvCachePrompts;
 
+  /// This device's name as paired devices see it. Null falls back to
+  /// "Entoli " plus a fingerprint prefix in [SyncHub].
+  String? deviceName;
+
+  /// A user-supplied WebSocket relay endpoint for pairing over the internet.
+  /// Empty or null means relay is off and only LAN / manual paste work.
+  String? syncRelayUrl;
+
+  /// TURN server URL for NAT traversal. Bring-your-own; STUN defaults are
+  /// public. Null means no TURN, so symmetric-NAT pairs fail honestly.
+  String? turnUrl;
+
+  /// TURN credentials, stored beside the URL. Null where the TURN server
+  /// needs none (rare) or none is configured.
+  String? turnUsername;
+  String? turnPassword;
+
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
   /// number.
@@ -238,6 +260,11 @@ class AppSettings {
         // the new name, so a file migrates itself on the next change.
         localModelKvCachePrompts: (json["localModelKvCachePrompts"] ??
             json["localModelKvCacheChats"]) as int?,
+        deviceName: _orNull(json["deviceName"] as String?),
+        syncRelayUrl: _orNull(json["syncRelayUrl"] as String?),
+        turnUrl: _orNull(json["turnUrl"] as String?),
+        turnUsername: _orNull(json["turnUsername"] as String?),
+        turnPassword: _orNull(json["turnPassword"] as String?),
       );
     } catch (_) {
       return AppSettings();
@@ -304,6 +331,11 @@ class AppSettings {
         localModelPrefill: localModelPrefill,
         localModelThreads: localModelThreads,
         localModelKvCachePrompts: localModelKvCachePrompts,
+        deviceName: deviceName,
+        syncRelayUrl: syncRelayUrl,
+        turnUrl: turnUrl,
+        turnUsername: turnUsername,
+        turnPassword: turnPassword,
       );
 
   Future<void> save(AppConfig config) async {
@@ -342,6 +374,11 @@ class AppSettings {
       if (localModelThreads != null) "localModelThreads": localModelThreads,
       if (localModelKvCachePrompts != null)
         "localModelKvCachePrompts": localModelKvCachePrompts,
+      if (deviceName != null) "deviceName": deviceName,
+      if (syncRelayUrl != null) "syncRelayUrl": syncRelayUrl,
+      if (turnUrl != null) "turnUrl": turnUrl,
+      if (turnUsername != null) "turnUsername": turnUsername,
+      if (turnPassword != null) "turnPassword": turnPassword,
     }));
   }
 }

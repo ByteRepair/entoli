@@ -146,6 +146,16 @@ without one the chat reads as a turn the process was killed in the middle of and
 is offered to be carried on, which is the point of `finished: false` and a
 surprise everywhere else.
 
+`TestApp.create(remotes: …, mirrors: …)` is a chat mirrored from a paired
+device — the rows the sidebar's Remotes section draws, and what one of them
+reads as when it is opened. Both are provider overrides rather than a faked
+`SyncHub`, and the empty default is load-bearing: the sidebar and the chat page
+both ask whether a chat is mirrored, and there is no hub in a test container to
+ask. What the real controller derives from a live mirror is pinned in
+`data/sync/sync_hub_pair_test.dart` instead, over two hubs on a loopback
+`ByteChannel` — the only place the handshake, the framing and the resource
+chunking actually run.
+
 ## The filesystem a test runs on
 
 `tempConfig` is a real temp directory over `fileSystemIo`, torn down when the
@@ -212,6 +222,31 @@ it as it stands.
 Do not reach for the memory filesystem to avoid all this. It was tried: sembast
 resolves through timers, not microtasks, so a widget test hangs on it exactly as
 it hangs on a disk. `runAsync` is the only answer.
+
+## What the wire is not tested against
+
+Everything above the transport is exercised on a loopback `ByteChannel` —
+`data/sync/sync_hub_pair_test.dart` stands two real hubs on one. The
+rendezvous under it is exercised over real sockets: `lan_signaling_test.dart`
+against a real `HttpServer`, `relay_signaling_test.dart` against a real
+WebSocket — both on loopback, on a port the OS picked.
+
+Nothing else dials. `testSyncHub` hands the hub a `FakeRelaySignaling` unless
+a test names its own, so a `syncRelayUrl` in a settings fixture is a string
+the page reads rather than a host to look up. It used to be a real dial: the
+Sync page's relay test resolved `relay.example.com`, and whether it passed
+depended on how fast that failed.
+
+**The WebRTC data channel itself has no automated coverage**, and cannot have
+any under `flutter test`: `flutter_webrtc` is a native plugin, so a peer
+connection needs an engine with the plugin registered and the Dart VM has
+neither. It is confirmed by hand, between two running instances.
+
+That gap has already cost two bugs that every loopback test passed — the frame
+header read through `frame.buffer`, and the hello exchange subscribing after
+it sent. Both are written up in `lib/data/sync/CLAUDE.md`; both would have
+been silent again. Anything changed in `framing.dart` or in `SyncHub._establish`
+is worth confirming between two instances before it is believed.
 
 ## The live test
 

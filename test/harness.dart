@@ -11,6 +11,10 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
+import "package:agent_chat/domain/sync/devices.dart";
+import "package:agent_chat/domain/sync/identity.dart";
+import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -26,6 +30,7 @@ import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
+import "package:agent_chat/ui/chat/mirror_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
@@ -89,6 +94,19 @@ class TestApp {
   /// [systemAccent] is the colour the system is themed to, which is the other
   /// thing only an Android answers: null is every platform without one, and so
   /// a settings page with no Material 3 Expressive switch on it.
+  ///
+  /// [hub] is for the one page that reads a [SyncHub] directly — the Sync
+  /// settings category, which draws this device's identity and the paired
+  /// list off it. Build one with [testSyncHub], which is asynchronous because
+  /// an identity is a generated keypair. Everything else about sync goes
+  /// through the provider overrides below and needs no hub at all.
+  ///
+  /// [remotes] is the Remotes section of the sidebar: chats mirrored from a
+  /// paired device. Empty by default, which is every test with no sync in it —
+  /// and load-bearing, because it is also what stands in for the [SyncHub]
+  /// nothing here builds. [mirrors] is what one of those chats reads as, and
+  /// [control] whether this device is driving one. [drivenBy] is the other
+  /// direction: chats of this device a paired one is typing into.
   factory TestApp.create({
     PromptLibrary? library,
     bool launcherIcons = true,
@@ -106,6 +124,11 @@ class TestApp {
     bool prefill = false,
     String? abi,
     int? systemAccent,
+    List<RemoteChatEntry> remotes = const [],
+    Map<String, ChatViewState> mirrors = const {},
+    Map<String, String> drivenBy = const {},
+    MirrorControl control = const MirrorControl(),
+    SyncHub? hub,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -188,6 +211,13 @@ class TestApp {
           prootAvailableProvider.overrideWithValue(proot),
           appVersionProvider.overrideWithValue(testAppVersion),
           backgroundWorkProvider.overrideWithValue(work),
+          if (hub != null) syncHubProvider.overrideWithValue(hub),
+          remoteChatsProvider.overrideWith(() => FakeRemoteChats(remotes)),
+          drivenChatsProvider.overrideWith(() => FakeDrivenChats(drivenBy)),
+          mirrorChatControllerProvider
+              .overrideWith2((id) => FakeMirrorChat(id, mirrors)),
+          mirrorControlProvider
+              .overrideWith2((id) => FakeMirrorControl(id, control)),
         ],
       ),
     );
@@ -299,6 +329,29 @@ class TestApp {
     container.dispose();
   }
 }
+
+/// A real [SyncHub] with nothing under it: an in-memory registry and secret
+/// store, and no signaling, so it binds no socket and dials nothing. What the
+/// Sync page reads off one — the fingerprint, the peers, the pairing window —
+/// is all its own, so faking the hub would only ever prove the fake.
+Future<SyncHub> testSyncHub(
+  AppConfig config, {
+  DeviceRegistry? devices,
+  AppSettings Function()? settings,
+  String? hostname,
+  RelayDial? relayDial,
+}) async =>
+    SyncHub(
+      identity: await SyncIdentity.load(FakeSecretStore()),
+      registry: devices ?? FakeDeviceRegistry(),
+      config: config,
+      settings: settings ?? AppSettings.new,
+      lanSignaling: () => null,
+      hostname: hostname,
+      // Nothing to dial by default, so a test that forgets one fails rather
+      // than reaching the network from whatever URL it configured.
+      relayDial: relayDial ?? FakeRelaySignaling().dial,
+    );
 
 /// Put a whole chat on disk the way the app would have: its state, then its
 /// conversation as the records a turn would have appended. There is no
@@ -569,7 +622,12 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
   if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
     await pressBack(tester);
   }
-  await tester.tap(find.widgetWithText(ListTile, category.label));
+  final tile = find.widgetWithText(ListTile, category.label);
+  // Only when it is off the bottom: [scrollTo] aligns what it reveals with the
+  // top of the list, which would push the categories above it out of the tree
+  // and leave the next call with nothing to tap.
+  if (tile.evaluate().isEmpty) await scrollTo(tester, tile);
+  await tester.tap(tile);
   await settleIo(tester);
 }
 
@@ -603,12 +661,13 @@ List<String?> popupLabels(WidgetTester tester) => tester
 ///
 /// For `test`, not `testWidgets`: it waits on the real clock, which a widget
 /// test's fake one only advances when the tree is pumped.
-Future<void> waitFor(FutureOr<bool> Function() done, {String what = "it"}) async {
-  for (var i = 0; i < 2000; i++) {
-    if (await done()) return;
+Future<void> waitFor(FutureOr<bool> Function() done,
+    {String what = "it", Duration limit = const Duration(seconds: 2)}) async {
+  final end = DateTime.now().add(limit);
+  while (!await done()) {
+    if (DateTime.now().isAfter(end)) fail("$what never happened");
     await Future<void>.delayed(const Duration(milliseconds: 1));
   }
-  fail("$what never happened");
 }
 
 /// A data directory that cleans itself up when the test ends. `forDirectory`

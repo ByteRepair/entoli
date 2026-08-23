@@ -33,6 +33,10 @@ named in a cross-reference is findable from this list.
   Carrying one on, Web search
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
+- `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
+  layer, three rendezvous transports, the SyncHub, mirroring a chat, control
+  and driving a turn from the other end, what the Sync page can do about a
+  peer, secrets at rest
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
@@ -40,7 +44,7 @@ named in a cross-reference is findable from this list.
   build's own
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
-  the user ran, The chat page
+  the user ran, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/CLAUDE.md` — Voice mode, What listens and what speaks, The
   Android system engines, Which language it is asked in, Ending the utterance,
   What counts as being spoken to, One listener, two engines, Mute is the user,
@@ -223,6 +227,36 @@ project-scoped path is built through it. `isProjectName` is the same rule read
 the other way: a directory that could not have been created as a project is not
 listed as one, so a stray `.git` beside them is not a project with no chats in
 it.
+
+## Saying what it did
+
+**Anything the app catches and carries on from gets a line.** Not a trace of
+what it is doing — a line where something did not work and the user cannot see
+it any other way. A failure that is caught and dropped, and there are good
+reasons to drop most of them, is otherwise indistinguishable from nothing
+having happened: sync shipped with nine such places and "it will not pair"
+came with nothing at all to go on, in a log or on screen.
+
+`logFailure` in `lib/core/log.dart` is how: a `[tag]` prefix naming the layer,
+one line, the reason and enough to say which thing it was about. Nothing calls
+`debugPrint` directly, so a log reads the same whoever it is sent to.
+`syncLog` is a wrapper over it, since nine call sites read better for one.
+
+Three rules for what goes in one.
+
+**Failures, not traffic.** A log of everything that happened is unreadable and
+nobody sends it. What earns a line is the arm nothing draws: a send that
+threw, a file that would not parse, a request nobody answered, a plugin that
+refused.
+
+**Nothing that should not leave the machine.** No secrets or keys, no message
+or file contents, no prompt, no model output, no SDP. A user pastes a log into
+an issue without reading it; assume this one will be. An id and a reason.
+
+**Failures are not gated on `kDebugMode`, chatter is.** A release build has to
+be able to say why it did not work, since that is the build a user is running
+when they tell you it did not. Volume — a subprocess's output, a cache hit —
+is `logDetail`, which is debug-only.
 
 ## Development
 

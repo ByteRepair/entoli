@@ -16,18 +16,22 @@ Future<Uint8List> zipEntries(FileSystem fs, List<String> paths) async =>
 /// The archive [zipEntries] encodes, for a caller with something of its own to
 /// put in it. [base] is what entries are named relative to, defaulting to each
 /// path's own parent; [skip] drops a file by its path, and is never asked about
-/// a directory.
+/// a directory; [skipDir] drops a directory by its path, and is asked before
+/// recursing into it.
 Future<Archive> archiveOf(
   FileSystem fs,
   List<String> paths, {
   String? base,
   bool Function(String path)? skip,
+  bool Function(String path)? skipDir,
 }) async {
   final archive = Archive();
   for (final path in paths) {
     final from = base ?? fs.path.dirname(path);
     if (await fs.isDirectory(path)) {
-      await _addDirectory(fs, archive, from, path, skip);
+      if (skipDir == null || !skipDir(path)) {
+        await _addDirectory(fs, archive, from, path, skip, skipDir);
+      }
     } else if (skip == null || !skip(path)) {
       await _addFile(fs, archive, from, path);
     }
@@ -51,6 +55,7 @@ Future<void> _addDirectory(
   String base,
   String path,
   bool Function(String path)? skip,
+  bool Function(String path)? skipDir,
 ) async {
   // Its own entry as well as its contents': an empty folder is otherwise
   // nothing at all, and a zip of one alone would come out empty. The base
@@ -59,7 +64,9 @@ Future<void> _addDirectory(
   if (name != ".") archive.add(ArchiveFile.directory(name));
   await for (final entity in fs.directory(path).list()) {
     if (entity is Directory) {
-      await _addDirectory(fs, archive, base, entity.path, skip);
+      if (skipDir == null || !skipDir(entity.path)) {
+        await _addDirectory(fs, archive, base, entity.path, skip, skipDir);
+      }
     } else if (skip == null || !skip(entity.path)) {
       await _addFile(fs, archive, base, entity.path);
     }

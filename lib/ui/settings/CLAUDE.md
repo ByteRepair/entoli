@@ -61,7 +61,10 @@ even when the app is closed — and where the port is unavailable the page says 
 and offers nothing,
 the way a row for a missing device would. The editor page is a route of its own;
 see "The reminder editor" below, and "Waking for a reminder" in
-`android/CLAUDE.md`. **Providers** is the endpoints.
+`android/CLAUDE.md`. **Sync** is paired devices — this device's identity and
+name, the relay and TURN settings for internet pairing, the paired-device list,
+and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
+handshake. **Providers** is the endpoints.
 **LLMs** is what a new chat is answered by and what names it. **Data** is all of
 it at once, out as one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app

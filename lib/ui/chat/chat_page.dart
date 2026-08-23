@@ -17,10 +17,12 @@ import "../widgets/nav_drawer.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
 import "chat_controller.dart";
+import "mirror_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
 import "widgets/turn_surface.dart";
+import "widgets/view_only_bar.dart";
 
 class ChatPage extends ConsumerWidget {
   const ChatPage({super.key, this.withDrawer = false});
@@ -302,12 +304,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         if (tries > 0) _settleAtBottom(tries - 1);
       });
 
-  Future<void> _send(String text, List<Attachment> attachments) => ref
-      .read(chatControllerProvider(widget.chatId).notifier)
-      .send(text, attachments: attachments);
-
-  Future<void> _abort() => ref.read(chatControllerProvider(widget.chatId).notifier).abort();
-
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
   /// case where the chat being deleted is the one the user is looking at.
@@ -349,20 +345,21 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   @override
   Widget build(BuildContext context) {
+    // A mirrored chat is read through the hub's mirror rather than the local
+    // store, so it is a different controller and a different bottom of the
+    // page. Everything between those two is the same page — see [_page].
+    return ref.watch(isMirroredChatProvider(widget.chatId))
+        ? _mirrored(context)
+        : _local(context);
+  }
+
+  Widget _local(BuildContext context) {
     final view = ref.watch(chatControllerProvider(widget.chatId));
     final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
     ref.listen(chatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
     final chat = view.chat;
-    if (chat == null) {
-      return _Waiting(
-        withDrawer: widget.withDrawer,
-        child: const CircularProgressIndicator(),
-      );
-    }
-    if (_opened != widget.chatId) {
-      _opened = widget.chatId;
-      _settleAtBottom();
-    }
+    if (chat == null) return _waiting();
+    _opening(chat);
     // Check expiry once per open: a temporary chat whose window has passed is
     // offered a choice between keeping it (turning its TTL off) and deleting it.
     if (_expiryChecked != widget.chatId) {
@@ -370,43 +367,151 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       _checkExpiry(context, chat.state);
     }
 
-    final details = _details(chat.state);
-    final barHeight = _barHeight(context, details.length);
+    // A chat being typed into from a paired device says so: the prompts
+    // arriving are somebody else's, and nothing else on the page would tell.
+    final drivenBy = ref.watch(drivenChatsProvider)[widget.chatId];
+    return _page(
+      context,
+      chat: chat,
+      view: view,
+      editing: notifier,
+      details: [
+        if (drivenBy != null)
+          _TitleLine(icon: Icons.edit_outlined, text: "Driven from $drivenBy"),
+      ],
+      onOpenSettings: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
+      ),
+      whenEmpty: _EmptyChat(
+        // `insertCompletion` rather than writing the field here: where a
+        // trigger lands is the composer's rule, and a `/command` appended at
+        // the caret is text nothing would ever expand. It does not ask for the
+        // focus, which is the composer's other rule — see "The keyboard and
+        // the caret".
+        onStart: (kind, name) => insertCompletion(_controller, kind, name),
+      ),
+      bottom: _turnBar(
+        view: view,
+        driver: notifier,
+        onVoice: ref.watch(voiceProvider).available
+            ? () => openVoice(context, ref, widget.chatId)
+            : null,
+      ),
+    );
+  }
+
+  /// A mirrored chat's page. Nothing here touches the repository or the store
+  /// — every byte came over the wire and stays in RAM, so expiry, settings and
+  /// the whole message-editing row are out whether or not this device is
+  /// driving. What control changes is only whether there is a composer: the
+  /// turn itself runs on the home device either way.
+  Widget _mirrored(BuildContext context) {
+    final view = ref.watch(mirrorChatControllerProvider(widget.chatId));
+    final driver = ref.read(mirrorChatControllerProvider(widget.chatId).notifier);
+    final control = ref.watch(mirrorControlProvider(widget.chatId));
+    ref.listen(mirrorChatControllerProvider(widget.chatId), (_, _) => _scrollToBottom());
+    // One pass over the Remotes list for the two things drawn from it, so the
+    // page rebuilds when they change rather than whenever anything does.
+    final (:online, :deviceName) = ref.watch(remoteChatsProvider.select((chats) {
+      for (final entry in chats) {
+        if (entry.chatId == widget.chatId) {
+          return (online: entry.online, deviceName: entry.deviceName);
+        }
+      }
+      return (online: false, deviceName: "the home device");
+    }));
+    final chat = view.chat;
+    if (chat == null) return _waiting();
+    _opening(chat);
+
+    final held = control.held && online;
+    final controls = ref.read(mirrorControlProvider(widget.chatId).notifier);
+    return _page(
+      context,
+      chat: chat,
+      view: view,
+      details: [_TitleLine(icon: Icons.devices_other, text: deviceName)],
+      whenEmpty: const Center(child: Text("No messages yet")),
+      banner: !online
+          ? MirrorStrip.offline(deviceName: deviceName)
+          : held
+              ? MirrorStrip.inControl(
+                  deviceName: deviceName, onRelease: controls.release)
+              : null,
+      bottom: held
+          ? _turnBar(view: view, driver: driver)
+          : ViewOnlyBar(
+              online: online,
+              asking: control.asking,
+              takenByAnother: control.takenByAnother,
+              onTakeControl: controls.take,
+            ),
+    );
+  }
+
+  Widget _waiting() => _Waiting(
+        withDrawer: widget.withDrawer,
+        child: const CircularProgressIndicator(),
+      );
+
+  /// Land at the end of the conversation the first time this chat is drawn.
+  void _opening(Chat chat) {
+    if (_opened == widget.chatId) return;
+    _opened = widget.chatId;
+    _settleAtBottom();
+  }
+
+  /// The chat, however it is being read. [editing] is the controller the
+  /// message row acts through and is null for a mirror, whose messages are
+  /// the home device's to edit; [onOpenSettings] is null for the same reason.
+  /// [banner] floats over the conversation, and [bottom] is whatever answers
+  /// the turn — a composer, or a bar saying why there is none.
+  Widget _page(
+    BuildContext context, {
+    required Chat chat,
+    required ChatViewState view,
+    required List<Widget> details,
+    required Widget whenEmpty,
+    required Widget bottom,
+    ChatController? editing,
+    VoidCallback? onOpenSettings,
+    Widget? banner,
+  }) {
+    final lines = [..._details(chat.state), ...details];
+    final barHeight = _barHeight(context, lines.length);
+    final title = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Held to the height the bar counted for it, the way a detail line
+          // is.
+          SizedBox(
+            height: MediaQuery.textScalerOf(context).scale(_titleHeight),
+            child: Text(chat.state.title.orUntitled),
+          ),
+          ...lines,
+        ],
+      ),
+    );
     return Scaffold(
       drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
       appBar: AppBar(
         titleSpacing: 0,
         toolbarHeight: barHeight,
-        title: InkWell(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
-          ),
-          // Fills the bar between leading and actions so the whole strip opens
-          // the chat's settings, not just the text.
-          child: SizedBox(
-            height: barHeight,
-            width: double.infinity,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Held to the height the bar counted for it, the way a
-                    // detail line is.
-                    SizedBox(
-                      height: MediaQuery.textScalerOf(context).scale(_titleHeight),
-                      child: Text(chat.state.title.orUntitled),
-                    ),
-                    ...details,
-                  ],
+        title: onOpenSettings == null
+            ? title
+            : InkWell(
+                onTap: onOpenSettings,
+                // Fills the bar between leading and actions so the whole strip
+                // opens the chat's settings, not just the text.
+                child: SizedBox(
+                  height: barHeight,
+                  width: double.infinity,
+                  child: Align(alignment: Alignment.centerLeft, child: title),
                 ),
               ),
-            ),
-          ),
-        ),
         actions: [
           if (view.isRunning)
             Padding(
@@ -414,7 +519,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               child: SizedBox(
                 width: 14,
                 height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
               ),
             ),
         ],
@@ -425,25 +531,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _readableWidth),
-          child: Column(
+          child: Stack(
             children: [
-              Expanded(child: _conversation(chat, view, notifier)),
-              TurnSurface(view: view, notifier: notifier),
-              // A question takes the composer's place rather than sitting above it:
-              // the turn is waiting on this answer, and there is nothing useful to
-              // type until it has it.
-              if (view.questions.isEmpty)
-                Composer(
-                  controller: _controller,
-                  isRunning: view.isRunning,
-                  onSend: _send,
-                  onAbort: _abort,
-                  onVoice: ref.watch(voiceProvider).available
-                      ? () => openVoice(context, ref, widget.chatId)
-                      : null,
-                )
-              else
-                TurnQuestions(view: view, notifier: notifier),
+              Column(
+                children: [
+                  Expanded(child: _conversation(chat, view, editing, whenEmpty)),
+                  bottom,
+                ],
+              ),
+              if (banner != null)
+                Positioned(left: 0, right: 0, top: 0, child: banner),
             ],
           ),
         ),
@@ -451,18 +548,37 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
-  Widget _conversation(Chat chat, ChatViewState view, ChatController notifier) {
+  /// What a running turn puts on screen, and what answers it. A question takes
+  /// the composer's place rather than sitting above it: the turn is waiting on
+  /// this answer, and there is nothing useful to type until it has it.
+  Widget _turnBar({
+    required ChatViewState view,
+    required TurnDriver driver,
+    VoidCallback? onVoice,
+  }) =>
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TurnSurface(view: view, notifier: driver),
+          if (view.questions.isEmpty)
+            Composer(
+              controller: _controller,
+              isRunning: view.isRunning,
+              onSend: (text, attachments) =>
+                  driver.send(text, attachments: attachments),
+              onAbort: driver.abort,
+              onVoice: onVoice,
+            )
+          else
+            TurnQuestions(view: view, notifier: driver),
+        ],
+      );
+
+  Widget _conversation(
+      Chat chat, ChatViewState view, ChatController? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
-    // `insertCompletion` rather than writing the field here: where a trigger
-    // lands is the composer's rule, and a `/command` appended at the caret is
-    // text nothing would ever expand. It does not ask for the focus, which is
-    // the composer's other rule — see "The keyboard and the caret".
-    if (chat.messages.isEmpty) {
-      return _EmptyChat(
-        onStart: (kind, name) => insertCompletion(_controller, kind, name),
-      );
-    }
+    if (chat.messages.isEmpty) return whenEmpty;
     return Stack(
       children: [
         ListView.builder(
@@ -470,6 +586,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           itemCount: chat.messages.length,
           itemBuilder: (context, i) {
             final m = chat.messages[i];
+            // A mirror has no editing controller: the log belongs to the home
+            // device, so the whole row of things to do to a message is out.
+            final mutable = editing != null && !view.isRunning;
             return MessageBubble(
               chatId: widget.chatId,
               message: m,
@@ -482,14 +601,13 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   ref.read(linkOpenerProvider).open(context, uri);
                 }
               },
-              threads: chat.branches[m.id],
-              onThreadStep:
-                  view.isRunning ? null : (step) => notifier.stepThread(m.id, step),
-              onDelete: view.isRunning ? null : () => notifier.deleteThread(m.id),
-              onEdit: m.role == MessageRole.user && !view.isRunning
-                  ? (text) => notifier.editAndResend(m.id, text)
+              threads: editing == null ? null : chat.branches[m.id],
+              onThreadStep: mutable ? (step) => editing.stepThread(m.id, step) : null,
+              onDelete: mutable ? () => editing.deleteThread(m.id) : null,
+              onEdit: mutable && m.role == MessageRole.user
+                  ? (text) => editing.editAndResend(m.id, text)
                   : null,
-              onRegenerate: view.isRunning ? null : () => notifier.regenerate(m.id),
+              onRegenerate: mutable ? () => editing.regenerate(m.id) : null,
               onSpeak: speechReady && m.hasText
                   ? () => readAloud(context, ref, m.id, m.plainText)
                   : null,
@@ -523,7 +641,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       ],
     );
   }
-
   /// What the bar says about the chat under its title, a line each. The
   /// conditions are here and nowhere else: [_barHeight] counts what this
   /// returns, so a line added here is one the bar makes room for.

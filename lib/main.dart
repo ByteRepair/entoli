@@ -12,10 +12,14 @@ import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "data/local/file_reminder_store.dart";
 import "data/local/file_selector_picker.dart";
+import "data/sync/file_devices.dart";
+import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
 import "domain/prompt_library.dart";
+import "domain/sync/identity.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
+import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
@@ -105,6 +109,24 @@ class AppSession {
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
     final reminders = await FileReminderStore(config).load();
+    // Sync: identity from the keyring (or file fallback), registry on disk.
+    // The hub reads settings from the container; the closure below defers
+    // that read until after the container exists — the same pattern the
+    // repository uses with `() => ref.read(appSettingsProvider)`.
+    final secretStore = platform.createSecretStore(config);
+    final identity = await SyncIdentity.load(secretStore);
+    final registry = FileDeviceRegistry(config, secretStore);
+    // Assigned two statements down, and read only from a running app — the
+    // hub has to exist before the container that overrides its provider.
+    late final ProviderContainer settingsHome;
+    final syncHub = SyncHub(
+      identity: identity,
+      registry: registry,
+      config: config,
+      settings: () => settingsHome.read(appSettingsProvider),
+      lanSignaling: platform.createLanSignaling,
+      hostname: platform.deviceHostname(),
+    );
     final container = ProviderContainer(
       overrides: [
         chatStoreProvider.overrideWithValue(store),
@@ -137,10 +159,23 @@ class AppSession {
         localPrefillProvider.overrideWithValue(prefill),
         installedLocalModelsProvider
             .overrideWith(() => InstalledLocalModels(scans.last)),
+        syncHubProvider.overrideWithValue(syncHub),
       ],
     );
+    // Arming reconnects for paired devices, so a desktop that has paired once
+    // can be dialed again after a restart without opening a window first.
+    settingsHome = container;
+    // Before `ensureReady`, which starts listening: a peer that lands during
+    // it would otherwise run the whole handshake against a hub with no
+    // repository and be sent no welcome.
+    syncHub.attach(container.read(chatRepositoryProvider));
+    await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
+    // The same again for sync: it holds a controller open per chat a paired
+    // device is watching, so a turn is visible there, and runs a teleported
+    // prompt here.
+    container.read(remoteTurnDriverProvider);
     // Read once to set going, like the keep-alive above: it wires itself to the
     // settings and drives the prefill from there.
     container.read(localPrefillTriggerProvider);
@@ -166,6 +201,7 @@ class AppSession {
   /// goes, which is what lets a restore replace the files underneath.
   Future<void> dispose() async {
     _sweep.cancel();
+    await container.read(syncHubProvider).dispose();
     await container.read(agentBackendProvider).shutdown();
     // Before the container goes: each is a subprocess holding a gigabyte of the
     // phone's memory, and nothing else would ever kill them.

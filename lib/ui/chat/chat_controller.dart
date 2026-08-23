@@ -66,9 +66,21 @@ class ChatViewState {
       );
 }
 
+/// What a page needs of whatever is driving its turn. [ChatController] for a
+/// chat on this device, `MirrorChatController` for one whose home device is a
+/// paired peer — the widgets between them are the same either way, and only
+/// where the work happens differs.
+abstract interface class TurnDriver {
+  Future<void> send(String text, {List<Attachment> attachments});
+  Future<void> resume();
+  Future<void> abort();
+  Future<void> respondApproval(String approvalId, ApprovalResponse r);
+  Future<void> answerQuestions(String requestId, List<String?> answers);
+}
+
 /// Drives a single chat: loads from store, sends prompts, accumulates streamed
 /// events into messages, and appends them to the chat's log as they arrive.
-class ChatController extends Notifier<ChatViewState> {
+class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   ChatController(this.chatId);
 
   final String chatId;
@@ -146,6 +158,7 @@ class ChatController extends Notifier<ChatViewState> {
 
   /// The composer's own path: what it is holding becomes files under the chat
   /// before anything else, since from here on a prompt is its parts.
+  @override
   Future<void> send(String text, {List<Attachment> attachments = const []}) async {
     if (state.chat == null || state.isRunning) return;
     final repo = ref.read(chatRepositoryProvider);
@@ -225,6 +238,7 @@ class ChatController extends Notifier<ChatViewState> {
   /// Carry on the turn the chat was cut off in. What this produces goes on the
   /// end of the reply that is already there, closed by a second [TurnEndRecord]
   /// when it finishes.
+  @override
   Future<void> resume() async {
     final chat = state.chat;
     if (chat == null || state.isRunning || !chat.unfinished) return;
@@ -406,12 +420,14 @@ class ChatController extends Notifier<ChatViewState> {
   /// same: killing the turn closes the stream, and a backend that closed it
   /// without the event would let `onDone` reach [_finishTurn] first and record
   /// the turn as having finished.
+  @override
   Future<void> abort() async {
     _recorder.outcome = TurnEnd.aborted;
     await ref.read(chatRepositoryProvider).abort(chatId);
     await _finishTurn();
   }
 
+  @override
   Future<void> respondApproval(String approvalId, ApprovalResponse r) async {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondApproval(chatId, approvalId, r);
@@ -421,6 +437,7 @@ class ChatController extends Notifier<ChatViewState> {
 
   /// Answer a request the panel was showing. One entry per question it held,
   /// null where nothing was picked.
+  @override
   Future<void> answerQuestions(String requestId, List<String?> answers) async {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondQuestions(chatId, requestId, answers);

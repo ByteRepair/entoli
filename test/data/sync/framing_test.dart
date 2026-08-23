@@ -1,0 +1,92 @@
+import "dart:async";
+import "dart:convert";
+import "dart:typed_data";
+
+import "package:agent_chat/data/sync/framing.dart";
+import "package:agent_chat/data/sync/handshake.dart";
+import "package:agent_chat/domain/sync/identity.dart";
+import "package:flutter_test/flutter_test.dart";
+
+import "../../fakes.dart";
+
+/// The AEAD layer, over a pair of channels that are wired to each other and
+/// otherwise do nothing. What is worth pinning here is what no single-message
+/// test would show: that the counter, the nonce and the order on the wire
+/// still agree when several sends are in flight at once — which they are, all
+/// the time, since a turn publishes what it is doing while the records it
+/// wrote are still going out.
+void main() {
+  /// Two ends of one encrypted channel, handshaken for real.
+  Future<(SecureChannel, SecureChannel)> connected() async {
+    final links = loopbackPair();
+    const psk = "cGFpcmluZy1zZWNyZXQtZm9yLWEtdGVzdA";
+    final a = SecureChannel.open(
+      links.$1,
+      handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
+          pairingSecret: psk, name: "a"),
+      initiator: true,
+    );
+    final b = SecureChannel.open(
+      links.$2,
+      handshake: Handshake(await SyncIdentity.load(FakeSecretStore()),
+          pairingSecret: psk, name: "b"),
+      initiator: false,
+    );
+    final both = await Future.wait([a, b]);
+    return (both[0], both[1]);
+  }
+
+  test("what one end seals, the other opens", () async {
+    final (a, b) = await connected();
+    addTearDown(a.close);
+    b.listen();
+
+    final read = b.jsonIncoming.first;
+    await a.sendJson({"t": "hello"});
+
+    expect(await read, {"t": "hello"});
+  });
+
+  test("sends in flight at once stay whole, and in order", () async {
+    final (a, b) = await connected();
+    addTearDown(a.close);
+    b.listen();
+
+    // Not awaited between, which is exactly how the hub sends: a turn's state
+    // goes out while its records still are. Two seals overlapping took the
+    // same counter, so two frames went out under one nonce — a broken MAC at
+    // this end, and in ChaCha20-Poly1305 the one thing a nonce must not do.
+    final read = b.jsonIncoming.take(50).toList();
+    for (var i = 0; i < 50; i++) {
+      unawaited(a.sendJson({"n": i}));
+    }
+
+    expect((await read).map((m) => m["n"]), List.generate(50, (i) => i));
+  });
+
+  test("a big payload and a small one do not overtake each other", () async {
+    final (a, b) = await connected();
+    addTearDown(a.close);
+    b.listen();
+
+    // The big one takes longer to seal, so without a queue it lands second.
+    final read = b.jsonIncoming.take(2).toList();
+    unawaited(a.sendJson({"big": "x" * 200000}));
+    unawaited(a.sendJson({"small": 1}));
+
+    final got = await read;
+    expect(got.first.containsKey("big"), isTrue);
+    expect(got.last.containsKey("small"), isTrue);
+  });
+
+  test("the type byte is what a frame is authenticated against", () async {
+    final (a, b) = await connected();
+    addTearDown(a.close);
+    b.listen();
+
+    final read = b.incoming.first;
+    await a.sendBinary(Uint8List.fromList(utf8.encode("raw")));
+
+    expect(utf8.decode(await read), "raw");
+  });
+}

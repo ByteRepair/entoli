@@ -1,6 +1,6 @@
 import "dart:async";
-import "dart:typed_data";
 
+import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
@@ -35,6 +35,7 @@ import "domain/reminder_alarms.dart";
 import "domain/reminder_runner.dart";
 import "domain/reminder_scheduler.dart";
 import "domain/rootfs_store.dart";
+import "data/sync/sync_hub.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/theme_colour.dart";
 import "domain/turn_keep_alive.dart";
@@ -425,6 +426,19 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setLocalKvCachePrompts(int? prompts) =>
       _applyLocal((s) => s.localModelKvCachePrompts = prompts);
 
+  Future<void> setDeviceName(String? name) =>
+      _update((s) => s.deviceName = name);
+
+  Future<void> setSyncRelayUrl(String? url) =>
+      _update((s) => s.syncRelayUrl = url);
+
+  Future<void> setTurnUrl(String? url) => _update((s) => s.turnUrl = url);
+
+  Future<void> setTurnCredentials(String? username, String? password) =>
+      _update((s) => s
+        ..turnUsername = username
+        ..turnPassword = password);
+
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value
   /// a picker is *showing* as Default be silently written back.
@@ -489,6 +503,66 @@ final linkOpenerProvider =
 
 final backgroundWorkProvider =
     Provider<BackgroundWork>((ref) => throw UnimplementedError());
+
+final syncHubProvider = Provider<SyncHub>((ref) => throw UnimplementedError());
+
+/// One of the hub's `ValueNotifier`s, watchable. Riverpod has nothing that
+/// watches a listenable, so a listener bridges it; the subclasses below name
+/// which notifier and nothing else, which is also what lets a test override
+/// one without a hub to read.
+abstract class HubValue<T> extends Notifier<T> {
+  ValueListenable<T> of(SyncHub hub);
+
+  @override
+  T build() {
+    final source = of(ref.watch(syncHubProvider));
+    void changed() => state = source.value;
+    source.addListener(changed);
+    ref.onDispose(() => source.removeListener(changed));
+    return source.value;
+  }
+}
+
+/// The Remotes half of the sidebar: every mirrored chat with who owns it and
+/// whether the connection to them is up.
+///
+/// Deliberately separate from [chatListProvider], which reads the local
+/// store and stays sync-unaware: two sources of truth, never merged.
+class RemoteChats extends HubValue<List<RemoteChatEntry>> {
+  @override
+  ValueListenable<List<RemoteChatEntry>> of(SyncHub hub) => hub.remotes;
+}
+
+final remoteChatsProvider =
+    NotifierProvider<RemoteChats, List<RemoteChatEntry>>(RemoteChats.new);
+
+/// The other direction: chats of *this* device a paired one is driving, by
+/// the name of the device driving them.
+class DrivenChats extends HubValue<Map<String, String>> {
+  @override
+  ValueListenable<Map<String, String>> of(SyncHub hub) => hub.drivenChats;
+}
+
+final drivenChatsProvider =
+    NotifierProvider<DrivenChats, Map<String, String>>(DrivenChats.new);
+
+/// Every device this one has paired with, online or not. One list rather than
+/// the registry for membership and the hub for status: a device paired while
+/// the Sync page was open landed in the hub and not in the registry read the
+/// page was still holding, so it did not appear until the page was left and
+/// come back to.
+class SyncPeers extends HubValue<Map<String, PeerState>> {
+  @override
+  ValueListenable<Map<String, PeerState>> of(SyncHub hub) => hub.peers;
+}
+
+final syncPeersProvider =
+    NotifierProvider<SyncPeers, Map<String, PeerState>>(SyncPeers.new);
+
+final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
+  return ref
+      .watch(remoteChatsProvider.select((chats) => chats.any((c) => c.chatId == chatId)));
+});
 
 /// Read once in `main` for its effect: it listens to the backend from the
 /// moment it exists, and nothing ever asks it anything. Here rather than a bare
@@ -629,12 +703,18 @@ final sortedModelsProvider = FutureProvider<List<ModelOption>>((ref) async {
   return models..sort((a, b) => name(a).compareTo(name(b)));
 });
 
-/// An attachment's bytes, read back from the chat's `resources/`, so a message
-/// that has already been sent can still show what it carried. Auto-disposed:
-/// held, a scrolled-past image would keep its megabytes for the whole session.
+/// An attachment's bytes: the sync cache for a mirrored image, `resources/`
+/// for a local one. Auto-disposed — held, a scrolled-past image would keep
+/// its megabytes for the whole session; the mirror cache outlives it either
+/// way, so re-showing one costs no second fetch.
 final attachmentBytesProvider =
-    FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>((ref, key) =>
-        ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource));
+    FutureProvider.autoDispose.family<Uint8List?, ({String chatId, String resource})>(
+        (ref, key) async {
+  if (ref.watch(isMirroredChatProvider(key.chatId))) {
+    return ref.watch(syncHubProvider).resourceBytes(key.chatId, key.resource);
+  }
+  return ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource);
+});
 
 /// The composer's `/` and `@` menus, read straight off the library: Entoli
 /// owns its commands and agents, so nothing has to be asked what it knows.

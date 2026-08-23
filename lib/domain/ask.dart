@@ -39,10 +39,16 @@ class AskQuestion {
 /// One `ask_user` call, under the tool call's id — which is what its answers
 /// travel back with.
 class AskRequest {
-  const AskRequest({required this.id, required this.questions});
+  const AskRequest(
+      {required this.id, required this.questions, this.argumentsJson});
 
   final String id;
   final List<AskQuestion> questions;
+
+  /// What [questions] was read out of. Kept so another device can read the
+  /// same call the same way — see the sync layer's `SyncAsk`. Nothing on this
+  /// device looks at it: the questions are already parsed.
+  final String? argumentsJson;
 
   /// A fresh answer for every question, all of them empty — what the panel
   /// starts from, and what a turn that ended before anyone answered sends.
