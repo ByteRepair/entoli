@@ -3,6 +3,7 @@ import "dart:io";
 
 import "package:agent_chat/core/platform/io/signaling_server.dart";
 import "package:agent_chat/data/sync/signaling/lan_signaler.dart";
+import "package:agent_chat/domain/sync/lan_signaling.dart";
 import "package:flutter_test/flutter_test.dart";
 
 /// The LAN rendezvous over a real socket: a real `HttpServer` on localhost
@@ -234,6 +235,17 @@ void main() {
   test("health on a port nothing is on is false, not a throw", () async {
     await server.close();
     expect(await client.alive(host: "127.0.0.1", port: port), isFalse);
+  });
+
+  test("a second device here falls back rather than failing to start",
+      () async {
+    // One port, so the second Entoli on a machine is dialable only until it
+    // restarts. It can still dial out, which is the half that matters.
+    final second = SignalingServer();
+    addTearDown(second.close);
+
+    expect(port, preferredSignalingPort);
+    expect(await second.start(), isNot(preferredSignalingPort));
   });
 
   test("the bound port is the one the QR would carry", () async {

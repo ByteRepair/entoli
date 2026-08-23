@@ -3,6 +3,12 @@
 /// either side restarts — and a LAN reconnect could never work twice. Here
 /// rather than on the io implementation because the dialling side needs it
 /// too, to guess where a device that restarted has gone.
+///
+/// One port, not a range. A second Entoli on the same machine falls back to
+/// an ephemeral one and is then dialable only until it restarts — which is a
+/// development arrangement, and not worth multiplying every failed dial's
+/// wait by, since a host that drops rather than refuses costs the full
+/// timeout per port tried.
 const preferredSignalingPort = 47921;
 
 /// The LAN rendezvous a desktop offers while pairing: where a joiner's offer

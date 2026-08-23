@@ -55,13 +55,14 @@ class SignalingServer implements LanSignaling {
   @override
   Future<int> start() async {
     if (_server != null) return _server!.port;
-    // Ephemeral where it is taken, which on a desktop means a second Entoli
-    // is already running here. That one is then reachable and this one is
-    // not, which is the right way round: it can still dial out.
+    // The usual port, so a peer holding an address from before this device
+    // restarted can still guess where it went. Ephemeral where that is taken,
+    // which means another Entoli is already running here: that one is then
+    // the reachable one, and this one can still dial out.
     HttpServer? server;
     try {
-      server = await HttpServer.bind(
-          InternetAddress.anyIPv4, preferredSignalingPort);
+      server =
+          await HttpServer.bind(InternetAddress.anyIPv4, preferredSignalingPort);
     } catch (_) {
       server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     }
