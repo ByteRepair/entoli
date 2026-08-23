@@ -16,6 +16,7 @@ void main() {
   late TestApp app;
   late SyncHub hub;
   late FakeDeviceRegistry registry;
+  late FakeRelaySignaling relay;
 
   tearDown(() async {
     await hub.dispose();
@@ -31,12 +32,14 @@ void main() {
   }) async {
     final config = tempConfig();
     registry = FakeDeviceRegistry(paired);
+    relay = FakeRelaySignaling();
     hub = await testSyncHub(
       config,
       devices: registry,
       hostname: hostname,
       settings: () =>
           AppSettings(syncRelayUrl: relayUrl, deviceName: deviceName),
+      relayDial: relay.dial,
     );
     // What `main` does once the container exists: it is what puts the
     // already-paired devices into `peers`, which is what the page draws.
@@ -182,6 +185,9 @@ void main() {
 
       expect(hub.pairing.value?.qr, startsWith("entoli-pair:"));
       expect(find.text("Open pairing window"), findsNothing);
+      // Holding the window is the "i" side, in the room the secret derives.
+      expect(relay.dialled.single.$1, "wss://relay.example.com");
+      expect(relay.dialled.single.$3, "i");
     });
   });
 }

@@ -15,6 +15,7 @@ import "../../domain/sync/devices.dart";
 import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
 import "../../domain/sync/protocol.dart";
+import "../../domain/sync/relay_signaling.dart";
 import "channel.dart";
 import "framing.dart";
 import "handshake.dart";
@@ -190,7 +191,9 @@ class SyncHub {
     required LanSignaling? Function() lanSignaling,
     this._hostname,
     http.Client? client,
+    RelayDial? relayDial,
   })  : _lanFactory = lanSignaling,
+        _relayDial = relayDial ?? RelaySignaler.connect,
         _client = client ?? http.Client();
 
   final SyncIdentity identity;
@@ -203,6 +206,7 @@ class SyncHub {
   /// `dart:io`'s, and a browser has none.
   final String? _hostname;
   final LanSignaling? Function() _lanFactory;
+  final RelayDial _relayDial;
   final http.Client _client;
 
   LanSignaling? _serverInstance;
@@ -218,7 +222,7 @@ class SyncHub {
 
   /// The relay wait a pairing window opened, cancelled with it.
   StreamSubscription<Map<String, dynamic>>? _relayWindow;
-  RelaySignaler? _relaySocket;
+  RelaySignaling? _relaySocket;
 
   _PendingManual? _pendingManual;
   Completer<bool>? _confirmation;
@@ -1325,7 +1329,7 @@ class SyncHub {
   /// window's secret until a joiner's offer arrives, answer it.
   Future<void> _waitInRelayRoom(String relayUrl, String psk) async {
     try {
-      final closer = await RelaySignaler.connect(
+      final closer = await _relayDial(
           relayUrl: relayUrl, room: RelaySignaler.roomFor(psk), role: "i");
       _relaySocket = closer;
       final messages = closer.messages;
@@ -1425,7 +1429,7 @@ class SyncHub {
   Future<void> _dialViaRelay(String relayUrl, String psk, String? knownId) async {
     final room = RelaySignaler.roomFor(psk);
     final weOffer = knownId == null || identity.id.compareTo(knownId) > 0;
-    final closer = await RelaySignaler.connect(
+    final closer = await _relayDial(
         relayUrl: relayUrl, room: room, role: weOffer ? "i" : "j");
     try {
       final link = await RtcLink.create(iceServers: iceServers());

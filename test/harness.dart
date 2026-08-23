@@ -14,6 +14,7 @@ import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
+import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -338,6 +339,7 @@ Future<SyncHub> testSyncHub(
   DeviceRegistry? devices,
   AppSettings Function()? settings,
   String? hostname,
+  RelayDial? relayDial,
 }) async =>
     SyncHub(
       identity: await SyncIdentity.load(FakeSecretStore()),
@@ -346,6 +348,9 @@ Future<SyncHub> testSyncHub(
       settings: settings ?? AppSettings.new,
       lanSignaling: () => null,
       hostname: hostname,
+      // Nothing to dial by default, so a test that forgets one fails rather
+      // than reaching the network from whatever URL it configured.
+      relayDial: relayDial ?? FakeRelaySignaling().dial,
     );
 
 /// Put a whole chat on disk the way the app would have: its state, then its

@@ -109,6 +109,13 @@ the backend. It is built in `main` after the config and store, reads settings
 through a closure deferred to the container, and is injected via
 `syncHubProvider` (throw-unimplemented, overridden in main, faked in tests).
 
+Neither rendezvous is named by the hub. The LAN server arrives as a factory
+that answers null where a platform cannot listen, and the relay as a
+`RelayDial` returning the `RelaySignaling` the room is read through —
+`RelaySignaler.connect` in a running app. The interface is what lets a test
+open a pairing window without a socket under it; the concrete class is still
+what `roomFor` lives on, which is a hash rather than a connection.
+
 ## Mirroring a chat
 
 `protocol.dart` is one freezed sealed union, `SyncMessage`, for everything two

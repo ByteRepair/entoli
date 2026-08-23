@@ -229,7 +229,13 @@ Everything above the transport is exercised on a loopback `ByteChannel` —
 `data/sync/sync_hub_pair_test.dart` stands two real hubs on one. The
 rendezvous under it is exercised over real sockets: `lan_signaling_test.dart`
 against a real `HttpServer`, `relay_signaling_test.dart` against a real
-WebSocket.
+WebSocket — both on loopback, on a port the OS picked.
+
+Nothing else dials. `testSyncHub` hands the hub a `FakeRelaySignaling` unless
+a test names its own, so a `syncRelayUrl` in a settings fixture is a string
+the page reads rather than a host to look up. It used to be a real dial: the
+Sync page's relay test resolved `relay.example.com`, and whether it passed
+depended on how fast that failed.
 
 **The WebRTC data channel itself has no automated coverage**, and cannot have
 any under `flutter test`: `flutter_webrtc` is a native plugin, so a peer

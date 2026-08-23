@@ -36,6 +36,7 @@ import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/rootfs_store.dart";
 import "package:agent_chat/domain/secret_store.dart";
 import "package:agent_chat/domain/sync/devices.dart";
+import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/voice_model_store.dart";
 import "package:agent_chat/providers.dart" show DrivenChats, RemoteChats;
 import "package:agent_chat/ui/chat/chat_controller.dart" show ChatViewState;
@@ -1052,6 +1053,49 @@ class FakeDeviceRegistry implements DeviceRegistry {
   @override
   Future<void> setPairingSecret(String id, String secret) async =>
       _secrets[id] = secret;
+}
+
+/// A relay room with nobody else in it. What the hub does with a relay URL is
+/// dial it, so a test that only wants the window open needs somewhere for the
+/// dial to land — a real one is a DNS lookup and a socket, in a test that is
+/// about neither.
+class FakeRelaySignaling implements RelaySignaling {
+  final _incoming = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Every room joined, as `(relayUrl, room, role)`.
+  final dialled = <(String, String, String)>[];
+
+  /// Everything the hub said into the room.
+  final sent = <Map<String, Object?>>[];
+
+  /// A [RelayDial] over this one, recording what it was asked for.
+  Future<RelaySignaling> dial({
+    required String relayUrl,
+    required String room,
+    required String role,
+  }) async {
+    dialled.add((relayUrl, room, role));
+    return this;
+  }
+
+  /// A message from the other side of the room.
+  void arrive(Map<String, dynamic> message) => _incoming.add(message);
+
+  @override
+  Stream<Map<String, dynamic>> get messages => _incoming.stream;
+
+  @override
+  Future<void> send(Map<String, Object?> json) async => sent.add(json);
+
+  @override
+  Future<Map<String, dynamic>> waitFor(String field,
+          {Duration timeout = const Duration(seconds: 45)}) =>
+      messages.firstWhere((m) => m.containsKey(field)).timeout(timeout);
+
+  @override
+  Future<void> close() async {
+    if (!_incoming.isClosed) await _incoming.close();
+  }
 }
 
 /// A device as the registry holds one, for seeding the paired list.

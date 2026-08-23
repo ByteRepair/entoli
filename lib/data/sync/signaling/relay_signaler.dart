@@ -4,6 +4,8 @@ import "dart:convert";
 import "package:crypto/crypto.dart" as slow;
 import "package:web_socket_channel/web_socket_channel.dart";
 
+import "../../../domain/sync/relay_signaling.dart";
+
 /// The joiner-or-host half of a relay pairing. Both sides dial the same
 /// user-supplied WebSocket endpoint and join the same room — derived from the
 /// pairing secret, so the relay learns nothing it could not already be told —
@@ -12,7 +14,7 @@ import "package:web_socket_channel/web_socket_channel.dart";
 /// The relay sees only this framing and opaque SDP payloads; nothing readable
 /// crosses it, because the channel keys come from the handshake that runs
 /// after the data channel is up, not from anything here.
-class RelaySignaler {
+class RelaySignaler implements RelaySignaling {
   RelaySignaler(this._channel);
 
   final WebSocketChannel _channel;
@@ -54,12 +56,14 @@ class RelaySignaler {
     return signaler;
   }
 
+  @override
   Stream<Map<String, dynamic>> get messages => _incoming.stream;
 
+  @override
   Future<void> send(Map<String, Object?> json) async =>
       _channel.sink.add(jsonEncode(json));
 
-  /// Waits for one message carrying [field], or times out.
+  @override
   Future<Map<String, dynamic>> waitFor(String field,
       {Duration timeout = const Duration(seconds: 45)}) async {
     return messages
@@ -67,6 +71,7 @@ class RelaySignaler {
         .timeout(timeout);
   }
 
+  @override
   Future<void> close() async {
     await _sub?.cancel();
     await _channel.sink.close();
