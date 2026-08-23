@@ -4,6 +4,7 @@ import "dart:typed_data";
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/sync/channel.dart";
+import "package:agent_chat/data/sync/handshake.dart" show HandshakeException;
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -100,6 +101,60 @@ void main() {
     expect(psk, hasLength(43));
     expect(psk.length % 4, isNot(0));
     expect(psk, isNot(contains("=")));
+  });
+
+  /// Two humans do not press Confirm at the same instant, and the side that
+  /// pressed first starts sending the moment it has. Confirming in one
+  /// synchronous block — which every test here did — leaves a gap of
+  /// microtasks; a real pairing leaves one of seconds, and everything the
+  /// first side sent into it was dropped by the second.
+  test("a pairing survives one side confirming long before the other",
+      () async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    final psk = generatePsk();
+    final a = home.hub.establishForTest(
+        link: links.$1, weOffered: true, psk: psk);
+    final b = away.hub.establishForTest(
+        link: links.$2, weOffered: false, psk: psk);
+    await eventually(() =>
+        home.hub.pairing.value?.stage == PairingStage.confirming &&
+        away.hub.pairing.value?.stage == PairingStage.confirming);
+    // Both screens show the same code, which is the whole point of showing it.
+    expect(home.hub.pairing.value!.sas, away.hub.pairing.value!.sas);
+
+    home.hub.confirmPairing(true);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    away.hub.confirmPairing(true);
+    await Future.wait([a, b]);
+
+    away.hub.followChat(state.id);
+    await eventually(() => away.hub.mirror(state.id) != null);
+    expect(away.hub.peers.value[home.identity.id]?.status, PeerStatus.online);
+  });
+
+  test("a pairing refused after the other side confirmed leaves nothing",
+      () async {
+    _seedChat(home);
+    final links = loopbackPair();
+    final psk = generatePsk();
+    final a = home.hub.establishForTest(
+        link: links.$1, weOffered: true, psk: psk);
+    final b = away.hub.establishForTest(
+        link: links.$2, weOffered: false, psk: psk);
+    await eventually(() =>
+        away.hub.pairing.value?.stage == PairingStage.confirming);
+
+    // The other side has already sent its welcome by the time this one says
+    // no, so what it sent must not have been applied.
+    home.hub.confirmPairing(true);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    away.hub.confirmPairing(false);
+    await expectLater(b, throwsA(isA<HandshakeException>()));
+    await a.catchError((_) {});
+
+    expect(away.hub.remotes.value, isEmpty);
+    expect(await away.registry.list(), isEmpty);
   });
 
   test("pairing files each device in the other's registry", () async {

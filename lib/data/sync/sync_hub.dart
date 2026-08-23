@@ -1350,20 +1350,14 @@ class SyncHub {
       final peer = handshake.peer!;
       if (knownDeviceId != null) handshake.requirePeerId(knownDeviceId);
 
-      if (await _sasGate(handshake.sas!, isNew: knownDeviceId == null) ==
-          false) {
-        throw const HandshakeException("the codes did not match");
-      }
-
-      // Everything from here reads through one subscription, attached before
-      // a byte goes out. The channel's stream is broadcast, so anything
-      // arriving with no listener on it is dropped rather than queued — and
-      // the peer answers the hello below the instant it has ours, then sends
-      // its welcome straight after. Subscribing after the send, or awaiting
-      // anything between the reply and this listener, loses whichever of
-      // those two lands in the gap. On a loopback channel the gap is a
-      // microtask and nothing ever fell into it; over a real data channel
-      // messages arrive on their own turns of the event loop and both did.
+      // Everything from here reads through one subscription, and it is
+      // attached before anything else happens at all. The channel's stream is
+      // broadcast, so whatever arrives with no listener on it is dropped
+      // rather than queued — and the other side sends its hello the moment
+      // *its* human has confirmed, which may be well before ours has. Every
+      // await between the decrypt loop starting and this listener is a window
+      // messages fall into: the codes-matched gate below is the widest one
+      // there could be, since it waits for a person.
       final deviceId = peer.id;
       final peerDevice = await registry.byId(deviceId);
       final live = _LivePeer(channel,
@@ -1371,6 +1365,12 @@ class SyncHub {
           deviceName: _nameOf(peerDevice, peer),
           onClose: () => _peerGone(deviceId));
       final hello = Completer<Map<String, dynamic>>();
+      // Held rather than handled until the codes have been compared: a peer
+      // whose own human confirmed first is already sending, and applying its
+      // welcome before ours has agreed would leave mirrors behind from a
+      // pairing that was then refused.
+      final held = <SyncMessage>[];
+      var confirmed = false;
       live.handle = (message) => _dispatch(live, message);
       live.pump = channel.jsonIncoming.listen(
         (json) {
@@ -1381,7 +1381,8 @@ class SyncHub {
             return;
           }
           try {
-            live.enqueue(SyncMessage.fromJson(json));
+            final message = SyncMessage.fromJson(json);
+            confirmed ? live.enqueue(message) : held.add(message);
           } catch (_) {
             // A frame that does not parse is a broken peer; drop the link
             // rather than guess at what it meant.
@@ -1391,6 +1392,13 @@ class SyncHub {
         onError: (_) => unawaited(live.close()),
         onDone: () => unawaited(live.close()),
       );
+
+      if (await _sasGate(handshake.sas!, isNew: knownDeviceId == null) ==
+          false) {
+        await live.close();
+        throw const HandshakeException("the codes did not match");
+      }
+      confirmed = true;
 
       await channel.sendJson({
         "t": "hello",
@@ -1423,6 +1431,11 @@ class SyncHub {
       _live[deviceId] = live;
       _setStatus(deviceId,
           name: device.name, status: PeerStatus.online);
+      // Whatever arrived while the codes were being compared, in order.
+      for (final message in held) {
+        live.enqueue(message);
+      }
+      held.clear();
 
       // What this device serves. The mirror side answers this with
       // chatOpens for whatever it follows.

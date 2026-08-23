@@ -268,8 +268,17 @@ ignores where the view starts, so the counter came out of whatever happened to
 be in front of it. A loopback channel hands back freshly allocated lists at
 offset zero, where the two spellings agree.
 
-**Nothing may be awaited between subscribing and the first message.** One
-subscription is attached to the channel before the hello goes out, and
+**Nothing may be awaited between the decrypt loop starting and the pump being
+attached.** `channel.listen()` starts decrypting into a broadcast stream, so
+anything arriving before there is a listener is dropped rather than queued.
+The subscription therefore goes on *first* — before the codes-matched gate,
+which is the widest window there could be, since it waits for a person. The
+other side sends the moment *its* human has confirmed, which can be a long
+time before ours has. What arrives before this side has agreed is held rather
+than handled: a welcome applied before the codes matched would leave mirrors
+behind from a pairing that was then refused.
+
+That one subscription is attached before the hello goes out, and
 the hello is read off it rather than through a second `firstWhere`. Both sides
 answer the moment they have the other's hello and send their welcome straight
 after, and the stream is broadcast — so subscribing after the send, or
