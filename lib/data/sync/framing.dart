@@ -73,19 +73,22 @@ final class SecureChannel implements ByteChannel {
   }
 
   Future<Uint8List> _seal(int type, Uint8List payload) async {
+    // Taken once, before the await. Read again afterwards for the header, it
+    // could have moved: the nonce and the counter in the frame would then
+    // disagree, and the frame would never authenticate.
+    final counter = _sendCounter++;
     final box = await _cipher.encrypt(
       payload,
       secretKey: _sendKey,
-      nonce: _nonce(_sendCounter),
+      nonce: _nonce(counter),
       aad: [type],
     );
     final mac = box.mac.bytes;
     final frame = Uint8List(5 + box.cipherText.length + mac.length);
     frame[0] = type;
-    ByteData.sublistView(frame).setUint32(1, _sendCounter);
+    ByteData.sublistView(frame).setUint32(1, counter);
     frame.setAll(5, box.cipherText);
     frame.setAll(5 + box.cipherText.length, mac);
-    _sendCounter++;
     return frame;
   }
 
@@ -98,10 +101,26 @@ final class SecureChannel implements ByteChannel {
   Future<void> sendBinary(Uint8List bytes) =>
       _dispatch(typeBinary, bytes);
 
-  Future<void> _dispatch(int type, Uint8List payload) async {
+  /// Frames leave one at a time, in counter order.
+  ///
+  /// Sealing is asynchronous, and callers do not wait for each other: a turn
+  /// publishes what it is doing while the records it wrote are still going
+  /// out. Two seals in flight at once took the same counter — so two frames
+  /// went out under one nonce, which the far end rejects as a bad MAC and
+  /// which, in ChaCha20-Poly1305, is the one thing a nonce must never do.
+  /// Even sealed correctly they could still reach the wire out of order,
+  /// which the receiving counter check refuses.
+  Future<void> _dispatch(int type, Uint8List payload) {
     if (_closed) throw StateError("secure channel closed");
-    await _raw.send(await _seal(type, payload));
+    final sent = _sending.then((_) async {
+      await _raw.send(await _seal(type, payload));
+    });
+    // The chain carries on after a failure; the caller still sees its own.
+    _sending = sent.catchError((_) {});
+    return sent;
   }
+
+  Future<void> _sending = Future.value();
 
   /// Starts decrypting incoming frames into [incoming]. Call once; frames
   /// arriving before this are buffered by the transport's reader and drained

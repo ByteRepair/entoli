@@ -53,7 +53,16 @@ who speaks first.
     [type: 1 byte][counter: 4 bytes BE][AEAD(cleartext)]
 
 Counters are per-direction and monotonic — a replayed, reordered or spliced
-frame fails its MAC. The header is read with `ByteData.sublistView(frame)`
+frame fails its MAC.
+
+**Frames leave one at a time.** Sealing is asynchronous and callers do not
+wait for each other — a turn publishes what it is doing while the records it
+wrote are still going out — so `_dispatch` queues, and `_seal` takes its
+counter once rather than reading it on both sides of the await. Without
+either, two seals in flight took the same counter and two frames went out
+under one nonce: a broken MAC at the far end, and in ChaCha20-Poly1305 the one
+thing a nonce must never do. It survived every test that sent one message at a
+time, and showed up the first time a real turn ran — which sends several. The header is read with `ByteData.sublistView(frame)`
 rather than through `frame.buffer`: a frame off a real data channel is a view
 into a larger receive buffer, and going through the buffer ignores where the
 view starts. The type byte (control or binary) is associated data, so

@@ -1,4 +1,3 @@
-import "dart:async";
 import "dart:io" show Directory;
 import "dart:typed_data";
 
@@ -22,7 +21,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:flutter_test/flutter_test.dart";
 
 import "../../fakes.dart"
-    show FakeBackend, FakeChatStore, FakeDeviceRegistry;
+    show FakeBackend, FakeChatStore, FakeDeviceRegistry, loopbackPair;
 import "../../harness.dart";
 
 /// Two real SyncHubs over a loopback channel pair — everything from the
@@ -665,52 +664,6 @@ ChatState _seedChat(_Device device) {
         id: "r1", role: MessageRole.assistant, createdAt: now),
   ]);
   return state;
-}
-
-(_Loopback, _Loopback) loopbackPair() {
-  final a = _Loopback();
-  final b = _Loopback();
-  a.other = b;
-  b.other = a;
-  return (a, b);
-}
-
-class _Loopback implements ByteChannel {
-  _Loopback? other;
-
-  /// Every frame's size as it goes out, for the tests about what has to be
-  /// paged. A real data channel refuses one past its maximum; this one does
-  /// not, so a test has to look.
-  void Function(int bytes)? _sizes;
-
-  void watchSends(void Function(int bytes) sizes) => _sizes = sizes;
-  // Single-subscription like the real one, so a test exercises the buffering
-  // rather than a broadcast stream's dropping.
-  final _incoming = StreamController<Uint8List>();
-  var _closed = false;
-
-  @override
-  Stream<Uint8List> get incoming => _incoming.stream;
-
-  @override
-  Future<void> send(Uint8List bytes) async {
-    _sizes?.call(bytes.length);
-    if (_closed) throw StateError("loopback closed");
-    final peer = other!;
-    if (peer._closed) throw StateError("peer closed");
-    peer._incoming.add(bytes);
-  }
-
-  @override
-  Future<void> close() async {
-    if (_closed) return;
-    _closed = true;
-    await _incoming.close();
-    // Both ends, the way a real transport does: closing one side of a data
-    // channel is something the other side is told about. Closing only this
-    // one left the peer waiting out its timeouts for a channel already gone.
-    await other?.close();
-  }
 }
 
 Future<void> eventually(bool Function() done,

@@ -7,6 +7,7 @@ import "package:flutter/widgets.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/local_pool_client.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
+import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry;
 import "package:agent_chat/domain/app_icon.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -985,4 +986,54 @@ class FakeMirrorChat extends MirrorChatController {
 
   @override
   ChatViewState build() => views[chatId] ?? ChatViewState();
+}
+
+/// Two [ByteChannel]s wired to each other, for the tests about everything
+/// above a transport: the handshake, the framing, and the hub on top. One
+/// message in is one message out, in order — which is all a real data channel
+/// promises, and all any of that code may assume.
+(LoopbackChannel, LoopbackChannel) loopbackPair() {
+  final a = LoopbackChannel();
+  final b = LoopbackChannel();
+  a.other = b;
+  b.other = a;
+  return (a, b);
+}
+
+class LoopbackChannel implements ByteChannel {
+  LoopbackChannel? other;
+
+  /// Every frame's size as it goes out, for the tests about what has to be
+  /// paged. A real data channel refuses one past its maximum; this one does
+  /// not, so a test has to look.
+  void Function(int bytes)? _sizes;
+
+  void watchSends(void Function(int bytes) sizes) => _sizes = sizes;
+  // Single-subscription like the real one, so a test exercises the buffering
+  // rather than a broadcast stream's dropping.
+  final _incoming = StreamController<Uint8List>();
+  var _closed = false;
+
+  @override
+  Stream<Uint8List> get incoming => _incoming.stream;
+
+  @override
+  Future<void> send(Uint8List bytes) async {
+    _sizes?.call(bytes.length);
+    if (_closed) throw StateError("loopback closed");
+    final peer = other!;
+    if (peer._closed) throw StateError("peer closed");
+    peer._incoming.add(bytes);
+  }
+
+  @override
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    await _incoming.close();
+    // Both ends, the way a real transport does: closing one side of a data
+    // channel is something the other side is told about. Closing only this
+    // one left the peer waiting out its timeouts for a channel already gone.
+    await other?.close();
+  }
 }
