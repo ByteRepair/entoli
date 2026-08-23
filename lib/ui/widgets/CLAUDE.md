@@ -9,8 +9,8 @@ every page would otherwise spell out), the `Default`-plus-reset pairing,
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `pickProject` dialogs and `copyToClipboard` beside them, `showAnchoredMenu`,
 `NavDrawer` and `navBreakpoint`, `ActionIcon`, `AttachmentChip` /
-`AttachmentStrip`, `EmptyPane`, `TempChatTtlField`, `CompletionField` — the
-section below — and `catalog.dart`.
+`AttachmentStrip`, `EmptyPane`, `TempChatTtlField`, `CompletionField`,
+`text_input.dart` — the sections below — and `catalog.dart`.
 
 `CompletionField` is the field a prompt is written in: the menu of `/commands`
 and `@agents` that matches what has been typed, the arrows and tab and return
@@ -30,6 +30,27 @@ agreeing with `prompt_library.dart`, and one copy of it can.
 straight onto `meta.json`. The reminder editor asks with the same field: a
 reminder's chat is a chat, and a bool there could only ever have named one of
 the five TTLs.
+
+`text_input.dart` is the pair of things a field wants and Material does not
+give it. `replaceIn` writes over a range and leaves the caret after it —
+`CompletionField` types a completion with it and `TabIndents` an indent, and
+they were the same four lines twice. `TabIndents` makes Tab type two spaces
+rather than move the focus on, which every `CompletionField` of more than one
+line has — the composer and a reminder's prompt — and so does any
+`promptForText` of more than one line; the one-line fields are left alone,
+since there Tab is how the caret reaches the buttons.
+
+It wraps a field instead of being one, because `CompletionField`'s own
+bindings are already on it: **the wrapper has to stay strictly outside them**.
+Key events run from the focused node outwards, so the completion `Shortcuts`
+sees Tab first and takes it while the menu has a match, and only what it
+ignores reaches the indent. That is why `CompletionField` wraps the field it
+has already built rather than anything nearer the `TextField`: moving the
+wrapper inward kills tab-completion with nothing to say so, and a widget test
+is what holds it. Merging the two into one shortcuts map is not the same thing
+and does not work: `SingleActivator` has no `==`, so a second Tab entry does
+not replace the first, it queues behind it. Shift+Tab is left unbound, so there
+is always a key that leaves the field.
 
 `EmptyPane` is the middle of a page with nothing on it. The workspace has two —
 a folder with no files in it, and a file the viewer could not read — and a
@@ -67,9 +88,10 @@ walks the parts and decides which of the two each one is.
 token, over a library that is already loaded — so it takes no chat id, has no
 loading state, and starts nothing. Enter, Tab and the arrows are bound only
 while the menu has a match — the rest of the time they have to keep doing what
-they do in a text box. The `+` button left of the field is a second way in: for
-a command or an agent it types the trigger character rather than opening its own
-list, so both routes share one code path; for a file it opens the chooser.
+they do in a text box, which for Tab is `TabIndents`. The `+` button left of the
+field is a second way in: for a command or an agent it types the trigger
+character rather than opening its own list, so both routes share one code path;
+for a file it opens the chooser.
 
 Send is dead while there is nothing to send, which `_worthSending` decides —
 whitespace is nothing, a file on its own is something. `_submit` asks it again
