@@ -9,6 +9,8 @@ import "core/config.dart";
 import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
 import "core/platform/platform.dart" as platform;
+import "core/platform/system_palette.dart";
+import "data/local/file_reminder_store.dart";
 import "data/local/file_selector_picker.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
@@ -24,6 +26,7 @@ import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
 import "ui/link_opener.dart";
 import "ui/share/incoming_shares.dart";
+import "ui/reminders/incoming_open.dart";
 import "ui/sidebar/sidebar.dart";
 import "ui/theme.dart";
 
@@ -61,6 +64,7 @@ class AppSession {
     // Started with them and awaited below: an asset read off a disk, or a fetch
     // in a browser, and nothing between wants it.
     final version = platform.appVersion();
+    final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
@@ -104,6 +108,7 @@ class AppSession {
     // first. Both at once — they are two directories and neither needs the
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
+    final reminders = await FileReminderStore(config).load();
     // Sync: identity from the keyring (or file fallback), registry on disk.
     // The hub reads settings from the container; the closure below defers
     // that read until after the container exists — the same pattern the
@@ -130,10 +135,13 @@ class AppSession {
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
         promptLibraryProvider.overrideWithValue(library),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
+        systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
+        reminderAlarmsProvider.overrideWithValue(platform.createReminderAlarms()),
+        remindersProvider.overrideWith(() => Reminders(reminders)),
         backupHandoffProvider
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),
@@ -179,6 +187,9 @@ class AppSession {
         .read(chatRepositoryProvider)
         .sweepExpired(exceptId: container.read(selectedChatIdProvider));
     await sweep();
+    // Started, not awaited: catch-up can run turns, and startup must not wait
+    // on a model. Whatever it finds overdue was already stamped fired.
+    unawaited(container.read(reminderSchedulerProvider).start());
     return AppSession._(
       container,
       Timer.periodic(const Duration(minutes: 30), (_) => sweep()),
@@ -318,11 +329,15 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Both narrowed rather than the settings object: without the `select`,
+    // adding a provider or editing an environment variable would rebuild the
+    // whole app under the user.
     final mode = ref.watch(appSettingsProvider.select((s) => s.appTheme.mode));
+    final look = ref.watch(appLookProvider);
     return MaterialApp(
       title: appTitle,
-      theme: entoliTheme(Brightness.light),
-      darkTheme: entoliTheme(Brightness.dark),
+      theme: entoliTheme(Brightness.light, look),
+      darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
       // All three wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
@@ -330,7 +345,9 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       // Navigator that only exists below here; and the keyboard is the app's to
       // answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
-        child: IncomingAssistant(child: IncomingShares(child: AppShell())),
+        child: IncomingAssistant(
+          child: IncomingShares(child: IncomingReminderOpen(child: AppShell())),
+        ),
       ),
     );
   }

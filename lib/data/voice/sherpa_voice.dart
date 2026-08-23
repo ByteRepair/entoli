@@ -9,6 +9,7 @@ import "package:path/path.dart" as p;
 import "package:record/record.dart";
 import "package:sherpa_onnx/sherpa_onnx.dart" as sherpa;
 
+import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../domain/voice_model_store.dart";
@@ -20,8 +21,8 @@ import "wav.dart";
 /// and only theirs — Android ships none of its native code and uses the system
 /// engines instead, so nothing constructs this there. `start` builds a
 /// [SherpaListener] and a [SherpaSpeaker] and hands them to a
-/// [ComposedVoiceSession], which wires barge-in and forwards the rest. See
-/// "Hearing and speaking" in CLAUDE.md for the two-worker design.
+/// [ComposedVoiceSession], which forwards both halves' events. See "Hearing and
+/// speaking" in CLAUDE.md for the two-worker design.
 class SherpaVoice extends Voice {
   SherpaVoice(this._store, this._cacheDir);
 
@@ -82,24 +83,22 @@ class SherpaVoice extends Voice {
 String get _speechDir => p.join(Directory.systemTemp.path, "entoli-speech");
 
 /// The sherpa listening half: a microphone, Silero VAD, and an offline
-/// recognizer, in one worker isolate. Emits [VoiceHeard] and
-/// [VoiceInterrupted]; the [ComposedVoiceSession] turns the latter into a
-/// speaker stop.
-class SherpaListener implements Listener {
-  SherpaListener(this._recorder, this._worker) {
+/// recognizer, in one worker isolate. The gate, the level and the event stream
+/// are [MicrophoneListener]'s; what is here is the recorder and the worker.
+///
+/// **Silero says whether it is a voice, not whose.** A television two rooms
+/// away is speech to it, and so was a turn — the same complaint the system
+/// recogniser answered with the gate, arriving here for the same reason. So
+/// this measures what it hands over: one reading per detector window, which is
+/// 32 ms of audio whatever size the platform's chunks are, on the [decibels]
+/// scale rather than the service's.
+class SherpaListener extends MicrophoneListener {
+  SherpaListener(this._recorder, this._worker) : super(LoudnessGate()) {
     _worker.messages.listen(_fromWorker);
-    unawaited(_open());
   }
 
   final AudioRecorder _recorder;
   final Worker _worker;
-
-  /// Single-subscription, so what [_open] reports is *buffered* until the
-  /// controller subscribes. Broadcast, a microphone that failed to open said so
-  /// into a stream nobody was listening to yet, and voice mode sat there
-  /// showing a microphone that was never going to hear anything.
-  final _events = StreamController<VoiceEvent>();
-  final _levelOf = ValueNotifier(0.0);
 
   StreamSubscription<Uint8List>? _mic;
 
@@ -107,29 +106,28 @@ class SherpaListener implements Listener {
   /// had, and the detector wants 512 samples at a time.
   final _window = Float32List(_windowSize);
   var _filled = 0;
+  var _square = 0.0;
 
   final _pcm = Pcm16Reader();
-  var _closed = false;
 
-  Future<void> _open() async {
-    await setListening(true);
-  }
-
+  /// The inherited [listening] is what the early return compares against rather
+  /// than `_mic`: opening the microphone is a platform call, so a shut arriving
+  /// while an open is still in flight would otherwise find `_mic` null, read
+  /// that as already shut, and leave a recorder running for the session.
   @override
-  Stream<VoiceEvent> get events => _events.stream;
-
-  @override
-  ValueListenable<double> get level => _levelOf;
-
-  @override
-  Future<void> setListening(bool on) async {
-    if (_closed || on == (_mic != null)) return;
+  Future<void> setListening(bool on, {bool finish = false}) async {
+    if (closed || on == listening) return;
+    asked(on);
     if (!on) {
+      // The detector is holding whatever has not fallen silent yet, and no more
+      // audio is coming to end it. Flushed rather than dropped where the
+      // microphone closed because the sentence was over.
+      if (finish) _worker.send(("flush",));
       await _mic?.cancel();
       _mic = null;
       await _recorder.stop();
       _filled = 0;
-      _levelOf.value = 0;
+      _square = 0;
       return;
     }
     try {
@@ -137,57 +135,57 @@ class SherpaListener implements Listener {
         encoder: AudioEncoder.pcm16bits,
         sampleRate: sampleRate,
         numChannels: 1,
-        // The reply comes out of the same device the microphone is on, so
-        // without this the model hears itself and every sentence is a barge-in.
+        // The reply comes out of the same device the microphone is on. The
+        // microphone is shut while one is being read out, so this is belt and
+        // braces rather than the thing keeping the model from hearing itself.
         echoCancel: true,
         noiseSuppress: true,
       ));
-      _mic = stream.listen(_onAudio, onError: (Object e) => _fail("$e"));
+      // Shut while this was opening, which is a Talk button let go inside the
+      // platform's own latency. What was asked for last wins.
+      if (closed || !listening) {
+        await _recorder.stop();
+        return;
+      }
+      _mic = stream.listen(_onAudio, onError: (Object e) => fail("$e"));
     } catch (e) {
-      _fail("$e");
+      fail("$e");
     }
   }
 
   void _onAudio(Uint8List bytes) {
-    if (_closed) return;
-    final samples = _pcm.read(bytes);
-    var sum = 0.0;
-    for (final value in samples) {
-      sum += value * value;
+    if (closed) return;
+    for (final value in _pcm.read(bytes)) {
+      _square += value * value;
       _window[_filled++] = value;
       if (_filled < _windowSize) continue;
       _worker.send(("audio", _window));
+      // Per window rather than per chunk, so a reading is always the same
+      // length of time: the gate counts readings out, and how much audio the
+      // platform hands over at once is the platform's business.
+      measured(decibels(math.sqrt(_square / _windowSize)));
       _filled = 0;
+      _square = 0;
     }
-    final loudness = math.sqrt(sum / math.max(1, samples.length));
-    final level = math.max(loudness * 3, _levelOf.value * 0.8).clamp(0.0, 1.0);
-    _levelOf.value = level < 0.005 ? 0 : level;
   }
 
   void _fromWorker(Object? message) {
     switch (message) {
       case ("heard", final String text):
-        _events.add(VoiceHeard(text));
-      case ("detected",):
-        _events.add(const VoiceInterrupted());
+        heard(text);
       case ("failed", final String message):
-        _fail(message);
+        fail(message);
     }
-  }
-
-  void _fail(String message) {
-    if (!_closed) _events.add(VoiceFailed(message));
   }
 
   @override
   Future<void> dispose() async {
-    _closed = true;
+    closed = true;
     await _mic?.cancel();
     await _recorder.stop();
     _recorder.dispose();
     _worker.close();
-    await _events.close();
-    _levelOf.dispose();
+    disposeParts();
   }
 
   /// Silero's window, and so the size of every frame handed to the worker.
@@ -197,7 +195,10 @@ class SherpaListener implements Listener {
 /// The sherpa speaking half: an offline TTS in one worker isolate, WAVs written
 /// to a temp directory and played through `audioplayers`. [SpeechSilent] is
 /// emitted when the queue has drained and nothing is pending; [SpeechFailed]
-/// on a generation fault.
+/// once the engine rather than the sentence is what failed — see
+/// [SpeechFailures], which is the system synthesiser's rule and now this one's
+/// too. Before it, one sentence a voice would not say, or one wav the player
+/// refused, ended voice mode.
 class SherpaSpeaker implements Speaker {
   SherpaSpeaker(this._worker) {
     _worker.messages.listen(_fromWorker);
@@ -225,7 +226,16 @@ class SherpaSpeaker implements Speaker {
   /// Sentences handed to the worker that have not come back as audio yet.
   var _pending = 0;
 
+  /// See [SpeechFailures]: one sentence lost is not a broken engine.
+  final _failures = SpeechFailures();
+
   var _closed = false;
+  var _failed = false;
+
+  /// Nothing generating, nothing queued, nothing playing — which is what there
+  /// is to report as silence, and what the controller puts the microphone back
+  /// on the strength of.
+  bool get _silent => _pending == 0 && _queue.isEmpty && !_playing;
 
   Future<void> _open() async {
     // Once per session rather than once per sentence, and emptied on the way
@@ -240,26 +250,56 @@ class SherpaSpeaker implements Speaker {
   Stream<SpeechSignal> get signals => _signals.stream;
 
   @override
-  bool get speaking => _playing || _queue.isNotEmpty;
-
-  @override
   Future<void> speak(String text) async {
-    if (_closed || text.trim().isEmpty) return;
+    if (_closed || _failed || text.trim().isEmpty) return;
     _pending++;
     _worker.send(("speak", _generation, text));
   }
 
   void _fromWorker(Object? message) {
+    if (_closed || _failed) return;
     switch (message) {
       case ("audio", final int generation, final Float32List samples, final int rate):
-        if (generation != _generation || _closed) return;
+        if (generation != _generation) return;
         _pending--;
+        _failures.spoke();
         unawaited(_enqueue(samples, rate));
+      // The voice would not say that sentence, or said it in no samples at all.
+      // Named by the batch it was queued under, so one arriving after a stop is
+      // not counted against the batch that replaced it.
+      case ("dropped", final int generation):
+        if (generation != _generation) return;
+        _dropped();
+      // The engine itself: the model would not load, and nothing outstanding is
+      // coming. Left counted, the session would never say it had finished.
       case ("failed", final String message):
-        // Whatever was outstanding is not coming: left counted, the session
-        // would never say it had finished.
-        _pending = 0;
-        _signals.add(SpeechFailed(message));
+        _fatal(message);
+    }
+  }
+
+  /// The engine is gone. Everything held or playing is dead, and what arrives
+  /// later belongs to an engine this side will never see.
+  void _fatal(String message) {
+    if (_failed || _closed) return;
+    _failed = true;
+    _pending = 0;
+    for (final path in _queue) {
+      unawaited(_discard(path));
+    }
+    _queue.clear();
+    _playing = false;
+    unawaited(_player.stop());
+    _signals.add(SpeechFailed(message));
+  }
+
+  /// One sentence will not be heard. The session still has to be told when the
+  /// rest of the reply has been.
+  void _dropped() {
+    if (_pending > 0) _pending--;
+    if (_failures.dropped()) {
+      _fatal("Speech playback keeps failing.");
+    } else if (_silent) {
+      _signals.add(const SpeechSilent());
     }
   }
 
@@ -271,7 +311,7 @@ class SherpaSpeaker implements Speaker {
   }
 
   Future<void> _playNext() async {
-    if (_closed) return;
+    if (_closed || _failed) return;
     await _discardPlayed();
     if (_queue.isEmpty) {
       if (_playing) {
@@ -285,9 +325,12 @@ class SherpaSpeaker implements Speaker {
     _played = next;
     try {
       await _player.play(DeviceFileSource(next));
-    } catch (e) {
+    } catch (_) {
+      // One wav the player would not take is one sentence rather than the
+      // engine, and the rest of the reply is still worth hearing.
       _playing = false;
-      _signals.add(SpeechFailed("$e"));
+      _dropped();
+      if (!_failed) await _playNext();
     }
   }
 
@@ -301,6 +344,8 @@ class SherpaSpeaker implements Speaker {
   Future<void> stop() async {
     _generation++;
     _pending = 0;
+    // A reply the user cut off is not a run of sentences the engine lost.
+    _failures.spoke();
     for (final path in _queue) {
       unawaited(_discard(path));
     }
@@ -402,28 +447,33 @@ void _listenWorker((SendPort, (String, RecognitionModel, String)) init) async {
     reply.send(("failed", "$e"));
   }
 
-  var wasSpeaking = false;
+  void drain(sherpa.VoiceActivityDetector vad, sherpa.OfflineRecognizer engine) {
+    while (!vad.isEmpty()) {
+      final segment = vad.front();
+      vad.pop();
+      final stream = engine.createStream();
+      stream.acceptWaveform(samples: segment.samples, sampleRate: sampleRate);
+      engine.decode(stream);
+      final text = engine.getResult(stream).text.trim();
+      stream.free();
+      // A cough is a speech segment to a detector and nothing to a
+      // conversation.
+      if (text.isNotEmpty) reply.send(("heard", text));
+    }
+  }
+
   await for (final message in port) {
     if (message case ("close",)) break;
     if (vad == null || recognizer == null) continue;
     if (message case ("audio", final Float32List frame)) {
       vad.acceptWaveform(frame);
-      final speaking = vad.isDetected();
-      if (speaking && !wasSpeaking) reply.send(("detected",));
-      wasSpeaking = speaking;
-
-      while (!vad.isEmpty()) {
-        final segment = vad.front();
-        vad.pop();
-        final stream = recognizer.createStream();
-        stream.acceptWaveform(samples: segment.samples, sampleRate: sampleRate);
-        recognizer.decode(stream);
-        final text = recognizer.getResult(stream).text.trim();
-        stream.free();
-        // A cough is a speech segment to a detector and nothing to a
-        // conversation.
-        if (text.isNotEmpty) reply.send(("heard", text));
-      }
+      drain(vad, recognizer);
+    }
+    // No more audio is coming to end the segment the detector is holding, so
+    // it is ended here — the microphone closed because the sentence was over.
+    else if (message case ("flush",)) {
+      vad.flush();
+      drain(vad, recognizer);
     }
   }
   vad?.free();
@@ -452,11 +502,19 @@ void _speakWorker((SendPort, (SpeechModel, String, int)) init) async {
     if (message case ("speak", final int generation, final String text)) {
       try {
         final audio = tts.generate(text: text, sid: speaker);
-        if (audio.samples.isNotEmpty) {
+        // Always answered, even with nothing to say: the other side counts what
+        // it handed over, and a sentence that came back as no samples left the
+        // count standing — so the queue never drained and silence was never
+        // reported, which is the microphone never opening again.
+        if (audio.samples.isEmpty) {
+          reply.send(("dropped", generation));
+        } else {
           reply.send(("audio", generation, audio.samples, audio.sampleRate));
         }
-      } catch (e) {
-        reply.send(("failed", "$e"));
+      } catch (_) {
+        // One sentence this voice will not say, rather than a voice that has
+        // stopped working. Which of the two it is, is the count's to decide.
+        reply.send(("dropped", generation));
       }
     }
   }

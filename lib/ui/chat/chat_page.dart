@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:math" as math;
 
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -11,6 +12,7 @@ import "../sidebar/sidebar.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
+import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/scrolling.dart";
 import "chat_settings_page.dart";
@@ -482,7 +484,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [Text(chat.state.title.orUntitled), ...lines],
+        children: [
+          // Held to the height the bar counted for it, the way a detail line
+          // is.
+          SizedBox(
+            height: MediaQuery.textScalerOf(context).scale(_titleHeight),
+            child: Text(chat.state.title.orUntitled),
+          ),
+          ...lines,
+        ],
       ),
     );
     return Scaffold(
@@ -642,13 +652,17 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           _TtlLine(expiresAt: state.tempTtlExpiresAt!),
       ];
 
-  /// Tall enough for the title and its detail lines. One of those fits beside
-  /// the title in Material's toolbar and a second does not, so the bar buys a
-  /// line for every one past the first.
-  double _barHeight(BuildContext context, int details) => details > 1
-      ? kToolbarHeight +
-          (details - 1) * MediaQuery.textScalerOf(context).scale(_TitleLine.height)
-      : kToolbarHeight;
+  /// What the title takes, and what the row drawing it is held to.
+  static const _titleHeight = 28.0;
+
+  /// Tall enough for the title and its detail lines, with Material's toolbar
+  /// as the floor rather than as the first line's allowance.
+  double _barHeight(BuildContext context, int details) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final lines =
+        scaler.scale(_titleHeight) + details * scaler.scale(_TitleLine.height);
+    return math.max(kToolbarHeight, lines);
+  }
   }
 
 /// One line under the chat's title in the bar: the project it is in, the pin

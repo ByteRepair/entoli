@@ -32,9 +32,12 @@ next save.
 
 The settings page is ten categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:
-**Appearance** — the theme and the app icon, which are the two things the app
-looks like — the **Agent** — command approval mode and the classifier model,
-which travel together because auto mode is unusable without one — the
+**Appearance** — the theme, the two colours the palette is seeded from, how
+round a corner is, and the app icon, which are what the app looks like; where
+the system has a palette of its own a Material 3 Expressive switch takes the
+place of the colours, and what any of it reaches is "What the settings page can
+change about it" — the **Agent** — command approval mode and the classifier
+model, which travel together because auto mode is unusable without one — the
 environment, and deleting every chat. **Terminal** is where commands run —
 Android itself, or a Linux downloaded from the catalog under it; a category of
 its own for the reason Voice is one, and drawn on every platform, where it says
@@ -46,14 +49,47 @@ like any other. **Voice** is what listens and what speaks,
 over the catalog they are downloaded from — its own category rather than a
 section under General because the two pickers are two lines and the catalog
 under them is the rest of the page. **Assistant** is where Android's assistant
-gesture lands — see "Being the assistant". **Sync** is paired devices —
-this device's identity and name, the relay and TURN settings for internet
-pairing, the paired-device list, and the pairing window. See
-`lib/data/sync/CLAUDE.md` for the threat model and handshake. **Providers** is the endpoints.
+gesture lands — see "Being the assistant". **Reminders** is Android's only — a
+reminder runs a prompt in a new chat at a time you pick, even when the app is
+closed — and where the port is unavailable the page says so and offers nothing,
+the way a row for a missing device would. The editor page is a route of its own;
+see "The reminder editor" below, and "Waking for a reminder" in
+`android/CLAUDE.md`. **Sync** is paired devices — this device's identity and
+name, the relay and TURN settings for internet pairing, the paired-device list,
+and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
+handshake. **Providers** is the endpoints.
 **LLMs** is what a new chat is answered by and what names it. **Data** is all of
 it at once, out as one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app
 is".
+
+## The reminder editor
+
+Four questions and the prompt, in `reminders.dart`. The name is one row and the
+date and time the next, sharing it half and half: what a reminder is set for is
+both of them, and either alone is half an answer — while a name beside them made
+the row three controls where two of them are one.
+
+**The prompt is not typed here.** The middle of the page is what the reminder
+will send, rendered the way the chat will render it, over the button that opens
+`ReminderPromptPage` — a box that is the whole page, Save and Discard, and
+nothing else. A reminder is written once and read many times afterwards, so the
+page it is read on shows the message; and a prompt long enough to need the room
+had a box a few lines tall to grow in before. Discarding asks, and so does the
+back key through a `PopScope`, since it is the one way out that loses what was
+typed.
+
+What is typed in it is `CompletionField` — the composer's, so `/commands` and
+`@agents` complete there and the `+` offers them; a reminder's prompt is
+dispatched through the same library, and being offered them in a chat and not
+here was the tell. The preview is `MarkdownBody` under `replyStyleSheet`, which
+is the reply's own sheet rather than a second answer to how markdown is set.
+
+**Temporary chat is `TempChatTtlField`**, the chat settings page's combobox and
+nothing new: the reminder's chat is a chat, and its TTL is written onto
+`meta.json` as it is. It was a switch over a bool, which could name only one of
+the five windows the field offers — see "Reminders" in `lib/domain/CLAUDE.md`
+for what the old key reads as.
 
 ## What the app is
 

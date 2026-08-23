@@ -1,8 +1,8 @@
 import "dart:async";
 
-import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
+import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "voice_strategies.dart";
@@ -53,6 +53,9 @@ class AndroidVoice extends Voice {
     }
     Listener? listener;
     if (recognition != null) {
+      // Asked for even where nothing is about to listen: the grant is what
+      // makes the Talk button work, and a permission sheet on the first press
+      // is one nobody expected.
       (await openMicrophone()).dispose();
       listener = AndroidSpeechRecognizer();
     }
@@ -92,90 +95,61 @@ class AndroidVoiceBridge {
 }
 
 /// Listening through Android's `SpeechRecognizer`. No model to load, no VAD:
-/// the OS delivers `onBeginningOfSpeech` (→ [VoiceInterrupted]) and
-/// `onResults` (→ [VoiceHeard]) directly. [level] is fed from
-/// `onRmsChanged`, which the platform emits as an RMS in dB — mapped to 0–1
-/// the way the sherpa path maps its own RMS.
-class AndroidSpeechRecognizer implements Listener {
-  AndroidSpeechRecognizer() {
+/// the OS delivers `onBeginningOfSpeech`, `onRmsChanged` and `onResults`, and
+/// this hands all three to [MicrophoneListener], which is where the gate, the
+/// level and the event stream are. What is left here is the channel.
+class AndroidSpeechRecognizer extends MicrophoneListener {
+  AndroidSpeechRecognizer() : super(LoudnessGate()) {
     _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
-    unawaited(_start());
   }
 
   late final StreamSubscription<MethodCall> _calls;
 
-  /// Single-subscription, the way `SherpaListener`'s is and for its reason: a
-  /// failure to start is emitted before anything has subscribed, and a
-  /// broadcast controller would drop it on the floor.
-  final _events = StreamController<VoiceEvent>();
-  final _levelOf = ValueNotifier(0.0);
-  bool _closed = false;
-
-  Future<void> _start() async {
-    if (_closed) return;
-    try {
-      await voiceChannel.invokeMethod<String>("startRecognition");
-    } on PlatformException catch (e) {
-      _fail(_message(e));
-    } on MissingPluginException {
-      _fail("Voice recognition is not available on this platform.");
-    }
-  }
-
   void _onCall(MethodCall call) {
-    if (_closed) return;
+    if (closed) return;
     switch (call.method) {
       case "heard":
-        final text = (call.arguments as String?)?.trim() ?? "";
-        if (text.isNotEmpty) _events.add(VoiceHeard(text));
-      case "interrupted":
-        _events.add(const VoiceInterrupted());
+        heard((call.arguments as String?) ?? "");
       case "rms":
-        // `onRmsChanged` reports dB in the range -2..10 roughly; map to 0–1.
-        final rms = (call.arguments as num?)?.toDouble() ?? 0;
-        _levelOf.value = ((rms + 2) / 12).clamp(0.0, 1.0);
+        measured((call.arguments as num?)?.toDouble() ?? 0);
       case "recognitionError":
-        _fail((call.arguments as String?) ?? "Recognition failed.");
+        fail((call.arguments as String?) ?? "Recognition failed.");
     }
   }
 
-  void _fail(String message) {
-    if (!_closed) _events.add(VoiceFailed(message));
-  }
-
-  String _message(PlatformException e) =>
-      e.message?.isNotEmpty == true ? e.message! : "Recognition failed.";
-
   @override
-  Stream<VoiceEvent> get events => _events.stream;
-
-  @override
-  ValueListenable<double> get level => _levelOf;
-
-  @override
-  Future<void> setListening(bool on) async {
-    if (_closed) return;
+  Future<void> setListening(bool on, {bool finish = false}) async {
+    if (closed || on == listening) return;
+    asked(on);
     try {
-      await voiceChannel.invokeMethod<String>("setRecognitionListening", on);
-    } catch (_) {}
+      await voiceChannel.invokeMethod<String>(
+          "setRecognitionListening", {"on": on, "finish": finish});
+    } on PlatformException catch (e) {
+      // Only opening it is a failure worth the session: nothing that goes wrong
+      // shutting a microphone leaves anyone unable to speak.
+      if (on) fail(_message(e, "Recognition failed."));
+    } on MissingPluginException {
+      if (on) fail("Voice recognition is not available on this platform.");
+    }
   }
 
   @override
   Future<void> dispose() async {
-    _closed = true;
+    closed = true;
     await _calls.cancel();
     try {
       await voiceChannel.invokeMethod<String>("stopRecognition");
     } catch (_) {}
-    await _events.close();
-    _levelOf.dispose();
+    disposeParts();
   }
 }
 
 /// Speaking through Android's `TextToSpeech`. One utterance per [speak] call,
-/// queued behind the last; [stop] flushes the queue. The platform signals
-/// completion via `onUtteranceProgressListener`, mapped to [SpeechSilent] when
-/// the queue has drained and nothing is pending.
+/// queued behind the last; [stop] flushes the queue. Speech is held until the
+/// engine says it is ready — a `speak` that lands before init completes returns
+/// an error code and no callback, which would count an utterance that never
+/// happened and leave a queue that never drains. One utterance failing is not a
+/// failed engine: it is dropped, and only repeated failures are reported up.
 class AndroidTextToSpeech implements Speaker {
   AndroidTextToSpeech() {
     _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
@@ -184,71 +158,127 @@ class AndroidTextToSpeech implements Speaker {
 
   late final StreamSubscription<MethodCall> _calls;
   final _signals = StreamController<SpeechSignal>.broadcast();
+
+  /// Utterances waiting for the engine.
+  final _queue = <String>[];
   int _pending = 0;
   int _generation = 0;
+
+  /// One utterance failing is not the engine failing; a run of them is. The
+  /// rule is shared with the sherpa speaker, which did not have it.
+  final _failures = SpeechFailures();
+
+  /// Whether the engine's init callback has run. Fatal from here on: nothing
+  /// that arrives later is believed.
+  bool _ready = false;
+  bool _failed = false;
+  Timer? _watchdog;
   bool _closed = false;
 
   Future<void> _init() async {
     if (_closed) return;
+    // An engine that never answers would hold everything forever; said rather
+    // than waited for. Fake clocks in tests only move when pumped.
+    _watchdog = Timer(const Duration(seconds: 5), () {
+      if (!_ready) _fatal("Speech did not start.");
+    });
     try {
       await voiceChannel.invokeMethod<String>("initSpeech");
     } on PlatformException catch (e) {
-      _fail(e.message?.isNotEmpty == true ? e.message! : "Speech failed.");
+      _fatal(_message(e, "Speech failed."));
     } on MissingPluginException {
-      _fail("Speech synthesis is not available on this platform.");
+      _fatal("Speech synthesis is not available on this platform.");
     }
   }
 
   void _onCall(MethodCall call) {
-    if (_closed) return;
+    if (_closed || _failed) return;
     switch (call.method) {
+      case "speechReady":
+        if (_ready) return;
+        _ready = true;
+        _watchdog?.cancel();
+        final queued = List.of(_queue);
+        _queue.clear();
+        for (final text in queued) {
+          unawaited(_dispatch(text));
+        }
       case "speechDone":
         // Named by the generation it was queued under, so one arriving after a
-        // barge-in is not counted against the batch that replaced it.
+        // `stop` is not counted against the batch that replaced it.
         if ((call.arguments as int? ?? 0) != _generation) return;
+        _failures.spoke();
         _pending--;
         if (_pending <= 0) {
           _pending = 0;
           _signals.add(const SpeechSilent());
         }
+      case "speechUtteranceError":
+        // Named by the generation it was queued under, so one arriving after a
+        // `stop` is not counted against the batch that replaced it.
+        if ((call.arguments as int? ?? -1) != _generation) return;
+        _utteranceDropped();
       case "speechError":
-        _pending = 0;
-        _fail((call.arguments as String?) ?? "Speech failed.");
+        _fatal((call.arguments as String?) ?? "Speech failed.");
     }
   }
 
-  void _fail(String message) {
-    if (!_closed) _signals.add(SpeechFailed(message));
+  /// The engine itself is gone: everything held or playing is dead, and what
+  /// arrives later belongs to an engine this side will never see.
+  void _fatal(String message) {
+    if (_failed || _closed) return;
+    _failed = true;
+    _watchdog?.cancel();
+    _queue.clear();
+    _pending = 0;
+    _signals.add(SpeechFailed(message));
   }
 
-  @override
-  Stream<SpeechSignal> get signals => _signals.stream;
+  /// See [SpeechFailures] for how many of these in a row is an engine rather
+  /// than a sentence.
+  void _utteranceDropped() {
+    if (_pending > 0) _pending--;
+    if (_failures.dropped()) {
+      _fatal("Speech playback keeps failing.");
+    } else if (_pending == 0) {
+      _signals.add(const SpeechSilent());
+    }
+  }
 
-  /// What the platform has been handed and not reported done. `TextToSpeech`
-  /// says nothing about which of queueing, generating and playing it is in, so
-  /// this is as fine as the answer gets.
-  @override
-  bool get speaking => _pending > 0;
-
-  @override
-  Future<void> speak(String text) async {
-    if (_closed || text.trim().isEmpty) return;
+  Future<void> _dispatch(String text) async {
     _pending++;
     try {
       await voiceChannel.invokeMethod<String>("speak", {
         "text": text,
         "generation": _generation,
       });
-    } catch (e) {
-      _pending--;
-      _fail("$e");
+    } catch (_) {
+      // The engine never took the utterance — the same shape a
+      // `speechUtteranceError` reports from the other side, so it costs the
+      // same budget.
+      _utteranceDropped();
     }
+  }
+
+  @override
+  Stream<SpeechSignal> get signals => _signals.stream;
+
+  @override
+  Future<void> speak(String text) async {
+    if (_closed || _failed || text.trim().isEmpty) return;
+    if (!_ready) {
+      _queue.add(text);
+      return;
+    }
+    await _dispatch(text);
   }
 
   @override
   Future<void> stop() async {
     _generation++;
     _pending = 0;
+    _failures.spoke();
+    _queue.clear();
     try {
       await voiceChannel.invokeMethod<String>("stopSpeech");
     } catch (_) {}
@@ -257,6 +287,8 @@ class AndroidTextToSpeech implements Speaker {
   @override
   Future<void> dispose() async {
     _closed = true;
+    _watchdog?.cancel();
+    _queue.clear();
     await _calls.cancel();
     try {
       await voiceChannel.invokeMethod<String>("disposeSpeech");
@@ -264,3 +296,6 @@ class AndroidTextToSpeech implements Speaker {
     await _signals.close();
   }
 }
+
+String _message(PlatformException e, String fallback) =>
+    e.message?.isNotEmpty == true ? e.message! : fallback;

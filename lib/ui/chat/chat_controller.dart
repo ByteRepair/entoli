@@ -144,7 +144,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final chat = state.chat;
     if (title == null || chat == null || !ref.mounted) return;
     applyTitle(title);
-    await ref.read(chatRepositoryProvider).retitle(chat.state, title);
+    await ref.read(chatRepositoryProvider).retitle(chatId, title);
     if (!ref.mounted) return;
     ref.invalidate(chatListProvider);
   }
@@ -210,8 +210,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final isFirst = chat.messages.isEmpty;
     state = state.copyWith(chat: updated, isRunning: true, clearRetry: true, clearStatus: true);
     // The prompt and the empty reply go down before the turn starts, so a chat
-    // killed before the model says anything still shows what was asked.
-    await repo.saveState(updated.state);
+    // killed before the model says anything still shows what was asked. What
+    // comes back carries the TTL anchor the save resolved, and is kept.
+    applyState(await repo.saveState(updated.state));
     _recorder.open(opening.last.id);
     await _recorder.write(recordsOf(opening,
         siblingOf: replacing?.id,

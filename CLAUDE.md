@@ -26,7 +26,7 @@ named in a cross-reference is findable from this list.
 
 - `lib/domain/CLAUDE.md` — The conversation log, Threads, The projection,
   Carrying on an interrupted turn, Starting a chat, and naming it, Commands
-  and agents, Resending a message, Attachments
+  and agents, Resending a message, Attachments, Reminders
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
@@ -40,17 +40,22 @@ named in a cross-reference is findable from this list.
 - `lib/data/local/CLAUDE.md` — Bundled tools, A whole Linux under proot,
   Running a model on the device
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
-  app, Being the assistant, The app icon, The debug build's own
+  app, Being the assistant, Waking for a reminder, The app icon, The debug
+  build's own
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page
 - `lib/data/voice/CLAUDE.md` — Voice mode, What listens and what speaks, The
-  Android system engines, Per side, not per session, The Kotlin, Where the
-  models live, Hearing and speaking
-- `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen
+  Android system engines, Ending the utterance, What counts as being spoken
+  to, One listener, two engines, Mute is the user, not the conversation, Per
+  side, not per session, The Kotlin, Where the models live, Hearing and
+  speaking
+- `lib/ui/voice/CLAUDE.md` — Reading one message out, The screen, Touch to
+  speak, Taking turns
 - `lib/ui/workspace/CLAUDE.md` — The workspace explorer
 - `lib/ui/share/CLAUDE.md` — Sharing to Entoli
-- `lib/ui/CLAUDE.md` — Opening a link, The theme, The keyboard and the caret
+- `lib/ui/CLAUDE.md` — Opening a link, The theme, What the settings page can
+  change about it, The keyboard and the caret
 - `lib/ui/settings/CLAUDE.md` — Setting overrides, What the app is, Backing it
   all up
 - `lib/ui/widgets/CLAUDE.md` — Shared UI, A catalog of things to download
@@ -89,8 +94,11 @@ Every project is a directory under `projects/`, the default one included.
 `<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
 files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
-`appTheme`, and
-`llmProviders`.
+`appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
+`cornerRadius` and `systemPalette` — and `llmProviders`.
+`<dataDir>/reminders.json` is the user's reminders, one JSON
+list; the boot receiver reads it with no engine running, which is why writes go
+through a rename.
 Data dir: `$AGENT_CHAT_CONFIG` if set, else `~/.config/agent-chat` (desktop),
 app-private storage (Android), and `/agent-chat` in a browser — where it is a
 name in IndexedDB rather than a path, and load-bearing all the same.

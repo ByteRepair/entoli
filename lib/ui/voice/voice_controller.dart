@@ -39,6 +39,7 @@ class VoiceViewState {
     this.error,
     this.level,
     this.paused = false,
+    this.pushToTalk = false,
   });
 
   final VoiceStatus status;
@@ -48,6 +49,13 @@ class VoiceViewState {
   /// running and its reply being read out while the microphone is off, and
   /// those are what the status is for.
   final bool paused;
+
+  /// The microphone is only open while the Talk button is held, which is the
+  /// setting rather than anything the session decided. Here because it changes
+  /// what [paused] *means* — a shut microphone waiting to be asked rather than
+  /// one the user muted — and the controls and the word under the orb both
+  /// have to say the right one.
+  final bool pushToTalk;
 
   /// How loud the microphone is. Held here rather than folded into [status] so
   /// the orb can follow it without the transcript rebuilding for every audio
@@ -60,9 +68,11 @@ class VoiceViewState {
   /// that is about the state rather than the status.
   bool get hushed => paused && status != VoiceStatus.speaking;
 
-  /// What the screen says this is. "Paused" is the state's rather than the
-  /// status's, which is why it is not all on the enum.
-  String get word => hushed ? "Paused" : status.word;
+  /// What the screen says this is. The two words for a shut microphone are the
+  /// state's rather than the status's, which is why it is not all on the enum —
+  /// and they are two because a microphone waiting to be asked was never
+  /// paused.
+  String get word => hushed ? (pushToTalk ? "Ready" : "Paused") : status.word;
 }
 
 extension VoiceStatusWord on VoiceStatus {
@@ -132,9 +142,15 @@ class VoiceController extends Notifier<VoiceViewState> {
   @override
   VoiceViewState build() {
     _work = ref.watch(backgroundWorkProvider);
+    // Read rather than watched, and listened to for changes: watching it would
+    // rebuild this notifier, and a rebuild resets the state a running session
+    // is being held in.
+    ref.listen(appSettingsProvider.select((s) => s.voicePushToTalk),
+        (_, on) => unawaited(_setPushToTalk(on)));
     ref.listen(chatControllerProvider(chatId), _onChat);
     ref.onDispose(() => unawaited(_shutdown()));
-    return const VoiceViewState();
+    return VoiceViewState(
+        pushToTalk: ref.read(appSettingsProvider).voicePushToTalk);
   }
 
   ChatController get _chat => ref.read(chatControllerProvider(chatId).notifier);
@@ -142,13 +158,57 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// Every state write goes through here. Written out at each call site, the
   /// two `failed` arms silently omitted the level, which is the sort of
   /// difference nobody sees until the circle stops moving.
-  void _show(VoiceStatus status, {String? error, bool? paused}) =>
-      state = VoiceViewState(
-        status: status,
-        error: error,
-        level: _session?.level,
-        paused: paused ?? state.paused,
-      );
+  void _show(VoiceStatus status,
+      {String? error, bool? paused, bool? pushToTalk}) {
+    final was = state.status;
+    state = VoiceViewState(
+      status: status,
+      error: error,
+      level: _session?.level,
+      paused: paused ?? state.paused,
+      pushToTalk: pushToTalk ?? state.pushToTalk,
+    );
+    if (state.status != was) {
+      voiceLog(() => "${was.name} -> ${state.status.name}");
+    }
+    _holdMicrophone();
+  }
+
+  /// Whether the microphone should be open right now.
+  ///
+  /// **It is open only when it is the user's turn to speak** — not while a turn
+  /// runs, not while the reply is read out. That is what makes this a
+  /// conversation rather than a room with a microphone in it.
+  ///
+  /// It answers one question and answers it exactly: *is the phone hearing
+  /// itself?* Matching the reply's own words back against what came in, and
+  /// waiting for a transcription before believing an interruption, were both
+  /// inference about that — and neither could be reliable, because the reply
+  /// and the room are one acoustic event to a recogniser. Not listening cannot
+  /// be wrong about it. The loudness gate is not one of these and stays: it
+  /// answers a different question, whether what was heard was meant for the
+  /// phone at all, and a television is that whether or not anyone is speaking.
+  ///
+  /// The cost is that talking over a reply no longer stops it. Stop does, and
+  /// it is under the orb the whole time.
+  bool get _wantsMicrophone {
+    if (!state.isOn || state.paused) return false;
+    // Touch to speak: the button is the whole of it, and the turn it belongs to
+    // is whichever one the user pressed it during.
+    if (state.pushToTalk) return true;
+    return state.status == VoiceStatus.listening;
+  }
+
+  /// Called after every state write, so the turn-taking above is a consequence
+  /// of the status rather than something each transition has to remember. The
+  /// session drops the call where nothing changed.
+  ///
+  /// A close while [VoiceViewState.paused] is the user saying they have
+  /// finished talking — mute, or letting the Talk button go — and the sentence
+  /// in flight is the point of it. A close because the turn moved on is not,
+  /// and there is no third kind.
+  void _holdMicrophone() => unawaited(
+      _session?.setListening(_wantsMicrophone, finish: state.paused));
 
   Future<void> start() async {
     if (state.isOn) return;
@@ -157,6 +217,7 @@ class VoiceController extends Notifier<VoiceViewState> {
         voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId);
     final speech = voiceModelOf<SpeechModel>(settings.voiceSpeechModelId);
     if (recognition == null || speech == null) {
+      voiceFailed("no models picked");
       return _show(VoiceStatus.failed,
           error: "Pick a recognition model and a speech model in Settings first.");
     }
@@ -167,8 +228,11 @@ class VoiceController extends Notifier<VoiceViewState> {
     await ref.read(readAloudProvider.notifier).stop();
     if (!ref.mounted) return;
 
-    _show(VoiceStatus.starting, paused: false);
+    final pushToTalk = settings.voicePushToTalk;
+    _show(VoiceStatus.starting, paused: pushToTalk, pushToTalk: pushToTalk);
     try {
+      // A session opens shut, and [_holdMicrophone] lets it open on the
+      // `listening` below like any other transition.
       final session = await ref.read(voiceProvider).start(
             recognition: recognition,
             speech: speech,
@@ -185,6 +249,7 @@ class VoiceController extends Notifier<VoiceViewState> {
       unawaited(_work.listening(true));
       _show(VoiceStatus.listening);
     } catch (e) {
+      voiceFailed("session did not start: $e");
       _show(VoiceStatus.failed, error: "$e");
     }
   }
@@ -201,18 +266,43 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// Mute, in `VoiceControls`.
   Future<void> togglePaused() => setPaused(!state.paused);
 
-  /// Shut the microphone, or open it again. Voice mode listens for as long as
-  /// it is on screen, and until this there was no way to stop it short of
-  /// leaving.
+  /// The Talk button, pressed and released. Pressing it stops the reply, since
+  /// somebody holding a button down to speak is not waiting for the rest of the
+  /// answer.
+  Future<void> talk(bool on) async {
+    if (!ref.mounted || !state.isOn) return;
+    // The reply's silence is not waited for: stopping speech is a platform call
+    // of its own, and the whole reason this is on pointer-down is that the
+    // first half second is the half nobody hears.
+    if (on && state.status == VoiceStatus.speaking) unawaited(hush());
+    await setPaused(!on);
+  }
+
+  /// Mute the microphone, or open it again.
+  ///
+  /// **It mutes the user, not the conversation** — which is what mute means on
+  /// a call. The reply being read out goes on being read out, the next turn
+  /// still runs, and what was already being said into the microphone is handed
+  /// over rather than dropped: someone who speaks and then mutes is saying they
+  /// have finished talking, and expects an answer.
   Future<void> setPaused(bool paused) async {
     if (!ref.mounted || !state.isOn || paused == state.paused) return;
-    await _session?.setListening(!paused);
-    if (ref.mounted) _show(state.status, paused: paused);
+    _show(state.status, paused: paused);
+  }
+
+  /// The setting changed under a session. Turning it on shuts the microphone
+  /// until it is asked for; turning it off opens it, which is what voice mode
+  /// without a button is.
+  Future<void> _setPushToTalk(bool on) async {
+    if (!ref.mounted || !state.isOn) return;
+    // Both at once: the setting and the microphone it decides move together,
+    // and two writes would rebuild the screen twice for one toggle.
+    _show(state.status, paused: on, pushToTalk: on);
   }
 
   /// Shut the reply up without leaving voice mode — Stop, in `VoiceControls`,
-  /// and the fallback wherever the platform's echo cancellation is not good
-  /// enough for the detector to hear the user over the reply.
+  /// and the way to interrupt an answer now that talking over one cannot be:
+  /// the microphone is shut while it is being read out.
   Future<void> hush() async {
     if (!ref.mounted) return;
     await _session?.stopSpeaking();
@@ -240,14 +330,6 @@ class VoiceController extends Notifier<VoiceViewState> {
     switch (event) {
       case VoiceHeard(:final text):
         unawaited(_say(text));
-      case VoiceInterrupted():
-        // The session has already gone quiet. Talking over a reply means stop
-        // and listen to me, so the turn goes too — which is Stop and then type,
-        // in one gesture, and leaves the same aborted turn in the log.
-        if (ref.read(chatControllerProvider(chatId)).isRunning) {
-          unawaited(_chat.abort());
-        }
-        _sentences.reset();
       case VoiceFellSilent():
         if (state.status == VoiceStatus.speaking) _show(VoiceStatus.listening);
       case VoiceFailed(:final message):
@@ -257,9 +339,10 @@ class VoiceController extends Notifier<VoiceViewState> {
 
   Future<void> _say(String text) async {
     if (text.trim().isEmpty) return;
-    // A turn still running here is one the user talked over. Aborting waits for
-    // the turn to be written and closed, so what is said next lands after it
-    // rather than into it.
+    // A turn still running here is one whose utterance arrived late — the
+    // microphone is shut for as long as one runs. Aborting waits for the turn
+    // to be written and closed, so what is said next lands after it rather than
+    // into it.
     if (ref.read(chatControllerProvider(chatId)).isRunning) await _chat.abort();
     if (!ref.mounted || !state.isOn) return;
     _show(VoiceStatus.thinking);
@@ -298,6 +381,10 @@ class VoiceController extends Notifier<VoiceViewState> {
     if ((was?.isRunning ?? false) && !chat.isRunning) {
       _readOn();
       _speak(_sentences.flush());
+      // A turn that said nothing out loud — one that only ran a command, or was
+      // aborted — still ends. Without this the status sticks on `thinking` and
+      // the microphone never opens again.
+      if (state.status == VoiceStatus.thinking) _show(VoiceStatus.listening);
     }
   }
 

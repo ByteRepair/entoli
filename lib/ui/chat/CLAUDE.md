@@ -347,17 +347,21 @@ and that put the app's name where the chat's belongs for every conversation
 short enough not to scroll, which is most of the ones being started. The mark is
 still on the bar with no chat open, where there is no title to draw instead.
 
-**The bar grows with what it has to say.** One detail line fits under the title
-in Material's 56dp toolbar and two do not, so a chat that is both in a project
-and temporary was having its countdown clipped. The lines are counted rather
+**The bar grows with what it has to say.** Every line is counted, the title's
+own included, and Material's 56dp toolbar is only the floor. Counting up from
+the toolbar instead — on the grounds that one detail line fits inside it —
+holds at the default text size and nowhere past about 1.2, since the title
+scales with the line under it: an Android phone set to a large font was
+clipping the countdown off a chat that had nothing else to say. Counted rather
 than measured — a bar that sized itself to its text would have to lay the text
 out to know its own height, and a `Scaffold`'s `appBar` has to answer that
 before it is built — which makes the count a thing that can drift from what is
 drawn. So it is not a second list of conditions: `_details` is the only place
-they are written down and `_barHeight` counts what it returned. The per-line
-number is `_TitleLine.height` and the row is *held* to it rather than measured
-against it, so what the bar adds for a line is what the line takes, at any text
-scale.
+they are written down and `_barHeight` counts what it returned. Every row is
+then *held* to the number counted for it rather than measured against it —
+`_TitleLine.height` for a detail line, `_titleHeight` for the title — so what
+the bar adds for a line is what the line takes, at any text scale, and the
+count cannot drift from the draw. Nothing is padded: the sum is the height.
 
 The conversation is a column of `_readableWidth`, centred. A phone gets the
 whole screen and a monitor gets a line that can be read back to the start of.
@@ -407,8 +411,9 @@ everything the user has written is a menu and `/` is what opens the menu; with
 nothing at all in the library it says how to reach them instead.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
-composer's own insertion lifted out of its `State` so both callers reach it.
-Both halves of that mattered. **Where** it lands is a rule: a command goes to
+field's own insertion lifted out of its `State` so both callers reach it — it
+sits beside `CompletionField` in `ui/widgets/`, which is the composer's menu now
+that the reminder editor writes a prompt too. Both halves of that mattered. **Where** it lands is a rule: a command goes to
 offset 0, because `prompt_library.dart`'s `_command` is anchored there and
 `activeCompletionToken` gates `/` on `start == 0` — appended at the caret it
 would be text that looks like a command, dispatches as none, and is not even

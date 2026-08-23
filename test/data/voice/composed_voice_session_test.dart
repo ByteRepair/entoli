@@ -14,13 +14,19 @@ class _FakeListener implements Listener {
   final level = ValueNotifier(0.0);
 
   var listening = true;
+  var finished = 0;
   var disposed = false;
 
   @override
   Stream<VoiceEvent> get events => _events.stream;
 
   @override
-  Future<void> setListening(bool on) async => listening = on;
+  Future<void> setListening(bool on, {bool finish = false}) async {
+    listening = on;
+    if (!on && finish) finished++;
+  }
+
+
 
   @override
   Future<void> dispose() async {
@@ -29,7 +35,6 @@ class _FakeListener implements Listener {
   }
 
   void hear(String text) => _events.add(VoiceHeard(text));
-  void interrupt() => _events.add(const VoiceInterrupted());
   void fail(String m) => _events.add(VoiceFailed(m));
 }
 
@@ -39,9 +44,6 @@ class _FakeSpeaker implements Speaker {
   final spoken = <String>[];
   var stopCount = 0;
   var disposed = false;
-
-  @override
-  var speaking = true;
 
   @override
   Stream<SpeechSignal> get signals => _signals.stream;
@@ -59,6 +61,7 @@ class _FakeSpeaker implements Speaker {
   }
 
   void silent() => _signals.add(const SpeechSilent());
+
   void fail(String m) => _signals.add(SpeechFailed(m));
 }
 
@@ -70,42 +73,13 @@ List<VoiceEvent> collectEvents(ComposedVoiceSession session) {
 
 void main() {
   group("ComposedVoiceSession", () {
-    test("barge-in stops the speaker and forwards VoiceInterrupted", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker();
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-
-      listener.interrupt();
-      await Future.delayed(Duration.zero);
-
-      expect(speaker.stopCount, 1);
-      expect(events, contains(const VoiceInterrupted()));
-      await session.dispose();
-    });
-
-    test("with nothing being said, starting to talk is not a barge-in", () async {
-      final listener = _FakeListener();
-      final speaker = _FakeSpeaker()..speaking = false;
-      final session = ComposedVoiceSession(listener, speaker);
-      final events = collectEvents(session);
-
-      listener.interrupt();
-      await Future.delayed(Duration.zero);
-
-      // Voice activity opens every utterance, and the controller aborts the
-      // running turn on a VoiceInterrupted — so an unguarded one would kill
-      // the turn the user is waiting on every time they spoke.
-      expect(speaker.stopCount, 0);
-      expect(events, isEmpty);
-      await session.dispose();
-    });
 
     test("VoiceHeard is forwarded unchanged", () async {
       final listener = _FakeListener();
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       listener.hear("hello there");
       await Future.delayed(Duration.zero);
@@ -115,11 +89,86 @@ void main() {
       await session.dispose();
     });
 
+    test("a shut microphone says nothing, whatever the engine flushes",
+        () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session = ComposedVoiceSession(listener, speaker);
+      final events = collectEvents(session);
+      await session.setListening(true);
+
+      await session.setListening(false);
+      // What a cancelled recognition session hands back on its way out, and
+      // what sherpa's worker decodes from audio it already had — words nobody
+      // spoke into a microphone that is off.
+      listener.hear("the reply, half transcribed");
+      await Future.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+      await session.dispose();
+    });
+
+    test("a session opens shut and says nothing until it is asked to", () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session = ComposedVoiceSession(listener, speaker);
+      final events = collectEvents(session);
+
+      listener.hear("nobody asked for this");
+      await Future.delayed(Duration.zero);
+      expect(events, isEmpty);
+
+      await session.setListening(true);
+      listener.hear("now they did");
+      await Future.delayed(Duration.zero);
+      expect(events.whereType<VoiceHeard>().single.text, "now they did");
+      await session.dispose();
+    });
+
+    test("a finish keeps the one sentence it was held for", () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session = ComposedVoiceSession(listener, speaker);
+      final events = collectEvents(session);
+      await session.setListening(true);
+
+      await session.setListening(false, finish: true);
+      expect(listener.finished, 1);
+
+      listener.hear("what was said while it was held");
+      await Future.delayed(Duration.zero);
+      expect(events.whereType<VoiceHeard>().single.text,
+          "what was said while it was held");
+
+      // One, and only the one that was asked for.
+      listener.hear("and whatever came after");
+      await Future.delayed(Duration.zero);
+      expect(events.whereType<VoiceHeard>().length, 1);
+      await session.dispose();
+    });
+
+    test("a failure arrives whatever the microphone is doing", () async {
+      final listener = _FakeListener();
+      final speaker = _FakeSpeaker();
+      final session = ComposedVoiceSession(listener, speaker);
+      final events = collectEvents(session);
+      await session.setListening(true);
+
+      await session.setListening(false);
+      listener.fail("The microphone could not be read.");
+      await Future.delayed(Duration.zero);
+
+      expect(events.whereType<VoiceFailed>().single.message,
+          "The microphone could not be read.");
+      await session.dispose();
+    });
+
     test("speaker silence becomes VoiceFellSilent", () async {
       final listener = _FakeListener();
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       speaker.silent();
       await Future.delayed(Duration.zero);
@@ -133,6 +182,7 @@ void main() {
       final speaker = _FakeSpeaker();
       final session = ComposedVoiceSession(listener, speaker);
       final events = collectEvents(session);
+      await session.setListening(true);
 
       speaker.fail("boom");
       await Future.delayed(Duration.zero);
@@ -176,4 +226,5 @@ void main() {
       expect(speaker.disposed, isTrue);
     });
   });
+
 }

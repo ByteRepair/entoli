@@ -268,6 +268,16 @@ void main() {
     expect(find.text(appTitle), findsNothing);
   });
 
+  /// The countdown is drawn, and the bar grew for it. The lines are laid out
+  /// inside the bar, so one too short to hold them overflows and fails the test
+  /// before either of these reads anything.
+  void expectCountdownFits(WidgetTester tester) {
+    final bar = find.byType(AppBar);
+    expect(find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
+        findsOneWidget);
+    expect(tester.getSize(bar).height, greaterThan(kToolbarHeight));
+  }
+
   // Three lines — a title, a project and a countdown — do not fit the 56dp bar
   // every other chat gets, and the last of them was being clipped.
   testWidgets("a chat that is both in a project and temporary fits its bar",
@@ -277,14 +287,27 @@ void main() {
 
     await open(tester, chat.state.id);
 
-    final bar = find.byType(AppBar);
-    expect(find.descendant(of: bar, matching: find.text("work")), findsOneWidget);
-    expect(find.descendant(of: bar, matching: find.byIcon(Icons.hourglass_empty)),
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text("work")),
         findsOneWidget);
-    // The lines are laid out inside the bar, so one too short to hold them
-    // overflows, which fails the test before this reads anything.
-    expect(tester.getSize(bar).height, greaterThan(kToolbarHeight));
+    expectCountdownFits(tester);
   });
+
+  // A phone set to a large font, which is where this was found: two lines fit
+  // the 56dp toolbar at the default text size and not much past it, so the bar
+  // used to clip the countdown rather than grow for it.
+  for (final scale in [1.3, 2.0]) {
+    testWidgets("a temporary chat fits its bar at text scale $scale",
+        (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final chat = await io(tester, () => app.seedChat(title: "at home"));
+      await io(tester, () => app.makeTemporary(chat.state));
+
+      await open(tester, chat.state.id);
+
+      expectCountdownFits(tester);
+    });
+  }
 
   // A pinned chat shows a pin in the title bar where a temporary chat's
   // hourglass would go. Pinning clears the TTL anchor, so the two never both

@@ -1,7 +1,10 @@
+import "dart:async";
+
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
+import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
@@ -13,6 +16,7 @@ import "domain/attachment_picker.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
 import "domain/chat_repository.dart";
+import "domain/corner_radius.dart";
 import "domain/chat_store.dart";
 import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
@@ -26,9 +30,14 @@ import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
 import "domain/prompt_library.dart";
+import "domain/reminder.dart";
+import "domain/reminder_alarms.dart";
+import "domain/reminder_runner.dart";
+import "domain/reminder_scheduler.dart";
 import "domain/rootfs_store.dart";
 import "data/sync/sync_hub.dart";
 import "domain/temp_chat_ttl.dart";
+import "domain/theme_colour.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model.dart"
@@ -332,6 +341,20 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setAppTheme(AppTheme theme) => _update((s) => s.appTheme = theme);
 
+  Future<void> setPrimaryColour(ThemeColour colour) =>
+      _update((s) => s.primaryColour = colour);
+
+  Future<void> setSecondaryColour(ThemeColour colour) =>
+      _update((s) => s.secondaryColour = colour);
+
+  Future<void> setCornerRadius(CornerRadius corner) =>
+      _update((s) => s.cornerRadius = corner);
+
+  /// Whether the palette follows the system's. The two colours are left where
+  /// they were, so turning it off again returns to what was picked.
+  Future<void> setSystemPalette(bool follow) =>
+      _update((s) => s.systemPalette = follow);
+
   /// Which project the assistant gesture opens a chat in. Null is the default
   /// project.
   Future<void> setAssistantProject(String? project) =>
@@ -351,6 +374,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setVoiceSpeaker(int speaker) =>
       _update((s) => s.voiceSpeaker = speaker);
+
+  /// Whether the microphone waits for a button to be held. Reaches a session
+  /// already running: the controller listens for it.
+  Future<void> setVoicePushToTalk(bool on) =>
+      _update((s) => s.voicePushToTalk = on);
 
   /// Which Linux the agent's commands run inside, or null for Android itself.
   /// It reaches the next command rather than the next turn: the shell resolves
@@ -442,6 +470,20 @@ final appSettingsProvider =
 final launcherIconsProvider =
     Provider<LauncherIcons>((ref) => throw UnimplementedError());
 
+/// The system's own accent, read once in `main` and overridden with what it
+/// found. Null is a platform with none, which is what takes the Material 3
+/// Expressive switch off the settings page — so the default here is every
+/// platform but a recent Android.
+final systemAccentProvider = Provider<int?>((ref) => null);
+
+/// The accent the palette is actually built from: the system's, where it has
+/// one and the user asked for it. Null is the two colours the settings page
+/// offers instead, and is what draws them.
+final paletteAccentProvider = Provider<int?>((ref) =>
+    ref.watch(appSettingsProvider.select((s) => s.systemPalette))
+        ? ref.watch(systemAccentProvider)
+        : null);
+
 final linkOpenerProvider =
     Provider<LinkOpener>((ref) => throw UnimplementedError());
 
@@ -522,6 +564,87 @@ final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
       ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));
   ref.onDispose(keepAlive.dispose);
   return keepAlive;
+});
+
+final reminderAlarmsProvider =
+    Provider<ReminderAlarms>((ref) => const UnavailableReminderAlarms());
+
+/// The user's reminders, seeded from disk before the container exists and
+/// written through on every change — the same bargain [InstalledRootfs] makes.
+class Reminders extends Notifier<List<Reminder>> implements ReminderList {
+  Reminders(this._seed);
+
+  final List<Reminder> _seed;
+  late FileReminderStore _store;
+
+  @override
+  List<Reminder> build() {
+    _store = FileReminderStore(ref.watch(appConfigProvider));
+    return _seed;
+  }
+
+  @override
+  List<Reminder> get reminders => state;
+
+  @override
+  Future<void> write(List<Reminder> reminders) async {
+    state = reminders;
+    await _store.save(reminders);
+  }
+
+  @override
+  Future<void> replace(Reminder reminder) => write([
+        for (final r in state) if (r.id == reminder.id) reminder else r,
+      ]);
+
+  /// Add with its alarm request code assigned: the one place codes are handed
+  /// out, so they stay unique for the reminder's life.
+  Future<void> add(Reminder reminder) => write([
+        ...state,
+        reminder.copyWith(requestCode: nextRequestCode(state)),
+      ]);
+
+  Future<void> remove(String id) =>
+      write([for (final r in state) if (r.id != id) r]);
+
+  Future<void> setEnabled(String id, bool enabled) async {
+    final at = state.indexWhere((r) => r.id == id);
+    if (at < 0) return;
+    final reminder = state[at];
+    final next = enabled ? reminder.nextOccurrence(DateTime.now()) : null;
+    // Disabling disarms it; re-enabling re-aims at the next occurrence.
+    await replace(reminder.copyWith(enabled: enabled, clearNextFireAt: true)
+        .copyWith(nextFireAt: next));
+  }
+}
+
+final remindersProvider =
+    NotifierProvider<Reminders, List<Reminder>>(() => Reminders(const []));
+
+final reminderRunnerProvider = Provider<ReminderRunner>((ref) {
+  return ReminderRunner(
+    repo: ref.watch(chatRepositoryProvider),
+    onListChanged: (_) => ref.invalidate(chatListProvider),
+    onReminderFired: (reminder) =>
+        ref.read(remindersProvider.notifier).replace(reminder),
+  );
+});
+
+/// Started once beside the sweep timer. It listens to the list from here, so
+/// an edit anywhere re-arms the timer and re-syncs the alarms without the
+/// editor having to know the scheduler exists.
+final reminderSchedulerProvider = Provider<ReminderScheduler>((ref) {
+  final scheduler = ReminderScheduler(
+    alarms: ref.watch(reminderAlarmsProvider),
+    runner: ref.watch(reminderRunnerProvider),
+    list: ref.watch(remindersProvider.notifier),
+    projects: () => ref.read(chatRepositoryProvider).listProjects(),
+  );
+  ref.onDispose(scheduler.dispose);
+  ref.listen(remindersProvider, (_, _) {
+    unawaited(scheduler.reload());
+  });
+  return scheduler;
 });
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {

@@ -4,11 +4,13 @@ import "../core/config.dart";
 import "app_icon.dart";
 import "app_theme.dart";
 import "assistant_view.dart";
+import "corner_radius.dart";
 import "llm_provider.dart";
 import "local_llm.dart";
 import "permission.dart";
 import "profile.dart";
 import "temp_chat_ttl.dart";
+import "theme_colour.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
@@ -25,10 +27,15 @@ class AppSettings {
     this.profile,
     this.appIcon = AppIcon.cookie,
     this.appTheme = AppTheme.system,
+    this.primaryColour = ThemeColour.indigo,
+    this.secondaryColour = ThemeColour.indigo,
+    this.cornerRadius = CornerRadius.medium,
+    this.systemPalette = false,
     this.tempChatTtl = TempChatTtl.off,
     this.voiceRecognitionModelId,
     this.voiceSpeechModelId,
     this.voiceSpeaker = 0,
+    this.voicePushToTalk = false,
     this.assistantProject,
     this.assistantView = AssistantView.chat,
     this.rootfsId,
@@ -83,6 +90,22 @@ class AppSettings {
   /// Which palette the app draws. App-level only, for the same reason.
   AppTheme appTheme;
 
+  /// The two colours the palette is built from: the primary is the seed, and
+  /// the secondary seeds the accent group beside it. Both indigo is the app's
+  /// own scheme, where the secondary is whatever Material derives from the one
+  /// seed. App-level, like the theme and the icon.
+  ThemeColour primaryColour;
+  ThemeColour secondaryColour;
+
+  /// How round the corners the theme rounds are — fields, dialogs, menus,
+  /// sheets and buttons.
+  CornerRadius cornerRadius;
+
+  /// Whether the palette comes from the system instead of the two colours
+  /// above — Android's Material 3 Expressive, which follows the wallpaper.
+  /// Ignored where the platform has no accent to give.
+  bool systemPalette;
+
   /// How long a temporary chat lives once its TTL is enabled. App-level
   /// default; a project and a chat can override it. [TempChatTtl.off] means
   /// temporary chats are off — chats live forever.
@@ -96,6 +119,13 @@ class AppSettings {
   String? voiceRecognitionModelId;
   String? voiceSpeechModelId;
   int voiceSpeaker;
+
+  /// Whether the microphone is open only while a button is held. Off is voice
+  /// mode listening for as long as it is on screen, which is what it is for;
+  /// on is for a room where that does not work — a recogniser transcribes
+  /// whatever is loud enough, and somewhere noisy enough the only reliable
+  /// answer is for the user to say when.
+  bool voicePushToTalk;
 
   /// Which project the system's assistant gesture opens a chat in. Null is the
   /// default project, the same null `selectedProjectProvider` uses. App-level:
@@ -201,10 +231,15 @@ class AppSettings {
         profile: Profile.fromJson(json["profile"]),
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
         appTheme: AppTheme.fromName(json["appTheme"] as String?),
+        primaryColour: ThemeColour.fromName(json["primaryColour"] as String?),
+        secondaryColour: ThemeColour.fromName(json["secondaryColour"] as String?),
+        cornerRadius: CornerRadius.fromName(json["cornerRadius"] as String?),
+        systemPalette: json["systemPalette"] as bool? ?? false,
         tempChatTtl: TempChatTtl.fromName(json["tempChatTtl"] as String?),
         voiceRecognitionModelId: _orNull(json["voiceRecognitionModelId"] as String?),
         voiceSpeechModelId: _orNull(json["voiceSpeechModelId"] as String?),
         voiceSpeaker: json["voiceSpeaker"] as int? ?? 0,
+        voicePushToTalk: json["voicePushToTalk"] as bool? ?? false,
         assistantProject: _orNull(json["assistantProject"] as String?),
         assistantView: AssistantView.fromName(json["assistantView"] as String?),
         rootfsId: _orNull(json["rootfsId"] as String?),
@@ -271,10 +306,15 @@ class AppSettings {
         profile: profile,
         appIcon: appIcon,
         appTheme: appTheme,
+        primaryColour: primaryColour,
+        secondaryColour: secondaryColour,
+        cornerRadius: cornerRadius,
+        systemPalette: systemPalette,
         tempChatTtl: tempChatTtl,
         voiceRecognitionModelId: voiceRecognitionModelId,
         voiceSpeechModelId: voiceSpeechModelId,
         voiceSpeaker: voiceSpeaker,
+        voicePushToTalk: voicePushToTalk,
         assistantProject: assistantProject,
         assistantView: assistantView,
         rootfsId: rootfsId,
@@ -306,11 +346,16 @@ class AppSettings {
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
       "appIcon": appIcon.name,
       "appTheme": appTheme.name,
+      "primaryColour": primaryColour.name,
+      "secondaryColour": secondaryColour.name,
+      "cornerRadius": cornerRadius.name,
+      "systemPalette": systemPalette,
       "tempChatTtl": tempChatTtl.name,
       if (voiceRecognitionModelId != null)
         "voiceRecognitionModelId": voiceRecognitionModelId,
       if (voiceSpeechModelId != null) "voiceSpeechModelId": voiceSpeechModelId,
       if (voiceSpeaker != 0) "voiceSpeaker": voiceSpeaker,
+      if (voicePushToTalk) "voicePushToTalk": voicePushToTalk,
       if (assistantProject != null) "assistantProject": assistantProject,
       "assistantView": assistantView.name,
       if (rootfsId != null) "rootfsId": rootfsId,

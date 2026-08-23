@@ -288,14 +288,151 @@ recognizer, or the assistant setting — would otherwise keep paying for what wa
 true when voice mode was last opened. Within a session it is kept, so pausing
 for a reply and unpausing does not walk it again.
 
-**The remaining codes are three kinds rather than a list.** Silence restarts and
-says nothing. Something happening elsewhere — the network, the server, one
-request too many, a service that went away under the session — is backed off and
-tried again, three times before it is called a fault, since each of those is a
-blink at least as often as it is a wall. Everything else reports: no microphone,
-no permission, and an error code nothing here has a name for, which is still
-worth showing with its number rather than swallowing.
+**A refusal does not always arrive dressed as a language error.** A rung that
+cannot work at all — offline preferred where nothing is downloaded, say — is
+answered by plenty of services with `ERROR_NO_MATCH` or `ERROR_SPEECH_TIMEOUT`
+instead, which are silence's codes and would restart forever a few hundred
+milliseconds in, voice mode listening and deaf. What separates that from a room
+with nobody in it is speed: genuine silence takes the service's own timeout to
+report, several seconds, while a refusal comes back almost instantly. Each
+request is timestamped, and two near-instant silences in a row descend the same
+ladder a language error does — `onBeginningOfSpeech` clears the count, so a
+rung that hears never steps down for being quiet. The worst case of being wrong
+is two fast cycles nobody noticed.
 
+**The remaining codes are three kinds rather than a list.** Silence restarts and
+says nothing — except as above, where it refuses fast enough to be asked again.
+Something happening elsewhere — the network, the server, one request too many,
+a service that went away under the session — is backed off and tried again,
+three times before it is called a fault, since each of those is a blink at least
+as often as it is a wall; `ERROR_RECOGNIZER_BUSY` is here rather than among the
+silences, cancelled first, because restarting into a recognizer still holding
+its last session was an immediate retry landing on the same error, forever.
+Everything else reports: no microphone, no permission, and an error code nothing
+here has a name for, which is still worth showing with its number rather than
+swallowing.
+
+### Ending the utterance
+
+**A session that never ends is a turn that is never sent**, and on a phone in a
+room with anything happening in it that is the ordinary way for voice mode to
+fail. `SpeechRecognizer` decides for itself when someone has stopped talking,
+and its own detector is generous: a fan, a television, a conversation elsewhere
+all read as speech continuing, so `onResults` never arrives and nothing is ever
+handed to a turn. From Dart it is indistinguishable from a microphone that is
+not working — voice mode sits there listening and apparently deaf.
+
+The intent asks for a silence length, and that is a hint every one of those
+extras is documented to be. What actually ends it is in `VoiceChannel.kt`:
+**what says the person has stopped is the transcription, not the sound.**
+Partial results stop changing while the room goes on making noise, so a partial
+that has not moved for `QUIET_MS` — or `MAX_UTTERANCE_MS` of anything at all —
+is answered with `stopListening`, which is the same call the Talk button's
+release makes and asks the service for what it has.
+
+**One timer and one call, and it is worth knowing what a second and a third
+cost.** The first version also capped the utterance's length and escalated to
+cancelling the session where `stopListening` went unanswered — three mechanisms
+interleaved with the restart machine, which already has timers of its own. The
+cap's arithmetic ran against a clock field that was still zero, so the timer
+fired immediately, `stopListening` landed on a session that had not opened, and
+the escalation raced the restart that the resulting error was already
+scheduling. Two `startListening` calls in flight is `ERROR_CLIENT` before a
+session opens, which walks the service list and reports "Speech recognition
+could not start." — on a phone whose recogniser works fine.
+
+So a service that ignores `stopListening` is left exactly where it was before
+any of this, which is the honest fallback, and `restart` now keeps at most one
+pending relisten so nothing else can stack them either.
+
+### What counts as being spoken to
+
+**Both engines are generous about what counts as speech**, in their own ways: a
+system recogniser transcribes a television two rooms away, and Silero calls
+plenty of it voice. Every one of those was a turn. So an utterance is judged
+after the fact by `LoudnessGate` in `domain/loudness.dart` — fed by
+`MicrophoneListener` from whatever its engine reports, and asked at each result.
+
+**There is not a single absolute number in it, and the first version's bug is
+why.** It compared the utterance against the room plus a fixed margin, in the
+units `onRmsChanged` reports — whose documented -2..10 is a typical range and
+not a contract. On a device reporting a narrower one the margin was unreachable,
+so nothing was ever loud enough and voice mode answered nobody. A gate that can
+be wrong that way is worse than no gate: it fails silently, and it looks exactly
+like a broken microphone.
+
+So the bar is a share of how loud this person turns out to be, measured rather
+than assumed. Nothing is refused until a voice has been heard to compare
+against, so the first utterance always carries whatever it was; that utterance
+sets the level and the bar is a fraction of it. A level set by the wrong thing
+corrects itself upward, since a real voice is louder than the television that
+set it, and downward, since the level decays at every judgement — one shout is
+not the bar for the rest of the session.
+
+What is left of the room is the **floor** the utterance is measured above, and
+that is a minimum rather than an average: a floor that follows what it hears
+climbs into a long sentence and reports that nobody said anything. It is the
+quietest reading of the last two blocks, so it takes a genuinely quieter room to
+move it and no amount of talking will. That is also why nothing tells the gate
+where speech began any more — it does not need protecting from it.
+
+The same measurement is what `level` follows, against the loudest anything has
+been rather than against a scale, so the orb moves the same amount in a quiet
+room and a noisy one.
+
+### One listener, two engines
+
+`MicrophoneListener` is what a `Listener` with a microphone behind it is made
+of, which turned out to be everything except the engine: the event stream, the
+level, and the gate. It exists because the gate did not — it was written for the
+system recogniser and lived in that class, so the desktops answered the
+television for as long as Android had stopped. An engine now gets it by being a
+listener rather than by remembering to be one, and what a subclass supplies is
+only what its engine gives it: readings through `measured`, onset through
+`began`, words through `heard`. The sherpa half measures one reading per
+detector window — 32 ms of audio whatever size the platform's chunks are — on
+the `decibels` scale; the Android half passes `onRmsChanged` through. Since
+neither number is compared against anything absolute, one gate serves both.
+
+`SpeechFailures` is the same story on the speaking side: one sentence lost is
+not a broken engine and three in a row is, which was the system synthesiser's
+rule and only its own — so on the desktops one sentence a voice would not say,
+or one wav the player refused, ended voice mode. The sherpa worker also answers
+every sentence now, including the ones it generates no samples for: a sentence
+that came back as nothing left the count standing, so the queue never drained,
+silence was never reported — and with it the status that puts the microphone
+back. A reply that said nothing would have ended the conversation.
+
+### Mute is the user, not the conversation
+
+**Mute mutes the person, the way it does on a call.** The reply being read out
+goes on being read out, the next turn still runs, and — the part that is easy to
+get wrong — what was already being said into the microphone is handed over
+rather than dropped. Somebody who speaks and then mutes is saying they have
+finished talking and is waiting for an answer; a mute that threw that sentence
+away left the turn unsaid and voice mode looking broken.
+
+That is `setListening(false, finish: true)`, the same call letting go of the
+Talk button makes: `stopListening` rather than `cancel`, so the service delivers
+what it has. Sherpa honours it too — the detector is holding a segment that no
+further audio is coming to end, so the worker is told to flush it.
+
+**Everything else a shut microphone flushes is dropped**, and that rule is
+`ComposedVoiceSession`'s. Neither engine stops on the instant it is asked to: a
+cancelled `SpeechRecognizer` session hands back what it had, and audio already
+given to sherpa's worker decodes after the recorder is released. Forwarded, that
+is words nobody spoke into a microphone that is off, landing in the middle of
+somebody else's turn. The session owns `setListening` and owns the event stream,
+so it is the one place that knows both — and the flags are set before the call
+goes down, since what the engine does with the request takes a platform hop and
+what it flushes in between is exactly what this drops. Written in each
+`Listener` instead it was two copies, and the second one was not written: the
+sherpa path forwarded what its worker decoded after the recorder had gone. A
+failure is not covered by it, since it is why the microphone is doing nothing.
+
+Kotlin still guards `onRmsChanged` on `wantListening`, and that is about traffic
+rather than about the rule: it is a codec encode and a main-thread hop many
+times a second, and the microphone is shut for most of a conversation.
 
 ### Per side, not per session
 
@@ -308,19 +445,9 @@ knows which the other is.
 The split was built to let the two kinds mix per side, which no platform now
 does — Android is native on both and the desktops are sherpa on both. It earns
 its keep anyway, twice: `AndroidVoice` is a dozen lines because the session, the
-barge-in wiring and the silence reporting were already somewhere neither engine
-owned, and `read_aloud` gets a speak-only session by passing a null [Listener]
-rather than by either engine knowing what reading one message out is.
-
-`Speaker.speaking` is on the interface for one reason, and it is the reason the
-split needed care: voice activity opens **every** utterance, not only the ones
-landing on top of a reply, and `VoiceController` aborts the running turn on a
-`VoiceInterrupted`. So the session forwards one only while something is actually
-being said. That guard was inside the old single class as `_playing ||
-_queue.isNotEmpty`, where it read as an optimisation; on the interface it is the
-contract, and each speaker answers it its own way — the sherpa one from its
-queue, the native one from what `TextToSpeech` has been handed and not reported
-done.
+shut-microphone rule and the silence reporting were already somewhere neither
+engine owned, and `read_aloud` gets a speak-only session by passing a null
+`Listener` rather than by either engine knowing what reading one message out is.
 
 ### The Kotlin
 
@@ -335,9 +462,20 @@ callback, and starting the next one there is what `ERROR_RECOGNIZER_BUSY` is.
 
 **Silence is not a fault.** A room with nobody talking in it produces
 `ERROR_NO_MATCH` or `ERROR_SPEECH_TIMEOUT` every few seconds, so those restart
-without a word; reporting them would leave voice mode in the failed state for
-the ordinary case of waiting to be spoken to. `ERROR_INSUFFICIENT_PERMISSIONS`
-is the one that stops.
+without a word — unless they come back near-instantly twice running, which the
+refusal section above covers. `ERROR_INSUFFICIENT_PERMISSIONS` is the one that
+stops.
+
+**The synthesiser answers only once it is up.** `TextToSpeech` is constructed
+long before its init callback runs, and a `speak` in that window returns an
+error code and no callback — Dart would count an utterance that never happened,
+and a `_pending` that never drains is a queue that never reports itself silent,
+which is the status stuck on `speaking` and a microphone that never reopens.
+So Kotlin says `speechReady` when init succeeds, and Dart holds what it is
+handed until then; an engine that has not answered within five seconds is said
+rather than waited for. One utterance failing is likewise not the engine
+failing: `speechUtteranceError` drops just that sentence, and three in a row
+with nothing heard between them are what fail the session.
 
 **`TextToSpeech` answers on a binder thread**, and a `MethodChannel` may only be
 touched from the main one. Everything Dart hears goes through `send`, which
@@ -394,8 +532,9 @@ half-written directory when its listener goes.
 
 ## Hearing and speaking
 
-`SherpaVoice.start` loads the two models and opens the microphone; what comes
-back is a `VoiceSession`, which is where **two worker isolates** live. sherpa's
+`SherpaVoice.start` loads the two models and takes the microphone's grant; what
+comes back is a `VoiceSession` with the microphone still shut, and where **two
+worker isolates** live. sherpa's
 calls block, so on the UI isolate a Whisper encode is a frozen screen. They are
 two rather than one because generating a spoken sentence takes about a second,
 and a single worker would have the microphone's frames queued behind it — which
@@ -490,11 +629,6 @@ sentences, which in voice mode flickers the circle and in a message being read
 out would stop it after the first sentence. The WAV of what is playing is kept
 until something else is: `play` returns when playback *starts*.
 
-**Talking over the reply stops the turn as well as the speech.** The session
-goes quiet the moment the detector fires, before the controller has decided
-anything; the controller then aborts the turn, because interrupting means stop
-and listen to me — which is Stop and then type, in one gesture, and leaves the
-same aborted turn in the log. That rides on the platform's echo cancellation,
-without which the model hears itself and every sentence is a barge-in; the Stop
-button under the orb is the fallback, and shuts the reply up without leaving
-voice mode.
+**Nothing here has to tell the reply from the room**, because the microphone is
+shut while one is being read out — see "Taking turns" for what that replaced and
+what it costs. Stop, under the orb, is how a reply is cut off.

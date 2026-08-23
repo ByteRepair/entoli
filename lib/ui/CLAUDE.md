@@ -19,13 +19,58 @@ which is what lets `main` inject it and the tests fake it.
 
 ## The theme
 
-One palette, seeded from `entoliIndigo` — the colour the icon sits on, which the
-seed used to miss by being `Colors.indigo` instead — and built in each
-brightness by `entoliTheme`. `MaterialApp` gets both as `theme` and `darkTheme`
-whichever is in use, so a system that turns dark at sunset turns the app with it
-without anything being told. `AppTheme` — `system`, `light`, `dark` — says
-which, and is app-level with no per-chat override for the same reason the icon
-is.
+One palette, seeded from `entoliIndigo` by default — the colour the icon sits
+on, which the seed used to miss by being `Colors.indigo` instead — and built in
+each brightness by `entoliTheme`. `MaterialApp` gets both as `theme` and
+`darkTheme` whichever is in use, so a system that turns dark at sunset turns the
+app with it without anything being told. `AppTheme` — `system`, `light`, `dark`
+— says which, and is app-level with no per-chat override for the same reason the
+icon is.
+
+## What the settings page can change about it
+
+Three things, all app-level like the theme itself: a primary colour, a secondary
+one and a corner radius. The colours are a `ThemeColour`, eight of Tailwind's
+600 tones — which is what `entoliIndigo` already was, so the row looks like one
+set rather than one colour per family from wherever it happened to sit — and
+both default to `indigo`, which is the scheme the app had before any of this
+existed. That colour has one spelling, `entoliIndigoArgb` beside the enum:
+`entoliIndigo` is it as a `Color`, and a const `Color` cannot be built from an
+enum's field, so the layer with no `Color` in it holds the number.
+
+The primary is the seed. The secondary is grafted from a *second* scheme seeded
+with it: `fromSeed`'s `secondary:` names one role, which would leave
+`secondaryContainer` a tone of the primary seed beside a colour that is not.
+Both indigo is the ungrafted scheme, so the default is byte-identical to what
+one seed gives.
+
+`CornerRadius` is named after Material's shape scale, which is where its eight
+numbers come from, and it reaches the shapes `entoliTheme` sets and no others:
+fields, dialogs, menus, sheets and buttons. The `BorderRadius.circular` literals
+scattered through the widgets are deliberately not it — a bubble, a code block
+inside that bubble and a search box were each tuned against the ones around
+them, and collapsing them onto one number would flatten a hierarchy rather than
+follow a setting.
+
+**Material 3 Expressive** replaces both colours with the one the system is
+themed to. `ThemeChannel.kt` answers with `system_accent1_500`, the tone Android
+derives its own palette from, and Dart seeds a scheme with it rather than
+reading the system's whole palette out — Material generates the other roles from
+one colour, which is what Android did to arrive at that one in the first place.
+Below Android 12, and on every other platform, `systemAccent()` is null, and
+that null is the whole of what takes the switch off the settings page: nothing
+else has to ask which version of which platform this is. It is read once at
+startup, so a wallpaper changed under the app reaches it at the next launch. The
+two colours are left where they were while it is on, so turning it off returns
+to what was picked.
+
+Three providers, and the split is what each answers: `systemAccentProvider` is
+what the platform has, `paletteAccentProvider` is what the palette is using —
+the first, but only where the switch is on — and `appLookProvider` resolves the
+settings against it into the seeds and the radius `entoliTheme` takes. `main`
+watches the last of them and the theme mode beside it, so the rule that an
+accent replaces both colours is written once and the settings page draws its
+colour rows from the same answer.
 
 Android's splash has followed the system since `minSdk` went to 26 and the
 pre-Lollipop `launch_background.xml` could go. Until this landed the app did not

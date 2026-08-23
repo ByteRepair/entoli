@@ -113,6 +113,32 @@ class ChatRepository {
     return _draft!;
   }
 
+  /// A chat created headlessly, with the settings it runs under already on
+  /// disk. State and meta land together and the draft pair is never touched:
+  /// [createChat] holds one draft, and two reminders firing together — or one
+  /// firing while a new chat is open unsent — would overwrite each other's
+  /// slot, orphaning a `meta.json` under the wrong project and losing the
+  /// approval pin that keeps an unattended turn from parking on a banner.
+  ///
+  /// The anchored save reads the meta back off disk, which is why it is
+  /// written first.
+  Future<Chat> createHeadlessChat({
+    String? title,
+    String? project,
+    ChatMeta? meta,
+  }) async {
+    final base = await _backend.createChat(title: title);
+    final chat = base.copyWith(state: base.state.copyWith(project: project));
+    // State lands before meta: the store learns where this chat lives from its
+    // first saveState, and a meta written before that goes under the default
+    // project whatever [project] says.
+    await _store.saveState(chat.state);
+    if (meta != null) await _store.saveMeta(chat.state.id, meta);
+    // Re-saved through the anchoring path, which reads the meta just written.
+    final anchored = await saveState(chat.state);
+    return chat.copyWith(state: anchored);
+  }
+
   Future<List<String>> listProjects() => _store.listProjects();
 
   Future<void> createProject(String name) => _store.createProject(name);
@@ -203,17 +229,18 @@ class ChatRepository {
     _changes.add(Appended(chatId, records));
   }
 
-  /// A title change on its own. The conversation is deliberately not written:
-  /// a turn may still be adding to it.
-  Future<ChatState> retitle(ChatState state, String title) async {
-    final renamed = state.copyWith(title: title);
-    if (_isDraft(state.id)) {
-      _draft = _draft!.copyWith(state: renamed);
+  /// A title change on its own — the title and nothing else. The conversation
+  /// is deliberately not written: a turn may still be adding to it.
+  Future<void> retitle(String chatId, String title) async {
+    if (_isDraft(chatId)) {
+      _draft = _draft!.copyWith(state: _draft!.state.copyWith(title: title));
     } else {
-      await _store.saveState(renamed);
-      _changes.add(StateChanged(renamed));
+      await _store.retitle(chatId, title);
+      // A mirror is sent the whole state, and only the store knows the rest of
+      // it: the caller's copy is older than the turn writing beside it.
+      final renamed = await _store.loadState(chatId);
+      if (renamed != null) _changes.add(StateChanged(renamed));
     }
-    return renamed;
   }
 
   /// A name for a new chat, from the first thing said in it. Null when no
@@ -267,10 +294,12 @@ class ChatRepository {
   /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
-      bool replaces = false}) async* {
+      bool replaces = false,
+      bool headless = false}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, prompt,
-        history: history, settings: await _turnSettings(chatId));
+        history: history,
+        settings: await _turnSettings(chatId, headless: headless));
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
@@ -285,7 +314,7 @@ class ChatRepository {
   /// The chat's own choice wins, else the app default, else whatever the
   /// backend picks. Never mix halves: a chat's model under the app default's
   /// provider is not a combination anyone asked for.
-  Future<TurnSettings> _turnSettings(String chatId) async {
+  Future<TurnSettings> _turnSettings(String chatId, {bool headless = false}) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
@@ -298,6 +327,9 @@ class ChatRepository {
       classifierModel: settings.classifierModelId,
       // A project can override the app-level profile; null falls back to it.
       profile: (await projectSettingsOf(project)).profile ?? settings.profile,
+      // A turn nobody watches must not be able to park on an answer.
+      offerAsk: !headless,
+      offerTask: !headless,
     );
   }
 

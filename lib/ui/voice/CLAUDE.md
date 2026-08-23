@@ -101,7 +101,10 @@ the system's own microphone indicator will say either way. It is a flag beside
 the status rather than one of its values, because a turn can be running and its
 reply being read out while the microphone is shut, and those are what the status
 is for. Starting a session clears it: a fresh one listens whatever the last one
-was doing.
+was doing. **It is the microphone and nothing else** — a reply being read out
+goes on being read out, and the button that stops it is the one beside it. That
+promise is kept below this as well as here; see "Mute is the microphone and
+nothing else".
 
 **The transcript is a five-line window that scrolls**, not five lines that roll
 past and are gone: it is a viewport over every line said, so the start of the
@@ -148,3 +151,75 @@ about, and is silently wrong when it is not. **It gives the field its width back
 a message in it**: something typed is something to send rather than to say. That
 is an `AnimatedSize` around the button and nothing else — the row is laid out
 again on every frame of it, and the `Expanded` field takes whatever it gives up.
+
+## Touch to speak
+
+Voice mode listens for as long as it is on screen, which is the point of it. The
+setting in `VoiceSection` is the answer for a room where that does not work: the
+microphone is open only while a Talk button is held. It is what a noisy room
+leaves once the loudness gate has done what it can — a recogniser transcribes
+whatever is loud enough, and past some amount of room the only reliable way to
+say what was meant for the phone is to say when.
+
+**Talk replaces Mute rather than standing beside it.** They are the same promise
+about the microphone made the other way round, and two of them would leave a
+muted session showing a Talk button that could not be answered. So it is
+`VoiceViewState.pushToTalk` and not a fourth `_Key`, and `paused` carries the
+same meaning it always did — the microphone is shut. What changes is the word
+for it: a microphone waiting to be asked was never paused, so the orb says
+`Ready` rather than `Paused`.
+
+The button works on pointer down and up rather than on a long press: a gesture
+that has to be recognised before it fires is a gesture the microphone opens late
+for, and what is said in that half second is the half nobody hears. Pressing it
+stops the reply: whoever holds a button down to speak is not waiting for the
+rest of the answer. Releasing it keeps the sentence it was held for, which is
+`setListening(false, finish: true)`.
+
+The setting reaches a session that is already running, through a `ref.listen`
+rather than a `ref.watch`: watching it rebuilds the notifier, and a rebuild
+resets the state the session is being held in. A session started with it on
+never opens the microphone at all, which falls out of the rule below rather than
+being arranged: every session opens shut and `_holdMicrophone` is what asks.
+
+Pressing it stops the reply without waiting for it to be quiet, and the press
+does not wait either: stopping speech is a platform call of its own, and the
+whole reason the button is on pointer-down is that the first half second is the
+half nobody hears.
+
+## Taking turns
+
+**The microphone is open only when it is the user's turn to speak** — not while
+a turn runs, not while the reply is read out. `VoiceController._wantsMicrophone`
+is the whole of the rule and `_holdMicrophone` the only thing that acts on it,
+running after every state write, so turn-taking is a consequence of the status
+rather than something each transition has to remember. A session opens shut and
+asking it for what it is already doing is a no-op, so nothing up here keeps its
+own copy of whether the microphone is open.
+
+It is worth writing down what this replaced. The microphone used to stay open,
+and the phone hears its own voice as readily as it hears the person — one
+acoustic event to a recogniser — so two mechanisms downstream existed to guess
+which of the two it was: the words just spoken were kept in a buffer and matched
+against what came back (`isEcho`), and onset was not trusted as an interruption
+until a transcription confirmed it. Both were inference about a question that
+did not need asking, and neither could be reliable. Not listening cannot be
+wrong about it. `isEcho`, `Speaker.speaking` and `VoiceInterrupted` went with the
+machinery they were written for.
+
+**The loudness gate is not one of these and is still here.** It answers a
+different question — whether what was heard was meant for the phone at all — and
+a television two rooms away is that whether or not anybody is speaking. See
+"What counts as being spoken to".
+
+What this costs is talking over a reply to interrupt it, which is now Stop:
+under the orb the whole time, instant, and not a transcription anyone has to
+trust.
+
+Two arms are worth knowing. A turn that says nothing out loud — one that only
+ran a command, or was aborted — never reports silence, so the status is put back
+to `listening` when the turn ends rather than when the speaking does; without it
+the microphone never opens again. And a session opens *shut*, then
+`_holdMicrophone` opens it like any other transition: opening a capture and
+closing it again is a real start and stop of the device and the system's own
+indicator flashing for nothing.

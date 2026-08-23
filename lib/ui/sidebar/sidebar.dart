@@ -569,7 +569,7 @@ class _ChatTile extends ConsumerWidget {
       confirmLabel: "Rename",
     );
     if (title == null) return;
-    await ref.read(chatRepositoryProvider).retitle(chat, title);
+    await ref.read(chatRepositoryProvider).retitle(chat.id, title);
     if (selected) {
       ref.read(chatControllerProvider(chat.id).notifier).applyTitle(title);
     }

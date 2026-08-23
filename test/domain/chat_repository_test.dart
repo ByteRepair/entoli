@@ -11,6 +11,7 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -129,7 +130,7 @@ void main() {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat();
 
-      await repo.retitle(chat.state, "Named early");
+      await repo.retitle(chat.state.id, "Named early");
 
       expect(await repo.listChats(), isEmpty);
       expect((await repo.openChat(chat.state.id)).state.title, "Named early");
@@ -201,11 +202,28 @@ void main() {
       Message(id: "m1", role: MessageRole.user, createdAt: DateTime(2026)),
     ]));
 
-    await repo.retitle(chat.state, "Named");
+    await repo.retitle(chat.state.id, "Named");
 
     final loaded = await repo.openChat(chat.state.id);
     expect(loaded.state.title, "Named");
     expect(loaded.messages, hasLength(1));
+  });
+
+  // The namer holds the state from before the turn it is naming, and writing
+  // that back used to undo the anchor the turn's own save had just made — so a
+  // temporary chat that got named lost its hourglass until a second turn.
+  test("renaming keeps the TTL anchor the turn wrote", () async {
+    final repo = repoWith(AppSettings(tempChatTtl: TempChatTtl.hours24));
+    final chat = await repo.createChat();
+    final anchored = await repo.saveState(chat.state);
+    expect(anchored.tempTtlExpiresAt, isNotNull);
+
+    await repo.retitle(chat.state.id, "Named");
+
+    final loaded = await repo.openChat(chat.state.id);
+    expect(loaded.state.title, "Named");
+    expect(loaded.state.tempTtlSince, anchored.tempTtlSince);
+    expect(loaded.state.tempTtlExpiresAt, anchored.tempTtlExpiresAt);
   });
 
   group("naming a chat", () {
@@ -308,7 +326,7 @@ void main() {
       final seen = <RepoEvent>[];
       repo.changes.listen(seen.add);
 
-      await repo.retitle(chat.state, "Renamed");
+      await repo.retitle(chat.state.id, "Renamed");
       await pumpEventQueue();
 
       expect(seen.whereType<StateChanged>().last.state.title, "Renamed");

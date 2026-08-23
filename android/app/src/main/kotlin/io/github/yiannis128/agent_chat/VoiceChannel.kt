@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognitionService
@@ -36,6 +38,14 @@ import java.util.Locale
 // declared and Dart asks for the grant before starting a session, the way the
 // sherpa path does.
 object VoiceChannel {
+    // Failures and the arms nothing draws: a service walked past, an utterance
+    // the recogniser would not end, a rung of the request ladder refused. Every
+    // one of them is a turn that silently does not happen and none of them
+    // reaches the screen, so all of them are worth a line in a release build.
+    // No per-transition chatter, and never what was heard — the Dart side draws
+    // the same line, as `voiceFailed` against `voiceLog`.
+    private const val TAG = "VoiceChannel"
+
     private var channel: MethodChannel? = null
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
@@ -91,7 +101,10 @@ object VoiceChannel {
             "disposeSpeech" -> { disposeTts(); result.success(null) }
             "startRecognition" -> { startRecognition(); result.success(null) }
             "setRecognitionListening" -> {
-                setRecognitionListening(call.arguments as? Boolean ?: true)
+                setRecognitionListening(
+                    call.argument<Boolean>("on") ?: true,
+                    call.argument<Boolean>("finish") ?: false,
+                )
                 result.success(null)
             }
             "stopRecognition" -> { stopRecognition(); result.success(null) }
@@ -141,6 +154,10 @@ object VoiceChannel {
 
     // --- Speech synthesis ---
 
+    // `TextToSpeech` may be constructed long before it can speak: a `speak` in
+    // that window returns an error code and nothing else — no callback, so
+    // nothing above would ever learn the utterance never happened. Dart holds
+    // its queue until `speechReady` says otherwise.
     private fun ensureTts(context: Context) {
         if (tts != null) return
         tts = TextToSpeech(context) { status ->
@@ -148,6 +165,7 @@ object VoiceChannel {
                 send("speechError", "Text-to-speech is not available.")
                 return@TextToSpeech
             }
+            send("speechReady", null)
             tts?.language = Locale.getDefault()
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
@@ -156,13 +174,16 @@ object VoiceChannel {
                     send("speechDone", utteranceId?.toIntOrNull() ?: 0)
                 }
 
+                // One utterance failing is not the engine failing: named by its
+                // batch, dropped by Dart, and only repeated failure is reported
+                // up. Init failure alone comes through as `speechError`.
                 @Deprecated("Kept for the platforms that still call it.")
                 override fun onError(utteranceId: String?) {
-                    send("speechError", "Speech playback failed.")
+                    onError(utteranceId, -1)
                 }
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
-                    send("speechError", "Speech playback failed.")
+                    send("speechUtteranceError", utteranceId?.toIntOrNull() ?: -1)
                 }
             })
         }
@@ -174,8 +195,8 @@ object VoiceChannel {
             return
         }
         // The generation rides as the utterance id, so `onDone` names the batch
-        // it belongs to and one arriving after a barge-in is ignored rather
-        // than counted against the batch that replaced it.
+        // it belongs to and one arriving after a `stop` is ignored rather than
+        // counted against the batch that replaced it.
         engine.speak(text, TextToSpeech.QUEUE_ADD, null, generation.toString())
     }
 
@@ -198,6 +219,15 @@ object VoiceChannel {
     // Transient faults since anything was last heard — see [retry].
     private var faults = 0
 
+    // When the current request went out, and how many silences have come back
+    // almost instantly. A room with nobody in it answers after the service's
+    // own timeout; a rung that cannot work at all refuses within a fraction of
+    // a second. Two fast ones in a row is a refusal dressed as silence, and is
+    // asked again — see [onError]. Speech resets it: a working rung never
+    // descends.
+    private var listenedAt = 0L
+    private var fastRefusals = 0
+
     // The services already asked for a model. A fetch rather than a retry, so
     // once each, and it outlives the session that discovered the gap.
     private val downloadAsked = mutableSetOf<ComponentName>()
@@ -208,19 +238,71 @@ object VoiceChannel {
         listen()
     }
 
+    // How quickly a silence has to come back to count as a refusal rather
+    // than as a room with nobody in it — see [onError].
+    private const val FAST_REFUSAL_MS = 1500L
+
+    // --- Ending the utterance ---
+    //
+    // **A session that never ends is a turn that is never sent**, and it is the
+    // ordinary way for this to fail in a room with anything happening in it.
+    // `SpeechRecognizer` decides for itself when someone has stopped talking,
+    // and its own detector is generous: a fan, a television, a conversation
+    // elsewhere all read as speech continuing, so `onResults` never arrives,
+    // the turn is never handed over, and voice mode sits there listening and
+    // apparently deaf. Nothing above can see this — from Dart it looks exactly
+    // like a microphone that is not working.
+    //
+    // So the utterance is ended here when the service will not end it. What
+    // says the person has stopped is the *transcription* rather than the sound:
+    // partial results stop changing while the room goes on making noise. After
+    // [QUIET_MS] of a partial that has not moved, `stopListening` asks the
+    // service for what it has, which is the same call the Talk button's release
+    // makes.
+    private const val QUIET_MS = 1500L
+
+    // The partial transcription as it was last seen to move.
+    private var lastPartial = ""
+
+    // One timer and one call, and it stays that way — see "Ending the
+    // utterance" for what a second and a third cost. A service that ignores
+    // `stopListening` is left where it was before any of this.
+    private val endpoint: Runnable = Runnable {
+        if (!wantListening) return@Runnable
+        Log.i(TAG, "ending the utterance: the service did not")
+        runCatching { recognizer?.stopListening() }
+    }
+
+    // Re-armed every time the transcription moves, and never before there is a
+    // session to end.
+    private fun armEndpoint() {
+        if (!sessionOpened) return
+        main.removeCallbacks(endpoint)
+        main.postDelayed(endpoint, QUIET_MS)
+    }
+
+    private fun disarmEndpoint() {
+        main.removeCallbacks(endpoint)
+        lastPartial = ""
+    }
+
     // An error voice mode will show. The recognizer goes with it: the Dart side
     // is in its failed state from here, and one left bound is one the next
     // unpause drives on rather than resolving a service again.
     private fun fail(message: String) {
+        Log.w(TAG, "recognition failed: $message")
         stopRecognition()
         send("recognitionError", message)
     }
 
     private fun listen() {
         if (!wantListening) return
+        main.removeCallbacks(relisten)
+        disarmEndpoint()
         val recognizer = ensureRecognizer() ?: return
         try {
             recognizer.startListening(recognizerIntent(ask))
+            listenedAt = SystemClock.elapsedRealtime()
         } catch (e: Exception) {
             fail(e.message ?: "Recognition could not start.")
         }
@@ -251,6 +333,21 @@ object VoiceChannel {
             // service that wants to know who is asking answers a request
             // without it as ERROR_CLIENT.
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
+            // Asked for so there is something to tell a person who has stopped
+            // talking from a room that has not — see [armEndpoint]. A service
+            // that ignores this leaves the fallback below doing the work.
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            // How long a silence ends the utterance. Every one of these is
+            // documented as a hint the service may ignore, which is why none of
+            // them is the answer on its own.
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                QUIET_MS,
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                QUIET_MS,
+            )
             if (ask == Ask.OnDevice) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             if (ask != Ask.NetworkAnyLanguage) {
                 languageTag()?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it) }
@@ -271,9 +368,12 @@ object VoiceChannel {
     // inside the old recognition when `onResults` runs, and starting a new one
     // there is what `ERROR_RECOGNIZER_BUSY` is. [after] is for the cases where
     // a turn of the looper is not enough — see [onError].
+    private val relisten: Runnable = Runnable { listen() }
+
     private fun restart(after: Long = 0) {
         if (!wantListening) return
-        main.postDelayed({ listen() }, after)
+        main.removeCallbacks(relisten)
+        main.postDelayed(relisten, after)
     }
 
     // The service cannot hear in the language it was asked for, or has no model
@@ -282,6 +382,7 @@ object VoiceChannel {
         if (ask == Ask.OnDevice) offerDownload()
         val next = Ask.entries.getOrNull(ask.ordinal + 1)
         if (next != null) {
+            Log.i(TAG, "asking again as $next")
             ask = next
             restart()
         } else {
@@ -293,6 +394,7 @@ object VoiceChannel {
     // [message] is what to say when this was the last service.
     private fun nextService(message: String) {
         if (service + 1 >= services.size) return fail(message)
+        Log.i(TAG, "walking past a recognition service that would not answer")
         service++
         ask = Ask.OnDevice
         rebind()
@@ -311,6 +413,7 @@ object VoiceChannel {
     // these is something happening elsewhere.
     private fun retry(message: String) {
         faults++
+        Log.i(TAG, "retrying after a transient fault ($faults)")
         if (faults > 3) return fail(message)
         restart(after = 500L * faults)
     }
@@ -348,12 +451,19 @@ object VoiceChannel {
         }
     }
 
-    private fun setRecognitionListening(on: Boolean) {
+    // [finish] ends the utterance in progress rather than dropping it, which is
+    // what releasing a touch-to-speak button means: `stopListening` is the one
+    // way to shut the microphone and still be told what went into it. Whether
+    // the result that comes back is wanted is not decided here — a closed
+    // session flushes results nobody asked for too, and `ComposedVoiceSession`
+    // is where the one rule about those lives.
+    private fun setRecognitionListening(on: Boolean, finish: Boolean) {
         if (on) {
             startRecognition()
         } else {
             wantListening = false
-            recognizer?.cancel()
+            disarmEndpoint()
+            if (finish) recognizer?.stopListening() else recognizer?.cancel()
         }
     }
 
@@ -361,12 +471,14 @@ object VoiceChannel {
     // a reply and unpausing keeps what it learned and a new session does not.
     private fun stopRecognition() {
         wantListening = false
+        disarmEndpoint()
         recognizer?.cancel()
         rebind()
         services = emptyList()
         service = 0
         ask = Ask.OnDevice
         faults = 0
+        fastRefusals = 0
     }
 
     private val recognitionListener = object : RecognitionListener {
@@ -375,27 +487,64 @@ object VoiceChannel {
             faults = 0
         }
 
+        // Both of these are guarded to save the traffic rather than to decide
+        // anything: `onRmsChanged` is a codec encode and a main-thread hop many
+        // times a second, and in touch-to-speak mode the microphone is shut
+        // almost all of the time. What a shut microphone is allowed to say is
+        // `ComposedVoiceSession`'s, in one place for both engines.
         override fun onBeginningOfSpeech() {
-            send("interrupted", null)
+            // The service is hearing something. Whatever comes back now is a
+            // real cycle, not a rung refusing to listen — see [onError].
+            fastRefusals = 0
+            lastPartial = ""
+            // Armed here rather than on the first partial: a service that
+            // reports none at all still has to end its utterance somewhere.
+            armEndpoint()
         }
 
         override fun onRmsChanged(rmsdB: Float) {
-            send("rms", rmsdB.toDouble())
+            if (wantListening) send("rms", rmsdB.toDouble())
         }
 
         override fun onBufferReceived(buffer: ByteArray?) {}
 
-        override fun onEndOfSpeech() {}
+        // The service thinks the utterance is over, which is not the same as
+        // having said what was in it. Results normally follow within a moment;
+        // where they do not, the endpoint above is what asks.
+        override fun onEndOfSpeech() {
+            armEndpoint()
+        }
 
         override fun onError(error: Int) {
+            disarmEndpoint()
             // Silence is not a fault while listening continuously: a room with
             // nobody talking in it produces one of these every few seconds, and
             // reporting them would put voice mode in the failed state for the
-            // ordinary case of waiting to be spoken to.
+            // ordinary case of waiting to be spoken to. But a rung that cannot
+            // hear at all — offline preferred where no model is downloaded,
+            // say — refuses within a fraction of a second rather than after
+            // the timeout window, and some services answer that way instead of
+            // with a language error. Two near-instant silences in a row is a
+            // refusal dressed as silence, and is asked again like one.
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> restart()
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    val elapsed = SystemClock.elapsedRealtime() - listenedAt
+                    fastRefusals = if (elapsed < FAST_REFUSAL_MS) fastRefusals + 1 else 0
+                    if (fastRefusals >= 2) {
+                        fastRefusals = 0
+                        askDifferently()
+                    } else restart()
+                }
+
+                // What the service answers while it still has the previous
+                // session open. Cancelled and retried on the fault budget:
+                // retrying into a busy recognizer immediately, forever, was a
+                // silent spin.
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    recognizer?.cancel()
+                    retry("Speech recognition did not answer.")
+                }
 
                 // What the service answers a restart that landed while it still
                 // had the last session open, and also a session that never
@@ -442,13 +591,26 @@ object VoiceChannel {
         }
 
         override fun onResults(results: Bundle?) {
+            disarmEndpoint()
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val text = matches?.firstOrNull()?.trim()
             if (!text.isNullOrEmpty()) send("heard", text)
             restart()
         }
 
-        override fun onPartialResults(partialResults: Bundle?) {}
+        // What the service has so far. The text rather than the sound is what
+        // says whether anyone is still talking: in a room with a television in
+        // it the sound never stops and the transcription does.
+        override fun onPartialResults(partialResults: Bundle?) {
+            val text = partialResults
+                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (text == lastPartial) return
+            lastPartial = text
+            armEndpoint()
+        }
 
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }

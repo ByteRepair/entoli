@@ -22,6 +22,7 @@ import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/reminder.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
@@ -48,6 +49,7 @@ class TestApp {
     required this.launcher,
     required this.handoff,
     required this.assistant,
+    required this.reminderAlarms,
     required this.backups,
     required this.restart,
     required this.store,
@@ -88,6 +90,10 @@ class TestApp {
   /// Android and so what most of the suite should be pretending to be.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
+  /// [systemAccent] is the colour the system is themed to, which is the other
+  /// thing only an Android answers: null is every platform without one, and so
+  /// a settings page with no Material 3 Expressive switch on it.
+  ///
   /// [hub] is for the one page that reads a [SyncHub] directly — the Sync
   /// settings category, which draws this device's identity and the paired
   /// list off it. Build one with [testSyncHub], which is asynchronous because
@@ -106,6 +112,8 @@ class TestApp {
     ChatStore? store,
     FakeFileHandoff? handoff,
     FakeVoice? voice,
+    FakeReminderAlarms? reminderAlarms,
+    List<Reminder> reminders = const [],
     Set<String> voiceModels = const {},
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
     Set<String> linuxes = const {},
@@ -114,6 +122,7 @@ class TestApp {
     FakeLocalLlm? localLlm,
     bool prefill = false,
     String? abi,
+    int? systemAccent,
     List<RemoteChatEntry> remotes = const [],
     Map<String, ChatViewState> mirrors = const {},
     Map<String, String> drivenBy = const {},
@@ -126,6 +135,7 @@ class TestApp {
     final launcher = FakeLauncherIcons(available: launcherIcons);
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch();
+    final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
     final backups = FakeBackupHandoff();
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
@@ -152,6 +162,7 @@ class TestApp {
       launcher: launcher,
       handoff: files,
       assistant: assist,
+      reminderAlarms: alarms,
       backups: backups,
       restart: restart,
       store: chats,
@@ -171,8 +182,11 @@ class TestApp {
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
           launcherIconsProvider.overrideWithValue(launcher),
+          systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),
+          reminderAlarmsProvider.overrideWithValue(alarms),
+          remindersProvider.overrideWith(() => Reminders(reminders)),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
@@ -214,6 +228,11 @@ class TestApp {
   final FakeLauncherIcons launcher;
   final FakeFileHandoff handoff;
   final FakeAssistantLaunch assistant;
+
+  /// The clock a reminder is set against. Default unavailable, which is every
+  /// platform but Android and so what most of the suite should be pretending
+  /// to be.
+  final FakeReminderAlarms reminderAlarms;
   final FakeBackupHandoff backups;
   final FakeAppRestart restart;
   final ChatStore store;
@@ -598,7 +617,12 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
   if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
     await pressBack(tester);
   }
-  await tester.tap(find.widgetWithText(ListTile, category.label));
+  final tile = find.widgetWithText(ListTile, category.label);
+  // Only when it is off the bottom: [scrollTo] aligns what it reveals with the
+  // top of the list, which would push the categories above it out of the tree
+  // and leave the next call with nothing to tap.
+  if (tile.evaluate().isEmpty) await scrollTo(tester, tile);
+  await tester.tap(tile);
   await settleIo(tester);
 }
 

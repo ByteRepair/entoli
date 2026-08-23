@@ -482,6 +482,21 @@ alone because the turn is still adding to `conv.jsonl`. A model that cannot
 answer names nothing and the chat keeps the name it has; there is no turn to
 report that on.
 
+**`retitle` takes a chat id, not a `ChatState`.** The namer's copy of the chat
+is from before the turn it is naming, and that turn's own `saveState` has since
+resolved the TTL and written an anchor onto the stored one — so `ChatStore.retitle`
+re-reads what is on disk and sets the title on that. It used to write the
+caller's copy back whole, which took the anchor with it: a temporary chat that
+got named then had a TTL to be deleted on and no `tempTtlSince` to count from,
+so no hourglass in the sidebar and no countdown in the bar, until a second turn
+re-anchored it a day late. Taking an id is the fix that keeps: there is no
+stale state to write.
+
+`ChatController` is the other half. `saveState` returns what it wrote *because*
+it is not what went in, and the head of a turn keeps that return rather than
+the copy it passed — otherwise the bar draws a chat with no anchor for the rest
+of the turn, and everything the controller writes from there carries the gap.
+
 A `!` message names nothing either, and `suggestTitle` is where that is decided
 rather than in the controller that calls it — it is the same kind of rule as "no
 title model is configured", and it belongs beside it. A command is not a thing
@@ -516,7 +531,7 @@ scalars — `description` is all the menu needs.
 The syntax is `_command` and `_mention` in `prompt_library.dart`, beside the
 library they are read against rather than in whichever layer happened to need
 them first — `BuiltinBackend` held them when it was the only thing that expanded
-one. `activeCompletionToken` in the composer has to agree with those two
+one. `activeCompletionToken` in `CompletionField` has to agree with those two
 patterns: anything the menu offers has to dispatch.
 
 `/name args` expands to the command's body with `$ARGUMENTS` substituted (or
@@ -611,3 +626,74 @@ text and nothing else, which is what every projected message did before this.
 
 The store's resource I/O is async where the rest of it is sync: a JSON file is
 small enough to write on the UI thread, an attachment is not.
+
+## Reminders
+
+A reminder runs a prompt in a new chat at a scheduled time, headlessly — nobody
+is watching, and on Android the process may have been dead since it was set. The
+pieces are `Reminder` (the model, `reminder.dart`), `ReminderRunner` (the
+headless turn, `reminder_runner.dart`), `ReminderScheduler` (the timer and
+catch-up, `reminder_scheduler.dart`), and `ReminderAlarms` (the platform port,
+`reminder_alarms.dart`). The store is `FileReminderStore`
+(`data/local/file_reminder_store.dart`); the port's Android impl is
+`AndroidReminderAlarms` (`data/local/android_reminder_alarms.dart`).
+
+**The runner is `ChatController._turn` without the UI.** It composes the prompt
+through `repo.composeUserPrompt`, writes the opening records through a
+`TurnRecorder`, drives `repo.sendPrompt` to completion, and closes the log with
+a `turnEnd`. Skipping any of those shows up elsewhere: no `turnEnd` and every
+later open offers to resume; no list invalidation and the chat is invisible until
+restart. The chat is created through `repo.createHeadlessChat`, which writes
+state and meta together and never touches the draft pair — two reminders firing
+together would otherwise overwrite each other's draft and orphan a `meta.json`
+under the wrong project.
+
+**A headless turn must not park on an answer.** `TurnSettings` carries
+`offerAsk` and `offerTask` (defaulting true); `sendPrompt(headless: true)` turns
+both off, since an `ask_user` parks the turn on a completer nobody will complete
+and a `task` fan-out could do the same through a sub-agent. `meta.approveMode` is
+pinned to `never` for the same reason: an approval banner nobody presses is a
+turn that never ends.
+
+**How long the chat lives is the reminder's `tempChatTtl`**, written onto its
+`meta.json` as it is, null and all — the same field the chat settings page sets,
+inheriting the project's or the app's answer where it is null. It was a bool,
+and a bool could name only one of the five TTLs; `fromJson` still reads the old
+key, where false meant `TempChatTtl.off` and true meant inherit.
+
+**`lastFiredAt` is stamped before the turn runs, never after.** A crash mid-turn
+costs a notification but must not re-run the whole prompt against the workspace.
+The stamp goes through `onReminderFired` before `sendPrompt` is called; the
+scheduler recomputes `nextFireAt` after the turn completes. A one-shot that
+fired has `nextFireAt` null (nothing armed); a repeating reminder moves to its
+next occurrence.
+
+**Dart is the sole arbiter of what runs.** Kotlin only nudges — an id stashed
+beside `ReminderAlarms.takeFired` — so whichever of the three triggers notices
+first (the in-process timer, a nudge, startup catch-up) stamps the reminder and
+runs it, and the others find the stamp moved. A single-flight set keyed by
+reminder id guards against the overlap, and the id goes into it **before the
+first await** — asking the platform anything is a round trip, and two triggers
+either side of one would both find nothing running.
+
+**A fire the platform will not hold is handed back to the alarm rather than
+run.** `_deferToAlarm` asks `ReminderAlarms.canHoldTurn` and, where the answer
+is no, re-arms the reminder for the time it was already due instead of starting
+a turn — the system delivers that at once, and its broadcast is the one moment
+a backgrounded app may hold the process open. Off screen the timer was
+otherwise starting turns nothing could keep alive, which Android kills partway
+through the reply, leaving the user a chat to press Continue on. Never twice
+without a run in between; `canHoldTurn` is true wherever there is nothing to
+ask, so this is Android's problem alone. See "Waking for a reminder" in
+`android/CLAUDE.md` for the other end, and for the hold the receiver takes and
+`doneFiring` releases.
+
+**Catch-up fires overdue reminders at launch**, the same lazy semantics the
+temp-chat sweep uses. A one-shot more than two minutes past its time says
+"Ran late" in its completion notification; an exact alarm arrives within
+seconds and does not.
+
+`nextFireAt` is precomputed and persisted, not derived on the Kotlin side: the
+boot receiver reads `reminders.json` with no engine running and arms AlarmManager
+against the times Dart already worked out. A second copy of the recurrence math
+in Kotlin would drift from this one across DST and month ends.

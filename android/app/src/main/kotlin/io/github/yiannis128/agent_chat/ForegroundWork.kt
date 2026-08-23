@@ -153,10 +153,33 @@ abstract class ForegroundWork : Service() {
         private var downloading = false
         private var prefilling = false
 
+        // A hold the alarm receiver took before Dart was listening. It starts
+        // AgentService itself, inside the one window a backgrounded app may —
+        // see ReminderReceiver — and what it started has to count here too, or
+        // `busy` says the process is idle while a reminder is being woken for
+        // and the engine is thrown away under the turn. Dart releases it
+        // through `doneFiring` once the fire has been dealt with.
+        private var alarmHold = false
+
         // Whether the isolate has work the process must not be killed for.
         // MainActivity reads it to decide whether to keep the engine — voice
         // mode counts, since the session it holds is in that isolate too.
-        val busy: Boolean get() = turns > 0 || listening || downloading || prefilling
+        val busy: Boolean
+            get() = turns > 0 || listening || downloading || prefilling || alarmHold
+
+        fun holdForAlarm() {
+            alarmHold = true
+        }
+
+        // Dart has dealt with what an alarm woke it for. The service goes
+        // unless a turn is holding it, which by then is the usual case: a
+        // reminder that ran keeps it until the turn ends.
+        fun releaseAlarmHold(context: Context) {
+            alarmHold = false
+            hold(context.applicationContext, AgentService::class.java, turns > 0) {
+                it.putExtra(AgentService.EXTRA_TURNS, turns)
+            }
+        }
 
         fun register(context: Context, messenger: BinaryMessenger) {
             val appContext = context.applicationContext
@@ -209,6 +232,13 @@ abstract class ForegroundWork : Service() {
             val intent = Intent(context, service)
             if (!wanted) {
                 context.stopService(intent)
+                // The last piece of work just ended. If no activity ever
+                // attached — the process was woken by an alarm and nobody came
+                // — the isolate it built is a full app nobody is looking at
+                // and nothing will reattach to except through a launch that
+                // must then skip main, which is the restart contract quietly
+                // broken. Release it; see AppEngine.
+                AppEngine.releaseIfUnwanted()
                 return
             }
             describe(intent)

@@ -20,6 +20,7 @@ import "../../domain/file_handoff.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model_store.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/reminder_alarms.dart";
 import "../../domain/rootfs_store.dart";
 import "../../domain/secret_store.dart";
 import "../../domain/shell.dart";
@@ -274,6 +275,10 @@ BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
 /// intent; everywhere else nothing fires, which is what leaves the launch
 /// handler inert.
 AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
+
+/// The system clock a reminder is set against: AlarmManager on Android,
+/// nothing anywhere else yet.
+ReminderAlarms createReminderAlarms() => platformReminderAlarms();
 
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now.

@@ -298,8 +298,7 @@ void main() {
     away.hub.followChat(state.id);
     await waitForSync(() => away.hub.mirror(state.id) != null);
 
-    await home.repo.retitle(
-        await home.repo.openChat(state.id).then((c) => c.state), "Renamed");
+    await home.repo.retitle(state.id, "Renamed");
     await waitForSync(
         () => away.hub.mirror(state.id)?.state.title == "Renamed");
   });
