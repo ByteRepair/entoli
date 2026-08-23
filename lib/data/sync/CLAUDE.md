@@ -150,6 +150,19 @@ freezed object left to `toJson`'s default comes out as a live instance rather
 than a map, and a raw `_ChatState` in the payload is a cast failure on the far
 side.
 
+### A conversation does not fit in one message
+
+A data channel refuses a message past its negotiated maximum, and a
+`conv.jsonl` of any age is far past it — the chats this was first run against
+were 74KB, 256KB and 485KB, and every one of them mirrored as an empty chat.
+So `chatSnapshot` is the *head* only: state, meta, and how long the log is.
+The records follow as a run of `recordAppend`s, paged by measured encoded size
+rather than by a count, since one record can be a whole file.
+
+`totalLines` is then the greater of what a mirror holds and what the peer last
+said — pages of a snapshot climb towards a total already known, while a live
+append is what makes the total bigger.
+
 ### Attachments
 
 An attachment's bytes are requested by `resourceRequest{id}` and answered by a
@@ -346,6 +359,27 @@ wins over both. The hostname comes in as a constructor argument rather than
 being read in the hub: `Platform.localHostname` is `dart:io`'s, and a browser
 has no name of its own to give — `location.hostname` is the server the page
 came from, which is a different machine entirely.
+
+## Being dialled again
+
+Two things have to be true for a paired device to reconnect, and neither was.
+
+**Somebody has to answer.** `ensureReady` arms a reconnect token per paired
+device, which lets the offer past the signaling server — but the subscription
+that answers offers was started only by `startPairingWindow`. With no window
+open there was nothing listening, so the offer was accepted and never replied
+to, and the dialling side waited out its timeout. The subscription now lives
+as long as the server does. An offer carries the token it came in under, which
+is the only thing in the request that says which pair it is: that decides the
+secret its handshake runs against, and that it is a reconnect at all rather
+than a stranger to show a code to.
+
+**Both sides have to know where the other is.** Only the device that dialled
+learns an address, so the other one had no route and said so. The `hello` now
+carries where the sender can be dialled back, and `markSeen` records it — a
+device that is not listening sends nothing, which is the honest answer. A
+completed pairing also starts this device listening, which before it had no
+reason to be doing.
 
 ## What the Sync page can do about a peer
 

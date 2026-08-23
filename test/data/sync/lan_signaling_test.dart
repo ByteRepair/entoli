@@ -121,6 +121,36 @@ void main() {
     expect(answer, "v=0 answer");
   });
 
+  test("the offer says which token let it in", () async {
+    // A reconnect's handshake runs against that pair's secret, and the token
+    // is the only thing in the request that says which pair it is.
+    server.allowReconnect("tok");
+    final seen = <String?>[];
+    server.offers.listen((offer) {
+      seen.add(offer.token);
+      server.postAnswer(offer.id, "v=0 answer");
+    });
+
+    await client.exchange(
+        hosts: ["127.0.0.1"], port: port, token: "tok", offerSdp: "v=0 offer");
+
+    expect(seen, ["tok"]);
+  });
+
+  test("an offer that used the window's code carries no token", () async {
+    server.arm("123456");
+    final seen = <String?>[];
+    server.offers.listen((offer) {
+      seen.add(offer.token);
+      server.postAnswer(offer.id, "v=0 answer");
+    });
+
+    await client.exchange(
+        hosts: ["127.0.0.1"], port: port, code: "123456", offerSdp: "v=0 offer");
+
+    expect(seen, [null]);
+  });
+
   test("an unknown token is refused", () async {
     server.allowReconnect("tok");
     answerWith("v=0 answer");

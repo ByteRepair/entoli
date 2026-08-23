@@ -41,19 +41,24 @@ sealed class SyncMessage with _$SyncMessage {
     @Default(0) int fromLine,
   }) = SyncChatOpen;
 
-  /// The reply to [SyncChatOpen]: state, meta and the records from
-  /// [SyncChatOpen.fromLine]. [totalLines] is the log's length at send time,
-  /// which is where the next resume counts from.
+  /// The reply to [SyncChatOpen]: the chat's head, and how long its log is.
+  /// The records follow as [SyncRecordAppend]s — a whole conversation is far
+  /// past what one data channel message may carry, and half a megabyte is an
+  /// ordinary size for one.
+  ///
+  /// [totalLines] is the log's length at send time, which is where the next
+  /// resume counts from; a mirror is stale by however far its own record
+  /// count falls short of it.
   const factory SyncMessage.chatSnapshot({
     required String chatId,
     required ChatState state,
     required ChatMeta meta,
-    required List<ChatRecord> records,
     required int totalLines,
   }) = SyncChatSnapshot;
 
-  /// Records appended to a subscribed chat since the last delivery. A
-  /// snapshot plus these in order rebuilds the log exactly.
+  /// Records for a subscribed chat, in order: the pages of a snapshot, and
+  /// then whatever the turn appends as it happens. A snapshot plus these
+  /// rebuilds the log exactly.
   const factory SyncMessage.recordAppend({
     required String chatId,
     required List<ChatRecord> records,

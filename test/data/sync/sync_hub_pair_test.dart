@@ -3,12 +3,14 @@ import "dart:io" show Directory;
 import "dart:typed_data";
 
 import "package:agent_chat/core/config.dart";
+import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/sync/channel.dart";
 import "package:agent_chat/data/sync/handshake.dart" show HandshakeException;
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
+import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
@@ -103,6 +105,80 @@ void main() {
     expect(psk, isNot(contains("=")));
   });
 
+  /// A data channel refuses a message past its negotiated maximum, and a
+  /// conversation of any length is far past it — the chats this was first run
+  /// against were 74KB, 256KB and 485KB of `conv.jsonl`, and every one of
+  /// them mirrored as an empty chat. A loopback carries any size, so what is
+  /// asserted is the size of what goes over it.
+  test("a log too big for one message crosses in pages", () async {
+    final now = DateTime.now();
+    final state = ChatState(
+        id: "big", title: "Long chat", createdAt: now, updatedAt: now);
+    await home.store.saveState(state);
+    await home.store.append(state.id, [
+      for (var i = 0; i < 200; i++)
+        ChatRecord.part(
+          messageId: "m$i",
+          index: 0,
+          part: TextPart(text: "x" * 2000),
+        ),
+    ]);
+
+    final links = loopbackPair();
+    final sent = <int>[];
+    links.$1.watchSends(sent.add);
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await eventually(() =>
+        away.hub.mirror(state.id)?.records.length ==
+        (home.store as FakeChatStore).records(state.id).length);
+
+    final mirror = away.hub.mirror(state.id)!;
+    expect(mirror.totalLines, mirror.records.length);
+    // Well over 400KB of records, so it cannot have been one message.
+    expect(sent.reduce((a, b) => a > b ? a : b), lessThan(64 * 1024));
+  });
+
+  /// Everything above runs on a `FakeChatStore`, which answers from memory.
+  /// The app runs on `FileChatStore`, and `_serveOpen` reads a chat's head,
+  /// its meta and its log through three separate store calls — a path no test
+  /// took until this one.
+  test("a chat on a real store mirrors with its records", () async {
+    final onDisk = await _Device.create("${tempDir.path}/disk",
+        store: FileChatStore(await AppConfig.load(
+            fileSystemIo, "${tempDir.path}/disk")));
+    addTearDown(onDisk.hub.dispose);
+
+    final chat = Chat(
+      state: ChatState(
+        id: "on-disk",
+        title: "Written down",
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+      messages: [
+        Message(
+          id: "m1",
+          role: MessageRole.user,
+          createdAt: DateTime.utc(2026),
+          parts: [TextPart(text: "said out loud")],
+        ),
+      ],
+    );
+    await writeChatTo(onDisk.store, chat);
+
+    final links = loopbackPair();
+    await pairing(onDisk, away, links.$1, links.$2);
+    away.hub.followChat("on-disk");
+    await eventually(() => away.hub.mirror("on-disk") != null);
+    await eventually(() => away.hub.mirror("on-disk")!.records.isNotEmpty);
+
+    final mirrored = chatFrom(
+        away.hub.mirror("on-disk")!.state, away.hub.mirror("on-disk")!.records);
+    expect(mirrored.state.title, "Written down");
+    expect(mirrored.messages.single.plainText, "said out loud");
+  });
+
   /// The hub is built before the container it reads from, so the repository
   /// has to be handed to it afterwards — and until it is, a device pairs
   /// happily and serves nothing: no welcome, no chat list, no records. That
@@ -193,7 +269,7 @@ void main() {
     await eventually(() => away.hub.mirror(state.id) != null);
 
     final mirror = away.hub.mirror(state.id)!;
-    expect(mirror.records.length, home.store.records(state.id).length);
+    expect(mirror.records.length, (home.store as FakeChatStore).records(state.id).length);
     expect(mirror.totalLines, mirror.records.length);
     expect(mirror.deviceName, home.hub.deviceName);
     expect(away.hub.isChatOnline(state.id), isTrue);
@@ -311,7 +387,7 @@ void main() {
     // followChat is still desired, so the reconnecting welcome re-opens it.
     await eventually(() =>
         away.hub.mirror(state.id)!.records.length ==
-        home.store.records(state.id).length);
+        (home.store as FakeChatStore).records(state.id).length);
 
     final mirror = away.hub.mirror(state.id)!;
     expect(mirror.records.length, heldBefore + 1);
@@ -561,20 +637,20 @@ class _Turns implements RemoteTurns {
 class _Device {
   _Device(this.identity, this.hub, this.registry, this.store, this.repo);
 
-  static Future<_Device> create(String dir) async {
+  static Future<_Device> create(String dir, {ChatStore? store}) async {
     final config = await AppConfig.load(fileSystemIo, dir);
     final registry = FakeDeviceRegistry();
-    final store = FakeChatStore();
-    final repo = ChatRepository(store, FakeBackend(), AppSettings.new, config);
+    final chats = store ?? FakeChatStore();
+    final repo = ChatRepository(chats, FakeBackend(), AppSettings.new, config);
     final hub = await testSyncHub(config, devices: registry);
     hub.attach(repo);
-    return _Device(hub.identity, hub, registry, store, repo);
+    return _Device(hub.identity, hub, registry, chats, repo);
   }
 
   final SyncIdentity identity;
   final SyncHub hub;
   final DeviceRegistry registry;
-  final FakeChatStore store;
+  final ChatStore store;
   final ChatRepository repo;
 }
 
@@ -591,7 +667,7 @@ ChatState _seedChat(_Device device) {
   return state;
 }
 
-(ByteChannel, ByteChannel) loopbackPair() {
+(_Loopback, _Loopback) loopbackPair() {
   final a = _Loopback();
   final b = _Loopback();
   a.other = b;
@@ -601,6 +677,13 @@ ChatState _seedChat(_Device device) {
 
 class _Loopback implements ByteChannel {
   _Loopback? other;
+
+  /// Every frame's size as it goes out, for the tests about what has to be
+  /// paged. A real data channel refuses one past its maximum; this one does
+  /// not, so a test has to look.
+  void Function(int bytes)? _sizes;
+
+  void watchSends(void Function(int bytes) sizes) => _sizes = sizes;
   // Single-subscription like the real one, so a test exercises the buffering
   // rather than a broadcast stream's dropping.
   final _incoming = StreamController<Uint8List>();
@@ -611,6 +694,7 @@ class _Loopback implements ByteChannel {
 
   @override
   Future<void> send(Uint8List bytes) async {
+    _sizes?.call(bytes.length);
     if (_closed) throw StateError("loopback closed");
     final peer = other!;
     if (peer._closed) throw StateError("peer closed");

@@ -36,9 +36,14 @@ abstract interface class LanSignaling {
 }
 
 class IncomingOffer {
-  IncomingOffer({required this.id, required this.sdp});
+  IncomingOffer({required this.id, required this.sdp, this.token});
 
   /// Identifies this offer back to the server when the answer is posted.
   final String id;
   final String sdp;
+
+  /// The reconnect token it came in under, or null for one that used the
+  /// pairing window's code. Which pair it is decides the secret the handshake
+  /// runs against, so the answer cannot be given without knowing.
+  final String? token;
 }

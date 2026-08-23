@@ -395,20 +395,25 @@ class SyncHub {
           :final chatId,
           :final state,
           :final meta,
-          :final records,
           :final totalLines
         ):
+        // The head only. Records already held are kept: a resume asks from
+        // the line this mirror got to, so what follows is the tail.
         _onMirror(peer, chatId, (mirror) {
           mirror
             ..state = state
             ..meta = meta
             ..totalLines = totalLines;
-          mirror.records.addAll(records);
         });
       case SyncRecordAppend(:final chatId, :final records):
         _onMirror(peer, chatId, (mirror) {
           mirror.records.addAll(records);
-          mirror.totalLines += records.length;
+          // The greater of what is held and what the peer last said its log
+          // was: pages of a snapshot climb towards a total already known,
+          // while a live append is what makes the total bigger.
+          if (mirror.records.length > mirror.totalLines) {
+            mirror.totalLines = mirror.records.length;
+          }
         });
       case SyncStateDiff(:final chatId, :final state):
         _onMirror(peer, chatId, (mirror) => mirror.state = state);
@@ -572,11 +577,14 @@ class SyncHub {
         chatId: chatId,
         state: state,
         meta: meta,
-        records: fromLine < records.length
-            ? records.sublist(fromLine)
-            : const [],
         totalLines: records.length,
       ));
+      await _sendRecords(
+          peer,
+          chatId,
+          fromLine < records.length
+              ? records.sublist(fromLine)
+              : const []);
     } on StateError {
       peer.subscriptions.remove(chatId);
       await peer.send(SyncMessage.chatDeleted(chatId: chatId));
@@ -591,8 +599,11 @@ class SyncHub {
   void _onRepoEvent(RepoEvent event) {
     switch (event) {
       case Appended(:final chatId, :final records):
-        _toSubscribers(chatId,
-            SyncMessage.recordAppend(chatId: chatId, records: records));
+        for (final peer in _live.values) {
+          if (peer.subscriptions.contains(chatId)) {
+            unawaited(_sendRecords(peer, chatId, records));
+          }
+        }
       case StateChanged(:final state):
         _toSubscribers(
             state.id, SyncMessage.stateDiff(chatId: state.id, state: state));
@@ -761,6 +772,31 @@ class SyncHub {
   Future<void> sendForTest(String chatId, SyncMessage message) async =>
       _peerHosting(chatId)?.send(message);
 
+  /// Records in pages small enough for one message. A data channel refuses a
+  /// message past its negotiated maximum, and a conversation of any length is
+  /// far past it — half a megabyte of `conv.jsonl` is an ordinary size, and
+  /// sending that whole was a mirror that opened empty and said nothing about
+  /// why. Measured rather than counted: one record can be a whole file.
+  Future<void> _sendRecords(
+      _LivePeer peer, String chatId, List<ChatRecord> records) async {
+    var page = <ChatRecord>[];
+    var bytes = 0;
+    Future<void> flush() async {
+      if (page.isEmpty) return;
+      await peer.send(SyncMessage.recordAppend(chatId: chatId, records: page));
+      page = [];
+      bytes = 0;
+    }
+
+    for (final record in records) {
+      final size = jsonEncode(record.toJson()).length;
+      if (bytes + size > _chunkBytes) await flush();
+      page.add(record);
+      bytes += size;
+    }
+    await flush();
+  }
+
   // ------------------------------------------------------------ resources
 
   static const _chunkBytes = 48 * 1024;
@@ -876,6 +912,13 @@ class SyncHub {
     // Read once: `FileDeviceRegistry.list` re-reads and re-parses the file
     // on every call, and this was asking three times over.
     final devices = await registry.list();
+    for (final device in devices) {
+      final secret = await registry.pairingSecret(device.id);
+      if (secret != null) {
+        _reconnects[RelaySignaler.roomFor(secret)] =
+            (deviceId: device.id, psk: secret);
+      }
+    }
     // Before the early return below: a web build listens for nothing and a
     // desktop with no pairings starts no server, and both still have a list
     // of paired devices to draw.
@@ -883,10 +926,12 @@ class SyncHub {
     final server = _server;
     if (server == null || devices.isEmpty) return;
     await server.start();
-    for (final device in devices) {
-      final secret = await registry.pairingSecret(device.id);
-      if (secret != null) server.allowReconnect(RelaySignaler.roomFor(secret));
+    for (final token in _reconnects.keys) {
+      server.allowReconnect(token);
     }
+    // Answering is what was missing: the tokens above let an offer in, and
+    // with nothing subscribed nobody ever replied to it.
+    _watchOffers(server);
   }
 
   Future<void> dispose() async {
@@ -936,7 +981,8 @@ class SyncHub {
       final port = await server.start();
       code = generatePairingCode();
       server.arm(code);
-      _watchOffers(server, psk);
+      _windowPsk = psk;
+      _watchOffers(server);
       final hosts = await server.addresses();
       qr = PairingOffer(
         kind: PairingOffer.lanKind,
@@ -971,6 +1017,7 @@ class SyncHub {
           "no relay URL is set.";
 
   void cancelPairingWindow() {
+    _windowPsk = null;
     _confirmation?.complete(false);
     _confirmation = null;
     _relayWindow?.cancel();
@@ -1182,6 +1229,16 @@ class SyncHub {
   String get defaultDeviceName =>
       _hostname ?? "Entoli ${identity.fingerprint.substring(0, 5)}";
 
+  /// Where a peer could dial this device back, or null where it is not
+  /// listening — a browser never is.
+  Future<String?> _dialbackAddress() async {
+    final server = _server;
+    if (server == null || kIsWeb) return null;
+    final port = server.port ?? await server.start();
+    final addresses = await server.addresses();
+    return addresses.isEmpty ? null : "${addresses.first}:$port";
+  }
+
   List<Map<String, Object>> iceServers() {
     final servers = [
       for (final url in RtcLink.defaultStun) {"urls": url},
@@ -1201,10 +1258,21 @@ class SyncHub {
 
   /// The host's route: offers arrive through the armed server and are
   /// answered straight back. The pairing secret is the window's.
-  void _watchOffers(LanSignaling server, String psk) {
+  /// Answers offers for as long as the server is up — not only while a
+  /// pairing window is open. A paired device redialling arrives here with a
+  /// reconnect token and no window in sight; before this, the server let the
+  /// offer in and nothing was subscribed to answer it, so every reconnect
+  /// waited out the dialling side's timeout.
+  void _watchOffers(LanSignaling server) {
     _offers?.cancel();
     _offers = server.offers.listen((incoming) {
       () async {
+        // Which pair it is decides the secret, and whether this is a first
+        // pairing at all: a token names a device already known, so its
+        // handshake is pinned to that key and skips the codes-matched gate.
+        final known = incoming.token == null ? null : _reconnects[incoming.token];
+        final psk = known?.psk ?? _windowPsk;
+        if (psk == null) return;
         RtcLink? link;
         try {
           link = await RtcLink.create(iceServers: iceServers());
@@ -1214,7 +1282,7 @@ class SyncHub {
             link: await link.open(),
             weOffered: false,
             psk: psk,
-            knownDeviceId: null,
+            knownDeviceId: known?.deviceId,
             onFailed: () => link!.close(),
           );
         } catch (error) {
@@ -1223,6 +1291,22 @@ class SyncHub {
         }
       }();
     });
+  }
+
+  /// Reconnect token to the pair it belongs to. Filled from the registry at
+  /// startup and by every completed pairing, so an offer arriving under a
+  /// token can be answered with that pair's secret.
+  final _reconnects = <String, ({String deviceId, String psk})>{};
+
+  /// The secret a pairing window is armed with, for offers that carry a code
+  /// rather than a token. Null when no window is open, which is what makes a
+  /// stranger's offer unanswerable rather than merely refused.
+  String? _windowPsk;
+
+  void _allowReconnect(String deviceId, String psk) {
+    final token = RelaySignaler.roomFor(psk);
+    _reconnects[token] = (deviceId: deviceId, psk: psk);
+    _server?.allowReconnect(token);
   }
 
   /// The generator's route over the relay: sit in the room derived from the
@@ -1436,6 +1520,11 @@ class SyncHub {
         "proto": SyncIdentity.protocolVersion,
         "id": identity.id,
         "name": deviceName,
+        // Where this device can be dialled back, if it listens at all. Only
+        // the side that dialled knows the other's address otherwise, so only
+        // that side could ever reconnect — the other one had no route and
+        // said so.
+        "addr": ?await _dialbackAddress(),
       });
       final reply = await hello.future.timeout(const Duration(seconds: 15));
       if (reply["proto"] != SyncIdentity.protocolVersion) {
@@ -1456,7 +1545,10 @@ class SyncHub {
       }
       // The registry's own verb rather than the same two fields written here:
       // when a device was last reached, and where, is what a registry is for.
-      await registry.markSeen(deviceId, address: address);
+      // The address it gave is as good as the one we dialled: on the side
+      // that was dialled, it is the only one there is.
+      await registry.markSeen(deviceId,
+          address: address ?? reply["addr"] as String?);
 
       _live[deviceId]?.close();
       _live[deviceId] = live;
@@ -1472,8 +1564,11 @@ class SyncHub {
         live.send(SyncMessage.welcome(chats: chats));
       }
 
-      // From here on, this pair can redial without the window.
-      _server?.allowReconnect(RelaySignaler.roomFor(psk));
+      // From here on, this pair can redial without the window — and this
+      // device starts listening for one, which before a pairing it had no
+      // reason to be doing.
+      _allowReconnect(deviceId, psk);
+      unawaited(ensureReady());
       _note(PairingStage.done);
     } catch (error) {
       await channel?.close();

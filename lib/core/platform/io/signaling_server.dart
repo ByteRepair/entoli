@@ -149,7 +149,10 @@ class SignalingServer implements LanSignaling {
 
     final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
     final answered = _pending[id] = Completer<String>();
-    _offers.add(IncomingOffer(id: id, sdp: sdp));
+    // Which token let it in travels with it: a reconnect's handshake runs
+    // against that pair's secret, and only the caller knows which that is.
+    _offers.add(IncomingOffer(
+        id: id, sdp: sdp, token: _tokens.contains(token) ? token : null));
     try {
       final answer =
           await answered.future.timeout(const Duration(seconds: 30), onTimeout: () => throw TimeoutException("no answer"));

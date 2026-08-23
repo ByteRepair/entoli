@@ -53,9 +53,6 @@ SyncChatSnapshot _$SyncChatSnapshotFromJson(Map<String, dynamic> json) =>
       chatId: json['chatId'] as String,
       state: ChatState.fromJson(json['state'] as Map<String, dynamic>),
       meta: ChatMeta.fromJson(json['meta'] as Map<String, dynamic>),
-      records: (json['records'] as List<dynamic>)
-          .map((e) => ChatRecord.fromJson(e as Map<String, dynamic>))
-          .toList(),
       totalLines: (json['totalLines'] as num).toInt(),
       $type: json['runtimeType'] as String?,
     );
@@ -65,7 +62,6 @@ Map<String, dynamic> _$SyncChatSnapshotToJson(SyncChatSnapshot instance) =>
       'chatId': instance.chatId,
       'state': instance.state.toJson(),
       'meta': instance.meta.toJson(),
-      'records': instance.records.map((e) => e.toJson()).toList(),
       'totalLines': instance.totalLines,
       'runtimeType': instance.$type,
     };
