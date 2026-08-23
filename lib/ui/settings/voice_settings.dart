@@ -54,8 +54,35 @@ class VoiceSection extends ConsumerWidget {
           onPick: (id) => ref.read(appSettingsProvider.notifier).setVoiceSpeechModel(id),
         ),
         _SpeakerField(settings: settings),
+        if (canListen) const _TouchToSpeak(),
         if (!voice.downloadsModels) _MissingEngines(installed: installed),
       ],
+    );
+  }
+}
+
+/// Whether the microphone waits to be asked. Voice mode listens for as long as
+/// it is on screen, which is the point of it; this is the answer for a room
+/// where that does not work — a system recogniser transcribes whatever is loud
+/// enough to be speech, and somewhere noisy the only reliable way to say what
+/// was meant for the phone is to say when.
+///
+/// It replaces Mute with Talk rather than adding a fourth button: they are the
+/// same promise about the microphone, made the other way round.
+class _TouchToSpeak extends ConsumerWidget {
+  const _TouchToSpeak();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(appSettingsProvider.select((s) => s.voicePushToTalk));
+    return SwitchListTile(
+      title: const Text("Touch to speak"),
+      subtitle: const Text(
+          "Open the microphone only while the Talk button is held, instead of "
+          "listening the whole time. For noisy rooms, where anything loud "
+          "enough is transcribed and answered."),
+      value: on,
+      onChanged: ref.read(appSettingsProvider.notifier).setVoicePushToTalk,
     );
   }
 }

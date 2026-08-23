@@ -35,7 +35,9 @@ abstract class Listener {
   ValueListenable<double> get level;
 
   /// Open or shut the microphone. Nothing to listen with makes it a no-op.
-  Future<void> setListening(bool on);
+  /// [finish] is [VoiceSession.setListening]'s: keep the utterance in progress
+  /// rather than dropping it with the session.
+  Future<void> setListening(bool on, {bool finish = false});
 
   Future<void> dispose();
 }
@@ -87,7 +89,8 @@ abstract class Speaker {
 /// `Voice` picks its own pair in `start`, which is what makes `AndroidVoice` a
 /// dozen lines and gives read-aloud a speak-only session for free.
 class ComposedVoiceSession implements VoiceSession {
-  ComposedVoiceSession(this._listener, this._speaker) {
+  ComposedVoiceSession(this._listener, this._speaker, {bool listening = true}) {
+    _listening = listening;
     _listener?.events.listen(_onListener);
     _speaker.signals.listen(_onSpeaker);
   }
@@ -104,7 +107,36 @@ class ComposedVoiceSession implements VoiceSession {
   static const _saidWindow = 1200;
   final _said = StringBuffer();
 
+  /// What [setListening] was last told, and whether one more utterance is still
+  /// wanted after it was shut. Held here rather than in each [Listener] because
+  /// it is one rule about what the session is allowed to say, and a listener
+  /// that forgot it would be silently back to the bug below.
+  bool _listening = true;
+  bool _finishing = false;
+
+  /// **A shut microphone says nothing.** Neither engine stops on the instant it
+  /// is asked to: a cancelled `SpeechRecognizer` session flushes what it had,
+  /// and audio already handed to sherpa's worker decodes after the recorder is
+  /// released. Forwarded, that arrives as words nobody spoke into a microphone
+  /// that is off — and landing on a reply still being read, it is not an echo
+  /// of what was just said, so it is a barge-in, so the speaker stops and the
+  /// turn is aborted. That is the Mute button stopping the answer, which is not
+  /// what it promises.
+  ///
+  /// The exception is the utterance a `finish` asked for, which is the release
+  /// of a touch-to-speak button: the microphone closed because the sentence was
+  /// over, not to throw it away.
+  bool _wanted(VoiceEvent event) {
+    if (_listening) return true;
+    if (event is! VoiceHeard || !_finishing) return false;
+    _finishing = false;
+    return true;
+  }
+
   void _onListener(VoiceEvent event) {
+    // A failure is the session's whatever the microphone is doing, since it is
+    // why it is doing nothing.
+    if (event is! VoiceFailed && !_wanted(event)) return;
     switch (event) {
       case VoiceHeard(:final text):
         // Onset alone interrupts nothing: every sentence said trips voice
@@ -155,7 +187,14 @@ class ComposedVoiceSession implements VoiceSession {
   }
 
   @override
-  Future<void> setListening(bool on) => _listener?.setListening(on) ?? Future.value();
+  Future<void> setListening(bool on, {bool finish = false}) {
+    // Before the call rather than after it: what the engine does with the
+    // request takes a platform hop, and anything it flushes in between is
+    // exactly what this is here to drop.
+    _listening = on;
+    _finishing = !on && finish;
+    return _listener?.setListening(on, finish: finish) ?? Future.value();
+  }
 
   @override
   Future<void> speak(String text) async {

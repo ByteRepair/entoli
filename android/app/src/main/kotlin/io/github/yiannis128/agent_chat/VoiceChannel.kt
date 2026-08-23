@@ -92,7 +92,10 @@ object VoiceChannel {
             "disposeSpeech" -> { disposeTts(); result.success(null) }
             "startRecognition" -> { startRecognition(); result.success(null) }
             "setRecognitionListening" -> {
-                setRecognitionListening(call.arguments as? Boolean ?: true)
+                setRecognitionListening(
+                    call.argument<Boolean>("on") ?: true,
+                    call.argument<Boolean>("finish") ?: false,
+                )
                 result.success(null)
             }
             "stopRecognition" -> { stopRecognition(); result.success(null) }
@@ -371,12 +374,18 @@ object VoiceChannel {
         }
     }
 
-    private fun setRecognitionListening(on: Boolean) {
+    // [finish] ends the utterance in progress rather than dropping it, which is
+    // what releasing a touch-to-speak button means: `stopListening` is the one
+    // way to shut the microphone and still be told what went into it. Whether
+    // the result that comes back is wanted is not decided here — a closed
+    // session flushes results nobody asked for too, and `ComposedVoiceSession`
+    // is where the one rule about those lives.
+    private fun setRecognitionListening(on: Boolean, finish: Boolean) {
         if (on) {
             startRecognition()
         } else {
             wantListening = false
-            recognizer?.cancel()
+            if (finish) recognizer?.stopListening() else recognizer?.cancel()
         }
     }
 
@@ -399,15 +408,20 @@ object VoiceChannel {
             faults = 0
         }
 
+        // Both of these are guarded to save the traffic rather than to decide
+        // anything: `onRmsChanged` is a codec encode and a main-thread hop many
+        // times a second, and in touch-to-speak mode the microphone is shut
+        // almost all of the time. What a shut microphone is allowed to say is
+        // `ComposedVoiceSession`'s, in one place for both engines.
         override fun onBeginningOfSpeech() {
             // The service is hearing something. Whatever comes back now is a
             // real cycle, not a rung refusing to listen — see [onError].
             fastRefusals = 0
-            send("interrupted", null)
+            if (wantListening) send("interrupted", null)
         }
 
         override fun onRmsChanged(rmsdB: Float) {
-            send("rms", rmsdB.toDouble())
+            if (wantListening) send("rms", rmsdB.toDouble())
         }
 
         override fun onBufferReceived(buffer: ByteArray?) {}

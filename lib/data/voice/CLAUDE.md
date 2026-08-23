@@ -312,6 +312,78 @@ Everything else reports: no microphone, no permission, and an error code nothing
 here has a name for, which is still worth showing with its number rather than
 swallowing.
 
+### What counts as being spoken to
+
+**A system recogniser transcribes whatever is loud enough to be speech**, and a
+conversation across the room, a television and a fan all clear that bar. Every
+one of them was a turn: voice mode answered the room. There is no threshold on
+`SpeechRecognizer` to raise — the service decides for itself when an utterance
+starts and stops — so the utterance is judged after the fact, by `LoudnessGate`
+in `domain/loudness.dart`, fed from `onRmsChanged` and asked at each result.
+
+**Nothing in it is an absolute level, because there is no absolute level to
+compare against.** `onRmsChanged` reports dB on a scale that is the engine's:
+the documented -2..10 is a typical range rather than a contract, and a
+microphone's gain moves it further. What survives that is a *margin* — how far
+this utterance rose above the room measured moments earlier, in whatever units
+both were measured in. The floor follows a room that has gone quiet within about
+a second and a room that has got louder barely at all, since it is what the room
+does when nobody is talking and an utterance must not raise the bar it is about
+to be measured against.
+
+**The bar is the larger of a fixed margin and a share of the loudest utterance
+so far**, which is what makes it follow the person rather than only the room. A
+quiet room and a quiet voice work at the fixed margin; somewhere noisy the first
+thing said raises the bar behind it, and the fan does not clear it. The loudest
+decays each time something carries, so a bar raised by shouting once comes back
+down over the next few turns instead of standing for the session.
+
+Two things it will not do. It never refuses before it has measured the room —
+the first thing anyone says may be the first thing the microphone ever heard,
+and a floor seeded from a voice is a bar above the voice that set it — and it
+never refuses where the engine reported no loudness at all. A gate that cannot
+measure has no business refusing. The same measurement is what `level` follows,
+so the orb moves the same amount in a quiet room and a noisy one where it used
+to be pinned to the nominal range.
+
+### Mute is the microphone and nothing else
+
+**Neither engine stops on the instant it is asked to.** A cancelled
+`SpeechRecognizer` session flushes what it had, and audio already handed to
+sherpa's worker decodes after the recorder is released. Forwarded, that arrives
+as words nobody spoke into a microphone that is off — and landing on a reply
+still being read, it is not an echo of what was just said, so `isEcho` lets it
+through, so it is a barge-in, so the speaker stops and the turn is aborted. That
+is the Mute button stopping the answer, which is not what it promises.
+
+**So the rule is `ComposedVoiceSession`'s, and there is one of it.** The session
+owns `setListening` and owns the event stream, so it is the one place that knows
+both that the microphone was shut and what is about to be said about it — and
+the flags are set before the call goes down, since what the engine does with the
+request takes a platform hop and what it flushes in between is exactly what this
+drops. Written in each `Listener` instead it was two copies, and the second one
+was not written: the sherpa path still forwarded what its worker decoded after
+the recorder had gone. A failure is not covered by it — that is the session's
+whatever the microphone is doing, since it is why it is doing nothing.
+
+Kotlin still guards `onBeginningOfSpeech` and `onRmsChanged` on `wantListening`,
+and that is about traffic rather than about the rule: `onRmsChanged` is a codec
+encode and a main-thread hop many times a second, and in touch-to-speak mode the
+microphone is shut almost all of the time.
+
+The one exception is `finish`, which is `setListening(false, finish: true)`:
+`stopListening` rather than `cancel`, and the one result it brings back is
+allowed past. That is releasing a touch-to-speak button — the microphone closed
+because the sentence was over, not to throw it away — and it is ungated for the
+same reason, since holding a button down and speaking is not something to
+second-guess by loudness. Sherpa honours it too: the detector is holding a
+segment that no further audio is coming to end, so the worker is told to flush
+it.
+
+**A session can also open shut**, which is what `Voice.start`'s `listening`
+answers. Opening the microphone and closing it again is a real capture started
+and stopped and the system's own indicator flashing for nothing, so touch to
+speak asks at the door rather than undoing it afterwards.
 
 ### Per side, not per session
 

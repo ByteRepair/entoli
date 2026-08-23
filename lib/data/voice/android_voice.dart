@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart";
 
+import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "voice_strategies.dart";
@@ -47,20 +48,25 @@ class AndroidVoice extends Voice {
     RecognitionModel? recognition,
     required SpeechModel speech,
     int speaker = 0,
+    bool listening = true,
   }) async {
     if (!speech.isNative || (recognition != null && !recognition.isNative)) {
       throw StateError("Android runs the system voice engines, not a model.");
     }
     Listener? listener;
     if (recognition != null) {
+      // Asked for even where nothing is about to listen: the grant is what
+      // makes the Talk button work, and a permission sheet on the first press
+      // is one nobody expected.
       (await openMicrophone()).dispose();
-      listener = AndroidSpeechRecognizer();
+      listener = AndroidSpeechRecognizer(listening: listening);
     }
     // `speaker` is the sherpa catalog's idea of which voice in a model file to
     // use, and the system synthesiser has no such thing — the voice is the
     // user's, set in the OS. So the settings page draws no picker for it here
     // and nothing is passed on.
-    return ComposedVoiceSession(listener, AndroidTextToSpeech());
+    return ComposedVoiceSession(listener, AndroidTextToSpeech(),
+        listening: listening);
   }
 }
 
@@ -93,13 +99,23 @@ class AndroidVoiceBridge {
 
 /// Listening through Android's `SpeechRecognizer`. No model to load, no VAD:
 /// the OS delivers `onBeginningOfSpeech` (→ [VoiceInterrupted]) and
-/// `onResults` (→ [VoiceHeard]) directly. [level] is fed from
-/// `onRmsChanged`, which the platform emits as an RMS in dB — mapped to 0–1
-/// the way the sherpa path maps its own RMS.
+/// `onResults` (→ [VoiceHeard]) directly.
+///
+/// **What the service calls speech, a conversation does not.** It transcribes
+/// a television, a fan and the next room over as readily as the person holding
+/// the phone, and every one of those was a turn. There is no threshold on
+/// `SpeechRecognizer` to raise, so the utterance is judged after the fact by a
+/// [LoudnessGate] fed from `onRmsChanged` — which is also what [level] follows,
+/// against the room rather than against the scale's nominal range.
+///
+/// What a shut microphone is allowed to say is not decided here — that is one
+/// rule for both engines and it lives in [ComposedVoiceSession]. What is here
+/// is what only this side knows: a reading taken while the microphone is shut
+/// is not the room, so it is not measured, and the level goes to nothing.
 class AndroidSpeechRecognizer implements Listener {
-  AndroidSpeechRecognizer() {
+  AndroidSpeechRecognizer({bool listening = true}) : _listening = listening {
     _calls = AndroidVoiceBridge.instance.calls.listen(_onCall);
-    unawaited(_start());
+    if (listening) unawaited(_start());
   }
 
   late final StreamSubscription<MethodCall> _calls;
@@ -109,6 +125,18 @@ class AndroidSpeechRecognizer implements Listener {
   /// broadcast controller would drop it on the floor.
   final _events = StreamController<VoiceEvent>();
   final _levelOf = ValueNotifier(0.0);
+  final _gate = LoudnessGate();
+
+  /// Whether the microphone is open. Only the loudness half reads it: a
+  /// reading taken after a cancel is not a reading of the room this gate is
+  /// measuring.
+  bool _listening;
+
+  /// The one result the release of a touch-to-speak button asked for, which is
+  /// let past the gate rather than judged by it — holding a button down and
+  /// speaking is not something to second-guess by loudness.
+  bool _finishing = false;
+
   bool _closed = false;
 
   Future<void> _start() async {
@@ -126,14 +154,21 @@ class AndroidSpeechRecognizer implements Listener {
     if (_closed) return;
     switch (call.method) {
       case "heard":
+        final finishing = _finishing;
+        _finishing = false;
         final text = (call.arguments as String?)?.trim() ?? "";
-        if (text.isNotEmpty) _events.add(VoiceHeard(text));
+        final spoken = _gate.spoken();
+        if (text.isNotEmpty && (spoken || finishing)) _events.add(VoiceHeard(text));
       case "interrupted":
+        _gate.speechBegan();
         _events.add(const VoiceInterrupted());
       case "rms":
-        // `onRmsChanged` reports dB in the range -2..10 roughly; map to 0–1.
-        final rms = (call.arguments as num?)?.toDouble() ?? 0;
-        _levelOf.value = ((rms + 2) / 12).clamp(0.0, 1.0);
+        if (!_listening) return;
+        _gate.measure((call.arguments as num?)?.toDouble() ?? 0);
+        // Rounded, so a floor that creeps by a hundredth of a decibel does not
+        // wake the orb: a `ValueNotifier` drops a write of what it already
+        // holds, and this is on the audio path.
+        _levelOf.value = (_gate.level * 100).round() / 100;
       case "recognitionError":
         _fail((call.arguments as String?) ?? "Recognition failed.");
     }
@@ -150,10 +185,17 @@ class AndroidSpeechRecognizer implements Listener {
   ValueListenable<double> get level => _levelOf;
 
   @override
-  Future<void> setListening(bool on) async {
+  Future<void> setListening(bool on, {bool finish = false}) async {
     if (_closed) return;
+    _listening = on;
+    _finishing = !on && finish;
+    if (!on) {
+      _gate.quiet();
+      _levelOf.value = 0;
+    }
     try {
-      await voiceChannel.invokeMethod<String>("setRecognitionListening", on);
+      await voiceChannel.invokeMethod<String>(
+          "setRecognitionListening", {"on": on, "finish": finish});
     } catch (_) {}
   }
 
