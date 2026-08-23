@@ -9,6 +9,7 @@ import "core/config.dart";
 import "core/platform/app_icon.dart";
 import "core/platform/background_work.dart";
 import "core/platform/platform.dart" as platform;
+import "core/platform/system_palette.dart";
 import "data/local/file_reminder_store.dart";
 import "data/local/file_selector_picker.dart";
 import "domain/app_restart.dart";
@@ -59,6 +60,7 @@ class AppSession {
     // Started with them and awaited below: an asset read off a disk, or a fetch
     // in a browser, and nothing between wants it.
     final version = platform.appVersion();
+    final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
@@ -111,6 +113,7 @@ class AppSession {
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
         promptLibraryProvider.overrideWithValue(library),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
+        systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
@@ -290,11 +293,15 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Both narrowed rather than the settings object: without the `select`,
+    // adding a provider or editing an environment variable would rebuild the
+    // whole app under the user.
     final mode = ref.watch(appSettingsProvider.select((s) => s.appTheme.mode));
+    final look = ref.watch(appLookProvider);
     return MaterialApp(
       title: appTitle,
-      theme: entoliTheme(Brightness.light),
-      darkTheme: entoliTheme(Brightness.dark),
+      theme: entoliTheme(Brightness.light, look),
+      darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
       // All three wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
