@@ -64,9 +64,8 @@ Future<void> _push(BuildContext context, String? chatId, {ChatMeta? meta}) =>
 class VoicePage extends ConsumerStatefulWidget {
   const VoicePage({super.key, required this.chatId, this.meta});
 
-  /// The chat to speak into, or null to make one on the first word. Null is
-  /// also the session's key, and there is only one of those — see
-  /// `voiceControllerProvider`.
+  /// The chat to speak into, or null to make one on the first word. It is also
+  /// the session's key — see `voiceControllerProvider`.
   final String? chatId;
 
   /// What that chat will be made with, where there is one to make.
@@ -77,10 +76,11 @@ class VoicePage extends ConsumerStatefulWidget {
 }
 
 class _VoicePageState extends ConsumerState<VoicePage> {
-  /// Held rather than read in [dispose], where the ref is no longer safe to
-  /// use — and the controller outlives this route, so there is something left
-  /// to tell.
-  late final VoiceController _voice =
+  /// The session this page drives. Read per call rather than held: the `build`
+  /// below is what keeps it alive, and there is no `dispose` here to reach it
+  /// from — leaving is the last watcher going, which disposes the session,
+  /// which shuts it.
+  VoiceController get _voice =>
       ref.read(voiceControllerProvider(widget.chatId).notifier);
 
   @override
@@ -92,14 +92,6 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _voice.start(meta: widget.meta);
     });
-  }
-
-  /// Leaving closes the session: the controller outlives the route, so without
-  /// this it would listen on with nothing on screen.
-  @override
-  void dispose() {
-    _voice.stop();
-    super.dispose();
   }
 
   @override

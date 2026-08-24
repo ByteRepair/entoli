@@ -198,27 +198,63 @@ a chat exists because something is in it — so a voice session nobody spoke in
 leaves nothing behind, and there is no delete-if-empty anywhere to clean up
 after one.
 
-What it cost is that the session stopped being keyed on what it is about.
-`openChatId` is what it was opened with and `_chatId` is what it is speaking
-into; they differ for exactly one session, and four things follow.
+What it cost is that the session stopped being keyed on what it is about. The
+key is how the page was opened; `_chatId` is what is being spoken into, seeded
+from the key and moved once, by `_speakInto`, when a chat is made.
 
-`_speakInto` is the only thing that moves `_chatId`, and it closes the old
-subscription before opening the new one. That close is load-bearing rather than
-tidy: `ref.listen` hands the element a subscription to *dispose*, not to
-re-point, so one left open goes on reading the previous chat's replies out into
-this session.
+That move closes the old subscription before opening the new one, and the close
+is load-bearing rather than tidy: `ref.listen` hands the element a subscription
+to *dispose*, not to re-point, so one left open goes on reading the previous
+chat's replies out into this session.
 
 `VoiceViewState` carries `chatId`, because the page is built on the key and the
 title and the transcript need the chat, which the key is not.
 
-**`start` puts `_chatId` back, not `stop`.** The null-keyed instance is the only
-one there is, so a chat one session made is still here when the next new voice
-chat begins — and going on speaking into it would put one conversation in the
-middle of another. Resetting when the *next* session starts rather than when
-this one ends is what lets stopping leave the screen alone: the notification's
-Stop arrives with the page still up, and clearing the chat there would take the
-transcript and the turn's own surface off it and leave a blank screen with no
-way back.
+**The session is the page's, and that is what makes the null key safe.** The
+provider is auto-disposed, so it lives exactly as long as something is watching
+it — which is the page — and the next new voice chat builds a controller that
+has never heard of the last one's chat. Nothing is put back anywhere, and there
+is no window in which the old chat could be read: the alternative, resetting at
+`start`, left the first frame of the next session showing the previous
+conversation's title and five lines of its transcript, since `start` only runs
+after it.
+
+It is also what shuts the session. Leaving is the last watcher going, which
+disposes the notifier, which runs `_shutdown` — so the page has no `dispose` of
+its own. Stopping by hand there as well said the same thing twice and raced
+with it. What that put on `_shutdown` is that it now runs on every page close
+rather than only on a session that was started, which is why releasing the
+foreground hold asks whether one was ever taken.
+
+`stop` therefore leaves `_chatId` alone, and the screen goes on showing what was
+said. The notification's Stop arrives with the page still up, and clearing the
+chat there would take the transcript and the turn's own surface off it and leave
+a blank screen with no way back. What `stop` does close is the *listening*: a
+session that is off does not read replies out, and a subscription left open
+fires on every flush of that chat for as long as the app runs.
+
+**One voice session in the app, and it is written down rather than assumed.**
+`runningVoiceProvider` holds whichever controller has the device, and `start`
+takes it off that one before opening its own — the same thing it already did to
+`ReadAloud`, which holds a speech model of its own. It holds the controller
+rather than a key, because the key is how a page was opened and two pages can
+share one.
+
+That is not a hypothetical. The assistant gesture pushes a voice page over
+whatever is on screen, a running session included, and the two are not
+necessarily on the same key: over a chat it is `openVoice(X)`, and the gesture's
+is null. Two keys are two controllers, and before this they were two
+`VoiceSession`s — two microphones and two worker isolates, where
+`lib/domain/voice.dart` says there is one of each. `BackgroundWork.listening` is
+a flag rather than a count, so the first of them to end released the foreground
+hold the other was still relying on. It predates deferring the chat; two keys
+were reachable before that too.
+
+`release` only clears its own claim, and only while there is something to
+release to: a session is shut from `onDispose`, and on the way out of the app
+that runs after the registry has gone itself. What it does not make impossible
+is two pages *on screen* — the one underneath is left showing a session that
+has stopped. That is a screen to go back from rather than a device held open.
 
 **One chat per session, however fast the words come.** The microphone is open
 for as long as the chat is being written down, so a second utterance arrives to
