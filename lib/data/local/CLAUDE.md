@@ -401,10 +401,9 @@ does need is Hexagon SDK 6.6 or later at **build** time. `tool/android-setup.sh`
 fetches it — Qualcomm's own route wants a package manager installed on the host,
 so this is the Community Edition repackaging llama.cpp's own CI builds in, pinned
 by SHA-256 in `versions.sh` — and `build.sh` picks it up from where that leaves
-it. CI still builds without it, because what the NPU build emits is compiled by
-Qualcomm's toolchain against Qualcomm's headers and whether it can ship is a
-licensing question. Nothing else changes when it is there: the backend arrives as
-two more `libggml-*.so` and is found the way the CPU's is.
+it. CI fetches it as well, so what a release ships is what a local build makes.
+Nothing else changes when it is there: the backend arrives as two more
+`libggml-*.so` and is found the way the CPU's is.
 
 It also decides the catalog. The Hexagon backend repacks **Q4_0, Q8_0 and
 MXFP4** and nothing else, so every entry in `local_model.dart` is Q4_0 — a
