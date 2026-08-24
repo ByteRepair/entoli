@@ -352,6 +352,19 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setAutoMemory(bool value) =>
       _update((s) => s.autoMemory = value);
 
+  /// Whether relevant memories are recalled into each turn. A sub-gate of
+  /// [setAutoMemory], on by default.
+  Future<void> setMemoryRecall(bool value) =>
+      _update((s) => s.memoryRecall = value);
+
+  /// Whether a background model writes memories from a turn after it ends.
+  Future<void> setMemoryExtraction(bool value) =>
+      _update((s) => s.memoryExtraction = value);
+
+  /// Whether the agent is offered the memory tools.
+  Future<void> setMemoryAgentTool(bool value) =>
+      _update((s) => s.memoryAgentTool = value);
+
   /// What writes memories in the background, or nothing at all — until one is
   /// picked, extraction and consolidation stay off.
   Future<void> setMemoryModel(ModelChoice choice) => _update((s) => s

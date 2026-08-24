@@ -173,6 +173,19 @@ class MemorySettings {
   /// Whether the auto-memory subsystem runs at all.
   final bool autoMemory;
 
+  /// Whether relevant memories are recalled into each turn. A sub-gate of
+  /// [autoMemory], on by default.
+  final bool recall;
+
+  /// Whether a background model writes memories from a turn after it ends.
+  /// A sub-gate of [autoMemory], on by default, inert beside it until [bgModel]
+  /// is picked.
+  final bool extract;
+
+  /// Whether the agent is offered the memory tools. A sub-gate of [autoMemory],
+  /// on by default.
+  final bool agentTool;
+
   /// The effective store, or null when [autoMemory] is off. Which project's
   /// it is — the chat's own or the default's — was resolved before this.
   final String? memoryDir;
@@ -187,6 +200,9 @@ class MemorySettings {
     this.imports = false,
     this.nested = false,
     this.autoMemory = false,
+    this.recall = true,
+    this.extract = true,
+    this.agentTool = true,
     this.memoryDir,
     this.bgModel,
     this.bgProvider,

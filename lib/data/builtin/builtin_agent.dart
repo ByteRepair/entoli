@@ -239,6 +239,7 @@ class BuiltinAgent {
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
+    this.recall = "",
   });
 
   final BuiltinSession session;
@@ -261,6 +262,12 @@ class BuiltinAgent {
   /// second system message either way, so the cacheable body above it never
   /// changes.
   final List<InstructionFile> instructions;
+
+  /// The memories recalled for this turn, already rendered as a block. Empty
+  /// when the gate is off, nothing matched, or the store was empty. The
+  /// backend queried the store before the agent existed, for the reason
+  /// [instructions] was loaded there.
+  final String recall;
 
   /// AGENTS.md paths already in front of the model, seeded from
   /// [instructions]. A nested file found on a read is added, so the same one
@@ -520,6 +527,7 @@ class BuiltinAgent {
       projectWorkspace: projectWorkspace,
       agentPrompt: agentPrompt,
       instructions: renderInstructions(instructions),
+      recall: recall,
       canRunCommands: shell.canRunCommands,
     );
     final head = [

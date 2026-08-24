@@ -44,6 +44,9 @@ void main() {
         instructionImports: true,
         nestedInstructions: true,
         autoMemory: true,
+        memoryRecall: false,
+        memoryExtraction: false,
+        memoryAgentTool: false,
         memoryProviderId: "ollama-cloud",
         memoryModelId: "qwen-2.5",
       );
@@ -54,8 +57,21 @@ void main() {
       expect(loaded.instructionImports, isTrue);
       expect(loaded.nestedInstructions, isTrue);
       expect(loaded.autoMemory, isTrue);
+      expect(loaded.memoryRecall, isFalse);
+      expect(loaded.memoryExtraction, isFalse);
+      expect(loaded.memoryAgentTool, isFalse);
       expect(loaded.memoryProviderId, "ollama-cloud");
       expect(loaded.memoryModelId, "qwen-2.5");
+    });
+
+    // The sub-gates default on: a file that turns auto-memory on without
+    // naming them says nothing, and gets recall, extraction and the tools.
+    test("the memory sub-gates default on", () async {
+      await AppSettings(autoMemory: true).save(config);
+      final loaded = AppSettings.load(config);
+      expect(loaded.memoryRecall, isTrue);
+      expect(loaded.memoryExtraction, isTrue);
+      expect(loaded.memoryAgentTool, isTrue);
     });
 
     // Defaults write nothing: an untouched settings.json carries no memory
@@ -70,6 +86,9 @@ void main() {
         "instructionImports",
         "nestedInstructions",
         "autoMemory",
+        "memoryRecall",
+        "memoryExtraction",
+        "memoryAgentTool",
         "memoryModelId",
         "memoryProviderId",
       ]) {
@@ -159,6 +178,34 @@ void main() {
       final memory = backend.prompts.single.settings.memory;
       expect(memory.instructions, isTrue);
       expect(memory.memoryDir, isNull);
+    });
+
+    test("the memory sub-gates travel with the turn", () async {
+      final repo = repoWith(AppSettings(
+        autoMemory: true,
+        memoryRecall: false,
+        memoryExtraction: false,
+      ));
+      final chat = await repo.createChat();
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final memory = backend.prompts.single.settings.memory;
+      expect(memory.recall, isFalse);
+      expect(memory.extract, isFalse);
+      expect(memory.agentTool, isTrue);
+    });
+
+    test("the memory sub-gates default on with the store", () async {
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final chat = await repo.createChat();
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final memory = backend.prompts.single.settings.memory;
+      expect(memory.recall, isTrue);
+      expect(memory.extract, isTrue);
+      expect(memory.agentTool, isTrue);
     });
 
     test("the background model pair travels with the turn", () async {

@@ -5,6 +5,7 @@ import "package:flutter/foundation.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
+import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart";
@@ -19,6 +20,7 @@ import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
 import "builtin_agent.dart";
 import "memory/instructions.dart";
+import "memory/store.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/llm_registry.dart";
@@ -202,6 +204,26 @@ class BuiltinBackend implements AgentBackend {
               imports: settings.memory.imports,
             )
           : const <InstructionFile>[];
+      // The memories this turn is about, rendered ready to read. A store
+      // that will not answer recalls nothing rather than costing the turn:
+      // the memories are a convenience, not the turn.
+      String recall = "";
+      if (settings.memory.autoMemory &&
+          settings.memory.recall &&
+          settings.memory.memoryDir != null) {
+        try {
+          final memoryStore = MemoryStore(config.fs, settings.memory.memoryDir!);
+          final query = (prompt ??
+                  history.lastWhereOrNull((m) => m.role == MessageRole.user))
+              ?.plainText ??
+              "";
+          if (query.isNotEmpty) {
+            recall = renderRecall(await memoryStore.search(query));
+          }
+        } catch (e) {
+          logFailure("memory", "recall failed: $e");
+        }
+      }
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {
@@ -228,6 +250,7 @@ class BuiltinBackend implements AgentBackend {
         rateLimitGate: rateLimitGate,
         memory: settings.memory,
         instructions: instructions,
+        recall: recall,
         // A headless turn offers neither: an ask_user parks it on a completer
         // nobody will complete, and there is nobody to watch a fan-out.
         offerAskTool: settings.offerAsk,

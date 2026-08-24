@@ -11,6 +11,7 @@ import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -205,6 +206,53 @@ void main() {
       await send(backend, "hi");
 
       expect(client.sent.first[1].text, isNot(contains("project rules")));
+    });
+
+    test("relevant memories are recalled into the turn", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      await store.add("the user likes code formatted with tabs");
+      await store.add("notes about the weather");
+
+      await send(backend, "how should the code be formatted",
+          memory: MemorySettings(
+              autoMemory: true, memoryDir: config.memoryDir()));
+
+      final system = client.sent.first[1].text;
+      expect(system, contains("Recalled memories"));
+      expect(system, contains("the user likes code formatted with tabs"));
+      // The other memory shares only a word the recalled one has too, which
+      // is not specific enough.
+      expect(system, isNot(contains("notes about the weather")));
+    });
+
+    test("no recall section when the recall gate is off", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      await store.add("the user likes code formatted with tabs");
+
+      await send(backend, "how should the code be formatted",
+          memory: MemorySettings(
+              autoMemory: true, recall: false, memoryDir: config.memoryDir()));
+
+      expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
+    });
+
+    test("an empty store recalls nothing and the turn still runs", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      final events = await send(backend, "how should the code be formatted",
+          memory: MemorySettings(
+              autoMemory: true, memoryDir: config.memoryDir()));
+
+      expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
+      expect(events.last, isA<DoneEvent>());
     });
 
     test("a chat in a project works in that project's directories", () async {

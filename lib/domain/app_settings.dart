@@ -25,6 +25,9 @@ class AppSettings {
     this.instructionImports = false,
     this.nestedInstructions = false,
     this.autoMemory = false,
+    this.memoryRecall = true,
+    this.memoryExtraction = true,
+    this.memoryAgentTool = true,
     this.memoryModelId,
     this.memoryProviderId,
     this.environment = const {},
@@ -100,6 +103,21 @@ class AppSettings {
   /// by a model they have not chosen.
   String? memoryModelId;
   String? memoryProviderId;
+
+  /// Whether relevant memories are recalled into each turn. A sub-gate of
+  /// [autoMemory], on by default: the store is read-only from the turn's point
+  /// of view, so the cost is prompt size, capped.
+  bool memoryRecall;
+
+  /// Whether a background model writes memories from a turn after it ends.
+  /// A sub-gate of [autoMemory], on by default, inert beside it until
+  /// [memoryModelId] is set.
+  bool memoryExtraction;
+
+  /// Whether the agent is offered the `memorySave` and `memorySearch` tools.
+  /// A sub-gate of [autoMemory], on by default: a memory it decides to keep is
+  /// one it judged worth keeping, rather than one a background pass guessed at.
+  bool memoryAgentTool;
 
   /// Environment variables the agent's commands run under, and that a provider
   /// may name instead of holding its key. Held here rather than in the shell
@@ -263,6 +281,11 @@ class AppSettings {
         instructionImports: json["instructionImports"] as bool? ?? false,
         nestedInstructions: json["nestedInstructions"] as bool? ?? false,
         autoMemory: json["autoMemory"] as bool? ?? false,
+        // Written only when off, so a file that predates them says nothing and
+        // gets the on defaults.
+        memoryRecall: json["memoryRecall"] as bool? ?? true,
+        memoryExtraction: json["memoryExtraction"] as bool? ?? true,
+        memoryAgentTool: json["memoryAgentTool"] as bool? ?? true,
         memoryModelId: _orNull(json["memoryModelId"] as String?),
         memoryProviderId: _orNull(json["memoryProviderId"] as String?),
         // `opencodeEnv` is what this was called when a second backend spawned
@@ -349,6 +372,9 @@ class AppSettings {
         instructionImports: instructionImports,
         nestedInstructions: nestedInstructions,
         autoMemory: autoMemory,
+        memoryRecall: memoryRecall,
+        memoryExtraction: memoryExtraction,
+        memoryAgentTool: memoryAgentTool,
         memoryModelId: memoryModelId,
         memoryProviderId: memoryProviderId,
         environment: environment,
@@ -395,6 +421,9 @@ class AppSettings {
       if (instructionImports) "instructionImports": instructionImports,
       if (nestedInstructions) "nestedInstructions": nestedInstructions,
       if (autoMemory) "autoMemory": autoMemory,
+      if (!memoryRecall) "memoryRecall": memoryRecall,
+      if (!memoryExtraction) "memoryExtraction": memoryExtraction,
+      if (!memoryAgentTool) "memoryAgentTool": memoryAgentTool,
       if (memoryModelId != null) "memoryModelId": memoryModelId,
       if (memoryProviderId != null) "memoryProviderId": memoryProviderId,
       if (environment.isNotEmpty) "environment": environment,
