@@ -281,9 +281,36 @@ class ChatRepository {
       classifierModel: settings.classifierModelId,
       // A project can override the app-level profile; null falls back to it.
       profile: (await projectSettingsOf(project)).profile ?? settings.profile,
+      memory: await _resolveMemory(settings, project),
       // A turn nobody watches must not be able to park on an answer.
       offerAsk: !headless,
       offerTask: !headless,
+    );
+  }
+
+  /// Which memories a turn reads and writes: the app-level gates over which
+  /// project's store answers. A non-default project with its own toggle on
+  /// keeps a store of its own; every other chat shares the default project's.
+  /// Both halves of the background model travel together or not at all, and
+  /// until one is picked nothing in the subsystem writes.
+  Future<MemorySettings> _resolveMemory(AppSettings settings, String? project) async {
+    if (!settings.loadInstructions && !settings.autoMemory) return MemorySettings.off;
+    String? dir;
+    if (settings.autoMemory) {
+      var owner = project;
+      if (owner != null && !(await projectSettingsOf(owner)).useProjectMemory) {
+        owner = null;
+      }
+      dir = _config.memoryDir(project: owner);
+    }
+    return MemorySettings(
+      instructions: settings.loadInstructions,
+      imports: settings.instructionImports,
+      nested: settings.nestedInstructions,
+      autoMemory: settings.autoMemory,
+      memoryDir: dir,
+      bgModel: settings.memoryModelId,
+      bgProvider: settings.memoryProviderId,
     );
   }
 

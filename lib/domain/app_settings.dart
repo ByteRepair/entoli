@@ -21,6 +21,12 @@ class AppSettings {
     this.titleProviderId,
     this.classifierModelId,
     this.classifierProviderId,
+    this.loadInstructions = false,
+    this.instructionImports = false,
+    this.nestedInstructions = false,
+    this.autoMemory = false,
+    this.memoryModelId,
+    this.memoryProviderId,
     this.environment = const {},
     this.approveMode = ApproveMode.ask,
     this.llmProviders = const [],
@@ -67,6 +73,33 @@ class AppSettings {
   /// here auto mode falls back to asking for every command.
   String? classifierModelId;
   String? classifierProviderId;
+
+  /// Whether the agent reads AGENTS.md out of the workspaces at all. The
+  /// master gate: off, the two switches below mean nothing. Off by default —
+  /// it is instructions from files the user has to have written, but it is
+  /// still context they did not ask this turn to carry.
+  bool loadInstructions;
+
+  /// Whether `@path` references inside an AGENTS.md pull in more files. A
+  /// sub-gate of [loadInstructions].
+  bool instructionImports;
+
+  /// Whether reading a file in a subdirectory that has its own AGENTS.md
+  /// pulls that file into the turn. A sub-gate of [loadInstructions].
+  bool nestedInstructions;
+
+  /// Whether the auto-memory subsystem runs: a per-project store of markdown
+  /// memories the agent reads, recalls and writes with a background model.
+  /// Off by default for the same reason as [loadInstructions], and inert
+  /// beside it until [memoryModelId] is set.
+  bool autoMemory;
+
+  /// What writes memories in the background (extraction after a turn,
+  /// consolidation between chats). Both halves or neither: with nothing here
+  /// auto-memory stays read-only — nothing is written on the user's behalf
+  /// by a model they have not chosen.
+  String? memoryModelId;
+  String? memoryProviderId;
 
   /// Environment variables the agent's commands run under, and that a provider
   /// may name instead of holding its key. Held here rather than in the shell
@@ -226,6 +259,12 @@ class AppSettings {
         titleProviderId: _orNull(json["titleProviderId"] as String?),
         classifierModelId: _orNull(json["classifierModelId"] as String?),
         classifierProviderId: _orNull(json["classifierProviderId"] as String?),
+        loadInstructions: json["loadInstructions"] as bool? ?? false,
+        instructionImports: json["instructionImports"] as bool? ?? false,
+        nestedInstructions: json["nestedInstructions"] as bool? ?? false,
+        autoMemory: json["autoMemory"] as bool? ?? false,
+        memoryModelId: _orNull(json["memoryModelId"] as String?),
+        memoryProviderId: _orNull(json["memoryProviderId"] as String?),
         // `opencodeEnv` is what this was called when a second backend spawned
         // servers. Read-only: `save` writes `environment`, so a file migrates
         // itself the first time anything is changed, and the fallback can go
@@ -306,6 +345,12 @@ class AppSettings {
         titleProviderId: titleProviderId,
         classifierModelId: classifierModelId,
         classifierProviderId: classifierProviderId,
+        loadInstructions: loadInstructions,
+        instructionImports: instructionImports,
+        nestedInstructions: nestedInstructions,
+        autoMemory: autoMemory,
+        memoryModelId: memoryModelId,
+        memoryProviderId: memoryProviderId,
         environment: environment,
         approveMode: approveMode,
         llmProviders: llmProviders,
@@ -346,6 +391,12 @@ class AppSettings {
       if (titleProviderId != null) "titleProviderId": titleProviderId,
       if (classifierModelId != null) "classifierModelId": classifierModelId,
       if (classifierProviderId != null) "classifierProviderId": classifierProviderId,
+      if (loadInstructions) "loadInstructions": loadInstructions,
+      if (instructionImports) "instructionImports": instructionImports,
+      if (nestedInstructions) "nestedInstructions": nestedInstructions,
+      if (autoMemory) "autoMemory": autoMemory,
+      if (memoryModelId != null) "memoryModelId": memoryModelId,
+      if (memoryProviderId != null) "memoryProviderId": memoryProviderId,
       if (environment.isNotEmpty) "environment": environment,
       "approveMode": approveMode.name,
       if (llmProviders.isNotEmpty)

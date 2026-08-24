@@ -335,6 +335,29 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..classifierProviderId = choice.providerId
     ..classifierModelId = choice.modelId);
 
+  /// Whether the agent reads AGENTS.md out of the workspaces. The master
+  /// gate; the two below are sub-gates of it.
+  Future<void> setLoadInstructions(bool value) =>
+      _update((s) => s.loadInstructions = value);
+
+  /// Whether `@path` references inside an AGENTS.md pull in more files.
+  Future<void> setInstructionImports(bool value) =>
+      _update((s) => s.instructionImports = value);
+
+  /// Whether reading a file pulls in a subdirectory's own AGENTS.md.
+  Future<void> setNestedInstructions(bool value) =>
+      _update((s) => s.nestedInstructions = value);
+
+  /// Whether the auto-memory subsystem runs at all.
+  Future<void> setAutoMemory(bool value) =>
+      _update((s) => s.autoMemory = value);
+
+  /// What writes memories in the background, or nothing at all — until one is
+  /// picked, extraction and consolidation stay off.
+  Future<void> setMemoryModel(ModelChoice choice) => _update((s) => s
+    ..memoryProviderId = choice.providerId
+    ..memoryModelId = choice.modelId);
+
   /// The user's profile, injected into the system prompt. Null clears it.
   Future<void> setProfile(Profile? profile) =>
       _update((s) => s.profile = profile);
@@ -755,6 +778,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
 
   Future<void> setProfile(Profile? profile) async {
     final next = state.copy()..profile = profile;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Whether this project keeps an auto-memory store of its own rather than
+  /// sharing the default project's.
+  Future<void> setUseProjectMemory(bool value) async {
+    final next = state.copy()..useProjectMemory = value;
     state = next;
     await next.save(_config, project: project);
   }
