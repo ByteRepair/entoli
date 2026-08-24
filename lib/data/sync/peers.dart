@@ -137,8 +137,9 @@ class SyncPeers {
 
   LivePeer? remove(String deviceId) => _live.remove(deviceId);
 
-  /// To every peer following [chatId]. The one shape every serving-side
-  /// message takes, so an arm cannot forget the subscription check.
+  /// To every peer following [chatId], so an arm carrying a chat's contents
+  /// cannot forget the subscription check. What reaches everyone instead — a
+  /// deletion, the chat list — loops [live] itself and says so there.
   void toSubscribers(String chatId, SyncMessage message) {
     for (final peer in _live.values) {
       if (peer.subscriptions.contains(chatId)) unawaited(peer.send(message));
