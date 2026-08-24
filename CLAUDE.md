@@ -281,12 +281,13 @@ is `logDetail`, which is debug-only.
 - git is no longer among them. The agent gets it from `apk` inside the Alpine
   rootfs, which is a distribution's job to patch rather than ours — so a device
   with no rootfs installed has no git.
-- The NPU is opt-in and wants Qualcomm's SDK: `tool/android-setup.sh` fetches it
-  into `tool/bundle/toolchains/` against a pinned SHA-256 and `build.sh` finds it
-  there. Only the NPU is gated on it: the build always carries the CPU and the
-  Vulkan GPU backend, so a build without the SDK still accelerates most phones,
-  and the settings page says the device has no accelerator only when it has
-  neither an NPU nor a Vulkan-1.1 GPU — see "What the NPU actually is".
+- The NPU wants Qualcomm's SDK: `tool/android-setup.sh` fetches it into
+  `tool/bundle/toolchains/` against a pinned SHA-256 and `build.sh` finds it
+  there. CI runs it too, so what a release ships is what this builds. Only the
+  NPU is gated on it: the build always carries the CPU and the Vulkan GPU
+  backend, so a build without the SDK still accelerates most phones, and the
+  settings page says the device has no accelerator only when it has neither an
+  NPU nor a Vulkan-1.1 GPU — see "What the NPU actually is".
 - Setup: `tool/prepare.sh` — packages plus codegen. The generated sources are
   not in the repository, so a fresh clone does not compile until it has run,
   and it wants running again whenever a `@freezed` or `@JsonSerializable` type

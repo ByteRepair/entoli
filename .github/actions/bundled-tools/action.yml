@@ -33,8 +33,10 @@ runs:
       with:
         path: tool/bundle/dist
         # The recipe and the versions between them decide every byte of the
-        # output, so nothing else belongs in the key.
-        key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/bundle/versions.sh', 'tool/bundle/build.sh', 'tool/bundle/talloc-config.h') }}
+        # output — this file included, since whether it fetches the Hexagon SDK
+        # below is the difference between an arm64 build with an NPU backend in
+        # it and one without, and nothing under tool/ changes when that does.
+        key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/bundle/versions.sh', 'tool/bundle/build.sh', 'tool/bundle/talloc-config.h', '.github/actions/bundled-tools/action.yml') }}
 
     # The runner image ships one, and llama.cpp's build is generated for it.
     # Checked rather than assumed: an image that dropped it would otherwise fail
@@ -45,6 +47,15 @@ runs:
       run: |
         command -v ninja >/dev/null ||
           { sudo apt-get update && sudo apt-get install -y ninja-build; }
+
+    # build.sh builds the NPU backend only where it finds this, and says so
+    # nowhere a runner log is read — an APK without it installs, runs, and tells
+    # the one kind of phone that has an NPU that it has no NPU. 660 MiB, on the
+    # runs that build rather than restore.
+    - name: Fetch the Hexagon SDK the NPU backend is built against
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: tool/android-setup.sh
 
     - name: Build the tools
       if: steps.cache.outputs.cache-hit != 'true'
