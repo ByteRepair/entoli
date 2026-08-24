@@ -86,6 +86,13 @@ void main() {
   Finder listed(String title) =>
       find.descendant(of: find.byType(Sidebar), matching: find.text(title));
 
+  /// Open a chat row's context menu. Shared by the pinning and deleting groups,
+  /// which both tap the same `more_vert` trigger.
+  Future<void> openMenu(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await settleIo(tester);
+  }
+
   // The list is what the new-chat screen's first message reaches, and it only
   // reaches it because creating the chat invalidates it.
   testWidgets("its first message puts it in the list", (tester) async {
@@ -446,11 +453,6 @@ void main() {
   });
 
   group("pinning", () {
-    Future<void> openMenu(WidgetTester tester) async {
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await settleIo(tester);
-    }
-
     testWidgets("the context menu offers Pin on an unpinned chat", (tester) async {
       await io(tester, () => app.seedChat(title: "a chat"));
       await pumpBeside(tester);
@@ -580,11 +582,6 @@ void main() {
     });
   });
   group("deleting", () {
-    Future<void> openMenu(WidgetTester tester) async {
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await settleIo(tester);
-    }
-
     Future<void> confirmDelete(WidgetTester tester) async {
       await tester.tap(find.text("Delete"));
       await pumpUntil(tester, find.text("Delete chat?"));
