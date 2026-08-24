@@ -1,10 +1,10 @@
 name: Release build
 
 # The binaries a release is downloaded from, and the checks that stop a bad one
-# being built: a signed APK and a Linux AppImage, both named after the version
-# in pubspec. `release.yml` calls this and attaches what comes out; a dispatch
-# says whether a tag builds without publishing anything. See "Releasing" in
-# CLAUDE.md.
+# being built: a signed APK per ABI and a Linux AppImage, all named after the
+# version in pubspec. `release.yml` calls this and attaches what comes out; a
+# dispatch says whether a tag builds without publishing anything. See
+# "Releasing" in CLAUDE.md.
 on:
   workflow_call:
     inputs:
@@ -24,12 +24,11 @@ on:
       ANDROID_KEY_PASSWORD:
         required: true
     outputs:
-      apk:
-        description: The APK's file name, in the `apk` artifact.
-        value: ${{ jobs.version.outputs.apk }}
-      appimage:
-        description: The AppImage's file name, in the `appimage` artifact.
-        value: ${{ jobs.version.outputs.appimage }}
+      assets:
+        description: >
+          Every file to attach, as `{file, artifact}` objects naming the
+          upload each is in. A caller drives one publish per entry.
+        value: ${{ jobs.version.outputs.assets }}
   workflow_dispatch:
     inputs:
       tag:
@@ -48,8 +47,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.version.outputs.code }}
-      apk: ${{ steps.version.outputs.apk }}
+      apks: ${{ steps.version.outputs.apks }}
       appimage: ${{ steps.version.outputs.appimage }}
+      assets: ${{ steps.version.outputs.assets }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -88,17 +88,31 @@ jobs:
           # The names are composed once, here: an attestation records its
           # subject by name, so the file attested and the file uploaded have to
           # be the same string, and they are built in different jobs.
+          #
+          # Keyed by ABI, which is `--split-per-abi`'s output and so Flutter's
+          # default target platforms rather than anything this repository
+          # chooses; the android job fails on an APK it named and did not get,
+          # so a Flutter that drops one is a build error rather than a release
+          # missing a file nobody looks for.
+          abis="arm64-v8a armeabi-v7a x86_64"
+          apks="$(jq -nc --arg abis "$abis" --arg v "$version" \
+            '$abis | split(" ") | map({(.): "entoli-\($v)-\(.).apk"}) | add')"
+          appimage="entoli-$version-x86_64.AppImage"
+
           {
             echo "code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))"
-            echo "apk=entoli-$version.apk"
-            echo "appimage=entoli-$version-x86_64.AppImage"
+            echo "apks=$apks"
+            echo "appimage=$appimage"
+            echo "assets=$(jq -nc --argjson apks "$apks" --arg appimage "$appimage" \
+              '[$apks[] | {file: ., artifact: "apk"}]
+                 + [{file: $appimage, artifact: "appimage"}]')"
           } >> "$GITHUB_OUTPUT"
 
   android:
     needs: version
     runs-on: ubuntu-latest
     env:
-      APK: ${{ needs.version.outputs.apk }}
+      APKS: ${{ needs.version.outputs.apks }}
       VERSION_CODE: ${{ needs.version.outputs.code }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -145,29 +159,62 @@ jobs:
       # Scoped to this step rather than the whole job. Without the environment
       # build.gradle.kts falls back to the debug key, which the next step
       # catches.
-      - name: Build the APK
+      - name: Build the APKs
         env:
           ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release --build-number="$VERSION_CODE"
+        run: |
+          flutter build apk --release --split-per-abi \
+            --build-number="$VERSION_CODE"
 
-      # A debug-signed release installs fine and is caught only at the next
-      # release, which will not install over it.
-      - name: Check the APK is signed with the release key
+      # Named before it is checked, so every check below reads the file that
+      # ships rather than the one it was copied from.
+      - name: Name the APKs after the release
         run: |
           set -euo pipefail
-          apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
-          certs="$("$apksigner" verify --print-certs \
-            build/app/outputs/flutter-apk/app-release.apk)"
-          echo "$certs"
-          if grep -q 'CN=Android Debug' <<<"$certs"; then
-            echo "::error::The release APK is signed with the debug key"
-            exit 1
-          fi
-          echo "SIGNER=$(grep -m1 'SHA-256 digest' <<<"$certs" | awk '{print $NF}')" \
+          mkdir -p dist
+          while read -r abi name; do
+            built="build/app/outputs/flutter-apk/app-$abi-release.apk"
+            if [ ! -f "$built" ]; then
+              echo "::error::The build produced no APK for $abi"
+              exit 1
+            fi
+            cp "$built" "dist/$name"
+          done <<<"$(jq -r 'to_entries[] | .key + " " + .value' <<<"$APKS")"
+
+      # A debug-signed release installs fine and is caught only at the next
+      # release, which will not install over it. One key signs all three, and a
+      # release carrying two signatures is worse than one that fails here.
+      # The newest installed, rather than whichever version the image happens to
+      # list first.
+      - name: Find the Android build tools
+        run: |
+          set -euo pipefail
+          echo "BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)" \
             >> "$GITHUB_ENV"
+
+      - name: Check the APKs are signed with the release key
+        run: |
+          set -euo pipefail
+          signer=
+          for apk in dist/*.apk; do
+            certs="$("$BUILD_TOOLS/apksigner" verify --print-certs "$apk")"
+            echo "$apk"
+            echo "$certs"
+            if grep -q 'CN=Android Debug' <<<"$certs"; then
+              echo "::error::$apk is signed with the debug key"
+              exit 1
+            fi
+            digest="$(grep -m1 'SHA-256 digest' <<<"$certs" | awk '{print $NF}')"
+            if [ -n "$signer" ] && [ "$digest" != "$signer" ]; then
+              echo "::error::$apk is signed by a different certificate than the others"
+              exit 1
+            fi
+            signer="$digest"
+          done
+          echo "SIGNER=$signer" >> "$GITHUB_ENV"
 
       # A release APK with no proot in it installs and runs, and the Terminal
       # settings say this build cannot run a Linux — which nobody would know was
@@ -175,53 +222,83 @@ jobs:
       # that is not noticed until it has shipped. llama.cpp's server is the
       # second, and it is checked on its own ABIs: it is arm64 only, so asking
       # for it everywhere would fail every release.
-      - name: Check the tools are in the APK
+      #
+      # The last loop is the split itself: an APK carrying another ABI's
+      # libraries passes every check above, since a universal one contains
+      # everything each of these looks for.
+      - name: Check each APK holds its own ABI and nothing else
+        env:
+          TOOL_ABIS: ${{ steps.tools.outputs.abis }}
+          LLAMA_ABIS: ${{ steps.tools.outputs.llama-abis }}
         run: |
           set -euo pipefail
-          check() {
-            if ! unzip -l build/app/outputs/flutter-apk/app-release.apk \
-                | grep -q "lib/$1/$2"; then
-              echo "::error::The release APK has no $2 for $1"
+          has() { [[ " $1 " == *" $2 "* ]]; }
+          pairs="$(jq -r 'to_entries[] | .key + " " + .value' <<<"$APKS")"
+
+          # Two lists of the same three strings: bundled-tools names what it
+          # cross-compiles for, the version job what Flutter splits into. A
+          # tool built for an ABI no APK carries would otherwise be checked
+          # nowhere and shipped nowhere.
+          for abi in $TOOL_ABIS $LLAMA_ABIS; do
+            if ! grep -q "^$abi " <<<"$pairs"; then
+              echo "::error::The tools are built for $abi, which no APK ships"
               exit 1
             fi
-          }
-          for abi in ${{ steps.tools.outputs.abis }}; do
-            for tool in libproot.so libproot-loader.so; do
-              check "$abi" "$tool"
-            done
-          done
-          for abi in ${{ steps.tools.outputs.llama-abis }}; do
-            for tool in libllama-server.so libggml-cpu.so; do
-              check "$abi" "$tool"
-            done
           done
 
-      - name: Name the APK after the release
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/$APK"
+          while read -r abi name; do
+            apk="dist/$name"
+            # The listing is taken once rather than grepped through a pipe:
+            # `unzip -l | grep -q` under `pipefail` reports unzip's SIGPIPE
+            # when grep leaves early, and so fails on the APKs that pass.
+            libs="$(unzip -l "$apk" | grep -o 'lib/[^/]*/[^ ]*' || true)"
+
+            tools=
+            if has "$TOOL_ABIS" "$abi"; then
+              tools="libproot.so libproot-loader.so"
+            fi
+            if has "$LLAMA_ABIS" "$abi"; then
+              tools="$tools libllama-server.so libggml-cpu.so"
+            fi
+            for tool in $tools; do
+              if ! grep -qx "lib/$abi/$tool" <<<"$libs"; then
+                echo "::error::$apk has no $tool for $abi"
+                exit 1
+              fi
+            done
+
+            if grep -qv "^lib/$abi/" <<<"$libs"; then
+              echo "::error::$apk carries another ABI's libraries; it is not split"
+              exit 1
+            fi
+          done <<<"$pairs"
 
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: apk
-          path: dist/${{ env.APK }}
+          path: dist/*.apk
           if-no-files-found: error
           compression-level: 0
           # Long enough to re-run the publisher by hand after a failure.
           retention-days: 7
 
+      # The version code is read back out rather than reported from the input:
+      # Flutter offsets it per ABI under a split, so what is in the file is not
+      # what was asked for. See "Releasing" in CLAUDE.md.
       - name: Report what was built
         run: |
           set -euo pipefail
           {
-            echo "### $APK"
-            echo
-            echo '```'
-            (cd dist && sha256sum "$APK")
-            echo "signing certificate  $SIGNER"
-            echo "version code         $VERSION_CODE"
-            echo '```'
+            for apk in dist/*.apk; do
+              echo "### $(basename "$apk")"
+              echo
+              echo '```'
+              (cd dist && sha256sum "$(basename "$apk")")
+              echo "version code         $("$BUILD_TOOLS/aapt2" dump badging "$apk" \
+                | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
+              echo '```'
+            done
+            echo "Signed by \`$SIGNER\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
   linux:
@@ -237,7 +314,8 @@ jobs:
         with:
           mode: release
           name: ${{ needs.version.outputs.appimage }}
-          # The version code, so the AppImage and the APK report the same build.
+          # The unoffset version code: the APKs carry Flutter's per-ABI offset
+          # on top of this, and there is no ABI here to offset by.
           build-number: ${{ needs.version.outputs.code }}
 
       # The AppImage alone: a release asset is a file, and the bundle it was

@@ -446,7 +446,8 @@ not answer for passes no `-t` at all and leaves the choice where it was.
 
 **arm64 only**, and that is a size decision. The server and its libraries are
 about 55 MB stripped — the Vulkan backend's `libggml-vulkan.so` is 36 MB of that
-on its own — and three ABIs of it would be a large part of the universal APK.
+on its own — and three ABIs of it would be most of what a phone downloads. It
+is most of why the release APK is split per ABI: see "Releasing".
 Nothing is lost: a 32-bit phone cannot map a two-gigabyte model at all, and
 x86_64 Android is an emulator. A build without it leaves
 `LocalLlm.available` false, which is also what the desktops and the web get —
