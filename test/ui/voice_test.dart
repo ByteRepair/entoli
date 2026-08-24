@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:flutter/material.dart";
 import "package:flutter/rendering.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
@@ -10,6 +11,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/voice/read_aloud.dart";
 import "package:agent_chat/ui/voice/transcript.dart";
 import "package:agent_chat/ui/voice/voice_controller.dart";
@@ -37,22 +39,175 @@ BloomPainter _bloom(WidgetTester tester) => tester
 void main() {
   late TestApp app;
 
-  setUp(() => app = TestApp.create(voiceModels: voiceModelIds));
+  /// One listener per session, standing in for the page that would be watching
+  /// it. `voiceControllerProvider` is auto-disposed, so a bare `read` in a test
+  /// is gone before the next line runs — a mounted page holds it by watching,
+  /// and nothing here is mounted. Dropped with the container in `tearDown`.
+  final sessions = <String?, ProviderSubscription<VoiceViewState>>{};
+
+  setUp(() {
+    sessions.clear();
+    app = TestApp.create(voiceModels: voiceModelIds);
+  });
   tearDown(() => app.dispose());
 
-  /// Voice mode running over a chat of its own, with the two models picked.
-  /// The wait is not decoration: the controller loads the chat asynchronously,
-  /// and driving one that has not finished loading is a `send` that quietly
-  /// does nothing — which is what `applyChat` spares the app itself.
+  /// The session for [chat], held. Every test reaches one through here.
+  ProviderSubscription<VoiceViewState> hold(String? chat) =>
+      sessions.putIfAbsent(chat,
+          () => app.container.listen(voiceControllerProvider(chat), (_, _) {}));
+
+  VoiceController voiceOf(String? chat) {
+    hold(chat);
+    return app.container.read(voiceControllerProvider(chat).notifier);
+  }
+
+  /// What that session is showing, read through the subscription so it is
+  /// flushed first — these are read after async hops.
+  VoiceViewState voiceState(String? chat) => hold(chat).read();
+
+  /// Leave the page — which is the last watcher going, and so what disposes the
+  /// session. `pumpEventQueue` because riverpod schedules the disposal rather
+  /// than doing it on the spot, and a single microtask is the weakest thing
+  /// that could work.
+  Future<void> leaveVoice() async {
+    sessions.remove(null)?.close();
+    await pumpEventQueue();
+  }
+
+  /// Voice mode running over a chat that already exists, with the two models
+  /// picked. The wait is not decoration: the controller loads the chat
+  /// asynchronously, and this is the state the page would be in by the time
+  /// anyone spoke.
   Future<String> startVoice() async {
     await app.pickVoiceModels();
     final chat = await app.seedChat();
     final id = chat.state.id;
     await waitFor(() => app.container.read(chatControllerProvider(id)).chat != null,
         what: "the chat to load");
-    await app.container.read(voiceControllerProvider(id).notifier).start();
+    await voiceOf(id).start();
     return id;
   }
+
+  /// Voice mode with nothing to speak into, which is what the new-chat screen's
+  /// circle opens. The session is keyed on null, and stays that way until it
+  /// hears something.
+  Future<VoiceController> startNewVoiceChat() async {
+    await app.pickVoiceModels();
+    final voice = voiceOf(null);
+    await voice.start();
+    return voice;
+  }
+
+  /// Which chat the session ended up speaking into.
+  String? spokenInto() => voiceState(null).chatId;
+
+  /// Say [text] into a session with no chat and wait for the turn it starts to
+  /// be over. The turn rather than the chat, because a test that ends under a
+  /// live one tears the container down beneath it.
+  Future<String> heard(String text) async {
+    app.voice.session!.hear(text);
+    await waitFor(() => spokenInto() != null, what: "the chat");
+    final id = spokenInto()!;
+    await waitFor(() => _finished(app, id), what: "the turn");
+    return id;
+  }
+
+  group("a session with no chat yet", () {
+    test("makes nothing until it hears something", () async {
+      await startNewVoiceChat();
+
+      expect(spokenInto(), isNull);
+      expect(await app.repo.listChats(), isEmpty);
+      expect(app.container.read(selectedChatIdProvider), isNull);
+    });
+
+    test("leaving without a word leaves nothing behind", () async {
+      await startNewVoiceChat();
+
+      await leaveVoice();
+
+      expect(await app.repo.listChats(), isEmpty);
+    });
+
+    test("the first word makes the chat, selects it and says it into it",
+        () async {
+      app.backend.scriptedEvents = [
+        const TextDelta("Right away."),
+        const DoneEvent(),
+      ];
+      await startNewVoiceChat();
+
+      final id = await heard("list the files");
+
+      expect((await app.repo.listChats()).single.id, id);
+      expect(app.container.read(selectedChatIdProvider), id);
+      final messages = app.container.read(chatControllerProvider(id)).chat!.messages;
+      expect(messages.first.plainText, "list the files");
+      expect(messages.last.plainText, "Right away.");
+    });
+
+    // The null key is shared by every new voice chat, so what keeps one out of
+    // another's conversation is that the session does not outlive its page.
+    test("a second session does not go on speaking into the first chat",
+        () async {
+      await startNewVoiceChat();
+      final first = await heard("first");
+
+      await leaveVoice();
+      await startNewVoiceChat();
+
+      expect(spokenInto(), isNull);
+      final second = await heard("second");
+
+      expect(second, isNot(first));
+      expect(await app.repo.listChats(), hasLength(2));
+    });
+
+    test("leaving the page shuts the session", () async {
+      await startNewVoiceChat();
+      final session = app.voice.session!;
+
+      await leaveVoice();
+
+      expect(session.disposed, isTrue);
+    });
+
+    // The microphone is still open while the chat is being written down, so a
+    // second utterance arrives to find none made yet.
+    test("two words in quick succession make one chat, not two", () async {
+      await startNewVoiceChat();
+
+      app.voice.session!.hear("first");
+      await heard("second");
+
+      expect(await app.repo.listChats(), hasLength(1));
+    });
+
+    test("what it hears is spoken into the project being shown", () async {
+      await app.repo.createProject("work");
+      app.container.read(selectedProjectProvider.notifier).select("work");
+      await startNewVoiceChat();
+
+      await heard("hello");
+
+      expect((await app.repo.listChats()).single.project, "work");
+    });
+  });
+
+  // A `VoiceSession` is the microphone and a worker isolate, and the device has
+  // one of each — so a second session starting has to take them off the first.
+  // Two voice pages is not hypothetical: the assistant gesture pushes one over
+  // whatever is on screen, a running session included.
+  test("starting a session shuts whichever one was already running", () async {
+    final first = await startVoice();
+    final firstSession = app.voice.session!;
+
+    await startNewVoiceChat();
+
+    expect(firstSession.disposed, isTrue);
+    expect(voiceState(first).status, VoiceStatus.off);
+    expect(app.voice.session, isNot(firstSession));
+  });
 
   test("the language Settings picked is what the session is started in",
       () async {
@@ -144,7 +299,7 @@ void main() {
 
     await waitFor(() => app.voice.session!.listening,
         what: "the microphone to open again");
-    expect(app.container.read(voiceControllerProvider(id)).status,
+    expect(voiceState(id).status,
         VoiceStatus.listening);
   });
 
@@ -171,7 +326,7 @@ void main() {
     final id = made.state.id;
     await waitFor(() => app.container.read(chatControllerProvider(id)).chat != null,
         what: "the chat to load");
-    await app.container.read(voiceControllerProvider(id).notifier).start();
+    await voiceOf(id).start();
     await Future<void>.delayed(Duration.zero);
 
     // Entering voice mode over a finished reply, or carrying on an interrupted
@@ -183,7 +338,7 @@ void main() {
     final id = await startVoice();
     expect(app.work.listened, [true]);
 
-    await app.container.read(voiceControllerProvider(id).notifier).stop();
+    await voiceOf(id).stop();
     // Released, not merely abandoned: a hold nobody lets go of leaves the
     // notification up and the cached engine never evicted again.
     expect(app.work.listened, [true, false]);
@@ -194,19 +349,19 @@ void main() {
 
     app.work.stop(BackgroundJob.voice);
     await waitFor(
-        () => app.container.read(voiceControllerProvider(id)).status == VoiceStatus.off,
+        () => voiceState(id).status == VoiceStatus.off,
         what: "voice mode to stop");
     expect(app.voice.session!.disposed, isTrue);
   });
 
   test("hushing stops the speech without leaving voice mode", () async {
     final id = await startVoice();
-    final voice = app.container.read(voiceControllerProvider(id).notifier);
+    final voice = voiceOf(id);
 
     await voice.hush();
 
     expect(app.voice.session!.hushed, 1);
-    expect(app.container.read(voiceControllerProvider(id)).status, isNot(VoiceStatus.off));
+    expect(voiceState(id).status, isNot(VoiceStatus.off));
   });
 
   test("falling silent goes back to listening", () async {
@@ -214,17 +369,17 @@ void main() {
     app.voice.session!.fallSilent();
     await Future<void>.delayed(Duration.zero);
 
-    expect(app.container.read(voiceControllerProvider(id)).status, VoiceStatus.listening);
+    expect(voiceState(id).status, VoiceStatus.listening);
   });
 
   test("a failure mid-session says what it was", () async {
     final id = await startVoice();
     app.voice.session!.fail("the microphone was taken");
     await waitFor(
-        () => app.container.read(voiceControllerProvider(id)).status == VoiceStatus.failed,
+        () => voiceState(id).status == VoiceStatus.failed,
         what: "the failure");
 
-    expect(app.container.read(voiceControllerProvider(id)).error,
+    expect(voiceState(id).error,
         contains("microphone was taken"));
   });
 
@@ -233,9 +388,9 @@ void main() {
     final session = app.voice.session!;
     expect(session.disposed, isFalse);
 
-    await app.container.read(voiceControllerProvider(id).notifier).stop();
+    await voiceOf(id).stop();
     expect(session.disposed, isTrue);
-    expect(app.container.read(voiceControllerProvider(id)).status, VoiceStatus.off);
+    expect(voiceState(id).status, VoiceStatus.off);
   });
 
   test("a model that will not load says so rather than opening silent",
@@ -243,7 +398,7 @@ void main() {
     app.voice.refusal = "Entoli was not allowed to use the microphone.";
     final id = await startVoice();
 
-    final state = app.container.read(voiceControllerProvider(id));
+    final state = voiceState(id);
     expect(state.status, VoiceStatus.failed);
     expect(state.error, contains("microphone"));
   });
@@ -488,27 +643,27 @@ void main() {
   group("pausing", () {
     test("shuts the microphone, and opens it again", () async {
       final id = await startVoice();
-      final voice = app.container.read(voiceControllerProvider(id).notifier);
+      final voice = voiceOf(id);
 
       await voice.setPaused(true);
       expect(app.voice.session!.listening, isFalse,
           reason: "paused has to mean the device has stopped recording");
-      expect(app.container.read(voiceControllerProvider(id)).paused, isTrue);
+      expect(voiceState(id).paused, isTrue);
 
       await voice.setPaused(false);
       expect(app.voice.session!.listening, isTrue);
-      expect(app.container.read(voiceControllerProvider(id)).paused, isFalse);
+      expect(voiceState(id).paused, isFalse);
     });
 
     test("a fresh session is listening, whatever the last one was doing",
         () async {
       final id = await startVoice();
-      final voice = app.container.read(voiceControllerProvider(id).notifier);
+      final voice = voiceOf(id);
       await voice.setPaused(true);
       await voice.stop();
 
       await voice.start();
-      expect(app.container.read(voiceControllerProvider(id)).paused, isFalse);
+      expect(voiceState(id).paused, isFalse);
     });
 
     test("shuts the microphone and nothing else: the reply goes on", () async {
@@ -521,11 +676,11 @@ void main() {
       await waitFor(() => app.voice.session!.spoken.isNotEmpty,
           what: "the reply to start being read");
 
-      await app.container.read(voiceControllerProvider(id).notifier).setPaused(true);
+      await voiceOf(id).setPaused(true);
 
       expect(app.voice.session!.hushed, 0,
           reason: "mute is about what the phone hears, not what it is saying");
-      expect(app.container.read(voiceControllerProvider(id)).status,
+      expect(voiceState(id).status,
           VoiceStatus.speaking);
     });
   });
@@ -539,7 +694,7 @@ void main() {
       final id = await startVoice();
 
       expect(app.voice.session!.listening, isFalse);
-      final view = app.container.read(voiceControllerProvider(id));
+      final view = voiceState(id);
       expect(view.paused, isTrue);
       expect(view.pushToTalk, isTrue);
       expect(view.word, "Ready", reason: "nobody paused it");
@@ -552,7 +707,7 @@ void main() {
       ];
       await turnOn();
       final id = await startVoice();
-      final voice = app.container.read(voiceControllerProvider(id).notifier);
+      final voice = voiceOf(id);
 
       // Held once to say something, which is the only way in with the
       // microphone shut.
@@ -570,14 +725,14 @@ void main() {
     test("releasing keeps the sentence it was held for", () async {
       await turnOn();
       final id = await startVoice();
-      final voice = app.container.read(voiceControllerProvider(id).notifier);
+      final voice = voiceOf(id);
 
       await voice.talk(true);
       await voice.talk(false);
 
       expect(app.voice.session!.listening, isFalse);
       expect(app.voice.session!.finished, 1);
-      expect(app.container.read(voiceControllerProvider(id)).paused, isTrue);
+      expect(voiceState(id).paused, isTrue);
     });
 
     test("turning it off under a running session opens the microphone",
@@ -592,7 +747,7 @@ void main() {
       await waitFor(() => app.voice.session!.listening,
           what: "the microphone to open");
 
-      final view = app.container.read(voiceControllerProvider(id));
+      final view = voiceState(id);
       expect(view.pushToTalk, isFalse);
       expect(view.paused, isFalse);
     });

@@ -136,13 +136,9 @@ platform can listen rather than only where models are installed — with none
 picked it leads to the settings that pick them, which is a better answer than a
 button nobody can find. `openVoice` is that rule, and `startVoiceChat` beside it
 is the circle on the new-chat screen and the assistant gesture's voice view.
-**It is the one thing left that makes a chat before a word is said**, because
-this page is keyed on the chat all the way down to `voiceControllerProvider` —
-there is nothing here to defer the way the composer defers. So it asks about
-the models *first*: that is what keeps the common refusal from leaving an
-untouched chat behind, and a session abandoned after the models are found does
-leave one. See "Nothing selected is a new chat" for why that is worn rather
-than swept up. Both read `voiceReadyProvider`
+It **makes nothing**: the page opens on no chat and the first word is what
+creates one, which is the rule the composer keeps and is written up under
+"Taking turns". Both read `voiceReadyProvider`
 themselves, which they can because **which models are installed is read before
 the app is built** — `AppSession.start` scans for them and seeds
 `InstalledVoiceModels` with what it found, the bargain `promptLibraryProvider`
@@ -193,6 +189,82 @@ whole reason the button is on pointer-down is that the first half second is the
 half nobody hears.
 
 ## Taking turns
+
+**A session can exist before the chat does.** `voiceControllerProvider` is keyed
+on `String?`, and null is a session started from the new-chat screen with
+nothing to speak into; `VoiceController` makes the chat on the first word it
+hears and speaks into it from there. That is the same rule the composer keeps —
+a chat exists because something is in it — so a voice session nobody spoke in
+leaves nothing behind, and there is no delete-if-empty anywhere to clean up
+after one.
+
+What it cost is that the session stopped being keyed on what it is about. The
+key is how the page was opened; `_chatId` is what is being spoken into, seeded
+from the key and moved once, by `_speakInto`, when a chat is made.
+
+That move closes the old subscription before opening the new one, and the close
+is load-bearing rather than tidy: `ref.listen` hands the element a subscription
+to *dispose*, not to re-point, so one left open goes on reading the previous
+chat's replies out into this session.
+
+`VoiceViewState` carries `chatId`, because the page is built on the key and the
+title and the transcript need the chat, which the key is not.
+
+**The session is the page's, and that is what makes the null key safe.** The
+provider is auto-disposed, so it lives exactly as long as something is watching
+it — which is the page — and the next new voice chat builds a controller that
+has never heard of the last one's chat. Nothing is put back anywhere, and there
+is no window in which the old chat could be read: the alternative, resetting at
+`start`, left the first frame of the next session showing the previous
+conversation's title and five lines of its transcript, since `start` only runs
+after it.
+
+It is also what shuts the session. Leaving is the last watcher going, which
+disposes the notifier, which runs `_shutdown` — so the page has no `dispose` of
+its own. Stopping by hand there as well said the same thing twice and raced
+with it. What that put on `_shutdown` is that it now runs on every page close
+rather than only on a session that was started, which is why releasing the
+foreground hold asks whether one was ever taken.
+
+`stop` therefore leaves `_chatId` alone, and the screen goes on showing what was
+said. The notification's Stop arrives with the page still up, and clearing the
+chat there would take the transcript and the turn's own surface off it and leave
+a blank screen with no way back. What `stop` does close is the *listening*: a
+session that is off does not read replies out, and a subscription left open
+fires on every flush of that chat for as long as the app runs.
+
+**One voice session in the app, and it is written down rather than assumed.**
+`runningVoiceProvider` holds whichever controller has the device, and `start`
+takes it off that one before opening its own — the same thing it already did to
+`ReadAloud`, which holds a speech model of its own. It holds the controller
+rather than a key, because the key is how a page was opened and two pages can
+share one.
+
+That is not a hypothetical. The assistant gesture pushes a voice page over
+whatever is on screen, a running session included, and the two are not
+necessarily on the same key: over a chat it is `openVoice(X)`, and the gesture's
+is null. Two keys are two controllers, and before this they were two
+`VoiceSession`s — two microphones and two worker isolates, where
+`lib/domain/voice.dart` says there is one of each. `BackgroundWork.listening` is
+a flag rather than a count, so the first of them to end released the foreground
+hold the other was still relying on. It predates deferring the chat; two keys
+were reachable before that too.
+
+`release` only clears its own claim, and only while there is something to
+release to: a session is shut from `onDispose`, and on the way out of the app
+that runs after the registry has gone itself. What it does not make impossible
+is two pages *on screen* — the one underneath is left showing a session that
+has stopped. That is a screen to go back from rather than a device held open.
+
+**One chat per session, however fast the words come.** The microphone is open
+for as long as the chat is being written down, so a second utterance arrives to
+find `_chatId` still null; `_creating` holds the one in flight so the second
+waits for it rather than making a chat of its own for its words to be lost in.
+
+And what was heard is said **even if the session stops while it is being
+written**. Those words were spoken while it was on, and dropping them there
+would leave the empty chat this whole path exists not to make.
+
 
 **The microphone is open only when it is the user's turn to speak** — not while
 a turn runs, not while the reply is read out. `VoiceController._wantsMicrophone`

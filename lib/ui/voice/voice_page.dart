@@ -7,7 +7,6 @@ import "../../providers.dart";
 import "../chat/chat_controller.dart";
 import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_page.dart";
-import "../sidebar/sidebar.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/nav_drawer.dart";
 import "transcript.dart";
@@ -25,21 +24,17 @@ Future<void> openVoice(BuildContext context, WidgetRef ref, String chatId) async
   await _push(context, chatId);
 }
 
-/// A new chat, opened straight into voice mode. **The one place a chat is made
-/// before anything is said in it**: every widget on this page is keyed on the
-/// chat, down to `voiceControllerProvider`, so there is nothing to defer the
-/// way the composer defers. The models are asked about first, which is what
-/// keeps the common refusal from making one — see "Nothing selected is a new
-/// chat" for what a session abandoned before the first word leaves behind.
+/// Voice mode with nothing to speak into yet — the new-chat screen's circle,
+/// and the assistant gesture's voice view. **Nothing is created here**: the
+/// page opens on no chat and `VoiceController` makes one when it hears the
+/// first word, which is the same rule the composer keeps. [meta] is the
+/// settings that screen offered, spent on the chat whichever way it is
+/// started.
 Future<void> startVoiceChat(BuildContext context, WidgetRef ref,
     {ChatMeta? meta}) async {
   if (!await _haveModels(context, ref) || !context.mounted) return;
-  // [meta] is the new-chat screen's, where the mic sits beside a composer that
-  // would have spent it — the same settings, whichever way the chat is started.
-  final chatId = await createChat(ref, meta: meta);
-  if (chatId == null || !context.mounted) return;
   closeNavDrawer(context);
-  await _push(context, chatId);
+  await _push(context, null, meta: meta);
 }
 
 Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
@@ -58,27 +53,34 @@ Future<bool> _haveModels(BuildContext context, WidgetRef ref) async {
   return false;
 }
 
-Future<void> _push(BuildContext context, String chatId) => Navigator.of(context)
-    .push(MaterialPageRoute(builder: (_) => VoicePage(chatId: chatId)));
+Future<void> _push(BuildContext context, String? chatId, {ChatMeta? meta}) =>
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => VoicePage(chatId: chatId, meta: meta)));
 
 /// Voice mode: an orb for what the microphone hears and five scrolling lines
 /// of what has been said, over the chat that was already open. It is a view,
 /// not a mode the conversation is in — which is why the turn's own surface and
 /// its question panel are the same widgets the chat page draws.
 class VoicePage extends ConsumerStatefulWidget {
-  const VoicePage({super.key, required this.chatId});
+  const VoicePage({super.key, required this.chatId, this.meta});
 
-  final String chatId;
+  /// The chat to speak into, or null to make one on the first word. It is also
+  /// the session's key — see `voiceControllerProvider`.
+  final String? chatId;
+
+  /// What that chat will be made with, where there is one to make.
+  final ChatMeta? meta;
 
   @override
   ConsumerState<VoicePage> createState() => _VoicePageState();
 }
 
 class _VoicePageState extends ConsumerState<VoicePage> {
-  /// Held rather than read in [dispose], where the ref is no longer safe to
-  /// use — and the controller outlives this route anyway, being keyed on the
-  /// chat rather than on the screen.
-  late final VoiceController _voice =
+  /// The session this page drives. Read per call rather than held: the `build`
+  /// below is what keeps it alive, and there is no `dispose` here to reach it
+  /// from — leaving is the last watcher going, which disposes the session,
+  /// which shuts it.
+  VoiceController get _voice =>
       ref.read(voiceControllerProvider(widget.chatId).notifier);
 
   @override
@@ -88,16 +90,8 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     // a permission prompt during the first build is one nobody has a screen to
     // answer over yet.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _voice.start();
+      if (mounted) _voice.start(meta: widget.meta);
     });
-  }
-
-  /// Leaving closes the session: the controller is keyed on the chat, so
-  /// without this it would listen on with nothing on screen.
-  @override
-  void dispose() {
-    _voice.stop();
-    super.dispose();
   }
 
   @override
@@ -109,7 +103,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     return Scaffold(
       // Nothing in the actions: the bar's own back arrow already pops this
       // route, and leaving is what going back to typing is.
-      appBar: AppBar(title: _Title(chatId: widget.chatId)),
+      appBar: AppBar(title: _Title(chatId: voice.chatId)),
       body: SafeArea(
         child: Column(
           children: [
@@ -123,7 +117,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            _Script(chatId: widget.chatId),
+            _Script(chatId: voice.chatId),
             const SizedBox(height: 16),
             // Bottom-most, where the composer is on the page this stands in
             // for: it is what there is to do here.
@@ -147,12 +141,17 @@ class _VoicePageState extends ConsumerState<VoicePage> {
 class _Title extends ConsumerWidget {
   const _Title({required this.chatId});
 
-  final String chatId;
+  /// The chat being spoken into, which is null until the first word makes one.
+  /// Handed down rather than watched here: the bar is rebuilt by the session
+  /// this came from, and watching it again would be the same rebuild twice.
+  final String? chatId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final title = ref.watch(chatControllerProvider(chatId)
-        .select((view) => view.chat?.state.title.orUntitled));
+    final title = chatId == null
+        ? null
+        : ref.watch(chatControllerProvider(chatId!)
+            .select((view) => view.chat?.state.title.orUntitled));
     return Text(title ?? "Voice");
   }
 }
@@ -164,7 +163,8 @@ class _Title extends ConsumerWidget {
 class _Script extends ConsumerStatefulWidget {
   const _Script({required this.chatId});
 
-  final String chatId;
+  /// The chat being spoken into, null until the first word makes one.
+  final String? chatId;
 
   @override
   ConsumerState<_Script> createState() => _ScriptState();
@@ -175,9 +175,15 @@ class _ScriptState extends ConsumerState<_Script> {
 
   @override
   Widget build(BuildContext context) {
-    final chat = ref.watch(chatControllerProvider(widget.chatId));
-    final notifier = ref.read(chatControllerProvider(widget.chatId).notifier);
-    final lines = _transcript.of(chat.chat?.messages ?? const <Message>[]);
+    final chatId = widget.chatId;
+    // Nothing said yet, so nothing has been said back — but the window is drawn
+    // at its own height either way, so the orb does not jump up the screen when
+    // the first line lands. One shape rather than two, or the empty one is
+    // shorter than the state it stands in for by exactly the gap below it.
+    final chat = chatId == null ? null : ref.watch(chatControllerProvider(chatId));
+    final driver =
+        chatId == null ? null : ref.read(chatControllerProvider(chatId).notifier);
+    final lines = _transcript.of(chat?.chat?.messages ?? const <Message>[]);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -187,9 +193,11 @@ class _ScriptState extends ConsumerState<_Script> {
           child: TranscriptWindow(lines: lines),
         ),
         const SizedBox(height: 12),
-        TurnSurface(view: chat, notifier: notifier),
-        if (chat.questions.isNotEmpty)
-          TurnQuestions(view: chat, notifier: notifier),
+        if (chat != null && driver != null) ...[
+          TurnSurface(view: chat, notifier: driver),
+          if (chat.questions.isNotEmpty)
+            TurnQuestions(view: chat, notifier: driver),
+        ],
       ],
     );
   }

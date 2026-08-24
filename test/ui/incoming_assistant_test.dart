@@ -95,7 +95,9 @@ void main() {
     expect(openedProject(), isNull);
   });
 
-  testWidgets("the voice view opens voice mode over the new chat",
+  // Nothing is made here either: the page opens on no chat, and the first word
+  // is what creates one.
+  testWidgets("the voice view opens voice mode with nothing to speak into yet",
       (tester) async {
     app = TestApp.create(voiceModels: voiceModelIds);
     // Both models picked in the same write as the view: two writes would race,
@@ -112,7 +114,10 @@ void main() {
 
     await pumpUntil(tester, find.byType(VoicePage));
     expect(find.byType(VoicePage), findsOneWidget);
-    expect(openedChat(), isNotNull);
+    expect(openedChat(), isNull);
+    // `runAsync` rather than `io`: the orb never comes to rest, so the settle
+    // `io` starts with would time out on it.
+    expect(await tester.runAsync(() => app.repo.listChats()), isEmpty);
   });
 
   testWidgets("the voice view with no models offers the settings instead",
