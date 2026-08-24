@@ -70,6 +70,26 @@ void main() {
     expect(find.text("Add reminder"), findsOneWidget);
   });
 
+  testWidgets("a permission granted in the system settings shows on the way back",
+      (tester) async {
+    final alarms = FakeReminderAlarms()..exact = false;
+    final app = TestApp.create(reminderAlarms: alarms);
+    addTearDown(app.dispose);
+    useWindow(tester, const Size(400, 900));
+    await pumpSettings(tester, app, SettingsCategory.reminders);
+    expect(find.text("Exact times are not granted"), findsOneWidget);
+
+    // Granted while the app is behind the system settings, then the app is
+    // brought back to the foreground: the page needs to re-read rather than
+    // keep what it first asked.
+    alarms.exact = true;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settleIo(tester);
+
+    expect(find.text("Exact times are not granted"), findsNothing);
+  });
+
   testWidgets("saving an empty prompt is refused", (tester) async {
     final alarms = FakeReminderAlarms();
     final app = TestApp.create(reminderAlarms: alarms);

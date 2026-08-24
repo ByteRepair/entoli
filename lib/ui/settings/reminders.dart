@@ -31,11 +31,21 @@ class RemindersSection extends ConsumerStatefulWidget {
 class _RemindersSectionState extends ConsumerState<RemindersSection> {
   bool? _notificationsAllowed;
   bool? _exactAllowed;
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void initState() {
     super.initState();
+    // The rows lead to the system settings, where the answers can change while
+    // the app is behind, so the page re-asks every time it comes back.
+    _lifecycle = AppLifecycleListener(onResume: () => unawaited(_loadPermissions()));
     unawaited(_loadPermissions());
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPermissions() async {
@@ -50,12 +60,9 @@ class _RemindersSectionState extends ConsumerState<RemindersSection> {
     });
   }
 
-  Future<void> _openEditor([Reminder? reminder]) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ReminderEditorPage(reminder: reminder)),
-    );
-    await _loadPermissions();
-  }
+  Future<void> _openEditor([Reminder? reminder]) => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ReminderEditorPage(reminder: reminder)),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -77,10 +84,8 @@ class _RemindersSectionState extends ConsumerState<RemindersSection> {
             title: const Text("Notifications are off"),
             subtitle: const Text("Allow them to see when a reminder finishes."),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              await ref.read(reminderAlarmsProvider).requestNotifications();
-              await _loadPermissions();
-            },
+            onTap: () =>
+                unawaited(ref.read(reminderAlarmsProvider).requestNotifications()),
           ),
         if (_exactAllowed == false)
           ListTile(
@@ -91,10 +96,7 @@ class _RemindersSectionState extends ConsumerState<RemindersSection> {
               "be cut short while the app is closed.",
             ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              await ref.read(reminderAlarmsProvider).requestExact();
-              await _loadPermissions();
-            },
+            onTap: () => unawaited(ref.read(reminderAlarmsProvider).requestExact()),
           ),
         for (final reminder in reminders)
           _ReminderTile(
