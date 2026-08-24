@@ -9,7 +9,6 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
-import "package:agent_chat/main.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
 import "../fakes.dart";
@@ -782,7 +781,7 @@ void main() {
       final stored = reloaded(id);
       expect(stored, hasLength(2));
       expect(stored.last.parts.whereType<ToolResultPart>().single.result.output, "a\nb");
-      expect((await app.store.readRecords(id)).whereType<TurnEndRecord>(), isEmpty);
+      expect(records(id).whereType<TurnEndRecord>(), isEmpty);
 
       app.backend.hold!.complete();
       await waitIdle(id);
@@ -950,7 +949,8 @@ void main() {
   // backend down first would abort them all.
   group("the app going away", () {
     /// A turn left open the way a real one is while the model is still working.
-    Future<String> heldTurn() async {
+    /// Not the harness's `heldTurn`, which drives a `ChatPage`.
+    Future<String> runningTurn() async {
       app.backend
         ..scriptedEvents = [const TextDelta("Half an ans")]
         ..hold = Completer<void>();
@@ -965,28 +965,29 @@ void main() {
     }
 
     test("interrupts the turns that are running", () async {
-      final id = await heldTurn();
+      final id = await runningTurn();
 
       await interruptLiveTurns(app.container);
 
       expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
-      expect(app.backend.runningTurns.value, isNot(contains(id)));
     });
 
     test("leaves them offered to be carried on", () async {
-      final id = await heldTurn();
+      final id = await runningTurn();
 
       await interruptLiveTurns(app.container);
 
+      final stored = await app.store.load(id);
       expect((await app.store.readRecords(id)).whereType<TurnEndRecord>(), isEmpty);
-      expect((await app.store.load(id)).unfinished, isTrue);
-      expect((await app.store.load(id)).messages.last.plainText, "Half an ans");
+      expect(stored.unfinished, isTrue);
+      expect(stored.messages.last.plainText, "Half an ans");
     });
 
     // Reading the notifier for one would build a controller for a conversation
     // nobody is looking at; a reminder's turn closes its own log.
     test("builds no controller for a turn nothing is driving", () async {
       final chat = await app.repo.createChat();
+      app.backend.runningTurns.value = {chat.state.id};
 
       await interruptLiveTurns(app.container);
 

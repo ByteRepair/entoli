@@ -435,17 +435,19 @@ then reads a `TurnEnd?`, and null is the no-record case — the same `?? true`
 that `endsUnfinished` makes of a log missing one, so the state on screen and the
 state a reload would build cannot disagree.
 
-Two things reach for it, and neither is special: **anything that stops watching
-a turn it did not choose to end wants this.** A voice session handing the
-microphone to another is one — see "Taking turns". `AppSession.dispose` is the
-other, through `interruptLiveTurns`: a restore or a relaunch used to abort every
-live turn, so work nobody stopped came back recorded as though they had. It runs
-*before* the backend is shut down, which is what would abort them, and only for
-chats something is already driving — a running turn with no `ChatController`
-behind it is a reminder's, and `ReminderRunner` closes its own log.
+**Anything that stops watching a turn it did not choose to end wants this.** A
+voice session handing the microphone to another is one — see "Taking turns".
+`AppSession.dispose` is the other, through `interruptLiveTurns`: a restore or a
+relaunch used to abort every live turn, so work nobody stopped came back
+recorded as though they had.
 
-What still ends a turn as `aborted` is the two places somebody actually chose
-to: the composer's Stop, and the notification's.
+It reaches only the chats a `ChatController` is already driving, and that leaves
+a hole. A reminder's turn has no controller — `ReminderRunner` owns its own
+recorder — so it is still aborted when the backend shuts down, still recorded as
+something the user ended, and still notified as "The task was stopped". Closing
+it properly means `AgentBackend` being able to stop a turn without claiming
+somebody chose to, rather than a second sweep; until then, the headless turns
+are the ones this does not cover.
 
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
 only ever be `messages.last.id`, an invariant nothing could enforce. The chat page

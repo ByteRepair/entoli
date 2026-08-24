@@ -212,25 +212,6 @@ class AppSession {
   }
 }
 
-/// Stop whatever turns are running the way the app going away stops them:
-/// **interrupted rather than aborted**. A restore or a relaunch is not somebody
-/// pressing stop, so what was running is offered to be carried on when the app
-/// comes back rather than recorded as something the user ended. See "Carrying
-/// on an interrupted turn".
-///
-/// Only the chats something is already driving. A running turn with no
-/// `ChatController` behind it is a reminder's, and `ReminderRunner` closes its
-/// own log — reading the notifier for one would build a controller for a
-/// conversation nobody is looking at, to tell it nothing.
-Future<void> interruptLiveTurns(ProviderContainer container) async {
-  final running = container.read(agentBackendProvider).runningTurns.value;
-  await Future.wait(<Future<void>>[
-    for (final id in running.toList())
-      if (container.exists(chatControllerProvider(id)))
-        container.read(chatControllerProvider(id).notifier).interrupt(),
-  ]);
-}
-
 /// What the container is handed in place of the root, which does not exist yet
 /// when the first session is built. Filled in on the root's first frame, and
 /// nothing can ask for a restart before there is a button to press.

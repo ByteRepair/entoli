@@ -491,3 +491,14 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
 final chatControllerProvider =
     NotifierProvider.family<ChatController, ChatViewState, String>(ChatController.new);
+
+/// Stop whatever turns are running the way the app going away stops them:
+/// **interrupted rather than aborted**. See "Carrying on an interrupted turn"
+/// for why, and for what this does not reach.
+Future<void> interruptLiveTurns(ProviderContainer container) async {
+  await Future.wait([
+    for (final id in container.read(agentBackendProvider).runningTurns.value)
+      if (container.exists(chatControllerProvider(id)))
+        container.read(chatControllerProvider(id).notifier).interrupt(),
+  ]);
+}
