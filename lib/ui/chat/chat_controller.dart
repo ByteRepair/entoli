@@ -99,6 +99,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// per `task` call — see [TurnRecorder].
   late final TurnRecorder _recorder;
 
+  /// This turn is being stopped rather than ended — see [interrupt]. Cleared
+  /// where a turn opens, beside the recorder's own `outcome`, so it cannot
+  /// reach the next one.
+  bool _interrupted = false;
+
   @override
   ChatViewState build() {
     _recorder = TurnRecorder(
@@ -236,6 +241,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // killed before the model says anything still shows what was asked. What
     // comes back carries the TTL anchor the save resolved, and is kept.
     applyState(await repo.saveState(updated.state));
+    _interrupted = false;
     _recorder.open(opening.last.id);
     await _recorder.write(recordsOf(opening,
         siblingOf: replacing?.id,
@@ -267,6 +273,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final reply = chat.messages.last;
 
     state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
+    _interrupted = false;
     _recorder.open(reply.id, existing: reply.parts);
 
     _listen(ref.read(chatRepositoryProvider)
@@ -415,7 +422,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   Future<void> _finishTurn() async {
     _sub?.cancel();
     _sub = null;
-    final reason = await _recorder.close();
+    // Null is a turn that was interrupted rather than ended — the log has no
+    // closing record, and `?? true` below is the same thing its reader makes
+    // of one. See "Carrying on an interrupted turn".
+    final TurnEnd? reason;
+    if (_interrupted) {
+      await _recorder.interrupt();
+      reason = null;
+    } else {
+      reason = await _recorder.close();
+    }
     if (!ref.mounted) return;
     // Nothing is left to answer once the turn is over: the backend has already
     // answered its own outstanding questions with nothing, so a banner or a
@@ -423,7 +439,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     state = state.copyWith(
       // What a reload would now make of the log, so a turn that gave up is
       // offered straight away rather than only once the chat is opened again.
-      chat: state.chat?.copyWith(unfinished: reason.resumable),
+      chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
       isRunning: false,
       approvals: const [],
       questions: const [],
@@ -445,6 +461,21 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   @override
   Future<void> abort() async {
     _recorder.outcome = TurnEnd.aborted;
+    await ref.read(chatRepositoryProvider).abort(chatId);
+    await _finishTurn();
+  }
+
+  /// Stop a turn without ending it: the agent is cancelled and the log is left
+  /// **open**, so the chat offers to carry it on. See "Carrying on an
+  /// interrupted turn" for why this is not [abort].
+  ///
+  /// Set before the agent is cancelled, the way [abort] sets its outcome:
+  /// cancelling closes the stream, so [_finishTurn] can run from the `onDone`
+  /// rather than from the line below, and it has to make the same decision
+  /// whichever gets there first.
+  Future<void> interrupt() async {
+    if (!state.isRunning) return;
+    _interrupted = true;
     await ref.read(chatRepositoryProvider).abort(chatId);
     await _finishTurn();
   }

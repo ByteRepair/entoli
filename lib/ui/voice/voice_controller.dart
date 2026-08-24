@@ -275,7 +275,7 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (!ref.mounted) return;
     // The other is another voice page. `state.isOn` above has already answered
     // for this one, so anything still running here is somebody else's.
-    await ref.read(runningVoiceProvider)?.stop();
+    await ref.read(runningVoiceProvider)?.handOver();
     if (!ref.mounted) return;
 
     final pushToTalk = settings.voicePushToTalk;
@@ -309,6 +309,24 @@ class VoiceController extends Notifier<VoiceViewState> {
       voiceFailed("session did not start: $e");
       _show(VoiceStatus.failed, error: "$e");
     }
+  }
+
+  /// Give the device up to a session that is starting: the microphone goes,
+  /// and so does the turn this one had running — **interrupted rather than
+  /// aborted**, since nobody chose to stop it. See "Taking turns".
+  ///
+  /// The session goes first, and that order is the whole of it. Interrupting
+  /// writes `isRunning: false` into the chat, which this session is still
+  /// listening to until it is shut — and its end-of-turn arm speaks the last
+  /// sentence and puts the status back to `listening`, which **opens the
+  /// microphone** on the way out, on the one path where another session is
+  /// trying to take it. It also keeps the log write off the device's critical
+  /// path: the caller is waiting to open a microphone this has already let go.
+  Future<void> handOver() async {
+    final id = _chatId;
+    await stop();
+    if (id == null || !ref.mounted) return;
+    await ref.read(chatControllerProvider(id).notifier).interrupt();
   }
 
   Future<void> stop() async {
