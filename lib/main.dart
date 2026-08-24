@@ -178,6 +178,10 @@ class AppSession {
     // Read once to set going, like the keep-alive above: it wires itself to the
     // settings and drives the prefill from there.
     container.read(localPrefillTriggerProvider);
+    // Read once to set going: it subscribes to the repo's change stream and
+    // invalidates the sidebar's list on a deletion, so a stale row cannot
+    // outlive the chat it points at.
+    container.read(chatDeletionRefreshProvider);
     // Sweep expired temporary chats on startup, then every 30 minutes. The
     // timer is in-process and dies with the session: a chat expiring while the
     // app is closed is caught at the next launch. Skips the currently-open
