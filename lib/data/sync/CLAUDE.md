@@ -88,13 +88,30 @@ Web builds are relay/manual-paste only — a browser cannot bind a socket, and
 HTTPS Pages makes plain-http LAN dialing mixed-content-blocked. So a browser
 can only ever *join*: `createLanSignaling` answers null there, and the Sync
 page says as much rather than drawing a button that does nothing.
-`startPairingWindow` throws `SyncHub.noRoute` where neither route is
+`startPairingWindow` throws `SyncPairing.noRoute` where neither route is
 available, and the wording differs by platform because what is missing does —
 a desktop is short of both, a browser only of the relay.
 
-## The SyncHub
+## The three pieces
 
-`sync_hub.dart` owns the three decisions above the wire:
+Sync is one object to everything outside it. Inside it is three, split where
+the code has a seam rather than by subject:
+
+- **`SyncPeers`** (`peers.dart`) — who is connected, the status the Sync page
+  draws, and the liveness ping.
+- **`SyncPairing`** (`pairing.dart`) — finding a device, proving who it is,
+  keeping a way back. It is the one part of sync with no idea what a chat is,
+  which is why it is its own file: it hands back a `LivePeer` through
+  `onReady`, and what that peer then says goes to `onMessage`.
+- **`SyncHub`** (`sync_hub.dart`) — everything two devices do with a channel
+  once there is one. Serving this device's chats and mirroring a peer's live
+  here together, on purpose: they are two ends of one conversation, every
+  message the serving side sends is one the mirror side receives, and a
+  protocol change is never one without the other. Separating them by which
+  end you are looking from would put the control lock, resource transfer and
+  chat-following each in two files.
+
+`pairing.dart` owns the three decisions above the wire:
 
 - **Who speaks first.** Handshake initiator = `!weOffered`, per route.
 - **Who may dial again.** A pairing window arms its one-time code; every
@@ -134,10 +151,12 @@ told even if it never opened the records.
 
 `_onMirror` is the one door into a mirror: it looks the chat up, refuses a
 peer talking about one it is not the home device for, and notifies. An arm
-that did its own lookup could forget either. `_toSubscribers` is the same
-consolidation the other way — every serving-side message goes out through it,
-so no arm can forget the subscription check. The exception is a deletion,
-which reaches every peer rather than only subscribers.
+that did its own lookup could forget either. `SyncPeers.toSubscribers` is the
+same consolidation the other way, for serving-side messages that go to
+whoever follows a chat. Three arms loop `peers.live` themselves instead: a
+deletion and the chat list, because both reach every peer rather than only
+subscribers, and an append, because it pages through `_sendRecords` rather
+than sending one message.
 
 A chat created after the mirrors were told about the list would otherwise not
 appear until a reconnect, so `_announced` holds the ids last sent and a
@@ -157,7 +176,7 @@ both directions — the chats this device served them, and the ones it mirrors
 from them — because a mirror's page has a banner to raise and nothing else
 tells it the snapshot has stopped moving. `revoke` is the other end of that:
 the row, the mirrors and the cached bytes all go with the device, since
-`_refreshPeers` only fills gaps from the registry and would leave an unpaired
+`SyncPeers.publish` only fills gaps from the registry and would leave an unpaired
 device listed, and online, until a restart.
 
 `ChatState` and `ChatRecord` ride inside those messages, which is what
