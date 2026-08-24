@@ -340,8 +340,7 @@ class TestApp {
 /// store, and no signaling, so it binds no socket and dials nothing. What the
 /// Sync page reads off one — the fingerprint, the peers, the pairing window —
 /// is all its own, so faking the hub would only ever prove the fake.
-Future<SyncHub> testSyncHub(
-  AppConfig config, {
+Future<SyncHub> testSyncHub({
   DeviceRegistry? devices,
   AppSettings Function()? settings,
   String? hostname,
@@ -350,7 +349,6 @@ Future<SyncHub> testSyncHub(
     SyncHub(
       identity: await SyncIdentity.load(FakeSecretStore()),
       registry: devices ?? FakeDeviceRegistry(),
-      config: config,
       settings: settings ?? AppSettings.new,
       lanSignaling: () => null,
       hostname: hostname,
