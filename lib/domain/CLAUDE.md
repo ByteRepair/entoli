@@ -435,12 +435,17 @@ then reads a `TurnEnd?`, and null is the no-record case — the same `?? true`
 that `endsUnfinished` makes of a log missing one, so the state on screen and the
 state a reload would build cannot disagree.
 
-What reaches for it so far is a voice session handing the microphone to
-another. It is not voice's, though: **anything that stops watching a turn it
-did not choose to end wants this**, and `AppSession.dispose` is the standing
-example that does not have it yet — a restore or a relaunch aborts every live
-turn, so what was running is recorded as something the user stopped and is not
-offered back.
+Two things reach for it, and neither is special: **anything that stops watching
+a turn it did not choose to end wants this.** A voice session handing the
+microphone to another is one — see "Taking turns". `AppSession.dispose` is the
+other, through `interruptLiveTurns`: a restore or a relaunch used to abort every
+live turn, so work nobody stopped came back recorded as though they had. It runs
+*before* the backend is shut down, which is what would abort them, and only for
+chats something is already driving — a running turn with no `ChatController`
+behind it is a reminder's, and `ReminderRunner` closes its own log.
+
+What still ends a turn as `aborted` is the two places somebody actually chose
+to: the composer's Stop, and the notification's.
 
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
 only ever be `messages.last.id`, an invariant nothing could enforce. The chat page

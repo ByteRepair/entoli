@@ -21,6 +21,7 @@ import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
+import "ui/chat/chat_controller.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
@@ -201,12 +202,33 @@ class AppSession {
   Future<void> dispose() async {
     _sweep.cancel();
     await container.read(syncHubProvider).dispose();
+    // Before the backend is told to stop, which would abort them.
+    await interruptLiveTurns(container);
     await container.read(agentBackendProvider).shutdown();
     // Before the container goes: each is a subprocess holding a gigabyte of the
     // phone's memory, and nothing else would ever kill them.
     await container.read(localLlmProvider).stopAll();
     container.dispose();
   }
+}
+
+/// Stop whatever turns are running the way the app going away stops them:
+/// **interrupted rather than aborted**. A restore or a relaunch is not somebody
+/// pressing stop, so what was running is offered to be carried on when the app
+/// comes back rather than recorded as something the user ended. See "Carrying
+/// on an interrupted turn".
+///
+/// Only the chats something is already driving. A running turn with no
+/// `ChatController` behind it is a reminder's, and `ReminderRunner` closes its
+/// own log — reading the notifier for one would build a controller for a
+/// conversation nobody is looking at, to tell it nothing.
+Future<void> interruptLiveTurns(ProviderContainer container) async {
+  final running = container.read(agentBackendProvider).runningTurns.value;
+  await Future.wait(<Future<void>>[
+    for (final id in running.toList())
+      if (container.exists(chatControllerProvider(id)))
+        container.read(chatControllerProvider(id).notifier).interrupt(),
+  ]);
 }
 
 /// What the container is handed in place of the root, which does not exist yet
