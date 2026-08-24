@@ -21,6 +21,7 @@ import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
+import "ui/chat/chat_controller.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
@@ -205,6 +206,8 @@ class AppSession {
   Future<void> dispose() async {
     _sweep.cancel();
     await container.read(syncHubProvider).dispose();
+    // Before the backend is told to stop, which would abort them.
+    await interruptLiveTurns(container);
     await container.read(agentBackendProvider).shutdown();
     // Before the container goes: each is a subprocess holding a gigabyte of the
     // phone's memory, and nothing else would ever kill them.
