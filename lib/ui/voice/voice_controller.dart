@@ -111,13 +111,11 @@ Color voiceColour(VoiceViewState state, ThemeData theme) =>
 /// chat, so a spoken turn is an ordinary turn — same model, same tools, same
 /// records in `conv.jsonl` — and leaving voice mode leaves a chat to read.
 class VoiceController extends Notifier<VoiceViewState> {
-  VoiceController(this.openChatId);
+  VoiceController(String? openChatId) : _chatId = openChatId;
 
-  /// The chat this session was opened over, or null for one started from the
-  /// new-chat screen — which has no chat until it hears something.
-  final String? openChatId;
-
-  /// The chat being spoken into. [openChatId] until the first word makes one.
+  /// The chat being spoken into: the one this session was opened over, or the
+  /// one it made on the first word. Null only for a session that has not heard
+  /// anything yet.
   String? _chatId;
 
   /// The settings that chat will be made with, handed over by [start] from the
@@ -178,22 +176,21 @@ class VoiceController extends Notifier<VoiceViewState> {
         pushToTalk: ref.read(appSettingsProvider).voicePushToTalk);
   }
 
-  /// Listen to whatever this session is speaking into — the chat it made, or
-  /// the one it was opened over. Both [build] and [start] want that and not a
-  /// reset: a rebuild must not lose a chat made since, and a session restarted
-  /// on the same page is still that page's session.
-  void _listenToChat() => _speakInto(_chatId ?? openChatId);
+  /// Read the chat's replies out, where there is a chat and nothing is doing it
+  /// yet. [build] opens it and [start] re-opens what [_shutdown] closed.
+  void _listenToChat() {
+    final id = _chatId;
+    if (_chatEvents != null || id == null) return;
+    _chatEvents = ref.listen(chatControllerProvider(id), _onChat);
+  }
 
-  /// Point the session at a chat, or at none — the only thing that moves
-  /// `_chatId`, and it closes before it re-opens. Publishing is the caller's:
-  /// [build] has no state to write yet. See "Taking turns".
-  void _speakInto(String? id) {
+  /// Point the session at the chat it has just made. Publishing is the
+  /// caller's. See "Taking turns".
+  void _speakInto(String id) {
     _chatEvents?.close();
     _chatEvents = null;
     _chatId = id;
-    if (id != null) {
-      _chatEvents = ref.listen(chatControllerProvider(id), _onChat);
-    }
+    _listenToChat();
   }
 
   ChatController get _chat => ref.read(chatControllerProvider(_chatId!).notifier);
@@ -257,9 +254,7 @@ class VoiceController extends Notifier<VoiceViewState> {
   Future<void> start({ChatMeta? meta}) async {
     if (state.isOn) return;
     _meta = meta;
-    // Re-opens the listening [_shutdown] closed. Nothing is reset here: the
-    // session is the page's, so a new one is a new notifier — see "Taking
-    // turns".
+    // Re-opens what a previous [stop] closed; a no-op on the way in.
     _listenToChat();
     final settings = ref.read(appSettingsProvider);
     final recognition =
@@ -288,9 +283,9 @@ class VoiceController extends Notifier<VoiceViewState> {
             speaker: settings.voiceSpeaker,
             language: settings.voiceLanguage,
           );
-      // Stopped while the models loaded. `ref.mounted` does not catch it — the
-      // notifier outlives the screen — and without this the microphone opens
-      // with nothing on screen.
+      // Stopped while the models loaded — the notification's Stop, or a pop
+      // whose disposal has not landed yet. Without this the microphone opens
+      // with nothing left to answer it.
       if (!ref.mounted || state.status != VoiceStatus.starting) {
         return unawaited(session.dispose());
       }
@@ -311,7 +306,7 @@ class VoiceController extends Notifier<VoiceViewState> {
 
   Future<void> stop() async {
     // Mounted first: reading `state` on a disposed notifier throws, and the
-    // page's `dispose` reaches this after a container has gone — where
+    // notification's Stop can arrive after the page has gone — where
     // `onDispose` has already done the shutting down.
     if (!ref.mounted || state.status == VoiceStatus.off) return;
     await _shutdown();
@@ -372,9 +367,7 @@ class VoiceController extends Notifier<VoiceViewState> {
   Future<void> _shutdown() async {
     _due?.cancel();
     _due = null;
-    // A session that is off does not read replies out, so it has no business
-    // still listening for them: left open this fires on every flush of that
-    // chat for as long as the app runs, to decide it is off each time.
+    // A session that is off does not read replies out — see "Taking turns".
     _chatEvents?.close();
     _chatEvents = null;
     final session = _session;
@@ -384,7 +377,10 @@ class VoiceController extends Notifier<VoiceViewState> {
     _events = null;
     _stops = null;
     await session?.dispose();
-    unawaited(_work.listening(false));
+    // Only where one was taken. This runs on every page close now, and
+    // `listening` is a flag rather than a count — telling the platform to let
+    // go of a hold nothing took drops the one another session is relying on.
+    if (session != null) unawaited(_work.listening(false));
   }
 
   void _onVoice(VoiceEvent event) {
@@ -498,7 +494,10 @@ class VoiceController extends Notifier<VoiceViewState> {
 /// **Auto-disposed, so a session lasts exactly as long as the page watching
 /// it.** That is what makes the null key safe to reuse: the next new voice
 /// chat builds a controller that has never heard of the last one's chat, with
-/// nothing to put back and no window in which the old one could be read. See
-/// "Taking turns".
+/// nothing to put back and no window in which the old one could be read.
+///
+/// The opposite of `chatControllerProvider`, deliberately: a turn outlives the
+/// page that started it and must go on being written down, where a microphone
+/// held open after its screen has gone is the bug. See "Taking turns".
 final voiceControllerProvider = NotifierProvider.autoDispose
     .family<VoiceController, VoiceViewState, String?>(VoiceController.new);

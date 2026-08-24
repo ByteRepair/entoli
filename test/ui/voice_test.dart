@@ -43,33 +43,35 @@ void main() {
   /// it. `voiceControllerProvider` is auto-disposed, so a bare `read` in a test
   /// is gone before the next line runs — a mounted page holds it by watching,
   /// and nothing here is mounted. Dropped with the container in `tearDown`.
-  final held = <String?, ProviderSubscription<VoiceViewState>>{};
+  final sessions = <String?, ProviderSubscription<VoiceViewState>>{};
 
   setUp(() {
-    held.clear();
+    sessions.clear();
     app = TestApp.create(voiceModels: voiceModelIds);
   });
   tearDown(() => app.dispose());
 
   /// The session for [chat], held. Every test reaches one through here.
+  ProviderSubscription<VoiceViewState> hold(String? chat) =>
+      sessions.putIfAbsent(chat,
+          () => app.container.listen(voiceControllerProvider(chat), (_, _) {}));
+
   VoiceController voiceOf(String? chat) {
-    held.putIfAbsent(chat,
-        () => app.container.listen(voiceControllerProvider(chat), (_, _) {}));
+    hold(chat);
     return app.container.read(voiceControllerProvider(chat).notifier);
   }
 
-  /// What that session is showing.
-  VoiceViewState voiceState(String? chat) {
-    voiceOf(chat);
-    return app.container.read(voiceControllerProvider(chat));
-  }
+  /// What that session is showing, read through the subscription so it is
+  /// flushed first — these are read after async hops.
+  VoiceViewState voiceState(String? chat) => hold(chat).read();
 
   /// Leave the page — which is the last watcher going, and so what disposes the
-  /// session. The wait is for the disposal, which riverpod schedules rather
-  /// than doing on the spot.
-  Future<void> leaveVoice([String? chat]) async {
-    held.remove(chat)?.close();
-    await Future<void>.delayed(Duration.zero);
+  /// session. `pumpEventQueue` because riverpod schedules the disposal rather
+  /// than doing it on the spot, and a single microtask is the weakest thing
+  /// that could work.
+  Future<void> leaveVoice() async {
+    sessions.remove(null)?.close();
+    await pumpEventQueue();
   }
 
   /// Voice mode running over a chat that already exists, with the two models

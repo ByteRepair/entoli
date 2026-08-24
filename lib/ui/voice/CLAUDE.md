@@ -198,17 +198,14 @@ a chat exists because something is in it — so a voice session nobody spoke in
 leaves nothing behind, and there is no delete-if-empty anywhere to clean up
 after one.
 
-What it cost is that the session stopped being keyed on what it is about.
-`openChatId` is what it was opened with and `_chatId` is what it is speaking
-into; they differ for exactly one session, and three things follow.
+What it cost is that the session stopped being keyed on what it is about. The
+key is how the page was opened; `_chatId` is what is being spoken into, seeded
+from the key and moved once, by `_speakInto`, when a chat is made.
 
-`_speakInto` is the only thing that moves `_chatId`, and it closes the old
-subscription before opening the new one. That close is load-bearing rather than
-tidy: `ref.listen` hands the element a subscription to *dispose*, not to
-re-point, so one left open goes on reading the previous chat's replies out into
-this session. `_listenToChat` is that pointed at `_chatId ?? openChatId`, which
-is what both `build` and `start` want — a rebuild must not lose a chat made
-since, and a session restarted on the same page is still that page's session.
+That move closes the old subscription before opening the new one, and the close
+is load-bearing rather than tidy: `ref.listen` hands the element a subscription
+to *dispose*, not to re-point, so one left open goes on reading the previous
+chat's replies out into this session.
 
 `VoiceViewState` carries `chatId`, because the page is built on the key and the
 title and the transcript need the chat, which the key is not.
@@ -225,7 +222,9 @@ after it.
 It is also what shuts the session. Leaving is the last watcher going, which
 disposes the notifier, which runs `_shutdown` — so the page has no `dispose` of
 its own. Stopping by hand there as well said the same thing twice and raced
-with it.
+with it. What that put on `_shutdown` is that it now runs on every page close
+rather than only on a session that was started, which is why releasing the
+foreground hold asks whether one was ever taken.
 
 `stop` therefore leaves `_chatId` alone, and the screen goes on showing what was
 said. The notification's Stop arrives with the page still up, and clearing the
@@ -234,11 +233,23 @@ a blank screen with no way back. What `stop` does close is the *listening*: a
 session that is off does not read replies out, and a subscription left open
 fires on every flush of that chat for as long as the app runs.
 
-What it does not fix is two pages on the null key at once — the assistant
-gesture can push a second voice page over a running one, and both watch the same
-session. The second joins the first rather than starting its own, which is the
-better of the two wrong answers: a session of its own would be a second
-microphone.
+**What none of this fixes is two voice pages at once**, and it is worth being
+exact about, because the shared key looks like protection and is not. The
+assistant gesture pushes a voice page over whatever is on screen, a running
+voice session included. Where both are new voice chats they share the null key
+and so share one session — the second silently joins the first, and popping
+either shuts it under the other. Where the one underneath was opened over a
+chat, the keys differ, and then there are two: two `VoiceSession`s, which
+`lib/domain/voice.dart` says there is only ever meant to be one of, each with a
+worker isolate and a microphone. `BackgroundWork.listening` is a flag rather
+than a count, so the first to end releases the foreground hold the other is
+still relying on.
+
+The invariant wanted is *one voice session in the app*, and nothing states it:
+`start` enforces it by hand against `ReadAloud` and against nothing else. This
+predates deferring the chat — two keys were reachable before it too — and
+closing it means the session being something the app owns one of rather than
+something a page looks up by a key it supplies.
 
 **One chat per session, however fast the words come.** The microphone is open
 for as long as the chat is being written down, so a second utterance arrives to
