@@ -256,6 +256,23 @@ that runs after the registry has gone itself. What it does not make impossible
 is two pages *on screen* — the one underneath is left showing a session that
 has stopped. That is a screen to go back from rather than a device held open.
 
+**Handing over interrupts the turn the outgoing session had running.** Shutting
+the microphone does not end a turn, and that is right where the page is still
+up: `stop` from the notification leaves it running, because the reply is still
+worth reading out and the user only asked for the microphone back. It is wrong
+here. The page has been buried under the new one, its transcript is gone, and a
+turn that parks on an approval or a question has nobody left to answer it — so
+it ran on with the "running a turn" notification up and never ended, which is
+exactly what was reported.
+
+So `handOver` interrupts it, and the chat offers to carry it on rather than
+recording it as something the user stopped — see "Carrying on an interrupted
+turn" for what that means and how it is done. The session is shut *before* the
+turn is, and that order is load-bearing: interrupting writes `isRunning: false`
+into the chat, this session is listening to that until it is shut, and its
+end-of-turn arm opens the microphone again — on the one path where another
+session is trying to take it.
+
 **One chat per session, however fast the words come.** The microphone is open
 for as long as the chat is being written down, so a second utterance arrives to
 find `_chatId` still null; `_creating` holds the one in flight so the second

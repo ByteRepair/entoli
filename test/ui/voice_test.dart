@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/background_work.dart";
+import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -207,6 +208,63 @@ void main() {
     expect(firstSession.disposed, isTrue);
     expect(voiceState(first).status, VoiceStatus.off);
     expect(app.voice.session, isNot(firstSession));
+  });
+
+  group("a turn still running when the device is taken away", () {
+    /// A session over a chat with a turn open on it — the backend is holding,
+    /// the way a real one does while the model is still thinking.
+    Future<String> startVoiceMidTurn() async {
+      app.backend
+        ..scriptedEvents = [const TextDelta("Half an ans")]
+        ..hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final id = await startVoice();
+      app.voice.session!.hear("the first question");
+      // For the reply to have said something, not just for the turn to be
+      // running: `isRunning` is set before the stream is even listened to, so
+      // waiting on it alone races the first delta.
+      await waitFor(() {
+        final said =
+            app.container.read(chatControllerProvider(id)).chat?.messages ??
+                const <Message>[];
+        return said.isNotEmpty && said.last.plainText.isNotEmpty;
+      }, what: "the reply to start");
+      return id;
+    }
+
+    test("is interrupted rather than left running", () async {
+      final id = await startVoiceMidTurn();
+
+      await startNewVoiceChat();
+
+      expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
+      // Out of the backend's list, which is what takes the notification away.
+      expect(app.backend.runningTurns.value, isNot(contains(id)));
+    });
+
+    // Nobody chose to stop it, so it is left the way a killed process leaves
+    // one: no closing record, and the chat offers to carry it on.
+    test("is offered to be carried on, not closed", () async {
+      final id = await startVoiceMidTurn();
+
+      await startNewVoiceChat();
+
+      expect(app.container.read(chatControllerProvider(id)).chat!.unfinished, isTrue);
+      final records = await app.store.readRecords(id);
+      expect(records.whereType<TurnEndRecord>(), isEmpty);
+      // A reload has to agree with what is on screen.
+      expect((await app.store.load(id)).unfinished, isTrue);
+    });
+
+    test("keeps what the reply had already said", () async {
+      final id = await startVoiceMidTurn();
+
+      await startNewVoiceChat();
+
+      final said = (await app.store.load(id)).messages.last;
+      expect(said.role, MessageRole.assistant);
+      expect(said.plainText, "Half an ans");
+    });
   });
 
   test("the language Settings picked is what the session is started in",
