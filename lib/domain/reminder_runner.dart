@@ -58,7 +58,7 @@ class ReminderRunner implements ReminderRuns {
     List<String> projects,
   ) async {
     final project = projectOrDefault(reminder.project, projects);
-    final chat = await repo.createHeadlessChat(
+    final chat = await repo.createChat(
       title: reminder.name,
       project: project,
       // Pinned rather than inherited: a later change of the app default must

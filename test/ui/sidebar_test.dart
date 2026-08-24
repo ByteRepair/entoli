@@ -8,7 +8,6 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/sidebar/chat_groups.dart";
 import "package:agent_chat/ui/sidebar/project_settings_page.dart";
@@ -66,67 +65,49 @@ void main() {
     await settleIo(tester);
   }
 
-  testWidgets("the new chat button selects the chat it just created", (tester) async {
+  // The button goes to the new-chat screen rather than making anything: what
+  // it does is drop the selection, and nothing selected is that screen.
+  testWidgets("the new chat button drops the selection and writes nothing",
+      (tester) async {
+    await io(tester, app.openSomeChat);
     await pumpBeside(tester);
+
+    await tester.tap(find.byTooltip("New chat"));
+    await settleIo(tester);
+
     expect(app.container.read(selectedChatIdProvider), isNull);
-
-    await tester.tap(find.byTooltip("New chat"));
-    await settleIo(tester);
-
-    expect(app.container.read(selectedChatIdProvider), isNotNull);
-  });
-
-  testWidgets("a new chat is not listed until something is said in it", (tester) async {
-    await io(tester, () => app.seedChat());
-    await pumpBeside(tester);
-
-    await tester.tap(find.byTooltip("New chat"));
-    await settleIo(tester);
-
     expect(await io(tester, () => app.repo.listChats()), hasLength(1));
     expect(find.text("New chat"), findsNothing);
     expect(find.text("old chat"), findsOneWidget);
   });
 
+  /// A row in the list, rather than the same words in the chat pane's title
+  /// bar beside it.
+  Finder listed(String title) =>
+      find.descendant(of: find.byType(Sidebar), matching: find.text(title));
+
+  // The list is what the new-chat screen's first message reaches, and it only
+  // reaches it because creating the chat invalidates it.
   testWidgets("its first message puts it in the list", (tester) async {
-    await pumpBeside(tester);
-    await tester.tap(find.byTooltip("New chat"));
-    await settleIo(tester);
-    final id = app.container.read(selectedChatIdProvider)!;
+    await pumpBeside(tester, beside: const ChatPage());
+    expect(listed("New chat"), findsNothing);
 
-    final controller = app.container.read(chatControllerProvider(id).notifier);
-    await tester.runAsync(() async {
-      // The controller loads its chat before it can send anything.
-      await Future<void>.delayed(Duration.zero);
-      await controller.send("hello");
-    });
-    await pumpUntil(tester, find.text("New chat"));
-    await settleIo(tester);
+    await sendMessage(tester, "hello");
+    await pumpUntil(tester, listed("New chat"));
 
-    expect(find.text("New chat"), findsOneWidget);
+    expect(listed("New chat"), findsOneWidget);
     expect(await io(tester, () => app.repo.listChats()), hasLength(1));
   });
 
-  testWidgets("a second new chat becomes the selected one", (tester) async {
-    await pumpBeside(tester);
-
-    await tester.tap(find.byTooltip("New chat"));
-    await settleIo(tester);
-    final first = app.container.read(selectedChatIdProvider);
-
-    await tester.tap(find.byTooltip("New chat"));
-    await settleIo(tester);
-
-    expect(app.container.read(selectedChatIdProvider), isNot(first));
-  });
-
-  testWidgets("creating a chat from the drawer closes it", (tester) async {
+  testWidgets("the new chat button closes the drawer it was pressed in",
+      (tester) async {
+    await io(tester, app.openSomeChat);
     await pumpAsDrawer(tester);
 
     await tester.tap(find.byTooltip("New chat"));
     await settleIo(tester);
 
-    expect(app.container.read(selectedChatIdProvider), isNotNull);
+    expect(app.container.read(selectedChatIdProvider), isNull);
     expect(find.byType(Drawer), findsNothing);
   });
 
@@ -339,16 +320,17 @@ void main() {
       expect(app.container.read(selectedChatIdProvider), isNull);
     });
 
+    // The switcher says where the next chat goes, and the next chat is made by
+    // the first thing said on the screen switching to it lands on.
     testWidgets("a new chat is created in the project being shown", (tester) async {
       await io(tester, () => app.repo.createProject("work"));
-      await pumpBeside(tester);
+      await pumpBeside(tester, beside: const ChatPage());
       await switchTo(tester, "work");
 
-      await tester.tap(find.byTooltip("New chat"));
-      await settleIo(tester);
+      await sendMessage(tester, "hello");
+      await pumpUntil(tester, listed("New chat"));
 
-      final id = app.container.read(selectedChatIdProvider)!;
-      expect(await io(tester, () => app.repo.projectOf(id)), "work");
+      expect((await io(tester, () => app.repo.listChats())).single.project, "work");
     });
 
     testWidgets("creating one names it, lays it down and switches to it", (tester) async {

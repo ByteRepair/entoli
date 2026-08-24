@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
@@ -8,6 +9,7 @@ import "../chat/widgets/turn_surface.dart";
 import "../settings/settings_page.dart";
 import "../sidebar/sidebar.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/nav_drawer.dart";
 import "transcript.dart";
 import "voice_controller.dart";
 import "widgets/transcript_window.dart";
@@ -23,13 +25,20 @@ Future<void> openVoice(BuildContext context, WidgetRef ref, String chatId) async
   await _push(context, chatId);
 }
 
-/// A new chat, opened straight into voice mode. The models are asked about
-/// first: a chat created and then left on screen because there is nothing to
-/// say it with is a worse answer than not creating one.
-Future<void> startVoiceChat(BuildContext context, WidgetRef ref) async {
+/// A new chat, opened straight into voice mode. **The one place a chat is made
+/// before anything is said in it**: every widget on this page is keyed on the
+/// chat, down to `voiceControllerProvider`, so there is nothing to defer the
+/// way the composer defers. The models are asked about first, which is what
+/// keeps the common refusal from making one — see "Nothing selected is a new
+/// chat" for what a session abandoned before the first word leaves behind.
+Future<void> startVoiceChat(BuildContext context, WidgetRef ref,
+    {ChatMeta? meta}) async {
   if (!await _haveModels(context, ref) || !context.mounted) return;
-  final chatId = await startChat(context, ref);
+  // [meta] is the new-chat screen's, where the mic sits beside a composer that
+  // would have spent it — the same settings, whichever way the chat is started.
+  final chatId = await createChat(ref, meta: meta);
   if (chatId == null || !context.mounted) return;
+  closeNavDrawer(context);
   await _push(context, chatId);
 }
 

@@ -45,17 +45,21 @@ void main() {
 
   testWidgets("nothing opens when the gesture never happened", (tester) async {
     app = TestApp.create();
+    await io(tester, app.openSomeChat);
+    final was = openedChat();
     await start(tester);
 
-    expect(openedChat(), isNull);
+    expect(openedChat(), was);
   });
 
-  testWidgets("a launch waiting at startup opens a new chat", (tester) async {
+  testWidgets("a launch waiting at startup opens the new-chat screen",
+      (tester) async {
     app = TestApp.create();
+    await io(tester, app.openSomeChat);
     app.assistant.pending = true;
     await start(tester);
 
-    expect(openedChat(), isNotNull);
+    expect(openedChat(), isNull);
     expect(openedProject(), isNull);
   });
 
@@ -63,22 +67,24 @@ void main() {
       (tester) async {
     app = TestApp.create();
     await start(tester);
-    expect(openedChat(), isNull);
+    await io(tester, app.openSomeChat);
 
     app.assistant.launch();
     await settleIo(tester);
 
-    expect(openedChat(), isNotNull);
+    expect(openedChat(), isNull);
   });
 
-  testWidgets("the chat lands in the project the setting names", (tester) async {
+  // Nothing is written by the gesture itself: it says where the chat will go,
+  // and the screen it lands on makes one when the first thing is said.
+  testWidgets("the next chat goes to the project the setting names",
+      (tester) async {
     app = TestApp.create();
     await io(tester, () => app.repo.createProject("research"));
     await launchWith(tester, AppSettings(assistantProject: "research"));
 
     expect(openedProject(), "research");
-    final chats = await io(tester, () => app.store.list());
-    expect(chats.map((c) => c.project), everyElement("research"));
+    expect(await io(tester, () => app.store.list()), isEmpty);
   });
 
   testWidgets("a project that has since been deleted lands in the default one",
@@ -87,7 +93,6 @@ void main() {
     await launchWith(tester, AppSettings(assistantProject: "gone"));
 
     expect(openedProject(), isNull);
-    expect(openedChat(), isNotNull);
   });
 
   testWidgets("the voice view opens voice mode over the new chat",

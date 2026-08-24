@@ -19,8 +19,10 @@ import "../voice/voice_page.dart";
 /// catches one arriving while the app is up — including into an activity whose
 /// engine was cached and whose `main` therefore does not run again.
 ///
-/// Where the chat lands is the settings' to say: the project is selected before
-/// the chat is made, since `startChat` reads `selectedProjectProvider`.
+/// Where the chat lands is the settings' to say, and selecting the project is
+/// the whole of saying it: the chat arm makes nothing, and the new-chat screen
+/// it opens reads `selectedProjectProvider` when the first message creates one.
+/// The voice arm creates as it goes, and reads the same provider to do it.
 class IncomingAssistant extends ConsumerStatefulWidget {
   const IncomingAssistant({super.key, required this.child});
 
@@ -73,7 +75,7 @@ class _IncomingAssistantState extends ConsumerState<IncomingAssistant> {
       case AssistantView.voice:
         await startVoiceChat(context, ref);
       case AssistantView.chat:
-        await startChat(context, ref);
+        openNewChat(context, ref);
     }
   }
 

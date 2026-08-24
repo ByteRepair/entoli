@@ -26,8 +26,9 @@ void main() {
       () => !app.container.read(chatControllerProvider(id)).isRunning,
       what: "the turn");
 
-  /// A chat with a turn under way. The delay lets the controller's initial
-  /// load settle before it is driven.
+  /// A chat with a turn under way. Nothing waits for the controller to have
+  /// read the chat back: `send` waits on that itself, which is what lets the
+  /// app drive a controller it built in the same breath.
   Future<(String, ChatController)> startTurn(
     String text, {
     List<Attachment> attachments = const [],
@@ -35,7 +36,6 @@ void main() {
     final chat = await app.repo.createChat();
     final id = chat.state.id;
     final controller = app.container.read(chatControllerProvider(id).notifier);
-    await Future<void>.delayed(Duration.zero);
     await controller.send(text, attachments: attachments);
     return (id, controller);
   }
@@ -80,16 +80,13 @@ void main() {
         () async => (await app.repo.openChat(id)).state.title != "New chat",
         what: "the title reaching disk");
 
-    test("is not on disk until its first message is sent", () async {
+    // Creating one writes it, so what keeps an untouched chat off the disk is
+    // that nothing creates one until there is something to say — see "Nothing
+    // selected is a new chat" for where that decision now lives.
+    test("is on disk from the moment it is made", () async {
       final chat = await app.repo.createChat();
-      expect(File(app.config.stateFile(chat.state.id)).existsSync(), isFalse);
-      expect(await app.repo.listChats(), isEmpty);
 
-      final controller = app.container.read(chatControllerProvider(chat.state.id).notifier);
-      await Future<void>.delayed(Duration.zero);
-      await controller.send("hello");
-      await waitIdle(chat.state.id);
-
+      expect(File(app.config.stateFile(chat.state.id)).existsSync(), isTrue);
       expect(await app.repo.listChats(), hasLength(1));
     });
 
