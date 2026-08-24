@@ -416,6 +416,32 @@ and the service only keeps that process alive, so the UI that comes back is the
 one that never stopped listening. A second engine would break it, and that is
 the reason there is not one. See "Staying alive off screen".
 
+**A kill is no longer the only way to leave a log open.**
+`ChatController.interrupt` does it deliberately: it cancels the agent and lets
+the turn close with no terminal record, so the chat offers Continue exactly as
+one killed with the process does.
+
+It is deliberately not `TurnEnd.aborted`. That reason means the user pressed
+stop, and it is the one outcome `resumable` refuses — the app does not offer to
+carry on something somebody chose to end. Nobody chooses an interruption, so it
+reads as what it is: a turn that stopped being written down.
+
+The mechanism is one flag rather than a second teardown. `_interrupted` is set
+before the agent is cancelled, the way `abort` sets its outcome first and for
+the same reason — cancelling closes the stream, so `_finishTurn` can run from
+the `onDone` instead of from the caller, and both have to decide the same thing.
+It clears where a turn opens, beside the recorder's own `outcome`. `_finishTurn`
+then reads a `TurnEnd?`, and null is the no-record case — the same `?? true`
+that `endsUnfinished` makes of a log missing one, so the state on screen and the
+state a reload would build cannot disagree.
+
+What reaches for it so far is a voice session handing the microphone to
+another. It is not voice's, though: **anything that stops watching a turn it
+did not choose to end wants this**, and `AppSession.dispose` is the standing
+example that does not have it yet — a restore or a relaunch aborts every live
+turn, so what was running is recorded as something the user stopped and is not
+offered back.
+
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
 only ever be `messages.last.id`, an invariant nothing could enforce. The chat page
 draws a `ResumeBar` above the composer from it, with the turn's age on it:
