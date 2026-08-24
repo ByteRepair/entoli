@@ -158,17 +158,30 @@ class TurnRecorder {
   /// [TurnEndRecord] was being written when the process died, and that absence
   /// is the only thing that can tell a reload the difference.
   Future<TurnEnd> close() async {
+    final reason = outcome ?? TurnEnd.done;
+    await _stop(reason);
+    return reason;
+  }
+
+  /// Stop recording and write **no** closing record, leaving the turn open —
+  /// which is what a reload reads as one the process died in the middle of,
+  /// and so what makes it one to offer to carry on. See "Carrying on an
+  /// interrupted turn".
+  Future<void> interrupt() => _stop(null);
+
+  /// Stop recording, with [reason] closing the log or null leaving it open.
+  /// The last of the reply goes in the same write, since every append is an
+  /// open and a close of the file.
+  Future<void> _stop(TurnEnd? reason) async {
     flushDeltas();
     _checkpoint?.cancel();
     _checkpoint = null;
     final ending = _messageId;
-    final reason = outcome ?? TurnEnd.done;
-    if (ending == null) return reason;
+    if (ending == null) return;
     _messageId = null;
-    // In one write, since every append is an open and a close of the file.
-    await _enqueue(() => _appendChanged(ending,
-        then: [ChatRecord.turnEnd(messageId: ending, reason: reason)]));
-    return reason;
+    await _enqueue(() => _appendChanged(ending, then: [
+          if (reason != null) ChatRecord.turnEnd(messageId: ending, reason: reason),
+        ]));
   }
 
   void dispose() {

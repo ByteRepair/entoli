@@ -205,9 +205,9 @@ abstract class AgentBackend {
   /// The chats with a turn running, as it changes: a chat is in it from
   /// [sendPrompt] or [resumeTurn] until that turn's event stream has closed,
   /// which is later than the agent stopping — the caller is still writing the
-  /// turn's last records. Ids rather than a count, because the one reader
-  /// (`TurnKeepAlive`) aborts each of them and would otherwise need a second
-  /// way to stop a turn.
+  /// turn's last records. Ids rather than a count, because its readers act on
+  /// each turn rather than on how many there are, and they do not all act the
+  /// same way: `TurnKeepAlive` aborts, `interruptLiveTurns` interrupts.
   ValueListenable<Set<String>> get runningTurns;
 
   /// One question, answered in one call to [model]: no tools, no session,

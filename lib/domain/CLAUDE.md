@@ -416,6 +416,39 @@ and the service only keeps that process alive, so the UI that comes back is the
 one that never stopped listening. A second engine would break it, and that is
 the reason there is not one. See "Staying alive off screen".
 
+**A kill is no longer the only way to leave a log open.**
+`ChatController.interrupt` does it deliberately: it cancels the agent and lets
+the turn close with no terminal record, so the chat offers Continue exactly as
+one killed with the process does.
+
+It is deliberately not `TurnEnd.aborted`. That reason means the user pressed
+stop, and it is the one outcome `resumable` refuses — the app does not offer to
+carry on something somebody chose to end. Nobody chooses an interruption, so it
+reads as what it is: a turn that stopped being written down.
+
+The mechanism is one flag rather than a second teardown. `_interrupted` is set
+before the agent is cancelled, the way `abort` sets its outcome first and for
+the same reason — cancelling closes the stream, so `_finishTurn` can run from
+the `onDone` instead of from the caller, and both have to decide the same thing.
+It clears where a turn opens, beside the recorder's own `outcome`. `_finishTurn`
+then reads a `TurnEnd?`, and null is the no-record case — the same `?? true`
+that `endsUnfinished` makes of a log missing one, so the state on screen and the
+state a reload would build cannot disagree.
+
+**Anything that stops watching a turn it did not choose to end wants this.** A
+voice session handing the microphone to another is one — see "Taking turns".
+`AppSession.dispose` is the other, through `interruptLiveTurns`: a restore or a
+relaunch used to abort every live turn, so work nobody stopped came back
+recorded as though they had.
+
+It reaches only the chats a `ChatController` is already driving, and that leaves
+a hole. A reminder's turn has no controller — `ReminderRunner` owns its own
+recorder — so it is still aborted when the backend shuts down, still recorded as
+something the user ended, and still notified as "The task was stopped". Closing
+it properly means `AgentBackend` being able to stop a turn without claiming
+somebody chose to, rather than a second sweep; until then, the headless turns
+are the ones this does not cover.
+
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
 only ever be `messages.last.id`, an invariant nothing could enforce. The chat page
 draws a `ResumeBar` above the composer from it, with the turn's age on it:
