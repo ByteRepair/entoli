@@ -194,6 +194,21 @@ void main() {
     });
   });
 
+  // A `VoiceSession` is the microphone and a worker isolate, and the device has
+  // one of each — so a second session starting has to take them off the first.
+  // Two voice pages is not hypothetical: the assistant gesture pushes one over
+  // whatever is on screen, a running session included.
+  test("starting a session shuts whichever one was already running", () async {
+    final first = await startVoice();
+    final firstSession = app.voice.session!;
+
+    await startNewVoiceChat();
+
+    expect(firstSession.disposed, isTrue);
+    expect(voiceState(first).status, VoiceStatus.off);
+    expect(app.voice.session, isNot(firstSession));
+  });
+
   test("the language Settings picked is what the session is started in",
       () async {
     await app.container

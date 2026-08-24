@@ -233,23 +233,28 @@ a blank screen with no way back. What `stop` does close is the *listening*: a
 session that is off does not read replies out, and a subscription left open
 fires on every flush of that chat for as long as the app runs.
 
-**What none of this fixes is two voice pages at once**, and it is worth being
-exact about, because the shared key looks like protection and is not. The
-assistant gesture pushes a voice page over whatever is on screen, a running
-voice session included. Where both are new voice chats they share the null key
-and so share one session — the second silently joins the first, and popping
-either shuts it under the other. Where the one underneath was opened over a
-chat, the keys differ, and then there are two: two `VoiceSession`s, which
-`lib/domain/voice.dart` says there is only ever meant to be one of, each with a
-worker isolate and a microphone. `BackgroundWork.listening` is a flag rather
-than a count, so the first to end releases the foreground hold the other is
-still relying on.
+**One voice session in the app, and it is written down rather than assumed.**
+`runningVoiceProvider` holds whichever controller has the device, and `start`
+takes it off that one before opening its own — the same thing it already did to
+`ReadAloud`, which holds a speech model of its own. It holds the controller
+rather than a key, because the key is how a page was opened and two pages can
+share one.
 
-The invariant wanted is *one voice session in the app*, and nothing states it:
-`start` enforces it by hand against `ReadAloud` and against nothing else. This
-predates deferring the chat — two keys were reachable before it too — and
-closing it means the session being something the app owns one of rather than
-something a page looks up by a key it supplies.
+That is not a hypothetical. The assistant gesture pushes a voice page over
+whatever is on screen, a running session included, and the two are not
+necessarily on the same key: over a chat it is `openVoice(X)`, and the gesture's
+is null. Two keys are two controllers, and before this they were two
+`VoiceSession`s — two microphones and two worker isolates, where
+`lib/domain/voice.dart` says there is one of each. `BackgroundWork.listening` is
+a flag rather than a count, so the first of them to end released the foreground
+hold the other was still relying on. It predates deferring the chat; two keys
+were reachable before that too.
+
+`release` only clears its own claim, and only while there is something to
+release to: a session is shut from `onDispose`, and on the way out of the app
+that runs after the registry has gone itself. What it does not make impossible
+is two pages *on screen* — the one underneath is left showing a session that
+has stopped. That is a screen to go back from rather than a device held open.
 
 **One chat per session, however fast the words come.** The microphone is open
 for as long as the chat is being written down, so a second utterance arrives to

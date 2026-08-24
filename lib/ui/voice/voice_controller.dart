@@ -141,9 +141,10 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// passes through, which is what its own test asserts.
   final _speakable = SpeakableText();
 
-  /// Held rather than read when it is needed: [_shutdown] runs from
+  /// Held rather than read when they are needed: [_shutdown] runs from
   /// `ref.onDispose`, where the ref is already gone.
   late BackgroundWork _work;
+  late RunningVoice _running;
 
   /// The reply being read out, so a new one starts the splitter over rather
   /// than carrying on from where the last one stopped, and the parts it was
@@ -164,6 +165,7 @@ class VoiceController extends Notifier<VoiceViewState> {
   @override
   VoiceViewState build() {
     _work = ref.watch(backgroundWorkProvider);
+    _running = ref.read(runningVoiceProvider.notifier);
     // Read rather than watched, and listened to for changes: watching it would
     // rebuild this notifier, and a rebuild resets the state a running session
     // is being held in.
@@ -266,10 +268,14 @@ class VoiceController extends Notifier<VoiceViewState> {
           error: "Pick a recognition model and a speech model in Settings first.");
     }
 
-    // One session at a time. `ReadAloud` holds a speech model of its own, and
-    // a message still being read out would be a second copy of it and a second
-    // voice over this one.
+    // One session at a time, and there are two things that could be holding
+    // one. `ReadAloud` has a speech model of its own, and a message still being
+    // read out would be a second copy of it talking over this one.
     await ref.read(readAloudProvider.notifier).stop();
+    if (!ref.mounted) return;
+    // The other is another voice page. `state.isOn` above has already answered
+    // for this one, so anything still running here is somebody else's.
+    await ref.read(runningVoiceProvider)?.stop();
     if (!ref.mounted) return;
 
     final pushToTalk = settings.voicePushToTalk;
@@ -296,6 +302,7 @@ class VoiceController extends Notifier<VoiceViewState> {
       _stops = _work.stopRequests
           .where((job) => job == BackgroundJob.voice)
           .listen((_) => unawaited(stop()));
+      _running.claim(this);
       unawaited(_work.listening(true));
       _show(VoiceStatus.listening);
     } catch (e) {
@@ -380,7 +387,10 @@ class VoiceController extends Notifier<VoiceViewState> {
     // Only where one was taken. This runs on every page close now, and
     // `listening` is a flag rather than a count — telling the platform to let
     // go of a hold nothing took drops the one another session is relying on.
-    if (session != null) unawaited(_work.listening(false));
+    if (session != null) {
+      _running.release(this);
+      unawaited(_work.listening(false));
+    }
   }
 
   void _onVoice(VoiceEvent event) {
@@ -488,6 +498,32 @@ class VoiceController extends Notifier<VoiceViewState> {
     if (state.status != VoiceStatus.speaking) _show(VoiceStatus.speaking);
   }
 }
+
+/// Whichever session is running, and null where none is. **One at a time is a
+/// property of the device** — a `VoiceSession` is the microphone and a worker
+/// isolate, and there is one of each — so it is written down here rather than
+/// assumed from there being one page. Two are reachable: the assistant gesture
+/// pushes a voice page over whatever is on screen, a running session included.
+///
+/// The controller itself rather than its key, because the key is how a page was
+/// opened and two sessions can share one — see "Taking turns".
+class RunningVoice extends Notifier<VoiceController?> {
+  @override
+  VoiceController? build() => null;
+
+  void claim(VoiceController voice) => state = voice;
+
+  /// Only its own claim: a session shutting down after another has taken over
+  /// must not take the new one's microphone away with it. And only while there
+  /// is somewhere to release it to — a session is shut down from `onDispose`,
+  /// which on the way out of the app runs after this has gone itself.
+  void release(VoiceController voice) {
+    if (ref.mounted && identical(state, voice)) state = null;
+  }
+}
+
+final runningVoiceProvider =
+    NotifierProvider<RunningVoice, VoiceController?>(RunningVoice.new);
 
 /// Keyed on the chat, or on null for a session with no chat yet.
 ///
