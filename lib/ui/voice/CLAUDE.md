@@ -200,25 +200,45 @@ after one.
 
 What it cost is that the session stopped being keyed on what it is about.
 `openChatId` is what it was opened with and `_chatId` is what it is speaking
-into; they differ for exactly one session, and four things follow.
+into; they differ for exactly one session, and three things follow.
 
 `_speakInto` is the only thing that moves `_chatId`, and it closes the old
 subscription before opening the new one. That close is load-bearing rather than
 tidy: `ref.listen` hands the element a subscription to *dispose*, not to
 re-point, so one left open goes on reading the previous chat's replies out into
-this session.
+this session. `_listenToChat` is that pointed at `_chatId ?? openChatId`, which
+is what both `build` and `start` want — a rebuild must not lose a chat made
+since, and a session restarted on the same page is still that page's session.
 
 `VoiceViewState` carries `chatId`, because the page is built on the key and the
 title and the transcript need the chat, which the key is not.
 
-**`start` puts `_chatId` back, not `stop`.** The null-keyed instance is the only
-one there is, so a chat one session made is still here when the next new voice
-chat begins — and going on speaking into it would put one conversation in the
-middle of another. Resetting when the *next* session starts rather than when
-this one ends is what lets stopping leave the screen alone: the notification's
-Stop arrives with the page still up, and clearing the chat there would take the
-transcript and the turn's own surface off it and leave a blank screen with no
-way back.
+**The session is the page's, and that is what makes the null key safe.** The
+provider is auto-disposed, so it lives exactly as long as something is watching
+it — which is the page — and the next new voice chat builds a controller that
+has never heard of the last one's chat. Nothing is put back anywhere, and there
+is no window in which the old chat could be read: the alternative, resetting at
+`start`, left the first frame of the next session showing the previous
+conversation's title and five lines of its transcript, since `start` only runs
+after it.
+
+It is also what shuts the session. Leaving is the last watcher going, which
+disposes the notifier, which runs `_shutdown` — so the page has no `dispose` of
+its own. Stopping by hand there as well said the same thing twice and raced
+with it.
+
+`stop` therefore leaves `_chatId` alone, and the screen goes on showing what was
+said. The notification's Stop arrives with the page still up, and clearing the
+chat there would take the transcript and the turn's own surface off it and leave
+a blank screen with no way back. What `stop` does close is the *listening*: a
+session that is off does not read replies out, and a subscription left open
+fires on every flush of that chat for as long as the app runs.
+
+What it does not fix is two pages on the null key at once — the assistant
+gesture can push a second voice page over a running one, and both watch the same
+session. The second joins the first rather than starting its own, which is the
+better of the two wrong answers: a session of its own would be a second
+microphone.
 
 **One chat per session, however fast the words come.** The microphone is open
 for as long as the chat is being written down, so a second utterance arrives to

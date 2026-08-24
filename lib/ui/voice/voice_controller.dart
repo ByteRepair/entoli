@@ -171,12 +171,18 @@ class VoiceController extends Notifier<VoiceViewState> {
     // is being held in.
     ref.listen(appSettingsProvider.select((s) => s.voicePushToTalk),
         (_, on) => unawaited(_setPushToTalk(on)));
-    _speakInto(openChatId);
+    _listenToChat();
     ref.onDispose(() => unawaited(_shutdown()));
     return VoiceViewState(
         chatId: _chatId,
         pushToTalk: ref.read(appSettingsProvider).voicePushToTalk);
   }
+
+  /// Listen to whatever this session is speaking into — the chat it made, or
+  /// the one it was opened over. Both [build] and [start] want that and not a
+  /// reset: a rebuild must not lose a chat made since, and a session restarted
+  /// on the same page is still that page's session.
+  void _listenToChat() => _speakInto(_chatId ?? openChatId);
 
   /// Point the session at a chat, or at none — the only thing that moves
   /// `_chatId`, and it closes before it re-opens. Publishing is the caller's:
@@ -251,10 +257,10 @@ class VoiceController extends Notifier<VoiceViewState> {
   Future<void> start({ChatMeta? meta}) async {
     if (state.isOn) return;
     _meta = meta;
-    // Starting is what puts the session back where it began — see "Taking
-    // turns". Unconditional: it is also what re-opens the listening that
-    // [_shutdown] closed.
-    _speakInto(openChatId);
+    // Re-opens the listening [_shutdown] closed. Nothing is reset here: the
+    // session is the page's, so a new one is a new notifier — see "Taking
+    // turns".
+    _listenToChat();
     final settings = ref.read(appSettingsProvider);
     final recognition =
         voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId);
@@ -487,11 +493,12 @@ class VoiceController extends Notifier<VoiceViewState> {
   }
 }
 
-/// Keyed on the chat, or on null for a session with no chat yet. There is only
-/// ever one of the latter: the page is a route and the session is shut when it
-/// is popped, so the single null instance is the one voice session that has
-/// nothing to speak into — see [VoiceController.stop] for what it has to put
-/// back before the next one.
-final voiceControllerProvider =
-    NotifierProvider.family<VoiceController, VoiceViewState, String?>(
-        VoiceController.new);
+/// Keyed on the chat, or on null for a session with no chat yet.
+///
+/// **Auto-disposed, so a session lasts exactly as long as the page watching
+/// it.** That is what makes the null key safe to reuse: the next new voice
+/// chat builds a controller that has never heard of the last one's chat, with
+/// nothing to put back and no window in which the old one could be read. See
+/// "Taking turns".
+final voiceControllerProvider = NotifierProvider.autoDispose
+    .family<VoiceController, VoiceViewState, String?>(VoiceController.new);

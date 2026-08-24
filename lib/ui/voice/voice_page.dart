@@ -77,9 +77,9 @@ class VoicePage extends ConsumerStatefulWidget {
 }
 
 class _VoicePageState extends ConsumerState<VoicePage> {
-  /// Held rather than read in [dispose], where the ref is no longer safe to
-  /// use — and the controller outlives this route, so there is something left
-  /// to tell.
+  /// What the buttons act through. The `build` below watches the same session,
+  /// which is what holds it: the provider is auto-disposed, so it lives as long
+  /// as this page and no longer.
   late final VoiceController _voice =
       ref.read(voiceControllerProvider(widget.chatId).notifier);
 
@@ -94,13 +94,9 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     });
   }
 
-  /// Leaving closes the session: the controller outlives the route, so without
-  /// this it would listen on with nothing on screen.
-  @override
-  void dispose() {
-    _voice.stop();
-    super.dispose();
-  }
+  // No `dispose`: leaving is the last watcher going, which disposes the
+  // session, which shuts it. Stopping it by hand here as well said the same
+  // thing twice and only ever raced with it.
 
   @override
   Widget build(BuildContext context) {
