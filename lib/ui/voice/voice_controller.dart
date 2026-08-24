@@ -124,8 +124,8 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// screen that offered them before there was anything to write them on.
   ChatMeta? _meta;
 
-  /// Closed and re-opened rather than set up once: there is nothing to listen
-  /// to until there is a chat. [_speakInto] is the only thing that touches it.
+  /// Only [_speakInto] and [_shutdown] touch it: there is nothing to listen to
+  /// until there is a chat, and nothing to listen for once the session is off.
   ProviderSubscription<ChatViewState>? _chatEvents;
 
   /// The chat being made, while it is being made — see [_startChat].
@@ -178,13 +178,9 @@ class VoiceController extends Notifier<VoiceViewState> {
         pushToTalk: ref.read(appSettingsProvider).voicePushToTalk);
   }
 
-  /// Point the session at a chat, or at none. **The only thing that moves
-  /// `_chatId`**, so what is listened to cannot come apart from what is being
-  /// spoken into. Closing first is load-bearing rather than defensive: a
-  /// subscription is the element's to dispose but not to re-point, so one left
-  /// open would go on reading the previous chat's replies out into this
-  /// session. Nothing is published here — [build] has no state to write yet,
-  /// and the other two callers `_show` straight after.
+  /// Point the session at a chat, or at none — the only thing that moves
+  /// `_chatId`, and it closes before it re-opens. Publishing is the caller's:
+  /// [build] has no state to write yet. See "Taking turns".
   void _speakInto(String? id) {
     _chatEvents?.close();
     _chatEvents = null;
@@ -255,13 +251,10 @@ class VoiceController extends Notifier<VoiceViewState> {
   Future<void> start({ChatMeta? meta}) async {
     if (state.isOn) return;
     _meta = meta;
-    // **A session starting is a session starting fresh.** The null-keyed
-    // instance is the only one there is, so a chat the last session made is
-    // still here — and going on speaking into it would put this conversation
-    // in the middle of somebody else's. Put back here rather than in [stop] so
-    // that stopping leaves the screen showing what was said; see "Taking
-    // turns".
-    if (_chatId != openChatId) _speakInto(openChatId);
+    // Starting is what puts the session back where it began — see "Taking
+    // turns". Unconditional: it is also what re-opens the listening that
+    // [_shutdown] closed.
+    _speakInto(openChatId);
     final settings = ref.read(appSettingsProvider);
     final recognition =
         voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId);
@@ -289,10 +282,9 @@ class VoiceController extends Notifier<VoiceViewState> {
             speaker: settings.voiceSpeaker,
             language: settings.voiceLanguage,
           );
-      // Stopped while the models were loading — the page popped, most likely.
-      // `ref.mounted` does not catch it: this provider is kept alive, so the
-      // notifier outlives the screen. Without this the microphone opens with
-      // nothing on screen, and the next thing the room says starts a turn.
+      // Stopped while the models loaded. `ref.mounted` does not catch it — the
+      // notifier outlives the screen — and without this the microphone opens
+      // with nothing on screen.
       if (!ref.mounted || state.status != VoiceStatus.starting) {
         return unawaited(session.dispose());
       }
@@ -317,9 +309,8 @@ class VoiceController extends Notifier<VoiceViewState> {
     // `onDispose` has already done the shutting down.
     if (!ref.mounted || state.status == VoiceStatus.off) return;
     await _shutdown();
-    // The chat is deliberately left where it is: the transcript and whatever
-    // the turn put on screen are still worth reading after the microphone has
-    // gone, and the notification's Stop reaches this with the page still up.
+    // The chat is left where it is, so the screen still shows what was said —
+    // the notification's Stop reaches this with the page still up.
     if (ref.mounted) _show(VoiceStatus.off);
   }
 
@@ -375,6 +366,11 @@ class VoiceController extends Notifier<VoiceViewState> {
   Future<void> _shutdown() async {
     _due?.cancel();
     _due = null;
+    // A session that is off does not read replies out, so it has no business
+    // still listening for them: left open this fires on every flush of that
+    // chat for as long as the app runs, to decide it is off each time.
+    _chatEvents?.close();
+    _chatEvents = null;
     final session = _session;
     _session = null;
     await _events?.cancel();
@@ -406,27 +402,19 @@ class VoiceController extends Notifier<VoiceViewState> {
     // into it.
     if (ref.read(chatControllerProvider(_chatId!)).isRunning) await _chat.abort();
     if (!ref.mounted) return;
-    // **Not gated on the session still being on.** These words were heard
-    // while it was, and the writes above take long enough for Done to be
-    // pressed in the middle of them — dropping them there would leave exactly
-    // the empty chat this path exists not to make. The status is, since a
-    // stopped session must not be shown thinking.
+    // Sent whether or not the session is still on — these words were heard
+    // while it was. The status is not: a stopped session is not thinking.
     if (state.isOn) _show(VoiceStatus.thinking);
     await _chat.send(text);
   }
 
-  /// The first word of a session started with nothing to speak into. **This is
-  /// what keeps voice mode to the rule the composer keeps** — a chat exists
-  /// because something is in it — so a session nobody spoke in leaves nothing.
-  ///
-  /// One at a time. The microphone stays open while the chat is being written,
-  /// so a second utterance arrives to find `_chatId` still null; without this
-  /// it would make a second chat and say itself into that instead.
+  /// The first word of a session started with nothing to speak into, and one
+  /// at a time — a second utterance arrives while this is still writing. See
+  /// "Taking turns".
   Future<bool> _startChat() async {
-    final made = _creating ??=
-        ref.read(selectedChatIdProvider.notifier).create(meta: _meta);
-    final id = await made;
-    if (identical(_creating, made)) _creating = null;
+    final id = await (_creating ??=
+        ref.read(selectedChatIdProvider.notifier).create(meta: _meta));
+    _creating = null;
     if (!ref.mounted) return false;
     // Won by the utterance that asked first, which is the one whose chat this
     // is. Nothing to do but speak into it.

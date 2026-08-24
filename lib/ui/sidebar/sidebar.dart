@@ -30,9 +30,8 @@ class SelectedChatId extends Notifier<String?> {
   void select(String? id) => state = id;
 
   /// Make a chat in the project being shown and select it. **The one place a
-  /// chat is created from the UI.** It is a method here rather than a function
-  /// beside the widgets because not every caller has a `WidgetRef`: voice mode
-  /// creates from inside its own controller, on the first word it hears.
+  /// chat is created from the UI** — a method here rather than a function
+  /// beside the widgets because not every caller has a `WidgetRef`.
   ///
   /// [meta] is the settings it should run its first turn under, for a screen
   /// that offered them before there was a chat to write them on. Null is a
@@ -48,7 +47,7 @@ class SelectedChatId extends Notifier<String?> {
       ref.read(selectedRemoteProvider.notifier).select(null);
       state = chat.state.id;
       ref.invalidate(chatListProvider);
-      return state;
+      return chat.state.id;
     } catch (e) {
       logFailure("chat", "could not start a chat", e);
       return null;

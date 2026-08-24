@@ -78,8 +78,8 @@ class VoicePage extends ConsumerStatefulWidget {
 
 class _VoicePageState extends ConsumerState<VoicePage> {
   /// Held rather than read in [dispose], where the ref is no longer safe to
-  /// use — and the controller outlives this route anyway, being keyed on the
-  /// chat rather than on the screen.
+  /// use — and the controller outlives this route, so there is something left
+  /// to tell.
   late final VoiceController _voice =
       ref.read(voiceControllerProvider(widget.chatId).notifier);
 
@@ -94,8 +94,8 @@ class _VoicePageState extends ConsumerState<VoicePage> {
     });
   }
 
-  /// Leaving closes the session: the controller is keyed on the chat, so
-  /// without this it would listen on with nothing on screen.
+  /// Leaving closes the session: the controller outlives the route, so without
+  /// this it would listen on with nothing on screen.
   @override
   void dispose() {
     _voice.stop();
@@ -125,7 +125,7 @@ class _VoicePageState extends ConsumerState<VoicePage> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            _Script(session: widget.chatId),
+            _Script(chatId: voice.chatId),
             const SizedBox(height: 16),
             // Bottom-most, where the composer is on the page this stands in
             // for: it is what there is to do here.
@@ -169,9 +169,10 @@ class _Title extends ConsumerWidget {
 /// delta: the orb and the controls answer to the session, which moves a
 /// handful of times a turn, and both are expensive to build.
 class _Script extends ConsumerStatefulWidget {
-  const _Script({required this.session});
+  const _Script({required this.chatId});
 
-  final String? session;
+  /// The chat being spoken into, null until the first word makes one.
+  final String? chatId;
 
   @override
   ConsumerState<_Script> createState() => _ScriptState();
@@ -182,15 +183,14 @@ class _ScriptState extends ConsumerState<_Script> {
 
   @override
   Widget build(BuildContext context) {
-    // Its own watch rather than the session's `chatId` handed down: this
-    // subtree must not rebuild on the session changes the orb answers to.
-    final chatId = ref
-        .watch(voiceControllerProvider(widget.session).select((v) => v.chatId));
+    final chatId = widget.chatId;
     // Nothing said yet, so nothing has been said back — but the window is drawn
     // at its own height either way, so the orb does not jump up the screen when
     // the first line lands. One shape rather than two, or the empty one is
     // shorter than the state it stands in for by exactly the gap below it.
     final chat = chatId == null ? null : ref.watch(chatControllerProvider(chatId));
+    final driver =
+        chatId == null ? null : ref.read(chatControllerProvider(chatId).notifier);
     final lines = _transcript.of(chat?.chat?.messages ?? const <Message>[]);
 
     return Column(
@@ -201,16 +201,10 @@ class _ScriptState extends ConsumerState<_Script> {
           child: TranscriptWindow(lines: lines),
         ),
         const SizedBox(height: 12),
-        if (chat != null) ...[
-          TurnSurface(
-            view: chat,
-            notifier: ref.read(chatControllerProvider(chatId!).notifier),
-          ),
+        if (chat != null && driver != null) ...[
+          TurnSurface(view: chat, notifier: driver),
           if (chat.questions.isNotEmpty)
-            TurnQuestions(
-              view: chat,
-              notifier: ref.read(chatControllerProvider(chatId).notifier),
-            ),
+            TurnQuestions(view: chat, notifier: driver),
         ],
       ],
     );

@@ -68,16 +68,13 @@ void main() {
   /// Which chat the session ended up speaking into.
   String? spokenInto() => app.container.read(voiceControllerProvider(null)).chatId;
 
-  /// Say [text] and wait for the turn it starts to be over, in the chat the
-  /// session is speaking into — waiting for the chat first where it has yet to
-  /// make one. The turn rather than the chat, because a test that ends under a
-  /// live turn tears the container down beneath it.
-  Future<String> heard(String text, {String? into}) async {
+  /// Say [text] into a session with no chat and wait for the turn it starts to
+  /// be over. The turn rather than the chat, because a test that ends under a
+  /// live one tears the container down beneath it.
+  Future<String> heard(String text) async {
     app.voice.session!.hear(text);
-    if (into == null) {
-      await waitFor(() => spokenInto() != null, what: "the chat");
-    }
-    final id = into ?? spokenInto()!;
+    await waitFor(() => spokenInto() != null, what: "the chat");
+    final id = spokenInto()!;
     await waitFor(() => _finished(app, id), what: "the turn");
     return id;
   }
@@ -143,10 +140,7 @@ void main() {
       await startNewVoiceChat();
 
       app.voice.session!.hear("first");
-      app.voice.session!.hear("second");
-      await waitFor(() => spokenInto() != null, what: "the chat");
-      final id = spokenInto()!;
-      await waitFor(() => _finished(app, id), what: "the turn");
+      await heard("second");
 
       expect(await app.repo.listChats(), hasLength(1));
     });

@@ -229,9 +229,6 @@ And what was heard is said **even if the session stops while it is being
 written**. Those words were spoken while it was on, and dropping them there
 would leave the empty chat this whole path exists not to make.
 
-Creation goes through `SelectedChatId.create`, which is why that is a method on
-the notifier rather than a function beside the widgets: a `Notifier` has a `Ref`
-and no `WidgetRef`, and this is the one creator that is not a widget.
 
 **The microphone is open only when it is the user's turn to speak** — not while
 a turn runs, not while the reply is read out. `VoiceController._wantsMicrophone`
