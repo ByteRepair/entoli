@@ -3,6 +3,7 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "package:cryptography/cryptography.dart";
+import "package:cryptography/dart.dart";
 
 import "../../domain/sync/identity.dart";
 import "channel.dart";
@@ -182,10 +183,12 @@ class Handshake {
     final ikm = Uint8List.fromList(
         [...dh, ...base64Url.decode(base64Url.normalize(pairingSecret))]);
 
-    Future<SecretKey> derive(String suffix) => Hkdf(hmac: Hmac.sha256(), outputLength: 32)
+    // `Hmac` on Android is `javax.crypto`, which refuses the empty-salt key
+    // HKDF's extract step builds ("Empty key"); `DartHmac` keeps it in Dart.
+    Future<SecretKey> derive(String suffix) => Hkdf(hmac: DartHmac.sha256(), outputLength: 32)
         .deriveKey(secretKey: SecretKey(ikm), info: utf8.encode("$info/$suffix"));
 
-    final sasSeed = await Hkdf(hmac: Hmac.sha256(), outputLength: 5)
+    final sasSeed = await Hkdf(hmac: DartHmac.sha256(), outputLength: 5)
         .deriveKey(secretKey: SecretKey(ikm), info: utf8.encode(_sasInfo));
     _sasText = formatSas(await sasSeed.extractBytes());
 

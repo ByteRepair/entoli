@@ -37,6 +37,30 @@ bits) is derived beside the keys for human confirmation — regrouped five bits
 at a time rather than through one 40-bit integer, since a shift past 32 bits is
 truncated on the web.
 
+That HKDF is asked for `DartHmac` by name. `cryptography_flutter` declares a
+`dartPluginClass`, so on Android it installs itself as `Cryptography.instance`
+with nothing in this app calling it, and a plain `Hmac.sha256()` then runs over
+a method channel into `javax.crypto`. HKDF's extract step keys its HMAC with
+the salt rather than the secret, this handshake passes no salt, and Java's
+`SecretKeySpec` throws on a zero-length key — so pairing a phone died at the
+last step of a handshake the desktop had already completed. Pure Dart pads an
+empty HMAC key like every other short one, so pinning it changes no bytes and
+needs no protocol bump.
+
+Nothing catches this in `flutter test`: the plugin reports itself absent on the
+Dart VM, so the suite takes the pure-Dart path whichever implementation the
+code names. Only a real device reaches the other one. The rule to carry
+forward is about HKDF rather than about Android — **a derivation with an empty
+salt must name a Dart HMAC**, and a new one that writes `Hmac.sha256()` will
+pass every test here and fail on a phone.
+
+The rest of the plugin is left alone deliberately. It only claims ChaCha20 on
+Android — its Ed25519 and X25519 are Cupertino-only — and only for payloads
+over 2000 bytes, which is resource chunks and not control frames; below that,
+and everywhere the plugin is inert, `cryptography` runs ChaCha20 in a
+background isolate. Overriding `Cryptography.instance` app-wide would cost
+both of those to fix two call sites.
+
 Role order in that transcript is the whole of what makes the two signatures
 comparable: signing local-then-remote has each side hashing its own ordering
 and every handshake failing to verify. It shipped that way in Phase 1 and was
