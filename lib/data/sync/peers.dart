@@ -99,11 +99,9 @@ class LivePeer {
 
 /// Who is connected, and what this device is serving them.
 ///
-/// The one piece all three halves of sync stand on: pairing puts a peer here,
-/// mirroring reads through one, serving writes through them. It owns the
-/// connections and the status the Sync page draws, and nothing else — which
-/// is what lets [SyncPairing], [SyncMirrors] and [SyncServing] be about their
-/// own subject rather than about each other.
+/// The piece both halves of sync stand on: [SyncPairing] puts a peer here,
+/// and everything [SyncHub] does with a chat reads or writes through one. It
+/// owns the connections and the status the Sync page draws, and nothing else.
 class SyncPeers {
   SyncPeers(this._registry);
 

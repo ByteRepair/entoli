@@ -551,13 +551,13 @@ final drivenChatsProvider =
 /// the Sync page was open landed in the hub and not in the registry read the
 /// page was still holding, so it did not appear until the page was left and
 /// come back to.
-class SyncPeers extends HubValue<Map<String, PeerState>> {
+class PairedDevices extends HubValue<Map<String, PeerState>> {
   @override
   ValueListenable<Map<String, PeerState>> of(SyncHub hub) => hub.peers;
 }
 
 final syncPeersProvider =
-    NotifierProvider<SyncPeers, Map<String, PeerState>>(SyncPeers.new);
+    NotifierProvider<PairedDevices, Map<String, PeerState>>(PairedDevices.new);
 
 final isMirroredChatProvider = Provider.family<bool, String>((ref, chatId) {
   return ref

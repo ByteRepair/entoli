@@ -111,11 +111,6 @@ the code has a seam rather than by subject:
   end you are looking from would put the control lock, resource transfer and
   chat-following each in two files.
 
-`holdsControl` and `heldBy` read as a pair and are not one: `holdsControl`
-asks whether this device was granted a chat *somebody else* owns, `heldBy`
-says who holds one *this* device owns. On one device they are about disjoint
-sets of chats.
-
 `pairing.dart` owns the three decisions above the wire:
 
 - **Who speaks first.** Handshake initiator = `!weOffered`, per route.
@@ -158,8 +153,10 @@ told even if it never opened the records.
 peer talking about one it is not the home device for, and notifies. An arm
 that did its own lookup could forget either. `SyncPeers.toSubscribers` is the
 same consolidation the other way, for serving-side messages that go to
-whoever follows a chat. Deletions and the chat list are the exceptions: both
-reach every peer, so both loop `peers.live` themselves.
+whoever follows a chat. Three arms loop `peers.live` themselves instead: a
+deletion and the chat list, because both reach every peer rather than only
+subscribers, and an append, because it pages through `_sendRecords` rather
+than sending one message.
 
 A chat created after the mirrors were told about the list would otherwise not
 appear until a reconnect, so `_announced` holds the ids last sent and a
@@ -179,7 +176,7 @@ both directions — the chats this device served them, and the ones it mirrors
 from them — because a mirror's page has a banner to raise and nothing else
 tells it the snapshot has stopped moving. `revoke` is the other end of that:
 the row, the mirrors and the cached bytes all go with the device, since
-`_refreshPeers` only fills gaps from the registry and would leave an unpaired
+`SyncPeers.publish` only fills gaps from the registry and would leave an unpaired
 device listed, and online, until a restart.
 
 `ChatState` and `ChatRecord` ride inside those messages, which is what

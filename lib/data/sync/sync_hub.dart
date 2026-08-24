@@ -114,15 +114,9 @@ class RemoteChatEntry {
 
 /// What two Entolis do with a channel once [SyncPairing] has opened one:
 /// serve this device's chats to whoever is watching, and hold a copy of the
-/// ones it watches elsewhere.
-///
-/// Both at once, always — every device is the home of its own chats and a
-/// mirror of its peers'. They are one file because they are two ends of one
-/// conversation: every message the serving side sends here, the mirror side
-/// of some other device receives, and a protocol change is never one without
-/// the other. Splitting them by which end you are looking from would put
-/// every feature — the control lock, resource transfer, following a chat —
-/// in two places.
+/// ones it watches elsewhere. Both at once, always — and in one file, because
+/// they are the two ends of the same twelve messages. See this directory's
+/// CLAUDE.md for why that is not two files.
 class SyncHub {
   SyncHub({
     required this.identity,
@@ -134,7 +128,7 @@ class SyncHub {
     http.Client? client,
     RelayDial? relayDial,
   }) {
-    _pairing = SyncPairing(
+    _signaling = SyncPairing(
       identity: identity,
       registry: registry,
       settings: settings,
@@ -154,30 +148,28 @@ class SyncHub {
 
   late final SyncPeers _peers = SyncPeers(registry);
 
-  /// Getting two devices talking, and keeping a way back. Its own file
-  /// because it is the one part of sync with no idea what a chat is: what it
-  /// hands back is a [LivePeer], and everything below here takes over.
-  late final SyncPairing _pairing;
+  /// Getting two devices talking, and keeping a way back.
+  late final SyncPairing _signaling;
 
   /// Every paired device with how it stands. The UI's whole view of sync.
   ValueNotifier<Map<String, PeerState>> get peers => _peers.states;
 
   // What the pairing side hands out, forwarded so that it stays the hub a
   // page or a test is given.
-  ValueNotifier<PairingActivity?> get pairing => _pairing.activity;
-  String get deviceName => _pairing.deviceName;
-  String get defaultDeviceName => _pairing.defaultDeviceName;
-  Future<PairingActivity> startPairingWindow() => _pairing.startPairingWindow();
-  void cancelPairingWindow() => _pairing.cancelPairingWindow();
-  Future<String?> pairWith(String text) => _pairing.pairWith(text);
-  Future<String> createManualInvite() => _pairing.createManualInvite();
-  void confirmPairing(bool ok) => _pairing.confirmPairing(ok);
-  Future<void> connect(String deviceId) => _pairing.connect(deviceId);
-  Future<void> disconnect(String deviceId) => _pairing.disconnect(deviceId);
-  Future<void> ensureReady() => _pairing.ensureReady();
+  ValueNotifier<PairingActivity?> get pairing => _signaling.activity;
+  String get deviceName => _signaling.deviceName;
+  String get defaultDeviceName => _signaling.defaultDeviceName;
+  Future<PairingActivity> startPairingWindow() => _signaling.startPairingWindow();
+  void cancelPairingWindow() => _signaling.cancelPairingWindow();
+  Future<String?> pairWith(String text) => _signaling.pairWith(text);
+  Future<String> createManualInvite() => _signaling.createManualInvite();
+  void confirmPairing(bool ok) => _signaling.confirmPairing(ok);
+  Future<void> connect(String deviceId) => _signaling.connect(deviceId);
+  Future<void> disconnect(String deviceId) => _signaling.disconnect(deviceId);
+  Future<void> ensureReady() => _signaling.ensureReady();
 
   @visibleForTesting
-  bool admitsReconnect(String psk) => _pairing.admitsReconnect(psk);
+  bool admitsReconnect(String psk) => _signaling.admitsReconnect(psk);
 
   @visibleForTesting
   Future<void> establishForTest({
@@ -186,21 +178,11 @@ class SyncHub {
     required String psk,
     String? knownDeviceId,
   }) =>
-      _pairing.establishForTest(
+      _signaling.establishForTest(
           link: link,
           weOffered: weOffered,
           psk: psk,
           knownDeviceId: knownDeviceId);
-
-  /// A peer finished the handshake: what this device serves goes out first.
-  /// The mirror side answers it with chatOpens for whatever it follows.
-  Future<void> _greet(LivePeer peer) async {
-    final repo = _repo;
-    if (repo == null) return;
-    final chats = await repo.listChats();
-    _announced = {for (final chat in chats) chat.id};
-    await peer.send(SyncMessage.welcome(chats: chats));
-  }
 
   // ------------------------------------------------------------- mirroring
 
@@ -243,12 +225,7 @@ class SyncHub {
   /// typed into from elsewhere. Names rather than ids: it is read out.
   final drivenChats = ValueNotifier<Map<String, String>>(const {});
 
-  /// Chats of this device that some peer is watching. The home end keeps a
-  /// controller open for each — that is what makes a turn's progress, and the
-  /// approvals and questions it stops on, visible at the other end, none of
-  /// which is in the log.
   ValueNotifier<Set<String>> get servedChats => _peers.servedChats;
-
 
   MirrorChat? mirror(String chatId) => _mirrors[chatId];
 
@@ -594,6 +571,16 @@ class SyncHub {
   /// disk on every `saveState` of every turn would not be.
   var _announced = <String>{};
 
+  /// A peer finished the handshake: what this device serves goes out first.
+  /// The mirror side answers it with chatOpens for whatever it follows.
+  Future<void> _greet(LivePeer peer) async {
+    final repo = _repo;
+    if (repo == null) return;
+    final chats = await repo.listChats();
+    _announced = {for (final chat in chats) chat.id};
+    await peer.send(SyncMessage.welcome(chats: chats));
+  }
+
   Future<void> _announceChats() async {
     final repo = _repo;
     if (repo == null || _peers.isEmpty) return;
@@ -761,7 +748,6 @@ class SyncHub {
 
   // ------------------------------------------------------------ resources
 
-
   /// Streams an attachment to a subscribing peer, base64 inside control
   /// frames — correlation stays trivial and every frame rides the same AEAD
   /// as the rest of the traffic. Binary framing can come later without a
@@ -802,7 +788,7 @@ class SyncHub {
     _pendingResources.remove(id);
   }
 
-  // ------------------------------------------------------------- presence
+  // --------------------------------------------- a connection ending
 
   /// A live connection ended. The peer goes offline; its mirrors stay as
   /// stale snapshots — the page shows its banner and disables the composer,
@@ -853,6 +839,9 @@ class SyncHub {
   // ------------------------------------------------------------ lifecycle
 
   Future<void> dispose() async {
+    // Before the peers go: a handshake parked at the codes-matched gate
+    // unwinds only when this completes its confirmation, and its tail would
+    // otherwise file a peer into a registry that has already been torn down.
     cancelPairingWindow();
     await _changesSub?.cancel();
     // Before the mirror state below: closing a peer runs [_peerGone], which
@@ -871,23 +860,16 @@ class SyncHub {
       if (!transfer.completer.isCompleted) transfer.completer.complete(null);
     }
     _pendingResources.clear();
-    await _pairing.dispose();
+    await _signaling.dispose();
   }
 
   /// Unpairs: drops the record, its secret, and any live connection. The
   /// other device keeps ours until someone revokes there too.
   Future<void> revoke(String deviceId) async {
     await _peers.remove(deviceId)?.close();
-    // Before the registry read below loses the secret: the token derived from
-    // it is what admits this device, and clearing everything *except* that
-    // left a revoked device still dialling in and still being answered, until
-    // something restarted.
-    final secret = await registry.pairingSecret(deviceId);
-    if (secret != null) _pairing.forgetReconnect(secret);
-    await registry.remove(deviceId);
-    // Everything of theirs goes with them. `_refreshPeers` only fills gaps
-    // from the registry, so the row and the mirrors have to be taken out by
-    // hand or an unpaired device stays listed, and online, until a restart.
+    await _signaling.forgetDevice(deviceId);
+    // By hand, both of them: a registry read only fills gaps, so the row and
+    // the mirrors would stay listed, and online, until a restart.
     for (final chatId in _mirrorsOf(deviceId)) {
       _dropMirror(deviceId, chatId);
     }
@@ -895,7 +877,6 @@ class SyncHub {
     _rebuildRemotes();
     unawaited(_peers.refresh());
   }
-
 
 }
 

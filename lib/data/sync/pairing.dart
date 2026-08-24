@@ -66,26 +66,22 @@ class SyncPairing {
   SyncPairing({
     required this.identity,
     required this.registry,
-    required this.settings,
-    required SyncPeers peers,
+    required this._settings,
+    required this._peers,
     required LanSignaling? Function() lanSignaling,
     required this.onMessage,
     required this.onPeerGone,
     required this.onReady,
-    this.hostname,
+    this._hostname,
     http.Client? client,
     RelayDial? relayDial,
-    // `this._peers` would be a named argument nothing outside this library
-    // could pass.
-    // ignore: prefer_initializing_formals
-  })  : _peers = peers,
-        _lanFactory = lanSignaling,
+  })  : _lanFactory = lanSignaling,
         _relayDial = relayDial ?? RelaySignaler.connect,
         _client = client ?? http.Client();
 
   final SyncIdentity identity;
   final DeviceRegistry registry;
-  final AppSettings Function() settings;
+  final AppSettings Function() _settings;
   final SyncPeers _peers;
 
   /// Where a message from a peer goes once there is a channel to carry it.
@@ -101,7 +97,7 @@ class SyncPairing {
   /// What the machine calls itself, where it has a name — the default device
   /// name before the user picks one. Passed in rather than read here: it is
   /// `dart:io`'s, and a browser has none.
-  final String? hostname;
+  final String? _hostname;
   final LanSignaling? Function() _lanFactory;
   final RelayDial _relayDial;
   final http.Client _client;
@@ -174,7 +170,7 @@ class SyncPairing {
     cancelPairingWindow();
     final server = _server;
     final lanAvailable = server != null && !kIsWeb;
-    final relayUrl = settings().syncRelayUrl ?? "";
+    final relayUrl = _settings().syncRelayUrl ?? "";
     if (!lanAvailable && relayUrl.isEmpty) throw SignalingException(noRoute);
 
     final psk = generatePsk();
@@ -371,7 +367,7 @@ class SyncPairing {
         failure = error;
       }
     }
-    final relayUrl = settings().syncRelayUrl ?? "";
+    final relayUrl = _settings().syncRelayUrl ?? "";
     if (relayUrl.isNotEmpty) {
       try {
         await _dialViaRelay(relayUrl, secret, deviceId);
@@ -394,9 +390,8 @@ class SyncPairing {
     _peers.markOffline(deviceId);
   }
 
-
   /// What the other device files this one under.
-  String get deviceName => settings().deviceName ?? defaultDeviceName;
+  String get deviceName => _settings().deviceName ?? defaultDeviceName;
 
   /// What it would be called with nothing set — the machine's own name where
   /// there is one, since that is what its owner already calls it, and the
@@ -404,7 +399,7 @@ class SyncPairing {
   /// getter because the Sync page's field wants exactly this: the hint has to
   /// go on saying what the default is after a name has been typed over it.
   String get defaultDeviceName =>
-      hostname ?? "Entoli ${identity.fingerprint.substring(0, 5)}";
+      _hostname ?? "Entoli ${identity.fingerprint.substring(0, 5)}";
 
   /// Where a peer could dial this device back, or null where it is not
   /// listening — a browser never is.
@@ -420,12 +415,12 @@ class SyncPairing {
     final servers = [
       for (final url in RtcLink.defaultStun) {"urls": url},
     ];
-    final turn = settings().turnUrl;
+    final turn = _settings().turnUrl;
     if (turn != null && turn.isNotEmpty) {
       servers.add({
         "urls": turn,
-        "username": ?settings().turnUsername,
-        "credential": ?settings().turnPassword,
+        "username": ?_settings().turnUsername,
+        "credential": ?_settings().turnPassword,
       });
     }
     return servers;
@@ -492,7 +487,17 @@ class SyncPairing {
   bool admitsReconnect(String psk) =>
       _reconnects.containsKey(RelaySignaler.roomFor(psk));
 
-  void forgetReconnect(String psk) {
+  /// Unpairs [deviceId]. The secret is read before the registry loses it:
+  /// the token derived from it is what admits the device, and clearing
+  /// everything *except* that left a revoked device still dialling in, and
+  /// still being answered, until something restarted.
+  Future<void> forgetDevice(String deviceId) async {
+    final secret = await registry.pairingSecret(deviceId);
+    if (secret != null) _forgetReconnect(secret);
+    await registry.remove(deviceId);
+  }
+
+  void _forgetReconnect(String psk) {
     final token = RelaySignaler.roomFor(psk);
     _reconnects.remove(token);
     _server?.refuseReconnect(token);
@@ -793,9 +798,6 @@ class SyncPairing {
     return confirmation.future;
   }
 
-
-
-
   void _note(PairingStage stage, {String? sas}) {
     final current = activity.value;
     if (current == null) return;
@@ -817,7 +819,8 @@ class SyncPairing {
       sas: current.sas,
       error: error.toString(),
     );
-  }}
+  }
+}
 
 class _PendingManual {
   _PendingManual({required this.link, required this.psk});
