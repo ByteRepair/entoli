@@ -3,6 +3,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/ui/app_shell.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
+import "package:agent_chat/ui/theme.dart";
 
 import "../harness.dart";
 
@@ -24,14 +25,14 @@ void main() {
     expect(find.byIcon(Icons.menu), findsNothing);
   });
 
-  // One bar, not the shell's and the chat's. The app opens on a new chat, so
-  // what it names is that chat.
+  // One bar, not the shell's and the chat's. The app opens on the new-chat
+  // screen, where there is no chat to name, so it wears the app's own mark.
   testWidgets("narrow, there is one app bar and it opens the sidebar",
       (tester) async {
     await pumpAt(tester, const Size(500, 900));
 
     expect(find.byType(AppBar), findsOneWidget);
-    expect(find.text("New chat"), findsOneWidget);
+    expect(find.text(appTitle), findsOneWidget);
     expect(find.byType(Sidebar), findsNothing);
 
     await tester.tap(find.byIcon(Icons.menu));

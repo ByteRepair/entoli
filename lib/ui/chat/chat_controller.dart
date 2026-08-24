@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
+import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
@@ -102,9 +103,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       _sub?.cancel();
       _recorder.dispose();
     });
-    _load();
+    _ready = _load();
     return ChatViewState();
   }
+
+  /// The first read of the chat off disk. **Anything that drives a turn waits
+  /// on it**, because a controller is built the moment something asks for it
+  /// and driven in the same breath — `createChat` sends the first message,
+  /// `RemoteTurnDriver` hands over a peer's — and a turn started before this
+  /// lands finds no chat and silently does nothing.
+  late Future<void> _ready;
 
   /// The reply being written. It is always the last message of a running turn.
   Message? get _reply {
@@ -150,16 +158,21 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   }
 
   Future<void> _load() async {
-    final repo = ref.read(chatRepositoryProvider);
-    final chat = await repo.openChat(chatId);
-    if (!ref.mounted) return;
-    state = state.copyWith(chat: chat);
+    try {
+      final chat = await ref.read(chatRepositoryProvider).openChat(chatId);
+      if (ref.mounted) state = state.copyWith(chat: chat);
+    } catch (e) {
+      // Deleted under us — swept for its TTL, or removed on a paired device.
+      // Left unsaid the page keeps a spinner up with nothing behind it.
+      logFailure("chat", "could not open $chatId", e);
+    }
   }
 
   /// The composer's own path: what it is holding becomes files under the chat
   /// before anything else, since from here on a prompt is its parts.
   @override
   Future<void> send(String text, {List<Attachment> attachments = const []}) async {
+    await _ready;
     if (state.chat == null || state.isRunning) return;
     final repo = ref.read(chatRepositoryProvider);
     await _prompt(text, files: await repo.saveAttachments(chatId, attachments));
@@ -217,12 +230,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     await _recorder.write(recordsOf(opening,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
-    // Only the first: a later message changes nothing the sidebar shows, and
-    // refreshing it re-reads every chat off disk.
-    if (isFirst) {
-      ref.invalidate(chatListProvider);
-      unawaited(_nameChat(prompt.plainText));
-    }
+    // Only the first message names the chat. The list is not refreshed here:
+    // the chat was written, and listed, when it was created — and refreshing
+    // re-reads every chat off disk to draw the row it already has.
+    if (isFirst) unawaited(_nameChat(prompt.plainText));
 
     _listen(repo.sendPrompt(chatId, prompt,
         history: history, replaces: replacing != null));
@@ -240,6 +251,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// when it finishes.
   @override
   Future<void> resume() async {
+    await _ready;
     final chat = state.chat;
     if (chat == null || state.isRunning || !chat.unfinished) return;
     final reply = chat.messages.last;

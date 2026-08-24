@@ -138,8 +138,9 @@ state wants it — approvals and questions today — because the ten lines that 
 a chat into that position are the same ten each time, and the second copy of
 them was already drifting from the first.
 
-`seedChat` is a chat that is actually in the sidebar: creating one no longer
-puts it there, so it creates and then writes its `state.json`. `writeChatTo`
+`seedChat` is a chat that is actually in the sidebar, which `createChat` now
+is — it writes as it creates, so this is that call and nothing else.
+`writeChatTo`
 (and `TestApp.writeChat`) is for one that has a conversation in it: there is no
 whole-log write on `ChatStore` to reach for, since a log is only ever appended
 to, so it writes the state and then appends `recordsOf` the messages — which is

@@ -345,9 +345,9 @@ project, and the pin or the countdown. It followed the scroll position at
 first — the mark and "Entoli" at the top of the list, the title once past it —
 and that put the app's name where the chat's belongs for every conversation
 short enough not to scroll, which is most of the ones being started. The mark is
-still on the bar for the two moments there is no chat to name — the frame a
-draft is being made in, and a paired device's list with nothing picked out of
-it.
+still on the bar for the three places there is no chat to name — the new-chat
+screen, a chat being read off disk, and a paired device's list with nothing
+picked out of it.
 
 **The bar grows with what it has to say.** Every line is counted, the title's
 own included, and Material's 56dp toolbar is only the floor. Counting up from
@@ -371,32 +371,72 @@ The composer is inside that column rather than under it: a centred conversation
 over a full-width field is a field twice the width of what it is answering.
 
 **Nothing selected is a new chat.** There is one empty screen rather than two,
-and it is `_EmptyChat` — the chat is open, so what is missing is the first
-thing to say, and the composer to say it in is already under it. The pane that
-used to stand in front of it offered New Chat, New Voice Chat and Open Chat,
-and all three had become the same thing said twice: New Chat was a button that
-led to a page whose only content was somewhere to type, the voice one is the
-composer's own circle, and Open Chat is the drawer the bar already opens. So
-`_StartingChat` asks `SelectedChatId.startIfEmpty` and draws nothing while it
-runs: the draft is made in memory, so what a spinner would show is one frame of
-one, which reads as a page that could not load rather than as a page arriving.
+and it is `_NewChat` — what is missing is the first thing to say, and the
+composer to say it in is already under it. The pane that used to stand in front
+of it offered New Chat, New Voice Chat and Open Chat, and all three had become
+the same thing said twice: New Chat was a button that led to a page whose only
+content was somewhere to type, the voice one is the composer's own circle, and
+Open Chat is the drawer the bar already opens.
 
-**Making it belongs to `SelectedChatId` rather than to the widget**, because
-the widget is not the only one asking and is not stable while it asks. Every
-`select(null)` in the app is now also "and start one" — switching project,
-deleting the open chat, deleting them all — and `AppShell` swaps `ChatPage`
-into a different tree either side of `navBreakpoint`, which remounts the
-starter mid-flight. The repository holds **one** draft, so two in flight leave
-the selection pointing at the one that lost the slot; `startNew` is therefore
-held to one at a time and `startChat` — the sidebar's button and the assistant
-gesture — is that same call with the drawer closed after it.
+**And it is only a screen.** Nothing is created to stand behind it: no chat, no
+`ChatController`, nothing on disk. The project is `selectedProjectProvider`'s
+and the settings are `_NewChat`'s own, and `startChatWith` spends both on a
+`createChat` at the moment the first message is sent. So a screen
+nobody typed into leaves nothing, which is the property this has to have, and
+it gets it by choosing *when* to create rather than by holding something unsaved
+— see "Starting a chat, and naming it" for the eleven branches that bought.
+
+What that removes is a whole class of question. There is no draft to be at one
+end of `ChatPage`'s three arms, so nothing has to make a chat during a build,
+or after a frame, or exactly once while `AppShell` remounts the pane across
+`navBreakpoint` — the one-at-a-time guard on `startNew` existed for that
+remount alone. There is nothing to draw while it happens, so no blank frame
+that reads as a page which could not load. And **switching project no longer
+touches the pane**: `selectProject` writes a provider the screen watches, so
+the badge redraws and the composer keeps what is in it, where before the screen
+was torn down and rebuilt around a fresh draft.
+
+The sidebar's New chat button and the assistant gesture are `openNewChat`,
+which selects nothing and closes the drawer. Every other `select(null)` —
+switching project, deleting the open chat, deleting them all — lands here too,
+and now means what it says rather than "and quietly make one".
+
+Two callers still need a chat before a word is said, and both are honest about
+it. `startChatWith` makes one because it has the message in hand. Voice mode
+makes one on the way in: every widget on that page is keyed on the chat, down
+to `voiceControllerProvider`, so there is nothing to defer the way a composer
+defers. **A voice session left before the first word therefore leaves an empty
+chat**, which the typed path cannot do — the models are asked about first, so
+the common refusal still makes nothing, and closing the rest would mean a
+delete-if-empty on the way out, which is a special case where this design's
+whole point is not having one. What it leaves is a real chat and not a special
+kind: it is in the sidebar, it goes out to paired devices as any other creation
+does, and it expires on the project's TTL like the rest.
 
 The one place nothing selected is not a new chat is a paired device's list,
-which `ChatPage` checks before it makes anything: a new chat is this device's
-and takes the sidebar home with it, so picking a device would bounce straight
-back off it. That arm says to pick a chat and makes nothing.
+which `ChatPage` checks first: a new chat is this device's and takes the sidebar
+home with it, so picking a device would bounce straight back off it. That arm
+says to pick a chat, and is now a peer of the new-chat arm rather than an
+exception to it — neither writes anything.
 
-`_EmptyChat` draws the mark, the question, the projects as badges, and a chip
+`NewChatSettingsPage` is the settings of a chat that does not exist yet: the
+model, the approve mode and the TTL, which are values and need nothing to hang
+on. Save pops a `ChatMeta` back rather than writing a file, and `_NewChat`
+holds it until `createChat` spends it. It edits a copy, so a page backed out of
+leaves the screen with what it had.
+
+**A page of its own rather than a mode of `ChatSettingsPage`**, and `_NewChat`
+state rather than a provider — both for the same reason. Folded into the chat's
+own page it was five null checks and two `!`s through a page whose subject
+ordinarily exists, which is the shape this change spent its effort removing
+from the repository; and held in a provider the settings outlive the screen,
+staying armed to land on whatever chat is created next, in whatever project.
+The three fields are already standalone widgets, so the page that composes them
+is thirty lines.
+
+`_EmptyChat` is the body of both empty screens — `_NewChat`'s, and a chat that
+exists with nothing said in it yet, which is what voice mode and a reminder can
+leave. It draws the mark, the question, the projects as badges, and a chip
 per `/command` and `@agent` the library holds. The chips are discovery: the
 composer's menus are the only place those are named, and nothing names them
 until the character that opens one has been typed, so a user who does not know
@@ -409,12 +449,12 @@ sidebar is the only other place one is named, and on a phone the sidebar is a
 drawer. Picking one is `selectProject` — the switcher's own action, lifted out
 of `_ProjectMenu` so that nothing that switches projects can come to disagree
 about what switching means. Deleting one goes through it too. **The badge is
-where the project changes, and it takes the chat with it**: `selectProject`
-drops the selection, which makes a fresh draft in the project just picked.
-Nothing is left behind — the chat it replaced had nothing in it, and
-`createChat` holds one draft slot anyway. Which badge is picked out is the open
-chat's own project rather than `selectedProjectProvider`, so the row says where
-this conversation is rather than where the next one would go.
+where the project changes**, and on this screen that is the whole of what
+happens: `selectProject` writes the provider, the row redraws, and there is no
+chat to take along or leave behind. Which badge is picked out is the open
+chat's own project where there *is* one, rather than
+`selectedProjectProvider` — so on a chat that exists the row says where this
+conversation is, and on the new-chat screen it says where the next one goes.
 
 **The default project is nothing selected**, and so has no badge. It is not a
 project beside the others — it is the absence of one, which is what `null`

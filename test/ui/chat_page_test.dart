@@ -2,7 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -19,6 +21,11 @@ void main() {
 
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
+
+  /// What is in the composer. The text rather than a finder over it: a
+  /// `find.text` would match the same words drawn anywhere else on the page.
+  String typed(WidgetTester tester) =>
+      tester.widget<TextField>(find.byType(TextField)).controller!.text;
 
   Future<void> open(WidgetTester tester, String chatId) async {
     app.container.read(selectedChatIdProvider.notifier).select(chatId);
@@ -52,22 +59,46 @@ void main() {
       });
 
   group("with nothing selected", () {
-    // Nothing selected is a new chat, so the pane is the empty conversation
-    // rather than a screen offering to start one. Not settled: there is a
-    // spinner on screen while the draft is made.
+    // Nothing selected is the new-chat screen, and it is only a screen: no
+    // chat is made until something is said.
     Future<void> openEmpty(WidgetTester tester) async {
       await app.pump(tester, const ChatPage(withDrawer: true), settle: false);
       await pumpUntil(tester, find.byType(Composer));
       await settleIo(tester);
     }
 
-    testWidgets("a chat is made and opened, with somewhere to type",
+    Future<List<ChatState>> stored(WidgetTester tester) =>
+        io(tester, () => app.repo.listChats());
+
+    testWidgets("there is somewhere to type, and no chat behind it",
         (tester) async {
       await openEmpty(tester);
 
-      expect(app.container.read(selectedChatIdProvider), isNotNull);
       expect(find.byType(Composer), findsOneWidget);
       expect(find.text("What would you like to discuss?"), findsOneWidget);
+      expect(app.container.read(selectedChatIdProvider), isNull);
+      expect(await stored(tester), isEmpty);
+    });
+
+    // The whole of the design: a screen nobody typed into leaves nothing on
+    // disk, so there is no draft to hold and nothing to sweep up.
+    testWidgets("leaving without typing writes nothing", (tester) async {
+      await openEmpty(tester);
+      await app.pump(tester, const SizedBox.shrink());
+
+      expect(await stored(tester), isEmpty);
+    });
+
+    testWidgets("saying something makes the chat and puts it in it",
+        (tester) async {
+      await openEmpty(tester);
+
+      await sendMessage(tester, "hello");
+
+      final chats = await stored(tester);
+      expect(chats, hasLength(1));
+      expect(app.container.read(selectedChatIdProvider), chats.single.id);
+      expect(find.text("hello"), findsOneWidget);
     });
 
     // The bar's own, wherever the sidebar is out of sight — there is no
@@ -81,20 +112,6 @@ void main() {
 
       expect(find.byType(Sidebar), findsOneWidget);
       expect(find.text("old chat"), findsOneWidget);
-    });
-
-    // The pane is remounted by a window crossing the sidebar's breakpoint, so
-    // two asks can be in flight — and the repository holds one draft, so a
-    // second would take the slot while the first took the selection.
-    testWidgets("two asks at once make one chat", (tester) async {
-      final made = await io(tester, () {
-        final selection = app.container.read(selectedChatIdProvider.notifier);
-        return Future.wait([selection.startIfEmpty(), selection.startIfEmpty()]);
-      });
-
-      expect(made.first, made.last);
-      expect(app.container.read(selectedChatIdProvider), made.first);
-      expect(await io(tester, () => app.repo.projectOf(made.first!)), isNull);
     });
 
     // A paired device's list is the one place nothing selected is not a new
@@ -115,8 +132,6 @@ void main() {
       await openEmpty(tester);
     }
 
-    /// The badge takes the chat with it, so there is a new draft to wait for —
-    /// which `settleIo` does, the draft being made in memory.
     Future<void> pick(WidgetTester tester, String project) async {
       await tester.tap(find.widgetWithText(ChoiceChip, project));
       await settleIo(tester);
@@ -125,8 +140,9 @@ void main() {
     bool selectedOf(WidgetTester tester, String label) =>
         tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label)).selected;
 
-    Future<String?> projectOfOpenChat(WidgetTester tester) => io(tester,
-        () => app.repo.projectOf(app.container.read(selectedChatIdProvider)!));
+    /// Where the chat this screen made ended up. There is only ever one.
+    Future<String?> projectOfMade(WidgetTester tester) async =>
+        (await stored(tester)).single.project;
 
     // The default project has no badge: it is nothing selected.
     testWidgets("the named projects are badges", (tester) async {
@@ -143,9 +159,9 @@ void main() {
       expect(find.byType(ChoiceChip), findsNothing);
     });
 
-    // The chat on screen has nothing in it, so switching project replaces it
-    // rather than leaving one behind in the project being left.
-    testWidgets("picking one highlights it and takes the chat with it",
+    // The badge says where the next chat goes, which is all it can say: there
+    // is no chat yet for it to be about.
+    testWidgets("picking one highlights it, and the chat lands there",
         (tester) async {
       await openWithProject(tester);
 
@@ -153,7 +169,10 @@ void main() {
 
       expect(selectedOf(tester, "work"), isTrue);
       expect(app.container.read(selectedProjectProvider), "work");
-      expect(await projectOfOpenChat(tester), "work");
+
+      await sendMessage(tester, "hello");
+
+      expect(await projectOfMade(tester), "work");
     });
 
     // Nothing selected is the default project, so leaving one is pressing it
@@ -167,14 +186,73 @@ void main() {
 
       expect(selectedOf(tester, "work"), isFalse);
       expect(app.container.read(selectedProjectProvider), isNull);
-      expect(await projectOfOpenChat(tester), isNull);
+
+      await sendMessage(tester, "hello");
+
+      expect(await projectOfMade(tester), isNull);
     });
 
-    testWidgets("the chat opens in the default until a badge is picked",
+    testWidgets("the chat lands in the default until a badge is picked",
         (tester) async {
       await openWithProject(tester);
 
-      expect(await projectOfOpenChat(tester), isNull);
+      await sendMessage(tester, "hello");
+
+      expect(await projectOfMade(tester), isNull);
+    });
+
+    // The settings are the screen's until there is a chat to write them on,
+    // which is what the `meta` handed to `createChat` is for.
+    group("settings picked before there is a chat", () {
+      Future<void> pickNeverAsk(WidgetTester tester) async {
+        await tester.tap(find.byTooltip("Chat settings"));
+        await settleIo(tester);
+        await scrollTo(tester, find.byType(DropdownButtonFormField<ApproveMode?>));
+        await tester.tap(find.byType(DropdownButtonFormField<ApproveMode?>));
+        await settleIo(tester);
+        await tester.tap(find.textContaining("Run without asking").last);
+        await settleIo(tester);
+      }
+
+      testWidgets("land on the chat the first message makes", (tester) async {
+        await openEmpty(tester);
+        await pickNeverAsk(tester);
+        await tester.tap(find.byTooltip("Save"));
+        await settleIo(tester);
+
+        await sendMessage(tester, "hello");
+
+        final made = (await stored(tester)).single;
+        expect(await io(tester, () => app.savedMeta(made.id)),
+            isA<ChatMeta>().having((m) => m.approveMode, "approveMode", ApproveMode.never));
+      });
+
+      // Backed out of rather than saved, so the screen goes on holding what it
+      // had — which is nothing, and nothing is what the chat inherits.
+      testWidgets("a page dismissed without saving changes nothing",
+          (tester) async {
+        await openEmpty(tester);
+        await pickNeverAsk(tester);
+        await tester.pageBack();
+        await settleIo(tester);
+
+        await sendMessage(tester, "hello");
+
+        final made = (await stored(tester)).single;
+        expect((await io(tester, () => app.savedMeta(made.id))).approveMode, isNull);
+      });
+    });
+
+    // The bug that started this: switching project used to drop the selection,
+    // which remounted the pane and took the composer's contents with it. There
+    // is nothing to remount now — the screen is not keyed on a chat.
+    testWidgets("picking one keeps what was typed", (tester) async {
+      await openWithProject(tester);
+      await tester.enterText(find.byType(TextField), "in which project?");
+
+      await pick(tester, "work");
+
+      expect(typed(tester), "in which project?");
     });
 
     testWidgets("the drawer shows the picked project's chats", (tester) async {
@@ -310,9 +388,6 @@ void main() {
       final chat = await io(tester, () => app.seedChat(title: "brand new"));
       await open(tester, chat.state.id);
     }
-
-    String typed(WidgetTester tester) =>
-        tester.widget<TextField>(find.byType(TextField)).controller!.text;
 
     // The composer's menus are the only place these are named, and nothing
     // names them until the character that opens one has been typed.

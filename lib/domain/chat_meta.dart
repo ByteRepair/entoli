@@ -41,6 +41,21 @@ class ChatMeta {
   static ApproveMode? _approveMode(Map<String, dynamic> json) =>
       approveModeFromJson(json);
 
+  /// The same overrides again, to be edited without the original moving. The
+  /// fields are mutable and the settings page writes them in place, so a page
+  /// backed out of has to leave what it was handed alone. `AppSettings.copy`
+  /// and `ProjectSettings.copy` are the same call for the same reason.
+  ChatMeta copy() => ChatMeta(
+        model: model,
+        provider: provider,
+        approveMode: approveMode,
+        tempChatTtl: tempChatTtl,
+      );
+
+  /// Nothing overridden, so nothing to write down: this chat inherits the
+  /// project's answers and the app's, which is what no `meta.json` means.
+  bool get isEmpty => toJson().isEmpty;
+
   Map<String, dynamic> toJson() => {
         if (model != null) "model": model,
         if (provider != null) "provider": provider,

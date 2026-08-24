@@ -1,7 +1,10 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/log.dart";
+import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
 import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
@@ -17,46 +20,14 @@ import "../workspace/workspace_page.dart";
 import "chat_groups.dart";
 import "project_settings_page.dart";
 
+/// Which chat the pane is showing, or null for the new-chat screen. **Null is
+/// a screen rather than a chat to be made**: nothing is written until there is
+/// something to say — see "Nothing selected is a new chat".
 class SelectedChatId extends Notifier<String?> {
   @override
   String? build() => null;
 
   void select(String? id) => state = id;
-
-  /// A new chat in the project being shown, selected. Nothing is listed for it
-  /// yet: an empty chat is not on disk, and joins the list when its first
-  /// message is saved.
-  ///
-  /// **One at a time.** The pane asks for one whenever it finds nothing
-  /// selected, and a window crossing the sidebar's breakpoint rebuilds it into
-  /// a different tree — so two asks can be in flight, and the repository holds
-  /// one draft. The second would take the slot while the first took the
-  /// selection, leaving the page pointed at a chat nothing holds.
-  Future<String?> startNew() =>
-      _starting ??= _start().whenComplete(() => _starting = null);
-
-  /// What the pane does with nothing selected. Already having one is the
-  /// answer, not a reason to make another.
-  Future<String?> startIfEmpty() async => state ?? await startNew();
-
-  Future<String?>? _starting;
-
-  Future<String?> _start() async {
-    try {
-      final project = ref.read(selectedProjectProvider);
-      final chat =
-          await ref.read(chatRepositoryProvider).createChat(project: project);
-      // A new chat is this device's, so the sidebar comes back from whatever
-      // paired device it was reading — the alternative is a list that denies
-      // the chat now on screen.
-      ref.read(selectedRemoteProvider.notifier).select(null);
-      state = chat.state.id;
-      return state;
-    } catch (e) {
-      logFailure("chat", "could not start a chat", e);
-      return null;
-    }
-  }
 }
 
 final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(SelectedChatId.new);
@@ -120,18 +91,61 @@ void selectRemote(WidgetRef ref, RemoteScope scope) {
   ref.read(selectedChatIdProvider.notifier).select(null);
 }
 
-/// [SelectedChatId.startNew] with the drawer it was pressed in closed — the
-/// sidebar's button and the assistant gesture. The pane with nothing selected
-/// has no drawer open to close, so it asks the notifier directly.
-///
-/// Returns the chat's id, so that `startVoiceChat` can carry on into voice mode
-/// with the one it just made; null is a caller that went away while it was
-/// being created, or a chat that could not be made.
-Future<String?> startChat(BuildContext context, WidgetRef ref) async {
-  final id = await ref.read(selectedChatIdProvider.notifier).startNew();
-  if (!context.mounted || id == null) return null;
+/// Go to the new-chat screen, with the drawer it was pressed in closed — the
+/// sidebar's button and the assistant gesture. Nothing is created: the screen
+/// makes a chat when the first thing is said in it.
+void openNewChat(BuildContext context, WidgetRef ref) {
+  ref.read(selectedChatIdProvider.notifier).select(null);
+  // A new chat is this device's, so the sidebar comes back from whatever
+  // paired device it was reading — the alternative is a list that denies the
+  // screen now in front of the user.
+  ref.read(selectedRemoteProvider.notifier).select(null);
   closeNavDrawer(context);
-  return id;
+}
+
+/// Make a chat in the project being shown and select it. **The one place the
+/// UI creates one**, so where a chat comes from is a single answer:
+/// [startChatWith] calls it as the first message is sent, and voice mode calls
+/// it on the way in, having no composer to defer to. Null is a chat that could
+/// not be made, which is already logged.
+Future<String?> createChat(WidgetRef ref, {ChatMeta? meta}) async {
+  try {
+    final chat = await ref.read(chatRepositoryProvider).createChat(
+          project: ref.read(selectedProjectProvider),
+          meta: meta,
+        );
+    ref.read(selectedRemoteProvider.notifier).select(null);
+    ref.read(selectedChatIdProvider.notifier).select(chat.state.id);
+    ref.invalidate(chatListProvider);
+    return chat.state.id;
+  } catch (e) {
+    logFailure("chat", "could not start a chat", e);
+    return null;
+  }
+}
+
+/// Start a chat and say the first thing in it. The new-chat screen's composer
+/// is the one caller: it holds the text, the files and the settings until
+/// there is a chat to put them in, and this is that moment. False is a chat
+/// that could not be made, so that the caller can put back what it cleared.
+///
+/// The turn is deliberately not awaited — it runs for as long as the model
+/// takes, and the page has to arrive on the message rather than after the
+/// reply. Nothing waits on the controller having read the chat back either:
+/// `send` waits on that itself, which is what [ChatController] owes anything
+/// that drives a turn it has only just built.
+Future<bool> startChatWith(
+  WidgetRef ref,
+  String text, {
+  List<Attachment> attachments = const [],
+  ChatMeta? meta,
+}) async {
+  final id = await createChat(ref, meta: meta);
+  if (id == null) return false;
+  unawaited(ref
+      .read(chatControllerProvider(id).notifier)
+      .send(text, attachments: attachments));
+  return true;
 }
 
 /// The button's tooltip and the title of the page it opens.
@@ -252,7 +266,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   child: FloatingActionButton(
                     heroTag: null,
                     tooltip: "New chat",
-                    onPressed: () => startChat(context, ref),
+                    onPressed: () => openNewChat(context, ref),
                     child: const Icon(Icons.add),
                   ),
                 ),

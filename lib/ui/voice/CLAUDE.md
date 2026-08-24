@@ -135,9 +135,14 @@ The way in is a circle left of the composer's send button, drawn wherever the
 platform can listen rather than only where models are installed — with none
 picked it leads to the settings that pick them, which is a better answer than a
 button nobody can find. `openVoice` is that rule, and `startVoiceChat` beside it
-is the assistant gesture's voice view: it asks about the models *before* it
-makes the chat, since one created and then left on screen with nothing to say
-it with is a worse answer than not making one. Both read `voiceReadyProvider`
+is the circle on the new-chat screen and the assistant gesture's voice view.
+**It is the one thing left that makes a chat before a word is said**, because
+this page is keyed on the chat all the way down to `voiceControllerProvider` —
+there is nothing here to defer the way the composer defers. So it asks about
+the models *first*: that is what keeps the common refusal from leaving an
+untouched chat behind, and a session abandoned after the models are found does
+leave one. See "Nothing selected is a new chat" for why that is worn rather
+than swept up. Both read `voiceReadyProvider`
 themselves, which they can because **which models are installed is read before
 the app is built** — `AppSession.start` scans for them and seeds
 `InstalledVoiceModels` with what it found, the bargain `promptLibraryProvider`
