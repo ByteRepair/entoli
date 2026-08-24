@@ -72,16 +72,17 @@ tool/bundle/stage.sh
   `LLAMA_ABIS` overrides that. About 55 MB an ABI is why — the Vulkan backend's
   `libggml-vulkan.so` is 36 MB of it — and a 32-bit phone cannot map a model
   anyway, x86_64 Android being an emulator.
-- The NPU is opt-in and wants Qualcomm's Hexagon SDK. `tool/android-setup.sh`
-  fetches it into `tool/bundle/toolchains/`, checked against the SHA-256 pinned
-  in `versions.sh`, and `build.sh` picks it up from there. Only the NPU is gated
-  on it: the build always carries the CPU and the Vulkan GPU backend, and the
-  settings page says the device has no accelerator only when it has neither an
-  NPU nor a Vulkan-1.1 GPU.
-- CI runs the same two steps from `.github/actions/bundled-tools`, so a release
-  APK always has both in it. It does not run `android-setup.sh`: what the NPU
-  build emits is compiled by Qualcomm's own toolchain, so whether it can ship is
-  a licensing question rather than a plumbing one.
+- The NPU wants Qualcomm's Hexagon SDK, and a build without it is a build
+  without the NPU. `tool/android-setup.sh` fetches it into
+  `tool/bundle/toolchains/`, checked against the SHA-256 pinned in
+  `versions.sh`, and `build.sh` picks it up from there. Only the NPU is gated on
+  it: the build always carries the CPU and the Vulkan GPU backend, so skipping
+  the fetch still accelerates most phones, and the settings page says the device
+  has no accelerator only when it has neither an NPU nor a Vulkan-1.1 GPU.
+- CI runs all three steps from `.github/actions/bundled-tools`, the fetch
+  included, so a release APK carries every backend. A release build whose arm64
+  APK has no NPU libraries in it fails there: it is the only place a build that
+  quietly lost them would be noticed.
 
 Skipping this leaves an APK whose On-device page says it carries no model
 server, and which cannot run a Linux at all.

@@ -221,7 +221,9 @@ jobs:
       # a build fault rather than the truth, and is exactly the kind of thing
       # that is not noticed until it has shipped. llama.cpp's server is the
       # second, and it is checked on its own ABIs: it is arm64 only, so asking
-      # for it everywhere would fail every release.
+      # for it everywhere would fail every release. The NPU backend is the
+      # third, and the quietest of them: build.sh drops it wherever the Hexagon
+      # SDK is not, so the check here is what says the fetch still works.
       #
       # The last loop is the split itself: an APK carrying another ABI's
       # libraries passes every check above, since a universal one contains
@@ -258,7 +260,7 @@ jobs:
               tools="libproot.so libproot-loader.so"
             fi
             if has "$LLAMA_ABIS" "$abi"; then
-              tools="$tools libllama-server.so libggml-cpu.so"
+              tools="$tools libllama-server.so libggml-cpu.so libggml-hexagon.so"
             fi
             for tool in $tools; do
               if ! grep -qx "lib/$abi/$tool" <<<"$libs"; then
@@ -266,6 +268,15 @@ jobs:
                 exit 1
               fi
             done
+
+            # The NPU's DSP-side halves, matched by prefix: their names carry
+            # the QDSP6 versions built, which is build.sh's target list and not
+            # something this should hold a second copy of.
+            if has "$LLAMA_ABIS" "$abi" &&
+              ! grep -q "^lib/$abi/libggml-htp-" <<<"$libs"; then
+              echo "::error::$apk has no DSP libraries for the NPU backend"
+              exit 1
+            fi
 
             if grep -qv "^lib/$abi/" <<<"$libs"; then
               echo "::error::$apk carries another ABI's libraries; it is not split"
