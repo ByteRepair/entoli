@@ -88,12 +88,6 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   final _uuid = const Uuid();
   StreamSubscription<AgentEvent>? _sub;
 
-  /// The repo's `Deleted` event for this chat. The provider is not
-  /// auto-disposed, so a controller outlives the page that showed it; without
-  /// this, selecting the deleted chat's id again re-opens the conversation from
-  /// memory rather than the empty page the disk now warrants.
-  StreamSubscription<RepoEvent>? _deletionSub;
-
   /// Everything that turns this turn's events into the reply's parts and the
   /// records that persist them. Shared with `SubAgentRunner`, which keeps one
   /// per `task` call — see [TurnRecorder].
@@ -110,12 +104,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       append: (records) => ref.read(chatRepositoryProvider).append(chatId, records),
       onParts: _writeReply,
     );
-    _deletionSub = ref.read(chatRepositoryProvider).changes.listen((event) {
+    // The provider is not auto-disposed: clear a controller that outlived its page, or its id re-opens the deleted chat from memory.
+    final deletionSub = ref.read(chatRepositoryProvider).changes.listen((event) {
       if (event is Deleted && event.chatId == chatId) state = ChatViewState();
     });
     ref.onDispose(() {
       _sub?.cancel();
-      _deletionSub?.cancel();
+      deletionSub.cancel();
       _recorder.dispose();
     });
     _ready = _load();
