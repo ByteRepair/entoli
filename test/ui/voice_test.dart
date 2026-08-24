@@ -10,6 +10,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
+import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/voice/read_aloud.dart";
 import "package:agent_chat/ui/voice/transcript.dart";
 import "package:agent_chat/ui/voice/voice_controller.dart";
@@ -40,10 +41,10 @@ void main() {
   setUp(() => app = TestApp.create(voiceModels: voiceModelIds));
   tearDown(() => app.dispose());
 
-  /// Voice mode running over a chat of its own, with the two models picked.
-  /// The wait is not decoration: the controller loads the chat asynchronously,
-  /// and driving one that has not finished loading is a `send` that quietly
-  /// does nothing — which is what `applyChat` spares the app itself.
+  /// Voice mode running over a chat that already exists, with the two models
+  /// picked. The wait is not decoration: the controller loads the chat
+  /// asynchronously, and this is the state the page would be in by the time
+  /// anyone spoke.
   Future<String> startVoice() async {
     await app.pickVoiceModels();
     final chat = await app.seedChat();
@@ -53,6 +54,113 @@ void main() {
     await app.container.read(voiceControllerProvider(id).notifier).start();
     return id;
   }
+
+  /// Voice mode with nothing to speak into, which is what the new-chat screen's
+  /// circle opens. The session is keyed on null, and stays that way until it
+  /// hears something.
+  Future<VoiceController> startNewVoiceChat() async {
+    await app.pickVoiceModels();
+    final voice = app.container.read(voiceControllerProvider(null).notifier);
+    await voice.start();
+    return voice;
+  }
+
+  /// Which chat the session ended up speaking into.
+  String? spokenInto() => app.container.read(voiceControllerProvider(null)).chatId;
+
+  /// Say [text] and wait for the turn it starts to be over, in the chat the
+  /// session is speaking into — waiting for the chat first where it has yet to
+  /// make one. The turn rather than the chat, because a test that ends under a
+  /// live turn tears the container down beneath it.
+  Future<String> heard(String text, {String? into}) async {
+    app.voice.session!.hear(text);
+    if (into == null) {
+      await waitFor(() => spokenInto() != null, what: "the chat");
+    }
+    final id = into ?? spokenInto()!;
+    await waitFor(() => _finished(app, id), what: "the turn");
+    return id;
+  }
+
+  group("a session with no chat yet", () {
+    test("makes nothing until it hears something", () async {
+      await startNewVoiceChat();
+
+      expect(spokenInto(), isNull);
+      expect(await app.repo.listChats(), isEmpty);
+      expect(app.container.read(selectedChatIdProvider), isNull);
+    });
+
+    test("leaving without a word leaves nothing behind", () async {
+      final voice = await startNewVoiceChat();
+
+      await voice.stop();
+
+      expect(await app.repo.listChats(), isEmpty);
+      expect(spokenInto(), isNull);
+    });
+
+    test("the first word makes the chat, selects it and says it into it",
+        () async {
+      app.backend.scriptedEvents = [
+        const TextDelta("Right away."),
+        const DoneEvent(),
+      ];
+      await startNewVoiceChat();
+
+      final id = await heard("list the files");
+
+      expect((await app.repo.listChats()).single.id, id);
+      expect(app.container.read(selectedChatIdProvider), id);
+      final messages = app.container.read(chatControllerProvider(id)).chat!.messages;
+      expect(messages.first.plainText, "list the files");
+      expect(messages.last.plainText, "Right away.");
+    });
+
+    // The null-keyed session is the only one there is, so a chat it made has
+    // to be let go of, or the next new voice chat would carry on in it.
+    test("a second session does not go on speaking into the first chat",
+        () async {
+      final voice = await startNewVoiceChat();
+      final first = await heard("first");
+      await voice.stop();
+
+      // Left where it was, so the screen still shows what was said. It is
+      // starting again that puts it back.
+      expect(spokenInto(), first);
+
+      await voice.start();
+      expect(spokenInto(), isNull);
+      final second = await heard("second");
+
+      expect(second, isNot(first));
+      expect(await app.repo.listChats(), hasLength(2));
+    });
+
+    // The microphone is still open while the chat is being written down, so a
+    // second utterance arrives to find none made yet.
+    test("two words in quick succession make one chat, not two", () async {
+      await startNewVoiceChat();
+
+      app.voice.session!.hear("first");
+      app.voice.session!.hear("second");
+      await waitFor(() => spokenInto() != null, what: "the chat");
+      final id = spokenInto()!;
+      await waitFor(() => _finished(app, id), what: "the turn");
+
+      expect(await app.repo.listChats(), hasLength(1));
+    });
+
+    test("what it hears is spoken into the project being shown", () async {
+      await app.repo.createProject("work");
+      app.container.read(selectedProjectProvider.notifier).select("work");
+      await startNewVoiceChat();
+
+      await heard("hello");
+
+      expect((await app.repo.listChats()).single.project, "work");
+    });
+  });
 
   test("the language Settings picked is what the session is started in",
       () async {

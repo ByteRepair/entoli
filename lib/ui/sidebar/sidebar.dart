@@ -28,6 +28,32 @@ class SelectedChatId extends Notifier<String?> {
   String? build() => null;
 
   void select(String? id) => state = id;
+
+  /// Make a chat in the project being shown and select it. **The one place a
+  /// chat is created from the UI.** It is a method here rather than a function
+  /// beside the widgets because not every caller has a `WidgetRef`: voice mode
+  /// creates from inside its own controller, on the first word it hears.
+  ///
+  /// [meta] is the settings it should run its first turn under, for a screen
+  /// that offered them before there was a chat to write them on. Null is a
+  /// chat that could not be made, which is already logged.
+  Future<String?> create({ChatMeta? meta}) async {
+    try {
+      final chat = await ref.read(chatRepositoryProvider).createChat(
+            project: ref.read(selectedProjectProvider),
+            meta: meta,
+          );
+      // A new chat is this device's, so the sidebar comes back from whatever
+      // paired device it was reading.
+      ref.read(selectedRemoteProvider.notifier).select(null);
+      state = chat.state.id;
+      ref.invalidate(chatListProvider);
+      return state;
+    } catch (e) {
+      logFailure("chat", "could not start a chat", e);
+      return null;
+    }
+  }
 }
 
 final selectedChatIdProvider = NotifierProvider<SelectedChatId, String?>(SelectedChatId.new);
@@ -103,27 +129,6 @@ void openNewChat(BuildContext context, WidgetRef ref) {
   closeNavDrawer(context);
 }
 
-/// Make a chat in the project being shown and select it. **The one place the
-/// UI creates one**, so where a chat comes from is a single answer:
-/// [startChatWith] calls it as the first message is sent, and voice mode calls
-/// it on the way in, having no composer to defer to. Null is a chat that could
-/// not be made, which is already logged.
-Future<String?> createChat(WidgetRef ref, {ChatMeta? meta}) async {
-  try {
-    final chat = await ref.read(chatRepositoryProvider).createChat(
-          project: ref.read(selectedProjectProvider),
-          meta: meta,
-        );
-    ref.read(selectedRemoteProvider.notifier).select(null);
-    ref.read(selectedChatIdProvider.notifier).select(chat.state.id);
-    ref.invalidate(chatListProvider);
-    return chat.state.id;
-  } catch (e) {
-    logFailure("chat", "could not start a chat", e);
-    return null;
-  }
-}
-
 /// Start a chat and say the first thing in it. The new-chat screen's composer
 /// is the one caller: it holds the text, the files and the settings until
 /// there is a chat to put them in, and this is that moment. False is a chat
@@ -140,7 +145,7 @@ Future<bool> startChatWith(
   List<Attachment> attachments = const [],
   ChatMeta? meta,
 }) async {
-  final id = await createChat(ref, meta: meta);
+  final id = await ref.read(selectedChatIdProvider.notifier).create(meta: meta);
   if (id == null) return false;
   unawaited(ref
       .read(chatControllerProvider(id).notifier)

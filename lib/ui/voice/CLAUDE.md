@@ -136,13 +136,9 @@ platform can listen rather than only where models are installed — with none
 picked it leads to the settings that pick them, which is a better answer than a
 button nobody can find. `openVoice` is that rule, and `startVoiceChat` beside it
 is the circle on the new-chat screen and the assistant gesture's voice view.
-**It is the one thing left that makes a chat before a word is said**, because
-this page is keyed on the chat all the way down to `voiceControllerProvider` —
-there is nothing here to defer the way the composer defers. So it asks about
-the models *first*: that is what keeps the common refusal from leaving an
-untouched chat behind, and a session abandoned after the models are found does
-leave one. See "Nothing selected is a new chat" for why that is worn rather
-than swept up. Both read `voiceReadyProvider`
+It **makes nothing**: the page opens on no chat and the first word is what
+creates one, which is the rule the composer keeps and is written up under
+"Taking turns". Both read `voiceReadyProvider`
 themselves, which they can because **which models are installed is read before
 the app is built** — `AppSession.start` scans for them and seeds
 `InstalledVoiceModels` with what it found, the bargain `promptLibraryProvider`
@@ -193,6 +189,49 @@ whole reason the button is on pointer-down is that the first half second is the
 half nobody hears.
 
 ## Taking turns
+
+**A session can exist before the chat does.** `voiceControllerProvider` is keyed
+on `String?`, and null is a session started from the new-chat screen with
+nothing to speak into; `VoiceController` makes the chat on the first word it
+hears and speaks into it from there. That is the same rule the composer keeps —
+a chat exists because something is in it — so a voice session nobody spoke in
+leaves nothing behind, and there is no delete-if-empty anywhere to clean up
+after one.
+
+What it cost is that the session stopped being keyed on what it is about.
+`openChatId` is what it was opened with and `_chatId` is what it is speaking
+into; they differ for exactly one session, and four things follow.
+
+`_speakInto` is the only thing that moves `_chatId`, and it closes the old
+subscription before opening the new one. That close is load-bearing rather than
+tidy: `ref.listen` hands the element a subscription to *dispose*, not to
+re-point, so one left open goes on reading the previous chat's replies out into
+this session.
+
+`VoiceViewState` carries `chatId`, because the page is built on the key and the
+title and the transcript need the chat, which the key is not.
+
+**`start` puts `_chatId` back, not `stop`.** The null-keyed instance is the only
+one there is, so a chat one session made is still here when the next new voice
+chat begins — and going on speaking into it would put one conversation in the
+middle of another. Resetting when the *next* session starts rather than when
+this one ends is what lets stopping leave the screen alone: the notification's
+Stop arrives with the page still up, and clearing the chat there would take the
+transcript and the turn's own surface off it and leave a blank screen with no
+way back.
+
+**One chat per session, however fast the words come.** The microphone is open
+for as long as the chat is being written down, so a second utterance arrives to
+find `_chatId` still null; `_creating` holds the one in flight so the second
+waits for it rather than making a chat of its own for its words to be lost in.
+
+And what was heard is said **even if the session stops while it is being
+written**. Those words were spoken while it was on, and dropping them there
+would leave the empty chat this whole path exists not to make.
+
+Creation goes through `SelectedChatId.create`, which is why that is a method on
+the notifier rather than a function beside the widgets: a `Notifier` has a `Ref`
+and no `WidgetRef`, and this is the one creator that is not a widget.
 
 **The microphone is open only when it is the user's turn to speak** — not while
 a turn runs, not while the reply is read out. `VoiceController._wantsMicrophone`

@@ -401,17 +401,17 @@ which selects nothing and closes the drawer. Every other `select(null)` —
 switching project, deleting the open chat, deleting them all — lands here too,
 and now means what it says rather than "and quietly make one".
 
-Two callers still need a chat before a word is said, and both are honest about
-it. `startChatWith` makes one because it has the message in hand. Voice mode
-makes one on the way in: every widget on that page is keyed on the chat, down
-to `voiceControllerProvider`, so there is nothing to defer the way a composer
-defers. **A voice session left before the first word therefore leaves an empty
-chat**, which the typed path cannot do — the models are asked about first, so
-the common refusal still makes nothing, and closing the rest would mean a
-delete-if-empty on the way out, which is a special case where this design's
-whole point is not having one. What it leaves is a real chat and not a special
-kind: it is in the sidebar, it goes out to paired devices as any other creation
-does, and it expires on the project's TTL like the rest.
+**Voice mode keeps the same rule**, and there is no exception left anywhere in
+the app: `startVoiceChat` opens the page on no chat and `VoiceController` makes
+one when it hears the first word, so a session nobody spoke in leaves nothing
+either. What that cost is written up in "Taking turns" — the session had to
+stop being keyed on the chat to be able to exist without one.
+
+The two places that create, then, are the two that have something to put in a
+chat: `startChatWith`, holding a message, and the voice controller, holding an
+utterance. Both go through `SelectedChatId.create`, which is a method on the
+notifier rather than a function beside the widgets for a plain reason — a
+`Notifier` has a `Ref` and no `WidgetRef`, and the voice controller is one.
 
 The one place nothing selected is not a new chat is a paired device's list,
 which `ChatPage` checks first: a new chat is this device's and takes the sidebar
