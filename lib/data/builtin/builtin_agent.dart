@@ -23,6 +23,7 @@ import "sub_agent.dart";
 import "task_tool.dart";
 import "projection.dart";
 import "templates.dart";
+import "memory/instructions.dart";
 import "websearch_tool.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -236,6 +237,8 @@ class BuiltinAgent {
     this.profile,
     this.saveArtifact,
     this.loadResource = noResources,
+    this.memory = MemorySettings.off,
+    this.instructions = const [],
   });
 
   final BuiltinSession session;
@@ -247,6 +250,26 @@ class BuiltinAgent {
   /// projected. Defaulted because a sub-agent has no chat under it to read
   /// from; `BuiltinBackend` passes the store's.
   final ResourceLoader loadResource;
+
+  /// What this turn reads and remembers. Only the `nested` half is consulted
+  /// here: the instructions block was loaded by the backend before the agent
+  /// existed, and the rest of the subsystem is later work.
+  final MemorySettings memory;
+
+  /// The AGENTS.md files loaded for this chat's workspaces, already read.
+  /// Empty when the gate is off or nothing was found; rendered into the
+  /// second system message either way, so the cacheable body above it never
+  /// changes.
+  final List<InstructionFile> instructions;
+
+  /// AGENTS.md paths already in front of the model, seeded from
+  /// [instructions]. A nested file found on a read is added, so the same one
+  /// is never injected twice into a turn.
+  Set<String> get _loadedInstructions =>
+      _loadedInstructionPaths ??= {
+        for (final file in instructions) file.path,
+      };
+  Set<String>? _loadedInstructionPaths;
 
   /// The filesystem the file tools (`read`/`write`/`edit`) and the artifact
   /// tool's path resolution operate on. The same one `AppConfig` holds, so it
@@ -496,6 +519,7 @@ class BuiltinAgent {
       workspace: workspace,
       projectWorkspace: projectWorkspace,
       agentPrompt: agentPrompt,
+      instructions: renderInstructions(instructions),
       canRunCommands: shell.canRunCommands,
     );
     final head = [
@@ -833,10 +857,22 @@ class BuiltinAgent {
       buf.writeln("$i: ${lines[i - 1]}");
     }
     final result = buf.toString();
+    final nested = memory.nested
+        ? await findNestedInstructions(
+            fs,
+            resolved,
+            alreadyLoaded: _loadedInstructions,
+            chatWorkspace: workspace,
+            projectWorkspace: projectWorkspace,
+          )
+        : const <InstructionFile>[];
+    final output = nested.isEmpty
+        ? (result.isEmpty ? "(empty file)" : result)
+        : "$result\n\n${renderInstructions(nested)}";
     yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
-          output: result.isEmpty ? "(empty file)" : result,
+          output: output,
         ));
   }
 

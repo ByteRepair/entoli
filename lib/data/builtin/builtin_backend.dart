@@ -18,6 +18,7 @@ import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
 import "builtin_agent.dart";
+import "memory/instructions.dart";
 import "llm/gated_client.dart";
 import "llm/llm_client.dart";
 import "llm/llm_registry.dart";
@@ -190,6 +191,17 @@ class BuiltinBackend implements AgentBackend {
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
+      // The AGENTS.md block, loaded once where the two workspace paths are
+      // known. Empty when the gate is off or nothing was found; the agent
+      // renders it into the second system message either way.
+      final instructions = settings.memory.instructions
+          ? await loadInstructions(
+              config.fs,
+              chatWorkspace: workspace,
+              projectWorkspace: projectWorkspace,
+              imports: settings.memory.imports,
+            )
+          : const <InstructionFile>[];
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {
@@ -214,6 +226,8 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         profile: settings.profile,
         rateLimitGate: rateLimitGate,
+        memory: settings.memory,
+        instructions: instructions,
         // A headless turn offers neither: an ask_user parks it on a completer
         // nobody will complete, and there is nobody to watch a fan-out.
         offerAskTool: settings.offerAsk,

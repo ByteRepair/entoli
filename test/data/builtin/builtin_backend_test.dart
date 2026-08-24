@@ -4,6 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 
 import "dart:convert";
 
+import "package:path/path.dart" as p;
+
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
@@ -85,6 +87,7 @@ void main() {
     List<MessagePart> files = const [],
     Map<String, String> documents = const {},
     DateTime? at,
+    MemorySettings memory = MemorySettings.off,
   }) =>
       backend
           .sendPrompt(
@@ -93,7 +96,10 @@ void main() {
                   at: at ?? sentAt, documents: documents, files: files),
               history: history,
               settings: TurnSettings(
-                  model: model, provider: provider, approveMode: ApproveMode.never))
+                  model: model,
+                  provider: provider,
+                  approveMode: ApproveMode.never,
+                  memory: memory))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -168,6 +174,37 @@ void main() {
 
       expect(Directory(config.projectWorkspaceDir()).existsSync(), isTrue);
       expect(client.sent.first[1].text, contains(config.projectWorkspaceDir()));
+    });
+
+    test("workspace instructions are loaded and sent when the gate is on",
+        () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      // The chat workspace is created by the turn; the project workspace is
+      // where the AGENTS.md the loader should find lives.
+      Directory(config.projectWorkspaceDir()).createSync(recursive: true);
+      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+          .writeAsStringSync("project rules");
+
+      await send(backend, "hi",
+          memory: const MemorySettings(instructions: true));
+
+      expect(client.sent.first[1].text, contains("project rules"));
+      expect(client.sent.first[1].text, contains("Workspace instructions"));
+    });
+
+    test("no instructions section when the gate is off", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      Directory(config.projectWorkspaceDir()).createSync(recursive: true);
+      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+          .writeAsStringSync("project rules");
+
+      await send(backend, "hi");
+
+      expect(client.sent.first[1].text, isNot(contains("project rules")));
     });
 
     test("a chat in a project works in that project's directories", () async {

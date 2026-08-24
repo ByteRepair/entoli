@@ -33,6 +33,7 @@ String turnPrompt({
   required String workspace,
   required String projectWorkspace,
   String? agentPrompt,
+  String? instructions,
   required bool canRunCommands,
 }) {
   final parts = [
@@ -51,6 +52,8 @@ there, so another conversation can pick it up. Write to it by path; you do not
 have to be in it. Anything a tool keeps in a home directory is the project's
 too, so a repository cloned or a package installed by one conversation is
 already there for the next.""",
+    if (instructions != null && instructions.isNotEmpty)
+      "## Workspace instructions\n\n$instructions",
     if (agentPrompt != null) "## Additional instructions\n\n$agentPrompt",
   ];
   return parts.join("\n\n");
