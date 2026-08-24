@@ -5,7 +5,6 @@ import "dart:typed_data";
 import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
-import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/chat_log.dart" show ChatRecord;
@@ -121,7 +120,6 @@ class SyncHub {
   SyncHub({
     required this.identity,
     required this.registry,
-    required AppConfig config,
     required AppSettings Function() settings,
     required LanSignaling? Function() lanSignaling,
     String? hostname,
