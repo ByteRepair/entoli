@@ -59,7 +59,9 @@ every other file here is one subject; see "Being the assistant". **Reminders**
 is Android's only — a reminder runs a prompt in a new chat at a time you pick,
 even when the app is closed — and where the port is unavailable the page says so
 and offers nothing,
-the way a row for a missing device would. The editor page is a route of its own;
+the way a row for a missing device would. The permission rows re-read on the way
+back to the app, since their answers can only change while it is behind in the
+system settings the rows open. The editor page is a route of its own;
 see "The reminder editor" below, and "Waking for a reminder" in
 `android/CLAUDE.md`. **Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
