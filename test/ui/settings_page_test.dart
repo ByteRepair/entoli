@@ -84,7 +84,7 @@ void main() {
 
     testWidgets(
         "are offered General, Terminal, On-device, Voice, Reminders, "
-        "Sync, Providers, LLMs, Data, About, in that order",
+        "Sync, Providers, LLMs, Memory, Data, About, in that order",
         (tester) async {
       useWindow(tester, const Size(1200, 800));
       await app.pump(tester, const SettingsPage());
@@ -104,6 +104,7 @@ void main() {
           "Sync",
           "Providers",
           "LLMs",
+          "Memory",
           "Data",
           "About",
         ],

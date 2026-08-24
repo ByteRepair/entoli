@@ -10,6 +10,7 @@ import "../../domain/project.dart";
 import "../../data/sync/sync_hub.dart" show RemoteChatEntry;
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
+import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
 import "../settings/settings_page.dart";
 import "../widgets/anchored_menu.dart";
@@ -220,7 +221,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         ),
                       ),
                     )
-                  else
+                  else ...[
                     IconButton(
                       icon: const Icon(Icons.folder_outlined),
                       tooltip: _defaultWorkspaceTitle,
@@ -233,6 +234,22 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         ),
                       ),
                     ),
+                    // The default project's own store, beside its workspace:
+                    // the one thing a settings page would have held for it,
+                    // twice over.
+                    IconButton(
+                      icon: const Icon(Icons.psychology_outlined),
+                      tooltip: "Memories",
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => MemoryPage(
+                            dir: ref.read(appConfigProvider).memoryDir(),
+                            title: "Memories",
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
