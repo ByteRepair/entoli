@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 
 import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
@@ -204,15 +205,19 @@ class BuiltinBackend implements AgentBackend {
               imports: settings.memory.imports,
             )
           : const <InstructionFile>[];
+      // The project's memory store, when the subsystem runs at all. Which
+      // project's is on the settings; the dir is never built twice for a
+      // turn, so recall and the agent's tools share one.
+      final memoryStore = settings.memory.autoMemory &&
+              settings.memory.memoryDir != null
+          ? MemoryStore(config.fs, settings.memory.memoryDir!)
+          : null;
       // The memories this turn is about, rendered ready to read. A store
       // that will not answer recalls nothing rather than costing the turn:
       // the memories are a convenience, not the turn.
       String recall = "";
-      if (settings.memory.autoMemory &&
-          settings.memory.recall &&
-          settings.memory.memoryDir != null) {
+      if (memoryStore != null && settings.memory.recall) {
         try {
-          final memoryStore = MemoryStore(config.fs, settings.memory.memoryDir!);
           final query = (prompt ??
                   history.lastWhereOrNull((m) => m.role == MessageRole.user))
               ?.plainText ??
@@ -251,6 +256,8 @@ class BuiltinBackend implements AgentBackend {
         memory: settings.memory,
         instructions: instructions,
         recall: recall,
+        memoryStore: settings.memory.agentTool ? memoryStore : null,
+        memoryChat: settings.memory.agentTool ? chatId : null,
         // A headless turn offers neither: an ask_user parks it on a completer
         // nobody will complete, and there is nobody to watch a fan-out.
         offerAskTool: settings.offerAsk,
@@ -277,8 +284,12 @@ class BuiltinBackend implements AgentBackend {
           ? agent.resume(agentPrompt: agentPrompt)
           : agent.run(prompt, agentPrompt: agentPrompt);
 
+      var reply = "";
+      var endedDone = false;
       await for (final event in events) {
         if (controller.isClosed) break;
+        if (event is TextDelta) reply += event.text;
+        if (event is DoneEvent && !event.aborted) endedDone = true;
         if (event is ApprovalRequestEvent) {
           _approvals.putIfAbsent(chatId, () => []).add(event.approval);
           // Created here rather than where it is awaited: the banner is on
@@ -291,6 +302,21 @@ class BuiltinBackend implements AgentBackend {
           _answers.putIfAbsent(event.request.id, Completer.new);
         }
         controller.add(event);
+      }
+      if (endedDone &&
+          settings.memory.extract &&
+          memoryStore != null &&
+          settings.memory.bgModel != null) {
+        // Unwatched on purpose: the turn is over, and the extraction must
+        // neither slow anything down nor be able to fail.
+        unawaited(_extractMemories(
+          store: memoryStore,
+          chatId: chatId,
+          prompt: prompt,
+          history: history,
+          reply: reply,
+          settings: settings,
+        ));
       }
     } catch (e) {
       _fail(controller, "$e");
@@ -453,6 +479,86 @@ class BuiltinBackend implements AgentBackend {
     } catch (_) {
       return null;
     }
+  }
+
+  /// What a turn that ended cleanly leaves behind: a background model reads
+  /// the exchange and keeps the facts that outlive it. Runs unwatched, so it
+  /// fails by writing nothing and leaving a line in the log — a turn is over
+  /// when its last event is out, whatever this is still doing.
+  Future<void> _extractMemories({
+    required MemoryStore store,
+    required String chatId,
+    required Message? prompt,
+    required List<Message> history,
+    required String reply,
+    required TurnSettings settings,
+  }) async {
+    final target =
+        _resolveModel(settings.memory.bgModel, settings.memory.bgProvider);
+    if (target == null) return;
+    final said = (prompt ??
+            history.lastWhereOrNull((m) => m.role == MessageRole.user))
+        ?.plainText ??
+        "";
+    final replyText = reply.trim();
+    if (said.trim().isEmpty && replyText.isEmpty) return;
+    final question = "Here is an exchange between a user and an assistant:\n\n"
+        "User: $said\n\n"
+        "Assistant: $replyText\n\n"
+        "Write down the facts from it that would still be true and useful in a "
+        "later conversation: a preference the user stated, a decision that was "
+        "made, a fact learned about a codebase, an account, or the user. One "
+        "fact per entry, each in one or two sentences, written so it makes "
+        "sense without this exchange. Never include secrets, keys, or "
+        "credentials, and never include what a file would say. Reply with JSON "
+        "only: {\"memories\": [\"...\"]}, with an empty list where there is "
+        "nothing worth keeping.";
+    try {
+      final chunks = await target.client
+          .stream([LlmMessage(role: LlmRole.user, text: question)],
+              model: target.modelId)
+          .timeout(const Duration(seconds: 60))
+          .toList();
+      final answer =
+          chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
+      for (final memory in _memoriesFrom(answer)) {
+        await store.add(memory, chat: chatId);
+      }
+    } catch (e) {
+      logFailure("memory", "extraction failed: $e");
+    }
+  }
+
+  /// The extraction's JSON, read as liberally as the model writes it: an array
+  /// of strings, or an object holding one. What is not a list of strings is
+  /// nothing, because a memory is the only thing the store takes.
+  List<String> _memoriesFrom(String answer) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(answer.trim());
+    } catch (_) {
+      final fenced = RegExp(r"```(?:json)?\n([\s\S]*?)```").firstMatch(answer);
+      if (fenced == null) return const [];
+      try {
+        decoded = jsonDecode(fenced.group(1)!.trim());
+      } catch (_) {
+        return const [];
+      }
+    }
+    if (decoded is Map) decoded = decoded["memories"];
+    if (decoded is! List) return const [];
+    final memories = <String>[];
+    for (final entry in decoded) {
+      if (entry is! String) continue;
+      var text = entry.trim();
+      if (text.isEmpty) continue;
+      if (text.length > recallEntryChars) {
+        text = text.substring(0, recallEntryChars);
+      }
+      memories.add(text);
+      if (memories.length == 5) break;
+    }
+    return memories;
   }
 
   /// The config is read once and reused: going back through the registry by id

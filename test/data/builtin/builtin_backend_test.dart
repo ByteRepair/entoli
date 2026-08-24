@@ -1157,6 +1157,113 @@ void main() {
       expect(client.closed, isTrue);
     });
   });
+
+  group("writing memories after a turn", () {
+    late MemoryStore store;
+
+    /// Auto-memory on over the default store; [bg] adds the background model
+    /// pair, [extract] is the sub-gate.
+    MemorySettings memory({bool extract = true, bool bg = true}) =>
+        MemorySettings(
+          autoMemory: true,
+          extract: extract,
+          memoryDir: config.memoryDir(),
+          bgModel: bg ? "fake-model" : null,
+          bgProvider: bg ? "fake" : null,
+        );
+
+    setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
+
+    test("a finished turn leaves the memory the background model kept", () async {
+      // The first scripted turn is the agent finishing; the second is the
+      // extraction call answering with the one fact it kept.
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": ["the user likes tabs over spaces"]}')],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await untilMemory(store, "the user likes tabs over spaces");
+      final entry = (await store.entries()).single;
+      expect(entry.chat, chatId);
+    });
+
+    test("an extraction that names nothing writes nothing", () async {
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await pumpEvents();
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("the extraction is asked the exchange, not the store", () async {
+      final backend = backendOver([
+        [saidOnly("use tabs, the user likes them")],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await pumpEvents();
+      final question = client.sent.last.last;
+      expect(question.text, contains("how should I indent this"));
+      expect(question.text, contains("use tabs, the user likes them"));
+      expect(question.text, contains("JSON"));
+    });
+
+    test("no background model, nothing is written", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory(bg: false));
+
+      await pumpEvents();
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("the extract gate off, nothing is written", () async {
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": ["a fact"]}')],
+      ]);
+
+      await send(backend, "how should I indent this",
+          memory: memory(extract: false));
+
+      await pumpEvents();
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("an aborted turn writes nothing", () async {
+      final backend = backendOver([
+        [bashCall("sleep 5")],
+        [saidOnly('{"memories": ["a fact"]}')],
+      ]);
+      final events = <AgentEvent>[];
+      final turn = backend
+          .sendPrompt(chatId, userMessage("hi", at: sentAt),
+              settings: TurnSettings(
+                  model: "fake-model",
+                  provider: "fake",
+                  approveMode: ApproveMode.ask,
+                  memory: memory()))
+          .listen(events.add);
+      await pumpEvents();
+
+      await backend.abort(chatId);
+      await turn.cancel();
+      await pumpEvents();
+
+      expect(events.whereType<DoneEvent>().single.aborted, isTrue);
+      expect(await store.entries(), isEmpty);
+    });
+  });
 }
 
 /// Let the agent's own async work run before looking at what it has published.
@@ -1166,5 +1273,21 @@ void main() {
 Future<void> pumpEvents() async {
   for (var i = 0; i < 20; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+}
+
+/// Extraction runs unwatched, so a test polls the store until [want] is in it
+/// rather than awaiting the turn — which is over the moment the extraction
+/// starts.
+Future<void> untilMemory(MemoryStore store, String want) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (true) {
+    final entries = await store.entries();
+    if ([for (final e in entries) e.text].contains(want)) return;
+    if (DateTime.now().isAfter(deadline)) {
+      fail("the store never held '$want'; it held "
+          "${[for (final e in entries) e.text]}");
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
   }
 }

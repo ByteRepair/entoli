@@ -24,6 +24,8 @@ import "task_tool.dart";
 import "projection.dart";
 import "templates.dart";
 import "memory/instructions.dart";
+import "memory/store.dart";
+import "memory_tools.dart";
 import "websearch_tool.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -196,6 +198,7 @@ List<LlmTool> agentTools({
   required bool offerAsk,
   required bool offerTask,
   required bool saveArtifact,
+  required bool offerMemory,
 }) =>
     [
       file_tool_defs.readTool,
@@ -206,6 +209,7 @@ List<LlmTool> agentTools({
       if (offerTask && canRunCommands) taskTool,
       if (webSearchAvailable) ...[websearchTool, webfetchTool],
       if (saveArtifact) artifactTool,
+      if (offerMemory) ...[memorySaveTool, memorySearchTool],
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -240,6 +244,8 @@ class BuiltinAgent {
     this.memory = MemorySettings.off,
     this.instructions = const [],
     this.recall = "",
+    this.memoryStore,
+    this.memoryChat,
   });
 
   final BuiltinSession session;
@@ -268,6 +274,16 @@ class BuiltinAgent {
   /// backend queried the store before the agent existed, for the reason
   /// [instructions] was loaded there.
   final String recall;
+
+  /// The project's memory store the memory tools talk to, or null where they
+  /// are not offered: auto-memory off, the agent-tool gate off, or a sub-agent
+  /// (which runs with none of the subsystem). Null also here is what takes the
+  /// tools off the list in [_tools].
+  final MemoryStore? memoryStore;
+
+  /// What a saved memory is stamped with: the chat that wrote it. Beside
+  /// [memoryStore] or neither.
+  final String? memoryChat;
 
   /// AGENTS.md paths already in front of the model, seeded from
   /// [instructions]. A nested file found on a read is added, so the same one
@@ -364,6 +380,7 @@ class BuiltinAgent {
         offerAsk: offerAskTool,
         offerTask: offerTaskTool && subAgentRunner != null,
         saveArtifact: saveArtifact != null,
+        offerMemory: memoryStore != null,
       );
 
   bool _cancelled = false;
@@ -609,6 +626,16 @@ class BuiltinAgent {
 
       if (call.name == webfetchToolName) {
         yield* _webFetch(call);
+        continue;
+      }
+
+      if (call.name == memorySaveToolName) {
+        yield* _memorySave(call);
+        continue;
+      }
+
+      if (call.name == memorySearchToolName) {
+        yield* _memorySearch(call);
         continue;
       }
 
@@ -967,6 +994,67 @@ class BuiltinAgent {
           callId: call.id,
           returnCode: 0,
           output: "Edited ${args.path}: replaced $count occurrence(s).",
+        ));
+  }
+
+  /// A fact the model judged worth keeping. No approval: like `websearch`, it
+  /// reaches nothing and runs nothing — what it writes is a line in the app's
+  /// own store, and a memory nobody wants is a line the user deletes in the
+  /// explorer.
+  Stream<AgentEvent> _memorySave(LlmToolCall call) async* {
+    final text = stringArg(call.argumentsJson, "text");
+    final store = memoryStore;
+    if (text == null || store == null) {
+      yield* _reject(call, 'The $memorySaveToolName tool takes {"text": "..."}; '
+          "that argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: text,
+    ));
+    try {
+      await store.add(text, chat: memoryChat);
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The memory could not be saved: $e",
+          ));
+      return;
+    }
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Memory saved. Later conversations are offered it when it "
+              "looks relevant.",
+        ));
+  }
+
+  /// Read-only over the app's own store, so no approval: it runs nothing and
+  /// reaches nothing.
+  Stream<AgentEvent> _memorySearch(LlmToolCall call) async* {
+    final query = stringArg(call.argumentsJson, "query");
+    final store = memoryStore;
+    if (query == null || store == null) {
+      yield* _reject(call, 'The $memorySearchToolName tool takes {"query": "..."}; '
+          "that argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: query,
+    ));
+    final hits = await store.search(query);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: hits.isEmpty ? "No memories match." : renderRecall(hits),
         ));
   }
 
