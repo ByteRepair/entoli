@@ -30,11 +30,9 @@ void main() {
     String? hostname,
     String? deviceName,
   }) async {
-    final config = tempConfig();
     registry = FakeDeviceRegistry(paired);
     relay = FakeRelaySignaling();
     hub = await testSyncHub(
-      config,
       devices: registry,
       hostname: hostname,
       settings: () =>

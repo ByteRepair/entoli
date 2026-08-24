@@ -122,7 +122,6 @@ class AppSession {
     final syncHub = SyncHub(
       identity: identity,
       registry: registry,
-      config: config,
       settings: () => settingsHome.read(appSettingsProvider),
       lanSignaling: platform.createLanSignaling,
       hostname: platform.deviceHostname(),

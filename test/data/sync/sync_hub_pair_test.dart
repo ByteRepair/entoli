@@ -185,8 +185,7 @@ void main() {
   /// (see `test/CLAUDE.md`), so what is pinned here is the symptom, loudly
   /// enough to recognise if it comes back.
   test("a hub with no repository serves nothing", () async {
-    final config = tempConfig();
-    final hub = await testSyncHub(config);
+    final hub = await testSyncHub();
     addTearDown(hub.dispose);
 
     expect(hub.isServing, isFalse);
@@ -652,7 +651,7 @@ class _Device {
     final registry = FakeDeviceRegistry();
     final chats = store ?? FakeChatStore();
     final repo = ChatRepository(chats, FakeBackend(), AppSettings.new, config);
-    final hub = await testSyncHub(config, devices: registry);
+    final hub = await testSyncHub(devices: registry);
     hub.attach(repo);
     return _Device(hub.identity, hub, registry, chats, repo);
   }
