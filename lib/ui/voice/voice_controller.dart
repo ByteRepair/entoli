@@ -6,12 +6,14 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/background_work.dart";
+import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/speech_text.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
 import "../../providers.dart";
 import "../chat/chat_controller.dart";
+import "../sidebar/sidebar.dart";
 import "../theme.dart";
 import "read_aloud.dart";
 
@@ -40,10 +42,16 @@ class VoiceViewState {
     this.level,
     this.paused = false,
     this.pushToTalk = false,
+    this.chatId,
   });
 
   final VoiceStatus status;
   final String? error;
+
+  /// The chat this session is speaking into, or null before the first word has
+  /// made one. What the title and the transcript are drawn from, since a
+  /// session started from the new-chat screen has no chat to be keyed on.
+  final String? chatId;
 
   /// The microphone is shut. Not one of the [status] values: a turn can be
   /// running and its reply being read out while the microphone is off, and
@@ -103,9 +111,23 @@ Color voiceColour(VoiceViewState state, ThemeData theme) =>
 /// chat, so a spoken turn is an ordinary turn — same model, same tools, same
 /// records in `conv.jsonl` — and leaving voice mode leaves a chat to read.
 class VoiceController extends Notifier<VoiceViewState> {
-  VoiceController(this.chatId);
+  VoiceController(String? openChatId) : _chatId = openChatId;
 
-  final String chatId;
+  /// The chat being spoken into: the one this session was opened over, or the
+  /// one it made on the first word. Null only for a session that has not heard
+  /// anything yet.
+  String? _chatId;
+
+  /// The settings that chat will be made with, handed over by [start] from the
+  /// screen that offered them before there was anything to write them on.
+  ChatMeta? _meta;
+
+  /// Only [_speakInto] and [_shutdown] touch it: there is nothing to listen to
+  /// until there is a chat, and nothing to listen for once the session is off.
+  ProviderSubscription<ChatViewState>? _chatEvents;
+
+  /// The chat being made, while it is being made — see [_startChat].
+  Future<String?>? _creating;
 
   VoiceSession? _session;
   StreamSubscription<VoiceEvent>? _events;
@@ -119,9 +141,10 @@ class VoiceController extends Notifier<VoiceViewState> {
   /// passes through, which is what its own test asserts.
   final _speakable = SpeakableText();
 
-  /// Held rather than read when it is needed: [_shutdown] runs from
+  /// Held rather than read when they are needed: [_shutdown] runs from
   /// `ref.onDispose`, where the ref is already gone.
   late BackgroundWork _work;
+  late RunningVoice _running;
 
   /// The reply being read out, so a new one starts the splitter over rather
   /// than carrying on from where the last one stopped, and the parts it was
@@ -142,18 +165,37 @@ class VoiceController extends Notifier<VoiceViewState> {
   @override
   VoiceViewState build() {
     _work = ref.watch(backgroundWorkProvider);
+    _running = ref.read(runningVoiceProvider.notifier);
     // Read rather than watched, and listened to for changes: watching it would
     // rebuild this notifier, and a rebuild resets the state a running session
     // is being held in.
     ref.listen(appSettingsProvider.select((s) => s.voicePushToTalk),
         (_, on) => unawaited(_setPushToTalk(on)));
-    ref.listen(chatControllerProvider(chatId), _onChat);
+    _listenToChat();
     ref.onDispose(() => unawaited(_shutdown()));
     return VoiceViewState(
+        chatId: _chatId,
         pushToTalk: ref.read(appSettingsProvider).voicePushToTalk);
   }
 
-  ChatController get _chat => ref.read(chatControllerProvider(chatId).notifier);
+  /// Read the chat's replies out, where there is a chat and nothing is doing it
+  /// yet. [build] opens it and [start] re-opens what [_shutdown] closed.
+  void _listenToChat() {
+    final id = _chatId;
+    if (_chatEvents != null || id == null) return;
+    _chatEvents = ref.listen(chatControllerProvider(id), _onChat);
+  }
+
+  /// Point the session at the chat it has just made. Publishing is the
+  /// caller's. See "Taking turns".
+  void _speakInto(String id) {
+    _chatEvents?.close();
+    _chatEvents = null;
+    _chatId = id;
+    _listenToChat();
+  }
+
+  ChatController get _chat => ref.read(chatControllerProvider(_chatId!).notifier);
 
   /// Every state write goes through here. Written out at each call site, the
   /// two `failed` arms silently omitted the level, which is the sort of
@@ -167,6 +209,7 @@ class VoiceController extends Notifier<VoiceViewState> {
       level: _session?.level,
       paused: paused ?? state.paused,
       pushToTalk: pushToTalk ?? state.pushToTalk,
+      chatId: _chatId,
     );
     if (state.status != was) {
       voiceLog(() => "${was.name} -> ${state.status.name}");
@@ -210,8 +253,11 @@ class VoiceController extends Notifier<VoiceViewState> {
   void _holdMicrophone() => unawaited(
       _session?.setListening(_wantsMicrophone, finish: state.paused));
 
-  Future<void> start() async {
+  Future<void> start({ChatMeta? meta}) async {
     if (state.isOn) return;
+    _meta = meta;
+    // Re-opens what a previous [stop] closed; a no-op on the way in.
+    _listenToChat();
     final settings = ref.read(appSettingsProvider);
     final recognition =
         voiceModelOf<RecognitionModel>(settings.voiceRecognitionModelId);
@@ -222,10 +268,14 @@ class VoiceController extends Notifier<VoiceViewState> {
           error: "Pick a recognition model and a speech model in Settings first.");
     }
 
-    // One session at a time. `ReadAloud` holds a speech model of its own, and
-    // a message still being read out would be a second copy of it and a second
-    // voice over this one.
+    // One session at a time, and there are two things that could be holding
+    // one. `ReadAloud` has a speech model of its own, and a message still being
+    // read out would be a second copy of it talking over this one.
     await ref.read(readAloudProvider.notifier).stop();
+    if (!ref.mounted) return;
+    // The other is another voice page. `state.isOn` above has already answered
+    // for this one, so anything still running here is somebody else's.
+    await ref.read(runningVoiceProvider)?.stop();
     if (!ref.mounted) return;
 
     final pushToTalk = settings.voicePushToTalk;
@@ -239,7 +289,12 @@ class VoiceController extends Notifier<VoiceViewState> {
             speaker: settings.voiceSpeaker,
             language: settings.voiceLanguage,
           );
-      if (!ref.mounted) return unawaited(session.dispose());
+      // Stopped while the models loaded — the notification's Stop, or a pop
+      // whose disposal has not landed yet. Without this the microphone opens
+      // with nothing left to answer it.
+      if (!ref.mounted || state.status != VoiceStatus.starting) {
+        return unawaited(session.dispose());
+      }
       _session = session;
       _events = session.events.listen(_onVoice);
       // Its own kind: the notification's Stop leaves voice mode and leaves a
@@ -247,6 +302,7 @@ class VoiceController extends Notifier<VoiceViewState> {
       _stops = _work.stopRequests
           .where((job) => job == BackgroundJob.voice)
           .listen((_) => unawaited(stop()));
+      _running.claim(this);
       unawaited(_work.listening(true));
       _show(VoiceStatus.listening);
     } catch (e) {
@@ -257,10 +313,12 @@ class VoiceController extends Notifier<VoiceViewState> {
 
   Future<void> stop() async {
     // Mounted first: reading `state` on a disposed notifier throws, and the
-    // page's `dispose` reaches this after a container has gone — where
+    // notification's Stop can arrive after the page has gone — where
     // `onDispose` has already done the shutting down.
     if (!ref.mounted || state.status == VoiceStatus.off) return;
     await _shutdown();
+    // The chat is left where it is, so the screen still shows what was said —
+    // the notification's Stop reaches this with the page still up.
     if (ref.mounted) _show(VoiceStatus.off);
   }
 
@@ -316,6 +374,9 @@ class VoiceController extends Notifier<VoiceViewState> {
   Future<void> _shutdown() async {
     _due?.cancel();
     _due = null;
+    // A session that is off does not read replies out — see "Taking turns".
+    _chatEvents?.close();
+    _chatEvents = null;
     final session = _session;
     _session = null;
     await _events?.cancel();
@@ -323,7 +384,13 @@ class VoiceController extends Notifier<VoiceViewState> {
     _events = null;
     _stops = null;
     await session?.dispose();
-    unawaited(_work.listening(false));
+    // Only where one was taken. This runs on every page close now, and
+    // `listening` is a flag rather than a count — telling the platform to let
+    // go of a hold nothing took drops the one another session is relying on.
+    if (session != null) {
+      _running.release(this);
+      unawaited(_work.listening(false));
+    }
   }
 
   void _onVoice(VoiceEvent event) {
@@ -339,15 +406,38 @@ class VoiceController extends Notifier<VoiceViewState> {
   }
 
   Future<void> _say(String text) async {
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || !state.isOn) return;
+    if (_chatId == null && !await _startChat()) return;
     // A turn still running here is one whose utterance arrived late — the
     // microphone is shut for as long as one runs. Aborting waits for the turn
     // to be written and closed, so what is said next lands after it rather than
     // into it.
-    if (ref.read(chatControllerProvider(chatId)).isRunning) await _chat.abort();
-    if (!ref.mounted || !state.isOn) return;
-    _show(VoiceStatus.thinking);
+    if (ref.read(chatControllerProvider(_chatId!)).isRunning) await _chat.abort();
+    if (!ref.mounted) return;
+    // Sent whether or not the session is still on — these words were heard
+    // while it was. The status is not: a stopped session is not thinking.
+    if (state.isOn) _show(VoiceStatus.thinking);
     await _chat.send(text);
+  }
+
+  /// The first word of a session started with nothing to speak into, and one
+  /// at a time — a second utterance arrives while this is still writing. See
+  /// "Taking turns".
+  Future<bool> _startChat() async {
+    final id = await (_creating ??=
+        ref.read(selectedChatIdProvider.notifier).create(meta: _meta));
+    _creating = null;
+    if (!ref.mounted) return false;
+    // Won by the utterance that asked first, which is the one whose chat this
+    // is. Nothing to do but speak into it.
+    if (_chatId != null) return true;
+    if (id == null) {
+      _show(VoiceStatus.failed, error: "Could not start a chat.");
+      return false;
+    }
+    _speakInto(id);
+    _show(state.status);
+    return true;
   }
 
   /// The reply, as it is written, turned into sentences and said. Reading it out
@@ -393,7 +483,8 @@ class VoiceController extends Notifier<VoiceViewState> {
   void _readOn() {
     _due?.cancel();
     _due = null;
-    final messages = ref.read(chatControllerProvider(chatId)).chat?.messages;
+    if (_chatId == null) return;
+    final messages = ref.read(chatControllerProvider(_chatId!)).chat?.messages;
     final last = messages == null || messages.isEmpty ? null : messages.last;
     if (last == null || last.id != _reading) return;
     for (final sentence in _sentences.add(_speakable.of(last.plainText))) {
@@ -408,5 +499,41 @@ class VoiceController extends Notifier<VoiceViewState> {
   }
 }
 
-final voiceControllerProvider =
-    NotifierProvider.family<VoiceController, VoiceViewState, String>(VoiceController.new);
+/// Whichever session is running, and null where none is. **One at a time is a
+/// property of the device** — a `VoiceSession` is the microphone and a worker
+/// isolate, and there is one of each — so it is written down here rather than
+/// assumed from there being one page. Two are reachable: the assistant gesture
+/// pushes a voice page over whatever is on screen, a running session included.
+///
+/// The controller itself rather than its key, because the key is how a page was
+/// opened and two sessions can share one — see "Taking turns".
+class RunningVoice extends Notifier<VoiceController?> {
+  @override
+  VoiceController? build() => null;
+
+  void claim(VoiceController voice) => state = voice;
+
+  /// Only its own claim: a session shutting down after another has taken over
+  /// must not take the new one's microphone away with it. And only while there
+  /// is somewhere to release it to — a session is shut down from `onDispose`,
+  /// which on the way out of the app runs after this has gone itself.
+  void release(VoiceController voice) {
+    if (ref.mounted && identical(state, voice)) state = null;
+  }
+}
+
+final runningVoiceProvider =
+    NotifierProvider<RunningVoice, VoiceController?>(RunningVoice.new);
+
+/// Keyed on the chat, or on null for a session with no chat yet.
+///
+/// **Auto-disposed, so a session lasts exactly as long as the page watching
+/// it.** That is what makes the null key safe to reuse: the next new voice
+/// chat builds a controller that has never heard of the last one's chat, with
+/// nothing to put back and no window in which the old one could be read.
+///
+/// The opposite of `chatControllerProvider`, deliberately: a turn outlives the
+/// page that started it and must go on being written down, where a microphone
+/// held open after its screen has gone is the bug. See "Taking turns".
+final voiceControllerProvider = NotifierProvider.autoDispose
+    .family<VoiceController, VoiceViewState, String?>(VoiceController.new);

@@ -31,6 +31,12 @@ it taking the settings branch rather than failing — is not something a test ca
 do by hand. `TestApp.pickVoiceModels` picks them, and wants a real clock:
 `io(tester, app.pickVoiceModels)`.
 
+`voiceControllerProvider` is auto-disposed — a voice session lives as long as
+its page — so a test that only `read`s it gets a controller that is gone by the
+next line. `voice_test.dart` holds one `container.listen` per session to stand
+in for the page that would be watching, and `leaveVoice` closing that hold is
+how a test leaves the page. Anything else auto-disposed wants the same shape.
+
 **The turn-level voice tests are `test`, not `testWidgets`**, for the reason
 `chat_controller_test.dart` is: a turn is driven by real futures, and
 `testWidgets` runs inside a fake clock where a bare `Future.delayed` only
