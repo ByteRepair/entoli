@@ -579,4 +579,58 @@ void main() {
       expect(meta.tempChatTtl, TempChatTtl.off);
     });
   });
+  group("deleting", () {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await settleIo(tester);
+    }
+
+    Future<void> confirmDelete(WidgetTester tester) async {
+      await tester.tap(find.text("Delete"));
+      await pumpUntil(tester, find.text("Delete chat?"));
+      await tester.tap(find.descendant(
+          of: find.byType(AlertDialog), matching: find.text("Delete")));
+      await settleIo(tester);
+    }
+
+    // The only thing that used to refresh the sidebar on a local deletion was
+    // the deleting widget's own ref.invalidate, called after awaits — and
+    // nothing reacted to the repo's Deleted event locally. When that invalidate
+    // did not take hold the row stayed in the list pointing at a chat whose data
+    // was gone.
+    testWidgets("deleting the open chat drops it from the list and closes it",
+        (tester) async {
+      await io(tester, app.openSomeChat);
+      await pumpBeside(tester, beside: const ChatPage());
+      expect(listed("old chat"), findsOneWidget);
+
+      await openMenu(tester);
+      await confirmDelete(tester);
+
+      expect(listed("old chat"), findsNothing);
+      expect(app.container.read(selectedChatIdProvider), isNull);
+      expect(await io(tester, () => app.repo.listChats()), isEmpty);
+    });
+
+    // The controller is not auto-disposed, so before the fix it stayed alive
+    // holding the deleted chat in memory: selecting its id again opened the
+    // cached conversation rather than an empty page.
+    testWidgets("re-selecting the deleted chat's id does not open its cached view",
+        (tester) async {
+      final chat = await io(tester, app.openSomeChat);
+      await pumpBeside(tester, beside: const ChatPage());
+      await openMenu(tester);
+      await confirmDelete(tester);
+
+      app.container
+          .read(selectedChatIdProvider.notifier)
+          .select(chat.state.id);
+      await tester.pump();
+
+      final pane = find.byType(ChatPage);
+      expect(
+          find.descendant(of: pane, matching: find.text("old chat")),
+          findsNothing);
+    });
+  });
 }

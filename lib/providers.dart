@@ -677,9 +677,22 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 /// The sidebar's list: the chats on disk, in every project — each says which
 /// one it is in. A new chat joins when its first message is saved, and whoever
 /// changes what the list shows invalidates it.
-final chatListProvider = FutureProvider((ref) async {
+final chatListProvider = FutureProvider<List<ChatState>>((ref) async {
   final repo = ref.watch(chatRepositoryProvider);
   return repo.listChats();
+});
+
+/// Keeps the sidebar's list in step with local deletions. The widget that
+/// asked for a delete invalidates [chatListProvider] too, but its ref may be
+/// gone by the time the await returns; this listens to the repo's `Deleted`
+/// event so the row pointing at a chat whose data is gone cannot stay up. Read
+/// once at startup to keep the subscription alive for the app's lifetime.
+final chatDeletionRefreshProvider = Provider<void>((ref) {
+  final repo = ref.watch(chatRepositoryProvider);
+  final sub = repo.changes.listen((event) {
+    if (event is Deleted) ref.invalidate(chatListProvider);
+  });
+  ref.onDispose(sub.cancel);
 });
 
 /// The projects that exist, for the sidebar's switcher. The default project is
