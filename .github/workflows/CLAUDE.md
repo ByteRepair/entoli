@@ -6,11 +6,33 @@ the same tag. Either can fail without the other, and only the first checks the
 tag against pubspec — a version disagreement stops the binaries and deploys the
 site anyway.
 
-Two files are attached, each with a provenance attestation beside it: a signed
-`entoli-<version>.apk` and a `entoli-<version>-x86_64.AppImage`. There is no
-Play channel and so no App Bundle: the file on the release is the file that
-gets installed. Both carry the app's name rather than the package's, since a
-person is what downloads them.
+Four files are attached, each with a provenance attestation beside it: a signed
+`entoli-<version>-<abi>.apk` for each of `armeabi-v7a`, `arm64-v8a` and
+`x86_64`, and a `entoli-<version>-x86_64.AppImage`. There is no Play channel
+and so no App Bundle: the file on the release is the file that gets installed.
+They carry the app's name rather than the package's, since a person is what
+downloads them.
+
+**The APK is split per ABI, so a release page offers a choice rather than one
+file.** A universal APK carried three copies of every native library and a
+phone could use one of them — 125 MB of libraries where an arm64 device wants
+94 MB of them, most of that llama.cpp, which is built for arm64 alone. The cost
+is that a downloader has to know which one to take, and that **an installer
+matching `.apk` finds three**: Obtainium asks which, or takes a regex like
+`entoli-.*-arm64-v8a\.apk` to stop asking. There is no universal APK beside
+them, deliberately — a fourth file that installs anywhere would be the one
+everybody takes, which is the arithmetic above undone.
+
+**Flutter offsets the version code per ABI, and going back to one APK is
+therefore a downgrade.** Under `--split-per-abi` its Gradle plugin sets
+`versionCode` to `abi * 1000 + <the code below>`, with `armeabi-v7a` 1,
+`arm64-v8a` 2 and `x86_64` 4 — so 1.0.0 ships as 11000, 12000 and 14000 rather
+than 10000. Within one ABI that stays monotonic in the version, and it is above
+what a universal APK of the same version would carry, so the split installs
+over an unsplit past. The reverse does not: a universal APK published after
+this would report a *lower* code than what is on the phone and Android would
+refuse it. Undoing the split means the release that does it also bumps the
+version far enough to clear the offset.
 
 **`release.yml` builds none of it.** The builds are `release-build.yml`'s,
 which it calls with the tag and which is dispatchable on its own, so whether a
@@ -32,9 +54,13 @@ only `flutter pub get`: rebuilding an older release breaks if the script is
 renamed.
 
 **The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
-job of its own before either build. Both file names are composed there, because
+job of its own before either build. Every file name is composed there, because
 an attestation records its subject by name and the file attested is uploaded
-from a different job than the one that built it. A tag disagreeing with pubspec
+from a different job than the one that built it. That job also names the ABIs,
+which is what a split is expected to produce rather than what it chose — the
+build fails on an APK it named and did not get, so a Flutter that changes its
+default platforms is an error here rather than a release quietly missing a
+file. A tag disagreeing with pubspec
 fails that job, since a binary reporting a version nobody released cannot be
 talked out of it afterwards — and failing there costs seconds rather than two
 toolchain installs.
@@ -44,7 +70,8 @@ named by that same version — see "Migrations" in the root CLAUDE.md. Nothing i
 CI checks for one; the check is that the PR moving the files adds it.
 
 **The Android version code is derived from that version rather than stored**,
-as `major * 10000 + minor * 100 + patch` — 1.0.0 is 10000, 1.2.3 is 10203. So
+as `major * 10000 + minor * 100 + patch` — 1.0.0 is 10000, 1.2.3 is 10203, and
+Flutter adds the per-ABI offset above on top of it. So
 pubspec carries no `+build` suffix: a suffix would be a second number to bump
 and so a second number to forget, and forgetting it means a release that will
 not install over the one before it. **Minor and patch must stay below 100**, or
@@ -91,21 +118,26 @@ gh secret set ANDROID_KEY_PASSWORD
 ```
 
 **The publisher is a job of its own, so the one holding the keystore never also
-holds `contents: write`.** It attests each binary with
-`actions/attest-build-provenance` — one attestation per file rather than one
-naming both, so a bundle on the release is about the file it sits beside — and
-attaches the four, so a download can be checked against the build that made it:
+holds `contents: write`.** It is a matrix over the files the version job named,
+one run per binary, because `actions/attest-build-provenance` handed several
+subjects mints one bundle naming all of them and a bundle on the release should
+be about the file it sits beside. Each run attests its file and attaches the
+pair, so a download can be checked against the build that made it:
 
 ```sh
-gh attestation verify entoli-1.0.0.apk --repo Yiannis128/agent-chat
+gh attestation verify entoli-1.0.0-arm64-v8a.apk --repo Yiannis128/agent-chat
 ```
 
-Splitting also means a failed upload re-runs against the artifacts that were
-already built and checked rather than a rebuild that would have to be trusted
-to match. **A job that never checks out has no git remote**, which is the trap
-in that split: `gh release upload` reads the repository from it and fails with
-`not a git repository` pointing at the runner, so the publisher names the
-repository explicitly.
+The matrix is `fail-fast: false`, since each entry attests and uploads a
+different file: one that fails should leave the other three attached, and
+`--clobber` is what makes re-running it against them safe.
+
+Keeping the publisher out of the build also means a failed upload re-runs
+against the artifacts that were already built and checked rather than a rebuild
+that would have to be trusted to match. **A job that never checks out has no git
+remote**, which is the trap in that arrangement: `gh release upload` reads the
+repository from it and fails with `not a git repository` pointing at the
+runner, so the publisher names the repository explicitly.
 
 `workflow_dispatch` takes a tag and rebuilds an existing release for the same
 reason: recreating a release to retry a publish changes its timestamp and

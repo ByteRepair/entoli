@@ -1,7 +1,7 @@
 name: Release
 
 # Attaches the binaries a published release is downloaded from — a signed APK
-# and a Linux AppImage — to the tag they were built from, each with a
+# per ABI and a Linux AppImage — to the tag they were built from, each with a
 # provenance attestation beside it. `release-build.yml` is what builds them and
 # can be run on its own; `pages.yml` answers the same event for the web app.
 # See "Releasing" in CLAUDE.md.
@@ -37,7 +37,8 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   # A job of its own so the keystore and `contents: write` are never held by
-  # the same one.
+  # the same one, and one run of it per file so a bundle on the release is
+  # about the file it sits beside rather than naming all four.
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -45,47 +46,37 @@ jobs:
       contents: write # attach assets to the release
       id-token: write # mint the short-lived Sigstore signing certificate
       attestations: write # record the attestation against the repository
+    strategy:
+      # Each entry attests and uploads a different file, so one that fails
+      # should leave the other three attached rather than cancel them.
+      fail-fast: false
+      matrix:
+        asset: ${{ fromJSON(needs.build.outputs.assets) }}
     env:
-      APK: ${{ needs.build.outputs.apk }}
-      APPIMAGE: ${{ needs.build.outputs.appimage }}
+      FILE: ${{ matrix.asset.file }}
     steps:
       - uses: actions/download-artifact@v8.0.1
         with:
-          name: apk
+          name: ${{ matrix.asset.artifact }}
           path: dist
 
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: appimage
-          path: dist
-
-      # One each, so a bundle on the release is about the file beside it.
-      - id: attest-apk
+      - id: attest
         uses: actions/attest-build-provenance@v4.2.2
         with:
-          subject-path: dist/${{ env.APK }}
+          subject-path: dist/${{ matrix.asset.file }}
 
-      - id: attest-appimage
-        uses: actions/attest-build-provenance@v4.2.2
-        with:
-          subject-path: dist/${{ env.APPIMAGE }}
-
-      - name: Attach the binaries and their attestations to the release
+      - name: Attach the binary and its attestation to the release
         env:
           GH_TOKEN: ${{ github.token }}
-          APK_BUNDLE: ${{ steps.attest-apk.outputs.bundle-path }}
-          APPIMAGE_BUNDLE: ${{ steps.attest-appimage.outputs.bundle-path }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          cp "$APK_BUNDLE" "dist/$APK.sigstore.json"
-          cp "$APPIMAGE_BUNDLE" "dist/$APPIMAGE.sigstore.json"
+          cp "$BUNDLE" "dist/$FILE.sigstore.json"
           # --repo because gh reads it off the git remote otherwise, and this
           # job never checks out. --clobber so a re-run replaces the assets.
           gh release upload "$TAG" \
-            "dist/$APK" \
-            "dist/$APK.sigstore.json" \
-            "dist/$APPIMAGE" \
-            "dist/$APPIMAGE.sigstore.json" \
+            "dist/$FILE" \
+            "dist/$FILE.sigstore.json" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
@@ -93,12 +84,6 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "### GitHub release $TAG"
+            echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
             echo
-            echo 'Check a download against this build:'
-            echo
-            echo '```'
-            echo "gh attestation verify $APK --repo $GITHUB_REPOSITORY"
-            echo "gh attestation verify $APPIMAGE --repo $GITHUB_REPOSITORY"
-            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
