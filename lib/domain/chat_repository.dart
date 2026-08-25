@@ -285,7 +285,10 @@ class ChatRepository {
   /// Where the chat is in a built-in project, the project's spec answers for
   /// its profile, its memory and its workspace, and the takes on top — a
   /// headless turn's, where it parks on nothing — so a turn in one runs under
-  /// whatever the app ships it with, whatever the settings say.
+  /// whatever the app ships it with, whatever the settings say. A chat's own
+  /// `memoryOff` is one of those takes: it turns the subsystem off for this
+  /// chat alone, and where the project already took it away it cannot be given
+  /// back from here.
   Future<TurnSettings> _turnSettings(String chatId, {bool headless = false}) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
@@ -306,7 +309,7 @@ class ChatRepository {
       classifierModel: settings.classifierModelId,
       profile: profileUnder(builtIn,
           projectProfile: projectSettings.profile, appProfile: settings.profile),
-      memory: builtIn?.memory == MemoryPolicy.off
+      memory: builtIn?.memory == MemoryPolicy.off || meta.memoryOff == true
           ? MemorySettings.off
           : await _resolveMemory(settings, project),
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
