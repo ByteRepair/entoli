@@ -72,6 +72,10 @@ class BuiltinBackend implements AgentBackend {
   /// are about reads its own off the stream.
   final MemoryNotes _memoryNotes = MemoryNotes();
 
+  /// One consolidation at a time: the interval is the real limit, and the
+  /// flag is for the turn that finishes while the pass is still mid-call.
+  bool _consolidating = false;
+
   @override
   Stream<MemoryNote> get memoryNotes => _memoryNotes.notes;
 
@@ -328,8 +332,11 @@ class BuiltinBackend implements AgentBackend {
           settings.memory.extract &&
           memoryStore != null &&
           settings.memory.bgModel != null) {
-        // Unwatched on purpose: the turn is over, and the extraction must
-        // neither slow anything down nor be able to fail.
+        // Unwatched on purpose: the turn is over, and the background memory
+        // work must neither slow anything down nor be able to fail. The
+        // consolidation rides behind the extraction rather than beside it —
+        // the two would race over the store, and the call order is the
+        // script's in a test.
         unawaited(_extractMemories(
           store: memoryStore,
           chatId: chatId,
@@ -337,7 +344,8 @@ class BuiltinBackend implements AgentBackend {
           history: history,
           reply: reply,
           settings: settings,
-        ));
+        ).then((_) => _consolidateMemories(
+            store: memoryStore, chatId: chatId, settings: settings)));
       }
     } catch (e) {
       _fail(controller, "$e");
@@ -588,6 +596,82 @@ class BuiltinBackend implements AgentBackend {
       }
     } catch (e) {
       logFailure("memory", "extraction failed: $e");
+    }
+  }
+
+  /// The slow half of the memory's housekeeping: where extraction keeps what
+  /// one exchange is worth, consolidation tidies what the store has grown
+  /// into — the duplicates an exchange at a time leaves behind, the entries a
+  /// newer one superseded. It rides extraction's gate and runs unwatched like
+  /// it, but earns its model call with a threshold: a store grown past
+  /// [consolidationMinEntries], at most one pass per
+  /// [consolidationMinInterval], one at a time. A tidy store says nothing on
+  /// success, and a failure is a log line like any other background failure.
+  Future<void> _consolidateMemories({
+    required MemoryStore store,
+    required String chatId,
+    required TurnSettings settings,
+  }) async {
+    if (_consolidating) return;
+    _consolidating = true;
+    try {
+      final target =
+          _resolveModel(settings.memory.bgModel, settings.memory.bgProvider);
+      if (target == null) return;
+      final all = await store.entries();
+      // Pinned memories are the user's standing orders rather than store
+      // growth: the pass neither sees them nor may spend them.
+      final offered = [for (final entry in all) if (!entry.pinned) entry];
+      if (offered.length < consolidationMinEntries) return;
+      final now = DateTime.now();
+      final last = await store.lastConsolidated();
+      if (last != null && now.difference(last) < consolidationMinInterval) {
+        return;
+      }
+      final question = "Memories kept about this project:\n"
+          "${renderConsolidation(offered)}\n\n"
+          "Tidy these memories. Merge two entries that say the same thing by "
+          "rewriting one with the merged wording and spending the other; spend "
+          "an entry that is plainly superseded or contradicted by a newer one; "
+          "and leave everything else exactly as it is. Only what is listed "
+          "decides: never delete or change an entry on a guess, and where two "
+          "entries could be read either way, keep both. Reply with JSON only: "
+          "{\"memories\": [...], \"replaces\": {\"<id>\": \"...\"}, "
+          "\"delete\": [\"<id>]}, where replaces rewrites an entry by its id, "
+          "delete spends one, and memories is empty unless the merge leaves "
+          "behind a fact none of the entries held. If nothing is wrong, all "
+          "three empty.";
+      try {
+        final chunks = await target.client
+            .stream([LlmMessage(role: LlmRole.user, text: question)],
+                model: target.modelId)
+            .timeout(const Duration(seconds: 60))
+            .toList();
+        final answer =
+            chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
+        final ops = _maintainFrom(answer);
+        if (ops.add.isNotEmpty ||
+            ops.replaces.isNotEmpty ||
+            ops.delete.isNotEmpty) {
+          final pinned = {for (final entry in all) if (entry.pinned) entry.id};
+          await store.maintain(
+            delete: [for (final id in ops.delete) if (!pinned.contains(id)) id],
+            replaces: {
+              for (final e in ops.replaces.entries)
+                if (!pinned.contains(e.key)) e.key: e.value,
+            },
+            add: ops.add,
+            chat: chatId,
+          );
+        }
+        // The interval is owed whatever the pass found: an hour with nothing
+        // to tidy is an hour of not asking again.
+        await store.stampConsolidated(now);
+      } catch (e) {
+        logFailure("memory", "consolidation failed: $e");
+      }
+    } finally {
+      _consolidating = false;
     }
   }
 

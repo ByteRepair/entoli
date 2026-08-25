@@ -20,6 +20,7 @@ import "../../../domain/documents.dart" show writingSuffix;
 /// one costs nothing.
 const _logName = "memories.jsonl";
 const _indexName = "index.json";
+const _consolidatedName = "consolidated";
 
 /// How many memories a search may return.
 const recallLimit = 5;
@@ -39,6 +40,17 @@ const recallBlockChars = 2000;
 /// a large store does not take the prompt with it.
 const indexEntryChars = 150;
 const indexBlockChars = 4000;
+
+/// What a consolidation pass is owed, and how often it may come: the store
+/// must have grown past [consolidationMinEntries] live memories, and the last
+/// pass must be at least [consolidationMinInterval] old, before the pass
+/// earns its background model call.
+const consolidationMinEntries = 15;
+const consolidationMinInterval = Duration(hours: 1);
+
+/// The ceiling on the entries a consolidation pass is shown: past this the
+/// oldest are left out of the question, which is to say, of the tidying.
+const consolidationMaxEntries = 50;
 
 /// A memory, replayed out of the log. [chat] is the one that wrote it, or
 /// null where the user typed it in the explorer.
@@ -77,6 +89,7 @@ class MemoryStore {
 
   String get _logPath => fs.path.join(dir, _logName);
   String get _indexPath => fs.path.join(dir, _indexName);
+  String get _consolidatedPath => fs.path.join(dir, _consolidatedName);
 
   /// Every live memory, oldest first.
   Future<List<MemoryEntry>> entries() async => _replay(await _readLog());
@@ -141,6 +154,29 @@ class MemoryStore {
       "id": id,
       "at": DateTime.now().toUtc().toIso8601String(),
     }));
+  }
+
+  /// When the store was last tidied by a consolidation pass, for the interval
+  /// between passes. Nothing stamped, and a stamp that will not parse — a torn
+  /// write —, both read as never.
+  Future<DateTime?> lastConsolidated() async {
+    final file = fs.file(_consolidatedPath);
+    if (!await file.exists()) return null;
+    try {
+      return DateTime.tryParse((await file.readAsString()).trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The stamp a finished consolidation pass leaves behind: the next one is an
+  /// interval away. Written through a rename, the way the index is.
+  Future<void> stampConsolidated(DateTime at) async {
+    final directory = fs.directory(dir);
+    if (!await directory.exists()) await directory.create(recursive: true);
+    final temp = fs.file("$_consolidatedPath$writingSuffix");
+    await temp.writeAsString(at.toUtc().toIso8601String());
+    await temp.rename(_consolidatedPath);
   }
 
   /// The maintenance half of the store: the ops a model reports after it has
@@ -415,4 +451,17 @@ String renderRecall(List<MemoryEntry> memories, {bool withIds = false}) {
     if (total > recallBlockChars) break;
   }
   return lines.join("\n");
+}
+
+/// The whole store as the consolidation pass's question: every entry in full
+/// with its id, newest first, cut at [consolidationMaxEntries]. The recall
+/// caps do not apply — the pass decides over the whole store, and a fact cut
+/// to a line is a fact it cannot judge.
+String renderConsolidation(List<MemoryEntry> memories) {
+  if (memories.isEmpty) return "";
+  return memories
+      .reversed
+      .take(consolidationMaxEntries)
+      .map((memory) => "- [${memory.id}] ${memory.text.trim()}")
+      .join("\n");
 }

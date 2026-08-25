@@ -1398,6 +1398,151 @@ void main() {
       expect(await store.entries(), isEmpty);
     });
   });
+
+  group("tidying the memories in the background", () {
+    late MemoryStore store;
+
+    MemorySettings memory() => MemorySettings(
+          autoMemory: true,
+          extract: true,
+          memoryDir: config.memoryDir(),
+          bgModel: "fake-model",
+          bgProvider: "fake",
+        );
+
+    setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
+
+    /// A store grown to [n] facts, one memory each.
+    Future<List<MemoryEntry>> seed(int n) async =>
+        [for (var i = 0; i < n; i++) await store.add("the user likes thing $i")];
+
+    /// The consolidation's own question, out of what the client was sent.
+    String tidyQuestion() {
+      for (final call in client.sent) {
+        final asked =
+            [for (final m in call) m.text].where((t) => t.contains("Tidy")).toList();
+        if (asked.length == 1) return asked.single;
+      }
+      fail("the consolidation was never asked");
+    }
+
+    /// The pass's stamp is what says it is done: whatever it wrote is in by
+    /// the time it leaves one.
+    Future<void> untilStamped() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (await store.lastConsolidated() == null) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the pass never stamped");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    test("a store that has not grown is never asked to be tidied", () async {
+      await seed(3);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+
+      await pumpEvents();
+      expect(client.sent, hasLength(2));
+      expect(await store.lastConsolidated(), isNull);
+    });
+
+    test("a grown store is merged and pruned behind the turn", () async {
+      final entries = await seed(consolidationMinEntries);
+      final keep = entries.first;
+      final spend = entries[1];
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "replaces": {keep.id: "the user likes things one and two"},
+          "delete": [spend.id],
+        }))],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+
+      await untilMemory(store, "the user likes things one and two");
+      await untilStamped();
+      final texts = [for (final e in await store.entries()) e.text];
+      expect(texts, isNot(contains("the user likes thing 1")));
+      expect(texts, hasLength(consolidationMinEntries - 1));
+      // The pass was asked the whole store.
+      final question = tidyQuestion();
+      expect(question, contains(entries.last.id));
+      expect(question, contains(keep.id));
+    });
+
+    test("a tidied store is not asked again inside the interval", () async {
+      await seed(consolidationMinEntries);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly('{"memories": [], "replaces": {}, "delete": []}')],
+        // The second turn: the agent and its extraction, and nothing after.
+        [finish],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "one", memory: memory());
+      await untilStamped();
+
+      await send(backend, "two", memory: memory());
+      await pumpEvents();
+
+      expect(client.sent, hasLength(5));
+    });
+
+    test("a pass that finds nothing still stamps its hour", () async {
+      await seed(consolidationMinEntries);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly('{"memories": [], "replaces": {}, "delete": []}')],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+      await untilStamped();
+
+      expect((await store.entries()).length, consolidationMinEntries);
+    });
+
+    test("pinned memories are neither offered nor spent", () async {
+      // One over the threshold: the pinned entry is not offered, so it is
+      // not counted either.
+      final entries = await seed(consolidationMinEntries + 1);
+      final pinnedEntry = entries.first;
+      final spend = entries[1];
+      await store.pin(pinnedEntry.id);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "delete": [pinnedEntry.id, spend.id],
+        }))],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while ((await store.entries()).any((e) => e.id == spend.id)) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the store never spent the memory");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      final remaining = await store.entries();
+      expect(remaining.where((e) => e.id == pinnedEntry.id).single.pinned, isTrue);
+      expect(tidyQuestion(), isNot(contains(pinnedEntry.id)));
+    });
+  });
 }
 
 /// Let the agent's own async work run before looking at what it has published.

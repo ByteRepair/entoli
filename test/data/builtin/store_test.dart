@@ -319,4 +319,40 @@ void main() {
       expect(block.length, lessThan(recallBlockChars + recallEntryChars + 10));
     });
   });
+
+  group("consolidation", () {
+    test("the stamp is nothing until it is written, then the time it was given",
+        () async {
+      expect(await store.lastConsolidated(), isNull);
+      final then = DateTime.utc(2026, 1, 2, 3);
+      await store.stampConsolidated(then);
+      expect(await store.lastConsolidated(), then);
+    });
+
+    test("a stamp that will not parse reads as never", () async {
+      final directory = Directory(dir);
+      directory.createSync(recursive: true);
+      File(p.join(dir, "consolidated")).writeAsStringSync("torn");
+      expect(await store.lastConsolidated(), isNull);
+    });
+
+    test("the pass is shown every entry in full, newest first", () async {
+      final first = await store.add("an older memory");
+      final newer = await store.add("a newer memory");
+      final block = renderConsolidation(await store.entries());
+      expect(block, "- [${newer.id}] a newer memory\n- [${first.id}] an older memory");
+    });
+
+    test("a grown store is cut at the ceiling, the oldest out", () {
+      final n = consolidationMaxEntries + 10;
+      final entries = [
+        for (var i = 0; i < n; i++)
+          MemoryEntry(id: "id$i", text: "memory $i", at: DateTime(2026)),
+      ];
+      final block = renderConsolidation(entries);
+      expect(block, isNot(contains("- [id${n - consolidationMaxEntries - 1}]")));
+      expect(block, contains("- [id${n - consolidationMaxEntries}]"));
+      expect(block.split("\n"), hasLength(consolidationMaxEntries));
+    });
+  });
 }
