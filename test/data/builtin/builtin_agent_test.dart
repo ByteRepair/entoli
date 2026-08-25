@@ -6,6 +6,9 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/data/builtin/memory/instructions.dart";
+import "package:agent_chat/data/builtin/memory/store.dart";
+import "package:agent_chat/data/builtin/memory_tools.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/artifact.dart";
@@ -35,6 +38,10 @@ void main() {
     ApproveMode approveMode = ApproveMode.never,
     bool canRunCommands = true,
     Future<String> Function(String path, {String? artifactId})? saveArtifact,
+    MemorySettings memory = MemorySettings.off,
+    List<InstructionFile> instructions = const [],
+    MemoryStore? memoryStore,
+    String? memoryChat,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     final testWorkspace = p.join(tempDir.path, "workspace");
@@ -58,6 +65,10 @@ void main() {
       // Nothing picked, unless the test says what was.
       answer: (request) async => answers ?? request.unanswered,
       saveArtifact: saveArtifact,
+      memory: memory,
+      instructions: instructions,
+      memoryStore: memoryStore,
+      memoryChat: memoryChat,
     );
   }
 
@@ -140,6 +151,35 @@ void main() {
       expect(client.sent.first.first.text,
           isNot(contains("You only read; you never edit.")));
       expect(client.sent.first[1].text, contains("You only read; you never edit."));
+    });
+
+    test("workspace instructions ride the second system message", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(
+        client,
+        instructions: const [
+          InstructionFile(
+              path: "/ws/AGENTS.md",
+              kind: InstructionKind.project,
+              content: "project rules"),
+        ],
+      ).run(userMessage("hi")).toList();
+
+      // In the per-turn message, not the body: the body has to stay the same
+      // string for every chat, which is what the on-device cache warms.
+      expect(client.sent.first.first.text, isNot(contains("project rules")));
+      expect(client.sent.first[1].text, contains("project rules"));
+      expect(client.sent.first[1].text, contains("Workspace instructions"));
+    });
+
+    test("no instructions means no instructions section", () async {
+      final client = FakeLlmClient([
+        [finish],
+      ]);
+      await agentOver(client).run(userMessage("hi")).toList();
+      expect(client.sent.first[1].text, isNot(contains("Workspace instructions")));
     });
   });
 
@@ -804,6 +844,44 @@ void main() {
       expect(results[1].result.output, contains("hello world"));
     });
 
+    test("reading a file pulls in a subdirectory's AGENTS.md when nested is on",
+        () async {
+      final client = FakeLlmClient([
+        [readCall("sub/notes.txt")],
+        [finish],
+      ]);
+      final agent = agentOver(client, memory: const MemorySettings(nested: true));
+      Directory(p.join(agent.workspace, "sub")).createSync(recursive: true);
+      File(p.join(agent.workspace, "sub", "notes.txt")).writeAsStringSync("hi");
+      File(p.join(agent.workspace, "sub", "AGENTS.md"))
+          .writeAsStringSync("sub rules");
+
+      final events = await agent.run(userMessage("read it")).toList();
+
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.output, contains("hi"));
+      expect(result.output, contains("sub rules"));
+      expect(result.output, contains("instructions for this directory"));
+    });
+
+    test("nested instructions are not injected when the gate is off", () async {
+      final client = FakeLlmClient([
+        [readCall("sub/notes.txt")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      Directory(p.join(agent.workspace, "sub")).createSync(recursive: true);
+      File(p.join(agent.workspace, "sub", "notes.txt")).writeAsStringSync("hi");
+      File(p.join(agent.workspace, "sub", "AGENTS.md"))
+          .writeAsStringSync("sub rules");
+
+      final events = await agent.run(userMessage("read it")).toList();
+
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.output, contains("hi"));
+      expect(result.output, isNot(contains("sub rules")));
+    });
+
     test("edit replaces a unique string", () async {
       final client = FakeLlmClient([
         [writeCall("test.txt", "foo bar baz")],
@@ -895,6 +973,95 @@ void main() {
       final tools = client.calls.first.tools.map((t) => t.name).toSet();
       expect(tools, containsAll(["read", "write", "edit"]));
       expect(tools, isNot(contains("bash")));
+    });
+  });
+
+  group("memory tools", () {
+    late Directory tmp;
+    late MemoryStore store;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync("agent_memory_test_");
+      store = MemoryStore(fileSystemIo, p.join(tmp.path, "memory"));
+    });
+
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    test("the tools are offered only where there is a store", () async {
+      final without = FakeLlmClient([[finish]]);
+      await agentOver(without).run(userMessage("hi")).toList();
+      final withoutTools = without.calls.first.tools.map((t) => t.name).toSet();
+      expect(withoutTools, isNot(contains(memorySaveToolName)));
+      expect(withoutTools, isNot(contains(memorySearchToolName)));
+
+      final with_ = FakeLlmClient([[finish]]);
+      await agentOver(with_, memoryStore: store)
+          .run(userMessage("hi"))
+          .toList();
+      final withTools = with_.calls.first.tools.map((t) => t.name).toSet();
+      expect(withTools, containsAll([memorySaveToolName, memorySearchToolName]));
+    });
+
+    test("memory_save appends to the store, stamped with the chat", () async {
+      final client = FakeLlmClient([
+        [fileCall(memorySaveToolName, {"text": "the user prefers tabs"})],
+        [finish],
+      ]);
+      final events = await agentOver(client, memoryStore: store, memoryChat: "chat-1")
+          .run(userMessage("remember this"))
+          .toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, 0);
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.text, "the user prefers tabs");
+      expect(entries.single.chat, "chat-1");
+    });
+
+    test("memory_save refuses an empty text", () async {
+      final client = FakeLlmClient([
+        [fileCall(memorySaveToolName, {"text": "   "})],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, memoryStore: store).run(userMessage("save")).toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, -1);
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("memory_search returns the memories it is about", () async {
+      await store.add("the user prefers tabs over spaces");
+      await store.add("notes about the weather");
+
+      final client = FakeLlmClient([
+        [fileCall(memorySearchToolName, {"query": "how does the user like code"})],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, memoryStore: store).run(userMessage("look it up")).toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, 0);
+      expect(result.output, contains("the user prefers tabs over spaces"));
+      expect(result.output, isNot(contains("notes about the weather")));
+    });
+
+    test("memory_search answers nothing where nothing matches", () async {
+      await store.add("notes about the weather");
+
+      final client = FakeLlmClient([
+        [fileCall(memorySearchToolName, {"query": "completely unrelated words"})],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, memoryStore: store).run(userMessage("look it up")).toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, 0);
+      expect(result.output, contains("No memories match"));
     });
   });
 }

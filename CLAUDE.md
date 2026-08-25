@@ -30,7 +30,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-  Carrying one on, Web search
+  Carrying one on, Web search, Memory
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
@@ -86,7 +86,8 @@ with nothing either, which is why nothing user-facing names it at all.
 
 ### On-disk layout
 
-`<dataDir>/projects/<project>/` holds `chats/` and `workspace/`. A chat is
+`<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`.
+A chat is
 `chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
@@ -175,12 +176,14 @@ handed a filesystem and the data directory rather than an `AppConfig` for that
 reason, since `workspaceDir` answers for the layout this build has and an entry
 is about one that is gone. **An entry does nothing where what it moves is not
 there**, because it also runs over restored backups and over directories where
-the user deleted whatever it was looking for. Nothing has changed the layout
-since 1.0.0, so the chain is empty and there is no entry to copy.
+the user deleted whatever it was looking for. Nothing that needed moving has
+changed the layout since 1.0.0 — a directory created on first use, `memory/`
+the first — so the chain is empty and there is no entry to copy.
 
 ### Projects
 
-A project is a directory holding its own chats and one workspace they share.
+A project is a directory holding its own chats, one workspace they share, and
+its memories.
 The default project is `null` above the filesystem and `projects/default/` below
 it — one shape for every project rather than one project that is also the data
 directory. `AppConfig`'s path helpers all take `{String? project}`, and passing

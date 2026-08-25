@@ -30,7 +30,7 @@ exported is found without having to be pasted in. Old files with the former
 `opencodeEnv` key still load, and rewrite themselves under the new name on the
 next save.
 
-The settings page is nine categories, picked from a panel beside it or, below
+The settings page is ten categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
@@ -67,8 +67,14 @@ see "The reminder editor" below, and "Waking for a reminder" in
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
 handshake. **Providers** is the endpoints.
-**LLMs** is what a new chat is answered by and what names it. **Data** is all of
-it at once, out as one file and back — see "Backing it all up". **About** is the
+**LLMs** is what a new chat is answered by and what names it. **Memory** is
+what one conversation leaves the others: the `AGENTS.md` files the workspaces
+are read from, with the imports they make and the nested ones found on a read,
+and the memories the app writes for itself, which the recall, extraction and
+tools sub-gates and the Memory LLM beside them steer — the two halves are
+"Memory" in `lib/data/builtin/CLAUDE.md`, and the memories themselves are
+looked at on a page the settings draw. **Data** is all of it at once, out as
+one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app
 is".
 

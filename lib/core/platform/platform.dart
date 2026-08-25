@@ -130,6 +130,10 @@ LocalPrefill? createLocalPrefill(
           offerAsk: true,
           offerTask: true,
           saveArtifact: true,
+          // A default turn has auto-memory off, so the warmed prefix carries
+          // no memory tools; a turn with them misses the cache rather than
+          // the cache serving a list no turn sends.
+          offerMemory: false,
         ),
       );
     },
