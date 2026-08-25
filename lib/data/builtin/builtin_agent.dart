@@ -1193,7 +1193,10 @@ class BuiltinAgent {
       return const ShellResult.failed("The turn was stopped before this command ran.");
     }
     final run = shell.start(command,
-        cwd: workspace, home: projectWorkspace, timeout: options.commandTimeout);
+        cwd: workspace,
+        home: projectWorkspace,
+        sharedHome: sharedWorkspace,
+        timeout: options.commandTimeout);
     _running = run;
     try {
       return await run.result;

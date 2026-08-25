@@ -375,6 +375,7 @@ class BuiltinBackend implements AgentBackend {
             workspace: workspace,
             project: project,
             sharedWorkspace: sharedWorkspace),
+        sharedHome: sharedWorkspace,
         timeout: options.commandTimeout);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.

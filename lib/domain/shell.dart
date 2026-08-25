@@ -117,10 +117,16 @@ abstract class Shell {
   const Shell();
 
   /// [cwd] is where the command starts, [home] the `HOME` it is given — the
-  /// chat's directory and the project workspace above it. Only a sandbox uses
-  /// [home]: on a desktop `HOME` is the user's own and stays that way.
+  /// chat's directory and the project workspace above it. A sandbox always
+  /// takes [home] for its guest, and so does a turn whose home it does not
+  /// share ([sharedHome] false): a home nothing shares is the chat's own.
+  /// Where the home is shared on a machine, `HOME` is the user's and stays
+  /// that way.
   ShellRun start(String command,
-      {required String cwd, required String home, required Duration timeout});
+      {required String cwd,
+      required String home,
+      required Duration timeout,
+      bool sharedHome = true});
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -149,7 +155,10 @@ class UnavailableShell extends Shell {
 
   @override
   ShellRun start(String command,
-          {required String cwd, required String home, required Duration timeout}) =>
+          {required String cwd,
+          required String home,
+          required Duration timeout,
+          bool sharedHome = true}) =>
       const _Unavailable();
 }
 
