@@ -456,18 +456,18 @@ chat's own project where there *is* one, rather than
 `selectedProjectProvider` — so on a chat that exists the row says where this
 conversation is, and on the new-chat screen it says where the next one goes.
 
- **The default project is nothing selected**, and so has no badge. It is not a
- project beside the others — it is the absence of one, which is what `null`
- already means everywhere else it is written down. A `Default` badge would say
- otherwise, and would be a thing to press to get back to where the app opens.
- Pressing the selected badge is that instead, which makes the row a set of
- toggles rather than a set with one always down.
- 
- The built-in projects have badges, and they are always on offer: `everyProject`
- leads with them after the default, so a user who has never made a project sees
- the built-ins alone rather than nothing. What the row names for one is its
- label, not its directory — `Anonymous`, not `anonymous` — the same rule the
- menus and the title bar keep.
+**The default project is nothing selected**, and so has no badge. It is not a
+project beside the others — it is the absence of one, which is what `null`
+already means everywhere else it is written down. A `Default` badge would say
+otherwise, and would be a thing to press to get back to where the app opens.
+Pressing the selected badge is that instead, which makes the row a set of
+toggles rather than a set with one always down.
+
+The built-in projects have badges, and they are always on offer: `everyProject`
+leads with them after the default, so a user who has never made a project sees
+the built-ins alone rather than nothing. What the row names for one is its
+label, not its directory — `Anonymous`, not `anonymous` — the same rule the
+menus and the title bar keep.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it
