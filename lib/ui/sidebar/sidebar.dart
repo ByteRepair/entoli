@@ -210,18 +210,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 children: [
                   const Expanded(child: _ProjectMenu()),
                   // The default project has no settings page; the workspace is
-                  // all one would hold.
-                  if (project != null)
-                    IconButton(
-                      icon: const Icon(Icons.settings),
-                      tooltip: "Project settings",
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ProjectSettingsPage(project: project),
-                        ),
-                      ),
-                    )
-                  else ...[
+                  // all one would hold. A built-in has neither a settings page
+                  // nor a shared workspace, so it has nothing to hold either.
+                  if (project == null) ...[
                     IconButton(
                       icon: const Icon(Icons.folder_outlined),
                       tooltip: _defaultWorkspaceTitle,
@@ -249,7 +240,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         ),
                       ),
                     ),
-                  ],
+                  ] else if (isProjectName(project))
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      tooltip: "Project settings",
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ProjectSettingsPage(project: project),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -803,7 +803,8 @@ class _ProjectMenu extends ConsumerWidget {
         value: () => _create(context, ref),
         child: const Text("New project…"),
       ),
-      if (selected != null)
+      // A built-in project cannot be deleted, so it is not offered one.
+      if (selected != null && isProjectName(selected))
         PopupMenuItem(
           value: () => _delete(context, ref, selected),
           child: const Text("Delete project…"),
