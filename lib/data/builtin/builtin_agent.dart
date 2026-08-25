@@ -205,7 +205,13 @@ List<LlmTool> agentTools({
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (caps.artifact) artifactTool,
-      if (offerMemory) ...[memorySaveTool, memorySearchTool],
+      if (offerMemory)
+        ...[
+          memorySaveTool,
+          memorySearchTool,
+          memoryUpdateTool,
+          memoryDeleteTool,
+        ],
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -646,6 +652,16 @@ class BuiltinAgent {
         continue;
       }
 
+      if (call.name == memoryUpdateToolName) {
+        yield* _memoryUpdate(call);
+        continue;
+      }
+
+      if (call.name == memoryDeleteToolName) {
+        yield* _memoryDelete(call);
+        continue;
+      }
+
       if (call.name == artifactToolName && saveArtifact != null) {
         yield* _artifact(call);
         continue;
@@ -1061,7 +1077,82 @@ class BuiltinAgent {
     yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
-          output: hits.isEmpty ? "No memories match." : renderRecall(hits),
+          // The ids ride with the hits: they are the update and delete
+          // tools' handles, and this is the only place the model sees them.
+          output:
+              hits.isEmpty ? "No memories match." : renderRecall(hits, withIds: true),
+        ));
+  }
+
+  /// The correction half of the in-turn writing: the replacement stands where
+  /// the old fact was, so a memory the user corrected is not left to drift
+  /// beside its newer version.
+  Stream<AgentEvent> _memoryUpdate(LlmToolCall call) async* {
+    final id = stringArg(call.argumentsJson, "id");
+    final text = stringArg(call.argumentsJson, "text");
+    final store = memoryStore;
+    if (id == null || text == null || store == null) {
+      yield* _reject(call,
+          'The $memoryUpdateToolName tool takes {"id": "...", "text": "..."}; '
+          "that argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: text,
+    ));
+    try {
+      await store.update(id, text, chat: memoryChat);
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The memory could not be updated: $e",
+          ));
+      return;
+    }
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Memory updated. The replacement stands where the old fact "
+              "was.",
+        ));
+  }
+
+  /// The half that costs a line in the log, not a new one: a fact the model
+  /// judged wrong or spent, so a later recall does not carry it.
+  Stream<AgentEvent> _memoryDelete(LlmToolCall call) async* {
+    final id = stringArg(call.argumentsJson, "id");
+    final store = memoryStore;
+    if (id == null || store == null) {
+      yield* _reject(call,
+          'The $memoryDeleteToolName tool takes {"id": "..."}; that argument '
+          "was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+    ));
+    try {
+      await store.delete(id);
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The memory could not be deleted: $e",
+          ));
+      return;
+    }
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Memory deleted, where it named an existing one.",
         ));
   }
 

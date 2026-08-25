@@ -397,8 +397,10 @@ String renderIndex(List<MemoryEntry> memories) {
 }
 
 /// The memories as a block of prompt text, the caps applied. Empty where
-/// there is nothing, so the caller sends no section then.
-String renderRecall(List<MemoryEntry> memories) {
+/// there is nothing, so the caller sends no section then. [withIds] is the
+/// tool's rendering: the ids the update and delete tools take, which the
+/// prompt's own recall does not need.
+String renderRecall(List<MemoryEntry> memories, {bool withIds = false}) {
   if (memories.isEmpty) return "";
   final lines = <String>[];
   var total = 0;
@@ -407,8 +409,9 @@ String renderRecall(List<MemoryEntry> memories) {
     if (text.length > recallEntryChars) {
       text = "${text.substring(0, recallEntryChars)}...";
     }
-    lines.add("- $text");
-    total += text.length + 2;
+    final line = withIds ? "- [${memory.id}] $text" : "- $text";
+    lines.add(line);
+    total += line.length + 1;
     if (total > recallBlockChars) break;
   }
   return lines.join("\n");
