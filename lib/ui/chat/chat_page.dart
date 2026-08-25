@@ -187,7 +187,6 @@ class _ProjectBadges extends ConsumerWidget {
     // `everyProject` leads with the default, which is the null that has no
     // badge; the rest are the built-in and the named.
     final projects = everyProject(named).whereType<String>().toList();
-    if (projects.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 20),
       child: Wrap(

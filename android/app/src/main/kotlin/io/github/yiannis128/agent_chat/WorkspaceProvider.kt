@@ -217,13 +217,14 @@ class WorkspaceProvider : DocumentsProvider() {
         chatId
     }
 
-    // `isProjectName`, in lib/domain/project.dart — it refuses the built-in
-    // projects' directories as well, which is what keeps them out of the tree:
-    // an anonymous chat's scratch is not something to browse in the Files app.
-    // Bar its refusal of `default`, a name Dart has no need of because `null`
-    // is the default project there, and a directory like any other here.
+    // The shape rule, `isProjectDirName` in lib/domain/project.dart, bar
+    // `default`, a name Dart has no need of because `null` is the default
+    // project there, and a directory like any other here. And a workspace
+    // that is not shared is not in the tree either, `UNBROWSED` below: a
+    // chat that must not reach past itself is not one whose scratch the
+    // Files app browses.
     private fun isProjectDir(name: String) =
-        name.isNotEmpty() && !name.startsWith(".") && !name.contains('/') && name !in BUILTIN
+        name.isNotEmpty() && !name.startsWith(".") && !name.contains('/') && name !in UNBROWSED
 
     // `viewerMime`, in lib/data/mime.dart: octet-stream throws away the one fact
     // that decides whether anything opens the file at all, so an unrecognised
@@ -258,10 +259,12 @@ class WorkspaceProvider : DocumentsProvider() {
         // `defaultProjectDir`, in lib/domain/project.dart.
         const val DEFAULT = "default"
 
-        // The built-in projects' directories, in lib/domain/builtin_project.dart,
-        // restated because no Dart is running when this is queried. Kept in step
-        // by hand, like `DEFAULT`.
-        val BUILTIN = setOf("anonymous")
+        // The built-in projects' directories whose workspace is not shared,
+        // in lib/domain/builtin_project.dart, restated because no Dart is
+        // running when this is queried. Kept in step by hand, like `DEFAULT`.
+        // A built-in that shared its workspace would be in the tree like any
+        // other project, and would leave this set.
+        val UNBROWSED = setOf("anonymous")
 
         // `projects/<name>/workspace`, which every reachable path starts with.
         const val WORKSPACE_DEPTH = 3

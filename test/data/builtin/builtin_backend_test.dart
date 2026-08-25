@@ -85,6 +85,9 @@ void main() {
     String text, {
     String? model = "fake-model",
     String? provider = "fake",
+    String? project,
+    bool sharedWorkspace = true,
+    Set<AgentCapability> disabled = const {},
     List<Message> history = const [],
     List<MessagePart> files = const [],
     Map<String, String> documents = const {},
@@ -100,8 +103,11 @@ void main() {
               settings: TurnSettings(
                   model: model,
                   provider: provider,
+                  project: project,
                   approveMode: ApproveMode.never,
-                  memory: memory))
+                  memory: memory,
+                  sharedWorkspace: sharedWorkspace,
+                  disabled: disabled))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -282,15 +288,7 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      await backend
-          .sendPrompt(chatId, userMessage("hi", at: sentAt),
-              settings: const TurnSettings(
-                  model: "fake-model",
-                  provider: "fake",
-                  project: "anonymous",
-                  approveMode: ApproveMode.never,
-                  sharedWorkspace: false))
-          .toList();
+      await send(backend, "hi", project: "anonymous", sharedWorkspace: false);
 
       final workspace = config.workspaceDir(chatId, project: "anonymous");
       final system = client.sent.first[1].text;
@@ -302,15 +300,7 @@ void main() {
 
     test("a ! command with no shared workspace homes in the chat's own", () async {
       final backend = backendOver([], respond: (_) => ok(""));
-      await backend
-          .sendPrompt(chatId, userMessage("!pwd", at: sentAt),
-              settings: const TurnSettings(
-                  model: "fake-model",
-                  provider: "fake",
-                  project: "anonymous",
-                  approveMode: ApproveMode.never,
-                  sharedWorkspace: false))
-          .toList();
+      await send(backend, "!pwd", project: "anonymous", sharedWorkspace: false);
 
       final workspace = config.workspaceDir(chatId, project: "anonymous");
       expect(shell.cwds, [workspace]);
@@ -324,14 +314,7 @@ void main() {
       final backend = backendOver([
         [finish],
       ]);
-      await backend
-          .sendPrompt(chatId, userMessage("hi", at: sentAt),
-              settings: const TurnSettings(
-                  model: "fake-model",
-                  provider: "fake",
-                  approveMode: ApproveMode.never,
-                  disabled: {AgentCapability.task}))
-          .toList();
+      await send(backend, "hi", disabled: {AgentCapability.task});
 
       final system = client.sent.first[0].text;
       expect(system, isNot(contains("to delegate a task to a sub-agent")));

@@ -14,7 +14,6 @@ class BuiltinProject {
     required this.dir,
     required this.label,
     this.profilePolicy = ProfilePolicy.inherit,
-    this.profile,
     this.memory = MemoryPolicy.app,
     this.sharedWorkspace = true,
     this.disabled = const {},
@@ -28,9 +27,6 @@ class BuiltinProject {
 
   /// What the turn's "About the user" is.
   final ProfilePolicy profilePolicy;
-
-  /// The profile, when [profilePolicy] is [ProfilePolicy.fixed].
-  final Profile? profile;
 
   /// Whether project memory runs for a turn in it.
   final MemoryPolicy memory;
@@ -53,9 +49,6 @@ enum ProfilePolicy {
 
   /// Nothing: neither the project's nor the app's profile is read.
   none,
-
-  /// The project's own [BuiltinProject.profile] alone; nothing else is read.
-  fixed,
 }
 
 /// Whether project memory runs for the turn.
@@ -110,13 +103,7 @@ Profile? profileUnder(
   BuiltinProject? spec, {
   required Profile? projectProfile,
   required Profile? appProfile,
-}) {
-  switch (spec?.profilePolicy ?? ProfilePolicy.inherit) {
-    case ProfilePolicy.inherit:
-      return projectProfile ?? appProfile;
-    case ProfilePolicy.none:
-      return null;
-    case ProfilePolicy.fixed:
-      return spec?.profile;
-  }
-}
+}) =>
+    spec?.profilePolicy == ProfilePolicy.none
+        ? null
+        : projectProfile ?? appProfile;

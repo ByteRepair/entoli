@@ -19,6 +19,16 @@ class AgentCapabilities {
     required this.artifact,
   });
 
+  /// The full set, before the platform's facts or a project's takes away any
+  /// of it: what a top-level turn in a user's project is offered.
+  static const AgentCapabilities full = AgentCapabilities(
+    commands: true,
+    webSearch: true,
+    ask: true,
+    task: true,
+    artifact: true,
+  );
+
   /// Whether a command can run at all: the platform's fact, which a project
   /// does not widen or narrow.
   final bool commands;

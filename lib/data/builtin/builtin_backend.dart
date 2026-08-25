@@ -172,12 +172,10 @@ class BuiltinBackend implements AgentBackend {
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
       final workspace = config.workspaceDir(chatId, project: project);
-      // Where the project's workspace is not shared, the chat's own is its
-      // `HOME` too, and a `project:` path resolves inside it: nothing reaches
-      // past the conversation.
-      final projectWorkspace = settings.sharedWorkspace
-          ? config.projectWorkspaceDir(project: project)
-          : workspace;
+      final projectWorkspace = _projectWorkspaceFor(
+          workspace: workspace,
+          project: project,
+          sharedWorkspace: settings.sharedWorkspace);
       // What this turn is offered: the device's facts minus a headless turn's
       // takes and the project's. One value, so the prompt and the tool list
       // cannot disagree.
@@ -347,6 +345,16 @@ class BuiltinBackend implements AgentBackend {
     }
   }
 
+  /// Where a turn in [project] reaches for the project's files, and the
+  /// `HOME` of its commands: the shared workspace where it is shared, the
+  /// chat's own otherwise, so that nothing reaches past the conversation.
+  String _projectWorkspaceFor({
+    required String workspace,
+    required String? project,
+    required bool sharedWorkspace,
+  }) =>
+      sharedWorkspace ? config.projectWorkspaceDir(project: project) : workspace;
+
   /// Run what [prompt] says and be done: no model call, no tools, and no
   /// approval, since the user typed the command rather than being asked to
   /// allow one.
@@ -363,8 +371,10 @@ class BuiltinBackend implements AgentBackend {
     final workspace = config.workspaceDir(chatId, project: project);
     final run = shell.start(command,
         cwd: workspace,
-        home:
-            sharedWorkspace ? config.projectWorkspaceDir(project: project) : workspace,
+        home: _projectWorkspaceFor(
+            workspace: workspace,
+            project: project,
+            sharedWorkspace: sharedWorkspace),
         timeout: options.commandTimeout);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.

@@ -220,8 +220,8 @@ void main() {
       expect(settings.disabled, isEmpty);
     });
 
-    // The same resolution the draft answers with before it is saved, and the
-    // default project keeps everything the app gives it.
+    // A draft is not on disk, so it answers for its own project: the same
+    // resolution a saved chat gets, before anything has written it.
     test("a draft in a built-in project resolves before it is saved", () async {
       final repo = repoWith(AppSettings(
         profile: const Profile(preferencesPrompt: "I like tea"),

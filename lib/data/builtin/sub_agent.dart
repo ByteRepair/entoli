@@ -38,13 +38,7 @@ class SubAgentRunner {
     this.webSearch,
     this.rateLimitGate,
     this.log = const NoSubAgentLog(),
-    this.caps = const AgentCapabilities(
-      commands: true,
-      webSearch: true,
-      ask: true,
-      task: true,
-      artifact: true,
-    ),
+    this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
   });
 
