@@ -153,11 +153,72 @@ class InfoEvent extends AgentEvent {
   final String message;
 }
 
+/// What a turn may read and remember, resolved once by `ChatRepository` from
+/// the app's gates over which project's store answers. [off] is the value
+/// while every gate is closed, which is the shipped default: a turn then
+/// carries nothing of this and the agent never touches a memory directory.
+class MemorySettings {
+  /// The master gate. Off, no AGENTS.md is read at all and the two sub-gates
+  /// below mean nothing.
+  final bool instructions;
+
+  /// Whether `@path` references inside an AGENTS.md are expanded into extra
+  /// files. A sub-gate of [instructions].
+  final bool imports;
+
+  /// Whether reading a file pulls in the AGENTS.md of a subdirectory that has
+  /// one. A sub-gate of [instructions].
+  final bool nested;
+
+  /// Whether the auto-memory subsystem runs at all.
+  final bool autoMemory;
+
+  /// Whether relevant memories are recalled into each turn. A sub-gate of
+  /// [autoMemory], on by default.
+  final bool recall;
+
+  /// Whether a background model writes memories from a turn after it ends.
+  /// A sub-gate of [autoMemory], on by default, inert beside it until [bgModel]
+  /// is picked.
+  final bool extract;
+
+  /// Whether the agent is offered the memory tools. A sub-gate of [autoMemory],
+  /// on by default.
+  final bool agentTool;
+
+  /// The effective store, or null when [autoMemory] is off. Which project's
+  /// it is — the chat's own or the default's — was resolved before this.
+  final String? memoryDir;
+
+  /// The background model that writes memories (extraction, consolidation).
+  /// Both halves or neither; null is the feature inert until one is picked.
+  final String? bgModel;
+  final String? bgProvider;
+
+  const MemorySettings({
+    this.instructions = false,
+    this.imports = false,
+    this.nested = false,
+    this.autoMemory = false,
+    this.recall = true,
+    this.extract = true,
+    this.agentTool = true,
+    this.memoryDir,
+    this.bgModel,
+    this.bgProvider,
+  });
+
+  static const off = MemorySettings();
+}
+
 /// Everything a turn runs under, resolved once by `ChatRepository` from the
 /// chat's `meta.json` over the app's `settings.json`. One value because every
 /// way of starting a turn takes all of it, and a forwarding site that drops one
 /// field is silent.
 class TurnSettings {
+  /// What this turn reads and remembers.
+  final MemorySettings memory;
+
   /// Only ever a matched pair: the registry keys clients by provider id.
   final String? model;
   final String? provider;
@@ -182,6 +243,7 @@ class TurnSettings {
   final bool offerTask;
 
   const TurnSettings({
+    this.memory = MemorySettings.off,
     this.model,
     this.provider,
     this.project,

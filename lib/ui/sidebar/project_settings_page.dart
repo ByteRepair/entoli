@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
+import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
@@ -87,6 +88,12 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: "Project workspace",
           ),
           const Divider(),
+          _UseProjectMemoryRow(project: project),
+          MemoryTile(
+            dir: ref.watch(appConfigProvider).memoryDir(project: project),
+            title: "Project memories",
+          ),
+          const Divider(),
           ListTile(
             title: const Text("Chats"),
             trailing: Text("$count"),
@@ -160,6 +167,27 @@ class _ProfileRow extends ConsumerWidget {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => ProfilePage(project: project)),
       ),
+    );
+  }
+}
+
+/// Whether this project keeps its own memory store or shares the default
+/// project's. Off, its chats read and write the default project's memories.
+class _UseProjectMemoryRow extends ConsumerWidget {
+  const _UseProjectMemoryRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(projectSettingsProvider(project).select((s) => s.useProjectMemory));
+    return SwitchListTile(
+      title: const Text("Project memory"),
+      subtitle: const Text(
+          "Off, this project's chats share the default project's memories."),
+      value: on,
+      onChanged: (value) =>
+          ref.read(projectSettingsProvider(project).notifier).setUseProjectMemory(value),
     );
   }
 }
