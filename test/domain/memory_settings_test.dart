@@ -8,6 +8,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/project_settings.dart";
 
@@ -221,6 +222,42 @@ void main() {
       final memory = backend.prompts.single.settings.memory;
       expect(memory.bgProvider, "ollama-cloud");
       expect(memory.bgModel, "qwen-2.5");
+    });
+
+    test("a chat that keeps out of memory runs with it off", () async {
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final chat = await repo.createChat(meta: ChatMeta(memoryOff: true));
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      expect(backend.prompts.single.settings.memory, MemorySettings.off);
+    });
+
+    test("one chat's keep-out does not reach the rest of the project",
+        () async {
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final off = await repo.createChat(meta: ChatMeta(memoryOff: true));
+      final on = await repo.createChat();
+
+      await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
+      await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
+
+      expect(backend.prompts.first.settings.memory, MemorySettings.off);
+      expect(backend.prompts.last.settings.memory.memoryDir,
+          config.memoryDir());
+    });
+
+    // The chat's off cannot be argued out of by a project that has a store.
+    test("the keep-out stands over a project's own store", () async {
+      makeProject("proj");
+      await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final chat = await repo.createChat(
+          project: "proj", meta: ChatMeta(memoryOff: true));
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      expect(backend.prompts.single.settings.memory, MemorySettings.off);
     });
   });
 }

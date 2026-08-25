@@ -495,7 +495,13 @@ otherwise. The Memory LLM — the half of extraction that writes — travels
 with its provider or not at all, and until one is picked nothing in the
 subsystem writes.
 
-Sub-agents run with `MemorySettings.off`: no recall in front of them, no
-tools in their hand, no extraction behind them. A sub-agent is a worker
-inside one turn, and the memories are the conversation's — what a worker
-learns is the turn's to keep, not the worker's to write down.
+A single chat can keep out of it too: its `meta.json` carries a `memoryOff`,
+and where it is set `_turnSettings` resolves `off` for that chat alone, before
+the project's and the app's answers are asked. It only ever weakens: a chat
+can turn the subsystem off, but it cannot turn it on for a project that has
+none, nor give it back to one that has taken it away.
+
+Sub-agents run with `MemorySettings.off`: no recall in front of them, no tools
+in their hand, no extraction behind them. A sub-agent is a worker inside one
+turn, and the memories are the conversation's — what a worker learns is the
+turn's to keep, not the worker's to write down.
