@@ -176,14 +176,14 @@ class BuiltinSession {
 LlmMessage agentSystemMessage({
   required String platform,
   Profile? profile,
-  required bool canRunCommands,
+  required AgentCapabilities caps,
 }) =>
     LlmMessage(
       role: LlmRole.system,
       text: systemPrompt(
         platform: platform,
         profile: profile,
-        canRunCommands: canRunCommands,
+        caps: caps,
       ),
     );
 
@@ -193,22 +193,18 @@ LlmMessage agentSystemMessage({
 /// two slightly different lists would cache a prefix no turn ever sends. The
 /// live turn is [BuiltinAgent._tools]; the cache is `LocalPrefill`.
 List<LlmTool> agentTools({
-  required bool canRunCommands,
-  required bool webSearchAvailable,
-  required bool offerAsk,
-  required bool offerTask,
-  required bool saveArtifact,
+  required AgentCapabilities caps,
   required bool offerMemory,
 }) =>
     [
       file_tool_defs.readTool,
       file_tool_defs.writeTool,
       file_tool_defs.editTool,
-      if (canRunCommands) bashTool,
-      if (offerAsk) askTool,
-      if (offerTask && canRunCommands) taskTool,
-      if (webSearchAvailable) ...[websearchTool, webfetchTool],
-      if (saveArtifact) artifactTool,
+      if (caps.commands) bashTool,
+      if (caps.ask) askTool,
+      if (caps.task) taskTool,
+      if (caps.webSearch) ...[websearchTool, webfetchTool],
+      if (caps.artifact) artifactTool,
       if (offerMemory) ...[memorySaveTool, memorySearchTool],
     ];
 
@@ -235,8 +231,14 @@ class BuiltinAgent {
     this.reasoningEffort,
     this.subAgentRunner,
     this.rateLimitGate,
-    this.offerTaskTool = true,
-    this.offerAskTool = true,
+    this.caps = const AgentCapabilities(
+      commands: true,
+      webSearch: true,
+      ask: true,
+      task: true,
+      artifact: true,
+    ),
+    this.sharedWorkspace = true,
     this.webSearch,
     this.profile,
     this.saveArtifact,
@@ -341,13 +343,18 @@ class BuiltinAgent {
   /// [BuiltinOptions.maxAttempts] path then governs 429s too.
   final RateLimitGate? rateLimitGate;
 
-  /// Whether to offer the `task` tool. Sub-agents run headless and do not
-  /// fan out themselves, so they pass `false`.
-  final bool offerTaskTool;
+  /// What this agent is offered, resolved once by the caller: the platform's
+  /// facts minus a headless turn's takes and a built-in project's. Sub-agents
+  /// pass the parent's `caps.unattended` — they run unattended, so they ask
+  /// nothing, fan out nothing, and publish nothing. Where the platform itself
+  /// cannot run something ([shell], [webSearch], a missing [subAgentRunner] or
+  /// [saveArtifact]), it is dropped below even if [caps] holds it.
+  final AgentCapabilities caps;
 
-  /// Whether to offer the `ask_user` tool. Sub-agents run unattended, so they
-  /// pass `false`.
-  final bool offerAskTool;
+  /// Whether the project's workspace is shared between its chats. When false,
+  /// the chat's own workspace is also its `HOME` and the prompt says nothing
+  /// of a shared one.
+  final bool sharedWorkspace;
 
   /// Web search and fetch. Null where neither is reachable — a browser sees
   /// `UnavailableWebSearch` and the tools are dropped the way `bash` is when
@@ -366,20 +373,24 @@ class BuiltinAgent {
   /// support) and copies the dir; the agent just passes the args through.
   final Future<String> Function(String path, {String? artifactId})? saveArtifact;
 
-  /// What the model may call. `bash` is dropped where nothing can run it —
-  /// offering a tool we could only ever answer with a failure invites one.
-  /// `task` is dropped where there is no [subAgentRunner] (a sub-agent) or
-  /// where the shell is unavailable. `ask_user` is dropped for sub-agents.
-  /// `websearch`/`webfetch` are dropped where there is no [webSearch] or it is
-  /// unavailable (a browser). `artifact` is dropped where there is no
-  /// [saveArtifact] (a sub-agent). `read`/`write`/`edit` are always offered —
-  /// they work on the `FileSystem`, which exists on every platform.
+  /// [caps] with the platform's facts applied where [caps] cannot know them:
+  /// a tool the device cannot run is not offered even if the turn was, and a
+  /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
+  /// and `artifact` the way [AgentCapabilities.unattended] does from the front.
+  AgentCapabilities get _offered => AgentCapabilities(
+        commands: caps.commands && shell.canRunCommands,
+        webSearch: caps.webSearch && (webSearch?.available ?? false),
+        ask: caps.ask,
+        task: caps.task && subAgentRunner != null,
+        artifact: caps.artifact && saveArtifact != null,
+      );
+
+  /// What the model may call, and what the system prompt says. One value for
+  /// both, so the prompt cannot advertise a tool the list does not carry.
+  /// `read`/`write`/`edit` are always offered — they work on the `FileSystem`,
+  /// which exists on every platform.
   List<LlmTool> get _tools => agentTools(
-        canRunCommands: shell.canRunCommands,
-        webSearchAvailable: webSearch?.available ?? false,
-        offerAsk: offerAskTool,
-        offerTask: offerTaskTool && subAgentRunner != null,
-        saveArtifact: saveArtifact != null,
+        caps: _offered,
         offerMemory: memoryStore != null,
       );
 
@@ -539,19 +550,21 @@ class BuiltinAgent {
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
   void _setSystemPrompt(String? agentPrompt) {
+    final caps = _offered;
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
       agentPrompt: agentPrompt,
       instructions: renderInstructions(instructions),
       recall: recall,
-      canRunCommands: shell.canRunCommands,
+      canRunCommands: caps.commands,
+      sharedWorkspace: sharedWorkspace,
     );
     final head = [
       agentSystemMessage(
         platform: shell.platformDescription,
         profile: profile,
-        canRunCommands: shell.canRunCommands,
+        caps: caps,
       ),
       if (turn.isNotEmpty) LlmMessage(role: LlmRole.system, text: turn),
     ];

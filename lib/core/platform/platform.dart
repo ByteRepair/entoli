@@ -4,6 +4,7 @@ import "package:fs_shim/fs.dart";
 
 import "../../data/builtin/builtin_agent.dart";
 import "../../data/builtin/builtin_backend.dart";
+import "../../data/builtin/templates.dart";
 import "../../data/builtin/llm/llm_client.dart";
 import "../../data/builtin/llm/llm_registry.dart";
 import "../../data/builtin/llm/local_kv_cache.dart";
@@ -109,27 +110,27 @@ LocalPrefill? createLocalPrefill(
     // prompt, so the two cannot be built from different snapshots.
     warmup: () {
       final now = AppSettings.load(config);
+      // What a default top-level turn is offered: the device's facts, no
+      // project's takes, nothing headless. A turn a built-in project narrows
+      // misses the warmed prefix rather than the cache serving a list no turn
+      // sends.
+      final caps = AgentCapabilities.forTurn(
+        commands: shell.canRunCommands,
+        webSearch: backend.webSearch.available,
+        disabled: const {},
+      );
       return (
         options: poolOptions(now),
         messages: [
           agentSystemMessage(
             platform: shell.platformDescription,
             profile: now.profile,
-            canRunCommands: shell.canRunCommands,
+            caps: caps,
           ),
           const LlmMessage(role: LlmRole.user, text: "Hello"),
         ],
-        // The tools a default top-level turn offers. `canRunCommands` and web
-        // search come from the same shell and search a turn uses; the three
-        // booleans are `BuiltinAgent`'s defaults for one — they must stay in
-        // step with those, or the warmed prefix is one no turn sends and the
-        // cache quietly stops hitting.
         tools: agentTools(
-          canRunCommands: shell.canRunCommands,
-          webSearchAvailable: backend.webSearch.available,
-          offerAsk: true,
-          offerTask: true,
-          saveArtifact: true,
+          caps: caps,
           // A default turn has auto-memory off, so the warmed prefix carries
           // no memory tools; a turn with them misses the cache rather than
           // the cache serving a list no turn sends.

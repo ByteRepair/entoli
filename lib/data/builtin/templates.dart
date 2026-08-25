@@ -1,26 +1,76 @@
 import "dart:convert";
 
 import "../../domain/ask.dart";
+import "../../domain/builtin_project.dart";
 import "../../domain/profile.dart";
 import "task_tool.dart";
+
+/// What a turn is offered, resolved from what this device can run minus what
+/// the turn is not offered. One value because the tool list and the system
+/// prompt are built from it: a prompt that advertises a tool the list does not
+/// carry is a call the model makes into silence, and one that withholds a tool
+/// the list offers is a refusal the model does not understand.
+class AgentCapabilities {
+  const AgentCapabilities({
+    required this.commands,
+    required this.webSearch,
+    required this.ask,
+    required this.task,
+    required this.artifact,
+  });
+
+  /// Whether a command can run at all: the platform's fact, which a project
+  /// does not widen or narrow.
+  final bool commands;
+  final bool webSearch;
+  final bool ask;
+  final bool task;
+  final bool artifact;
+
+  /// What this device can offer, minus what [disabled] takes away — the
+  /// project's takes, and a headless turn's.
+  AgentCapabilities.forTurn({
+    required bool commands,
+    required bool webSearch,
+    required Set<AgentCapability> disabled,
+  }) : this(
+          commands: commands,
+          webSearch: webSearch && !disabled.contains(AgentCapability.webSearch),
+          ask: !disabled.contains(AgentCapability.ask),
+          task: !disabled.contains(AgentCapability.task),
+          artifact: !disabled.contains(AgentCapability.artifact),
+        );
+
+  /// What a sub-agent runs under: unattended, so it asks nothing, fans out
+  /// nothing, and publishes nothing — there is no viewer to open what it made.
+  AgentCapabilities get unattended => AgentCapabilities(
+        commands: commands,
+        webSearch: webSearch,
+        ask: false,
+        task: false,
+        artifact: false,
+      );
+}
 
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
 /// and adapted for a conversation: upstream runs one task and exits, this is
 /// asked something else once the turn is over.
 ///
 /// **Nothing per-conversation is in here**, which is what makes it one string
-/// for every chat on the device and so one cacheable prefix. What is per-chat —
-/// the workspace, an `@agent`'s own instructions — is [turnPrompt], a second
-/// system message after this one. See "Prefilling the system prompt" in
-/// `lib/data/local/CLAUDE.md` for what that buys.
+/// for a device and a set of [AgentCapabilities] and so one cacheable prefix.
+/// What is per-chat — the workspace, an `@agent`'s own instructions — is
+/// [turnPrompt], a second system message after this one. See "Prefilling the
+/// system prompt" in `lib/data/local/CLAUDE.md` for what that buys. A
+/// capability the turn is not offered is not said: each section names only
+/// what [caps] holds.
 String systemPrompt({
   required String platform,
   Profile? profile,
-  bool canRunCommands = true,
+  required AgentCapabilities caps,
 }) =>
-    canRunCommands
-        ? _withShell(platform: platform, profile: profile)
-        : _withoutShell(profile: profile);
+    caps.commands
+        ? _withShell(platform: platform, profile: profile, caps: caps)
+        : _withoutShell(profile: profile, caps: caps);
 
 /// The half that changes: where this conversation's files are, and whatever an
 /// `@agent` mention added. Its own system message so the body above it is
@@ -36,23 +86,27 @@ String turnPrompt({
   String? instructions,
   String? recall,
   required bool canRunCommands,
+  bool sharedWorkspace = true,
 }) {
+  // The project's workspace is shared only where the project says so; a
+  // project that does not share one names nothing of it.
+  final shared = sharedWorkspace
+      ? "\n\n"
+          "It is a folder inside the project workspace, which is shared with "
+          "every other\nconversation in this project: $projectWorkspace\n"
+          "Work the user will come back to — a checkout, notes, data you "
+          "built up — goes\nthere, so another conversation can pick it up. "
+          "Write to it by path; you do not\nhave to be in it. Anything a "
+          "tool keeps in a home directory is the project's\ntoo, so a "
+          "repository cloned or a package installed by one conversation is\n"
+          "already there for the next."
+      : "";
   final parts = [
     if (canRunCommands)
-      """
-## Your workspace
-
-Every command runs in this conversation's own workspace: $workspace
-It is yours; the files in it survive between turns, and nothing else writes
-there.
-
-It is a folder inside the project workspace, which is shared with every other
-conversation in this project: $projectWorkspace
-Work the user will come back to — a checkout, notes, data you built up — goes
-there, so another conversation can pick it up. Write to it by path; you do not
-have to be in it. Anything a tool keeps in a home directory is the project's
-too, so a repository cloned or a package installed by one conversation is
-already there for the next.""",
+      "## Your workspace\n\n"
+          "Every command runs in this conversation's own workspace: $workspace\n"
+          "It is yours; the files in it survive between turns, and nothing else "
+          "writes\nthere.$shared",
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
     if (recall != null && recall.isNotEmpty)
@@ -88,18 +142,26 @@ String userTurnText(String text, {required DateTime at, required bool first}) =>
 /// same `FileSystem` the app uses, so a browser can still produce files and
 /// artifacts. The turn ends when it replies with text and calls no tool — the
 /// same termination signal the shell path uses.
-String _withoutShell({Profile? profile}) => """
-You are a helpful assistant.
-
-You are running in a browser, so you have no shell: you cannot run commands.
-You do have a filesystem in your workspace — use `read`, `write`, and `edit`
-to work with files there, and `artifact` to publish an HTML page the user can
-view. Prefix a path with `project:` to reach the project workspace.
-
-$_files
-$_asking
-$_artifacts
-${profileSection(profile)}""";
+String _withoutShell({Profile? profile, required AgentCapabilities caps}) {
+  // The artifact is named in the browser's one sentence about its files, so a
+  // turn that is not offered it drops the phrase rather than the sentence.
+  final artifact = caps.artifact
+      ? ", and `artifact` to publish an HTML page the user can\nview"
+      : "";
+  final sections = <String>[
+    _files,
+    if (caps.ask) _asking,
+    if (caps.artifact) _artifacts,
+  ].join("\n");
+  return "You are a helpful assistant.\n\n"
+      "You are running in a browser, so you have no shell: you cannot run "
+      "commands.\n"
+      "You do have a filesystem in your workspace — use `read`, `write`, "
+      "and `edit`\nto work with files there$artifact. Prefix a path with "
+      "`project:` to reach the project workspace.\n\n"
+      "$sections\n"
+      "${profileSection(profile)}";
+}
 
 /// The one thing both prompts say, because asking is the one thing the agent
 /// can do with or without a machine under it. Deliberately only what the tool's
@@ -144,89 +206,91 @@ keep the look working on the serif fallbacks the base stylesheet uses offline.
 To update an artifact, edit the files and call `artifact` again with the same
 `artifact_id`.""";
 
-String _withShell({required String platform, Profile? profile}) =>
-    """
-You are a helpful assistant that can interact with a computer to answer the
-user's questions and carry out their tasks.
+/// The step-2 sentence's list of what a call is for, one fragment per tool
+/// the turn is offered, in the order the sentence reads them.
+String _toolFragments(AgentCapabilities caps) {
+  final acts = [
+    "`bash` to run a command",
+    "`read`/`write`/`edit`\n   to work with files in the workspace",
+    if (caps.task) "`$taskToolName`\n   to delegate a task to a sub-agent",
+    if (caps.ask) "`$askToolName` to put a question to the\n   user",
+    if (caps.webSearch) "`websearch` to search the web, `webfetch` to read a page",
+    if (caps.artifact) "`artifact`\n   to publish an HTML page the user can view",
+  ];
+  if (acts.length == 1) return acts.single;
+  final head = acts.sublist(0, acts.length - 1).join(", ");
+  return acts.length == 2 ? "$head or ${acts.last}" : "$head, or ${acts.last}";
+}
 
-## How you act
-
-1. You write reasoning text saying what you are doing and why.
-2. You call a tool when you need to: `bash` to run a command, `read`/`write`/`edit`
-   to work with files in the workspace, `$taskToolName`
-   to delegate a task to a sub-agent, `$askToolName` to put a question to the
-   user, `websearch` to search the web, `webfetch` to read a page, or `artifact`
-   to publish an HTML page the user can view.
-3. The system runs the command and shows you the result.
-4. You continue, or you finish the turn.
-
-A command only runs when you call the `bash` tool with it. Writing a command
-as text, in a code block or otherwise, does nothing at all.
-
-Every command runs in a new subshell, so a `cd` or an export does not carry
-over to the next one. Prefix instead: `MY_VAR=value cd some/dir && ...`, or
-write what you need to a file and read it back.
-
-Your reasoning text is what the user reads as your reply, so write it for
-them: say what you found and what you did, not just what you are about to run.
-
-## Delegating to sub-agents
-
-The `$taskToolName` tool spawns a sub-agent with its own conversation and
-returns its final output when it finishes. Use it to fan out work that would
-otherwise crowd this conversation — a search, an extraction, a verification —
-and to run independent pieces in parallel. Several `$taskToolName` calls in
-one message run concurrently, so a fan-out of N is one step, not N.
-
-## Searching the web
-
-`websearch` queries DuckDuckGo and returns titles, URLs, and snippets.
-`webfetch` retrieves a URL and returns its text content with markup stripped.
-Use them together: `websearch` to find sources, then `webfetch` to read the
-ones that look relevant. Both are read-only, so they run without asking.
-
-$_files
-
-$_artifacts
-
-## Finishing a turn
-
-When you have the answer, reply with it as text and do not call any tool —
-that ends the turn and hands your reply to the user. A plain text reply is a
-finished answer, not a mistake.
-
-Finish the moment you have the answer. Do not keep running commands to look
-busy, and do not go looking for more to say. If the question needs no commands
-at all, say your answer and finish immediately.
-
-$_asking
-
-<system_information>
-$platform
-</system_information>
-
-## Useful command examples
-
-Create a file:
-
-```bash
-cat <<'EOF' > newfile.py
-print("hello")
-EOF
-```
-
-Edit a file in place:
-
-```bash
-sed -i 's/old_string/new_string/g' filename.py
-```
-
-Read part of a file with line numbers:
-
-```bash
-nl -ba filename.py | sed -n '10,20p'
-```
-${profileSection(profile)}""";
+String _withShell({
+  required String platform,
+  Profile? profile,
+  required AgentCapabilities caps,
+}) {
+  final sections = <String>[
+    if (caps.task)
+      "## Delegating to sub-agents\n\n"
+          "The `$taskToolName` tool spawns a sub-agent with its own "
+          "conversation and\nreturns its final output when it finishes. Use "
+          "it to fan out work that would\notherwise crowd this conversation "
+          "— a search, an extraction, a verification —\nand to run "
+          "independent pieces in parallel. Several `$taskToolName` calls in\n"
+          "one message run concurrently, so a fan-out of N is one step, not "
+          "N.",
+    if (caps.webSearch)
+      "## Searching the web\n\n"
+          "`websearch` queries DuckDuckGo and returns titles, URLs, and "
+          "snippets.\n`webfetch` retrieves a URL and returns its text "
+          "content with markup stripped.\nUse them together: `websearch` to "
+          "find sources, then `webfetch` to read the\nones that look "
+          "relevant. Both are read-only, so they run without asking.",
+    _files,
+    if (caps.artifact) _artifacts,
+    "## Finishing a turn\n\n"
+        "When you have the answer, reply with it as text and do not call any "
+        "tool —\nthat ends the turn and hands your reply to the user. A "
+        "plain text reply is a\nfinished answer, not a mistake.\n\nFinish "
+        "the moment you have the answer. Do not keep running commands to "
+        "look\nbusy, and do not go looking for more to say. If the question "
+        "needs no commands\nat all, say your answer and finish immediately.",
+    if (caps.ask) _asking,
+    "<system_information>\n$platform\n</system_information>",
+    "## Useful command examples\n\n"
+        "Create a file:\n\n"
+        "```bash\n"
+        "cat <<'EOF' > newfile.py\n"
+        'print("hello")\n'
+        "EOF\n"
+        "```\n\n"
+        "Edit a file in place:\n\n"
+        "```bash\n"
+        "sed -i 's/old_string/new_string/g' filename.py\n"
+        "```\n\n"
+        "Read part of a file with line numbers:\n\n"
+        "```bash\n"
+        "nl -ba filename.py | sed -n '10,20p'\n"
+        "```",
+   ];
+  return "You are a helpful assistant that can interact with a computer to "
+      "answer the\nuser's questions and carry out their tasks.\n\n"
+      "## How you act\n\n"
+      "1. You write reasoning text saying what you are doing and why.\n"
+      "2. You call a tool when you need to: ${_toolFragments(caps)}.\n"
+      "3. The system runs the command and shows you the result.\n"
+      "4. You continue, or you finish the turn.\n\n"
+      "A command only runs when you call the `bash` tool with it. Writing "
+      "a command\nas text, in a code block or otherwise, does nothing at "
+      "all.\n\n"
+      "Every command runs in a new subshell, so a `cd` or an export does "
+      "not carry\nover to the next one. Prefix instead: `MY_VAR=value cd "
+      "some/dir && ...`, or\nwrite what you need to a file and read it "
+      "back.\n\n"
+      "Your reasoning text is what the user reads as your reply, so write "
+      "it for\nthem: say what you found and what you did, not just what "
+      "you are about to run.\n\n"
+      "${sections.join("\n\n")}\n"
+      "${profileSection(profile)}";
+}
 
 /// The current moment, put at the top of a user turn so the model can date its
 /// answer. It rides on the message rather than the system prompt on purpose: a

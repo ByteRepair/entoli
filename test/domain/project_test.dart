@@ -1,5 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/project.dart";
 
 void main() {
@@ -45,5 +46,43 @@ void main() {
   test("the default project is labelled rather than left blank", () {
     expect(projectLabel(null), defaultProjectLabel);
     expect(projectLabel("work"), "work");
+  });
+
+  group("the built-in projects", () {
+    // The one the app ships today: a directory under projects/ like any
+    // other, but named by the app rather than the user.
+    final builtIn = builtinProjects.single;
+    final dir = builtIn.dir;
+
+    test("is a project-shaped directory name", () {
+      expect(dir, "anonymous");
+      expect(builtIn.label, "Anonymous");
+      expect(isProjectDirName(dir), isTrue);
+      expect(isBuiltinProject(dir), isTrue);
+      expect(builtinProjectOf(dir), same(builtIn));
+    });
+
+    // A second way to name it would be a second entry for it in every list,
+    // so the user cannot create, rename or delete one.
+    test("is not a name the user may create a project with", () {
+      expect(isProjectName(dir), isFalse);
+      expect(projectNameFrom("anonymous"), isNull);
+      expect(projectNameFrom("Anonymous"), isNull);
+    });
+
+    // It is read as a label rather than a path, and is always there to resolve
+    // to, since it cannot be deleted.
+    test("is labelled and always resolves to itself", () {
+      expect(projectLabel(dir), builtIn.label);
+      expect(projectOrDefault(dir, const []), dir);
+      expect(projectOrDefault("deleted", const []), isNull);
+    });
+
+    // Offered after the default and before the user's projects, and not twice.
+    test("is in everyProject once, after the default", () {
+      final all = everyProject(["work"]);
+      expect(all, [null, dir, "work"]);
+      expect(all.where((p) => p == dir), hasLength(1));
+    });
   });
 }

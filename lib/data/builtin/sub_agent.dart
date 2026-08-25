@@ -15,6 +15,7 @@ import "builtin_agent.dart";
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
 import "projection.dart";
+import "templates.dart";
 
 /// Spawns sub-agents for `task` tool calls. Each sub-agent gets a fresh
 /// [BuiltinSession], the named `@agent`'s body as its system-prompt overlay,
@@ -37,6 +38,14 @@ class SubAgentRunner {
     this.webSearch,
     this.rateLimitGate,
     this.log = const NoSubAgentLog(),
+    this.caps = const AgentCapabilities(
+      commands: true,
+      webSearch: true,
+      ask: true,
+      task: true,
+      artifact: true,
+    ),
+    this.sharedWorkspace = true,
   });
 
   final LlmClient client;
@@ -50,6 +59,16 @@ class SubAgentRunner {
   final double? temperature;
   final String? reasoningEffort;
   final WebSearch? webSearch;
+
+  /// What the parent turn is offered. A sub-agent runs unattended, so it takes
+  /// [AgentCapabilities.unattended] of this: no asking, no fanning out, no
+  /// publishing — whatever the parent was offered.
+  final AgentCapabilities caps;
+
+  /// Whether the project's workspace is shared, so a sub-agent's prompt says
+  /// nothing of one where it is not — the parent's [projectWorkspace] is the
+  /// chat's own there, and claiming it is shared would be a lie.
+  final bool sharedWorkspace;
 
   /// Shared with the parent agent and every sibling sub-agent, so the fan-out
   /// bounds in-flight requests and coordinates 429 backoff as one. Null where
@@ -120,8 +139,8 @@ class SubAgentRunner {
       reasoningEffort: reasoningEffort,
       approve: (_) async => ApprovalResponse.allow,
       answer: (_) async => const [],
-      offerTaskTool: false,
-      offerAskTool: false,
+      caps: caps.unattended,
+      sharedWorkspace: sharedWorkspace,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
     );

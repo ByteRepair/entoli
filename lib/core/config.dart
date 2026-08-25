@@ -69,10 +69,12 @@ class AppConfig {
   String get syncDir => fs.path.join(dataDir, "sync");
 
   /// Every project-scoped path goes through here, so this is where a name that
-  /// would reach outside `projects/` is refused rather than joined.
+  /// would reach outside `projects/` is refused rather than joined. A built-in
+  /// project's name has the directory shape, so it passes: a chat can be in
+  /// one. What refuses it is [isProjectName], where a user names a project.
   String projectDir({String? project}) {
     if (project == null) return fs.path.join(projectsDir, defaultProjectDir);
-    if (!isProjectName(project)) {
+    if (!isProjectDirName(project)) {
       throw ArgumentError.value(project, "project", "not a project name");
     }
     return fs.path.join(projectsDir, project);

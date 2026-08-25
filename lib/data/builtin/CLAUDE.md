@@ -38,12 +38,23 @@ litellm — how upstream reaches a provider at all — has native dependencies n
 of them can build. The loop is about a hundred lines of actual logic; the model
 clients are the large half of the work.
 
-The prompts live in `templates.dart`, adapted from upstream's `mini.yaml` for a
-conversation: upstream runs one task and exits, this is asked something else
-once the turn is over. A turn's prose streams into the bubble as `TextDelta`,
-its commands become tool labels, and a no-tool-call reply ends the turn.
-
-One thing the prompt has to say explicitly, learned from watching a real model
+ The prompts live in `templates.dart`, adapted from upstream's `mini.yaml` for a
+ conversation: upstream runs one task and exits, this is asked something else
+ once the turn is over. A turn's prose streams into the bubble as `TextDelta`,
+ its commands become tool labels, and a no-tool-call reply ends the turn.
+ 
+ **One value decides what the prompt names and what the tool list carries.**
+ `AgentCapabilities` is the effective per-turn set — the platform's facts (a
+ shell, web search) with the turn's `disabled` set folded out — and both the
+ system prompt and `agentTools` read it, so a capability a turn is not offered
+ is not advertised in the prompt either. The file tools are the floor and are
+ not in the set: every turn can read, write and edit in its own workspace. What
+ a turn *can run at all* is the platform's fact, which the set neither widens
+ nor narrows — `bash` and the prompt around it change with the shell, not with
+ the capabilities. Sub-agents read the same set through `unattended`, which
+ zeroes `ask` and `task`: a worker has nothing to ask and nothing to fan out to.
+ 
+ One thing the prompt has to say explicitly, learned from watching a real model
 fail: that a command only runs when the `bash` tool is called (a model shown a
 fenced ```` ```echo foo``` ```` will imitate the fence and write the line as
 prose, which does nothing). Finishing is native — the model just replies with

@@ -1,5 +1,7 @@
 import "package:path/path.dart" as p;
 
+import "builtin_project.dart";
+
 /// A project is a directory holding its own chats and a workspace they share.
 /// It is named by that directory, so the name is what the agent sees in a path
 /// and what the user types is made safe to be one.
@@ -8,34 +10,53 @@ import "package:path/path.dart" as p;
 /// other, and [defaultProjectDir] is its name; `null` rather than that string
 /// everywhere above the filesystem, because which project is the default is not
 /// a thing the UI or a stored setting should be able to disagree about.
+///
+/// A built-in project (`builtin_project.dart`) is a directory the same way,
+/// except the app names it: [isProjectName] refuses its name so one cannot be
+/// created, renamed or deleted, and [everyProject] is where it is offered.
 const defaultProjectLabel = "Default";
 
 /// The default project's directory, and so a name no other project may have.
 const defaultProjectDir = "default";
 
-String projectLabel(String? project) => project ?? defaultProjectLabel;
+String projectLabel(String? project) =>
+    project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
 
-/// Every project there is, the default one first — the order the menus offer
-/// them in, and the order a chat is looked for in.
-List<String?> everyProject(List<String> named) => [null, ...named];
+/// Every project there is, the default one first, then the built-in ones, then
+/// the user's — the order the menus offer them in, and the order a chat is
+/// looked for in.
+List<String?> everyProject(List<String> named) =>
+    [null, for (final builtIn in builtinProjects) builtIn.dir, ...named];
 
 /// A stored project name read against the projects there are: one that has
 /// since been deleted is the default project. A setting holds a name rather
 /// than a reference, so both ends of one have to resolve it the same way, or a
-/// field says `Default` while what it drives lands somewhere else.
+/// field says `Default` while what it drives lands somewhere else. A built-in
+/// name is always there — it cannot be deleted — so it resolves to itself
+/// without asking [existing].
 String? projectOrDefault(String? named, List<String> existing) =>
-    named != null && existing.contains(named) ? named : null;
+    named != null && (isBuiltinProject(named) || existing.contains(named))
+        ? named
+        : null;
 
-/// One directory under `projects/` and nothing else, bar the default project's:
-/// that one is `null` above the filesystem, so a second way to name it would be
-/// a second entry for it in every list. Anything else is a name that would
-/// reach outside `projects/`, and `projects/.hidden` is not a project either.
-/// Restated in Kotlin by `WorkspaceProvider`, which cannot call this.
+/// One directory under `projects/` and nothing else: the shape a project
+/// directory may have. The default project's and the built-in projects' names
+/// have it too — a chat can be in one — so path construction accepts them;
+/// what refuses them is [isProjectName]. Restated in Kotlin by
+/// `WorkspaceProvider`, which cannot call this.
+bool isProjectDirName(String name) =>
+    name.isNotEmpty && !name.startsWith(".") && name == p.basename(name);
+
+/// A name the user may create a project with: the directory shape, minus the
+/// names the app ships — the default project's and the built-in projects'.
+/// Those are named above the filesystem by `null` and by the app, so a second
+/// way to name one would be a second entry for it in every list. Anything else
+/// is a name that would reach outside `projects/`, and `projects/.hidden` is
+/// not a project either.
 bool isProjectName(String name) =>
-    name.isNotEmpty &&
-    !name.startsWith(".") &&
-    name == p.basename(name) &&
-    name.toLowerCase() != defaultProjectDir;
+    isProjectDirName(name) &&
+    name.toLowerCase() != defaultProjectDir &&
+    !isBuiltinProject(name);
 
 /// The directory name for what the user typed, or null if nothing usable is
 /// left of it. Deliberately strict: this ends up as a `cd` target in commands

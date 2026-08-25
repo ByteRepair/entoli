@@ -10,6 +10,7 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 
@@ -181,6 +182,75 @@ void main() {
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
       expect(backend.prompts.single.settings.project, "work");
+    });
+
+    // A built-in project is a directory the app ships rather than the user
+    // makes. A chat can be in one, but its name cannot be created or deleted,
+    // and a turn in it is resolved against its spec: no profile, no memory, no
+    // workspace it shares with another chat.
+    test("a built-in project's name cannot be created or deleted", () async {
+      final repo = repoWith(AppSettings());
+
+      // `createProject` throws before it returns a future; `deleteProject` is
+      // async, so its refusal is a future error.
+      expect(() => repo.createProject("anonymous"), throwsArgumentError);
+      await expectLater(repo.deleteProject("anonymous"), throwsArgumentError);
+    });
+
+    test("a turn in a built-in project drops the profile and memory", () async {
+      final repo = repoWith(AppSettings(
+        profile: const Profile(preferencesPrompt: "I like tea"),
+        autoMemory: true,
+      ));
+      final chat = await repo.createChat(project: "anonymous");
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, "anonymous");
+      // The app's profile is set, but the built-in says none.
+      expect(settings.profile, isNull);
+      // Auto-memory is on in the app, but the built-in says off.
+      expect(settings.memory.autoMemory, isFalse);
+      expect(settings.memory.instructions, isFalse);
+      // No shared workspace: the chat's own is its HOME too.
+      expect(settings.sharedWorkspace, isFalse);
+      // A watched turn: nothing is taken away beyond the built-in's (none).
+      expect(settings.disabled, isEmpty);
+    });
+
+    // The same resolution the draft answers with before it is saved, and the
+    // default project keeps everything the app gives it.
+    test("a draft in a built-in project resolves before it is saved", () async {
+      final repo = repoWith(AppSettings(
+        profile: const Profile(preferencesPrompt: "I like tea"),
+      ));
+      final chat = await repo.createChat(project: "anonymous");
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, "anonymous");
+      expect(settings.profile, isNull);
+      expect(settings.sharedWorkspace, isFalse);
+    });
+
+    test("the default project keeps the app's profile and memory", () async {
+      final repo = repoWith(AppSettings(
+        profile: const Profile(preferencesPrompt: "I like tea"),
+        autoMemory: true,
+      ));
+      final chat = await repo.createChat();
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, isNull);
+      expect(settings.profile, isNotNull);
+      expect(settings.memory.autoMemory, isTrue);
+      expect(settings.sharedWorkspace, isTrue);
     });
   });
 

@@ -30,6 +30,7 @@ import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
+import "templates.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which
@@ -151,7 +152,9 @@ class BuiltinBackend implements AgentBackend {
       // chat with no provider configured can still run a command.
       if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
         await _runBypass(chatId, prompt, controller,
-            history: history, project: project);
+            history: history,
+            project: project,
+            sharedWorkspace: settings.sharedWorkspace);
         return;
       }
 
@@ -169,7 +172,20 @@ class BuiltinBackend implements AgentBackend {
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
       final workspace = config.workspaceDir(chatId, project: project);
-      final projectWorkspace = config.projectWorkspaceDir(project: project);
+      // Where the project's workspace is not shared, the chat's own is its
+      // `HOME` too, and a `project:` path resolves inside it: nothing reaches
+      // past the conversation.
+      final projectWorkspace = settings.sharedWorkspace
+          ? config.projectWorkspaceDir(project: project)
+          : workspace;
+      // What this turn is offered: the device's facts minus a headless turn's
+      // takes and the project's. One value, so the prompt and the tool list
+      // cannot disagree.
+      final caps = AgentCapabilities.forTurn(
+        commands: shell.canRunCommands,
+        webSearch: webSearch.available,
+        disabled: settings.disabled,
+      );
       // One gate per turn, shared by the parent and every sub-agent it spawns:
       // bounds in-flight stream() calls and coordinates 429 backoff so a
       // fan-out doesn't each-retry-into the same rate limit.
@@ -191,6 +207,8 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         rateLimitGate: rateLimitGate,
         log: subAgentLog,
+        caps: caps,
+        sharedWorkspace: settings.sharedWorkspace,
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
@@ -258,10 +276,8 @@ class BuiltinBackend implements AgentBackend {
         recall: recall,
         memoryStore: settings.memory.agentTool ? memoryStore : null,
         memoryChat: settings.memory.agentTool ? chatId : null,
-        // A headless turn offers neither: an ask_user parks it on a completer
-        // nobody will complete, and there is nobody to watch a fan-out.
-        offerAskTool: settings.offerAsk,
-        offerTaskTool: settings.offerTask,
+        caps: caps,
+        sharedWorkspace: settings.sharedWorkspace,
         saveArtifact: (path, {artifactId}) async {
           final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
           if (artifactId != null) {
@@ -340,12 +356,15 @@ class BuiltinBackend implements AgentBackend {
     StreamController<AgentEvent> controller, {
     required List<Message> history,
     required String? project,
+    required bool sharedWorkspace,
   }) async {
     final command = shellBypassCommand(prompt.plainText)!;
     await config.ensureChatDirs(chatId, project: project);
+    final workspace = config.workspaceDir(chatId, project: project);
     final run = shell.start(command,
-        cwd: config.workspaceDir(chatId, project: project),
-        home: config.projectWorkspaceDir(project: project),
+        cwd: workspace,
+        home:
+            sharedWorkspace ? config.projectWorkspaceDir(project: project) : workspace,
         timeout: options.commandTimeout);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.

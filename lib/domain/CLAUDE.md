@@ -693,12 +693,15 @@ restart. The chat is `repo.createChat` with a `meta` — the same call the UI
 makes, since there is only one now; see "Starting a chat, and naming it" for
 the second one this replaced and why it existed.
 
-**A headless turn must not park on an answer.** `TurnSettings` carries
-`offerAsk` and `offerTask` (defaulting true); `sendPrompt(headless: true)` turns
-both off, since an `ask_user` parks the turn on a completer nobody will complete
-and a `task` fan-out could do the same through a sub-agent. `meta.approveMode` is
-pinned to `never` for the same reason: an approval banner nobody presses is a
-turn that never ends.
+**A headless turn must not park on an answer.** `TurnSettings.disabled` is the
+set of capabilities a turn is not offered; `sendPrompt(headless: true)` adds
+`ask` and `task` to it, since an `ask_user` parks the turn on a completer nobody
+will complete and a `task` fan-out could do the same through a sub-agent. A
+built-in project's takes (`builtin_project.dart`) fold into the same set — see
+"Projects" — so one value answers what the turn is and is not offered, and the
+prompt and the tool list cannot disagree. `meta.approveMode` is pinned to
+`never` for the same reason: an approval banner nobody presses is a turn that
+never ends.
 
 **How long the chat lives is the reminder's `tempChatTtl`**, written onto its
 `meta.json` as it is, null and all — the same field the chat settings page sets,

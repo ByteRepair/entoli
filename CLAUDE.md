@@ -190,6 +190,21 @@ directory. `AppConfig`'s path helpers all take `{String? project}`, and passing
 nothing means the default. `isProjectName` refuses `default` for the same
 reason: a second way to name it would be a second entry for it in every list.
 
+A **built-in project** is a directory the app ships rather than the user makes,
+declared in `builtin_project.dart` (`builtinProjects`, today just `anonymous`).
+It is a project in every respect that matters to the store — same layout, same
+movement, a chat can be in one — but its name is refused by `isProjectName`, so
+it cannot be created, renamed or deleted, and `everyProject` is where it is
+offered. What is special about it is what a *turn* in it may not have, and that
+is a `BuiltinProject` spec: which profile it runs under (`ProfilePolicy`),
+whether project memory runs (`MemoryPolicy`), whether its workspace is shared
+between its chats, and which capabilities it takes away. `anonymous` turns all
+of those off: no profile, no memory, and a workspace it does not share — so the
+context and tools that would reach another conversation are simply not there. A
+turn never meets a built-in project itself: `ChatRepository._turnSettings`
+resolves the spec into a profile, a memory, a `sharedWorkspace` flag and a
+`disabled` capability set, and the backend sees only those.
+
 Two workspaces reach a turn, and they answer different questions. The project's
 (`<project>/workspace/`) is where work another conversation should find goes,
 and it is the `HOME` of every command — so a repository cloned, a package
@@ -226,10 +241,13 @@ projects clears the selected chat, since it is no longer in the list.
 A project name is a directory name, so `projectNameFrom` makes what was typed
 safe to be one — the model writes paths into it — and `AppConfig.projectDir`
 refuses anything that is not one segment under `projects/`, since every
-project-scoped path is built through it. `isProjectName` is the same rule read
-the other way: a directory that could not have been created as a project is not
-listed as one, so a stray `.git` beside them is not a project with no chats in
-it.
+project-scoped path is built through it. That refusal is `isProjectDirName`,
+the shape alone; the default project's and the built-ins' names have it too, a
+chat can be in one, so path construction accepts them. `isProjectName` is the
+shape minus the names the app ships — the default's and the built-ins' — and is
+where a user names a project: a directory that could not have been created as a
+project is not listed as one, so a stray `.git` beside them is not a project
+with no chats in it.
 
 ## Saying what it did
 

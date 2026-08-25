@@ -1,6 +1,7 @@
 import "package:flutter/foundation.dart" show ValueListenable;
 
 import "../domain/ask.dart";
+import "../domain/builtin_project.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
@@ -235,12 +236,16 @@ class TurnSettings {
 
   final Profile? profile;
 
-  /// Whether the turn may put questions to the user, or spawn sub-agents. True
-  /// for a turn somebody is watching; a headless one turns both off, since an
-  /// `ask_user` parks it on a completer nobody will complete — there is no
-  /// timeout behind that wait anywhere.
-  final bool offerAsk;
-  final bool offerTask;
+  /// Whether the project's workspace is shared between its chats. When false,
+  /// the chat's own workspace is also the `HOME` of its commands, a `project:`
+  /// path resolves inside it, and the prompt says nothing of a shared one.
+  final bool sharedWorkspace;
+
+  /// What this turn is not offered. The project's takesaways, plus `ask` and
+  /// `task` on a turn nobody is watching: an `ask_user` parks it on a
+  /// completer nobody will complete — there is no timeout behind that wait
+  /// anywhere — and a `task` fan-out can do the same through a sub-agent.
+  final Set<AgentCapability> disabled;
 
   const TurnSettings({
     this.memory = MemorySettings.off,
@@ -251,8 +256,8 @@ class TurnSettings {
     this.classifierProvider,
     this.classifierModel,
     this.profile,
-    this.offerAsk = true,
-    this.offerTask = true,
+    this.sharedWorkspace = true,
+    this.disabled = const {},
   });
 }
 

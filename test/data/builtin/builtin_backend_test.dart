@@ -15,6 +15,7 @@ import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
@@ -272,6 +273,68 @@ void main() {
       expect(system, contains(config.workspaceDir(chatId, project: "work")));
       expect(system, contains(config.projectWorkspaceDir(project: "work")));
       expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
+    });
+
+    // A project that does not share a workspace is the answer to "a chat that
+    // must not reach past itself": the chat's own workspace is its HOME too,
+    // and the prompt says nothing of a shared one.
+    test("a turn with no shared workspace is told nothing of one", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await backend
+          .sendPrompt(chatId, userMessage("hi", at: sentAt),
+              settings: const TurnSettings(
+                  model: "fake-model",
+                  provider: "fake",
+                  project: "anonymous",
+                  approveMode: ApproveMode.never,
+                  sharedWorkspace: false))
+          .toList();
+
+      final workspace = config.workspaceDir(chatId, project: "anonymous");
+      final system = client.sent.first[1].text;
+      // The chat's own workspace is named...
+      expect(system, contains(workspace));
+      // ...and the shared project workspace is not.
+      expect(system, isNot(contains("shared with every other")));
+    });
+
+    test("a ! command with no shared workspace homes in the chat's own", () async {
+      final backend = backendOver([], respond: (_) => ok(""));
+      await backend
+          .sendPrompt(chatId, userMessage("!pwd", at: sentAt),
+              settings: const TurnSettings(
+                  model: "fake-model",
+                  provider: "fake",
+                  project: "anonymous",
+                  approveMode: ApproveMode.never,
+                  sharedWorkspace: false))
+          .toList();
+
+      final workspace = config.workspaceDir(chatId, project: "anonymous");
+      expect(shell.cwds, [workspace]);
+      expect(shell.homes, [workspace]);
+    });
+
+    // A project's takeaways are the same machinery a headless turn uses to drop
+    // `ask` and `task`: one value, so the prompt and the tool list cannot
+    // disagree. A capability a project takes away is not named in the prompt.
+    test("a disabled capability is not named in the prompt", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await backend
+          .sendPrompt(chatId, userMessage("hi", at: sentAt),
+              settings: const TurnSettings(
+                  model: "fake-model",
+                  provider: "fake",
+                  approveMode: ApproveMode.never,
+                  disabled: {AgentCapability.task}))
+          .toList();
+
+      final system = client.sent.first[0].text;
+      expect(system, isNot(contains("to delegate a task to a sub-agent")));
     });
   });
 
