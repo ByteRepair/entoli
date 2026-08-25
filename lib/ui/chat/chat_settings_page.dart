@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/builtin_project.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
@@ -63,6 +64,12 @@ class _NewChatSettingsPageState extends State<NewChatSettingsPage> {
             _ApprovalField(
               value: _meta.approveMode,
               onChanged: (v) => setState(() => _meta.approveMode = v),
+            ),
+            const Divider(),
+            _MemoryField(
+              value: _meta.memoryOff,
+              project: widget.project,
+              onChanged: (v) => setState(() => _meta.memoryOff = v),
             ),
             const Divider(),
             TempChatTtlField(
@@ -187,6 +194,12 @@ class _ChatSettingsPageState extends ConsumerState<ChatSettingsPage> {
                   onChanged: (v) => setState(() => _meta!.approveMode = v),
                 ),
                 const Divider(),
+                _MemoryField(
+                  value: _meta!.memoryOff,
+                  project: _project,
+                  onChanged: (v) => setState(() => _meta!.memoryOff = v),
+                ),
+                const Divider(),
                 if (_state?.pinned ?? false)
                   LabelledField(
                     label: "Temporary chat",
@@ -285,6 +298,34 @@ class _LlmField extends ConsumerWidget {
           ..provider = choice.providerId
           ..model = choice.modelId),
       ),
+    );
+  }
+}
+
+/// Whether this chat keeps out of the memory subsystem. The on position
+/// stores null — the chat follows whatever the project answers — and the off
+/// one stores the off. A project that has no memory of its own takes the
+/// subsystem away outright, and for that one the row says so and takes
+/// nothing.
+class _MemoryField extends StatelessWidget {
+  const _MemoryField(
+      {required this.value, required this.project, required this.onChanged});
+
+  final bool? value;
+  final String? project;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final taken = builtinProjectOf(project)?.memory == MemoryPolicy.off;
+    return SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      title: const Text("Project memory"),
+      subtitle: Text(taken
+          ? "This project keeps no memories."
+          : "Off, the agent reads, recalls and keeps no memories in this chat."),
+      value: taken ? false : value != true,
+      onChanged: taken ? null : (v) => onChanged(v ? null : true),
     );
   }
 }

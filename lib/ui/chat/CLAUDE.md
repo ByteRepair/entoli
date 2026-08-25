@@ -420,10 +420,10 @@ says to pick a chat, and is now a peer of the new-chat arm rather than an
 exception to it — neither writes anything.
 
 `NewChatSettingsPage` is the settings of a chat that does not exist yet: the
-model, the approve mode and the TTL, which are values and need nothing to hang
-on. Save pops a `ChatMeta` back rather than writing a file, and `_NewChat`
-holds it until `createChat` spends it. It edits a copy, so a page backed out of
-leaves the screen with what it had.
+model, the approve mode, the memory switch and the TTL, which are values and
+need nothing to hang on. Save pops a `ChatMeta` back rather than writing a
+file, and `_NewChat` holds it until `createChat` spends it. It edits a copy,
+so a page backed out of leaves the screen with what it had.
 
 **A page of its own rather than a mode of `ChatSettingsPage`**, and `_NewChat`
 state rather than a provider — both for the same reason. Folded into the chat's
