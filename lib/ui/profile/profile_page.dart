@@ -1,14 +1,20 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../core/config.dart";
+import "../../domain/documents.dart" show writingSuffix;
 import "../../domain/profile.dart";
 import "../../providers.dart";
 import "../widgets/resettable_field.dart";
 
-/// Edits the user's profile — the "About the user" block appended to the
-/// system prompt. When [project] is null this is the app-level default, shown
-/// from the sidebar; otherwise it is a project's override, reached from that
-/// project's settings page.
+/// Edits what a turn knows about the user. With no [project] this is the
+/// app-level page, shown from the sidebar: the identity fields, which the
+/// prompt renders as "About the user", and the user's global instructions —
+/// the AGENTS.md at the data dir's root that every project's turns read. With
+/// a [project] it is that project's page, reached from the project settings:
+/// the AGENTS.md at its workspace root, the file its chats' turns read, and
+/// nothing else — a chat would contain all the context it needs, and the
+/// identity fields are the user's, not a project's.
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key, required this.project});
 
@@ -19,7 +25,7 @@ class ProfilePage extends ConsumerStatefulWidget {
 }
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
-  final _prefs = TextEditingController();
+  final _instructions = TextEditingController();
   final _name = TextEditingController();
   final _dob = TextEditingController();
   final _religion = TextEditingController();
@@ -36,25 +42,36 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _load() async {
-    final Profile? profile;
-    if (widget.project == null) {
-      profile = ref.read(appSettingsProvider).profile;
-    } else {
-      profile = ref.read(projectSettingsProvider(widget.project)).profile;
+    final config = ref.read(appConfigProvider);
+    final path = _instructionsPath(config);
+    try {
+      final file = config.fs.file(path);
+      if (await file.exists()) _instructions.text = await file.readAsString();
+    } catch (_) {
+      // A file that will not read is shown as empty; saving overwrites it.
     }
-    if (profile != null) {
-      _prefs.text = profile.preferencesPrompt ?? "";
-      _name.text = profile.name ?? "";
-      _dob.text = profile.dateOfBirth ?? "";
-      _religion.text = profile.religion ?? "";
-      _profession.text = profile.profession ?? "";
-      _dobValue = _parseDate(profile.dateOfBirth);
+    if (widget.project == null) {
+      final profile = ref.read(appSettingsProvider).profile;
+      if (profile != null) {
+        _name.text = profile.name ?? "";
+        _dob.text = profile.dateOfBirth ?? "";
+        _religion.text = profile.religion ?? "";
+        _profession.text = profile.profession ?? "";
+        _dobValue = _parseDate(profile.dateOfBirth);
+      }
     }
     if (mounted) setState(() => _loaded = true);
   }
 
-  Profile _current() => Profile(
-        preferencesPrompt: _blank(_prefs.text),
+  String _instructionsPath(AppConfig config) =>
+      widget.project == null
+          ? config.globalInstructionsFile
+          : config.fs.path.join(
+              config.projectWorkspaceDir(project: widget.project),
+              "AGENTS.md",
+            );
+
+  Profile _profile() => Profile(
         name: _blank(_name.text),
         dateOfBirth: _blank(_dob.text),
         religion: _blank(_religion.text),
@@ -65,19 +82,37 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    final profile = _current();
-    final effective = profile.isEmpty ? null : profile;
+    final config = ref.read(appConfigProvider);
+    await _writeInstructions(config, _instructionsPath(config), _instructions.text);
     if (widget.project == null) {
-      await ref.read(appSettingsProvider.notifier).setProfile(effective);
-    } else {
-      await ref.read(projectSettingsProvider(widget.project).notifier).setProfile(effective);
+      final profile = _profile();
+      await ref
+          .read(appSettingsProvider.notifier)
+          .setProfile(profile.isEmpty ? null : profile);
     }
     if (mounted) setState(() => _saving = false);
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// Through a rename: a turn reads the file between turns, and a truncated
+  /// half-write would be instructions the model half-follows.
+  Future<void> _writeInstructions(
+      AppConfig config, String path, String text) async {
+    final fs = config.fs;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      final file = fs.file(path);
+      if (await file.exists()) await file.delete();
+      return;
+    }
+    await fs.directory(fs.path.dirname(path)).create(recursive: true);
+    final temp = fs.file("$path$writingSuffix");
+    await temp.writeAsString(text);
+    await temp.rename(path);
+  }
+
   Future<void> _clear() async {
-    _prefs.clear();
+    _instructions.clear();
     _name.clear();
     _dob.clear();
     _religion.clear();
@@ -102,7 +137,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   @override
   void dispose() {
-    _prefs.dispose();
+    _instructions.dispose();
     _name.dispose();
     _dob.dispose();
     _religion.dispose();
@@ -112,9 +147,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final global = widget.project == null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.project == null ? "Profile" : "Project profile"),
+        title: Text(global ? "Profile" : "Project instructions"),
         actions: [
           IconButton(
             icon: const Icon(Icons.restart_alt),
@@ -132,57 +168,73 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
-                if (widget.project != null)
+                if (global)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                     child: Text(
-                      "Overrides the app-level profile for chats in this project. "
-                      "Empty fields inherit from the app profile.",
+                      "About you, in every turn, in every project.",
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                     ),
                   ),
-                LabelledField(
-                  label: "General preferences",
-                  child: TextField(
-                    controller: _prefs,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      hintText: "Custom instructions for the LLM, applied to every turn",
-                    ),
+                if (global)
+                  LabelledField(
+                    label: "Name",
+                    child: TextField(
+                        controller: _name),
                   ),
-                ),
-                LabelledField(
-                  label: "Name",
-                  child: TextField(
-                    controller: _name,                  ),
-                ),
-                LabelledField(
-                  label: "Date of birth",
-                  child: TextField(
-                    controller: _dob,
-                    readOnly: true,
-                    decoration: InputDecoration(
-                      hintText: "Not set",
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.calendar_today),
-                        onPressed: _pickDate,
-                        tooltip: "Pick date",
+                if (global)
+                  LabelledField(
+                    label: "Date of birth",
+                    child: TextField(
+                      controller: _dob,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        hintText: "Not set",
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today),
+                          onPressed: _pickDate,
+                          tooltip: "Pick date",
+                        ),
                       ),
+                      onTap: _pickDate,
                     ),
-                    onTap: _pickDate,
+                  ),
+                if (global)
+                  LabelledField(
+                    label: "Religion",
+                    child: TextField(controller: _religion),
+                  ),
+                if (global)
+                  LabelledField(
+                    label: "Profession",
+                    child: TextField(controller: _profession),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text(
+                    global
+                        ? "Your global instructions, read by every project's turns. "
+                            "Stored at the root of your data directory, where a "
+                            "conversation's commands cannot reach them."
+                        : "The AGENTS.md at this project's workspace root, read by "
+                            "every chat's turn in it.",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ),
                 LabelledField(
-                  label: "Religion",
+                  label: "General instructions",
                   child: TextField(
-                    controller: _religion,                  ),
-                ),
-                LabelledField(
-                  label: "Profession",
-                  child: TextField(
-                    controller: _profession,                  ),
+                    controller: _instructions,
+                    maxLines: 8,
+                    decoration: const InputDecoration(
+                      hintText:
+                          "Standing rules for the agent, applied to every turn",
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 24),
               ],

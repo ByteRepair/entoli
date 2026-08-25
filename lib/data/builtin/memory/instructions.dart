@@ -2,11 +2,13 @@ import "package:fs_shim/fs.dart";
 
 import "../../../core/log.dart";
 
-/// AGENTS.md files in the workspaces, read for a turn and rendered into its
-/// second system message — this app's answer to Claude Code's CLAUDE.md
-/// memory. Two roots only: the project workspace every chat shares, and the
-/// chat workspace inside it. Nothing above the project workspace is ever
-/// read; the walk from the chat workspace stops there.
+/// AGENTS.md files, read for a turn and rendered into its second system
+/// message — this app's answer to Claude Code's CLAUDE.md memory. Two files a
+/// turn loads up front: the user's global one at the data dir's root, outside
+/// every project and outside the workspaces, and the project's at its
+/// workspace root, shared by its chats. Neither lives in a chat's own
+/// workspace — a chat's scratch is not the place for standing rules — so a
+/// nested file above a file the agent reads mid-turn is the only other way in.
 const instructionFileName = "AGENTS.md";
 
 /// A file bigger than this is skipped rather than sent. Claude Code's cap.
@@ -22,11 +24,11 @@ const maxImportDepth = 5;
 const instructionBudgetChars = 40000;
 
 enum InstructionKind {
-  /// At the project workspace root, or between it and a chat's directory.
-  project,
+  /// At the data dir's root: the user's, for every project.
+  global,
 
-  /// In the chat workspace itself.
-  chat,
+  /// At the project workspace root, shared by its chats.
+  project,
 
   /// Reached through an `@path` reference in another instructions file.
   imported,
@@ -53,66 +55,54 @@ class InstructionFile {
   final int depth;
 }
 
-/// Every AGENTS.md from the chat workspace up to the project workspace root,
-/// outermost first, with `@path` references expanded depth-first after their
-/// importer when [imports] is on.
+/// The two files a turn loads up front — the global one where [global] names
+/// it, and the project's at its workspace root — outermost first, with `@path`
+/// references in the project's file expanded depth-first after it when
+/// [imports] is on. The global file's own references are left as text: it is
+/// the user's background for every project, and an import reaching only into
+/// one project's workspace would be a word in the model's mouth about the
+/// other projects.
 Future<List<InstructionFile>> loadInstructions(
   FileSystem fs, {
-  required String chatWorkspace,
   required String projectWorkspace,
+  String? global,
   bool imports = false,
 }) async {
-  final dirs = <String>[];
-  var dir = _norm(fs, chatWorkspace);
-  final stop = _norm(fs, projectWorkspace);
-  // A chat workspace is always inside its project's; the bound keeps a
-  // mis-shaped pair from walking off up the tree regardless.
-  while (_inside(dir, stop)) {
-    dirs.add(dir);
-    if (dir == stop) break;
-    dir = _norm(fs, fs.path.dirname(dir));
-  }
-
   final files = <InstructionFile>[];
   final loaded = <String>{};
-  for (final dir in dirs.reversed) {
-    final path = fs.path.join(dir, instructionFileName);
-    final kind = dir == _norm(fs, chatWorkspace)
-        ? InstructionKind.chat
-        : InstructionKind.project;
-    final before = files.length;
-    await _readInto(fs, path, kind, 0, files, loaded);
-    if (imports && files.length > before) {
-      await _expandImports(
-        fs,
-        files[before],
-        files,
-        loaded,
-        chatWorkspace: chatWorkspace,
-        projectWorkspace: projectWorkspace,
-      );
-    }
+  if (global != null) {
+    await _readInto(
+        fs, _norm(fs, global), InstructionKind.global, 0, files, loaded);
+  }
+  final before = files.length;
+  await _readInto(
+      fs,
+      fs.path.join(_norm(fs, projectWorkspace), instructionFileName),
+      InstructionKind.project,
+      0,
+      files,
+      loaded);
+  if (imports && files.length > before) {
+    await _expandImports(fs, files[before], files, loaded,
+        projectWorkspace: projectWorkspace);
   }
   return _withinBudget(files);
 }
 
 /// The AGENTS.md files above [filePath], nearest first, that have not been
 /// loaded already — what reading a file in a subdirectory pulls into the
-/// turn. Empty unless [filePath] sits inside one of the two workspaces.
+/// turn. The walk stops at the project workspace root; empty unless
+/// [filePath] sits inside it.
 Future<List<InstructionFile>> findNestedInstructions(
   FileSystem fs,
   String filePath, {
   required Set<String> alreadyLoaded,
-  required String chatWorkspace,
   required String projectWorkspace,
 }) async {
-  final roots = [
-    _norm(fs, chatWorkspace),
-    _norm(fs, projectWorkspace),
-  ];
+  final root = _norm(fs, projectWorkspace);
   var dir = _norm(fs, fs.path.dirname(filePath));
   final found = <InstructionFile>[];
-  while (roots.any((root) => _inside(dir, root))) {
+  while (_inside(dir, root)) {
     await _readInto(
       fs,
       fs.path.join(dir, instructionFileName),
@@ -145,8 +135,9 @@ String renderInstructions(List<InstructionFile> files) {
 }
 
 String _kindPhrase(InstructionKind kind) => switch (kind) {
+      InstructionKind.global =>
+        "the user's global instructions, for every project",
       InstructionKind.project => "project workspace instructions",
-      InstructionKind.chat => "chat workspace instructions",
       InstructionKind.imported => "instructions imported by another file",
       InstructionKind.directory => "instructions for this directory",
     };
@@ -180,32 +171,22 @@ Future<void> _expandImports(
   InstructionFile from,
   List<InstructionFile> out,
   Set<String> loaded, {
-  required String chatWorkspace,
   required String projectWorkspace,
 }) async {
   if (from.depth >= maxImportDepth) return;
   for (final ref in importRefsIn(from.content)) {
     if (!ref.isImportable) continue;
     final resolved = _norm(fs, fs.path.join(fs.path.dirname(from.path), ref.target));
-    // An import reaches only inside the two workspaces: `~/` and absolute
+    // An import reaches only inside the project workspace: `~/` and absolute
     // paths name real places on this machine, and a workspace file the user
     // wrote should not be able to pull one in.
-    if (!_inside(resolved, _norm(fs, chatWorkspace)) &&
-        !_inside(resolved, _norm(fs, projectWorkspace))) {
-      continue;
-    }
+    if (!_inside(resolved, _norm(fs, projectWorkspace))) continue;
     final before = out.length;
     await _readInto(
         fs, resolved, InstructionKind.imported, from.depth + 1, out, loaded);
     if (out.length > before) {
-      await _expandImports(
-        fs,
-        out.last,
-        out,
-        loaded,
-        chatWorkspace: chatWorkspace,
-        projectWorkspace: projectWorkspace,
-      );
+      await _expandImports(fs, out.last, out, loaded,
+          projectWorkspace: projectWorkspace);
     }
   }
 }
@@ -260,14 +241,21 @@ String _stripFences(String text) => text
 String _stripInlineCode(String text) =>
     text.replaceAllMapped(RegExp("`[^`\n]*`"), (_) => "");
 
-/// Deepest first, then latest-loaded among equals: the walk's own files sit
-/// at depth 0 and survive longest.
+/// What the budget cannot hold is dropped imports first, deepest first, then
+/// the global file, then the project's: what sits in the project root is what
+/// the turn is about, and the global half is the background behind it.
 List<InstructionFile> _withinBudget(List<InstructionFile> files) {
   var total = files.fold(0, (sum, f) => sum + f.content.length);
   if (total <= instructionBudgetChars) return files;
-  final byDepth = [...files]..sort((a, b) => b.depth.compareTo(a.depth));
+  int dropRank(InstructionFile f) =>
+      f.depth == 0 ? (f.kind == InstructionKind.global ? 1 : 2) : 0;
+  final byDrop = [...files]..sort((a, b) {
+    final rank = dropRank(a).compareTo(dropRank(b));
+    if (rank != 0) return rank;
+    return b.depth.compareTo(a.depth);
+  });
   final dropped = <int>{};
-  for (final file in byDepth) {
+  for (final file in byDrop) {
     if (total <= instructionBudgetChars) break;
     total -= file.content.length;
     dropped.add(files.indexOf(file));

@@ -789,12 +789,6 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     return ProjectSettings.load(_config, project: project);
   }
 
-  Future<void> setProfile(Profile? profile) async {
-    final next = state.copy()..profile = profile;
-    state = next;
-    await next.save(_config, project: project);
-  }
-
   /// Whether this project keeps an auto-memory store of its own rather than
   /// sharing the default project's.
   Future<void> setUseProjectMemory(bool value) async {

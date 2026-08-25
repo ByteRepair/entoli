@@ -148,25 +148,47 @@ class _CopyField extends StatelessWidget {
   }
 }
 
-/// Shows whether this project overrides the app-level profile, and opens the
-/// editor. "Default" means the project inherits the app profile.
-class _ProfileRow extends ConsumerWidget {
+/// Opens the editor for the project's instructions, and says whether the
+/// file is there.
+class _ProfileRow extends ConsumerStatefulWidget {
   const _ProfileRow({required this.project});
 
   final String project;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(projectSettingsProvider(project));
-    final hasOverride = settings.profile != null && !settings.profile!.isEmpty;
+  ConsumerState<_ProfileRow> createState() => _ProfileRowState();
+}
+
+class _ProfileRowState extends ConsumerState<_ProfileRow> {
+  bool? _set;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final config = ref.read(appConfigProvider);
+    final path = config.fs.path.join(
+        config.projectWorkspaceDir(project: widget.project), "AGENTS.md");
+    final there = await config.fs.file(path).exists();
+    if (mounted) setState(() => _set = there);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return ListTile(
-      leading: const Icon(Icons.person_outline),
-      title: const Text("Profile"),
-      subtitle: Text(hasOverride ? "Customized" : "Default (inherited)"),
+      leading: const Icon(Icons.rule),
+      title: const Text("Instructions"),
+      subtitle: Text(_set == null ? "" : (_set! ? "Set" : "Not set")),
       trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ProfilePage(project: project)),
-      ),
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ProfilePage(project: widget.project)),
+        );
+        _check();
+      },
     );
   }
 }

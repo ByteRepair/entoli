@@ -10,7 +10,6 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/workspace.dart";
 
@@ -169,7 +168,7 @@ void main() {
     test("a filesystem with nothing written to it is the defaults", () {
       expect(AppSettings.load(config).llmProviders, isEmpty);
       expect(AppSettings.load(config).approveMode, ApproveMode.ask);
-      expect(ProjectSettings.load(config).profile, isNull);
+      expect(ProjectSettings.load(config).useProjectMemory, isFalse);
     });
 
     test("what was saved reads back without waiting for the write", () async {
@@ -184,10 +183,10 @@ void main() {
 
     test("a project's settings are their own, and keyed by project", () async {
       await store.createProject("work");
-      await ProjectSettings(profile: const Profile(name: "Yiannis")).save(config, project: "work");
+      await ProjectSettings(useProjectMemory: true).save(config, project: "work");
 
-      expect(ProjectSettings.load(config, project: "work").profile?.name, "Yiannis");
-      expect(ProjectSettings.load(config).profile, isNull);
+      expect(ProjectSettings.load(config, project: "work").useProjectMemory, isTrue);
+      expect(ProjectSettings.load(config).useProjectMemory, isFalse);
     });
   });
 
@@ -217,14 +216,14 @@ void main() {
         ],
       ).save(config);
       await store.createProject("work");
-      await ProjectSettings(profile: const Profile(name: "Yiannis")).save(config, project: "work");
+      await ProjectSettings(useProjectMemory: true).save(config, project: "work");
 
       final reloaded = await AppConfig.load(fs, "/agent-chat");
 
       expect(AppSettings.load(reloaded).defaultProviderId, "ollama");
       expect(AppSettings.load(reloaded).approveMode, ApproveMode.never);
       expect(AppSettings.load(reloaded).llmProviders.single.id, "ollama");
-      expect(ProjectSettings.load(reloaded, project: "work").profile?.name, "Yiannis");
+      expect(ProjectSettings.load(reloaded, project: "work").useProjectMemory, isTrue);
     });
   });
 }

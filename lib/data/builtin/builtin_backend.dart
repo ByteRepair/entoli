@@ -227,8 +227,8 @@ class BuiltinBackend implements AgentBackend {
       final instructions = settings.memory.instructions
           ? await loadInstructions(
               config.fs,
-              chatWorkspace: workspace,
               projectWorkspace: projectWorkspace,
+              global: config.globalInstructionsFile,
               imports: settings.memory.imports,
             )
           : const <InstructionFile>[];

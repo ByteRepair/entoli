@@ -920,7 +920,6 @@ class BuiltinAgent {
             fs,
             resolved,
             alreadyLoaded: _loadedInstructions,
-            chatWorkspace: workspace,
             projectWorkspace: projectWorkspace,
           )
         : const <InstructionFile>[];

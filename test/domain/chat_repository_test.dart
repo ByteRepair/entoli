@@ -199,7 +199,7 @@ void main() {
 
     test("a turn in a built-in project drops the profile and memory", () async {
       final repo = repoWith(AppSettings(
-        profile: const Profile(preferencesPrompt: "I like tea"),
+        profile: const Profile(name: "Tea Fan"),
         autoMemory: true,
       ));
       final chat = await repo.createChat(project: "anonymous");
@@ -224,7 +224,7 @@ void main() {
     // resolution a saved chat gets, before anything has written it.
     test("a draft in a built-in project resolves before it is saved", () async {
       final repo = repoWith(AppSettings(
-        profile: const Profile(preferencesPrompt: "I like tea"),
+        profile: const Profile(name: "Tea Fan"),
       ));
       final chat = await repo.createChat(project: "anonymous");
 
@@ -238,7 +238,7 @@ void main() {
 
     test("the default project keeps the app's profile and memory", () async {
       final repo = repoWith(AppSettings(
-        profile: const Profile(preferencesPrompt: "I like tea"),
+        profile: const Profile(name: "Tea Fan"),
         autoMemory: true,
       ));
       final chat = await repo.createChat();

@@ -95,15 +95,8 @@ BuiltinProject? builtinProjectOf(String? dir) {
 /// Whether [dir] names a built-in project, whatever its case.
 bool isBuiltinProject(String? dir) => builtinProjectOf(dir) != null;
 
-/// What [spec]'s policy makes of the profiles there are: [projectProfile] is
-/// the project's own (from its `project.json`) and [appProfile] the app's.
-/// Null is no spec — a user's project, or the default one — and the policy is
+/// What [spec]'s policy makes of the app's profile. Null is no spec — a
+/// user's project, or the default one — and the policy is
 /// [ProfilePolicy.inherit].
-Profile? profileUnder(
-  BuiltinProject? spec, {
-  required Profile? projectProfile,
-  required Profile? appProfile,
-}) =>
-    spec?.profilePolicy == ProfilePolicy.none
-        ? null
-        : projectProfile ?? appProfile;
+Profile? profileUnder(BuiltinProject? spec, {required Profile? appProfile}) =>
+    spec?.profilePolicy == ProfilePolicy.none ? null : appProfile;

@@ -294,7 +294,6 @@ class ChatRepository {
     final settings = _settings();
     final project = await projectOf(chatId);
     final builtIn = builtinProjectOf(project);
-    final projectSettings = await projectSettingsOf(project);
     final disabled = {...builtIn?.disabled ?? const <AgentCapability>{}};
     if (headless) {
       // A turn nobody watches must not be able to park on an answer.
@@ -307,8 +306,7 @@ class ChatRepository {
       approveMode: meta.approveMode ?? settings.approveMode,
       classifierProvider: settings.classifierProviderId,
       classifierModel: settings.classifierModelId,
-      profile: profileUnder(builtIn,
-          projectProfile: projectSettings.profile, appProfile: settings.profile),
+      profile: profileUnder(builtIn, appProfile: settings.profile),
       memory: builtIn?.memory == MemoryPolicy.off || meta.memoryOff == true
           ? MemorySettings.off
           : await _resolveMemory(settings, project),

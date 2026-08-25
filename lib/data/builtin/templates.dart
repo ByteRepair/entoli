@@ -413,12 +413,5 @@ String profileSection(Profile? profile) {
   }
   final buf = StringBuffer("\n## About the user\n\n");
   if (labelled.isNotEmpty) buf.writeln(labelled.join("\n"));
-  final prefs = profile.preferencesPrompt;
-  if (prefs != null && prefs.isNotEmpty) {
-    if (labelled.isNotEmpty) buf.writeln();
-    buf
-      ..writeln("Preferences:")
-      ..writeln(prefs);
-  }
   return buf.toString();
 }

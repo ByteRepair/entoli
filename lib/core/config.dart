@@ -198,6 +198,12 @@ class AppConfig {
   /// Not the app's version: it names the release whose migration last ran here,
   /// and a release that leaves the layout alone leaves this where it was. See
   /// `migrations.dart`.
+  /// The user's global instructions, at the data dir's root: the one file the
+  /// instruction load reads that is not inside a project. Outside the
+  /// workspaces, so a turn's file tools cannot reach it.
+  String get globalInstructionsFile =>
+      fs.path.join(dataDir, "AGENTS.md");
+
   String get versionFile => fs.path.join(dataDir, "version");
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");

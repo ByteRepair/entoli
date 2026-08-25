@@ -8,14 +8,18 @@ import "package:agent_chat/data/builtin/memory/instructions.dart";
 
 void main() {
   late Directory tmp;
-  late String chatWorkspace;
+  late String dataDir;
   late String projectWorkspace;
+  late String chatWorkspace;
+  late String global;
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("instructions_test_");
-    projectWorkspace = p.join(tmp.path, "project-workspace");
+    dataDir = p.join(tmp.path, "data");
+    projectWorkspace = p.join(dataDir, "projects", "default", "workspace");
     chatWorkspace = p.join(projectWorkspace, "chats", "chat-1");
     Directory(chatWorkspace).createSync(recursive: true);
+    global = p.join(dataDir, "AGENTS.md");
   });
 
   tearDown(() {
@@ -28,60 +32,76 @@ void main() {
     file.writeAsStringSync(content);
   }
 
+  void writeGlobal(String content) {
+    final file = File(global);
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(content);
+  }
+
+  Future<List<InstructionFile>> load({bool imports = false}) =>
+      loadInstructions(fileSystemIo,
+          projectWorkspace: projectWorkspace, global: global, imports: imports);
+
   List<String> pathsOf(List<InstructionFile> files) =>
-      [for (final f in files) p.relative(f.path, from: projectWorkspace)];
+      [for (final f in files) p.relative(f.path, from: dataDir)];
 
   test("nothing loaded when there are no AGENTS.md files", () async {
-    final files = await loadInstructions(fileSystemIo,
-        chatWorkspace: chatWorkspace, projectWorkspace: projectWorkspace);
-    expect(files, isEmpty);
+    expect(await load(), isEmpty);
   });
 
-  test("the chat workspace file and the project file both load", () async {
+  test("the global file loads first, before the project's", () async {
+    writeGlobal("global rules");
+    write("AGENTS.md", "project rules");
+
+    final files = await load();
+
+    expect(pathsOf(files), ["AGENTS.md", "projects/default/workspace/AGENTS.md"]);
+    expect(files.first.kind, InstructionKind.global);
+    expect(files.last.kind, InstructionKind.project);
+  });
+
+  test("a chat's own AGENTS.md is not loaded up front", () async {
     write("AGENTS.md", "project rules");
     write("chats/chat-1/AGENTS.md", "chat rules");
 
-    final files = await loadInstructions(fileSystemIo,
-        chatWorkspace: chatWorkspace, projectWorkspace: projectWorkspace);
+    final files = await load();
 
-    expect(pathsOf(files), ["AGENTS.md", "chats/chat-1/AGENTS.md"]);
-    expect(files.first.kind, InstructionKind.project);
-    expect(files.last.kind, InstructionKind.chat);
+    expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
+    expect(files.single.kind, InstructionKind.project);
   });
 
-  test("an intermediate directory's AGENTS.md loads as project", () async {
+  test("an intermediate directory's AGENTS.md is not loaded up front",
+      () async {
     write("chats/AGENTS.md", "shared chat rules");
-    write("chats/chat-1/AGENTS.md", "chat rules");
+    write("AGENTS.md", "project rules");
 
-    final files = await loadInstructions(fileSystemIo,
-        chatWorkspace: chatWorkspace, projectWorkspace: projectWorkspace);
+    final files = await load();
 
-    expect(pathsOf(files), ["chats/AGENTS.md", "chats/chat-1/AGENTS.md"]);
-    expect(files.first.kind, InstructionKind.project);
+    expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
   });
 
-  test("nothing above the project workspace is read", () async {
+  test("nothing above the project workspace is read, the global named aside",
+      () async {
     write("AGENTS.md", "project rules");
     File(p.join(tmp.path, "AGENTS.md")).writeAsStringSync("outside rules");
+    File(p.join(dataDir, "elsewhere", "AGENTS.md"))
+      ..createSync(recursive: true)
+      ..writeAsStringSync("a data dir file");
 
-    final files = await loadInstructions(fileSystemIo,
-        chatWorkspace: chatWorkspace, projectWorkspace: projectWorkspace);
+    final files = await load();
 
-    expect(pathsOf(files), ["AGENTS.md"]);
+    expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
   });
 
   test("an empty file is skipped", () async {
-    write("AGENTS.md", "   \n  ");
-    final files = await loadInstructions(fileSystemIo,
-        chatWorkspace: chatWorkspace, projectWorkspace: projectWorkspace);
-    expect(files, isEmpty);
+    writeGlobal("   \n  ");
+    write("AGENTS.md", "project rules");
+    expect(pathsOf(await load()), ["projects/default/workspace/AGENTS.md"]);
   });
 
   test("a file over the cap is skipped", () async {
     write("AGENTS.md", "x" * (maxInstructionBytes + 1));
-    final files = await loadInstructions(fileSystemIo,
-        chatWorkspace: chatWorkspace, projectWorkspace: projectWorkspace);
-    expect(files, isEmpty);
+    expect(await load(), isEmpty);
   });
 
   group("imports", () {
@@ -89,12 +109,12 @@ void main() {
       write("AGENTS.md", "see @./notes.md");
       write("notes.md", "the notes");
 
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace,
-          projectWorkspace: projectWorkspace,
-          imports: true);
+      final files = await load(imports: true);
 
-      expect(pathsOf(files), ["AGENTS.md", "notes.md"]);
+      expect(
+          pathsOf(files),
+          ["projects/default/workspace/AGENTS.md",
+              "projects/default/workspace/notes.md"]);
       expect(files.last.kind, InstructionKind.imported);
       expect(files.last.depth, 1);
     });
@@ -103,28 +123,30 @@ void main() {
       write("AGENTS.md", "see @./notes.md");
       write("notes.md", "the notes");
 
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace, projectWorkspace: projectWorkspace);
+      final files = await load();
 
-      expect(pathsOf(files), ["AGENTS.md"]);
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
+    });
+
+    test("a reference in the global file is left as text", () async {
+      writeGlobal("see @./global-notes.md");
+      write("AGENTS.md", "project rules");
+
+      final files = await load(imports: true);
+
+      expect(pathsOf(files), ["AGENTS.md", "projects/default/workspace/AGENTS.md"]);
     });
 
     test("a reference outside the workspaces is refused", () async {
       write("AGENTS.md", "see @/etc/passwd");
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace,
-          projectWorkspace: projectWorkspace,
-          imports: true);
-      expect(pathsOf(files), ["AGENTS.md"]);
+      final files = await load(imports: true);
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
     });
 
     test("a missing import is left as text, not an error", () async {
       write("AGENTS.md", "see @./nope.md");
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace,
-          projectWorkspace: projectWorkspace,
-          imports: true);
-      expect(pathsOf(files), ["AGENTS.md"]);
+      final files = await load(imports: true);
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
     });
 
     test("a chain deeper than the cap stops expanding", () async {
@@ -133,10 +155,7 @@ void main() {
         write("${String.fromCharCode(97 + i)}.md",
             "see @./${String.fromCharCode(98 + i)}.md");
       }
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace,
-          projectWorkspace: projectWorkspace,
-          imports: true);
+      final files = await load(imports: true);
       // The cap is on depth, not count: a chain of depth 5 loads 6 files.
       expect(files.length, maxImportDepth + 1);
     });
@@ -145,21 +164,22 @@ void main() {
       write("AGENTS.md", "see @./a.md");
       write("a.md", "see @./b.md");
       write("b.md", "see @./a.md");
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace,
-          projectWorkspace: projectWorkspace,
-          imports: true);
-      expect(pathsOf(files), ["AGENTS.md", "a.md", "b.md"]);
+      final files = await load(imports: true);
+      expect(
+          pathsOf(files),
+          ["projects/default/workspace/AGENTS.md",
+              "projects/default/workspace/a.md",
+              "projects/default/workspace/b.md"]);
     });
 
     test("code blocks and comments are not read as references", () async {
       write("AGENTS.md", "```\n@./a.md\n```\n<!-- @./b.md -->\nsee @./c.md");
       write("c.md", "c");
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace,
-          projectWorkspace: projectWorkspace,
-          imports: true);
-      expect(pathsOf(files), ["AGENTS.md", "c.md"]);
+      final files = await load(imports: true);
+      expect(
+          pathsOf(files),
+          ["projects/default/workspace/AGENTS.md",
+              "projects/default/workspace/c.md"]);
     });
   });
 
@@ -167,13 +187,17 @@ void main() {
     test("a block over the budget drops the deepest files first", () async {
       write("AGENTS.md", "see @./a.md\n${"p" * 100}");
       write("a.md", "a" * (instructionBudgetChars - 50));
-      final files = await loadInstructions(fileSystemIo,
-          chatWorkspace: chatWorkspace,
-          projectWorkspace: projectWorkspace,
-          imports: true);
+      final files = await load(imports: true);
       // The imported file alone exceeds the budget, so it is dropped and the
       // root survives.
-      expect(pathsOf(files), ["AGENTS.md"]);
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
+    });
+
+    test("the global file is dropped before the project's", () async {
+      writeGlobal("g" * (instructionBudgetChars - 50));
+      write("AGENTS.md", "p" * (instructionBudgetChars - 50));
+      final files = await load();
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
     });
   });
 
@@ -181,19 +205,23 @@ void main() {
     test("renders the header and each file with its kind", () {
       final text = renderInstructions([
         const InstructionFile(
+            path: "/data/AGENTS.md",
+            kind: InstructionKind.global,
+            content: "global rules"),
+        const InstructionFile(
             path: "/ws/AGENTS.md",
             kind: InstructionKind.project,
             content: "project rules"),
-        const InstructionFile(
-            path: "/ws/chats/1/AGENTS.md",
-            kind: InstructionKind.chat,
-            content: "chat rules"),
       ]);
       expect(text, contains("Workspace instructions are shown below."));
-      expect(text, contains("Contents of /ws/AGENTS.md (project workspace instructions):"));
-      expect(text, contains("Contents of /ws/chats/1/AGENTS.md (chat workspace instructions):"));
+      expect(
+          text,
+          contains("Contents of /data/AGENTS.md "
+              "(the user's global instructions, for every project):"));
+      expect(text,
+          contains("Contents of /ws/AGENTS.md (project workspace instructions):"));
+      expect(text, contains("global rules"));
       expect(text, contains("project rules"));
-      expect(text, contains("chat rules"));
     });
 
     test("renders nothing for an empty list", () {
@@ -207,7 +235,16 @@ void main() {
       final found = await findNestedInstructions(fileSystemIo,
           p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {},
-          chatWorkspace: chatWorkspace,
+          projectWorkspace: projectWorkspace);
+      expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
+    });
+
+    test("a nested file above the project root's own loads too", () async {
+      write("AGENTS.md", "project rules");
+      write("chats/chat-1/sub/AGENTS.md", "sub rules");
+      final found = await findNestedInstructions(fileSystemIo,
+          p.join(chatWorkspace, "sub", "notes.txt"),
+          alreadyLoaded: {p.join(projectWorkspace, "AGENTS.md")},
           projectWorkspace: projectWorkspace);
       expect(found.single.path, p.join(chatWorkspace, "sub", "AGENTS.md"));
     });
@@ -217,7 +254,6 @@ void main() {
       final found = await findNestedInstructions(fileSystemIo,
           p.join(chatWorkspace, "sub", "notes.txt"),
           alreadyLoaded: {p.join(chatWorkspace, "sub", "AGENTS.md")},
-          chatWorkspace: chatWorkspace,
           projectWorkspace: projectWorkspace);
       expect(found, isEmpty);
     });
@@ -226,7 +262,6 @@ void main() {
       final found = await findNestedInstructions(fileSystemIo,
           p.join(tmp.path, "elsewhere", "notes.txt"),
           alreadyLoaded: {},
-          chatWorkspace: chatWorkspace,
           projectWorkspace: projectWorkspace);
       expect(found, isEmpty);
     });
