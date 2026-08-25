@@ -1,3 +1,5 @@
+import "dart:async";
+
 import "package:flutter/foundation.dart" show ValueListenable;
 
 import "../domain/ask.dart";
@@ -212,6 +214,31 @@ class MemorySettings {
   static const off = MemorySettings();
 }
 
+/// What a background write to the memories says after the turn that earned
+/// it — the "kept a note" line. The turn's own event stream is closed by then,
+/// so this is the half of it the stream cannot carry.
+class MemoryNote {
+  const MemoryNote(this.chatId, this.text);
+
+  final String chatId;
+  final String text;
+}
+
+/// The one-shot side of the backend: the notes are added as they land and a
+/// page listens for the ones its chat is about.
+class MemoryNotes {
+  final StreamController<MemoryNote> _controller =
+      StreamController<MemoryNote>.broadcast();
+
+  Stream<MemoryNote> get notes => _controller.stream;
+
+  void add(MemoryNote note) {
+    if (!_controller.isClosed) _controller.add(note);
+  }
+
+  Future<void> close() => _controller.close();
+}
+
 /// Everything a turn runs under, resolved once by `ChatRepository` from the
 /// chat's `meta.json` over the app's `settings.json`. One value because every
 /// way of starting a turn takes all of it, and a forwarding site that drops one
@@ -276,6 +303,11 @@ abstract class AgentBackend {
   /// each turn rather than on how many there are, and they do not all act the
   /// same way: `TurnKeepAlive` aborts, `interruptLiveTurns` interrupts.
   ValueListenable<Set<String>> get runningTurns;
+
+  /// What the background memory writes land as: a note per chat, after the
+  /// turn that earned it. A backend with no memory writes simply never adds
+  /// one, and a page that is not interested never listens.
+  Stream<MemoryNote> get memoryNotes;
 
   /// One question, answered in one call to [model]: no tools, no session,
   /// nothing kept. Null when the provider is not configured or says nothing —

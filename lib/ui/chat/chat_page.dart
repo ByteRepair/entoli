@@ -4,6 +4,7 @@ import "dart:math" as math;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -347,14 +348,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// from re-prompting for the same expired chat.
   String? _expiryChecked;
 
+  /// The page's half of the memory notes: the ones this chat is about land as
+  /// a line, since the turn they came from is over by then.
+  StreamSubscription<MemoryNote>? _memoryNotes;
+
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_readPosition);
+    _memoryNotes = ref
+        .read(agentBackendProvider)
+        .memoryNotes
+        .where((note) => note.chatId == widget.chatId)
+        .listen((note) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(note.text)),
+      );
+    });
   }
 
   @override
   void dispose() {
+    _memoryNotes?.cancel();
     _scroll.removeListener(_readPosition);
     _controller.dispose();
     _scroll.dispose();

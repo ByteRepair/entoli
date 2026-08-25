@@ -68,6 +68,13 @@ class BuiltinBackend implements AgentBackend {
   /// call it.
   final WebSearch webSearch;
 
+  /// The notes the background memory writes add: the page of the chat they
+  /// are about reads its own off the stream.
+  final MemoryNotes _memoryNotes = MemoryNotes();
+
+  @override
+  Stream<MemoryNote> get memoryNotes => _memoryNotes.notes;
+
   /// Limits and timeouts for every turn.
   final BuiltinOptions options;
 
@@ -532,17 +539,32 @@ class BuiltinBackend implements AgentBackend {
         "";
     final replyText = reply.trim();
     if (said.trim().isEmpty && replyText.isEmpty) return;
+    // What is already kept, the newest first — the ones a new exchange is
+    // most likely to restate or spend. The ids ride with them: they are the
+    // handles for the replaces and delete keys. A store that will not answer
+    // is no better than an empty one.
+    String existing = "";
+    try {
+      existing = renderRecall([...(await store.entries())].reversed.toList(),
+          withIds: true);
+    } catch (e) {
+      logFailure("memory", "could not read the store for extraction: $e");
+    }
     final question = "Here is an exchange between a user and an assistant:\n\n"
         "User: $said\n\n"
         "Assistant: $replyText\n\n"
-        "Write down the facts from it that would still be true and useful in a "
-        "later conversation: a preference the user stated, a decision that was "
-        "made, a fact learned about a codebase, an account, or the user. One "
-        "fact per entry, each in one or two sentences, written so it makes "
-        "sense without this exchange. Never include secrets, keys, or "
-        "credentials, and never include what a file would say. Reply with JSON "
-        "only: {\"memories\": [\"...\"]}, with an empty list where there is "
-        "nothing worth keeping.";
+        "${existing.isEmpty ? "" : "Memories already kept about this project:\n$existing\n\n"}"
+        "Maintain the memory: from the exchange, keep the facts that would "
+        "still be true and useful in a later conversation — a preference the "
+        "user stated, a decision that was made, a fact learned about a "
+        "codebase, an account, or the user. One fact per entry, each in one or "
+        "two sentences, written so it makes sense without this exchange. Never "
+        "include secrets, keys, or credentials, and never include what a file "
+        "would say. Reply with JSON only: {\"memories\": [\"...\"], "
+        "\"replaces\": {\"<id>\": \"...\"}, \"delete\": [\"<id>\"]}, where "
+        "memories is a new fact, replaces corrects one of the ones above by "
+        "its id, and delete spends one the exchange contradicts or supersedes. "
+        "Any key may be an empty list where there is nothing to do.";
     try {
       final chunks = await target.client
           .stream([LlmMessage(role: LlmRole.user, text: question)],
@@ -551,45 +573,96 @@ class BuiltinBackend implements AgentBackend {
           .toList();
       final answer =
           chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
-      for (final memory in _memoriesFrom(answer)) {
-        await store.add(memory, chat: chatId);
+      final ops = _maintainFrom(answer);
+      if (ops.add.isEmpty && ops.replaces.isEmpty && ops.delete.isEmpty) return;
+      final result = await store.maintain(
+        delete: ops.delete,
+        replaces: ops.replaces,
+        add: ops.add,
+        chat: chatId,
+      );
+      if (result.added > 0) {
+        _memoryNotes.add(MemoryNote(chatId, result.added == 1
+            ? "Kept 1 memory."
+            : "Kept ${result.added} memories."));
       }
     } catch (e) {
       logFailure("memory", "extraction failed: $e");
     }
   }
 
-  /// The extraction's JSON, read as liberally as the model writes it: an array
-  /// of strings, or an object holding one. What is not a list of strings is
-  /// nothing, because a memory is the only thing the store takes.
-  List<String> _memoriesFrom(String answer) {
+  /// The maintenance JSON, read as liberally as the model writes it: the old
+  /// shape — an array of strings, or an object holding one — reads as new
+  /// facts, and the object adds the replaces and delete keys. What is not a
+  /// string where a string is owed is nothing, because that is all the store
+  /// takes.
+  ({List<String> add, Map<String, String> replaces, List<String> delete})
+      _maintainFrom(String answer) {
+    const empty = (
+      add: <String>[],
+      replaces: <String, String>{},
+      delete: <String>[],
+    );
     Object? decoded;
     try {
       decoded = jsonDecode(answer.trim());
     } catch (_) {
       final fenced = RegExp(r"```(?:json)?\n([\s\S]*?)```").firstMatch(answer);
-      if (fenced == null) return const [];
+      if (fenced == null) return empty;
       try {
         decoded = jsonDecode(fenced.group(1)!.trim());
       } catch (_) {
-        return const [];
+        return empty;
       }
     }
-    if (decoded is Map) decoded = decoded["memories"];
-    if (decoded is! List) return const [];
-    final memories = <String>[];
-    for (final entry in decoded) {
+    if (decoded is List) {
+      return (add: _factsFrom(decoded), replaces: const {}, delete: const []);
+    }
+    if (decoded is! Map) return empty;
+    final replaces = <String, String>{};
+    final rawReplaces = decoded["replaces"];
+    if (rawReplaces is Map) {
+      for (final entry in rawReplaces.entries) {
+        if (entry.key is! String || entry.value is! String) continue;
+        var text = (entry.value as String).trim();
+        if (text.isEmpty) continue;
+        if (text.length > recallEntryChars) {
+          text = text.substring(0, recallEntryChars);
+        }
+        replaces[entry.key as String] = text;
+      }
+    }
+    final memories = decoded["memories"] ?? decoded["add"];
+    return (
+      add: memories is List ? _factsFrom(memories) : const [],
+      replaces: replaces,
+      delete: decoded["delete"] is List
+          ? _stringsFrom(decoded["delete"] as List)
+          : const [],
+    );
+  }
+
+  /// The new-fact half of the answer: trimmed, cut to the store's write cap,
+  /// and at most five of them, the way the old shape was.
+  List<String> _factsFrom(Object? value) {
+    final facts = <String>[];
+    for (final entry in (value as List)) {
       if (entry is! String) continue;
       var text = entry.trim();
       if (text.isEmpty) continue;
       if (text.length > recallEntryChars) {
         text = text.substring(0, recallEntryChars);
       }
-      memories.add(text);
-      if (memories.length == 5) break;
+      facts.add(text);
+      if (facts.length == 5) break;
     }
-    return memories;
+    return facts;
   }
+
+  List<String> _stringsFrom(Object? value) => [
+        for (final entry in (value as List))
+          if (entry is String) entry,
+      ];
 
   /// The config is read once and reused: going back through the registry by id
   /// would re-read and re-parse `settings.json` for each question asked of it.
@@ -708,6 +781,7 @@ class BuiltinBackend implements AgentBackend {
     _sessions.clear();
     registry.close();
     webSearch.close();
+    await _memoryNotes.close();
   }
 
   @override

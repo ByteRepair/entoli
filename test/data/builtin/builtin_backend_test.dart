@@ -1247,9 +1247,11 @@ void main() {
       expect(await store.entries(), isEmpty);
     });
 
-    test("the extraction is asked the exchange, not the store", () async {
+    test("the extraction is asked the exchange and what is already kept",
+        () async {
+      final existing = await store.add("the user likes tabs over spaces");
       final backend = backendOver([
-        [saidOnly("use tabs, the user likes them")],
+        [saidOnly("use spaces, the user changed their mind")],
         [saidOnly('{"memories": []}')],
       ]);
 
@@ -1258,8 +1260,94 @@ void main() {
       await pumpEvents();
       final question = client.sent.last.last;
       expect(question.text, contains("how should I indent this"));
-      expect(question.text, contains("use tabs, the user likes them"));
+      expect(question.text, contains("use spaces, the user changed their mind"));
+      // The kept memory, with the id the replacement ops take.
+      expect(question.text, contains("the user likes tabs over spaces"));
+      expect(question.text, contains(existing.id));
       expect(question.text, contains("JSON"));
+    });
+
+    test("a replacement corrects the kept memory in place", () async {
+      final existing = await store.add("the user likes tabs over spaces");
+      final backend = backendOver([
+        [saidOnly("use spaces, the user changed their mind")],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "replaces": {existing.id: "the user likes spaces over tabs"},
+        }))],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await untilMemory(store, "the user likes spaces over tabs");
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.id, existing.id);
+      expect(entries.single.text, "the user likes spaces over tabs");
+      expect(entries.single.chat, chatId);
+    });
+
+    test("a delete spends the kept memory", () async {
+      final existing = await store.add("a fact that turned out wrong");
+      final backend = backendOver([
+        [saidOnly("never mind that, it was wrong")],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "delete": [existing.id],
+        }))],
+      ]);
+
+      await send(backend, "let me correct the record", memory: memory());
+
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while ((await store.entries()).isNotEmpty) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the store never dropped the memory");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+
+    test("kept facts land as a note the page can see", () async {
+      final backend = backendOver([
+        [saidOnly("the user likes tabs over spaces")],
+        [saidOnly('{"memories": ["the user likes tabs over spaces", "the user is on the west coast"]}')],
+      ]);
+      final notes = <MemoryNote>[];
+      final subscription = backend.memoryNotes.listen(notes.add);
+
+      await send(backend, "a little about me", memory: memory());
+
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (notes.isEmpty) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the note never landed");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await subscription.cancel();
+      expect(notes.single.chatId, chatId);
+      expect(notes.single.text, "Kept 2 memories.");
+    });
+
+    test("no note where nothing new was kept", () async {
+      final existing = await store.add("the user likes tabs over spaces");
+      final backend = backendOver([
+        [saidOnly("still tabs, by the way")],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "replaces": {existing.id: "the user likes tabs over spaces"},
+        }))],
+      ]);
+      final notes = <MemoryNote>[];
+      final subscription = backend.memoryNotes.listen(notes.add);
+
+      await send(backend, "how should I indent this", memory: memory());
+      await pumpEvents();
+      await subscription.cancel();
+
+      expect(notes, isEmpty);
+      expect((await store.entries()).single.text, "the user likes tabs over spaces");
     });
 
     test("no background model, nothing is written", () async {

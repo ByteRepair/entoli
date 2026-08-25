@@ -600,4 +600,33 @@ void main() {
     expect(find.text("line 39"), findsOneWidget);
     expect(revealed(tester).where((o) => o == 1), isEmpty);
   });
+
+  group("when a memory note lands", () {
+    testWidgets("the chat the note is about says so in a line", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "noted"));
+      await open(tester, chat.state.id);
+
+      app.backend
+          .memoryNoteHolder
+          .add(MemoryNote(chat.state.id, "Kept 1 memory."));
+      // Two frames: the messenger rebuilds, and the snackbar attaches on the
+      // frame after.
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text("Kept 1 memory."), findsOneWidget);
+    });
+
+    testWidgets("a note for another chat is not this page's line", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "noted"));
+      await open(tester, chat.state.id);
+
+      app.backend.memoryNoteHolder.add(
+          MemoryNote("some-other-chat", "Kept 1 memory."));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text("Kept 1 memory."), findsNothing);
+    });
+  });
 }
