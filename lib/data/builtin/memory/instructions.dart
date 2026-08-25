@@ -61,18 +61,19 @@ class InstructionFile {
 /// [imports] is on. The global file's own references are left as text: it is
 /// the user's background for every project, and an import reaching only into
 /// one project's workspace would be a word in the model's mouth about the
-/// other projects.
+/// other projects. A file whose path [excludes] names is skipped.
 Future<List<InstructionFile>> loadInstructions(
   FileSystem fs, {
   required String projectWorkspace,
   String? global,
   bool imports = false,
+  List<String> excludes = const [],
 }) async {
   final files = <InstructionFile>[];
   final loaded = <String>{};
   if (global != null) {
-    await _readInto(
-        fs, _norm(fs, global), InstructionKind.global, 0, files, loaded);
+    await _readInto(fs, _norm(fs, global), InstructionKind.global, 0, files,
+        loaded, excludes);
   }
   final before = files.length;
   await _readInto(
@@ -81,10 +82,11 @@ Future<List<InstructionFile>> loadInstructions(
       InstructionKind.project,
       0,
       files,
-      loaded);
+      loaded,
+      excludes);
   if (imports && files.length > before) {
     await _expandImports(fs, files[before], files, loaded,
-        projectWorkspace: projectWorkspace);
+        projectWorkspace: projectWorkspace, excludes: excludes);
   }
   return _withinBudget(files);
 }
@@ -92,12 +94,13 @@ Future<List<InstructionFile>> loadInstructions(
 /// The AGENTS.md files above [filePath], nearest first, that have not been
 /// loaded already — what reading a file in a subdirectory pulls into the
 /// turn. The walk stops at the project workspace root; empty unless
-/// [filePath] sits inside it.
+/// [filePath] sits inside it. A file whose path [excludes] names is skipped.
 Future<List<InstructionFile>> findNestedInstructions(
   FileSystem fs,
   String filePath, {
   required Set<String> alreadyLoaded,
   required String projectWorkspace,
+  List<String> excludes = const [],
 }) async {
   final root = _norm(fs, projectWorkspace);
   var dir = _norm(fs, fs.path.dirname(filePath));
@@ -110,12 +113,47 @@ Future<List<InstructionFile>> findNestedInstructions(
       0,
       found,
       alreadyLoaded,
+      excludes,
     );
     final parent = _norm(fs, fs.path.dirname(dir));
     if (parent == dir) break;
     dir = parent;
   }
   return found;
+}
+
+/// Whether [path] is named by any of [patterns] — the files an AGENTS.md load
+/// skips. A pattern is a glob over the path's full name: `**` spans
+/// directories, `*` and `?` do not, and the pattern is anchored to the whole
+/// path. A pattern with no slash in it names a file name rather than a path,
+/// the way `.gitignore` reads one.
+bool isExcludedPath(FileSystem fs, String path, List<String> patterns) {
+  for (final raw in patterns) {
+    final pattern = raw.trim();
+    if (pattern.isEmpty) continue;
+    final target =
+        pattern.contains("/") ? path : fs.path.basename(path);
+    if (_globToRegExp(pattern).hasMatch(target)) return true;
+  }
+  return false;
+}
+
+RegExp _globToRegExp(String pattern) {
+  final buf = StringBuffer("^");
+  for (var i = 0; i < pattern.length; i++) {
+    final c = pattern[i];
+    if (c == "*" && i + 1 < pattern.length && pattern[i + 1] == "*") {
+      buf.write(".*");
+      i++;
+    } else if (c == "*") {
+      buf.write("[^/]*");
+    } else if (c == "?") {
+      buf.write("[^/]");
+    } else {
+      buf.write(RegExp.escape(c));
+    }
+  }
+  return RegExp("${buf}\$");
 }
 
 /// One block of prompt text carrying everything loaded, worded so the model
@@ -148,8 +186,10 @@ bool _inside(String path, String root) =>
     path == root || path.startsWith("$root/");
 
 Future<void> _readInto(FileSystem fs, String path, InstructionKind kind,
-    int depth, List<InstructionFile> out, Set<String> loaded) async {
+    int depth, List<InstructionFile> out, Set<String> loaded,
+    List<String> excludes) async {
   if (loaded.contains(path)) return;
+  if (isExcludedPath(fs, path, excludes)) return;
   try {
     final file = fs.file(path);
     if (!await file.exists()) return;
@@ -172,6 +212,7 @@ Future<void> _expandImports(
   List<InstructionFile> out,
   Set<String> loaded, {
   required String projectWorkspace,
+  List<String> excludes = const [],
 }) async {
   if (from.depth >= maxImportDepth) return;
   for (final ref in importRefsIn(from.content)) {
@@ -183,10 +224,10 @@ Future<void> _expandImports(
     if (!_inside(resolved, _norm(fs, projectWorkspace))) continue;
     final before = out.length;
     await _readInto(
-        fs, resolved, InstructionKind.imported, from.depth + 1, out, loaded);
+        fs, resolved, InstructionKind.imported, from.depth + 1, out, loaded, excludes);
     if (out.length > before) {
       await _expandImports(fs, out.last, out, loaded,
-          projectWorkspace: projectWorkspace);
+          projectWorkspace: projectWorkspace, excludes: excludes);
     }
   }
 }

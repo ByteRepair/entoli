@@ -38,9 +38,13 @@ void main() {
     file.writeAsStringSync(content);
   }
 
-  Future<List<InstructionFile>> load({bool imports = false}) =>
+  Future<List<InstructionFile>> load(
+          {bool imports = false, List<String> excludes = const []}) =>
       loadInstructions(fileSystemIo,
-          projectWorkspace: projectWorkspace, global: global, imports: imports);
+          projectWorkspace: projectWorkspace,
+          global: global,
+          imports: imports,
+          excludes: excludes);
 
   List<String> pathsOf(List<InstructionFile> files) =>
       [for (final f in files) p.relative(f.path, from: dataDir)];
@@ -226,6 +230,71 @@ void main() {
 
     test("renders nothing for an empty list", () {
       expect(renderInstructions(const []), isEmpty);
+    });
+  });
+
+  group("excludes", () {
+    test("** spans directories, * and ? do not", () {
+      final path = "/data/projects/work/workspace/vendor/lib/AGENTS.md";
+      expect(isExcludedPath(fileSystemIo, path, ["**/vendor/**"]), isTrue);
+      expect(isExcludedPath(fileSystemIo, path, ["**/vendor"]), isFalse);
+      expect(isExcludedPath(fileSystemIo, path,
+              ["/data/projects/*/workspace/AGENTS.md"]),
+          isFalse);
+      expect(isExcludedPath(fileSystemIo,
+              "/data/projects/work/workspace/AGENTS.md",
+              ["/data/projects/*/workspace/AGENTS.md"]),
+          isTrue);
+      expect(isExcludedPath(fileSystemIo, path, ["/data/projects/*/AGENTS.md"]),
+          isFalse);
+      expect(
+          isExcludedPath(fileSystemIo, path,
+              ["/data/projects/wor?/workspace/vendor/lib/AGENTS.md"]),
+          isTrue);
+      expect(isExcludedPath(fileSystemIo, path, const []), isFalse);
+      expect(isExcludedPath(fileSystemIo, path, ["", "  "]), isFalse);
+    });
+
+    test("a pattern without a slash names a file name, anywhere", () {
+      expect(
+          isExcludedPath(fileSystemIo, "/a/b/AGENTS.md", ["AGENTS.md"]),
+          isTrue);
+      expect(isExcludedPath(fileSystemIo, "/a/b/notes.md", ["AGENTS.md"]),
+          isFalse);
+      expect(isExcludedPath(fileSystemIo, "/a/b/AGENTS.md", ["*.md"]), isTrue);
+    });
+
+    test("a project file the pattern names is not loaded", () async {
+      write("AGENTS.md", "project rules");
+      final files = await load(
+          excludes: ["${projectWorkspace}/AGENTS.md"]);
+      expect(files, isEmpty);
+    });
+
+    test("a global file the pattern names is not loaded", () async {
+      writeGlobal("global rules");
+      write("AGENTS.md", "project rules");
+      final files = await load(excludes: [global]);
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
+    });
+
+    test("an import the pattern names is not expanded", () async {
+      write("AGENTS.md", "see @./notes.md");
+      write("notes.md", "the notes");
+      final files = await load(
+          imports: true, excludes: ["**/notes.md"]);
+      expect(pathsOf(files), ["projects/default/workspace/AGENTS.md"]);
+    });
+
+    test("a nested file the pattern names is not pulled in by a read",
+        () async {
+      write("chats/chat-1/sub/AGENTS.md", "sub rules");
+      final found = await findNestedInstructions(fileSystemIo,
+          p.join(chatWorkspace, "sub", "notes.txt"),
+          alreadyLoaded: {},
+          projectWorkspace: projectWorkspace,
+          excludes: ["**/sub/AGENTS.md"]);
+      expect(found, isEmpty);
     });
   });
 

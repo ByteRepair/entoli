@@ -44,10 +44,11 @@ void main() {
     String? memoryChat,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
-    final testWorkspace = p.join(tempDir.path, "workspace");
     final testProjectWorkspace = p.join(tempDir.path, "project-workspace");
+    // Nested the way the layout is: the chat's own workspace is a folder
+    // inside its project's, which is the bound the nested walk stops at.
+    final testWorkspace = p.join(testProjectWorkspace, "chats", "chat-1");
     Directory(testWorkspace).createSync(recursive: true);
-    Directory(testProjectWorkspace).createSync(recursive: true);
     addTearDown(() => tempDir.deleteSync(recursive: true));
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
     final allowed = [...approvals];

@@ -24,6 +24,7 @@ class AppSettings {
     this.loadInstructions = false,
     this.instructionImports = false,
     this.nestedInstructions = false,
+    this.instructionExcludes = const [],
     this.autoMemory = false,
     this.memoryRecall = true,
     this.memoryExtraction = true,
@@ -90,6 +91,11 @@ class AppSettings {
   /// Whether reading a file in a subdirectory that has its own AGENTS.md
   /// pulls that file into the turn. A sub-gate of [loadInstructions].
   bool nestedInstructions;
+
+  /// Glob patterns that keep an AGENTS.md out of a turn: a file whose path
+  /// one of them names is skipped, wherever the load meets it. A sub-gate of
+  /// [loadInstructions]; empty skips nothing.
+  List<String> instructionExcludes;
 
   /// Whether the auto-memory subsystem runs: a per-project store of markdown
   /// memories the agent reads, recalls and writes with a background model.
@@ -280,6 +286,10 @@ class AppSettings {
         loadInstructions: json["loadInstructions"] as bool? ?? false,
         instructionImports: json["instructionImports"] as bool? ?? false,
         nestedInstructions: json["nestedInstructions"] as bool? ?? false,
+        instructionExcludes:
+            (json["instructionExcludes"] as List? ?? const [])
+                .map((e) => e as String)
+                .toList(),
         autoMemory: json["autoMemory"] as bool? ?? false,
         // Written only when off, so a file that predates them says nothing and
         // gets the on defaults.
@@ -371,6 +381,7 @@ class AppSettings {
         loadInstructions: loadInstructions,
         instructionImports: instructionImports,
         nestedInstructions: nestedInstructions,
+        instructionExcludes: instructionExcludes,
         autoMemory: autoMemory,
         memoryRecall: memoryRecall,
         memoryExtraction: memoryExtraction,
@@ -420,6 +431,8 @@ class AppSettings {
       if (loadInstructions) "loadInstructions": loadInstructions,
       if (instructionImports) "instructionImports": instructionImports,
       if (nestedInstructions) "nestedInstructions": nestedInstructions,
+      if (instructionExcludes.isNotEmpty)
+        "instructionExcludes": instructionExcludes,
       if (autoMemory) "autoMemory": autoMemory,
       if (!memoryRecall) "memoryRecall": memoryRecall,
       if (!memoryExtraction) "memoryExtraction": memoryExtraction,

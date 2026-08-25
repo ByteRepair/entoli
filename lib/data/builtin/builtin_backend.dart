@@ -230,6 +230,7 @@ class BuiltinBackend implements AgentBackend {
               projectWorkspace: projectWorkspace,
               global: config.globalInstructionsFile,
               imports: settings.memory.imports,
+              excludes: settings.memory.excludes,
             )
           : const <InstructionFile>[];
       // The project's memory store, when the subsystem runs at all. Which

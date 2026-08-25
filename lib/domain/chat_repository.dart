@@ -334,6 +334,7 @@ class ChatRepository {
       instructions: settings.loadInstructions,
       imports: settings.instructionImports,
       nested: settings.nestedInstructions,
+      excludes: settings.instructionExcludes,
       autoMemory: settings.autoMemory,
       recall: settings.memoryRecall,
       extract: settings.memoryExtraction,

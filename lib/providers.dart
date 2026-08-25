@@ -348,6 +348,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setNestedInstructions(bool value) =>
       _update((s) => s.nestedInstructions = value);
 
+  /// The glob patterns that keep an AGENTS.md out of a turn.
+  Future<void> setInstructionExcludes(List<String> value) =>
+      _update((s) => s.instructionExcludes = value);
+
   /// Whether the auto-memory subsystem runs at all.
   Future<void> setAutoMemory(bool value) =>
       _update((s) => s.autoMemory = value);

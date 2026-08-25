@@ -921,6 +921,7 @@ class BuiltinAgent {
             resolved,
             alreadyLoaded: _loadedInstructions,
             projectWorkspace: projectWorkspace,
+            excludes: memory.excludes,
           )
         : const <InstructionFile>[];
     final output = nested.isEmpty

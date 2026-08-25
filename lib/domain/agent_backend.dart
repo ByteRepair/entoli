@@ -173,6 +173,10 @@ class MemorySettings {
   /// one. A sub-gate of [instructions].
   final bool nested;
 
+  /// The glob patterns a file's path must not name for an AGENTS.md of its to
+  /// be read. A sub-gate of [instructions]; empty reads everything.
+  final List<String> excludes;
+
   /// Whether the auto-memory subsystem runs at all.
   final bool autoMemory;
 
@@ -202,6 +206,7 @@ class MemorySettings {
     this.instructions = false,
     this.imports = false,
     this.nested = false,
+    this.excludes = const [],
     this.autoMemory = false,
     this.recall = true,
     this.extract = true,
