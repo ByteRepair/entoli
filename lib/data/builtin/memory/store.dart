@@ -35,6 +35,11 @@ const double recallMinScore = 1;
 const recallEntryChars = 400;
 const recallBlockChars = 2000;
 
+/// Caps on the index block: a line per memory, and a ceiling on the block so
+/// a large store does not take the prompt with it.
+const indexEntryChars = 150;
+const indexBlockChars = 4000;
+
 /// A memory, replayed out of the log. [chat] is the one that wrote it, or
 /// null where the user typed it in the explorer.
 class MemoryEntry {
@@ -43,12 +48,25 @@ class MemoryEntry {
     required this.text,
     required this.at,
     this.chat,
+    this.pinned = false,
   });
 
   final String id;
   final String text;
   final DateTime at;
   final String? chat;
+
+  /// Whether the user pinned it: pinned memories go into every turn in full
+  /// rather than waiting on a recall.
+  final bool pinned;
+
+  MemoryEntry copyWithPinned(bool pinned) => MemoryEntry(
+        id: id,
+        text: text,
+        at: at,
+        chat: chat,
+        pinned: pinned,
+      );
 }
 
 class MemoryStore {
@@ -75,13 +93,7 @@ class MemoryStore {
       at: DateTime.now().toUtc(),
       chat: chat,
     );
-    await _append(_encode({
-      "t": "m",
-      "id": entry.id,
-      "text": entry.text,
-      "at": entry.at.toIso8601String(),
-      "chat": ?chat,
-    }));
+    await _append(_memoryRecord(entry.id, entry.text, entry.at, chat));
     await _rebuildIndex();
     return entry;
   }
@@ -96,6 +108,96 @@ class MemoryStore {
     }));
     await _rebuildIndex();
   }
+
+  /// Replaces the text of [id]. The log stays append-only: a new record with
+  /// the same id, and the replay's last-record-stands makes it a replacement
+  /// rather than a duplicate. Throws on empty text.
+  Future<MemoryEntry> update(String id, String text, {String? chat}) async {
+    if (text.trim().isEmpty) {
+      throw ArgumentError.value(text, "text", "must not be empty");
+    }
+    final entry = MemoryEntry(
+      id: id,
+      text: text.trim(),
+      at: DateTime.now().toUtc(),
+      chat: chat,
+    );
+    await _append(_memoryRecord(entry.id, entry.text, entry.at, chat));
+    await _rebuildIndex();
+    return entry;
+  }
+
+  /// Marks [id] as pinned, so it reaches every turn in full rather than
+  /// waiting on a recall. Pinning an id that is not there is a line the
+  /// replay ignores, the way a stray tombstone is.
+  Future<void> pin(String id) => _pinRecord(id, true);
+
+  /// The undo of [pin]: the last pin or unpin for an id stands.
+  Future<void> unpin(String id) => _pinRecord(id, false);
+
+  Future<void> _pinRecord(String id, bool pinned) async {
+    await _append(_encode({
+      "t": pinned ? "p" : "u",
+      "id": id,
+      "at": DateTime.now().toUtc().toIso8601String(),
+    }));
+  }
+
+  /// The maintenance half of the store: the ops a model reports after it has
+  /// been shown the memories — drops, replacements, and new ones. An
+  /// operation on an id that is not there is ignored, and a replacement of a
+  /// missing id lands as a new memory rather than a record with a made-up id,
+  /// so a model that misremembers a name costs nothing. Returns what landed.
+  Future<({int added, int updated, int deleted})> maintain({
+    List<String>? delete,
+    Map<String, String>? replaces,
+    List<String>? add,
+    String? chat,
+  }) async {
+    final live = {for (final entry in await entries()) entry.id: entry};
+    var added = 0;
+    var updated = 0;
+    var deleted = 0;
+    for (final id in delete ?? const <String>[]) {
+      if (!live.containsKey(id)) continue;
+      await _append(_encode({
+        "t": "d",
+        "id": id,
+        "at": DateTime.now().toUtc().toIso8601String(),
+      }));
+      deleted++;
+    }
+    for (final entry in (replaces ?? const <String, String>{}).entries) {
+      final id = entry.key;
+      final text = entry.value;
+      if (text.trim().isEmpty) continue;
+      final when = DateTime.now().toUtc();
+      if (live.containsKey(id)) {
+        await _append(_memoryRecord(id, text.trim(), when, chat));
+        updated++;
+      } else {
+        await _append(_memoryRecord(const Uuid().v4(), text.trim(), when, chat));
+        added++;
+      }
+    }
+    for (final text in add ?? const <String>[]) {
+      if (text.trim().isEmpty) continue;
+      await _append(_memoryRecord(const Uuid().v4(), text.trim(),
+          DateTime.now().toUtc(), chat));
+      added++;
+    }
+    if (added + updated + deleted > 0) await _rebuildIndex();
+    return (added: added, updated: updated, deleted: deleted);
+  }
+
+  String _memoryRecord(String id, String text, DateTime at, String? chat) =>
+      _encode({
+        "t": "m",
+        "id": id,
+        "text": text,
+        "at": at.toIso8601String(),
+        "chat": ?chat,
+      });
 
   /// The memories [query] is about: the ones that clear [recallMinScore],
   /// best first, at most [limit].
@@ -147,12 +249,15 @@ class MemoryStore {
   List<MemoryEntry> _replay(String log) {
     final latest = <String, MemoryEntry>{};
     final deleted = <String>{};
+    final pinned = <String, bool>{};
     for (final line in log.split("\n")) {
       if (line.trim().isEmpty) continue;
       final record = _recordOf(line);
       if (record == null) break;
       if (record.delete) {
         deleted.add(record.id);
+      } else if (record.pin != null) {
+        pinned[record.id] = record.pin!;
       } else {
         final memory = record.entry!;
         latest.putIfAbsent(memory.id, () => memory);
@@ -161,13 +266,14 @@ class MemoryStore {
     }
     return [
       for (final entry in latest.values)
-        if (!deleted.contains(entry.id)) entry,
+        if (!deleted.contains(entry.id))
+          entry.copyWithPinned(pinned[entry.id] ?? false),
     ];
   }
 
   /// One line of the log, or null where it is not a record at all: a torn
   /// write, or one whose fields are not what the reader needs.
-  ({bool delete, String id, MemoryEntry? entry})? _recordOf(String line) {
+  ({bool delete, bool? pin, String id, MemoryEntry? entry})? _recordOf(String line) {
     Object? decoded;
     try {
       decoded = jsonDecode(line);
@@ -178,7 +284,10 @@ class MemoryStore {
     final id = decoded["id"];
     if (id is! String) return null;
     if (decoded["t"] == "d") {
-      return (delete: true, id: id, entry: null);
+      return (delete: true, pin: null, id: id, entry: null);
+    }
+    if (decoded["t"] == "p" || decoded["t"] == "u") {
+      return (delete: false, pin: decoded["t"] == "p", id: id, entry: null);
     }
     if (decoded["t"] != "m") return null;
     final text = decoded["text"];
@@ -189,6 +298,7 @@ class MemoryStore {
     final chat = decoded["chat"];
     return (
       delete: false,
+      pin: null,
       id: id,
       entry: MemoryEntry(
         id: id,
@@ -264,6 +374,26 @@ List<String> tokenize(String text) {
     if (word.length >= 2) words.add(word);
   }
   return words;
+}
+
+/// The memories as a block of prompt text, newest first, one line each with
+/// the caps applied. This is the always-loaded half of the store: what is not
+/// in the line is still there, and the line says the search can reach it.
+/// Empty where there is nothing, so the caller sends no section then.
+String renderIndex(List<MemoryEntry> memories) {
+  if (memories.isEmpty) return "";
+  final lines = <String>[];
+  var total = 0;
+  for (final memory in [...memories].reversed) {
+    var text = memory.text.trim();
+    if (text.length > indexEntryChars) {
+      text = "${text.substring(0, indexEntryChars)}...";
+    }
+    lines.add("- $text");
+    total += text.length + 2;
+    if (total > indexBlockChars) break;
+  }
+  return lines.join("\n");
 }
 
 /// The memories as a block of prompt text, the caps applied. Empty where

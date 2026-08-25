@@ -144,6 +144,154 @@ void main() {
     });
   });
 
+  group("update", () {
+    test("a same-id record replaces the memory rather than duplicating it",
+        () async {
+      final entry = await store.add("the user prefers tabs", chat: "chat-1");
+      await store.update(entry.id, "the user prefers spaces", chat: "chat-2");
+
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.id, entry.id);
+      expect(entries.single.text, "the user prefers spaces");
+      expect(entries.single.chat, "chat-2");
+    });
+
+    test("the old position in the list stands, the text moves", () async {
+      final first = await store.add("first");
+      await store.add("second");
+      await store.update(first.id, "first, revised");
+
+      final entries = await store.entries();
+      expect([for (final e in entries) e.text], ["first, revised", "second"]);
+    });
+
+    test("an update to a missing id is a new memory under that id", () async {
+      await store.update("no-such-id", "a fact with no predecessor");
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.id, "no-such-id");
+    });
+
+    test("an empty update is refused", () async {
+      final entry = await store.add("a memory");
+      expect(() => store.update(entry.id, "  "), throwsArgumentError);
+      expect(await store.entries(), hasLength(1));
+    });
+  });
+
+  group("pinning", () {
+    test("a pin shows on the entry, an unpin takes it off", () async {
+      final a = await store.add("pinned later");
+      final b = await store.add("never pinned");
+      await store.pin(a.id);
+
+      final entries = await store.entries();
+      expect(entries.singleWhere((e) => e.id == a.id).pinned, isTrue);
+      expect(entries.singleWhere((e) => e.id == b.id).pinned, isFalse);
+
+      await store.unpin(a.id);
+      expect((await store.entries()).singleWhere((e) => e.id == a.id).pinned,
+          isFalse);
+    });
+
+    test("the last pin or unpin stands", () async {
+      final entry = await store.add("toggle me");
+      await store.pin(entry.id);
+      await store.unpin(entry.id);
+      await store.pin(entry.id);
+      expect((await store.entries()).single.pinned, isTrue);
+    });
+
+    test("a pin for a memory that is not there changes nothing", () async {
+      await store.pin("no-such-id");
+      await store.add("a memory");
+      expect(await store.entries(), hasLength(1));
+      expect((await store.entries()).single.pinned, isFalse);
+    });
+
+    test("a pin does not keep a tombstoned memory alive", () async {
+      final entry = await store.add("doomed");
+      await store.pin(entry.id);
+      await store.delete(entry.id);
+      expect(await store.entries(), isEmpty);
+    });
+  });
+
+  group("maintain", () {
+    test("drops, replacements and new ones all land", () async {
+      final keep = await store.add("keep this");
+      final drop = await store.add("drop this");
+      final result = await store.maintain(
+        delete: [drop.id, "no-such-id"],
+        replaces: {keep.id: "keep this, revised"},
+        add: ["a brand new fact"],
+        chat: "chat-9",
+      );
+
+      expect(result, (added: 1, updated: 1, deleted: 1));
+      final entries = await store.entries();
+      expect(entries, hasLength(2));
+      expect(entries.singleWhere((e) => e.id == keep.id).text,
+          "keep this, revised");
+      expect(entries.singleWhere((e) => e.id == keep.id).chat, "chat-9");
+      expect(
+          entries.any((e) => e.text == "a brand new fact"), isTrue);
+    });
+
+    test("a replacement of a missing id lands as a new memory", () async {
+      final result = await store.maintain(replaces: {"no-such-id": "fresh fact"});
+      expect(result, (added: 1, updated: 0, deleted: 0));
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.text, "fresh fact");
+      expect(entries.single.id, isNot("no-such-id"));
+    });
+
+    test("empty texts are skipped and an empty batch changes nothing",
+        () async {
+      await store.add("a memory");
+      final result = await store.maintain(
+        delete: [],
+        replaces: {"no-such-id": "   "},
+        add: ["", "  "],
+      );
+      expect(result, (added: 0, updated: 0, deleted: 0));
+      expect(await store.entries(), hasLength(1));
+    });
+
+    test("the index follows a maintenance batch", () async {
+      await store.add("the build needs the flutter toolbox");
+      final result = await store.maintain(add: ["kotlin was written to the log"]);
+      expect(result.added, 1);
+      expect(await store.search("kotlin"), hasLength(1));
+    });
+  });
+
+  group("renderIndex", () {
+    test("empty where there is nothing", () {
+      expect(renderIndex(const []), isEmpty);
+    });
+
+    test("one line per memory, newest first", () async {
+      await store.add("the older note");
+      await store.add("the newer note");
+      final block = renderIndex(await store.entries());
+      expect(block, "- the newer note\n- the older note");
+    });
+
+    test("a long line is cut and the block has a ceiling", () {
+      final long = List.filled(20, "a memory long enough to matter").join(" ");
+      final entries = [
+        for (var i = 0; i < 20; i++)
+          MemoryEntry(id: "id$i", text: long, at: DateTime(2026)),
+      ];
+      final block = renderIndex(entries);
+      expect(block, contains("..."));
+      expect(block.length, lessThan(indexBlockChars + indexEntryChars + 10));
+    });
+  });
+
   group("renderRecall", () {
     test("empty where there is nothing", () {
       expect(renderRecall(const []), isEmpty);
