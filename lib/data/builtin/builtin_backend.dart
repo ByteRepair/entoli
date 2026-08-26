@@ -55,10 +55,13 @@ class BuiltinBackend implements AgentBackend {
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
 
-  /// Entoli's own commands and agents. A turn's own references travel on the
+  /// Entoli's own skills and agents. A turn's own references travel on the
   /// message, resolved where it was composed, so this is left for the `task`
-  /// tool — which names an `@agent` the user never wrote.
-  final PromptLibrary? library;
+  /// tool — which names an `@agent` the user never wrote — and for the skills
+  /// offered to the model. Mutable because the Skills page can change what is
+  /// on disk and reload the library; a turn already running keeps what it
+  /// started with, the way a running command keeps its environment.
+  PromptLibrary? library;
 
   /// Web search and fetch, chosen by the platform like [shell] is:
   /// `DuckDuckGoSearch` on desktop and Android, `UnavailableWebSearch` in a
@@ -245,6 +248,7 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         model: target.modelId,
         options: options,
+        skills: library?.entries(CompletionKind.skill) ?? const [],
         approveMode: settings.approveMode,
         classifier: classifier,
         approve: _awaitApproval,

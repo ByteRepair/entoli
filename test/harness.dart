@@ -182,7 +182,8 @@ class TestApp {
           agentBackendProvider.overrideWithValue(backend),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
-          promptLibraryProvider.overrideWithValue(library ?? testLibrary()),
+          promptLibraryProvider
+              .overrideWith(() => PromptLibraryNotifier(library ?? testLibrary())),
           launcherIconsProvider.overrideWithValue(launcher),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),

@@ -451,7 +451,7 @@ void main() {
       app = TestApp.create(
         library: PromptLibrary([
           for (var i = 0; i < 12; i++)
-            PromptDocument.parse(CompletionKind.command, "cmd$i", "do $i"),
+            PromptDocument.parse(CompletionKind.skill, "cmd$i", "do $i"),
         ]),
       );
       await openBlank(tester);

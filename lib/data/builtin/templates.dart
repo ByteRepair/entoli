@@ -2,6 +2,8 @@ import "dart:convert";
 
 import "../../domain/ask.dart";
 import "../../domain/profile.dart";
+import "../../domain/prompt_library.dart";
+import "skill_tool.dart";
 import "task_tool.dart";
 
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
@@ -17,10 +19,11 @@ String systemPrompt({
   required String platform,
   Profile? profile,
   bool canRunCommands = true,
+  List<PromptDocument> skills = const [],
 }) =>
     canRunCommands
-        ? _withShell(platform: platform, profile: profile)
-        : _withoutShell(profile: profile);
+        ? _withShell(platform: platform, profile: profile, skills: skills)
+        : _withoutShell(profile: profile, skills: skills);
 
 /// The half that changes: where this conversation's files are, and whatever an
 /// `@agent` mention added. Its own system message so the body above it is
@@ -88,7 +91,7 @@ String userTurnText(String text, {required DateTime at, required bool first}) =>
 /// same `FileSystem` the app uses, so a browser can still produce files and
 /// artifacts. The turn ends when it replies with text and calls no tool — the
 /// same termination signal the shell path uses.
-String _withoutShell({Profile? profile}) => """
+String _withoutShell({Profile? profile, List<PromptDocument> skills = const []}) => """
 You are a helpful assistant.
 
 You are running in a browser, so you have no shell: you cannot run commands.
@@ -99,7 +102,30 @@ view. Prefix a path with `project:` to reach the project workspace.
 $_files
 $_asking
 $_artifacts
-${profileSection(profile)}""";
+${skillsSection(skills)}${profileSection(profile)}""";
+
+/// The skills the model may load itself, as the system prompt lists them.
+/// Empty produces nothing, so a device with no skills keeps the prompt — and
+/// the warmed prefix over it — exactly as it was.
+String skillsSection(List<PromptDocument> skills) {
+  final usable = skills.where((s) => s.modelInvocable).toList();
+  if (usable.isEmpty) return "";
+  final listed = [
+    for (final skill in usable)
+      "- ${skill.name}: ${skill.description ?? "(no description)"}",
+  ];
+  return """
+
+## Skills
+
+Skills are named procedures, packaged as instructions with whatever files they
+need. Available to you:
+
+${listed.join("\n")}
+
+Load one with the `$skillToolName` tool when the task suits it. The result
+carries its instructions and the base directory its files are in.""";
+}
 
 /// The one thing both prompts say, because asking is the one thing the agent
 /// can do with or without a machine under it. Deliberately only what the tool's
@@ -144,7 +170,11 @@ keep the look working on the serif fallbacks the base stylesheet uses offline.
 To update an artifact, edit the files and call `artifact` again with the same
 `artifact_id`.""";
 
-String _withShell({required String platform, Profile? profile}) =>
+String _withShell({
+  required String platform,
+  Profile? profile,
+  List<PromptDocument> skills = const [],
+}) =>
     """
 You are a helpful assistant that can interact with a computer to answer the
 user's questions and carry out their tasks.
@@ -184,7 +214,7 @@ one message run concurrently, so a fan-out of N is one step, not N.
 `webfetch` retrieves a URL and returns its text content with markup stripped.
 Use them together: `websearch` to find sources, then `webfetch` to read the
 ones that look relevant. Both are read-only, so they run without asking.
-
+${skillsSection(skills)}
 $_files
 
 $_artifacts

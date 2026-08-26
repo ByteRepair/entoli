@@ -267,7 +267,7 @@ void main() {
       AppSettings(),
       library: PromptLibrary([
         PromptDocument.parse(
-            CompletionKind.command, "review", "---\ndescription: d\n---\n\nLook at it."),
+            CompletionKind.skill, "review", "---\ndescription: d\n---\n\nLook at it."),
       ]),
     );
 

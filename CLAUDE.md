@@ -25,12 +25,12 @@ loads when that code is being read rather than on every session. A section
 named in a cross-reference is findable from this list.
 
 - `lib/domain/CLAUDE.md` — The conversation log, Threads, The projection,
-  Carrying on an interrupted turn, Starting a chat, and naming it, Commands
-  and agents, Resending a message, Attachments, Reminders
+  Carrying on an interrupted turn, Starting a chat, and naming it, Skills and
+  agents, Resending a message, Attachments, Reminders
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-  Carrying one on, Web search, Memory
+   Carrying one on, Web search, Skills, Memory
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
@@ -80,7 +80,7 @@ with nothing either, which is why nothing user-facing names it at all.
   `ChatRepository` resolves which model runs and owns rewinding. Context is
   re-injected only when a turn is resent — otherwise the agent's own session
   carries it.
-- The agent runs **on top of** Entoli. Commands and agents are Entoli's,
+- The agent runs **on top of** Entoli. Skills and agents are Entoli's,
   resolved where the message is composed and recorded on it, so the model reads
   the same words on every reading of the conversation.
 
@@ -92,8 +92,12 @@ A chat is
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
 Every project is a directory under `projects/`, the default one included.
-`<dataDir>/commands/*.md` and `<dataDir>/agents/*.md` are the user's own prompt
-files, beside `settings.json` — which holds the app-level model default, the
+`<dataDir>/skills/<name>/` is a skill — a directory with a `SKILL.md` and the
+files it runs with, not a single file — and `<dataDir>/agents/*.md` are the
+user's agents, beside `settings.json`. The bundled skills are extracted to
+`<dataDir>/skills-bundled/` at startup, beside `skills/` rather than in it: a
+skill's scripts want a real base directory, and deleting one's own skill must
+not reach the presets. `settings.json` holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
 `cornerRadius` and `systemPalette` — and `llmProviders`.
@@ -176,9 +180,11 @@ handed a filesystem and the data directory rather than an `AppConfig` for that
 reason, since `workspaceDir` answers for the layout this build has and an entry
 is about one that is gone. **An entry does nothing where what it moves is not
 there**, because it also runs over restored backups and over directories where
-the user deleted whatever it was looking for. Nothing that needed moving has
-changed the layout since 1.0.0 — a directory created on first use, `memory/`
-the first — so the chain is empty and there is no entry to copy.
+the user deleted whatever it was looking for. Two things have changed the layout
+since 1.0.0, and neither is in the chain: the user's `commands/` became
+`skills/` — a private app with no released directory to carry forward, so a
+`commands/` left on disk is not read rather than migrated — and `memory/`, a
+directory created on first use rather than moved. The chain stays empty.
 
 ### Projects
 
