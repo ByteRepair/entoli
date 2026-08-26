@@ -267,7 +267,7 @@ void main() {
     test("a project file the pattern names is not loaded", () async {
       write("AGENTS.md", "project rules");
       final files = await load(
-          excludes: ["${projectWorkspace}/AGENTS.md"]);
+          excludes: ["$projectWorkspace/AGENTS.md"]);
       expect(files, isEmpty);
     });
 

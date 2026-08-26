@@ -153,7 +153,7 @@ RegExp _globToRegExp(String pattern) {
       buf.write(RegExp.escape(c));
     }
   }
-  return RegExp("${buf}\$");
+  return RegExp("$buf\$");
 }
 
 /// One block of prompt text carrying everything loaded, worded so the model
