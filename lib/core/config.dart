@@ -147,9 +147,15 @@ class AppConfig {
   String subAgentFile(String chatId, String callId, {String? project}) =>
       fs.path.join(subAgentsDir(chatId, project: project), "$callId.jsonl");
 
-  /// Where the user's own commands and agents go, beside the presets the app
+  /// Where the user's own skills and agents go, beside the presets the app
   /// ships with. App-wide: a project scopes files, not what the composer offers.
   String promptsDir(CompletionKind kind) => fs.path.join(dataDir, kind.folder);
+
+  /// Where the bundled skills are extracted to at startup, so a skill's
+  /// scripts and reference files have a real base directory. Beside the
+  /// user's [promptsDir] rather than in it: `skills/` is purely theirs, so
+  /// deleting a skill there deletes it.
+  String get bundledSkillsDir => fs.path.join(dataDir, "skills-bundled");
 
   /// Create a chat's directories. Reading a path no longer creates it, so the
   /// few places that need them on the filesystem say so.

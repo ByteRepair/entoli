@@ -13,7 +13,7 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `CompletionField`,
 `text_input.dart` — the sections below — and `catalog.dart`.
 
-`CompletionField` is the field a prompt is written in: the menu of `/commands`
+`CompletionField` is the field a prompt is written in: the menu of `/skills`
 and `@agents` that matches what has been typed, the arrows and tab and return
 that take one, and escape. It was the composer's, and it is here because the
 reminder editor writes a prompt too — one that is dispatched through the same

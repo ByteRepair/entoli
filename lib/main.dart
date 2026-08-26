@@ -12,6 +12,7 @@ import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "data/local/file_reminder_store.dart";
 import "data/local/file_selector_picker.dart";
+import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
@@ -34,6 +35,7 @@ import "ui/theme.dart";
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerBundledFontLicences();
+  registerBundledSkillLicences();
   platform.registerVoiceLicences();
   await platform.persist();
   // Built here rather than by the root, so the platform's splash covers the
@@ -67,6 +69,9 @@ class AppSession {
     final version = platform.appVersion();
     final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
+    // Before the library is built: the bundled skills are read back off the
+    // directory this writes them into, not off the asset bundle.
+    await installBundledSkills(config);
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
     final handoff = platform.createFileHandoff(config);
@@ -133,7 +138,7 @@ class AppSession {
         agentBackendProvider.overrideWithValue(backend),
         appConfigProvider.overrideWithValue(config),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
-        promptLibraryProvider.overrideWithValue(library),
+        promptLibraryProvider.overrideWith(() => PromptLibraryNotifier(library)),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
