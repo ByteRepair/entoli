@@ -673,54 +673,42 @@ class _InstructionsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
-    final on = settings.loadInstructions;
     final excludes = settings.instructionExcludes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader(
           "Instructions",
-          description: "The AGENTS.md files read into each turn: yours, at the "
-              "root of your data directory, and the project's, in its "
-              "workspace: rules the user wrote down once.",
-        ),
-        SwitchListTile(
-          title: const Text("Read AGENTS.md"),
-          subtitle: const Text("Off, the agent reads no instruction files."),
-          value: on,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setLoadInstructions(value),
+          description: "The AGENTS.md files are read into every turn: yours, "
+              "at the root of your data directory, and the project's, in its "
+              "workspace: rules the user wrote down once. The rows below reach "
+              "further than those two, or keep one of them out.",
         ),
         SwitchListTile(
           title: const Text("Follow @file imports"),
           subtitle: const Text(
               "An @path inside an AGENTS.md pulls in the file it names."),
-          value: on && settings.instructionImports,
-          onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setInstructionImports(value)
-              : null,
+          value: settings.instructionImports,
+          onChanged: (value) =>
+              ref.read(appSettingsProvider.notifier).setInstructionImports(value),
         ),
         SwitchListTile(
           title: const Text("Nested AGENTS.md"),
           subtitle: const Text(
               "Reading a file pulls in a subdirectory's own AGENTS.md."),
-          value: on && settings.nestedInstructions,
-          onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setNestedInstructions(value)
-              : null,
+          value: settings.nestedInstructions,
+          onChanged: (value) =>
+              ref.read(appSettingsProvider.notifier).setNestedInstructions(value),
         ),
-        if (on)
-          _EditableRow(
-            title: "Excluded files",
-            subtitle: excludes.isEmpty ? "None" : excludes.join("\n"),
-            removeLabel: "Clear exclusions",
-            onTap: () => _editExcludes(context, ref),
-            onRemove: () => ref
-                .read(appSettingsProvider.notifier)
-                .setInstructionExcludes(const []),
-          ),
+        _EditableRow(
+          title: "Excluded files",
+          subtitle: excludes.isEmpty ? "None" : excludes.join("\n"),
+          removeLabel: "Clear exclusions",
+          onTap: () => _editExcludes(context, ref),
+          onRemove: () => ref
+              .read(appSettingsProvider.notifier)
+              .setInstructionExcludes(const []),
+        ),
       ],
     );
   }

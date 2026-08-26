@@ -222,17 +222,16 @@ class BuiltinBackend implements AgentBackend {
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
       // The AGENTS.md block, loaded once where the two workspace paths are
-      // known. Empty when the gate is off or nothing was found; the agent
-      // renders it into the second system message either way.
-      final instructions = settings.memory.instructions
-          ? await loadInstructions(
-              config.fs,
-              projectWorkspace: projectWorkspace,
-              global: config.globalInstructionsFile,
-              imports: settings.memory.imports,
-              excludes: settings.memory.excludes,
-            )
-          : const <InstructionFile>[];
+      // known: the files are read into every turn, and the imports and
+      // excludes answers are the only halves a turn may withhold. Empty when
+      // nothing was found; the agent renders it either way.
+      final instructions = await loadInstructions(
+        config.fs,
+        projectWorkspace: projectWorkspace,
+        global: config.globalInstructionsFile,
+        imports: settings.memory.imports,
+        excludes: settings.memory.excludes,
+      );
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a
       // turn, so recall and the agent's tools share one.

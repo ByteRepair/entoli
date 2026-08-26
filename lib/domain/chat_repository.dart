@@ -319,9 +319,10 @@ class ChatRepository {
   /// project's store answers. A non-default project with its own toggle on
   /// keeps a store of its own; every other chat shares the default project's.
   /// Both halves of the background model travel together or not at all, and
-  /// until one is picked nothing in the subsystem writes.
+  /// until one is picked nothing in the subsystem writes. With the master
+  /// off there is no store and the value carries nothing, but it is built
+  /// rather than skipped: the AGENTS.md files a turn reads do not ride on it.
   Future<MemorySettings> _resolveMemory(AppSettings settings, String? project) async {
-    if (!settings.loadInstructions && !settings.autoMemory) return MemorySettings.off;
     String? dir;
     if (settings.autoMemory) {
       var owner = project;
@@ -331,7 +332,6 @@ class ChatRepository {
       dir = _config.memoryDir(project: owner);
     }
     return MemorySettings(
-      instructions: settings.loadInstructions,
       imports: settings.instructionImports,
       nested: settings.nestedInstructions,
       excludes: settings.instructionExcludes,

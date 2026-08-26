@@ -335,12 +335,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..classifierProviderId = choice.providerId
     ..classifierModelId = choice.modelId);
 
-  /// Whether the agent reads AGENTS.md out of the workspaces. The master
-  /// gate; the two below are sub-gates of it.
-  Future<void> setLoadInstructions(bool value) =>
-      _update((s) => s.loadInstructions = value);
-
-  /// Whether `@path` references inside an AGENTS.md pull in more files.
+  /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);
 

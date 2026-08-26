@@ -213,7 +213,6 @@ void main() {
       expect(settings.profile, isNull);
       // Auto-memory is on in the app, but the built-in says off.
       expect(settings.memory.autoMemory, isFalse);
-      expect(settings.memory.instructions, isFalse);
       // No shared workspace: the chat's own is its HOME too.
       expect(settings.sharedWorkspace, isFalse);
       // A watched turn: nothing is taken away beyond the built-in's (none).

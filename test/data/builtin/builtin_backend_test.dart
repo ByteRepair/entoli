@@ -184,8 +184,7 @@ void main() {
       expect(client.sent.first[1].text, contains(config.projectWorkspaceDir()));
     });
 
-    test("workspace instructions are loaded and sent when the gate is on",
-        () async {
+    test("workspace instructions are loaded and sent", () async {
       final backend = backendOver([
         [finish],
       ]);
@@ -195,24 +194,10 @@ void main() {
       File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
           .writeAsStringSync("project rules");
 
-      await send(backend, "hi",
-          memory: const MemorySettings(instructions: true));
+      await send(backend, "hi");
 
       expect(client.sent.first[1].text, contains("project rules"));
       expect(client.sent.first[1].text, contains("Workspace instructions"));
-    });
-
-    test("no instructions section when the gate is off", () async {
-      final backend = backendOver([
-        [finish],
-      ]);
-      Directory(config.projectWorkspaceDir()).createSync(recursive: true);
-      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
-          .writeAsStringSync("project rules");
-
-      await send(backend, "hi");
-
-      expect(client.sent.first[1].text, isNot(contains("project rules")));
     });
 
     test("relevant memories are recalled into the turn", () async {

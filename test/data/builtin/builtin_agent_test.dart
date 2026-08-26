@@ -870,7 +870,7 @@ void main() {
         [readCall("sub/notes.txt")],
         [finish],
       ]);
-      final agent = agentOver(client);
+      final agent = agentOver(client, memory: const MemorySettings(nested: false));
       Directory(p.join(agent.workspace, "sub")).createSync(recursive: true);
       File(p.join(agent.workspace, "sub", "notes.txt")).writeAsStringSync("hi");
       File(p.join(agent.workspace, "sub", "AGENTS.md"))

@@ -158,23 +158,21 @@ class InfoEvent extends AgentEvent {
 
 /// What a turn may read and remember, resolved once by `ChatRepository` from
 /// the app's gates over which project's store answers. [off] is the value
-/// while every gate is closed, which is the shipped default: a turn then
-/// carries nothing of this and the agent never touches a memory directory.
+/// while the subsystem is closed, which is the shipped default: a turn then
+/// carries no store and the agent never touches a memory directory. The
+/// AGENTS.md files a turn reads are not here: they are read whether or not
+/// the subsystem runs.
 class MemorySettings {
-  /// The master gate. Off, no AGENTS.md is read at all and the two sub-gates
-  /// below mean nothing.
-  final bool instructions;
-
   /// Whether `@path` references inside an AGENTS.md are expanded into extra
-  /// files. A sub-gate of [instructions].
+  /// files.
   final bool imports;
 
   /// Whether reading a file pulls in the AGENTS.md of a subdirectory that has
-  /// one. A sub-gate of [instructions].
+  /// one.
   final bool nested;
 
   /// The glob patterns a file's path must not name for an AGENTS.md of its to
-  /// be read. A sub-gate of [instructions]; empty reads everything.
+  /// be read; empty reads everything.
   final List<String> excludes;
 
   /// Whether the auto-memory subsystem runs at all.
@@ -203,9 +201,8 @@ class MemorySettings {
   final String? bgProvider;
 
   const MemorySettings({
-    this.instructions = false,
-    this.imports = false,
-    this.nested = false,
+    this.imports = true,
+    this.nested = true,
     this.excludes = const [],
     this.autoMemory = false,
     this.recall = true,
