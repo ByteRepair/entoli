@@ -1,5 +1,6 @@
 import "package:fs_shim/fs.dart";
 
+import "../../../core/config.dart" show instructionFileName;
 import "../../../core/log.dart";
 
 /// AGENTS.md files, read for a turn and rendered into its second system
@@ -9,7 +10,6 @@ import "../../../core/log.dart";
 /// workspace root, shared by its chats. Neither lives in a chat's own
 /// workspace — a chat's scratch is not the place for standing rules — so a
 /// nested file above a file the agent reads mid-turn is the only other way in.
-const instructionFileName = "AGENTS.md";
 
 /// A file bigger than this is skipped rather than sent. Claude Code's cap.
 const maxInstructionBytes = 4 * 1024 * 1024;

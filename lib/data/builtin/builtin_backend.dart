@@ -229,17 +229,18 @@ class BuiltinBackend implements AgentBackend {
       // excludes answers are the only halves a turn may withhold. Where the
       // turn's project ships a note of its own it stands in for the whole
       // block: no file is read, and nothing a file read would pull in can
-      // either.
+      // either. Started before the recall reads below, which it is
+      // independent of: a turn's two file loads are not a queue.
       final bundled = settings.bundledInstructions;
-      final instructions = bundled != null
-          ? [
+      final instructionsF = bundled != null
+          ? Future.value([
               InstructionFile(
                 path: settings.project ?? "the built-in project",
                 kind: InstructionKind.bundled,
                 content: bundled,
               ),
-            ]
-          : await loadInstructions(
+            ])
+          : loadInstructions(
               config.fs,
               projectWorkspace: projectWorkspace,
               global: config.globalInstructionsFile,
@@ -271,12 +272,13 @@ class BuiltinBackend implements AgentBackend {
               ?.plainText ??
               "";
           if (query.isNotEmpty) {
-            recall = renderRecall(await memoryStore.search(query));
+            recall = renderRecall(await memoryStore.search(query, entries: all));
           }
         } catch (e) {
           logFailure("memory", "recall failed: $e");
         }
       }
+      final instructions = await instructionsF;
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {
@@ -602,13 +604,7 @@ class BuiltinBackend implements AgentBackend {
         "its id, and delete spends one the exchange contradicts or supersedes. "
         "Any key may be an empty list where there is nothing to do.";
     try {
-      final chunks = await target.client
-          .stream([LlmMessage(role: LlmRole.user, text: question)],
-              model: target.modelId)
-          .timeout(const Duration(seconds: 60))
-          .toList();
-      final answer =
-          chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
+      final answer = await _askBackground(target, question);
       final ops = _maintainFrom(answer);
       if (ops.add.isEmpty && ops.replaces.isEmpty && ops.delete.isEmpty) return;
       final result = await store.maintain(
@@ -670,13 +666,7 @@ class BuiltinBackend implements AgentBackend {
           "behind a fact none of the entries held. If nothing is wrong, all "
           "three empty.";
       try {
-        final chunks = await target.client
-            .stream([LlmMessage(role: LlmRole.user, text: question)],
-                model: target.modelId)
-            .timeout(const Duration(seconds: 60))
-            .toList();
-        final answer =
-            chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
+        final answer = await _askBackground(target, question);
         final ops = _maintainFrom(answer);
         if (ops.add.isNotEmpty ||
             ops.replaces.isNotEmpty ||
@@ -701,6 +691,19 @@ class BuiltinBackend implements AgentBackend {
     } finally {
       _consolidating = false;
     }
+  }
+
+  /// The background answer: the last completion the model streams within the
+  /// window, trimmed, and nothing where it streamed no completion at all. The
+  /// window is what keeps a stuck provider from holding a pass forever.
+  Future<String> _askBackground(
+      ({LlmClient client, String modelId}) target, String question) async {
+    final chunks = await target.client
+        .stream([LlmMessage(role: LlmRole.user, text: question)],
+            model: target.modelId)
+        .timeout(const Duration(seconds: 60))
+        .toList();
+    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
   }
 
   /// The maintenance JSON, read as liberally as the model writes it: the old
@@ -735,13 +738,10 @@ class BuiltinBackend implements AgentBackend {
     final rawReplaces = decoded["replaces"];
     if (rawReplaces is Map) {
       for (final entry in rawReplaces.entries) {
-        if (entry.key is! String || entry.value is! String) continue;
-        var text = (entry.value as String).trim();
-        if (text.isEmpty) continue;
-        if (text.length > recallEntryChars) {
-          text = text.substring(0, recallEntryChars);
-        }
-        replaces[entry.key as String] = text;
+        final key = entry.key;
+        final text = entry.value is String ? _fact(entry.value as String) : null;
+        if (key is! String || text == null) continue;
+        replaces[key] = text;
       }
     }
     final memories = decoded["memories"] ?? decoded["add"];
@@ -754,17 +754,23 @@ class BuiltinBackend implements AgentBackend {
     );
   }
 
-  /// The new-fact half of the answer: trimmed, cut to the store's write cap,
-  /// and at most five of them, the way the old shape was.
+  /// One fact as the store takes it: trimmed and cut to the write cap, or
+  /// nothing where there is no fact at all.
+  String? _fact(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return null;
+    return text.length > recallEntryChars
+        ? text.substring(0, recallEntryChars)
+        : text;
+  }
+
+  /// The new-fact half of the answer, at most five of them, the way the old
+  /// shape was.
   List<String> _factsFrom(Object? value) {
     final facts = <String>[];
     for (final entry in (value as List)) {
-      if (entry is! String) continue;
-      var text = entry.trim();
-      if (text.isEmpty) continue;
-      if (text.length > recallEntryChars) {
-        text = text.substring(0, recallEntryChars);
-      }
+      final text = entry is String ? _fact(entry) : null;
+      if (text == null) continue;
       facts.add(text);
       if (facts.length == 5) break;
     }

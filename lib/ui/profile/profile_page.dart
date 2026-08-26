@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writingSuffix;
+import "../../domain/documents.dart" show writeThroughRename;
 import "../../domain/profile.dart";
 import "../../providers.dart";
 import "../widgets/resettable_field.dart";
@@ -67,10 +67,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   String _instructionsPath(AppConfig config) =>
       widget.project == null
           ? config.globalInstructionsFile
-          : config.fs.path.join(
-              config.projectWorkspaceDir(project: widget.project),
-              "AGENTS.md",
-            );
+          : config.projectInstructionsFile(project: widget.project);
 
   Profile _profile() => Profile(
         name: _blank(_name.text),
@@ -96,20 +93,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   /// Through a rename: a turn reads the file between turns, and a truncated
-  /// half-write would be instructions the model half-follows.
+  /// half-write would be instructions the model half-follows. An empty field
+  /// deletes the file rather than leaving an empty one behind.
   Future<void> _writeInstructions(
       AppConfig config, String path, String text) async {
     final fs = config.fs;
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) {
+    if (text.trim().isEmpty) {
       final file = fs.file(path);
       if (await file.exists()) await file.delete();
       return;
     }
     await fs.directory(fs.path.dirname(path)).create(recursive: true);
-    final temp = fs.file("$path$writingSuffix");
-    await temp.writeAsString(text);
-    await temp.rename(path);
+    await writeThroughRename(fs, path, text);
   }
 
   Future<void> _clear() async {

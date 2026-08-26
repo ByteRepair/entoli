@@ -6,6 +6,10 @@ import "../domain/models.dart";
 import "../domain/project.dart";
 import "migrations.dart";
 
+/// The name the instruction files go by, at the data dir's root and at each
+/// project's workspace root.
+const instructionFileName = "AGENTS.md";
+
 /// Composes the paths of the Entoli data directory, and holds the filesystem
 /// they lead into. This file builds names; [fs] is what they mean.
 ///
@@ -201,15 +205,19 @@ class AppConfig {
     }
   }
 
-  /// Not the app's version: it names the release whose migration last ran here,
-  /// and a release that leaves the layout alone leaves this where it was. See
-  /// `migrations.dart`.
   /// The user's global instructions, at the data dir's root: the one file the
   /// instruction load reads that is not inside a project. Outside the
   /// workspaces, so a turn's file tools cannot reach it.
   String get globalInstructionsFile =>
-      fs.path.join(dataDir, "AGENTS.md");
+      fs.path.join(dataDir, instructionFileName);
 
+  /// The project's instructions, at its workspace root, shared by its chats.
+  String projectInstructionsFile({String? project}) =>
+      fs.path.join(projectWorkspaceDir(project: project), instructionFileName);
+
+  /// Not the app's version: it names the release whose migration last ran here,
+  /// and a release that leaves the layout alone leaves this where it was. See
+  /// `migrations.dart`.
   String get versionFile => fs.path.join(dataDir, "version");
 
   String get settingsFile => fs.path.join(dataDir, "settings.json");

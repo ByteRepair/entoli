@@ -3,7 +3,7 @@ import "dart:convert";
 import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
-import "../../../domain/documents.dart" show writingSuffix;
+import "../../../domain/documents.dart" show writeThroughRename;
 
 /// A project's auto-memory: small durable facts that accumulate as turns
 /// happen and are recalled into the turns they are relevant to. The store is
@@ -179,9 +179,7 @@ class MemoryStore {
   Future<void> stampConsolidated(DateTime at) async {
     final directory = fs.directory(dir);
     if (!await directory.exists()) await directory.create(recursive: true);
-    final temp = fs.file("$_consolidatedPath$writingSuffix");
-    await temp.writeAsString(at.toUtc().toIso8601String());
-    await temp.rename(_consolidatedPath);
+    await writeThroughRename(fs, _consolidatedPath, at.toUtc().toIso8601String());
   }
 
   /// The maintenance half of the store: the ops a model reports after it has
@@ -241,9 +239,14 @@ class MemoryStore {
       });
 
   /// The memories [query] is about: the ones that clear [recallMinScore],
-  /// best first, at most [limit].
-  Future<List<MemoryEntry>> search(String query, {int limit = recallLimit}) async {
-    final all = await entries();
+  /// best first, at most [limit]. [entries] spares the log a second read where
+  /// the caller has it in hand already.
+  Future<List<MemoryEntry>> search(
+    String query, {
+    int limit = recallLimit,
+    List<MemoryEntry>? entries,
+  }) async {
+    final all = entries ?? await this.entries();
     if (all.isEmpty) return const [];
     final index = await _index(all);
     final scores = <String, double>{};
@@ -389,9 +392,8 @@ class MemoryStore {
   Future<void> _writeIndex(int size, Map<String, List<String>> terms) async {
     // Through a rename: a torn index would cost a rebuild on the next read,
     // but a reader must never see an empty one under a non-empty log.
-    final temp = fs.file("$_indexPath$writingSuffix");
-    await temp.writeAsString(jsonEncode({"size": size, "terms": terms}));
-    await temp.rename(_indexPath);
+    await writeThroughRename(
+        fs, _indexPath, jsonEncode({"size": size, "terms": terms}));
   }
 
   static Map<String, List<String>> _indexFor(List<MemoryEntry> entries) {

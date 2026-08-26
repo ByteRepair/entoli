@@ -1256,19 +1256,19 @@ void main() {
     });
   });
 
+  /// Auto-memory on over the default store; [bg] adds the background model
+  /// pair, [extract] is the sub-gate.
+  MemorySettings memory({bool extract = true, bool bg = true}) =>
+      MemorySettings(
+        autoMemory: true,
+        extract: extract,
+        memoryDir: config.memoryDir(),
+        bgModel: bg ? "fake-model" : null,
+        bgProvider: bg ? "fake" : null,
+      );
+
   group("writing memories after a turn", () {
     late MemoryStore store;
-
-    /// Auto-memory on over the default store; [bg] adds the background model
-    /// pair, [extract] is the sub-gate.
-    MemorySettings memory({bool extract = true, bool bg = true}) =>
-        MemorySettings(
-          autoMemory: true,
-          extract: extract,
-          memoryDir: config.memoryDir(),
-          bgModel: bg ? "fake-model" : null,
-          bgProvider: bg ? "fake" : null,
-        );
 
     setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
 
@@ -1453,14 +1453,6 @@ void main() {
 
   group("tidying the memories in the background", () {
     late MemoryStore store;
-
-    MemorySettings memory() => MemorySettings(
-          autoMemory: true,
-          extract: true,
-          memoryDir: config.memoryDir(),
-          bgModel: "fake-model",
-          bgProvider: "fake",
-        );
 
     setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
 

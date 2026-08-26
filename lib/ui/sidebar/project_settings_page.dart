@@ -99,9 +99,9 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: const Text("Chats"),
             trailing: Text("$count"),
           ),
-          // A built-in project ships its own note and reads no file, so there
-          // is no instructions to edit for one.
-          if (!isBuiltinProject(project)) ...[
+          // A built-in that ships its own note reads no file, so there is no
+          // instructions to edit for one.
+          if (builtinProjectOf(project)?.bundledInstructions == null) ...[
             const Divider(),
             _ProfileRow(project: project),
           ],
@@ -175,8 +175,7 @@ class _ProfileRowState extends ConsumerState<_ProfileRow> {
 
   Future<void> _check() async {
     final config = ref.read(appConfigProvider);
-    final path = config.fs.path.join(
-        config.projectWorkspaceDir(project: widget.project), "AGENTS.md");
+    final path = config.projectInstructionsFile(project: widget.project);
     final there = await config.fs.file(path).exists();
     if (mounted) setState(() => _set = there);
   }
