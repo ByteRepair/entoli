@@ -1,8 +1,7 @@
 import "models.dart";
 
-/// One command or agent, exactly as Entoli stores it: YAML frontmatter,
-/// then the template a command expands to or the system prompt an agent runs
-/// under.
+/// One skill or agent, exactly as Entoli stores it: YAML frontmatter, then the
+/// template a skill expands to or the system prompt an agent runs under.
 class PromptDocument {
   const PromptDocument({
     required this.kind,
@@ -18,7 +17,22 @@ class PromptDocument {
 
   String? get description => frontmatter["description"];
 
-  CompletionOption get option => CompletionOption(name: name, description: description);
+  String? get argumentHint => frontmatter["argument-hint"];
+
+  /// Whether the `/` menu offers it. False is the model's half alone: a skill
+  /// the user can only reach by the model deciding to load it.
+  bool get userInvocable => frontmatter["user-invocable"]?.toLowerCase() != "false";
+
+  /// Whether the model may load it through the `skill` tool. False is the
+  /// user's half alone: the tool refuses it, reserved for `/name`.
+  bool get modelInvocable =>
+      frontmatter["disable-model-invocation"]?.toLowerCase() != "true";
+
+  CompletionOption get option => CompletionOption(
+        name: name,
+        description: description,
+        argumentHint: argumentHint,
+      );
 
   /// Only the top-level scalars are read, because [description] is all the menu
   /// shows. Everything else — nested permissions, tool maps — is dropped.
@@ -67,7 +81,7 @@ abstract class PromptSource {
   Future<List<PromptDocument>> load(CompletionKind kind);
 }
 
-/// Every command and agent the app offers, whichever backend is running the
+/// Every skill and agent the app offers, whichever backend is running the
 /// chat. This is the whole of what the composer's `/` and `@` menus show:
 /// Entoli owns the list, rather than asking a backend what it knows.
 class PromptLibrary {
@@ -100,18 +114,24 @@ class PromptLibrary {
     return (byName.keys.toList()..sort()).map((name) => byName[name]!).toList();
   }
 
-  List<CompletionOption> options(CompletionKind kind) =>
-      entries(kind).map((document) => document.option).toList();
+  /// What the composer's menus offer. `user-invocable: false` leaves a
+  /// document out of here — that is the whole of what the flag does, and it
+  /// applies to agents as well as skills, since a prompt file either belongs
+  /// in a menu or it does not.
+  List<CompletionOption> options(CompletionKind kind) => [
+        for (final document in entries(kind))
+          if (document.userInvocable) document.option,
+      ];
 
   PromptDocument? find(CompletionKind kind, String name) => _byKind[kind]?[name];
 }
 
-/// A message that is nothing but `/name` plus arguments runs that command. The
+/// A message that is nothing but `/name` plus arguments runs that skill. The
 /// name may not hold a slash, so `/usr/bin/foo is broken` stays prose. It is
 /// the whole of the message and there is at most one, which is what anchoring
 /// both ends says. Matches what `activeCompletionToken` offers in the
 /// composer's menu — anything it can offer has to dispatch here.
-final _command = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
+final _skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 
 /// `@name` addresses an agent, but only where a word starts, so an email
 /// address is not a mention.
@@ -119,30 +139,38 @@ final _mention = RegExp(r"(?<=^|\s)@([\w.-]+)");
 
 /// What the library says [text]'s references mean, ready to be written into the
 /// message as [Message.documents] and read back by [expandedPrompt] and
-/// [agentPromptFrom] — see "Commands and agents" in `lib/domain/CLAUDE.md`.
+/// [agentPromptFrom] — see "Skills and agents" in `lib/domain/CLAUDE.md`.
 ///
-/// Keyed by the reference as written, sigil included, so a command and an agent
+/// Keyed by the reference as written, sigil included, so a skill and an agent
 /// of the same name do not collide. A name the library does not know is left
 /// out: it is more likely a path, or prose, than a document nobody defined.
 Map<String, String> promptDocuments(String text, PromptLibrary? library) => {
-      if (_command.firstMatch(text.trim())?.group(1) case final name?)
-        if (library?.find(CompletionKind.command, name) case final document?)
-          "${CompletionKind.command.trigger}$name": document.body,
+      if (_skillReference.firstMatch(text.trim())?.group(1) case final name?)
+        if (library?.find(CompletionKind.skill, name) case final document?)
+          "${CompletionKind.skill.trigger}$name": document.body,
       for (final match in _mention.allMatches(text))
         if (library?.find(CompletionKind.agent, match.group(1)!)
             case final document?)
           "${CompletionKind.agent.trigger}${match.group(1)}": document.body,
     };
 
-/// The task the model is given: a command's template with the arguments in it,
-/// or the message unchanged where it names no command this one recorded.
+/// The task the model is given: a skill's template with the arguments in it,
+/// or the message unchanged where it names no skill this one recorded.
 String expandedPrompt(String text, Map<String, String> documents) {
   if (documents.isEmpty) return text;
-  final match = _command.firstMatch(text.trim());
+  final match = _skillReference.firstMatch(text.trim());
   if (match == null) return text;
-  final body = documents["${CompletionKind.command.trigger}${match.group(1)}"];
+  final body = documents["${CompletionKind.skill.trigger}${match.group(1)}"];
   if (body == null) return text;
-  final arguments = match.group(2) ?? "";
+  return withArguments(body, match.group(2) ?? "");
+}
+
+/// A template with the user's arguments in it: substituted where the template
+/// left a `$ARGUMENTS` placeholder, appended where it left none. The one rule
+/// for both halves of a skill — the composer's `/name` expansion and the
+/// `skill` tool's result — so the model reads the same words whichever route
+/// it arrived by.
+String withArguments(String body, String arguments) {
   if (body.contains(r"$ARGUMENTS")) return body.replaceAll(r"$ARGUMENTS", arguments);
   return arguments.isEmpty ? body : "$body\n\n$arguments";
 }

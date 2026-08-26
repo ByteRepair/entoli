@@ -131,8 +131,9 @@ workspace and under the same `commandTimeout`, and Stop kills it:
 command's `kill` and an agent's `cancel` are the same thing to it.
 
 `shellBypassCommand` in `domain/shell.dart` is the whole of the syntax, and it
-lives there rather than beside `_command` and `_mention` because five places
-read it: this, the composer, the bubble, `suggestTitle` and `endsUnfinished`. A
+lives there rather than beside `_skillReference` and `_mention` because five
+places read it: this, the composer, the bubble, `suggestTitle` and
+`endsUnfinished`. A
 bare `!` is a command too — an empty one — so the composer can say what it is
 about to do from the keystroke that decides it rather than a word later.
 
@@ -151,7 +152,7 @@ a model. It gets the prompt message itself and builds the reply beside it, so
 what the model is holding now and what a reload would build out of the log
 cannot be two different conversations. The reply it builds carries no id,
 because the projection does not read one; everything it does read — the date, an
-attachment's bytes, what a `/command` stood for — is on the prompt, which is the
+attachment's bytes, what a `/skill` stood for — is on the prompt, which is the
 message being logged. See "The projection".
 
 An aborted `!` turn writes nothing — no part, and nothing into the session
@@ -375,6 +376,31 @@ on desktop and Android, `UnavailableWebSearch` on the web platform (CORS
 blocks cross-origin requests from a browser). `Shell.canRunCommands` gates
 `bash`; `WebSearch.available` gates `websearch`/`webfetch` the same way —
 offered where there is something to reach, dropped where there is not. The
-search page is HTML, not JSON, so results are parsed out of the table it
-renders. Both return a `ShellResult`, so the agent words a search's outcome
-the same way it words a command's — the model reads one shape, whatever ran.
+ search page is HTML, not JSON, so results are parsed out of the table it
+ renders. Both return a `ShellResult`, so the agent words a search's outcome
+ the same way it words a command's — the model reads one shape, whatever ran.
+
+## Skills (the `skill` tool)
+
+`skill` is the one tool that answers from the library rather than the machine:
+the model names a skill and is handed its instructions, base directory included.
+It is offered wherever a model-invocable skill exists, with or without a shell,
+like `ask_user` (reading text needs no machine), and is read-only and instant,
+so it runs without an approval banner and carries no running label.
+
+The result is the skill's body — the base directory over the template, the same
+string a `/name` message records — with its arguments through `withArguments`,
+so the model reads the same words whether the user sent it or the model loaded
+it. A name the library does not know is refused with the list of what is
+available, which turns a refusal into a correction.
+
+The refusal for a `disable-model-invocation` skill is deliberate wording rather
+than a plain no. The skill is available, just not to the model, and one told
+only "no" will try its workflow by other means — so the answer says not to work
+around it. The tool is not even offered where every skill is user-only, which
+is the same fact read from the other side.
+
+The system prompt lists the model-invocable skills under a Skills section, and
+an empty list produces nothing at all: a device with no skills keeps the prompt
+and the warmed prefix over it exactly as it was, which is why the section is
+absent rather than empty.

@@ -105,7 +105,13 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/prompts/commands/
+    # One entry per skill: an asset directory does not include its
+    # subdirectories, and a skill is a subdirectory. Adding a skill means an
+    # entry here — the guard test in prompt_sources_test fails when one is
+    # forgotten.
+    - assets/prompts/skills/artifact/
+    - assets/prompts/skills/deep-research/
+    - assets/prompts/skills/skill-creator/
     - assets/prompts/agents/
     - assets/icons/
     # The font's licence, read into `LicenseRegistry` at startup. An asset

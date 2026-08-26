@@ -437,7 +437,7 @@ is thirty lines.
 `_EmptyChat` is the body of both empty screens — `_NewChat`'s, and a chat that
 exists with nothing said in it yet, which is what voice mode and a reminder can
 leave. It draws the mark, the question, the projects as badges, and a chip
-per `/command` and `@agent` the library holds. The chips are discovery: the
+per `/skill` and `@agent` the library holds. The chips are discovery: the
 composer's menus are the only place those are named, and nothing names them
 until the character that opens one has been typed, so a user who does not know
 they exist never finds out. Six at most, because everything the user has
@@ -469,11 +469,12 @@ selected and can lead nowhere.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it
-sits beside `CompletionField` in `ui/widgets/`, which is the composer's menu now
-that the reminder editor writes a prompt too. Both halves of that mattered. **Where** it lands is a rule: a command goes to
-offset 0, because `prompt_library.dart`'s `_command` is anchored there and
+sits beside `CompletionField` in `ui/widgets/`, which is the composer's menu
+now that the reminder editor writes a prompt too. Both halves of that mattered.
+**Where** it lands is a rule: a skill goes to offset 0, because
+`prompt_library.dart`'s `_skillReference` is anchored there and
 `activeCompletionToken` gates `/` on `start == 0` — appended at the caret it
-would be text that looks like a command, dispatches as none, and is not even
+would be text that looks like a skill, dispatches as none, and is not even
 offered a menu. A mention goes at the caret, since `_mention` reads one wherever
 a word starts. And it **does not ask for the focus**, which is the composer's
 other rule — see "The keyboard and the caret": on Android focus is the keyboard,

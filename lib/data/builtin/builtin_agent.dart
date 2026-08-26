@@ -10,6 +10,7 @@ import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/profile.dart";
+import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
@@ -19,6 +20,7 @@ import "artifact_tool.dart";
 import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
+import "skill_tool.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
 import "projection.dart";
@@ -174,6 +176,7 @@ LlmMessage agentSystemMessage({
   required String platform,
   Profile? profile,
   required bool canRunCommands,
+  List<PromptDocument> skills = const [],
 }) =>
     LlmMessage(
       role: LlmRole.system,
@@ -181,6 +184,7 @@ LlmMessage agentSystemMessage({
         platform: platform,
         profile: profile,
         canRunCommands: canRunCommands,
+        skills: skills,
       ),
     );
 
@@ -189,12 +193,17 @@ LlmMessage agentSystemMessage({
 /// so are part of what the prefill cache warms: a turn and its warm-up building
 /// two slightly different lists would cache a prefix no turn ever sends. The
 /// live turn is [BuiltinAgent._tools]; the cache is `LocalPrefill`.
+///
+/// [skills] is the whole library's skill list, not the model-invocable half:
+/// both halves of the flag are decided where they are read, so one caller
+/// passes one list.
 List<LlmTool> agentTools({
   required bool canRunCommands,
   required bool webSearchAvailable,
   required bool offerAsk,
   required bool offerTask,
   required bool saveArtifact,
+  List<PromptDocument> skills = const [],
 }) =>
     [
       file_tool_defs.readTool,
@@ -204,6 +213,7 @@ List<LlmTool> agentTools({
       if (offerAsk) askTool,
       if (offerTask && canRunCommands) taskTool,
       if (webSearchAvailable) ...[websearchTool, webfetchTool],
+      if (skills.any((s) => s.modelInvocable)) skillTool,
       if (saveArtifact) artifactTool,
     ];
 
@@ -232,6 +242,7 @@ class BuiltinAgent {
     this.rateLimitGate,
     this.offerTaskTool = true,
     this.offerAskTool = true,
+    this.skills = const [],
     this.webSearch,
     this.profile,
     this.saveArtifact,
@@ -303,6 +314,12 @@ class BuiltinAgent {
   /// pass `false`.
   final bool offerAskTool;
 
+  /// The whole skill library, both invocation halves of it. The system prompt
+  /// lists the model-invocable ones, the `skill` tool refuses the rest, and a
+  /// sub-agent gets the same list — a skill's workflow is as much a worker's
+  /// job as the parent's.
+  final List<PromptDocument> skills;
+
   /// Web search and fetch. Null where neither is reachable — a browser sees
   /// `UnavailableWebSearch` and the tools are dropped the way `bash` is when
   /// there is no shell.
@@ -326,7 +343,8 @@ class BuiltinAgent {
   /// where the shell is unavailable. `ask_user` is dropped for sub-agents.
   /// `websearch`/`webfetch` are dropped where there is no [webSearch] or it is
   /// unavailable (a browser). `artifact` is dropped where there is no
-  /// [saveArtifact] (a sub-agent). `read`/`write`/`edit` are always offered —
+  /// [saveArtifact] (a sub-agent). `skill` is dropped where no skill allows
+  /// the model itself. `read`/`write`/`edit` are always offered —
   /// they work on the `FileSystem`, which exists on every platform.
   List<LlmTool> get _tools => agentTools(
         canRunCommands: shell.canRunCommands,
@@ -334,6 +352,7 @@ class BuiltinAgent {
         offerAsk: offerAskTool,
         offerTask: offerTaskTool && subAgentRunner != null,
         saveArtifact: saveArtifact != null,
+        skills: skills,
       );
 
   bool _cancelled = false;
@@ -503,6 +522,7 @@ class BuiltinAgent {
         platform: shell.platformDescription,
         profile: profile,
         canRunCommands: shell.canRunCommands,
+        skills: skills,
       ),
       if (turn.isNotEmpty) LlmMessage(role: LlmRole.system, text: turn),
     ];
@@ -567,6 +587,11 @@ class BuiltinAgent {
 
       if (call.name == askToolName) {
         yield* _ask(call);
+        continue;
+      }
+
+      if (call.name == skillToolName) {
+        yield* _skill(call);
         continue;
       }
 
@@ -754,6 +779,45 @@ class BuiltinAgent {
     final answers = askAnswers(questions, await answer(request));
 
     yield ToolResultEvent(ToolResult(callId: call.id, returnCode: 0, output: answers));
+  }
+
+  /// Load a skill. Read-only and instant, so no approval and no running label:
+  /// the answer is text the library already holds, and the turn's next step is
+  /// whatever the model does with it.
+  ///
+  /// The refusal for a `disable-model-invocation` skill is deliberate wording
+  /// rather than a plain no: the skill is *available*, just not to the model,
+  /// and one that is told only "no" will try the workflow by other means.
+  Stream<AgentEvent> _skill(LlmToolCall call) async* {
+    final name = stringArg(call.argumentsJson, "skill");
+    if (name == null) {
+      yield* _reject(call, skillFormatError);
+      return;
+    }
+    final arguments = stringArg(call.argumentsJson, "args") ?? "";
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: arguments.isEmpty ? name : "$name $arguments",
+    ));
+
+    final document = skills.where((s) => s.name == name).firstOrNull;
+    if (document == null) {
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(skillUnknown(name, [
+            for (final skill in skills)
+              if (skill.modelInvocable) skill.name,
+          ]))));
+      return;
+    }
+    if (!document.modelInvocable) {
+      yield ToolResultEvent(_ran(call, ShellResult.failed(skillReserved(name))));
+      return;
+    }
+    yield ToolResultEvent(
+        ToolResult(callId: call.id, returnCode: 0, output: skillPrompt(document, arguments)));
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same
