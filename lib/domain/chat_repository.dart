@@ -6,11 +6,13 @@ import "package:uuid/uuid.dart";
 import "../core/config.dart";
 import "../domain/agent_backend.dart";
 import "../domain/app_settings.dart";
+import "../domain/builtin_project.dart";
 import "../domain/chat_log.dart";
 import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
+import "../domain/project.dart";
 import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
 import "../domain/shell.dart";
@@ -114,11 +116,22 @@ class ChatRepository {
 
   Future<List<String>> listProjects() => _store.listProjects();
 
-  Future<void> createProject(String name) => _store.createProject(name);
+  /// A name the user may create: [isProjectName] is the gate, and the app's
+  /// own projects — the default's and the built-ins' — are not among them.
+  Future<void> createProject(String name) {
+    if (!isProjectName(name)) {
+      throw ArgumentError.value(name, "name", "not a project name");
+    }
+    return _store.createProject(name);
+  }
 
   /// The chats go with it, so their sessions are dropped the way deleting one
-  /// at a time would drop them.
+  /// at a time would drop them. Only a user's project can be deleted; the app's
+  /// own cannot be.
   Future<void> deleteProject(String name) async {
+    if (!isProjectName(name)) {
+      throw ArgumentError.value(name, "name", "not a project name");
+    }
     for (final chat in await listChats()) {
       if (chat.project == name) await _backend.disposeChat(chat.id);
     }
@@ -268,10 +281,24 @@ class ChatRepository {
   /// The chat's own choice wins, else the app default, else whatever the
   /// backend picks. Never mix halves: a chat's model under the app default's
   /// provider is not a combination anyone asked for.
+  ///
+  /// Where the chat is in a built-in project, the project's spec answers for
+  /// its profile, its memory and its workspace, and the takes on top — a
+  /// headless turn's, where it parks on nothing — so a turn in one runs under
+  /// whatever the app ships it with, whatever the settings say. A chat's own
+  /// `memoryOff` is one of those takes: it turns the subsystem off for this
+  /// chat alone, and where the project already took it away it cannot be given
+  /// back from here.
   Future<TurnSettings> _turnSettings(String chatId, {bool headless = false}) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
+    final builtIn = builtinProjectOf(project);
+    final disabled = {...builtIn?.disabled ?? const <AgentCapability>{}};
+    if (headless) {
+      // A turn nobody watches must not be able to park on an answer.
+      disabled..add(AgentCapability.ask)..add(AgentCapability.task);
+    }
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -279,12 +306,13 @@ class ChatRepository {
       approveMode: meta.approveMode ?? settings.approveMode,
       classifierProvider: settings.classifierProviderId,
       classifierModel: settings.classifierModelId,
-      // A project can override the app-level profile; null falls back to it.
-      profile: (await projectSettingsOf(project)).profile ?? settings.profile,
-      memory: await _resolveMemory(settings, project),
-      // A turn nobody watches must not be able to park on an answer.
-      offerAsk: !headless,
-      offerTask: !headless,
+      profile: profileUnder(builtIn, appProfile: settings.profile),
+      memory: builtIn?.memory == MemoryPolicy.off || meta.memoryOff == true
+          ? MemorySettings.off
+          : await _resolveMemory(settings, project),
+      sharedWorkspace: builtIn?.sharedWorkspace ?? true,
+      disabled: disabled,
+      bundledInstructions: builtIn?.bundledInstructions,
     );
   }
 
@@ -292,9 +320,10 @@ class ChatRepository {
   /// project's store answers. A non-default project with its own toggle on
   /// keeps a store of its own; every other chat shares the default project's.
   /// Both halves of the background model travel together or not at all, and
-  /// until one is picked nothing in the subsystem writes.
+  /// until one is picked nothing in the subsystem writes. With the master
+  /// off there is no store and the value carries nothing, but it is built
+  /// rather than skipped: the AGENTS.md files a turn reads do not ride on it.
   Future<MemorySettings> _resolveMemory(AppSettings settings, String? project) async {
-    if (!settings.loadInstructions && !settings.autoMemory) return MemorySettings.off;
     String? dir;
     if (settings.autoMemory) {
       var owner = project;
@@ -304,9 +333,9 @@ class ChatRepository {
       dir = _config.memoryDir(project: owner);
     }
     return MemorySettings(
-      instructions: settings.loadInstructions,
       imports: settings.instructionImports,
       nested: settings.nestedInstructions,
+      excludes: settings.instructionExcludes,
       autoMemory: settings.autoMemory,
       recall: settings.memoryRecall,
       extract: settings.memoryExtraction,

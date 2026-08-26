@@ -140,7 +140,13 @@ is worth saying: a tree grant lets the app holding it compose ids of its own, so
 
 Kotlin's `isProjectDir` is Dart's `isProjectName` bar its refusal of `default`:
 Dart calls the default project `null` and has no use for the string, where here
-it is a directory like any other.
+it is a directory like any other. It also refuses the directories of the
+built-in projects whose workspace is not shared, which is what keeps an
+anonymous chat's scratch out of the tree: a chat that must not reach past itself
+is not one whose scratch the Files app browses. A built-in that shared its
+workspace would be in the tree like any other project, and out of the set. The
+set (`UNBROWSED`) is restated in `WorkspaceProvider` beside `DEFAULT`, by hand,
+for the reason nothing from Dart is running when this is asked.
 
 A data directory a release has yet to migrate reads as empty here. Migrating is
 `migrations.dart`'s and happens the next time the app is launched, so an update

@@ -1,6 +1,9 @@
+import "dart:async";
+
 import "package:flutter/foundation.dart" show ValueListenable;
 
 import "../domain/ask.dart";
+import "../domain/builtin_project.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
@@ -155,20 +158,22 @@ class InfoEvent extends AgentEvent {
 
 /// What a turn may read and remember, resolved once by `ChatRepository` from
 /// the app's gates over which project's store answers. [off] is the value
-/// while every gate is closed, which is the shipped default: a turn then
-/// carries nothing of this and the agent never touches a memory directory.
+/// while the subsystem is closed, which is the shipped default: a turn then
+/// carries no store and the agent never touches a memory directory. The
+/// AGENTS.md files a turn reads are not here: they are read whether or not
+/// the subsystem runs.
 class MemorySettings {
-  /// The master gate. Off, no AGENTS.md is read at all and the two sub-gates
-  /// below mean nothing.
-  final bool instructions;
-
   /// Whether `@path` references inside an AGENTS.md are expanded into extra
-  /// files. A sub-gate of [instructions].
+  /// files.
   final bool imports;
 
   /// Whether reading a file pulls in the AGENTS.md of a subdirectory that has
-  /// one. A sub-gate of [instructions].
+  /// one.
   final bool nested;
+
+  /// The glob patterns a file's path must not name for an AGENTS.md of its to
+  /// be read; empty reads everything.
+  final List<String> excludes;
 
   /// Whether the auto-memory subsystem runs at all.
   final bool autoMemory;
@@ -196,9 +201,9 @@ class MemorySettings {
   final String? bgProvider;
 
   const MemorySettings({
-    this.instructions = false,
-    this.imports = false,
-    this.nested = false,
+    this.imports = true,
+    this.nested = true,
+    this.excludes = const [],
     this.autoMemory = false,
     this.recall = true,
     this.extract = true,
@@ -209,6 +214,31 @@ class MemorySettings {
   });
 
   static const off = MemorySettings();
+}
+
+/// What a background write to the memories says after the turn that earned
+/// it — the "kept a note" line. The turn's own event stream is closed by then,
+/// so this is the half of it the stream cannot carry.
+class MemoryNote {
+  const MemoryNote(this.chatId, this.text);
+
+  final String chatId;
+  final String text;
+}
+
+/// The one-shot side of the backend: the notes are added as they land and a
+/// page listens for the ones its chat is about.
+class MemoryNotes {
+  final StreamController<MemoryNote> _controller =
+      StreamController<MemoryNote>.broadcast();
+
+  Stream<MemoryNote> get notes => _controller.stream;
+
+  void add(MemoryNote note) {
+    if (!_controller.isClosed) _controller.add(note);
+  }
+
+  Future<void> close() => _controller.close();
 }
 
 /// Everything a turn runs under, resolved once by `ChatRepository` from the
@@ -235,12 +265,21 @@ class TurnSettings {
 
   final Profile? profile;
 
-  /// Whether the turn may put questions to the user, or spawn sub-agents. True
-  /// for a turn somebody is watching; a headless one turns both off, since an
-  /// `ask_user` parks it on a completer nobody will complete — there is no
-  /// timeout behind that wait anywhere.
-  final bool offerAsk;
-  final bool offerTask;
+  /// Whether the project's workspace is shared between its chats. When false,
+  /// the chat's own workspace is also the `HOME` of its commands, a `project:`
+  /// path resolves inside it, and the prompt says nothing of a shared one.
+  final bool sharedWorkspace;
+
+  /// What this turn is not offered. The project's takesaways, plus `ask` and
+  /// `task` on a turn nobody is watching: an `ask_user` parks it on a
+  /// completer nobody will complete — there is no timeout behind that wait
+  /// anywhere — and a `task` fan-out can do the same through a sub-agent.
+  final Set<AgentCapability> disabled;
+
+  /// The instruction text the app ships for this turn's project, where its
+  /// spec has one. Where set it is the turn's instructions in full: no
+  /// AGENTS.md file is read, and the nested walk on a file read is off.
+  final String? bundledInstructions;
 
   const TurnSettings({
     this.memory = MemorySettings.off,
@@ -251,8 +290,9 @@ class TurnSettings {
     this.classifierProvider,
     this.classifierModel,
     this.profile,
-    this.offerAsk = true,
-    this.offerTask = true,
+    this.sharedWorkspace = true,
+    this.disabled = const {},
+    this.bundledInstructions,
   });
 }
 
@@ -271,6 +311,11 @@ abstract class AgentBackend {
   /// each turn rather than on how many there are, and they do not all act the
   /// same way: `TurnKeepAlive` aborts, `interruptLiveTurns` interrupts.
   ValueListenable<Set<String>> get runningTurns;
+
+  /// What the background memory writes land as: a note per chat, after the
+  /// turn that earned it. A backend with no memory writes simply never adds
+  /// one, and a page that is not interested never listens.
+  Stream<MemoryNote> get memoryNotes;
 
   /// One question, answered in one call to [model]: no tools, no session,
   /// nothing kept. Null when the provider is not configured or says nothing —

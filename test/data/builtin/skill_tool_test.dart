@@ -6,6 +6,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
+import "package:agent_chat/data/builtin/templates.dart";
 import "package:agent_chat/data/builtin/skill_tool.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
@@ -98,7 +99,7 @@ void main() {
     test("the system prompt lists the model-invocable skills, not the rest", () {
       final text = agentSystemMessage(
         platform: "test",
-        canRunCommands: true,
+        caps: AgentCapabilities.full,
         skills: [
           skillDoc("review", description: "look it over"),
           skillDoc("private", modelInvocable: false),
@@ -111,7 +112,9 @@ void main() {
     });
 
     test("no skills leaves the section out of the prompt", () {
-      final text = agentSystemMessage(platform: "test", canRunCommands: true).text;
+      final text =
+          agentSystemMessage(platform: "test", caps: AgentCapabilities.full)
+              .text;
 
       expect(text, isNot(contains("## Skills")));
     });

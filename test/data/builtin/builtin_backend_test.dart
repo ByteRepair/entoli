@@ -15,6 +15,7 @@ import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
@@ -84,11 +85,15 @@ void main() {
     String text, {
     String? model = "fake-model",
     String? provider = "fake",
+    String? project,
+    bool sharedWorkspace = true,
+    Set<AgentCapability> disabled = const {},
     List<Message> history = const [],
     List<MessagePart> files = const [],
     Map<String, String> documents = const {},
     DateTime? at,
     MemorySettings memory = MemorySettings.off,
+    String? bundledInstructions,
   }) =>
       backend
           .sendPrompt(
@@ -99,8 +104,12 @@ void main() {
               settings: TurnSettings(
                   model: model,
                   provider: provider,
+                  project: project,
                   approveMode: ApproveMode.never,
-                  memory: memory))
+                  memory: memory,
+                  sharedWorkspace: sharedWorkspace,
+                  disabled: disabled,
+                  bundledInstructions: bundledInstructions))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -177,8 +186,7 @@ void main() {
       expect(client.sent.first[1].text, contains(config.projectWorkspaceDir()));
     });
 
-    test("workspace instructions are loaded and sent when the gate is on",
-        () async {
+    test("workspace instructions are loaded and sent", () async {
       final backend = backendOver([
         [finish],
       ]);
@@ -188,24 +196,31 @@ void main() {
       File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
           .writeAsStringSync("project rules");
 
-      await send(backend, "hi",
-          memory: const MemorySettings(instructions: true));
+      await send(backend, "hi");
 
       expect(client.sent.first[1].text, contains("project rules"));
       expect(client.sent.first[1].text, contains("Workspace instructions"));
     });
 
-    test("no instructions section when the gate is off", () async {
+    test("a bundled note stands in for the files, and the files are not read",
+        () async {
       final backend = backendOver([
         [finish],
       ]);
       Directory(config.projectWorkspaceDir()).createSync(recursive: true);
       File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
           .writeAsStringSync("project rules");
+      File(config.globalInstructionsFile).writeAsStringSync("global rules");
 
-      await send(backend, "hi");
+      await send(backend, "hi",
+          project: "anonymous",
+          sharedWorkspace: false,
+          bundledInstructions: "This is an anonymous chat.");
 
-      expect(client.sent.first[1].text, isNot(contains("project rules")));
+      final system = client.sent.first[1].text;
+      expect(system, contains("This is an anonymous chat."));
+      expect(system, isNot(contains("project rules")));
+      expect(system, isNot(contains("global rules")));
     });
 
     test("relevant memories are recalled into the turn", () async {
@@ -224,8 +239,9 @@ void main() {
       expect(system, contains("Recalled memories"));
       expect(system, contains("the user likes code formatted with tabs"));
       // The other memory shares only a word the recalled one has too, which
-      // is not specific enough.
-      expect(system, isNot(contains("notes about the weather")));
+      // is not specific enough: it is on the index's line, nowhere else — the
+      // recall did not over-fetch it.
+      expect(system.split("notes about the weather").length - 1, 1);
     });
 
     test("no recall section when the recall gate is off", () async {
@@ -255,6 +271,49 @@ void main() {
       expect(events.last, isA<DoneEvent>());
     });
 
+    test("pinned memories reach the turn in full, the rest as an index",
+        () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      await store.add("the user likes code formatted with tabs");
+      await store.add("the codebase is called Entoli");
+      final standing = await store.add("the deploy key rotates every month");
+      await store.pin(standing.id);
+
+      await send(backend, "unrelated question",
+          memory: MemorySettings(
+              autoMemory: true, memoryDir: config.memoryDir()));
+
+      final system = client.sent.first[1].text;
+      expect(system, contains("Pinned memories"));
+      expect(system, contains("the deploy key rotates every month"));
+      expect(system, contains("Memory index"));
+      expect(system, contains("the user likes code formatted with tabs"));
+      expect(system, contains("the codebase is called Entoli"));
+      // The pinned one is in the block, not in the index: one place for it.
+      expect(system.split("the deploy key rotates every month").length - 1, 1);
+    });
+
+    test("no pinned or index section while the recall gate is off",
+        () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      final standing = await store.add("the deploy key rotates every month");
+      await store.pin(standing.id);
+
+      await send(backend, "unrelated question",
+          memory: MemorySettings(
+              autoMemory: true, recall: false, memoryDir: config.memoryDir()));
+
+      final system = client.sent.first[1].text;
+      expect(system, isNot(contains("Pinned memories")));
+      expect(system, isNot(contains("Memory index")));
+    });
+
     test("a chat in a project works in that project's directories", () async {
       final backend = backendOver([
         [finish],
@@ -272,6 +331,45 @@ void main() {
       expect(system, contains(config.workspaceDir(chatId, project: "work")));
       expect(system, contains(config.projectWorkspaceDir(project: "work")));
       expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
+    });
+
+    // A project that does not share a workspace is the answer to "a chat that
+    // must not reach past itself": the chat's own workspace is its HOME too,
+    // and the prompt says nothing of a shared one.
+    test("a turn with no shared workspace is told nothing of one", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "hi", project: "anonymous", sharedWorkspace: false);
+
+      final workspace = config.workspaceDir(chatId, project: "anonymous");
+      final system = client.sent.first[1].text;
+      // The chat's own workspace is named...
+      expect(system, contains(workspace));
+      // ...and the shared project workspace is not.
+      expect(system, isNot(contains("shared with every other")));
+    });
+
+    test("a ! command with no shared workspace homes in the chat's own", () async {
+      final backend = backendOver([], respond: (_) => ok(""));
+      await send(backend, "!pwd", project: "anonymous", sharedWorkspace: false);
+
+      final workspace = config.workspaceDir(chatId, project: "anonymous");
+      expect(shell.cwds, [workspace]);
+      expect(shell.homes, [workspace]);
+    });
+
+    // A project's takeaways are the same machinery a headless turn uses to drop
+    // `ask` and `task`: one value, so the prompt and the tool list cannot
+    // disagree. A capability a project takes away is not named in the prompt.
+    test("a disabled capability is not named in the prompt", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "hi", disabled: {AgentCapability.task});
+
+      final system = client.sent.first[0].text;
+      expect(system, isNot(contains("to delegate a task to a sub-agent")));
     });
   });
 
@@ -1158,19 +1256,19 @@ void main() {
     });
   });
 
+  /// Auto-memory on over the default store; [bg] adds the background model
+  /// pair, [extract] is the sub-gate.
+  MemorySettings memory({bool extract = true, bool bg = true}) =>
+      MemorySettings(
+        autoMemory: true,
+        extract: extract,
+        memoryDir: config.memoryDir(),
+        bgModel: bg ? "fake-model" : null,
+        bgProvider: bg ? "fake" : null,
+      );
+
   group("writing memories after a turn", () {
     late MemoryStore store;
-
-    /// Auto-memory on over the default store; [bg] adds the background model
-    /// pair, [extract] is the sub-gate.
-    MemorySettings memory({bool extract = true, bool bg = true}) =>
-        MemorySettings(
-          autoMemory: true,
-          extract: extract,
-          memoryDir: config.memoryDir(),
-          bgModel: bg ? "fake-model" : null,
-          bgProvider: bg ? "fake" : null,
-        );
 
     setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
 
@@ -1201,9 +1299,11 @@ void main() {
       expect(await store.entries(), isEmpty);
     });
 
-    test("the extraction is asked the exchange, not the store", () async {
+    test("the extraction is asked the exchange and what is already kept",
+        () async {
+      final existing = await store.add("the user likes tabs over spaces");
       final backend = backendOver([
-        [saidOnly("use tabs, the user likes them")],
+        [saidOnly("use spaces, the user changed their mind")],
         [saidOnly('{"memories": []}')],
       ]);
 
@@ -1212,8 +1312,94 @@ void main() {
       await pumpEvents();
       final question = client.sent.last.last;
       expect(question.text, contains("how should I indent this"));
-      expect(question.text, contains("use tabs, the user likes them"));
+      expect(question.text, contains("use spaces, the user changed their mind"));
+      // The kept memory, with the id the replacement ops take.
+      expect(question.text, contains("the user likes tabs over spaces"));
+      expect(question.text, contains(existing.id));
       expect(question.text, contains("JSON"));
+    });
+
+    test("a replacement corrects the kept memory in place", () async {
+      final existing = await store.add("the user likes tabs over spaces");
+      final backend = backendOver([
+        [saidOnly("use spaces, the user changed their mind")],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "replaces": {existing.id: "the user likes spaces over tabs"},
+        }))],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await untilMemory(store, "the user likes spaces over tabs");
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.id, existing.id);
+      expect(entries.single.text, "the user likes spaces over tabs");
+      expect(entries.single.chat, chatId);
+    });
+
+    test("a delete spends the kept memory", () async {
+      final existing = await store.add("a fact that turned out wrong");
+      final backend = backendOver([
+        [saidOnly("never mind that, it was wrong")],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "delete": [existing.id],
+        }))],
+      ]);
+
+      await send(backend, "let me correct the record", memory: memory());
+
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while ((await store.entries()).isNotEmpty) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the store never dropped the memory");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+
+    test("kept facts land as a note the page can see", () async {
+      final backend = backendOver([
+        [saidOnly("the user likes tabs over spaces")],
+        [saidOnly('{"memories": ["the user likes tabs over spaces", "the user is on the west coast"]}')],
+      ]);
+      final notes = <MemoryNote>[];
+      final subscription = backend.memoryNotes.listen(notes.add);
+
+      await send(backend, "a little about me", memory: memory());
+
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (notes.isEmpty) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the note never landed");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await subscription.cancel();
+      expect(notes.single.chatId, chatId);
+      expect(notes.single.text, "Kept 2 memories.");
+    });
+
+    test("no note where nothing new was kept", () async {
+      final existing = await store.add("the user likes tabs over spaces");
+      final backend = backendOver([
+        [saidOnly("still tabs, by the way")],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "replaces": {existing.id: "the user likes tabs over spaces"},
+        }))],
+      ]);
+      final notes = <MemoryNote>[];
+      final subscription = backend.memoryNotes.listen(notes.add);
+
+      await send(backend, "how should I indent this", memory: memory());
+      await pumpEvents();
+      await subscription.cancel();
+
+      expect(notes, isEmpty);
+      expect((await store.entries()).single.text, "the user likes tabs over spaces");
     });
 
     test("no background model, nothing is written", () async {
@@ -1262,6 +1448,143 @@ void main() {
 
       expect(events.whereType<DoneEvent>().single.aborted, isTrue);
       expect(await store.entries(), isEmpty);
+    });
+  });
+
+  group("tidying the memories in the background", () {
+    late MemoryStore store;
+
+    setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
+
+    /// A store grown to [n] facts, one memory each.
+    Future<List<MemoryEntry>> seed(int n) async =>
+        [for (var i = 0; i < n; i++) await store.add("the user likes thing $i")];
+
+    /// The consolidation's own question, out of what the client was sent.
+    String tidyQuestion() {
+      for (final call in client.sent) {
+        final asked =
+            [for (final m in call) m.text].where((t) => t.contains("Tidy")).toList();
+        if (asked.length == 1) return asked.single;
+      }
+      fail("the consolidation was never asked");
+    }
+
+    /// The pass's stamp is what says it is done: whatever it wrote is in by
+    /// the time it leaves one.
+    Future<void> untilStamped() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (await store.lastConsolidated() == null) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the pass never stamped");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    test("a store that has not grown is never asked to be tidied", () async {
+      await seed(3);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+
+      await pumpEvents();
+      expect(client.sent, hasLength(2));
+      expect(await store.lastConsolidated(), isNull);
+    });
+
+    test("a grown store is merged and pruned behind the turn", () async {
+      final entries = await seed(consolidationMinEntries);
+      final keep = entries.first;
+      final spend = entries[1];
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "replaces": {keep.id: "the user likes things one and two"},
+          "delete": [spend.id],
+        }))],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+
+      await untilMemory(store, "the user likes things one and two");
+      await untilStamped();
+      final texts = [for (final e in await store.entries()) e.text];
+      expect(texts, isNot(contains("the user likes thing 1")));
+      expect(texts, hasLength(consolidationMinEntries - 1));
+      // The pass was asked the whole store.
+      final question = tidyQuestion();
+      expect(question, contains(entries.last.id));
+      expect(question, contains(keep.id));
+    });
+
+    test("a tidied store is not asked again inside the interval", () async {
+      await seed(consolidationMinEntries);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly('{"memories": [], "replaces": {}, "delete": []}')],
+        // The second turn: the agent and its extraction, and nothing after.
+        [finish],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "one", memory: memory());
+      await untilStamped();
+
+      await send(backend, "two", memory: memory());
+      await pumpEvents();
+
+      expect(client.sent, hasLength(5));
+    });
+
+    test("a pass that finds nothing still stamps its hour", () async {
+      await seed(consolidationMinEntries);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly('{"memories": [], "replaces": {}, "delete": []}')],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+      await untilStamped();
+
+      expect((await store.entries()).length, consolidationMinEntries);
+    });
+
+    test("pinned memories are neither offered nor spent", () async {
+      // One over the threshold: the pinned entry is not offered, so it is
+      // not counted either.
+      final entries = await seed(consolidationMinEntries + 1);
+      final pinnedEntry = entries.first;
+      final spend = entries[1];
+      await store.pin(pinnedEntry.id);
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+        [saidOnly(jsonEncode({
+          "memories": <String>[],
+          "delete": [pinnedEntry.id, spend.id],
+        }))],
+      ]);
+
+      await send(backend, "hello again", memory: memory());
+
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while ((await store.entries()).any((e) => e.id == spend.id)) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail("the store never spent the memory");
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      final remaining = await store.entries();
+      expect(remaining.where((e) => e.id == pinnedEntry.id).single.pinned, isTrue);
+      expect(tidyQuestion(), isNot(contains(pinnedEntry.id)));
     });
   });
 }

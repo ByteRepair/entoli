@@ -362,18 +362,17 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..classifierProviderId = choice.providerId
     ..classifierModelId = choice.modelId);
 
-  /// Whether the agent reads AGENTS.md out of the workspaces. The master
-  /// gate; the two below are sub-gates of it.
-  Future<void> setLoadInstructions(bool value) =>
-      _update((s) => s.loadInstructions = value);
-
-  /// Whether `@path` references inside an AGENTS.md pull in more files.
+  /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);
 
   /// Whether reading a file pulls in a subdirectory's own AGENTS.md.
   Future<void> setNestedInstructions(bool value) =>
       _update((s) => s.nestedInstructions = value);
+
+  /// The glob patterns that keep an AGENTS.md out of a turn.
+  Future<void> setInstructionExcludes(List<String> value) =>
+      _update((s) => s.instructionExcludes = value);
 
   /// Whether the auto-memory subsystem runs at all.
   Future<void> setAutoMemory(bool value) =>
@@ -814,12 +813,6 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   ProjectSettings build() {
     _config = ref.watch(appConfigProvider);
     return ProjectSettings.load(_config, project: project);
-  }
-
-  Future<void> setProfile(Profile? profile) async {
-    final next = state.copy()..profile = profile;
-    state = next;
-    await next.save(_config, project: project);
   }
 
   /// Whether this project keeps an auto-memory store of its own rather than

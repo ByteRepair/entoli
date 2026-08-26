@@ -434,6 +434,13 @@ class FakeBackend implements AgentBackend {
   @override
   final ValueNotifier<Set<String>> runningTurns = ValueNotifier(const {});
 
+  /// The memory notes a test wants the page to see: a real holder, so a test
+  /// adds one the way the backend would.
+  final MemoryNotes memoryNoteHolder = MemoryNotes();
+
+  @override
+  Stream<MemoryNote> get memoryNotes => memoryNoteHolder.notes;
+
   @override
   Future<Chat> createChat({String? title}) async {
     final now = DateTime.now();

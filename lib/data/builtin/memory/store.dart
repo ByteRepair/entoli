@@ -3,7 +3,7 @@ import "dart:convert";
 import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
-import "../../../domain/documents.dart" show writingSuffix;
+import "../../../domain/documents.dart" show writeThroughRename;
 
 /// A project's auto-memory: small durable facts that accumulate as turns
 /// happen and are recalled into the turns they are relevant to. The store is
@@ -20,6 +20,7 @@ import "../../../domain/documents.dart" show writingSuffix;
 /// one costs nothing.
 const _logName = "memories.jsonl";
 const _indexName = "index.json";
+const _consolidatedName = "consolidated";
 
 /// How many memories a search may return.
 const recallLimit = 5;
@@ -35,6 +36,27 @@ const double recallMinScore = 1;
 const recallEntryChars = 400;
 const recallBlockChars = 2000;
 
+/// Caps on the index block: a line per memory, and a ceiling on the block so
+/// a large store does not take the prompt with it.
+const indexEntryChars = 150;
+const indexBlockChars = 4000;
+
+/// What a consolidation pass is owed, and how often it may come: the store
+/// must have grown past [consolidationMinEntries] live memories, and the last
+/// pass must be at least [consolidationMinInterval] old, before the pass
+/// earns its background model call.
+const consolidationMinEntries = 15;
+const consolidationMinInterval = Duration(hours: 1);
+
+/// The ceiling on the entries a consolidation pass is shown: past this the
+/// oldest are left out of the question, which is to say, of the tidying.
+const consolidationMaxEntries = 50;
+
+/// How many pinned memories a turn carries in full: the pin is the user's way
+/// of saying "this is in every turn", and a standing order that crowds out the
+/// turn it is standing over has stopped being one.
+const pinnedLimit = 4;
+
 /// A memory, replayed out of the log. [chat] is the one that wrote it, or
 /// null where the user typed it in the explorer.
 class MemoryEntry {
@@ -43,12 +65,25 @@ class MemoryEntry {
     required this.text,
     required this.at,
     this.chat,
+    this.pinned = false,
   });
 
   final String id;
   final String text;
   final DateTime at;
   final String? chat;
+
+  /// Whether the user pinned it: pinned memories go into every turn in full
+  /// rather than waiting on a recall.
+  final bool pinned;
+
+  MemoryEntry copyWithPinned(bool pinned) => MemoryEntry(
+        id: id,
+        text: text,
+        at: at,
+        chat: chat,
+        pinned: pinned,
+      );
 }
 
 class MemoryStore {
@@ -59,6 +94,7 @@ class MemoryStore {
 
   String get _logPath => fs.path.join(dir, _logName);
   String get _indexPath => fs.path.join(dir, _indexName);
+  String get _consolidatedPath => fs.path.join(dir, _consolidatedName);
 
   /// Every live memory, oldest first.
   Future<List<MemoryEntry>> entries() async => _replay(await _readLog());
@@ -75,13 +111,7 @@ class MemoryStore {
       at: DateTime.now().toUtc(),
       chat: chat,
     );
-    await _append(_encode({
-      "t": "m",
-      "id": entry.id,
-      "text": entry.text,
-      "at": entry.at.toIso8601String(),
-      "chat": ?chat,
-    }));
+    await _append(_memoryRecord(entry.id, entry.text, entry.at, chat));
     await _rebuildIndex();
     return entry;
   }
@@ -97,10 +127,126 @@ class MemoryStore {
     await _rebuildIndex();
   }
 
+  /// Replaces the text of [id]. The log stays append-only: a new record with
+  /// the same id, and the replay's last-record-stands makes it a replacement
+  /// rather than a duplicate. Throws on empty text.
+  Future<MemoryEntry> update(String id, String text, {String? chat}) async {
+    if (text.trim().isEmpty) {
+      throw ArgumentError.value(text, "text", "must not be empty");
+    }
+    final entry = MemoryEntry(
+      id: id,
+      text: text.trim(),
+      at: DateTime.now().toUtc(),
+      chat: chat,
+    );
+    await _append(_memoryRecord(entry.id, entry.text, entry.at, chat));
+    await _rebuildIndex();
+    return entry;
+  }
+
+  /// Marks [id] as pinned, so it reaches every turn in full rather than
+  /// waiting on a recall. Pinning an id that is not there is a line the
+  /// replay ignores, the way a stray tombstone is.
+  Future<void> pin(String id) => _pinRecord(id, true);
+
+  /// The undo of [pin]: the last pin or unpin for an id stands.
+  Future<void> unpin(String id) => _pinRecord(id, false);
+
+  Future<void> _pinRecord(String id, bool pinned) async {
+    await _append(_encode({
+      "t": pinned ? "p" : "u",
+      "id": id,
+      "at": DateTime.now().toUtc().toIso8601String(),
+    }));
+  }
+
+  /// When the store was last tidied by a consolidation pass, for the interval
+  /// between passes. Nothing stamped, and a stamp that will not parse — a torn
+  /// write —, both read as never.
+  Future<DateTime?> lastConsolidated() async {
+    final file = fs.file(_consolidatedPath);
+    if (!await file.exists()) return null;
+    try {
+      return DateTime.tryParse((await file.readAsString()).trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The stamp a finished consolidation pass leaves behind: the next one is an
+  /// interval away. Written through a rename, the way the index is.
+  Future<void> stampConsolidated(DateTime at) async {
+    final directory = fs.directory(dir);
+    if (!await directory.exists()) await directory.create(recursive: true);
+    await writeThroughRename(fs, _consolidatedPath, at.toUtc().toIso8601String());
+  }
+
+  /// The maintenance half of the store: the ops a model reports after it has
+  /// been shown the memories — drops, replacements, and new ones. An
+  /// operation on an id that is not there is ignored, and a replacement of a
+  /// missing id lands as a new memory rather than a record with a made-up id,
+  /// so a model that misremembers a name costs nothing. Returns what landed.
+  Future<({int added, int updated, int deleted})> maintain({
+    List<String>? delete,
+    Map<String, String>? replaces,
+    List<String>? add,
+    String? chat,
+  }) async {
+    final live = {for (final entry in await entries()) entry.id: entry};
+    var added = 0;
+    var updated = 0;
+    var deleted = 0;
+    for (final id in delete ?? const <String>[]) {
+      if (!live.containsKey(id)) continue;
+      await _append(_encode({
+        "t": "d",
+        "id": id,
+        "at": DateTime.now().toUtc().toIso8601String(),
+      }));
+      deleted++;
+    }
+    for (final entry in (replaces ?? const <String, String>{}).entries) {
+      final id = entry.key;
+      final text = entry.value;
+      if (text.trim().isEmpty) continue;
+      final when = DateTime.now().toUtc();
+      if (live.containsKey(id)) {
+        await _append(_memoryRecord(id, text.trim(), when, chat));
+        updated++;
+      } else {
+        await _append(_memoryRecord(const Uuid().v4(), text.trim(), when, chat));
+        added++;
+      }
+    }
+    for (final text in add ?? const <String>[]) {
+      if (text.trim().isEmpty) continue;
+      await _append(_memoryRecord(const Uuid().v4(), text.trim(),
+          DateTime.now().toUtc(), chat));
+      added++;
+    }
+    if (added + updated + deleted > 0) await _rebuildIndex();
+    return (added: added, updated: updated, deleted: deleted);
+  }
+
+  String _memoryRecord(String id, String text, DateTime at, String? chat) =>
+      _encode({
+        "t": "m",
+        "id": id,
+        "text": text,
+        "at": at.toIso8601String(),
+        "chat": ?chat,
+      });
+
   /// The memories [query] is about: the ones that clear [recallMinScore],
-  /// best first, at most [limit].
-  Future<List<MemoryEntry>> search(String query, {int limit = recallLimit}) async {
-    final all = await entries();
+  /// best first, at most [limit]. [entries] spares the log a second read where
+  /// the caller has it in hand already.
+  Future<List<MemoryEntry>> search(
+    String query, {
+    int limit = recallLimit,
+    List<MemoryEntry>? entries,
+  }) async {
+    final all = entries ?? await this.entries();
     if (all.isEmpty) return const [];
     final index = await _index(all);
     final scores = <String, double>{};
@@ -147,12 +293,15 @@ class MemoryStore {
   List<MemoryEntry> _replay(String log) {
     final latest = <String, MemoryEntry>{};
     final deleted = <String>{};
+    final pinned = <String, bool>{};
     for (final line in log.split("\n")) {
       if (line.trim().isEmpty) continue;
       final record = _recordOf(line);
       if (record == null) break;
       if (record.delete) {
         deleted.add(record.id);
+      } else if (record.pin != null) {
+        pinned[record.id] = record.pin!;
       } else {
         final memory = record.entry!;
         latest.putIfAbsent(memory.id, () => memory);
@@ -161,13 +310,14 @@ class MemoryStore {
     }
     return [
       for (final entry in latest.values)
-        if (!deleted.contains(entry.id)) entry,
+        if (!deleted.contains(entry.id))
+          entry.copyWithPinned(pinned[entry.id] ?? false),
     ];
   }
 
   /// One line of the log, or null where it is not a record at all: a torn
   /// write, or one whose fields are not what the reader needs.
-  ({bool delete, String id, MemoryEntry? entry})? _recordOf(String line) {
+  ({bool delete, bool? pin, String id, MemoryEntry? entry})? _recordOf(String line) {
     Object? decoded;
     try {
       decoded = jsonDecode(line);
@@ -178,7 +328,10 @@ class MemoryStore {
     final id = decoded["id"];
     if (id is! String) return null;
     if (decoded["t"] == "d") {
-      return (delete: true, id: id, entry: null);
+      return (delete: true, pin: null, id: id, entry: null);
+    }
+    if (decoded["t"] == "p" || decoded["t"] == "u") {
+      return (delete: false, pin: decoded["t"] == "p", id: id, entry: null);
     }
     if (decoded["t"] != "m") return null;
     final text = decoded["text"];
@@ -189,6 +342,7 @@ class MemoryStore {
     final chat = decoded["chat"];
     return (
       delete: false,
+      pin: null,
       id: id,
       entry: MemoryEntry(
         id: id,
@@ -238,9 +392,8 @@ class MemoryStore {
   Future<void> _writeIndex(int size, Map<String, List<String>> terms) async {
     // Through a rename: a torn index would cost a rebuild on the next read,
     // but a reader must never see an empty one under a non-empty log.
-    final temp = fs.file("$_indexPath$writingSuffix");
-    await temp.writeAsString(jsonEncode({"size": size, "terms": terms}));
-    await temp.rename(_indexPath);
+    await writeThroughRename(
+        fs, _indexPath, jsonEncode({"size": size, "terms": terms}));
   }
 
   static Map<String, List<String>> _indexFor(List<MemoryEntry> entries) {
@@ -266,9 +419,31 @@ List<String> tokenize(String text) {
   return words;
 }
 
+/// The memories as a block of prompt text, newest first, one line each with
+/// the caps applied. This is the always-loaded half of the store: what is not
+/// in the line is still there, and the line says the search can reach it.
+/// Empty where there is nothing, so the caller sends no section then.
+String renderIndex(List<MemoryEntry> memories) {
+  if (memories.isEmpty) return "";
+  final lines = <String>[];
+  var total = 0;
+  for (final memory in [...memories].reversed) {
+    var text = memory.text.trim();
+    if (text.length > indexEntryChars) {
+      text = "${text.substring(0, indexEntryChars)}...";
+    }
+    lines.add("- $text");
+    total += text.length + 2;
+    if (total > indexBlockChars) break;
+  }
+  return lines.join("\n");
+}
+
 /// The memories as a block of prompt text, the caps applied. Empty where
-/// there is nothing, so the caller sends no section then.
-String renderRecall(List<MemoryEntry> memories) {
+/// there is nothing, so the caller sends no section then. [withIds] is the
+/// tool's rendering: the ids the update and delete tools take, which the
+/// prompt's own recall does not need.
+String renderRecall(List<MemoryEntry> memories, {bool withIds = false}) {
   if (memories.isEmpty) return "";
   final lines = <String>[];
   var total = 0;
@@ -277,9 +452,36 @@ String renderRecall(List<MemoryEntry> memories) {
     if (text.length > recallEntryChars) {
       text = "${text.substring(0, recallEntryChars)}...";
     }
-    lines.add("- $text");
-    total += text.length + 2;
+    final line = withIds ? "- [${memory.id}] $text" : "- $text";
+    lines.add(line);
+    total += line.length + 1;
     if (total > recallBlockChars) break;
   }
   return lines.join("\n");
+}
+
+/// The pinned memories as a block: their full text, newest first, cut at
+/// [pinnedLimit]. The cap is the prompt's, not the store's: a store that grew
+/// past it keeps the pins, and the newest four are the ones a pin means
+/// most.
+String renderPinned(List<MemoryEntry> memories) {
+  final pinned = memories.where((m) => m.pinned).toList()
+    ..sort((a, b) => b.at.compareTo(a.at));
+  return pinned
+      .take(pinnedLimit)
+      .map((memory) => "- ${memory.text.trim()}")
+      .join("\n");
+}
+
+/// The whole store as the consolidation pass's question: every entry in full
+/// with its id, newest first, cut at [consolidationMaxEntries]. The recall
+/// caps do not apply — the pass decides over the whole store, and a fact cut
+/// to a line is a fact it cannot judge.
+String renderConsolidation(List<MemoryEntry> memories) {
+  if (memories.isEmpty) return "";
+  return memories
+      .reversed
+      .take(consolidationMaxEntries)
+      .map((memory) => "- [${memory.id}] ${memory.text.trim()}")
+      .join("\n");
 }

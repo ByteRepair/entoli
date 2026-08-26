@@ -86,7 +86,8 @@ with nothing either, which is why nothing user-facing names it at all.
 
 ### On-disk layout
 
-`<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`.
+ `<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`,
+ the project's memories beside what its chats share.
 A chat is
 `chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
@@ -100,7 +101,9 @@ skill's scripts want a real base directory, and deleting one's own skill must
 not reach the presets. `settings.json` holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
-`cornerRadius` and `systemPalette` — and `llmProviders`.
+ `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's
+ global `AGENTS.md`, the instructions that reach every turn in every user
+ project, beside it.
 `<dataDir>/reminders.json` is the user's reminders, one JSON
 list; the boot receiver reads it with no engine running, which is why writes go
 through a rename.
@@ -196,6 +199,25 @@ directory. `AppConfig`'s path helpers all take `{String? project}`, and passing
 nothing means the default. `isProjectName` refuses `default` for the same
 reason: a second way to name it would be a second entry for it in every list.
 
+A **built-in project** is a directory the app ships rather than the user makes,
+declared in `builtin_project.dart` (`builtinProjects`, today just `anonymous`).
+It is a project in every respect that matters to the store — same layout, same
+movement, a chat can be in one — but its name is refused by `isProjectName`, so
+it cannot be created, renamed or deleted, and `everyProject` is where it is
+offered. What is special about it is what a *turn* in it may not have, and that
+ is a `BuiltinProject` spec: which profile it runs under (`ProfilePolicy`),
+ whether project memory runs (`MemoryPolicy`), whether its workspace is shared
+ between its chats, which capabilities it takes away, and, where it ships
+ one, a note that stands in for the instruction files. `anonymous` turns all
+ of the first four off and is the one that ships a note: no profile, no
+ memory, a workspace it does not share, and its own account of what an
+ anonymous chat is, in code rather than in a file the user could edit away —
+ so the context and tools that would reach another conversation are simply not
+ there. A turn never meets a built-in project itself:
+ `ChatRepository._turnSettings` resolves the spec into a profile, a memory, a
+ `sharedWorkspace` flag, a `disabled` capability set and the bundled note, and
+ the backend sees only those.
+
 Two workspaces reach a turn, and they answer different questions. The project's
 (`<project>/workspace/`) is where work another conversation should find goes,
 and it is the `HOME` of every command — so a repository cloned, a package
@@ -232,10 +254,13 @@ projects clears the selected chat, since it is no longer in the list.
 A project name is a directory name, so `projectNameFrom` makes what was typed
 safe to be one — the model writes paths into it — and `AppConfig.projectDir`
 refuses anything that is not one segment under `projects/`, since every
-project-scoped path is built through it. `isProjectName` is the same rule read
-the other way: a directory that could not have been created as a project is not
-listed as one, so a stray `.git` beside them is not a project with no chats in
-it.
+project-scoped path is built through it. That refusal is `isProjectDirName`,
+the shape alone; the default project's and the built-ins' names have it too, a
+chat can be in one, so path construction accepts them. `isProjectName` is the
+shape minus the names the app ships — the default's and the built-ins' — and is
+where a user names a project: a directory that could not have been created as a
+project is not listed as one, so a stray `.git` beside them is not a project
+with no chats in it.
 
 ## Saying what it did
 

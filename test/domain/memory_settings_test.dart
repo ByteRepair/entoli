@@ -8,6 +8,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/project_settings.dart";
 
@@ -40,9 +41,8 @@ void main() {
   group("settings round-trip", () {
     test("the app-level memory fields survive save and load", () async {
       final settings = AppSettings(
-        loadInstructions: true,
-        instructionImports: true,
-        nestedInstructions: true,
+        instructionImports: false,
+        nestedInstructions: false,
         autoMemory: true,
         memoryRecall: false,
         memoryExtraction: false,
@@ -53,9 +53,8 @@ void main() {
       await settings.save(config);
 
       final loaded = AppSettings.load(config);
-      expect(loaded.loadInstructions, isTrue);
-      expect(loaded.instructionImports, isTrue);
-      expect(loaded.nestedInstructions, isTrue);
+      expect(loaded.instructionImports, isFalse);
+      expect(loaded.nestedInstructions, isFalse);
       expect(loaded.autoMemory, isTrue);
       expect(loaded.memoryRecall, isFalse);
       expect(loaded.memoryExtraction, isFalse);
@@ -66,9 +65,13 @@ void main() {
 
     // The sub-gates default on: a file that turns auto-memory on without
     // naming them says nothing, and gets recall, extraction and the tools.
-    test("the memory sub-gates default on", () async {
+    // The instruction half defaults on too, the files being read into every
+    // turn whether or not the file names them.
+    test("the sub-gates default on", () async {
       await AppSettings(autoMemory: true).save(config);
       final loaded = AppSettings.load(config);
+      expect(loaded.instructionImports, isTrue);
+      expect(loaded.nestedInstructions, isTrue);
       expect(loaded.memoryRecall, isTrue);
       expect(loaded.memoryExtraction, isTrue);
       expect(loaded.memoryAgentTool, isTrue);
@@ -82,7 +85,6 @@ void main() {
           jsonDecode(File(config.settingsFile).readAsStringSync())
               as Map<String, dynamic>;
       for (final key in [
-        "loadInstructions",
         "instructionImports",
         "nestedInstructions",
         "autoMemory",
@@ -108,28 +110,34 @@ void main() {
   });
 
   group("turn-time resolution", () {
-    test("everything off resolves to nothing at all", () async {
+    test("nothing on resolves to a turn with no store", () async {
       final repo = repoWith(AppSettings());
       final chat = await repo.createChat();
 
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
-      expect(backend.prompts.single.settings.memory, MemorySettings.off);
+      final memory = backend.prompts.single.settings.memory;
+      expect(memory.autoMemory, isFalse);
+      expect(memory.memoryDir, isNull);
+      expect(memory.bgModel, isNull);
+      // The AGENTS.md half does not ride on the store: its answers travel
+      // with the turn whatever the store says.
+      expect(memory.imports, isTrue);
+      expect(memory.nested, isTrue);
     });
 
-    test("the instructions gates travel alone", () async {
+    test("the instruction answers travel with the turn", () async {
       final repo = repoWith(AppSettings(
-        loadInstructions: true,
-        nestedInstructions: true,
+        instructionImports: false,
+        nestedInstructions: false,
       ));
       final chat = await repo.createChat();
 
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
       final memory = backend.prompts.single.settings.memory;
-      expect(memory.instructions, isTrue);
       expect(memory.imports, isFalse);
-      expect(memory.nested, isTrue);
+      expect(memory.nested, isFalse);
       expect(memory.autoMemory, isFalse);
       expect(memory.memoryDir, isNull);
     });
@@ -170,13 +178,13 @@ void main() {
     test("auto-memory off means no store even where the toggle is on", () async {
       makeProject("proj");
       await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
-      final repo = repoWith(AppSettings(loadInstructions: true));
+      final repo = repoWith(AppSettings());
       final chat = await repo.createChat(project: "proj");
 
       await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
 
       final memory = backend.prompts.single.settings.memory;
-      expect(memory.instructions, isTrue);
+      expect(memory.autoMemory, isFalse);
       expect(memory.memoryDir, isNull);
     });
 
@@ -221,6 +229,42 @@ void main() {
       final memory = backend.prompts.single.settings.memory;
       expect(memory.bgProvider, "ollama-cloud");
       expect(memory.bgModel, "qwen-2.5");
+    });
+
+    test("a chat that keeps out of memory runs with it off", () async {
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final chat = await repo.createChat(meta: ChatMeta(memoryOff: true));
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      expect(backend.prompts.single.settings.memory, MemorySettings.off);
+    });
+
+    test("one chat's keep-out does not reach the rest of the project",
+        () async {
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final off = await repo.createChat(meta: ChatMeta(memoryOff: true));
+      final on = await repo.createChat();
+
+      await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
+      await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
+
+      expect(backend.prompts.first.settings.memory, MemorySettings.off);
+      expect(backend.prompts.last.settings.memory.memoryDir,
+          config.memoryDir());
+    });
+
+    // The chat's off cannot be argued out of by a project that has a store.
+    test("the keep-out stands over a project's own store", () async {
+      makeProject("proj");
+      await ProjectSettings(useProjectMemory: true).save(config, project: "proj");
+      final repo = repoWith(AppSettings(autoMemory: true));
+      final chat = await repo.createChat(
+          project: "proj", meta: ChatMeta(memoryOff: true));
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      expect(backend.prompts.single.settings.memory, MemorySettings.off);
     });
   });
 }

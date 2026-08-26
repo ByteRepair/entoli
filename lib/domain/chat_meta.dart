@@ -7,7 +7,12 @@ import "temp_chat_ttl.dart";
 /// the chat settings page. Distinct from `state.json` (chat metadata) and
 /// `conv.jsonl` (message tree). Null everywhere means "inherit".
 class ChatMeta {
-  ChatMeta({this.model, this.provider, this.approveMode, this.tempChatTtl});
+  ChatMeta(
+      {this.model,
+      this.provider,
+      this.approveMode,
+      this.tempChatTtl,
+      this.memoryOff});
 
   String? model;
   String? provider;
@@ -17,11 +22,19 @@ class ChatMeta {
   /// project (if set) or app default.
   TempChatTtl? tempChatTtl;
 
+  /// Whether this chat keeps out of the auto-memory: the recall, the
+  /// extraction and the memory tools. The instruction files keep reaching it —
+  /// they are read into every turn. Null means follow whatever the project
+  /// answers, and a project that takes the subsystem away cannot be given it
+  /// back from here.
+  bool? memoryOff;
+
   factory ChatMeta.fromJson(Map<String, dynamic> json) => ChatMeta(
         model: json["model"] as String?,
         provider: json["provider"] as String?,
         approveMode: _approveMode(json),
         tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?),
+        memoryOff: json["memoryOff"] as bool?,
       );
 
   /// Null is a `meta.json` that was never written, which inherits everything —
@@ -50,6 +63,7 @@ class ChatMeta {
         provider: provider,
         approveMode: approveMode,
         tempChatTtl: tempChatTtl,
+        memoryOff: memoryOff,
       );
 
   /// Nothing overridden, so nothing to write down: this chat inherits the
@@ -61,6 +75,7 @@ class ChatMeta {
         if (provider != null) "provider": provider,
         if (approveMode != null) "approveMode": approveMode!.name,
         if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
+        if (memoryOff != null) "memoryOff": memoryOff,
       };
 
   String encode() => jsonEncode(toJson());

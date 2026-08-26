@@ -9,6 +9,11 @@ records are still in flight, and closing the app in that window would lose them
 milliseconds on a disk and longer on IndexedDB. A write that fails still has to
 clear the flag, or the composer stays disabled with nothing running.
 
+Where the turn's extraction kept something, the page says so: the backend's
+note stream carries a line for the chat — "Kept N memories." — and a note for
+any other chat does not reach this one, since the extraction ran for it. The
+page subscribes for the chat's life and cancels the subscription on dispose.
+
 ## Thinking and tool runs
 
 A turn is not just a reply: the model thinks, runs tools, thinks again. Each of
@@ -420,10 +425,10 @@ says to pick a chat, and is now a peer of the new-chat arm rather than an
 exception to it — neither writes anything.
 
 `NewChatSettingsPage` is the settings of a chat that does not exist yet: the
-model, the approve mode and the TTL, which are values and need nothing to hang
-on. Save pops a `ChatMeta` back rather than writing a file, and `_NewChat`
-holds it until `createChat` spends it. It edits a copy, so a page backed out of
-leaves the screen with what it had.
+model, the approve mode, the memory switch and the TTL, which are values and
+need nothing to hang on. Save pops a `ChatMeta` back rather than writing a
+file, and `_NewChat` holds it until `createChat` spends it. It edits a copy,
+so a page backed out of leaves the screen with what it had.
 
 **A page of its own rather than a mode of `ChatSettingsPage`**, and `_NewChat`
 state rather than a provider — both for the same reason. Folded into the chat's
@@ -463,9 +468,11 @@ otherwise, and would be a thing to press to get back to where the app opens.
 Pressing the selected badge is that instead, which makes the row a set of
 toggles rather than a set with one always down.
 
-So a user who has never made a project sees nothing here, which is right: with
-none there is no choice to offer, and the row would be one badge that is always
-selected and can lead nowhere.
+The built-in projects have badges, and they are always on offer: `everyProject`
+leads with them after the default, so a user who has never made a project sees
+the built-ins alone rather than nothing. What the row names for one is its
+label, not its directory — `Anonymous`, not `anonymous` — the same rule the
+menus and the title bar keep.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it

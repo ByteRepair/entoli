@@ -4,8 +4,10 @@ import "dart:math" as math;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/agent_backend.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
+import "../../domain/project.dart";
 import "../../providers.dart";
 import "../fonts.dart";
 import "../theme.dart";
@@ -170,9 +172,11 @@ class _NewChatState extends ConsumerState<_NewChat> {
       );
 }
 
-/// The named projects, as badges, with the one this chat is in picked out. The
-/// default project is nothing selected, so it has no badge — see "The chat
-/// page" in CLAUDE.md.
+/// The projects a new chat could happen in, as badges, with the one picked out.
+/// The named projects the user has made, and the built-in ones the app ships —
+/// a built-in is always on offer, so the row is never empty. The default
+/// project is nothing selected, so it has no badge — see "The chat page" in
+/// CLAUDE.md.
 class _ProjectBadges extends ConsumerWidget {
   const _ProjectBadges({required this.selected});
 
@@ -181,8 +185,9 @@ class _ProjectBadges extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final named = ref.watch(projectListProvider).value ?? const [];
-    // The padding would otherwise be a gap under nothing.
-    if (named.isEmpty) return const SizedBox.shrink();
+    // `everyProject` leads with the default, which is the null that has no
+    // badge; the rest are the built-in and the named.
+    final projects = everyProject(named).whereType<String>().toList();
     return Padding(
       padding: const EdgeInsets.only(top: 20),
       child: Wrap(
@@ -190,9 +195,9 @@ class _ProjectBadges extends ConsumerWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          for (final project in named)
+          for (final project in projects)
             ChoiceChip(
-              label: Text(project),
+              label: Text(projectLabel(project)),
               selected: project == selected,
               onSelected: (on) => selectProject(ref, on ? project : null),
             ),
@@ -343,14 +348,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// from re-prompting for the same expired chat.
   String? _expiryChecked;
 
+  /// The page's half of the memory notes: the ones this chat is about land as
+  /// a line, since the turn they came from is over by then.
+  StreamSubscription<MemoryNote>? _memoryNotes;
+
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_readPosition);
+    _memoryNotes = ref
+        .read(agentBackendProvider)
+        .memoryNotes
+        .where((note) => note.chatId == widget.chatId)
+        .listen((note) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(note.text)),
+      );
+    });
   }
 
   @override
   void dispose() {
+    _memoryNotes?.cancel();
     _scroll.removeListener(_readPosition);
     _controller.dispose();
     _scroll.dispose();
@@ -709,7 +729,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// returns, so a line added here is one the bar makes room for.
   List<Widget> _details(ChatState state) => [
         // Every chat is in a project, so naming the default one says nothing.
-        if (state.project != null) _TitleLine(text: state.project!),
+        // A built-in's directory name is read as its label, not its path.
+        if (state.project != null) _TitleLine(text: projectLabel(state.project)),
         if (state.pinned) _TitleLine(icon: Icons.push_pin, text: "Pinned"),
         if (state.tempTtlExpiresAt != null)
           _TtlLine(expiresAt: state.tempTtlExpiresAt!),

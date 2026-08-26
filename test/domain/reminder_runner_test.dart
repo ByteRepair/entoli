@@ -8,6 +8,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -102,8 +103,7 @@ void main() {
     final settings = backend.prompts.single.settings;
     // A turn nobody watches must never park on an approval or a question:
     // there is nobody to answer either, and nothing behind that wait but time.
-    expect(settings.offerAsk, isFalse);
-    expect(settings.offerTask, isFalse);
+    expect(settings.disabled, containsAll([AgentCapability.ask, AgentCapability.task]));
   });
 
   test("writes meta.json with the pins; the reminder's TTL is the chat's", () async {

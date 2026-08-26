@@ -22,9 +22,14 @@ void main() {
 
   Future<dynamic> run(String command,
           {Duration timeout = const Duration(seconds: 10),
-          Map<String, String> env = const {}}) =>
+          Map<String, String> env = const {},
+          bool sharedHome = true}) =>
       LocalShell(environment: () => env)
-          .start(command, cwd: workspace.path, home: home.path, timeout: timeout)
+          .start(command,
+              cwd: workspace.path,
+              home: home.path,
+              timeout: timeout,
+              sharedHome: sharedHome)
           .result;
 
   test("reports what the command printed and the code it exited with", () async {
@@ -53,6 +58,18 @@ void main() {
     final result = await run(r'echo "$MY_TOKEN"', env: {"MY_TOKEN": "abc123"});
 
     expect(result.output.trim(), "abc123");
+  });
+
+  test("a shared home leaves the machine's own HOME", () async {
+    final result = await run(r'echo "$HOME"');
+
+    expect(result.output.trim(), isNot(home.path));
+  });
+
+  test("a home that is not shared becomes HOME", () async {
+    final result = await run(r'echo "$HOME"', sharedHome: false);
+
+    expect(result.output.trim(), home.path);
   });
 
   test("nothing waits for a keypress", () async {
