@@ -98,8 +98,8 @@ files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
  `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's
- global `AGENTS.md`, the instructions that reach every turn in every project,
- beside it.
+ global `AGENTS.md`, the instructions that reach every turn in every user
+ project, beside it.
 `<dataDir>/reminders.json` is the user's reminders, one JSON
 list; the boot receiver reads it with no engine running, which is why writes go
 through a rename.
@@ -199,14 +199,18 @@ It is a project in every respect that matters to the store — same layout, same
 movement, a chat can be in one — but its name is refused by `isProjectName`, so
 it cannot be created, renamed or deleted, and `everyProject` is where it is
 offered. What is special about it is what a *turn* in it may not have, and that
-is a `BuiltinProject` spec: which profile it runs under (`ProfilePolicy`),
-whether project memory runs (`MemoryPolicy`), whether its workspace is shared
-between its chats, and which capabilities it takes away. `anonymous` turns all
-of those off: no profile, no memory, and a workspace it does not share — so the
-context and tools that would reach another conversation are simply not there. A
-turn never meets a built-in project itself: `ChatRepository._turnSettings`
-resolves the spec into a profile, a memory, a `sharedWorkspace` flag and a
-`disabled` capability set, and the backend sees only those.
+ is a `BuiltinProject` spec: which profile it runs under (`ProfilePolicy`),
+ whether project memory runs (`MemoryPolicy`), whether its workspace is shared
+ between its chats, which capabilities it takes away, and, where it ships
+ one, a note that stands in for the instruction files. `anonymous` turns all
+ of the first four off and is the one that ships a note: no profile, no
+ memory, a workspace it does not share, and its own account of what an
+ anonymous chat is, in code rather than in a file the user could edit away —
+ so the context and tools that would reach another conversation are simply not
+ there. A turn never meets a built-in project itself:
+ `ChatRepository._turnSettings` resolves the spec into a profile, a memory, a
+ `sharedWorkspace` flag, a `disabled` capability set and the bundled note, and
+ the backend sees only those.
 
 Two workspaces reach a turn, and they answer different questions. The project's
 (`<project>/workspace/`) is where work another conversation should find goes,

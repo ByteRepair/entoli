@@ -397,8 +397,10 @@ instructions the user writes, and auto-memory the app writes. Both reach the
 model in `turnPrompt`'s second system message — the half that changes per
 turn — which is why neither is in `conv.jsonl` and both are re-read on every
 turn: a file or a memory edited between turns is in force from the next
-message rather than the next restart. The Memory category of the settings
-page is where the user meets them.
+message rather than the next restart. The instructions half has no off switch
+— the files are read whether or not the subsystem runs, and the settings
+page's Memory category is where the user meets the auto-memory half and
+tunes how the files are read.
 
 ### The store
 
@@ -515,17 +517,27 @@ and every workspace, so the file tools cannot reach it and it is the user's
 writing rather than the model's — and the project's, at its workspace root,
 which its conversations share. There is no chat-level file: a chat's workspace
 is scratch, and rules that stand for one chat have no room in a place the next
-turn's scratch files share. The two render in that order, global first, and a
-file whose path matches one of the user's exclude patterns is skipped wherever
-it would be read — the patterns are globs, anchored, `**` spanning
-directories, and a pattern with no slash matching the file's name alone.
+turn's scratch files share. The files are read into every turn: there is no
+switch to turn the reading off, because a user who writes a standing rule
+expects it to be in force, and the ways a turn may withhold what a file pulls
+in are the ones below. The two render in that order, global first, and a file
+whose path matches one of the user's exclude patterns is skipped wherever it
+would be read — the patterns are globs, anchored, `**` spanning directories,
+and a pattern with no slash matching the file's name alone.
+
+A built-in project that ships a note of its own reads no file at all: the
+note, in code, is the turn's instructions in full, and the nested walk on a
+file read is off beside it, since there is no file anywhere to pull in.
+`anonymous` is the one today — the app's short account of what an anonymous
+chat is, which a file on the user's disk could delete or edit away from under
+a turn.
 
 An `@path` line in the project's file imports the file it names, depth-first
 after its importer, to a depth of five, and only inside the project workspace
-— the gate is off by default, since an import the user never asked for is a
-word in the model's mouth. The global file's references are left as text: a
-file that stands for every project importing one of a project's files would be
-a project leaking into the rest. A file bigger than 4 MiB is skipped rather
+— on by default, and the settings page is where a user takes it back. The
+global file's references are left as text: a file that stands for every
+project importing one of a project's files would be a project leaking into the
+rest. A file bigger than 4 MiB is skipped rather
 than sent. The whole block has a budget of 40,000 characters, trimmed
 deepest first: what was imported by an import matters least, the user's global
 file next, and the project's root last to go. Claude Code's budget
@@ -533,25 +545,31 @@ is `max(40k, 5% of the model's context window)`; the window half waits on a
 provider reporting one (issue #135), so until then it is the floor alone.
 
 A nested `AGENTS.md` found above a file the agent reads mid-turn joins the
-turn where the nested gate is on, and `_loadedInstructions` holds the paths
-already in front of the model so the same file is never injected twice. They
-render as "## Workspace instructions" — the one section of the second message
-with no preamble of its own, because these are the instructions.
+turn where the nested switch is on, and that one defaults on too: a
+subdirectory that writes its own rules is a place the user meant to have
+them. `_loadedInstructions` holds the paths already in front of the model so
+the same file is never injected twice. They render as "## Workspace
+instructions" — the one section of the second message with no preamble of its
+own, because these are the instructions.
 
 ### Gating
 
-`ChatRepository._resolveMemory` resolves a `MemorySettings` per turn, and it
-is `off` unless the user has asked for one of the two halves:
-`loadInstructions` or `autoMemory`. The rest hangs off `autoMemory`, which
-is off by default and owns the store; the sub-gates — recall, extraction,
-the agent tools — default on and mean nothing while it is off, which is how
-the settings page draws them dead under a dead master. Which project's store
-answers is the project's own question: a non-default project keeps its own
-only while `useProjectMemory` is on, and that is off by default, so a named
-project's chats share the default project's memories until the user says
-otherwise. The Memory LLM — the half of extraction that writes — travels
-with its provider or not at all, and until one is picked nothing in the
-subsystem writes.
+The instruction files have no gate: they are read into every turn, and a
+built-in project that ships a note reads its note instead. What the settings
+page gates is the auto-memory subsystem, and `ChatRepository._resolveMemory`
+resolves a `MemorySettings` per turn from it: the value is always built — a
+turn with the subsystem off still carries the imports, nested and excludes
+answers, since the files it reads do not ride on the store — and it is `off`
+where a built-in project or the chat's own say so. The subsystem hangs off
+`autoMemory`, which is off by default and owns the store; the sub-gates —
+recall, extraction, the agent tools — default on and mean nothing while it is
+off, which is how the settings page draws them dead under a dead master.
+Which project's store answers is the project's own question: a non-default
+project keeps its own only while `useProjectMemory` is on, and that is off by
+default, so a named project's chats share the default project's memories until
+the user says otherwise. The Memory LLM — the half of extraction that writes —
+travels with its provider or not at all, and until one is picked nothing in
+the subsystem writes.
 
 A single chat can keep out of it too: its `meta.json` carries a `memoryOff`,
 and where it is set `_turnSettings` resolves `off` for that chat alone, before
