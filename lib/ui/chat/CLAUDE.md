@@ -9,6 +9,11 @@ records are still in flight, and closing the app in that window would lose them
 milliseconds on a disk and longer on IndexedDB. A write that fails still has to
 clear the flag, or the composer stays disabled with nothing running.
 
+Where the turn's extraction kept something, the page says so: the backend's
+note stream carries a line for the chat — "Kept N memories." — and a note for
+any other chat does not reach this one, since the extraction ran for it. The
+page subscribes for the chat's life and cancels the subscription on dispose.
+
 ## Thinking and tool runs
 
 A turn is not just a reply: the model thinks, runs tools, thinks again. Each of

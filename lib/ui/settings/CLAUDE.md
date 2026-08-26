@@ -68,12 +68,15 @@ name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
 handshake. **Providers** is the endpoints.
 **LLMs** is what a new chat is answered by and what names it. **Memory** is
-what one conversation leaves the others: the `AGENTS.md` files the workspaces
-are read from, with the imports they make and the nested ones found on a read,
-and the memories the app writes for itself, which the recall, extraction and
-tools sub-gates and the Memory LLM beside them steer — the two halves are
-"Memory" in `lib/data/builtin/CLAUDE.md`, and the memories themselves are
-looked at on a page the settings draw. **Data** is all of it at once, out as
+what one conversation leaves the others: the two `AGENTS.md` files the turn
+is read from — the user's own at the root of the data directory and the
+project's in its workspace, the latter's imports expanded and a nested one
+found on a read joining the turn — with the patterns that keep one of them
+out, and the memories the app writes for itself, which the recall, extraction
+and tools sub-gates and the Memory LLM beside them steer; the profile pages
+edit the files — the global page the user's own, the project page the
+project's — and the memories themselves are looked at on a page the settings
+draw. The two halves are "Memory" in `lib/data/builtin/CLAUDE.md`. **Data** is all of it at once, out as
 one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app
 is".

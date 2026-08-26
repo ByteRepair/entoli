@@ -86,7 +86,8 @@ with nothing either, which is why nothing user-facing names it at all.
 
 ### On-disk layout
 
-`<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`.
+ `<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`,
+ the project's memories beside what its chats share.
 A chat is
 `chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
@@ -96,7 +97,9 @@ Every project is a directory under `projects/`, the default one included.
 files, beside `settings.json` — which holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
-`cornerRadius` and `systemPalette` — and `llmProviders`.
+ `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's
+ global `AGENTS.md`, the instructions that reach every turn in every project,
+ beside it.
 `<dataDir>/reminders.json` is the user's reminders, one JSON
 list; the boot receiver reads it with no engine running, which is why writes go
 through a rename.

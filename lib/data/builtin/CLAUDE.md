@@ -411,13 +411,24 @@ the approval regime is the answer to that, not the layout — but a model whose
 everyday reach is the file tools reads and writes memories by being asked to,
 rather than by finding them.
 
-`memories.jsonl` is an append-only log of memory records and tombstone
-records, one per line: the last record for an id stands, a tombstone after a
-memory removes it, and the first line that will not parse ends the read —
-appends are ordered, so a torn line is the one a kill landed in, the same
-bargain `conv.jsonl` makes. `index.json` beside it is derived rather than
-truth: a term-to-documents index rebuilt whenever the log has grown past it,
-which is what lets a query run without a full replay.
+`memories.jsonl` is an append-only log of memory records, tombstone records
+and pin records, one per line: the last record for an id stands, a tombstone
+after a memory removes it, the last pin or unpin for an id stands, and the
+first line that will not parse ends the read — appends are ordered, so a torn
+line is the one a kill landed in, the same bargain `conv.jsonl` makes.
+`index.json` beside it is derived rather than truth: a term-to-documents
+index rebuilt whenever the log has grown past it, which is what lets a query
+run without a full replay. A `consolidated` file beside the two is a stamp,
+not a log: when the last consolidation pass ran, written through a rename,
+and a stamp that will not parse reads as never.
+
+`update` replaces a memory's text by appending a record with the same id, and
+`maintain` is the batch shape the model reports in — drops, replacements and
+new ones, an op on a missing id ignored, a replacement of a missing id
+landing as a new memory rather than a record with a made-up id, so a model
+that misremembers a name costs nothing. A memory's `chat` is its provenance:
+the chat that wrote it, or null where the user typed it in the explorer,
+which is the line the explorer's "added by you" reads.
 
 `search` scores the way the index is built: for each distinct term of the
 query, a memory holding it takes a share of `1 / (how many memories hold it)`,
@@ -428,7 +439,20 @@ to a whole match) best first, at most `recallLimit` (5), and `renderRecall`
 caps what the turn actually reads: 400 characters per memory, 2000 for the
 block. The bar and the cap are cut points on a sorted list, not filters.
 
+A pinned memory is the user's "this is in every turn": it is carried in full
+at most `pinnedLimit` (4), the newest standing where the limit is reached,
+and the pin's cap is the prompt's rather than the store's — a store that
+grows past it keeps the pins.
+
 ### What reaches the turn
+
+**Pinned and the index.** Where a store exists and the recall gate is on, the
+turn carries the store's always-loaded half: the pinned memories in full as
+"## Pinned memories" — the user's standing orders, held for every turn
+rather than the relevant one — and the rest as "## Memory index", one line
+each with `renderIndex`'s caps, the pinned ones out of it because they are
+above in full. They say the catalog is there without carrying the catalog:
+what is not on a line is still in the store, and the search tool reaches it.
 
 **Recall.** Before the session is built, `_runTurn` searches the store with
 the turn's prompt text — the last user message of the history where there is
@@ -442,37 +466,71 @@ turn goes on.
 
 **Extraction.** A turn that ends `done` not aborted, with the Memory LLM
 picked, is asked in the background what it is worth remembering: one model
-call over the exchange, `unawaited`, answered as a JSON list of strings
-parsed leniently (the model's writing, like `askQuestionsFrom`'s), at most
-five memories of 400 characters each, written through the same store. It
-never costs the turn — a failure is a log line — and it writes nothing while
-no model is picked, which is what keeps the subsystem read-only until the
-user has given it a writer.
+call over the exchange *and what is already kept* — the store's newest first,
+with their ids, so the answer can correct and spend as well as add. The
+answer is a maintenance JSON, parsed as liberally as `_maintainFrom` reads
+the model's writing: `memories` for new facts (five of 400 characters at
+most), `replaces` keyed by id, `delete` a list of ids, applied through
+`store.maintain`. It never costs the turn — a failure is a log line — and it
+writes nothing while no model is picked, which is what keeps the subsystem
+read-only until the user has given it a writer. Where the pass kept anything
+new, it adds a `MemoryNote` to the backend's note stream and the chat's own
+page shows it as a line — "Kept N memories." — because a silent keep is
+indistinguishable from a failed one.
 
-**The tools.** `memory_save` and `memory_search` are ordinary tools with
-ordinary call/result pairs, the only difference being that neither raises an
-approval: one reads, and the other writes to a directory the approval regime
-does not police. `memory_save` is stamped with the chat id that made it,
-which is what the explorer's "added by you" line and a future "who learned
-this" answer read. They are offered while the agent tool gate is on and a
-store exists, and the prefill warm cache is built with `offerMemory: false`
-because the common turn has no store at all — a warm prefix that names tools
-the cold turn does not offer would be a prefix that misses.
+**Consolidation.** The slow half of the housekeeping, chained behind the
+extraction in the same unawaited: where the extraction keeps what one
+exchange is worth, the pass tidies what the store has grown into — the
+duplicates an exchange at a time leaves behind, the entries a newer one
+superseded. It rides the extraction's gate rather than having a setting of
+its own: a pass nobody asked for is not a switch the user should have to
+remember. What earns it its model call is a threshold rather than a switch —
+a store grown past `consolidationMinEntries` (15) live memories, the
+`consolidated` stamp at least `consolidationMinInterval` (an hour) old, one
+pass at a time. It is shown the whole store with ids, the pinned ones
+withheld — standing orders are not store growth — at
+`consolidationMaxEntries` at most, and is asked to merge, correct and spend
+only what it can see, keeping both where two could be read either way. Its
+ops go through the same `maintain`, its ids checked against the pins again
+before they land, and a finished pass stamps its hour whatever it found: an
+hour with nothing to tidy is an hour of not asking.
+
+**The tools.** `memory_save`, `memory_search`, `memory_update` and
+`memory_delete` are ordinary tools with ordinary call/result pairs, the only
+difference being that none raises an approval: two read, and the other two
+write to a directory the approval regime does not police. `memory_search`
+answers with the hits' ids beside them, because the update and delete tools
+take one; `memory_save` is stamped with the chat id that made it, which is
+what the explorer's "added by you" line reads. They are offered while the
+agent tool gate is on and a store exists, and the prefill warm cache is built
+with `offerMemory: false` because the common turn has no store at all — a
+warm prefix that names tools the cold turn does not offer would be a prefix
+that misses.
 
 ### Workspace instructions
 
-`loadInstructions` reads the `AGENTS.md` files from the chat workspace up to
-the project workspace root and never above: the project's is shared by its
-conversations, the chat's own is the chat's, and anything above the project
-workspace is another environment's. An `@path` line in one imports the file
-it names, depth-first after its importer, to a depth of five — the gate is
-off by default, since an import the user never asked for is a word in the
-model's mouth. A file bigger than 4 MiB is skipped rather than sent. The
-whole block has a budget of 40,000 characters, trimmed deepest first: what
-was imported by an import matters less than what sat in the root. Claude
-Code's budget is `max(40k, 5% of the model's context window)`; the window
-half waits on a provider reporting one (issue #135), so until then it is the
-floor alone.
+`loadInstructions` reads two files, and the walk is not there anymore: the
+user's global one, at the root of the data directory — outside every project
+and every workspace, so the file tools cannot reach it and it is the user's
+writing rather than the model's — and the project's, at its workspace root,
+which its conversations share. There is no chat-level file: a chat's workspace
+is scratch, and rules that stand for one chat have no room in a place the next
+turn's scratch files share. The two render in that order, global first, and a
+file whose path matches one of the user's exclude patterns is skipped wherever
+it would be read — the patterns are globs, anchored, `**` spanning
+directories, and a pattern with no slash matching the file's name alone.
+
+An `@path` line in the project's file imports the file it names, depth-first
+after its importer, to a depth of five, and only inside the project workspace
+— the gate is off by default, since an import the user never asked for is a
+word in the model's mouth. The global file's references are left as text: a
+file that stands for every project importing one of a project's files would be
+a project leaking into the rest. A file bigger than 4 MiB is skipped rather
+than sent. The whole block has a budget of 40,000 characters, trimmed
+deepest first: what was imported by an import matters least, the user's global
+file next, and the project's root last to go. Claude Code's budget
+is `max(40k, 5% of the model's context window)`; the window half waits on a
+provider reporting one (issue #135), so until then it is the floor alone.
 
 A nested `AGENTS.md` found above a file the agent reads mid-turn joins the
 turn where the nested gate is on, and `_loadedInstructions` holds the paths
@@ -501,7 +559,7 @@ the project's and the app's answers are asked. It only ever weakens: a chat
 can turn the subsystem off, but it cannot turn it on for a project that has
 none, nor give it back to one that has taken it away.
 
-Sub-agents run with `MemorySettings.off`: no recall in front of them, no tools
-in their hand, no extraction behind them. A sub-agent is a worker inside one
-turn, and the memories are the conversation's — what a worker learns is the
-turn's to keep, not the worker's to write down.
+Sub-agents run with `MemorySettings.off`: no memories in front of them, no
+tools in their hand, no extraction behind them. A sub-agent is a worker inside
+one turn, and the memories are the conversation's — what a worker learns is
+the turn's to keep, not the worker's to write down.
