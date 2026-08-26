@@ -320,6 +320,41 @@ void main() {
     });
   });
 
+  group("renderPinned", () {
+    test("the pinned memories in full, newest first, the rest out",
+        () async {
+      final older = await store.add("an older pinned memory");
+      await store.pin(older.id);
+      await store.add("a plain memory");
+      final newer = await store.add("a newer pinned memory");
+      await store.pin(newer.id);
+
+      final block = renderPinned(await store.entries());
+      expect(block, "- a newer pinned memory\n- an older pinned memory");
+    });
+
+    test("cut at the limit, the newest are the ones that fit", () {
+      final entries = [
+        for (var i = 0; i < pinnedLimit + 2; i++)
+          MemoryEntry(
+              id: "id$i",
+              text: "memory $i",
+              at: DateTime(2026, 1, 1, i),
+              pinned: true),
+      ];
+      final block = renderPinned(entries);
+      expect(block.split("\n"), hasLength(pinnedLimit));
+      expect(block, isNot(contains("memory 0")));
+      expect(block, isNot(contains("memory 1")));
+      expect(block, contains("memory ${pinnedLimit + 1}"));
+    });
+
+    test("empty where nothing is pinned", () async {
+      await store.add("a plain memory");
+      expect(renderPinned(await store.entries()), isEmpty);
+    });
+  });
+
   group("consolidation", () {
     test("the stamp is nothing until it is written, then the time it was given",
         () async {

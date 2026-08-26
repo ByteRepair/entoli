@@ -52,6 +52,11 @@ const consolidationMinInterval = Duration(hours: 1);
 /// oldest are left out of the question, which is to say, of the tidying.
 const consolidationMaxEntries = 50;
 
+/// How many pinned memories a turn carries in full: the pin is the user's way
+/// of saying "this is in every turn", and a standing order that crowds out the
+/// turn it is standing over has stopped being one.
+const pinnedLimit = 4;
+
 /// A memory, replayed out of the log. [chat] is the one that wrote it, or
 /// null where the user typed it in the explorer.
 class MemoryEntry {
@@ -451,6 +456,19 @@ String renderRecall(List<MemoryEntry> memories, {bool withIds = false}) {
     if (total > recallBlockChars) break;
   }
   return lines.join("\n");
+}
+
+/// The pinned memories as a block: their full text, newest first, cut at
+/// [pinnedLimit]. The cap is the prompt's, not the store's: a store that grew
+/// past it keeps the pins, and the newest four are the ones a pin means
+/// most.
+String renderPinned(List<MemoryEntry> memories) {
+  final pinned = memories.where((m) => m.pinned).toList()
+    ..sort((a, b) => b.at.compareTo(a.at));
+  return pinned
+      .take(pinnedLimit)
+      .map((memory) => "- ${memory.text.trim()}")
+      .join("\n");
 }
 
 /// The whole store as the consolidation pass's question: every entry in full

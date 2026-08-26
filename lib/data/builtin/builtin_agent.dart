@@ -246,6 +246,8 @@ class BuiltinAgent {
     this.memory = MemorySettings.off,
     this.instructions = const [],
     this.recall = "",
+    this.pinned = "",
+    this.index = "",
     this.memoryStore,
     this.memoryChat,
   });
@@ -276,6 +278,12 @@ class BuiltinAgent {
   /// backend queried the store before the agent existed, for the reason
   /// [instructions] was loaded there.
   final String recall;
+
+  /// The pinned memories, in full, and the rest of the store as an index —
+  /// the always-loaded half of what [recall] loads on demand. Both empty when
+  /// the gate is off or the store is empty, beside [recall].
+  final String pinned;
+  final String index;
 
   /// The project's memory store the memory tools talk to, or null where they
   /// are not offered: auto-memory off, the agent-tool gate off, or a sub-agent
@@ -556,6 +564,8 @@ class BuiltinAgent {
       projectWorkspace: projectWorkspace,
       agentPrompt: agentPrompt,
       instructions: renderInstructions(instructions),
+      pinned: pinned,
+      index: index,
       recall: recall,
       canRunCommands: caps.commands,
       sharedWorkspace: sharedWorkspace,

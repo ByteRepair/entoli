@@ -20,7 +20,7 @@ class MemoryTile extends StatelessWidget {
     return ListTile(
       leading: const Icon(Icons.psychology_outlined),
       title: const Text("Memories"),
-      subtitle: const Text("Browse, add, delete"),
+      subtitle: const Text("Browse, add, pin, delete"),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => MemoryPage(dir: dir, title: title)),
@@ -109,6 +109,36 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("The memory could not be saved.")),
+      );
+      return;
+    }
+    _reload();
+  }
+
+  Future<void> _togglePin(MemoryEntry entry) async {
+    final store = _store;
+    try {
+      if (entry.pinned) {
+        await store.unpin(entry.id);
+      } else {
+        // Counted over the whole store: a search is a window, and a pin made
+        // inside it must not slip past the limit the full list would show.
+        final pinned =
+            (await store.entries()).where((e) => e.pinned).length;
+        if (pinned >= pinnedLimit) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text("Four is the most that can be pinned.")),
+          );
+          return;
+        }
+        await store.pin(entry.id);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("The pin could not be changed.")),
       );
       return;
     }
@@ -225,12 +255,28 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                             ),
                             subtitle: Text(
                               "${_when(entry.at)} · "
-                              "${entry.chat == null ? "added by you" : "kept by the agent"}",
+                              "${entry.chat == null ? "added by you" : "kept by the agent"}"
+                              "${entry.pinned ? " · pinned" : ""}",
                             ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip: "Delete memory",
-                              onPressed: () => _delete(entry),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    entry.pinned
+                                        ? Icons.push_pin
+                                        : Icons.push_pin_outlined,
+                                  ),
+                                  tooltip:
+                                      entry.pinned ? "Unpin" : "Pin: in every turn",
+                                  onPressed: () => _togglePin(entry),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  tooltip: "Delete memory",
+                                  onPressed: () => _delete(entry),
+                                ),
+                              ],
                             ),
                             onTap: () => _view(entry),
                           );

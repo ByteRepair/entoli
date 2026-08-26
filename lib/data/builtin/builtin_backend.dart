@@ -240,12 +240,19 @@ class BuiltinBackend implements AgentBackend {
               settings.memory.memoryDir != null
           ? MemoryStore(config.fs, settings.memory.memoryDir!)
           : null;
-      // The memories this turn is about, rendered ready to read. A store
-      // that will not answer recalls nothing rather than costing the turn:
-      // the memories are a convenience, not the turn.
+      // The memories this turn is about, rendered ready to read, and the
+      // always-loaded half of the store: the pinned ones in full, and the
+      // rest as an index. A store that will not answer recalls nothing and
+      // costs the turn nothing: the memories are a convenience, not the turn.
       String recall = "";
+      String pinned = "";
+      String index = "";
       if (memoryStore != null && settings.memory.recall) {
         try {
+          final all = await memoryStore.entries();
+          pinned = renderPinned(all);
+          index = renderIndex(
+              [for (final entry in all) if (!entry.pinned) entry]);
           final query = (prompt ??
                   history.lastWhereOrNull((m) => m.role == MessageRole.user))
               ?.plainText ??
@@ -284,6 +291,8 @@ class BuiltinBackend implements AgentBackend {
         memory: settings.memory,
         instructions: instructions,
         recall: recall,
+        pinned: pinned,
+        index: index,
         memoryStore: settings.memory.agentTool ? memoryStore : null,
         memoryChat: settings.memory.agentTool ? chatId : null,
         caps: caps,

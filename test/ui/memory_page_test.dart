@@ -148,6 +148,51 @@ void main() {
     });
   });
 
+  group("pinning", () {
+    setUp(start);
+
+    testWidgets("a pin marks the memory and lands in the store", (tester) async {
+      final entry = await seed(tester, "the deploy runs on fridays");
+      await open(tester);
+
+      await tester.tap(find.byTooltip("Pin: in every turn"));
+      await settled(tester);
+
+      final pinned = (await io(tester, () => store.entries())).single;
+      expect(pinned.id, entry.id);
+      expect(pinned.pinned, isTrue);
+      expect(find.textContaining("pinned"), findsOneWidget);
+    });
+
+    testWidgets("unpinning takes the mark back", (tester) async {
+      final entry = await seed(tester, "the deploy runs on fridays");
+      await io(tester, () => store.pin(entry.id));
+      await open(tester);
+
+      await tester.tap(find.byTooltip("Unpin"));
+      await settled(tester);
+
+      expect((await io(tester, () => store.entries())).single.pinned, isFalse);
+    });
+
+    testWidgets("a pin past the limit is refused, the standing four hold",
+        (tester) async {
+      for (var i = 0; i < pinnedLimit + 1; i++) {
+        final entry = await seed(tester, "a standing rule $i");
+        await io(tester, () => store.pin(entry.id));
+      }
+      final unpinned = await seed(tester, "an unpinned memory");
+      await open(tester);
+
+      await tester.tap(find.byTooltip("Pin: in every turn"));
+      await settleIo(tester);
+
+      expect(find.text("Four is the most that can be pinned."), findsOneWidget);
+      final all = await io(tester, () => store.entries());
+      expect(all.where((e) => e.id == unpinned.id).single.pinned, isFalse);
+    });
+  });
+
   group("search", () {
     setUp(start);
 

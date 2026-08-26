@@ -94,6 +94,8 @@ String turnPrompt({
   required String projectWorkspace,
   String? agentPrompt,
   String? instructions,
+  String? pinned,
+  String? index,
   String? recall,
   required bool canRunCommands,
   bool sharedWorkspace = true,
@@ -119,6 +121,14 @@ String turnPrompt({
           "writes\nthere.$shared",
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
+    if (pinned != null && pinned.isNotEmpty)
+      "## Pinned memories\n\n"
+          "The user pinned these, so they hold for every turn, not just this "
+          "one:\n\n$pinned",
+    if (index != null && index.isNotEmpty)
+      "## Memory index\n\n"
+          "What this app's memory holds, one line each — the pinned ones are "
+          "above in full, and anything not on a line is still there.\n\n$index",
     if (recall != null && recall.isNotEmpty)
       """
 ## Recalled memories

@@ -231,8 +231,9 @@ void main() {
       expect(system, contains("Recalled memories"));
       expect(system, contains("the user likes code formatted with tabs"));
       // The other memory shares only a word the recalled one has too, which
-      // is not specific enough.
-      expect(system, isNot(contains("notes about the weather")));
+      // is not specific enough: it is on the index's line, nowhere else — the
+      // recall did not over-fetch it.
+      expect(system.split("notes about the weather").length - 1, 1);
     });
 
     test("no recall section when the recall gate is off", () async {
@@ -260,6 +261,49 @@ void main() {
 
       expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
       expect(events.last, isA<DoneEvent>());
+    });
+
+    test("pinned memories reach the turn in full, the rest as an index",
+        () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      await store.add("the user likes code formatted with tabs");
+      await store.add("the codebase is called Entoli");
+      final standing = await store.add("the deploy key rotates every month");
+      await store.pin(standing.id);
+
+      await send(backend, "unrelated question",
+          memory: MemorySettings(
+              autoMemory: true, memoryDir: config.memoryDir()));
+
+      final system = client.sent.first[1].text;
+      expect(system, contains("Pinned memories"));
+      expect(system, contains("the deploy key rotates every month"));
+      expect(system, contains("Memory index"));
+      expect(system, contains("the user likes code formatted with tabs"));
+      expect(system, contains("the codebase is called Entoli"));
+      // The pinned one is in the block, not in the index: one place for it.
+      expect(system.split("the deploy key rotates every month").length - 1, 1);
+    });
+
+    test("no pinned or index section while the recall gate is off",
+        () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      final standing = await store.add("the deploy key rotates every month");
+      await store.pin(standing.id);
+
+      await send(backend, "unrelated question",
+          memory: MemorySettings(
+              autoMemory: true, recall: false, memoryDir: config.memoryDir()));
+
+      final system = client.sent.first[1].text;
+      expect(system, isNot(contains("Pinned memories")));
+      expect(system, isNot(contains("Memory index")));
     });
 
     test("a chat in a project works in that project's directories", () async {
