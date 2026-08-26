@@ -5,6 +5,15 @@ import "package:fs_shim/fs.dart";
 /// rename a kill landed in, not a file anything reads.
 const writingSuffix = ".writing";
 
+/// A whole-file write no reader may catch mid-way: to the [writingSuffix]
+/// sibling, then a rename. The caller that owns the parent directory creates
+/// it.
+Future<void> writeThroughRename(FileSystem fs, String path, String text) async {
+  final temp = fs.file("$path$writingSuffix");
+  await temp.writeAsString(text);
+  await temp.rename(path);
+}
+
 /// The two JSON documents that are read synchronously: `settings.json` and each
 /// project's `project.json`. Everything else on the filesystem is read as it is
 /// needed.
@@ -41,8 +50,6 @@ class Documents {
   /// line sees the new value whatever the filesystem is still doing.
   Future<void> write(String path, String text) async {
     _texts[path] = text;
-    final temp = _fs.file("$path$writingSuffix");
-    await temp.writeAsString(text);
-    await temp.rename(path);
+    await writeThroughRename(_fs, path, text);
   }
 }

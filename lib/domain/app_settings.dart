@@ -21,9 +21,9 @@ class AppSettings {
     this.titleProviderId,
     this.classifierModelId,
     this.classifierProviderId,
-    this.loadInstructions = false,
-    this.instructionImports = false,
-    this.nestedInstructions = false,
+    this.instructionImports = true,
+    this.nestedInstructions = true,
+    this.instructionExcludes = const [],
     this.autoMemory = false,
     this.memoryRecall = true,
     this.memoryExtraction = true,
@@ -77,24 +77,23 @@ class AppSettings {
   String? classifierModelId;
   String? classifierProviderId;
 
-  /// Whether the agent reads AGENTS.md out of the workspaces at all. The
-  /// master gate: off, the two switches below mean nothing. Off by default —
-  /// it is instructions from files the user has to have written, but it is
-  /// still context they did not ask this turn to carry.
-  bool loadInstructions;
-
-  /// Whether `@path` references inside an AGENTS.md pull in more files. A
-  /// sub-gate of [loadInstructions].
+  /// Whether `@path` references inside an AGENTS.md pull in more files. The
+  /// files themselves are read into every turn; this and [nestedInstructions]
+  /// only reach further than the two of them.
   bool instructionImports;
 
   /// Whether reading a file in a subdirectory that has its own AGENTS.md
-  /// pulls that file into the turn. A sub-gate of [loadInstructions].
+  /// pulls that file into the turn.
   bool nestedInstructions;
+
+  /// Glob patterns that keep an AGENTS.md out of a turn: a file whose path
+  /// one of them names is skipped, wherever the load meets it; empty skips
+  /// nothing.
+  List<String> instructionExcludes;
 
   /// Whether the auto-memory subsystem runs: a per-project store of markdown
   /// memories the agent reads, recalls and writes with a background model.
-  /// Off by default for the same reason as [loadInstructions], and inert
-  /// beside it until [memoryModelId] is set.
+  /// Off by default, and inert beside it until [memoryModelId] is set.
   bool autoMemory;
 
   /// What writes memories in the background (extraction after a turn,
@@ -277,9 +276,12 @@ class AppSettings {
         titleProviderId: _orNull(json["titleProviderId"] as String?),
         classifierModelId: _orNull(json["classifierModelId"] as String?),
         classifierProviderId: _orNull(json["classifierProviderId"] as String?),
-        loadInstructions: json["loadInstructions"] as bool? ?? false,
-        instructionImports: json["instructionImports"] as bool? ?? false,
-        nestedInstructions: json["nestedInstructions"] as bool? ?? false,
+        instructionImports: json["instructionImports"] as bool? ?? true,
+        nestedInstructions: json["nestedInstructions"] as bool? ?? true,
+        instructionExcludes:
+            (json["instructionExcludes"] as List? ?? const [])
+                .map((e) => e as String)
+                .toList(),
         autoMemory: json["autoMemory"] as bool? ?? false,
         // Written only when off, so a file that predates them says nothing and
         // gets the on defaults.
@@ -368,9 +370,10 @@ class AppSettings {
         titleProviderId: titleProviderId,
         classifierModelId: classifierModelId,
         classifierProviderId: classifierProviderId,
-        loadInstructions: loadInstructions,
+
         instructionImports: instructionImports,
         nestedInstructions: nestedInstructions,
+        instructionExcludes: instructionExcludes,
         autoMemory: autoMemory,
         memoryRecall: memoryRecall,
         memoryExtraction: memoryExtraction,
@@ -417,9 +420,12 @@ class AppSettings {
       if (titleProviderId != null) "titleProviderId": titleProviderId,
       if (classifierModelId != null) "classifierModelId": classifierModelId,
       if (classifierProviderId != null) "classifierProviderId": classifierProviderId,
-      if (loadInstructions) "loadInstructions": loadInstructions,
-      if (instructionImports) "instructionImports": instructionImports,
-      if (nestedInstructions) "nestedInstructions": nestedInstructions,
+      // Written only when off, so a file that predates the on defaults says
+      // nothing and gets them.
+      if (!instructionImports) "instructionImports": instructionImports,
+      if (!nestedInstructions) "nestedInstructions": nestedInstructions,
+      if (instructionExcludes.isNotEmpty)
+        "instructionExcludes": instructionExcludes,
       if (autoMemory) "autoMemory": autoMemory,
       if (!memoryRecall) "memoryRecall": memoryRecall,
       if (!memoryExtraction) "memoryExtraction": memoryExtraction,

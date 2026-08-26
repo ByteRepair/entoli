@@ -178,7 +178,7 @@ class BuiltinSession {
 LlmMessage agentSystemMessage({
   required String platform,
   Profile? profile,
-  required bool canRunCommands,
+  required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
 }) =>
     LlmMessage(
@@ -186,7 +186,7 @@ LlmMessage agentSystemMessage({
       text: systemPrompt(
         platform: platform,
         profile: profile,
-        canRunCommands: canRunCommands,
+        caps: caps,
         skills: skills,
       ),
     );
@@ -201,11 +201,7 @@ LlmMessage agentSystemMessage({
 /// both halves of the flag are decided where they are read, so one caller
 /// passes one list.
 List<LlmTool> agentTools({
-  required bool canRunCommands,
-  required bool webSearchAvailable,
-  required bool offerAsk,
-  required bool offerTask,
-  required bool saveArtifact,
+  required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   required bool offerMemory,
 }) =>
@@ -213,13 +209,19 @@ List<LlmTool> agentTools({
       file_tool_defs.readTool,
       file_tool_defs.writeTool,
       file_tool_defs.editTool,
-      if (canRunCommands) bashTool,
-      if (offerAsk) askTool,
-      if (offerTask && canRunCommands) taskTool,
-      if (webSearchAvailable) ...[websearchTool, webfetchTool],
+      if (caps.commands) bashTool,
+      if (caps.ask) askTool,
+      if (caps.task) taskTool,
+      if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
-      if (saveArtifact) artifactTool,
-      if (offerMemory) ...[memorySaveTool, memorySearchTool],
+      if (caps.artifact) artifactTool,
+      if (offerMemory)
+        ...[
+          memorySaveTool,
+          memorySearchTool,
+          memoryUpdateTool,
+          memoryDeleteTool,
+        ],
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -245,8 +247,8 @@ class BuiltinAgent {
     this.reasoningEffort,
     this.subAgentRunner,
     this.rateLimitGate,
-    this.offerTaskTool = true,
-    this.offerAskTool = true,
+    this.caps = AgentCapabilities.full,
+    this.sharedWorkspace = true,
     this.skills = const [],
     this.webSearch,
     this.profile,
@@ -255,6 +257,8 @@ class BuiltinAgent {
     this.memory = MemorySettings.off,
     this.instructions = const [],
     this.recall = "",
+    this.pinned = "",
+    this.index = "",
     this.memoryStore,
     this.memoryChat,
   });
@@ -285,6 +289,12 @@ class BuiltinAgent {
   /// backend queried the store before the agent existed, for the reason
   /// [instructions] was loaded there.
   final String recall;
+
+  /// The pinned memories, in full, and the rest of the store as an index —
+  /// the always-loaded half of what [recall] loads on demand. Both empty when
+  /// the gate is off or the store is empty, beside [recall].
+  final String pinned;
+  final String index;
 
   /// The project's memory store the memory tools talk to, or null where they
   /// are not offered: auto-memory off, the agent-tool gate off, or a sub-agent
@@ -352,13 +362,18 @@ class BuiltinAgent {
   /// [BuiltinOptions.maxAttempts] path then governs 429s too.
   final RateLimitGate? rateLimitGate;
 
-  /// Whether to offer the `task` tool. Sub-agents run headless and do not
-  /// fan out themselves, so they pass `false`.
-  final bool offerTaskTool;
+  /// What this agent is offered, resolved once by the caller: the platform's
+  /// facts minus a headless turn's takes and a built-in project's. Sub-agents
+  /// pass the parent's `caps.unattended` — they run unattended, so they ask
+  /// nothing, fan out nothing, and publish nothing. Where the platform itself
+  /// cannot run something ([shell], [webSearch], a missing [subAgentRunner] or
+  /// [saveArtifact]), it is dropped below even if [caps] holds it.
+  final AgentCapabilities caps;
 
-  /// Whether to offer the `ask_user` tool. Sub-agents run unattended, so they
-  /// pass `false`.
-  final bool offerAskTool;
+  /// Whether the project's workspace is shared between its chats. When false,
+  /// the chat's own workspace is also its `HOME` and the prompt says nothing
+  /// of a shared one.
+  final bool sharedWorkspace;
 
   /// The whole skill library, both invocation halves of it. The system prompt
   /// lists the model-invocable ones, the `skill` tool refuses the rest, and a
@@ -383,24 +398,28 @@ class BuiltinAgent {
   /// support) and copies the dir; the agent just passes the args through.
   final Future<String> Function(String path, {String? artifactId})? saveArtifact;
 
-  /// What the model may call. `bash` is dropped where nothing can run it —
-  /// offering a tool we could only ever answer with a failure invites one.
-  /// `task` is dropped where there is no [subAgentRunner] (a sub-agent) or
-  /// where the shell is unavailable. `ask_user` is dropped for sub-agents.
-  /// `websearch`/`webfetch` are dropped where there is no [webSearch] or it is
-  /// unavailable (a browser). `artifact` is dropped where there is no
-  /// [saveArtifact] (a sub-agent). `skill` is dropped where no skill allows
-  /// the model itself. `read`/`write`/`edit` are always offered —
-  /// they work on the `FileSystem`, which exists on every platform.
+  /// [caps] with the platform's facts applied where [caps] cannot know them:
+  /// a tool the device cannot run is not offered even if the turn was, and a
+  /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
+  /// and `artifact` the way [AgentCapabilities.unattended] does from the front.
+  AgentCapabilities get _offered => AgentCapabilities(
+        commands: caps.commands && shell.canRunCommands,
+        webSearch: caps.webSearch && (webSearch?.available ?? false),
+        ask: caps.ask,
+        task: caps.task && subAgentRunner != null,
+        artifact: caps.artifact && saveArtifact != null,
+      );
+
+  /// What the model may call, and what the system prompt says. One value for
+  /// both, so the prompt cannot advertise a tool the list does not carry.
+  /// `skill` is dropped where no skill allows the model itself.
+  /// `read`/`write`/`edit` are always offered — they work on the `FileSystem`,
+  /// which exists on every platform.
   List<LlmTool> get _tools => agentTools(
-        canRunCommands: shell.canRunCommands,
-        webSearchAvailable: webSearch?.available ?? false,
-        offerAsk: offerAskTool,
-        offerTask: offerTaskTool && subAgentRunner != null,
-         saveArtifact: saveArtifact != null,
-         skills: skills,
-         offerMemory: memoryStore != null,
-       );
+        caps: _offered,
+        skills: skills,
+        offerMemory: memoryStore != null,
+      );
 
   bool _cancelled = false;
   ShellRun? _running;
@@ -558,19 +577,23 @@ class BuiltinAgent {
   /// a chat template renders one system block, so `mergeLeadingSystem` joins
   /// them on the way out.
   void _setSystemPrompt(String? agentPrompt) {
+    final caps = _offered;
     final turn = turnPrompt(
       workspace: workspace,
       projectWorkspace: projectWorkspace,
       agentPrompt: agentPrompt,
       instructions: renderInstructions(instructions),
+      pinned: pinned,
+      index: index,
       recall: recall,
-      canRunCommands: shell.canRunCommands,
+      canRunCommands: caps.commands,
+      sharedWorkspace: sharedWorkspace,
     );
     final head = [
       agentSystemMessage(
         platform: shell.platformDescription,
         profile: profile,
-        canRunCommands: shell.canRunCommands,
+        caps: caps,
         skills: skills,
       ),
       if (turn.isNotEmpty) LlmMessage(role: LlmRole.system, text: turn),
@@ -661,6 +684,16 @@ class BuiltinAgent {
 
       if (call.name == memorySearchToolName) {
         yield* _memorySearch(call);
+        continue;
+      }
+
+      if (call.name == memoryUpdateToolName) {
+        yield* _memoryUpdate(call);
+        continue;
+      }
+
+      if (call.name == memoryDeleteToolName) {
+        yield* _memoryDelete(call);
         continue;
       }
 
@@ -961,8 +994,8 @@ class BuiltinAgent {
             fs,
             resolved,
             alreadyLoaded: _loadedInstructions,
-            chatWorkspace: workspace,
             projectWorkspace: projectWorkspace,
+            excludes: memory.excludes,
           )
         : const <InstructionFile>[];
     final output = nested.isEmpty
@@ -1118,7 +1151,82 @@ class BuiltinAgent {
     yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
-          output: hits.isEmpty ? "No memories match." : renderRecall(hits),
+          // The ids ride with the hits: they are the update and delete
+          // tools' handles, and this is the only place the model sees them.
+          output:
+              hits.isEmpty ? "No memories match." : renderRecall(hits, withIds: true),
+        ));
+  }
+
+  /// The correction half of the in-turn writing: the replacement stands where
+  /// the old fact was, so a memory the user corrected is not left to drift
+  /// beside its newer version.
+  Stream<AgentEvent> _memoryUpdate(LlmToolCall call) async* {
+    final id = stringArg(call.argumentsJson, "id");
+    final text = stringArg(call.argumentsJson, "text");
+    final store = memoryStore;
+    if (id == null || text == null || store == null) {
+      yield* _reject(call,
+          'The $memoryUpdateToolName tool takes {"id": "...", "text": "..."}; '
+          "that argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: text,
+    ));
+    try {
+      await store.update(id, text, chat: memoryChat);
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The memory could not be updated: $e",
+          ));
+      return;
+    }
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Memory updated. The replacement stands where the old fact "
+              "was.",
+        ));
+  }
+
+  /// The half that costs a line in the log, not a new one: a fact the model
+  /// judged wrong or spent, so a later recall does not carry it.
+  Stream<AgentEvent> _memoryDelete(LlmToolCall call) async* {
+    final id = stringArg(call.argumentsJson, "id");
+    final store = memoryStore;
+    if (id == null || store == null) {
+      yield* _reject(call,
+          'The $memoryDeleteToolName tool takes {"id": "..."}; that argument '
+          "was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+    ));
+    try {
+      await store.delete(id);
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The memory could not be deleted: $e",
+          ));
+      return;
+    }
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Memory deleted, where it named an existing one.",
         ));
   }
 
@@ -1250,7 +1358,10 @@ class BuiltinAgent {
       return const ShellResult.failed("The turn was stopped before this command ran.");
     }
     final run = shell.start(command,
-        cwd: workspace, home: projectWorkspace, timeout: options.commandTimeout);
+        cwd: workspace,
+        home: projectWorkspace,
+        sharedHome: sharedWorkspace,
+        timeout: options.commandTimeout);
     _running = run;
     try {
       return await run.result;

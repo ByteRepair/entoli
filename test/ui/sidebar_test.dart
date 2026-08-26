@@ -286,6 +286,28 @@ void main() {
       expect(find.byType(WorkspacePage), findsOneWidget);
     });
 
+    // A built-in project is in the menu like any other, but it is not one the
+    // user made, so there is nothing to delete it with.
+    testWidgets("a built-in project is offered, and not deletable", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      expect(find.text("Anonymous"), findsOneWidget);
+      expect(find.text("Delete project…"), findsNothing);
+    });
+
+    // A built-in has neither a settings page nor a shared workspace, so the
+    // slot beside the switcher holds nothing for it.
+    testWidgets("a built-in project has no settings page or workspace button",
+        (tester) async {
+      await pumpBeside(tester);
+      await switchTo(tester, "Anonymous");
+
+      expect(app.container.read(selectedProjectProvider), "anonymous");
+      expect(find.byTooltip("Project settings"), findsNothing);
+      expect(find.byTooltip("Default workspace"), findsNothing);
+    });
+
     testWidgets("a named project's still goes to its settings", (tester) async {
       await io(tester, () => app.repo.createProject("work"));
       await pumpBeside(tester);

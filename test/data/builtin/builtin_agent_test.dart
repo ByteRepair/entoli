@@ -44,10 +44,11 @@ void main() {
     String? memoryChat,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
-    final testWorkspace = p.join(tempDir.path, "workspace");
     final testProjectWorkspace = p.join(tempDir.path, "project-workspace");
+    // Nested the way the layout is: the chat's own workspace is a folder
+    // inside its project's, which is the bound the nested walk stops at.
+    final testWorkspace = p.join(testProjectWorkspace, "chats", "chat-1");
     Directory(testWorkspace).createSync(recursive: true);
-    Directory(testProjectWorkspace).createSync(recursive: true);
     addTearDown(() => tempDir.deleteSync(recursive: true));
     shell = FakeShell(respond ?? (_) => ok(""), canRunCommands: canRunCommands);
     final allowed = [...approvals];
@@ -869,7 +870,7 @@ void main() {
         [readCall("sub/notes.txt")],
         [finish],
       ]);
-      final agent = agentOver(client);
+      final agent = agentOver(client, memory: const MemorySettings(nested: false));
       Directory(p.join(agent.workspace, "sub")).createSync(recursive: true);
       File(p.join(agent.workspace, "sub", "notes.txt")).writeAsStringSync("hi");
       File(p.join(agent.workspace, "sub", "AGENTS.md"))
@@ -999,7 +1000,14 @@ void main() {
           .run(userMessage("hi"))
           .toList();
       final withTools = with_.calls.first.tools.map((t) => t.name).toSet();
-      expect(withTools, containsAll([memorySaveToolName, memorySearchToolName]));
+      expect(
+          withTools,
+          containsAll([
+            memorySaveToolName,
+            memorySearchToolName,
+            memoryUpdateToolName,
+            memoryDeleteToolName,
+          ]));
     });
 
     test("memory_save appends to the store, stamped with the chat", () async {
@@ -1047,6 +1055,74 @@ void main() {
       expect(result.returnCode, 0);
       expect(result.output, contains("the user prefers tabs over spaces"));
       expect(result.output, isNot(contains("notes about the weather")));
+    });
+
+    test("memory_search shows the ids the correction tools take", () async {
+      final entry = await store.add("the user prefers tabs over spaces");
+
+      final client = FakeLlmClient([
+        [fileCall(memorySearchToolName, {"query": "how does the user like code"})],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, memoryStore: store).run(userMessage("look it up")).toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.output, contains("[${entry.id}]"));
+    });
+
+    test("memory_update replaces the fact in place, stamped with the chat",
+        () async {
+      final entry = await store.add("the user prefers tabs");
+
+      final client = FakeLlmClient([
+        [fileCall(memoryUpdateToolName,
+            {"id": entry.id, "text": "the user prefers spaces"})],
+        [finish],
+      ]);
+      final events = await agentOver(client, memoryStore: store, memoryChat: "chat-2")
+          .run(userMessage("correct the note"))
+          .toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, 0);
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.id, entry.id);
+      expect(entries.single.text, "the user prefers spaces");
+      expect(entries.single.chat, "chat-2");
+    });
+
+    test("memory_update refuses a missing argument", () async {
+      final client = FakeLlmClient([
+        [fileCall(memoryUpdateToolName, {"text": "no id given"})],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, memoryStore: store).run(userMessage("update")).toList();
+
+      final result = events.whereType<ToolResultEvent>().first.result;
+      expect(result.returnCode, -1);
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("memory_delete drops the fact, and a missing id is a no-op", () async {
+      final entry = await store.add("a fact that is wrong");
+      await store.add("a fact that stands");
+
+      final client = FakeLlmClient([
+        [fileCall(memoryDeleteToolName, {"id": entry.id})],
+        [fileCall(memoryDeleteToolName, {"id": "no-such-id"})],
+        [finish],
+      ]);
+      final events =
+          await agentOver(client, memoryStore: store).run(userMessage("clean up")).toList();
+
+      final results = events.whereType<ToolResultEvent>().map((e) => e.result).toList();
+      expect(results.map((r) => r.returnCode), [0, 0]);
+      final entries = await store.entries();
+      expect(entries, hasLength(1));
+      expect(entries.single.text, "a fact that stands");
     });
 
     test("memory_search answers nothing where nothing matches", () async {

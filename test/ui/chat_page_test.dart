@@ -153,10 +153,26 @@ void main() {
       expect(selectedOf(tester, "work"), isFalse);
     });
 
-    testWidgets("and there are none until one is made", (tester) async {
+    // The built-in projects are always on offer, so the row is never empty:
+    // with no project of the user's it is the built-ins alone.
+    testWidgets("the built-ins are badges with no project of the user's",
+        (tester) async {
       await openEmpty(tester);
 
-      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.widgetWithText(ChoiceChip, "Anonymous"), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsOneWidget);
+    });
+
+    testWidgets("picking the built-in badge moves the chat to it", (tester) async {
+      await openEmpty(tester);
+
+      await pick(tester, "Anonymous");
+
+      expect(app.container.read(selectedProjectProvider), "anonymous");
+
+      await sendMessage(tester, "hello");
+
+      expect(await projectOfMade(tester), "anonymous");
     });
 
     // The badge says where the next chat goes, which is all it can say: there
@@ -313,6 +329,21 @@ void main() {
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("at home")),
         findsOneWidget);
     expect(find.text("Default"), findsNothing);
+  });
+
+  // A built-in project's directory name is not what the bar should read; it is
+  // labelled the way the menus label it.
+  testWidgets("a chat in a built-in project is named by the project's label",
+      (tester) async {
+    final chat =
+        await seedLongChat(tester, title: "off the record", project: "anonymous");
+
+    await open(tester, chat.state.id);
+
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text("Anonymous")),
+        findsOneWidget);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text("anonymous")),
+        findsNothing);
   });
 
   // The case the scroll-position bar got wrong: nothing to scroll used to mean
@@ -568,5 +599,34 @@ void main() {
 
     expect(find.text("line 39"), findsOneWidget);
     expect(revealed(tester).where((o) => o == 1), isEmpty);
+  });
+
+  group("when a memory note lands", () {
+    testWidgets("the chat the note is about says so in a line", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "noted"));
+      await open(tester, chat.state.id);
+
+      app.backend
+          .memoryNoteHolder
+          .add(MemoryNote(chat.state.id, "Kept 1 memory."));
+      // Two frames: the messenger rebuilds, and the snackbar attaches on the
+      // frame after.
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text("Kept 1 memory."), findsOneWidget);
+    });
+
+    testWidgets("a note for another chat is not this page's line", (tester) async {
+      final chat = await io(tester, () => app.seedChat(title: "noted"));
+      await open(tester, chat.state.id);
+
+      app.backend.memoryNoteHolder.add(
+          MemoryNote("some-other-chat", "Kept 1 memory."));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text("Kept 1 memory."), findsNothing);
+    });
   });
 }

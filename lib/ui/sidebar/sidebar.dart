@@ -4,6 +4,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/log.dart";
+import "../../domain/builtin_project.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -153,9 +154,6 @@ Future<bool> startChatWith(
   return true;
 }
 
-/// The button's tooltip and the title of the page it opens.
-const _defaultWorkspaceTitle = "$defaultProjectLabel workspace";
-
 class Sidebar extends ConsumerStatefulWidget {
   const Sidebar({super.key});
 
@@ -190,6 +188,65 @@ class _SidebarState extends ConsumerState<Sidebar> {
     super.dispose();
   }
 
+  /// What the slot beside the switcher holds for [project]. The default
+  /// project has no settings page, so its workspace and its memories; a
+  /// built-in the halves its spec says it has; a user's project its settings
+  /// page.
+  List<Widget> _projectButtons(
+      BuildContext context, WidgetRef ref, String? project) {
+    final spec = builtinProjectOf(project);
+    Widget workspace() => IconButton(
+          icon: const Icon(Icons.folder_outlined),
+          tooltip: "${projectLabel(project)} workspace",
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => WorkspacePage(
+                root: ref
+                    .read(appConfigProvider)
+                    .projectWorkspaceDir(project: project),
+                title: "${projectLabel(project)} workspace",
+              ),
+            ),
+          ),
+        );
+    // The app's own store: what the default project shows beside its workspace
+    // in place of a settings page, and what a built-in with [MemoryPolicy.app]
+    // shows for the same reason.
+    Widget memories() => IconButton(
+          icon: const Icon(Icons.psychology_outlined),
+          tooltip: "Memories",
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => MemoryPage(
+                dir: ref.read(appConfigProvider).memoryDir(),
+                title: "Memories",
+              ),
+            ),
+          ),
+        );
+    if (project == null) return [workspace(), memories()];
+    if (spec != null) {
+      return [
+        if (spec.sharedWorkspace) workspace(),
+        if (spec.memory != MemoryPolicy.off) memories(),
+      ];
+    }
+    if (isProjectName(project)) {
+      return [
+        IconButton(
+          icon: const Icon(Icons.settings),
+          tooltip: "Project settings",
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ProjectSettingsPage(project: project),
+            ),
+          ),
+        ),
+      ];
+    }
+    return const [];
+  }
+
   @override
   Widget build(BuildContext context) {
     final project = ref.watch(selectedProjectProvider);
@@ -209,47 +266,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
               child: Row(
                 children: [
                   const Expanded(child: _ProjectMenu()),
-                  // The default project has no settings page; the workspace is
-                  // all one would hold.
-                  if (project != null)
-                    IconButton(
-                      icon: const Icon(Icons.settings),
-                      tooltip: "Project settings",
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ProjectSettingsPage(project: project),
-                        ),
-                      ),
-                    )
-                  else ...[
-                    IconButton(
-                      icon: const Icon(Icons.folder_outlined),
-                      tooltip: _defaultWorkspaceTitle,
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => WorkspacePage(
-                            root: ref.read(appConfigProvider).projectWorkspaceDir(),
-                            title: _defaultWorkspaceTitle,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // The default project's own store, beside its workspace:
-                    // the one thing a settings page would have held for it,
-                    // twice over.
-                    IconButton(
-                      icon: const Icon(Icons.psychology_outlined),
-                      tooltip: "Memories",
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => MemoryPage(
-                            dir: ref.read(appConfigProvider).memoryDir(),
-                            title: "Memories",
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ..._projectButtons(context, ref, project),
                 ],
               ),
             ),
@@ -673,7 +690,7 @@ class _ChatTile extends ConsumerWidget {
 /// device's name alone — the local default has no name either, and inventing
 /// one here would be the only place in the app that gives it one.
 String _remoteLabel(String deviceName, String? project) =>
-    project == null ? deviceName : "$deviceName · $project";
+    project == null ? deviceName : "$deviceName · ${projectLabel(project)}";
 
 /// Every project that has a mirrored chat in it, one entry each, device
 /// first. A device with nothing mirrored has no projects to offer — the
@@ -803,7 +820,8 @@ class _ProjectMenu extends ConsumerWidget {
         value: () => _create(context, ref),
         child: const Text("New project…"),
       ),
-      if (selected != null)
+      // A built-in project cannot be deleted, so it is not offered one.
+      if (selected != null && isProjectName(selected))
         PopupMenuItem(
           value: () => _delete(context, ref, selected),
           child: const Text("Delete project…"),

@@ -118,6 +118,9 @@ class FakeShell extends Shell {
   /// The `HOME` each of [ran] was given, in step with it.
   final List<String> homes = [];
 
+  /// Whether each of [ran] was given a home to keep, in step with it.
+  final List<bool> sharedHomes = [];
+
   final List<String> killed = [];
 
   /// Commands that never finish on their own, so a test can drive an abort.
@@ -131,10 +134,14 @@ class FakeShell extends Shell {
 
   @override
   ShellRun start(String command,
-      {required String cwd, required String home, required Duration timeout}) {
+      {required String cwd,
+      required String home,
+      required Duration timeout,
+      bool sharedHome = true}) {
     ran.add(command);
     cwds.add(cwd);
     homes.add(home);
+    sharedHomes.add(sharedHome);
     return _FakeRun(this, command);
   }
 }

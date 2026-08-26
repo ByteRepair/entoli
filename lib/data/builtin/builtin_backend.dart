@@ -30,6 +30,7 @@ import "permission_classifier.dart";
 import "projection.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
+import "templates.dart";
 
 /// The built-in agent, running in this process. The loop is [BuiltinAgent];
 /// this is what Entoli talks to: it holds a session per chat, resolves which
@@ -69,6 +70,17 @@ class BuiltinBackend implements AgentBackend {
   /// ship its HTML parser to every browser that loads the app and could never
   /// call it.
   final WebSearch webSearch;
+
+  /// The notes the background memory writes add: the page of the chat they
+  /// are about reads its own off the stream.
+  final MemoryNotes _memoryNotes = MemoryNotes();
+
+  /// One consolidation at a time: the interval is the real limit, and the
+  /// flag is for the turn that finishes while the pass is still mid-call.
+  bool _consolidating = false;
+
+  @override
+  Stream<MemoryNote> get memoryNotes => _memoryNotes.notes;
 
   /// Limits and timeouts for every turn.
   final BuiltinOptions options;
@@ -154,7 +166,9 @@ class BuiltinBackend implements AgentBackend {
       // chat with no provider configured can still run a command.
       if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
         await _runBypass(chatId, prompt, controller,
-            history: history, project: project);
+            history: history,
+            project: project,
+            sharedWorkspace: settings.sharedWorkspace);
         return;
       }
 
@@ -172,7 +186,18 @@ class BuiltinBackend implements AgentBackend {
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
       final workspace = config.workspaceDir(chatId, project: project);
-      final projectWorkspace = config.projectWorkspaceDir(project: project);
+      final projectWorkspace = _projectWorkspaceFor(
+          workspace: workspace,
+          project: project,
+          sharedWorkspace: settings.sharedWorkspace);
+      // What this turn is offered: the device's facts minus a headless turn's
+      // takes and the project's. One value, so the prompt and the tool list
+      // cannot disagree.
+      final caps = AgentCapabilities.forTurn(
+        commands: shell.canRunCommands,
+        webSearch: webSearch.available,
+        disabled: settings.disabled,
+      );
       // One gate per turn, shared by the parent and every sub-agent it spawns:
       // bounds in-flight stream() calls and coordinates 429 backoff so a
       // fan-out doesn't each-retry-into the same rate limit.
@@ -194,20 +219,34 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         rateLimitGate: rateLimitGate,
         log: subAgentLog,
+        caps: caps,
+        sharedWorkspace: settings.sharedWorkspace,
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
       // The AGENTS.md block, loaded once where the two workspace paths are
-      // known. Empty when the gate is off or nothing was found; the agent
-      // renders it into the second system message either way.
-      final instructions = settings.memory.instructions
-          ? await loadInstructions(
+      // known: the files are read into every turn, and the imports and
+      // excludes answers are the only halves a turn may withhold. Where the
+      // turn's project ships a note of its own it stands in for the whole
+      // block: no file is read, and nothing a file read would pull in can
+      // either. Started before the recall reads below, which it is
+      // independent of: a turn's two file loads are not a queue.
+      final bundled = settings.bundledInstructions;
+      final instructionsF = bundled != null
+          ? Future.value([
+              InstructionFile(
+                path: settings.project ?? "the built-in project",
+                kind: InstructionKind.bundled,
+                content: bundled,
+              ),
+            ])
+          : loadInstructions(
               config.fs,
-              chatWorkspace: workspace,
               projectWorkspace: projectWorkspace,
+              global: config.globalInstructionsFile,
               imports: settings.memory.imports,
-            )
-          : const <InstructionFile>[];
+              excludes: settings.memory.excludes,
+            );
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a
       // turn, so recall and the agent's tools share one.
@@ -215,23 +254,31 @@ class BuiltinBackend implements AgentBackend {
               settings.memory.memoryDir != null
           ? MemoryStore(config.fs, settings.memory.memoryDir!)
           : null;
-      // The memories this turn is about, rendered ready to read. A store
-      // that will not answer recalls nothing rather than costing the turn:
-      // the memories are a convenience, not the turn.
+      // The memories this turn is about, rendered ready to read, and the
+      // always-loaded half of the store: the pinned ones in full, and the
+      // rest as an index. A store that will not answer recalls nothing and
+      // costs the turn nothing: the memories are a convenience, not the turn.
       String recall = "";
+      String pinned = "";
+      String index = "";
       if (memoryStore != null && settings.memory.recall) {
         try {
+          final all = await memoryStore.entries();
+          pinned = renderPinned(all);
+          index = renderIndex(
+              [for (final entry in all) if (!entry.pinned) entry]);
           final query = (prompt ??
                   history.lastWhereOrNull((m) => m.role == MessageRole.user))
               ?.plainText ??
               "";
           if (query.isNotEmpty) {
-            recall = renderRecall(await memoryStore.search(query));
+            recall = renderRecall(await memoryStore.search(query, entries: all));
           }
         } catch (e) {
           logFailure("memory", "recall failed: $e");
         }
       }
+      final instructions = await instructionsF;
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {
@@ -257,15 +304,19 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         profile: settings.profile,
         rateLimitGate: rateLimitGate,
-        memory: settings.memory,
+        // A bundled turn's note is its whole instruction half, so the nested
+        // walk on a read — the one memory answer the agent itself consults —
+        // is off: there is no file anywhere to pull in.
+        memory:
+            bundled != null ? const MemorySettings(nested: false) : settings.memory,
         instructions: instructions,
         recall: recall,
+        pinned: pinned,
+        index: index,
         memoryStore: settings.memory.agentTool ? memoryStore : null,
         memoryChat: settings.memory.agentTool ? chatId : null,
-        // A headless turn offers neither: an ask_user parks it on a completer
-        // nobody will complete, and there is nobody to watch a fan-out.
-        offerAskTool: settings.offerAsk,
-        offerTaskTool: settings.offerTask,
+        caps: caps,
+        sharedWorkspace: settings.sharedWorkspace,
         saveArtifact: (path, {artifactId}) async {
           final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
           if (artifactId != null) {
@@ -311,8 +362,11 @@ class BuiltinBackend implements AgentBackend {
           settings.memory.extract &&
           memoryStore != null &&
           settings.memory.bgModel != null) {
-        // Unwatched on purpose: the turn is over, and the extraction must
-        // neither slow anything down nor be able to fail.
+        // Unwatched on purpose: the turn is over, and the background memory
+        // work must neither slow anything down nor be able to fail. The
+        // consolidation rides behind the extraction rather than beside it —
+        // the two would race over the store, and the call order is the
+        // script's in a test.
         unawaited(_extractMemories(
           store: memoryStore,
           chatId: chatId,
@@ -320,7 +374,8 @@ class BuiltinBackend implements AgentBackend {
           history: history,
           reply: reply,
           settings: settings,
-        ));
+        ).then((_) => _consolidateMemories(
+            store: memoryStore, chatId: chatId, settings: settings)));
       }
     } catch (e) {
       _fail(controller, "$e");
@@ -335,6 +390,16 @@ class BuiltinBackend implements AgentBackend {
     }
   }
 
+  /// Where a turn in [project] reaches for the project's files, and the
+  /// `HOME` of its commands: the shared workspace where it is shared, the
+  /// chat's own otherwise, so that nothing reaches past the conversation.
+  String _projectWorkspaceFor({
+    required String workspace,
+    required String? project,
+    required bool sharedWorkspace,
+  }) =>
+      sharedWorkspace ? config.projectWorkspaceDir(project: project) : workspace;
+
   /// Run what [prompt] says and be done: no model call, no tools, and no
   /// approval, since the user typed the command rather than being asked to
   /// allow one.
@@ -344,12 +409,18 @@ class BuiltinBackend implements AgentBackend {
     StreamController<AgentEvent> controller, {
     required List<Message> history,
     required String? project,
+    required bool sharedWorkspace,
   }) async {
     final command = shellBypassCommand(prompt.plainText)!;
     await config.ensureChatDirs(chatId, project: project);
+    final workspace = config.workspaceDir(chatId, project: project);
     final run = shell.start(command,
-        cwd: config.workspaceDir(chatId, project: project),
-        home: config.projectWorkspaceDir(project: project),
+        cwd: workspace,
+        home: _projectWorkspaceFor(
+            workspace: workspace,
+            project: project,
+            sharedWorkspace: sharedWorkspace),
+        sharedHome: sharedWorkspace,
         timeout: options.commandTimeout);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
@@ -506,64 +577,210 @@ class BuiltinBackend implements AgentBackend {
         "";
     final replyText = reply.trim();
     if (said.trim().isEmpty && replyText.isEmpty) return;
+    // What is already kept, the newest first — the ones a new exchange is
+    // most likely to restate or spend. The ids ride with them: they are the
+    // handles for the replaces and delete keys. A store that will not answer
+    // is no better than an empty one.
+    String existing = "";
+    try {
+      existing = renderRecall([...(await store.entries())].reversed.toList(),
+          withIds: true);
+    } catch (e) {
+      logFailure("memory", "could not read the store for extraction: $e");
+    }
     final question = "Here is an exchange between a user and an assistant:\n\n"
         "User: $said\n\n"
         "Assistant: $replyText\n\n"
-        "Write down the facts from it that would still be true and useful in a "
-        "later conversation: a preference the user stated, a decision that was "
-        "made, a fact learned about a codebase, an account, or the user. One "
-        "fact per entry, each in one or two sentences, written so it makes "
-        "sense without this exchange. Never include secrets, keys, or "
-        "credentials, and never include what a file would say. Reply with JSON "
-        "only: {\"memories\": [\"...\"]}, with an empty list where there is "
-        "nothing worth keeping.";
+        "${existing.isEmpty ? "" : "Memories already kept about this project:\n$existing\n\n"}"
+        "Maintain the memory: from the exchange, keep the facts that would "
+        "still be true and useful in a later conversation — a preference the "
+        "user stated, a decision that was made, a fact learned about a "
+        "codebase, an account, or the user. One fact per entry, each in one or "
+        "two sentences, written so it makes sense without this exchange. Never "
+        "include secrets, keys, or credentials, and never include what a file "
+        "would say. Reply with JSON only: {\"memories\": [\"...\"], "
+        "\"replaces\": {\"<id>\": \"...\"}, \"delete\": [\"<id>\"]}, where "
+        "memories is a new fact, replaces corrects one of the ones above by "
+        "its id, and delete spends one the exchange contradicts or supersedes. "
+        "Any key may be an empty list where there is nothing to do.";
     try {
-      final chunks = await target.client
-          .stream([LlmMessage(role: LlmRole.user, text: question)],
-              model: target.modelId)
-          .timeout(const Duration(seconds: 60))
-          .toList();
-      final answer =
-          chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
-      for (final memory in _memoriesFrom(answer)) {
-        await store.add(memory, chat: chatId);
+      final answer = await _askBackground(target, question);
+      final ops = _maintainFrom(answer);
+      if (ops.add.isEmpty && ops.replaces.isEmpty && ops.delete.isEmpty) return;
+      final result = await store.maintain(
+        delete: ops.delete,
+        replaces: ops.replaces,
+        add: ops.add,
+        chat: chatId,
+      );
+      if (result.added > 0) {
+        _memoryNotes.add(MemoryNote(chatId, result.added == 1
+            ? "Kept 1 memory."
+            : "Kept ${result.added} memories."));
       }
     } catch (e) {
       logFailure("memory", "extraction failed: $e");
     }
   }
 
-  /// The extraction's JSON, read as liberally as the model writes it: an array
-  /// of strings, or an object holding one. What is not a list of strings is
-  /// nothing, because a memory is the only thing the store takes.
-  List<String> _memoriesFrom(String answer) {
+  /// The slow half of the memory's housekeeping: where extraction keeps what
+  /// one exchange is worth, consolidation tidies what the store has grown
+  /// into — the duplicates an exchange at a time leaves behind, the entries a
+  /// newer one superseded. It rides extraction's gate and runs unwatched like
+  /// it, but earns its model call with a threshold: a store grown past
+  /// [consolidationMinEntries], at most one pass per
+  /// [consolidationMinInterval], one at a time. A tidy store says nothing on
+  /// success, and a failure is a log line like any other background failure.
+  Future<void> _consolidateMemories({
+    required MemoryStore store,
+    required String chatId,
+    required TurnSettings settings,
+  }) async {
+    if (_consolidating) return;
+    _consolidating = true;
+    try {
+      final target =
+          _resolveModel(settings.memory.bgModel, settings.memory.bgProvider);
+      if (target == null) return;
+      final all = await store.entries();
+      // Pinned memories are the user's standing orders rather than store
+      // growth: the pass neither sees them nor may spend them.
+      final offered = [for (final entry in all) if (!entry.pinned) entry];
+      if (offered.length < consolidationMinEntries) return;
+      final now = DateTime.now();
+      final last = await store.lastConsolidated();
+      if (last != null && now.difference(last) < consolidationMinInterval) {
+        return;
+      }
+      final question = "Memories kept about this project:\n"
+          "${renderConsolidation(offered)}\n\n"
+          "Tidy these memories. Merge two entries that say the same thing by "
+          "rewriting one with the merged wording and spending the other; spend "
+          "an entry that is plainly superseded or contradicted by a newer one; "
+          "and leave everything else exactly as it is. Only what is listed "
+          "decides: never delete or change an entry on a guess, and where two "
+          "entries could be read either way, keep both. Reply with JSON only: "
+          "{\"memories\": [...], \"replaces\": {\"<id>\": \"...\"}, "
+          "\"delete\": [\"<id>]}, where replaces rewrites an entry by its id, "
+          "delete spends one, and memories is empty unless the merge leaves "
+          "behind a fact none of the entries held. If nothing is wrong, all "
+          "three empty.";
+      try {
+        final answer = await _askBackground(target, question);
+        final ops = _maintainFrom(answer);
+        if (ops.add.isNotEmpty ||
+            ops.replaces.isNotEmpty ||
+            ops.delete.isNotEmpty) {
+          final pinned = {for (final entry in all) if (entry.pinned) entry.id};
+          await store.maintain(
+            delete: [for (final id in ops.delete) if (!pinned.contains(id)) id],
+            replaces: {
+              for (final e in ops.replaces.entries)
+                if (!pinned.contains(e.key)) e.key: e.value,
+            },
+            add: ops.add,
+            chat: chatId,
+          );
+        }
+        // The interval is owed whatever the pass found: an hour with nothing
+        // to tidy is an hour of not asking again.
+        await store.stampConsolidated(now);
+      } catch (e) {
+        logFailure("memory", "consolidation failed: $e");
+      }
+    } finally {
+      _consolidating = false;
+    }
+  }
+
+  /// The background answer: the last completion the model streams within the
+  /// window, trimmed, and nothing where it streamed no completion at all. The
+  /// window is what keeps a stuck provider from holding a pass forever.
+  Future<String> _askBackground(
+      ({LlmClient client, String modelId}) target, String question) async {
+    final chunks = await target.client
+        .stream([LlmMessage(role: LlmRole.user, text: question)],
+            model: target.modelId)
+        .timeout(const Duration(seconds: 60))
+        .toList();
+    return chunks.whereType<LlmCompletion>().lastOrNull?.message.text.trim() ?? "";
+  }
+
+  /// The maintenance JSON, read as liberally as the model writes it: the old
+  /// shape — an array of strings, or an object holding one — reads as new
+  /// facts, and the object adds the replaces and delete keys. What is not a
+  /// string where a string is owed is nothing, because that is all the store
+  /// takes.
+  ({List<String> add, Map<String, String> replaces, List<String> delete})
+      _maintainFrom(String answer) {
+    const empty = (
+      add: <String>[],
+      replaces: <String, String>{},
+      delete: <String>[],
+    );
     Object? decoded;
     try {
       decoded = jsonDecode(answer.trim());
     } catch (_) {
       final fenced = RegExp(r"```(?:json)?\n([\s\S]*?)```").firstMatch(answer);
-      if (fenced == null) return const [];
+      if (fenced == null) return empty;
       try {
         decoded = jsonDecode(fenced.group(1)!.trim());
       } catch (_) {
-        return const [];
+        return empty;
       }
     }
-    if (decoded is Map) decoded = decoded["memories"];
-    if (decoded is! List) return const [];
-    final memories = <String>[];
-    for (final entry in decoded) {
-      if (entry is! String) continue;
-      var text = entry.trim();
-      if (text.isEmpty) continue;
-      if (text.length > recallEntryChars) {
-        text = text.substring(0, recallEntryChars);
-      }
-      memories.add(text);
-      if (memories.length == 5) break;
+    if (decoded is List) {
+      return (add: _factsFrom(decoded), replaces: const {}, delete: const []);
     }
-    return memories;
+    if (decoded is! Map) return empty;
+    final replaces = <String, String>{};
+    final rawReplaces = decoded["replaces"];
+    if (rawReplaces is Map) {
+      for (final entry in rawReplaces.entries) {
+        final key = entry.key;
+        final text = entry.value is String ? _fact(entry.value as String) : null;
+        if (key is! String || text == null) continue;
+        replaces[key] = text;
+      }
+    }
+    final memories = decoded["memories"] ?? decoded["add"];
+    return (
+      add: memories is List ? _factsFrom(memories) : const [],
+      replaces: replaces,
+      delete: decoded["delete"] is List
+          ? _stringsFrom(decoded["delete"] as List)
+          : const [],
+    );
   }
+
+  /// One fact as the store takes it: trimmed and cut to the write cap, or
+  /// nothing where there is no fact at all.
+  String? _fact(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return null;
+    return text.length > recallEntryChars
+        ? text.substring(0, recallEntryChars)
+        : text;
+  }
+
+  /// The new-fact half of the answer, at most five of them, the way the old
+  /// shape was.
+  List<String> _factsFrom(Object? value) {
+    final facts = <String>[];
+    for (final entry in (value as List)) {
+      final text = entry is String ? _fact(entry) : null;
+      if (text == null) continue;
+      facts.add(text);
+      if (facts.length == 5) break;
+    }
+    return facts;
+  }
+
+  List<String> _stringsFrom(Object? value) => [
+        for (final entry in (value as List))
+          if (entry is String) entry,
+      ];
 
   /// The config is read once and reused: going back through the registry by id
   /// would re-read and re-parse `settings.json` for each question asked of it.
@@ -682,6 +899,7 @@ class BuiltinBackend implements AgentBackend {
     _sessions.clear();
     registry.close();
     webSearch.close();
+    await _memoryNotes.close();
   }
 
   @override

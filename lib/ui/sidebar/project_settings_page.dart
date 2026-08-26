@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/builtin_project.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../memory/memory_page.dart";
@@ -98,8 +99,12 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: const Text("Chats"),
             trailing: Text("$count"),
           ),
-          const Divider(),
-          _ProfileRow(project: project),
+          // A built-in that ships its own note reads no file, so there is no
+          // instructions to edit for one.
+          if (builtinProjectOf(project)?.bundledInstructions == null) ...[
+            const Divider(),
+            _ProfileRow(project: project),
+          ],
           const Divider(),
           _TempChatTtlRow(project: project),
           const Divider(),
@@ -148,25 +153,46 @@ class _CopyField extends StatelessWidget {
   }
 }
 
-/// Shows whether this project overrides the app-level profile, and opens the
-/// editor. "Default" means the project inherits the app profile.
-class _ProfileRow extends ConsumerWidget {
+/// Opens the editor for the project's instructions, and says whether the
+/// file is there.
+class _ProfileRow extends ConsumerStatefulWidget {
   const _ProfileRow({required this.project});
 
   final String project;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(projectSettingsProvider(project));
-    final hasOverride = settings.profile != null && !settings.profile!.isEmpty;
+  ConsumerState<_ProfileRow> createState() => _ProfileRowState();
+}
+
+class _ProfileRowState extends ConsumerState<_ProfileRow> {
+  bool? _set;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final config = ref.read(appConfigProvider);
+    final path = config.projectInstructionsFile(project: widget.project);
+    final there = await config.fs.file(path).exists();
+    if (mounted) setState(() => _set = there);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return ListTile(
-      leading: const Icon(Icons.person_outline),
-      title: const Text("Profile"),
-      subtitle: Text(hasOverride ? "Customized" : "Default (inherited)"),
+      leading: const Icon(Icons.rule),
+      title: const Text("Instructions"),
+      subtitle: Text(_set == null ? "" : (_set! ? "Set" : "Not set")),
       trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ProfilePage(project: project)),
-      ),
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ProfilePage(project: widget.project)),
+        );
+        _check();
+      },
     );
   }
 }

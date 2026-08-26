@@ -22,12 +22,16 @@ void main() {
       io(tester, () => app.seedChatMeta(_chatId, meta));
 
   /// Write `state.json` for the fixed chat id, so the page can read `pinned`
-  /// off it. `seedChat` would use a generated id; the tests here are pinned
-  /// to `_chatId` because the page is constructed with it directly.
-  Future<void> seedState(WidgetTester tester, {bool pinned = false}) =>
+  /// and the project off it. `seedChat` would use a generated id; the tests
+  /// here are pinned to `_chatId` because the page is constructed with it
+  /// directly.
+  Future<void> seedState(WidgetTester tester,
+          {bool pinned = false, String? project}) =>
       io(tester, () async {
-        final chat = await app.repo.createChat(title: "chat");
-        await app.repo.saveState(chat.state.copyWith(id: _chatId, pinned: pinned));
+        final chat =
+            await app.repo.createChat(title: "chat", project: project);
+        await app.repo.saveState(
+            chat.state.copyWith(id: _chatId, pinned: pinned));
       });
 
   Future<void> seedGlobalDefault(WidgetTester tester, String providerId, String modelId) =>
@@ -207,6 +211,57 @@ void main() {
       await save(tester);
 
       expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, isNull);
+    });
+  });
+
+  group("project memory", () {
+    Future<void> openRow(WidgetTester tester) async {
+      await openPage(tester);
+      await scrollTo(tester, find.text("Project memory"));
+    }
+
+    testWidgets("a chat follows the project until it keeps out", (tester) async {
+      await openRow(tester);
+
+      expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+          isTrue);
+      expect((await io(tester, () => app.savedMeta(_chatId))).memoryOff, isNull);
+    });
+
+    testWidgets("keeping out stores the off, and it survives a save",
+        (tester) async {
+      await openRow(tester);
+      await tester.tap(find.byType(SwitchListTile));
+      await settleIo(tester);
+      await save(tester);
+
+      expect((await io(tester, () => app.savedMeta(_chatId))).memoryOff, isTrue);
+    });
+
+    testWidgets("turning it back on returns the chat to the project",
+        (tester) async {
+      await seedMeta(tester, ChatMeta(memoryOff: true));
+      await openRow(tester);
+
+      expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+          isFalse);
+
+      await tester.tap(find.byType(SwitchListTile));
+      await settleIo(tester);
+      await save(tester);
+
+      expect((await io(tester, () => app.savedMeta(_chatId))).memoryOff, isNull);
+    });
+
+    testWidgets("a project that keeps no memories says so and takes nothing",
+        (tester) async {
+      await seedState(tester, project: "anonymous");
+      await openRow(tester);
+
+      final tile = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      expect(find.text("This project keeps no memories."), findsOneWidget);
+      expect(tile.value, isFalse);
+      expect(tile.onChanged, isNull);
     });
   });
 
