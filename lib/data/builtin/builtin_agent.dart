@@ -25,6 +25,9 @@ import "sub_agent.dart";
 import "task_tool.dart";
 import "projection.dart";
 import "templates.dart";
+import "memory/instructions.dart";
+import "memory/store.dart";
+import "memory_tools.dart";
 import "websearch_tool.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -204,6 +207,7 @@ List<LlmTool> agentTools({
   required bool offerTask,
   required bool saveArtifact,
   List<PromptDocument> skills = const [],
+  required bool offerMemory,
 }) =>
     [
       file_tool_defs.readTool,
@@ -215,6 +219,7 @@ List<LlmTool> agentTools({
       if (webSearchAvailable) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
       if (saveArtifact) artifactTool,
+      if (offerMemory) ...[memorySaveTool, memorySearchTool],
     ];
 
 /// The agent loop: ask the model, run the command it asked for, show it the
@@ -247,6 +252,11 @@ class BuiltinAgent {
     this.profile,
     this.saveArtifact,
     this.loadResource = noResources,
+    this.memory = MemorySettings.off,
+    this.instructions = const [],
+    this.recall = "",
+    this.memoryStore,
+    this.memoryChat,
   });
 
   final BuiltinSession session;
@@ -258,6 +268,42 @@ class BuiltinAgent {
   /// projected. Defaulted because a sub-agent has no chat under it to read
   /// from; `BuiltinBackend` passes the store's.
   final ResourceLoader loadResource;
+
+  /// What this turn reads and remembers. Only the `nested` half is consulted
+  /// here: the instructions block was loaded by the backend before the agent
+  /// existed, and the rest of the subsystem is later work.
+  final MemorySettings memory;
+
+  /// The AGENTS.md files loaded for this chat's workspaces, already read.
+  /// Empty when the gate is off or nothing was found; rendered into the
+  /// second system message either way, so the cacheable body above it never
+  /// changes.
+  final List<InstructionFile> instructions;
+
+  /// The memories recalled for this turn, already rendered as a block. Empty
+  /// when the gate is off, nothing matched, or the store was empty. The
+  /// backend queried the store before the agent existed, for the reason
+  /// [instructions] was loaded there.
+  final String recall;
+
+  /// The project's memory store the memory tools talk to, or null where they
+  /// are not offered: auto-memory off, the agent-tool gate off, or a sub-agent
+  /// (which runs with none of the subsystem). Null also here is what takes the
+  /// tools off the list in [_tools].
+  final MemoryStore? memoryStore;
+
+  /// What a saved memory is stamped with: the chat that wrote it. Beside
+  /// [memoryStore] or neither.
+  final String? memoryChat;
+
+  /// AGENTS.md paths already in front of the model, seeded from
+  /// [instructions]. A nested file found on a read is added, so the same one
+  /// is never injected twice into a turn.
+  Set<String> get _loadedInstructions =>
+      _loadedInstructionPaths ??= {
+        for (final file in instructions) file.path,
+      };
+  Set<String>? _loadedInstructionPaths;
 
   /// The filesystem the file tools (`read`/`write`/`edit`) and the artifact
   /// tool's path resolution operate on. The same one `AppConfig` holds, so it
@@ -351,9 +397,10 @@ class BuiltinAgent {
         webSearchAvailable: webSearch?.available ?? false,
         offerAsk: offerAskTool,
         offerTask: offerTaskTool && subAgentRunner != null,
-        saveArtifact: saveArtifact != null,
-        skills: skills,
-      );
+         saveArtifact: saveArtifact != null,
+         skills: skills,
+         offerMemory: memoryStore != null,
+       );
 
   bool _cancelled = false;
   ShellRun? _running;
@@ -515,6 +562,8 @@ class BuiltinAgent {
       workspace: workspace,
       projectWorkspace: projectWorkspace,
       agentPrompt: agentPrompt,
+      instructions: renderInstructions(instructions),
+      recall: recall,
       canRunCommands: shell.canRunCommands,
     );
     final head = [
@@ -602,6 +651,16 @@ class BuiltinAgent {
 
       if (call.name == webfetchToolName) {
         yield* _webFetch(call);
+        continue;
+      }
+
+      if (call.name == memorySaveToolName) {
+        yield* _memorySave(call);
+        continue;
+      }
+
+      if (call.name == memorySearchToolName) {
+        yield* _memorySearch(call);
         continue;
       }
 
@@ -897,10 +956,22 @@ class BuiltinAgent {
       buf.writeln("$i: ${lines[i - 1]}");
     }
     final result = buf.toString();
+    final nested = memory.nested
+        ? await findNestedInstructions(
+            fs,
+            resolved,
+            alreadyLoaded: _loadedInstructions,
+            chatWorkspace: workspace,
+            projectWorkspace: projectWorkspace,
+          )
+        : const <InstructionFile>[];
+    final output = nested.isEmpty
+        ? (result.isEmpty ? "(empty file)" : result)
+        : "$result\n\n${renderInstructions(nested)}";
     yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
-          output: result.isEmpty ? "(empty file)" : result,
+          output: output,
         ));
   }
 
@@ -987,6 +1058,67 @@ class BuiltinAgent {
           callId: call.id,
           returnCode: 0,
           output: "Edited ${args.path}: replaced $count occurrence(s).",
+        ));
+  }
+
+  /// A fact the model judged worth keeping. No approval: like `websearch`, it
+  /// reaches nothing and runs nothing — what it writes is a line in the app's
+  /// own store, and a memory nobody wants is a line the user deletes in the
+  /// explorer.
+  Stream<AgentEvent> _memorySave(LlmToolCall call) async* {
+    final text = stringArg(call.argumentsJson, "text");
+    final store = memoryStore;
+    if (text == null || store == null) {
+      yield* _reject(call, 'The $memorySaveToolName tool takes {"text": "..."}; '
+          "that argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: text,
+    ));
+    try {
+      await store.add(text, chat: memoryChat);
+    } catch (e) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "The memory could not be saved: $e",
+          ));
+      return;
+    }
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Memory saved. Later conversations are offered it when it "
+              "looks relevant.",
+        ));
+  }
+
+  /// Read-only over the app's own store, so no approval: it runs nothing and
+  /// reaches nothing.
+  Stream<AgentEvent> _memorySearch(LlmToolCall call) async* {
+    final query = stringArg(call.argumentsJson, "query");
+    final store = memoryStore;
+    if (query == null || store == null) {
+      yield* _reject(call, 'The $memorySearchToolName tool takes {"query": "..."}; '
+          "that argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: query,
+    ));
+    final hits = await store.search(query);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: hits.isEmpty ? "No memories match." : renderRecall(hits),
         ));
   }
 

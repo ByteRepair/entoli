@@ -4,11 +4,14 @@ import "package:flutter_test/flutter_test.dart";
 
 import "dart:convert";
 
+import "package:path/path.dart" as p;
+
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
+import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/local/file_sub_agent_log.dart";
 import "package:agent_chat/domain/agent_backend.dart";
@@ -85,6 +88,7 @@ void main() {
     List<MessagePart> files = const [],
     Map<String, String> documents = const {},
     DateTime? at,
+    MemorySettings memory = MemorySettings.off,
   }) =>
       backend
           .sendPrompt(
@@ -93,7 +97,10 @@ void main() {
                   at: at ?? sentAt, documents: documents, files: files),
               history: history,
               settings: TurnSettings(
-                  model: model, provider: provider, approveMode: ApproveMode.never))
+                  model: model,
+                  provider: provider,
+                  approveMode: ApproveMode.never,
+                  memory: memory))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -168,6 +175,84 @@ void main() {
 
       expect(Directory(config.projectWorkspaceDir()).existsSync(), isTrue);
       expect(client.sent.first[1].text, contains(config.projectWorkspaceDir()));
+    });
+
+    test("workspace instructions are loaded and sent when the gate is on",
+        () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      // The chat workspace is created by the turn; the project workspace is
+      // where the AGENTS.md the loader should find lives.
+      Directory(config.projectWorkspaceDir()).createSync(recursive: true);
+      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+          .writeAsStringSync("project rules");
+
+      await send(backend, "hi",
+          memory: const MemorySettings(instructions: true));
+
+      expect(client.sent.first[1].text, contains("project rules"));
+      expect(client.sent.first[1].text, contains("Workspace instructions"));
+    });
+
+    test("no instructions section when the gate is off", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      Directory(config.projectWorkspaceDir()).createSync(recursive: true);
+      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+          .writeAsStringSync("project rules");
+
+      await send(backend, "hi");
+
+      expect(client.sent.first[1].text, isNot(contains("project rules")));
+    });
+
+    test("relevant memories are recalled into the turn", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      await store.add("the user likes code formatted with tabs");
+      await store.add("notes about the weather");
+
+      await send(backend, "how should the code be formatted",
+          memory: MemorySettings(
+              autoMemory: true, memoryDir: config.memoryDir()));
+
+      final system = client.sent.first[1].text;
+      expect(system, contains("Recalled memories"));
+      expect(system, contains("the user likes code formatted with tabs"));
+      // The other memory shares only a word the recalled one has too, which
+      // is not specific enough.
+      expect(system, isNot(contains("notes about the weather")));
+    });
+
+    test("no recall section when the recall gate is off", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      final store = MemoryStore(config.fs, config.memoryDir());
+      await store.add("the user likes code formatted with tabs");
+
+      await send(backend, "how should the code be formatted",
+          memory: MemorySettings(
+              autoMemory: true, recall: false, memoryDir: config.memoryDir()));
+
+      expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
+    });
+
+    test("an empty store recalls nothing and the turn still runs", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      final events = await send(backend, "how should the code be formatted",
+          memory: MemorySettings(
+              autoMemory: true, memoryDir: config.memoryDir()));
+
+      expect(client.sent.first[1].text, isNot(contains("Recalled memories")));
+      expect(events.last, isA<DoneEvent>());
     });
 
     test("a chat in a project works in that project's directories", () async {
@@ -1072,6 +1157,113 @@ void main() {
       expect(client.closed, isTrue);
     });
   });
+
+  group("writing memories after a turn", () {
+    late MemoryStore store;
+
+    /// Auto-memory on over the default store; [bg] adds the background model
+    /// pair, [extract] is the sub-gate.
+    MemorySettings memory({bool extract = true, bool bg = true}) =>
+        MemorySettings(
+          autoMemory: true,
+          extract: extract,
+          memoryDir: config.memoryDir(),
+          bgModel: bg ? "fake-model" : null,
+          bgProvider: bg ? "fake" : null,
+        );
+
+    setUp(() => store = MemoryStore(config.fs, config.memoryDir()));
+
+    test("a finished turn leaves the memory the background model kept", () async {
+      // The first scripted turn is the agent finishing; the second is the
+      // extraction call answering with the one fact it kept.
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": ["the user likes tabs over spaces"]}')],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await untilMemory(store, "the user likes tabs over spaces");
+      final entry = (await store.entries()).single;
+      expect(entry.chat, chatId);
+    });
+
+    test("an extraction that names nothing writes nothing", () async {
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await pumpEvents();
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("the extraction is asked the exchange, not the store", () async {
+      final backend = backendOver([
+        [saidOnly("use tabs, the user likes them")],
+        [saidOnly('{"memories": []}')],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory());
+
+      await pumpEvents();
+      final question = client.sent.last.last;
+      expect(question.text, contains("how should I indent this"));
+      expect(question.text, contains("use tabs, the user likes them"));
+      expect(question.text, contains("JSON"));
+    });
+
+    test("no background model, nothing is written", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      await send(backend, "how should I indent this", memory: memory(bg: false));
+
+      await pumpEvents();
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("the extract gate off, nothing is written", () async {
+      final backend = backendOver([
+        [finish],
+        [saidOnly('{"memories": ["a fact"]}')],
+      ]);
+
+      await send(backend, "how should I indent this",
+          memory: memory(extract: false));
+
+      await pumpEvents();
+      expect(await store.entries(), isEmpty);
+    });
+
+    test("an aborted turn writes nothing", () async {
+      final backend = backendOver([
+        [bashCall("sleep 5")],
+        [saidOnly('{"memories": ["a fact"]}')],
+      ]);
+      final events = <AgentEvent>[];
+      final turn = backend
+          .sendPrompt(chatId, userMessage("hi", at: sentAt),
+              settings: TurnSettings(
+                  model: "fake-model",
+                  provider: "fake",
+                  approveMode: ApproveMode.ask,
+                  memory: memory()))
+          .listen(events.add);
+      await pumpEvents();
+
+      await backend.abort(chatId);
+      await turn.cancel();
+      await pumpEvents();
+
+      expect(events.whereType<DoneEvent>().single.aborted, isTrue);
+      expect(await store.entries(), isEmpty);
+    });
+  });
 }
 
 /// Let the agent's own async work run before looking at what it has published.
@@ -1081,5 +1273,21 @@ void main() {
 Future<void> pumpEvents() async {
   for (var i = 0; i < 20; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+}
+
+/// Extraction runs unwatched, so a test polls the store until [want] is in it
+/// rather than awaiting the turn — which is over the moment the extraction
+/// starts.
+Future<void> untilMemory(MemoryStore store, String want) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (true) {
+    final entries = await store.entries();
+    if ([for (final e in entries) e.text].contains(want)) return;
+    if (DateTime.now().isAfter(deadline)) {
+      fail("the store never held '$want'; it held "
+          "${[for (final e in entries) e.text]}");
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
   }
 }

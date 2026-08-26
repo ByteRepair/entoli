@@ -46,6 +46,7 @@ enum SettingsCategory {
   sync("Sync", Icons.sync),
   providers("Providers", Icons.cloud_outlined),
   llms("LLMs", Icons.auto_awesome_outlined),
+  memory("Memory", Icons.psychology),
   data("Data", Icons.inventory_2_outlined),
   about("About", Icons.info_outline);
 
@@ -184,6 +185,13 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],
+      // The two things the agent carries between conversations: the files the
+      // user writes (instructions) and the ones it writes (memories).
+      SettingsCategory.memory => const [
+          _InstructionsSection(),
+          Divider(),
+          _AutoMemorySection(),
+        ],
       SettingsCategory.data => const [_BackupSection()],
       SettingsCategory.about => const [_AboutSection()],
     };
@@ -634,6 +642,133 @@ class _AgentSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Whether the agent reads AGENTS.md out of the workspaces at all, and the
+/// two sub-gates of a file it does read.
+class _InstructionsSection extends ConsumerWidget {
+  const _InstructionsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final on = settings.loadInstructions;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          "Instructions",
+          description: "AGENTS.md files in a chat's workspaces, read into each "
+              "turn: rules the user wrote down once.",
+        ),
+        SwitchListTile(
+          title: const Text("Read AGENTS.md"),
+          subtitle: const Text(
+              "Off, the agent never reads a workspace's instruction files."),
+          value: on,
+          onChanged: (value) =>
+              ref.read(appSettingsProvider.notifier).setLoadInstructions(value),
+        ),
+        SwitchListTile(
+          title: const Text("Follow @file imports"),
+          subtitle: const Text(
+              "An @path inside an AGENTS.md pulls in the file it names."),
+          value: on && settings.instructionImports,
+          onChanged: on
+              ? (value) =>
+                  ref.read(appSettingsProvider.notifier).setInstructionImports(value)
+              : null,
+        ),
+        SwitchListTile(
+          title: const Text("Nested AGENTS.md"),
+          subtitle: const Text(
+              "Reading a file pulls in a subdirectory's own AGENTS.md."),
+          value: on && settings.nestedInstructions,
+          onChanged: on
+              ? (value) =>
+                  ref.read(appSettingsProvider.notifier).setNestedInstructions(value)
+              : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// Whether the auto-memory subsystem runs: the master gate, its three sub-gates
+/// and the background model that writes memories.
+class _AutoMemorySection extends ConsumerWidget {
+  const _AutoMemorySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final on = settings.autoMemory;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          "Auto memory",
+          description: "A per-project store of short facts the agent reads into "
+              "relevant turns and writes from finished ones.",
+        ),
+        SwitchListTile(
+          title: const Text("Keep memories"),
+          subtitle: const Text(
+              "Off, the agent keeps no memories and recalls none."),
+          value: on,
+          onChanged: (value) =>
+              ref.read(appSettingsProvider.notifier).setAutoMemory(value),
+        ),
+        SwitchListTile(
+          title: const Text("Recall relevant memories"),
+          subtitle: const Text(
+              "Each turn is offered the memories its prompt is about."),
+          value: on && settings.memoryRecall,
+          onChanged: on
+              ? (value) => ref.read(appSettingsProvider.notifier).setMemoryRecall(value)
+              : null,
+        ),
+        SwitchListTile(
+          title: const Text("Write memories after a turn"),
+          subtitle: const Text(
+              "A background model keeps the facts a finished turn leaves "
+              "behind. Needs a model below."),
+          value: on && settings.memoryExtraction,
+          onChanged: on
+              ? (value) =>
+                  ref.read(appSettingsProvider.notifier).setMemoryExtraction(value)
+              : null,
+        ),
+        SwitchListTile(
+          title: const Text("Memory tools"),
+          subtitle: const Text(
+              "The agent can save a memory it judges worth keeping, and "
+              "search the store while a turn runs."),
+          value: on && settings.memoryAgentTool,
+          onChanged: on
+              ? (value) =>
+                  ref.read(appSettingsProvider.notifier).setMemoryAgentTool(value)
+              : null,
+        ),
+        if (on)
+          LabelledField(
+            label: "Memory LLM",
+            child: OptionalModelPicker(
+              offLabel: "Off",
+              helperText: "What writes memories in the background. Off, "
+                  "extraction is inert and the store only ever holds what the "
+                  "agent or you saved.",
+              choice: (
+                providerId: settings.memoryProviderId,
+                modelId: settings.memoryModelId,
+              ),
+              onChanged: (choice) =>
+                  ref.read(appSettingsProvider.notifier).setMemoryModel(choice),
+            ),
+          ),
       ],
     );
   }

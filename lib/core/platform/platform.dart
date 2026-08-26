@@ -136,6 +136,10 @@ LocalPrefill? createLocalPrefill(
           offerTask: true,
           saveArtifact: true,
           skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+          // A default turn has auto-memory off, so the warmed prefix carries
+          // no memory tools; a turn with them misses the cache rather than
+          // the cache serving a list no turn sends.
+          offerMemory: false,
         ),
       );
     },

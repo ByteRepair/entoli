@@ -30,7 +30,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-  Carrying one on, Web search
+   Carrying one on, Web search, Skills, Memory
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
@@ -86,7 +86,8 @@ with nothing either, which is why nothing user-facing names it at all.
 
 ### On-disk layout
 
-`<dataDir>/projects/<project>/` holds `chats/` and `workspace/`. A chat is
+`<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`.
+A chat is
 `chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
@@ -178,15 +179,17 @@ only the directories that were behind. **An entry spells its paths out** — it 
 handed a filesystem and the data directory rather than an `AppConfig` for that
 reason, since `workspaceDir` answers for the layout this build has and an entry
 is about one that is gone. **An entry does nothing where what it moves is not
- there**, because it also runs over restored backups and over directories where
- the user deleted whatever it was looking for. The one layout change since 1.0.0
- — the user's `commands/` becoming `skills/` — is not in the chain: it is a
- private app with no released directory to carry forward, so a `commands/` left
- on disk is simply not read rather than migrated, and the chain stays empty.
+there**, because it also runs over restored backups and over directories where
+the user deleted whatever it was looking for. Two things have changed the layout
+since 1.0.0, and neither is in the chain: the user's `commands/` became
+`skills/` — a private app with no released directory to carry forward, so a
+`commands/` left on disk is not read rather than migrated — and `memory/`, a
+directory created on first use rather than moved. The chain stays empty.
 
 ### Projects
 
-A project is a directory holding its own chats and one workspace they share.
+A project is a directory holding its own chats, one workspace they share, and
+its memories.
 The default project is `null` above the filesystem and `projects/default/` below
 it — one shape for every project rather than one project that is also the data
 directory. `AppConfig`'s path helpers all take `{String? project}`, and passing

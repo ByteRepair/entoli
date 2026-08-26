@@ -75,8 +75,14 @@ still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
 handshake. **Providers** is the endpoints.
-**LLMs** is what a new chat is answered by and what names it. **Data** is all of
-it at once, out as one file and back — see "Backing it all up". **About** is the
+**LLMs** is what a new chat is answered by and what names it. **Memory** is
+what one conversation leaves the others: the `AGENTS.md` files the workspaces
+are read from, with the imports they make and the nested ones found on a read,
+and the memories the app writes for itself, which the recall, extraction and
+tools sub-gates and the Memory LLM beside them steer — the two halves are
+"Memory" in `lib/data/builtin/CLAUDE.md`, and the memories themselves are
+looked at on a page the settings draw. **Data** is all of it at once, out as
+one file and back — see "Backing it all up". **About** is the
 app rather than anything it does, which is why it is last — see "What the app
 is".
 

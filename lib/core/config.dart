@@ -94,6 +94,12 @@ class AppConfig {
   String chatsDir({String? project}) =>
       fs.path.join(projectDir(project: project), "chats");
 
+  /// Where a project's auto-memory lives: beside `chats/` and `workspace/`,
+  /// app-managed rather than user scratch space. The default project's store
+  /// answers for every project that has not turned its own on.
+  String memoryDir({String? project}) =>
+      fs.path.join(projectDir(project: project), "memory");
+
   /// The workspace every chat in the project shares, beside the one each has
   /// of its own.
   String projectWorkspaceDir({String? project}) =>
