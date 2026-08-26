@@ -272,6 +272,19 @@ void main() {
       expect(find.textContaining("research keeps its own"), findsOneWidget);
     });
 
+    testWidgets("the built-in project's page has no instructions to edit",
+        (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+      await settleIo(tester);
+      expect(find.widgetWithText(ListTile, "Instructions"), findsOneWidget);
+
+      await app.pump(tester, const ProjectSettingsPage(project: "anonymous"));
+      await settleIo(tester);
+      expect(find.widgetWithText(ListTile, "Instructions"), findsNothing);
+    });
+
     testWidgets("a project can keep its own rather than the default's",
         (tester) async {
       await io(tester, () => app.repo.createProject("research"));

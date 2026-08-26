@@ -40,6 +40,12 @@ class BuiltinProject {
   /// the platform's facts and a headless turn's restrictions apply on top,
   /// never under.
   final Set<AgentCapability> disabled;
+
+  /// The instruction text the app ships for a turn in it. Where non-null it is
+  /// the turn's instructions in full: no AGENTS.md file is read, and none is
+  /// offered to write, so there is no file to delete or edit away from under
+  /// the turn.
+  String? get bundledInstructions => null;
 }
 
 /// What a turn's "About the user" is.
@@ -56,7 +62,7 @@ enum MemoryPolicy {
   /// The app's gates answer, the way a user's project's does.
   app,
 
-  /// Nothing: no instructions, no recall, no extraction, no memory tools.
+  /// Nothing: no store, no recall, no extraction, no memory tools.
   off,
 }
 
@@ -67,18 +73,33 @@ enum MemoryPolicy {
 /// change with the shell, not with the project.
 enum AgentCapability { ask, task, artifact, webSearch }
 
+/// A chat with no profile, no project memory, and no workspace it shares
+/// with another chat: the tools and the context that would reach them are
+/// simply not there. Its instructions are the app's own note about what it is,
+/// in code rather than in a file — the only AGENTS.md it has is one nobody
+/// could delete or edit away from under a turn.
+class AnonymousProject extends BuiltinProject {
+  const AnonymousProject()
+      : super(
+          dir: "anonymous",
+          label: "Anonymous",
+          profilePolicy: ProfilePolicy.none,
+          memory: MemoryPolicy.off,
+          sharedWorkspace: false,
+        );
+
+  @override
+  String get bundledInstructions =>
+      "This is an anonymous chat. Its workspace is scratch for this chat "
+      "alone: nothing in it is shared with any other conversation, and "
+      "nothing about it is remembered. There is no profile of the user and no "
+      "memory of earlier chats, and this note stands in for the instruction "
+      "files the other projects read.";
+}
+
 /// The built-in projects, in the order the menus offer them.
 const builtinProjects = <BuiltinProject>[
-  /// A chat with no profile, no project memory, and no workspace it shares
-  /// with another chat: the tools and the context that would reach them are
-  /// simply not there.
-  BuiltinProject(
-    dir: "anonymous",
-    label: "Anonymous",
-    profilePolicy: ProfilePolicy.none,
-    memory: MemoryPolicy.off,
-    sharedWorkspace: false,
-  ),
+  AnonymousProject(),
 ];
 
 /// The built-in project [dir] is one, or null for a user's. [dir] is read the

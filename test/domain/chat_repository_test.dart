@@ -217,6 +217,8 @@ void main() {
       expect(settings.sharedWorkspace, isFalse);
       // A watched turn: nothing is taken away beyond the built-in's (none).
       expect(settings.disabled, isEmpty);
+      // The built-in ships its own note; the user's files are not read.
+      expect(settings.bundledInstructions, contains("anonymous chat"));
     });
 
     // A draft is not on disk, so it answers for its own project: the same
@@ -250,6 +252,8 @@ void main() {
       expect(settings.profile, isNotNull);
       expect(settings.memory.autoMemory, isTrue);
       expect(settings.sharedWorkspace, isTrue);
+      // A user's project reads its files; nothing ships in their place.
+      expect(settings.bundledInstructions, isNull);
     });
   });
 

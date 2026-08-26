@@ -78,6 +78,17 @@ void main() {
       expect(projectOrDefault("deleted", const []), isNull);
     });
 
+    // The only AGENTS.md it has is the one the app ships, in code rather than
+    // on a disk a user could delete or edit away from under a turn.
+    test("ships its own instructions and reads no file", () {
+      expect(builtIn, isA<AnonymousProject>());
+      expect(builtIn.bundledInstructions, contains("anonymous chat"));
+      expect(
+          const BuiltinProject(dir: "work", label: "work")
+              .bundledInstructions,
+          isNull);
+    });
+
     // Offered after the default and before the user's projects, and not twice.
     test("is in everyProject once, after the default", () {
       final all = everyProject(["work"]);

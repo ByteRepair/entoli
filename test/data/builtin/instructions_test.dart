@@ -216,6 +216,10 @@ void main() {
             path: "/ws/AGENTS.md",
             kind: InstructionKind.project,
             content: "project rules"),
+        const InstructionFile(
+            path: "anonymous",
+            kind: InstructionKind.bundled,
+            content: "this is an anonymous chat"),
       ]);
       expect(text, contains("Workspace instructions are shown below."));
       expect(
@@ -224,8 +228,12 @@ void main() {
               "(the user's global instructions, for every project):"));
       expect(text,
           contains("Contents of /ws/AGENTS.md (project workspace instructions):"));
+      expect(text,
+          contains("Contents of anonymous "
+              "(the app's own note on this kind of chat):"));
       expect(text, contains("global rules"));
       expect(text, contains("project rules"));
+      expect(text, contains("this is an anonymous chat"));
     });
 
     test("renders nothing for an empty list", () {

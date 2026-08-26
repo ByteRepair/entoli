@@ -276,6 +276,11 @@ class TurnSettings {
   /// anywhere — and a `task` fan-out can do the same through a sub-agent.
   final Set<AgentCapability> disabled;
 
+  /// The instruction text the app ships for this turn's project, where its
+  /// spec has one. Where set it is the turn's instructions in full: no
+  /// AGENTS.md file is read, and the nested walk on a file read is off.
+  final String? bundledInstructions;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -287,6 +292,7 @@ class TurnSettings {
     this.profile,
     this.sharedWorkspace = true,
     this.disabled = const {},
+    this.bundledInstructions,
   });
 }
 

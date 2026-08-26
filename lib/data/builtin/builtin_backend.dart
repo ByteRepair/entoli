@@ -223,15 +223,26 @@ class BuiltinBackend implements AgentBackend {
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
       // The AGENTS.md block, loaded once where the two workspace paths are
       // known: the files are read into every turn, and the imports and
-      // excludes answers are the only halves a turn may withhold. Empty when
-      // nothing was found; the agent renders it either way.
-      final instructions = await loadInstructions(
-        config.fs,
-        projectWorkspace: projectWorkspace,
-        global: config.globalInstructionsFile,
-        imports: settings.memory.imports,
-        excludes: settings.memory.excludes,
-      );
+      // excludes answers are the only halves a turn may withhold. Where the
+      // turn's project ships a note of its own it stands in for the whole
+      // block: no file is read, and nothing a file read would pull in can
+      // either.
+      final bundled = settings.bundledInstructions;
+      final instructions = bundled != null
+          ? [
+              InstructionFile(
+                path: settings.project ?? "the built-in project",
+                kind: InstructionKind.bundled,
+                content: bundled,
+              ),
+            ]
+          : await loadInstructions(
+              config.fs,
+              projectWorkspace: projectWorkspace,
+              global: config.globalInstructionsFile,
+              imports: settings.memory.imports,
+              excludes: settings.memory.excludes,
+            );
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a
       // turn, so recall and the agent's tools share one.
@@ -287,7 +298,11 @@ class BuiltinBackend implements AgentBackend {
         webSearch: webSearch,
         profile: settings.profile,
         rateLimitGate: rateLimitGate,
-        memory: settings.memory,
+        // A bundled turn's note is its whole instruction half, so the nested
+        // walk on a read — the one memory answer the agent itself consults —
+        // is off: there is no file anywhere to pull in.
+        memory:
+            bundled != null ? const MemorySettings(nested: false) : settings.memory,
         instructions: instructions,
         recall: recall,
         pinned: pinned,

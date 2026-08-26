@@ -312,6 +312,7 @@ class ChatRepository {
           : await _resolveMemory(settings, project),
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
       disabled: disabled,
+      bundledInstructions: builtIn?.bundledInstructions,
     );
   }
 

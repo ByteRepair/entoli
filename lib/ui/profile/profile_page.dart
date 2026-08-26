@@ -10,9 +10,10 @@ import "../widgets/resettable_field.dart";
 /// Edits what a turn knows about the user. With no [project] this is the
 /// app-level page, shown from the sidebar: the identity fields, which the
 /// prompt renders as "About the user", and the user's global instructions —
-/// the AGENTS.md at the data dir's root that every project's turns read. With
-/// a [project] it is that project's page, reached from the project settings:
-/// the AGENTS.md at its workspace root, the file its chats' turns read, and
+/// the AGENTS.md at the data dir's root that every user project's turns read;
+/// a built-in project runs on a note the app ships instead. With a [project]
+/// it is that project's page, reached from the project settings: the
+/// AGENTS.md at its workspace root, the file its chats' turns read, and
 /// nothing else — a chat would contain all the context it needs, and the
 /// identity fields are the user's, not a project's.
 class ProfilePage extends ConsumerStatefulWidget {
@@ -214,12 +215,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(
-                    global
-                        ? "Your global instructions, read by every project's turns. "
-                            "Stored at the root of your data directory, where a "
-                            "conversation's commands cannot reach them."
-                        : "The AGENTS.md at this project's workspace root, read by "
-                            "every chat's turn in it.",
+                  global
+                      ? "Your global instructions, read by every user project's "
+                          "turns; the built-in projects run on the app's own "
+                          "note. Stored at the root of your data directory, "
+                          "where a conversation's commands cannot reach them."
+                      : "The AGENTS.md at this project's workspace root, read by "
+                          "every chat's turn in it.",
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),

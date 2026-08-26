@@ -35,6 +35,10 @@ enum InstructionKind {
 
   /// Found above a file the agent read, mid-turn.
   directory,
+
+  /// Shipped by the app for a project whose turns read no file: the note
+  /// stands in for the instruction files.
+  bundled,
 }
 
 class InstructionFile {
@@ -178,6 +182,7 @@ String _kindPhrase(InstructionKind kind) => switch (kind) {
       InstructionKind.project => "project workspace instructions",
       InstructionKind.imported => "instructions imported by another file",
       InstructionKind.directory => "instructions for this directory",
+      InstructionKind.bundled => "the app's own note on this kind of chat",
     };
 
 String _norm(FileSystem fs, String path) => fs.path.normalize(path);

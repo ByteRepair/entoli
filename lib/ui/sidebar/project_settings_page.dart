@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/builtin_project.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../memory/memory_page.dart";
@@ -98,8 +99,12 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: const Text("Chats"),
             trailing: Text("$count"),
           ),
-          const Divider(),
-          _ProfileRow(project: project),
+          // A built-in project ships its own note and reads no file, so there
+          // is no instructions to edit for one.
+          if (!isBuiltinProject(project)) ...[
+            const Divider(),
+            _ProfileRow(project: project),
+          ],
           const Divider(),
           _TempChatTtlRow(project: project),
           const Divider(),

@@ -93,6 +93,7 @@ void main() {
     Map<String, String> documents = const {},
     DateTime? at,
     MemorySettings memory = MemorySettings.off,
+    String? bundledInstructions,
   }) =>
       backend
           .sendPrompt(
@@ -107,7 +108,8 @@ void main() {
                   approveMode: ApproveMode.never,
                   memory: memory,
                   sharedWorkspace: sharedWorkspace,
-                  disabled: disabled))
+                  disabled: disabled,
+                  bundledInstructions: bundledInstructions))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -198,6 +200,27 @@ void main() {
 
       expect(client.sent.first[1].text, contains("project rules"));
       expect(client.sent.first[1].text, contains("Workspace instructions"));
+    });
+
+    test("a bundled note stands in for the files, and the files are not read",
+        () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      Directory(config.projectWorkspaceDir()).createSync(recursive: true);
+      File(p.join(config.projectWorkspaceDir(), "AGENTS.md"))
+          .writeAsStringSync("project rules");
+      File(config.globalInstructionsFile).writeAsStringSync("global rules");
+
+      await send(backend, "hi",
+          project: "anonymous",
+          sharedWorkspace: false,
+          bundledInstructions: "This is an anonymous chat.");
+
+      final system = client.sent.first[1].text;
+      expect(system, contains("This is an anonymous chat."));
+      expect(system, isNot(contains("project rules")));
+      expect(system, isNot(contains("global rules")));
     });
 
     test("relevant memories are recalled into the turn", () async {
