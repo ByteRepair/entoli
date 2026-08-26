@@ -14,7 +14,7 @@ Six records. `message` opens one — before it holds anything, which is what the
 empty assistant message at the head of a turn is — and its `siblingOf` names
 what it is an alternative to, or nothing at all, which puts it on the end of the
 thread being read; `replacesSibling` takes that one away rather than joining it,
-and `documents` records what its `/command` and `@agent` references stood for
+and `documents` records what its `/skill` and `@agent` references stood for
 when it was written — see "Commands and agents". `part` is one part of it, at an
 index. `append` is more text
 on the end of the part at an index. `turnEnd` closes the turn and says why:
@@ -192,7 +192,7 @@ instead of being written to the log a second time.
 **Nothing else words a conversation for a model.** What the model is shown of a
 user's message is not what the user typed: it carries the moment it was sent,
 the one that opens a conversation is dressed as a task (upstream's instance
-template), a `/command` is expanded to its body, and a file part comes back as
+template), a `/skill` is expanded to its body, and a file part comes back as
 the bytes it names. `BuiltinAgent` used to word the turn it was about to run
 while the projection worded that same turn read back out of the log, and for a
 long time the two disagreed — the log holding only what was typed. So a chat
@@ -285,7 +285,7 @@ re-runs the message rather than a copy of its text — sends the date that turn
 was sent under. The bytes are read back through a `ResourceLoader`, and that is
 the only reason the projection is asynchronous; a file whose resource has gone is
 left named rather than failing the turn, which is what every message did before
-this read any. And what a `/command` or an `@agent` stood for is written into the
+this read any. And what a `/skill` or an `@agent` stood for is written into the
 message when it is composed — see "Commands and agents".
 
 **`resume` is the one message a turn shows the model that nobody said.**
@@ -477,7 +477,7 @@ turn is being asked again — it takes away when the turn is over, so a session
 that has been resumed is still one the log could rebuild; see "The projection".
 
 `AgentBackend.resumeTurn` is a method of its own rather than a flag on
-`sendPrompt`, because there is no prompt: no text, no attachments, no `/command`
+`sendPrompt`, because there is no prompt: no text, no attachments, no `/skill`
 or `@agent` to expand. Its `@agent` prompt comes off the last user message of the
 history — off that message's own record of what the name meant, so a turn
 interrupted last week carries on under the agent it started under. What the two
@@ -557,38 +557,55 @@ clean-up are `lib/domain/chat_title.dart` and the repository composes them.
 is one of the prompt's instructions being ignored — a quoted title, a `Title:`
 prefix, an explanation on the next line, thirty words instead of twenty.
 
-## Commands and agents
+## Skills and agents
 
 `PromptLibrary` is the whole of what the composer's `/` and `@` menus offer,
-built once at startup from two `PromptSource`s in precedence order: the presets
-packaged under `assets/prompts/{commands,agents}/`, then
-`$AGENT_CHAT_CONFIG/{commands,agents}/`. A file the user wrote replaces the
-preset it shares a name with. Entries come back sorted by name, so the menu does
-not reorder when a source does. Built once because reading assets is async and
-nothing downstream should wait on it; a file added while the app runs therefore
-does not appear until a restart, though nothing would break if it did — a
-message resolves against whatever the library holds when it is composed, and
-keeps the answer.
+built from two `PromptSource`s in precedence order: the presets packaged under
+`assets/prompts/`, then the user's own directory. A file the user wrote replaces
+the preset it shares a name with, and entries come back sorted by name, so the
+menu does not reorder when a source does. It is built once at startup, because
+reading assets is async and nothing downstream should wait on it; a skill
+dropped into the directory by hand therefore does not appear until a restart,
+though nothing would break if it did — a message resolves against whatever the
+library holds when it is composed, and keeps the answer. The one route that buys
+a refresh is the Skills settings page: it is where a user changes the library
+from inside the app, and it reloads after an import or a delete, so that change
+lands without a restart.
 
-A prompt file is YAML frontmatter, then the template a command expands to or the
-system prompt an agent runs under. `PromptDocument` reads only the top-level
-scalars — `description` is all the menu needs.
+A skill is a **directory**, not a file: a `SKILL.md` and whatever files it runs
+with. Its name is the frontmatter's `name` where it has one, the folder
+otherwise — the folder is where a `.skill` import lands, so the two names
+diverging is normal. Its body carries the base directory above the template,
+because that is the one thing every reader needs and none can work out. An agent
+is still one `.md` file: a system prompt, with nothing to run beside it.
 
-The syntax is `_command` and `_mention` in `prompt_library.dart`, beside the
-library they are read against rather than in whichever layer happened to need
-them first — `BuiltinBackend` held them when it was the only thing that expanded
-one. `activeCompletionToken` in `CompletionField` has to agree with those two
-patterns: anything the menu offers has to dispatch.
+A skill has two halves to being reachable, and they are separate. **User
+invocation** is a `/name` in the composer, offered while the skill is
+`user-invocable` (the default); **model invocation** is the `skill` tool,
+offered while it is not `disable-model-invocation: true`. A skill can be the
+model's alone, the user's alone, or both: `user-invocable: false` drops it from
+the `/` menu, and `disable-model-invocation: true` keeps it out of the tool and
+of the system-prompt listing, so the model reaches it only because the user sent
+it.
 
-`/name args` expands to the command's body with `$ARGUMENTS` substituted (or
+`PromptDocument` reads only the top-level scalars — `description` is all the
+menu needs. The syntax is `_skillReference` and `_mention`, in
+`prompt_library.dart`, beside the library they are read against rather than in
+whichever layer happened to need them first. `activeCompletionToken` in
+`CompletionField` has to agree with those two patterns: anything the menu
+offers has to dispatch.
+
+`/name args` expands to the skill's body with `$ARGUMENTS` substituted (or
 appended); a name the library does not know is left alone, because it is more
-likely a path. `@name` stacks that agent's prompt under the system message.
+likely a path. The `skill` tool hands the model the same body through the same
+`withArguments`, so the two routes put the same words in front of it. `@name`
+stacks that agent's prompt under the system message.
 
 **The library is read once, where the message is composed, and never again.**
 `ChatRepository.composeUserPrompt` is the only place a user's message is made,
 and it calls `promptDocuments`: what each reference meant goes into the message
 as `documents`, keyed by the reference as written — `/review`, `@researcher`,
-sigil included, so a command and an agent of the same name do not collide. Every
+sigil included, so a skill and an agent of the same name do not collide. Every
 later reading renders from that map: the turn being sent, the chat reopened
 tomorrow, a regenerate a week later.
 
@@ -602,12 +619,12 @@ nowhere else to get one.
 
 It was re-parsed against the library each time before, and that is wrong for a
 reason nothing catches. These are user-editable files, so rebuilding a year-old
-turn read whatever `commands/review.md` says *now* — putting words in the model's
-mouth it had never seen, and quietly changing a conversation the user is reading
-beside it. A command since deleted was worse: the turn fell back to the four
-characters the user typed, and the model was asked to carry on from a prompt it
-had never been given. Held, none of that is possible, and the message that
-carried it says so on its face.
+turn read whatever `skills/review/SKILL.md` says *now* — putting words in the
+model's mouth it had never seen, and quietly changing a conversation the user is
+reading beside it. A skill since deleted was worse: the turn fell back to the
+four characters the user typed, and the model was asked to carry on from a
+prompt it had never been given. Held, none of that is possible, and the message
+that carried it says so on its face.
 
 Old logs have no `documents` and default to an empty map, which renders as the
 text alone — exactly what those turns already did. There is nothing to migrate

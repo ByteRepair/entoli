@@ -322,8 +322,10 @@ typedef ModelChoice = ({String? providerId, String? modelId});
 /// What a message can address, the character that starts one, and the
 /// directory the files defining them live in — under `assets/prompts/` when
 /// they ship with the app, under `$AGENT_CHAT_CONFIG/` when the user adds one.
+/// A skill's directory holds a `SKILL.md` (and whatever else the skill needs);
+/// an agent's holds flat `.md` files.
 enum CompletionKind {
-  command("/", "Commands", "commands"),
+  skill("/", "Skills", "skills"),
   agent("@", "Agents", "agents");
 
   const CompletionKind(this.trigger, this.label, this.folder);
@@ -332,7 +334,7 @@ enum CompletionKind {
   final String folder;
 }
 
-/// An entry in the composer's `/` or `@` menu — a command the backend can run,
+/// An entry in the composer's `/` or `@` menu — a skill the backend can load,
 /// or an agent a message can address. Built from a `PromptDocument`, never
 /// deserialized: the file on disk is the persisted form.
 @freezed
@@ -340,6 +342,7 @@ abstract class CompletionOption with _$CompletionOption {
   const factory CompletionOption({
     required String name,
     String? description,
+    String? argumentHint,
   }) = _CompletionOption;
 }
 

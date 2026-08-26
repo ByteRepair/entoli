@@ -3,6 +3,8 @@ import "dart:convert";
 import "../../domain/ask.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/profile.dart";
+import "../../domain/prompt_library.dart";
+import "skill_tool.dart";
 import "task_tool.dart";
 
 /// What a turn is offered, resolved from what this device can run minus what
@@ -77,10 +79,12 @@ String systemPrompt({
   required String platform,
   Profile? profile,
   required AgentCapabilities caps,
+  List<PromptDocument> skills = const [],
 }) =>
     caps.commands
-        ? _withShell(platform: platform, profile: profile, caps: caps)
-        : _withoutShell(profile: profile, caps: caps);
+        ? _withShell(
+            platform: platform, profile: profile, caps: caps, skills: skills)
+        : _withoutShell(profile: profile, caps: caps, skills: skills);
 
 /// The half that changes: where this conversation's files are, and whatever an
 /// `@agent` mention added. Its own system message so the body above it is
@@ -162,16 +166,22 @@ String userTurnText(String text, {required DateTime at, required bool first}) =>
 /// same `FileSystem` the app uses, so a browser can still produce files and
 /// artifacts. The turn ends when it replies with text and calls no tool — the
 /// same termination signal the shell path uses.
-String _withoutShell({Profile? profile, required AgentCapabilities caps}) {
+String _withoutShell({
+  Profile? profile,
+  required AgentCapabilities caps,
+  List<PromptDocument> skills = const [],
+}) {
   // The artifact is named in the browser's one sentence about its files, so a
   // turn that is not offered it drops the phrase rather than the sentence.
   final artifact = caps.artifact
       ? ", and `artifact` to publish an HTML page the user can\nview"
       : "";
+  final skillsText = skillsSection(skills);
   final sections = <String>[
     _files,
     if (caps.ask) _asking,
     if (caps.artifact) _artifacts,
+    if (skillsText.isNotEmpty) skillsText,
   ].join("\n");
   return "You are a helpful assistant.\n\n"
       "You are running in a browser, so you have no shell: you cannot run "
@@ -181,6 +191,29 @@ String _withoutShell({Profile? profile, required AgentCapabilities caps}) {
       "`project:` to reach the project workspace.\n\n"
       "$sections\n"
       "${profileSection(profile)}";
+}
+
+/// The skills the model may load itself, as the system prompt lists them.
+/// Empty produces nothing, so a device with no skills keeps the prompt — and
+/// the warmed prefix over it — exactly as it was.
+String skillsSection(List<PromptDocument> skills) {
+  final usable = skills.where((s) => s.modelInvocable).toList();
+  if (usable.isEmpty) return "";
+  final listed = [
+    for (final skill in usable)
+      "- ${skill.name}: ${skill.description ?? "(no description)"}",
+  ];
+  return """
+
+## Skills
+
+Skills are named procedures, packaged as instructions with whatever files they
+need. Available to you:
+
+${listed.join("\n")}
+
+Load one with the `$skillToolName` tool when the task suits it. The result
+carries its instructions and the base directory its files are in.""";
 }
 
 /// The one thing both prompts say, because asking is the one thing the agent
@@ -246,7 +279,9 @@ String _withShell({
   required String platform,
   Profile? profile,
   required AgentCapabilities caps,
+  List<PromptDocument> skills = const [],
 }) {
+  final skillsText = skillsSection(skills);
   final sections = <String>[
     if (caps.task)
       "## Delegating to sub-agents\n\n"
@@ -262,8 +297,9 @@ String _withShell({
           "`websearch` queries DuckDuckGo and returns titles, URLs, and "
           "snippets.\n`webfetch` retrieves a URL and returns its text "
           "content with markup stripped.\nUse them together: `websearch` to "
-          "find sources, then `webfetch` to read the\nones that look "
-          "relevant. Both are read-only, so they run without asking.",
+           "find sources, then `webfetch` to read the\nones that look "
+           "relevant. Both are read-only, so they run without asking.",
+    if (skillsText.isNotEmpty) skillsText,
     _files,
     if (caps.artifact) _artifacts,
     "## Finishing a turn\n\n"

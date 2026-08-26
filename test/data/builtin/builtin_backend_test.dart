@@ -379,7 +379,7 @@ void main() {
 
     test("/name expands to the command's template", () async {
       final asWritten =
-          libraryWith(CompletionKind.command, "review", "Review this:\n\n\$ARGUMENTS");
+          libraryWith(CompletionKind.skill, "review", "Review this:\n\n\$ARGUMENTS");
       final backend = backendOver([
         [finish],
       ], library: asWritten);
@@ -392,7 +392,7 @@ void main() {
 
     test("a command with no placeholder gets its arguments appended", () async {
       final asWritten =
-          libraryWith(CompletionKind.command, "commit", "Commit what changed.");
+          libraryWith(CompletionKind.skill, "commit", "Commit what changed.");
       final backend = backendOver([
         [finish],
       ], library: asWritten);
@@ -408,7 +408,7 @@ void main() {
         [
           [finish],
         ],
-        library: libraryWith(CompletionKind.command, "review", "Review this."),
+        library: libraryWith(CompletionKind.skill, "review", "Review this."),
       );
       await send(backend, "/etc/hosts is where?");
 
@@ -430,14 +430,14 @@ void main() {
 
     test("a command edited since is still the words the turn was sent with",
         () async {
-      final asWritten = libraryWith(CompletionKind.command, "review", "Look hard at:\n\n\$ARGUMENTS");
+      final asWritten = libraryWith(CompletionKind.skill, "review", "Look hard at:\n\n\$ARGUMENTS");
       final backend = backendOver(
         [
           [finish],
         ],
         // The library the turn is replayed against says something else
         // entirely, and a deleted command would say nothing at all.
-        library: libraryWith(CompletionKind.command, "review", "REWRITTEN"),
+        library: libraryWith(CompletionKind.skill, "review", "REWRITTEN"),
       );
       await send(backend, "/review the parser",
           documents: promptDocuments("/review the parser", asWritten));
@@ -447,7 +447,7 @@ void main() {
     });
 
     test("a command deleted since still reads back", () async {
-      final asWritten = libraryWith(CompletionKind.command, "review", "Review this.");
+      final asWritten = libraryWith(CompletionKind.skill, "review", "Review this.");
       final backend = backendOver([
         [finish],
       ]);

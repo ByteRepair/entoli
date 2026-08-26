@@ -20,6 +20,7 @@ import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/local_llm.dart";
 import "../../domain/local_model_store.dart";
+import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/reminder_alarms.dart";
 import "../../domain/rootfs_store.dart";
@@ -122,16 +123,21 @@ LocalPrefill? createLocalPrefill(
       return (
         options: poolOptions(now),
         messages: [
-          agentSystemMessage(
-            platform: shell.platformDescription,
-            profile: now.profile,
-            caps: caps,
-          ),
+           agentSystemMessage(
+             platform: shell.platformDescription,
+             profile: now.profile,
+             caps: caps,
+             // The same skills a turn's prompt lists, off the same library the
+             // backend holds — a warm-up built without them caches a prefix no
+             // chat ever sends.
+             skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+           ),
           const LlmMessage(role: LlmRole.user, text: "Hello"),
         ],
-        tools: agentTools(
-          caps: caps,
-          // A default turn has auto-memory off, so the warmed prefix carries
+         tools: agentTools(
+           caps: caps,
+           skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+           // A default turn has auto-memory off, so the warmed prefix carries
           // no memory tools; a turn with them misses the cache rather than
           // the cache serving a list no turn sends.
           offerMemory: false,
@@ -286,9 +292,13 @@ AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 ReminderAlarms createReminderAlarms() => platformReminderAlarms();
 
 /// The presets, and the user's own beside them. Their directory is on the
-/// config's filesystem, so it exists on every platform now.
-List<PromptSource> createPromptSources(AppConfig config) =>
-    [const BundledPrompts(), DirectoryPrompts(config)];
+/// config's filesystem, so it exists on every platform now. The bundled skills
+/// are extracted to the config's filesystem first — `installBundledSkills`,
+/// called before the library is built in `main`.
+List<PromptSource> createPromptSources(AppConfig config) => [
+      BundledPrompts(config: config),
+      DirectoryPrompts(config),
+    ];
 
 /// What this machine calls itself, where it has a name. The sync device name
 /// starts here, so two paired machines are told apart by something the user

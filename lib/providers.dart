@@ -4,6 +4,8 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
+import "../core/platform/platform.dart" show createPromptSources;
+import "data/builtin/builtin_backend.dart";
 import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
@@ -278,7 +280,32 @@ final systemVoiceLanguagesProvider =
 
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.
-final promptLibraryProvider = Provider<PromptLibrary>((ref) => PromptLibrary.empty);
+/// The prompt library, built once at startup and rebuilt only where something
+/// on screen says the disk changed — the Skills page, importing or deleting
+/// one. See "Skills and agents" in `lib/domain/CLAUDE.md` for why it is
+/// otherwise read once: nothing downstream waits on it, and a file added
+/// behind the app's back reaches the next launch.
+class PromptLibraryNotifier extends Notifier<PromptLibrary> {
+  PromptLibraryNotifier([PromptLibrary? initial]) : _initial = initial;
+
+  final PromptLibrary? _initial;
+
+  @override
+  PromptLibrary build() => _initial ?? PromptLibrary.empty;
+
+  /// Read the sources again, and hand the backend its copy: the agent holds
+  /// one of its own for the `task` tool and the skills it offers a turn.
+  Future<void> reload() async {
+    final next =
+        await PromptLibrary.from(createPromptSources(ref.read(appConfigProvider)));
+    state = next;
+    final backend = ref.read(agentBackendProvider);
+    if (backend is BuiltinBackend) backend.library = next;
+  }
+}
+
+final promptLibraryProvider = NotifierProvider<PromptLibraryNotifier, PromptLibrary>(
+    PromptLibraryNotifier.new);
 
 class AppSettingsNotifier extends Notifier<AppSettings> {
   late final AppConfig _config;

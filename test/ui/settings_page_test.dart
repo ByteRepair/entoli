@@ -83,7 +83,7 @@ void main() {
     });
 
     testWidgets(
-        "are offered General, Terminal, On-device, Voice, Reminders, "
+        "are offered General, Terminal, On-device, Voice, Reminders, Skills, "
         "Sync, Providers, LLMs, Memory, Data, About, in that order",
         (tester) async {
       useWindow(tester, const Size(1200, 800));
@@ -101,6 +101,7 @@ void main() {
           "On-device",
           "Voice",
           "Reminders",
+          "Skills",
           "Sync",
           "Providers",
           "LLMs",

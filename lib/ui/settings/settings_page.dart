@@ -26,6 +26,7 @@ import "../widgets/section_header.dart";
 import "assistant_settings.dart";
 import "local_model_settings.dart";
 import "reminders.dart";
+import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
 import "voice_settings.dart";
@@ -41,6 +42,7 @@ enum SettingsCategory {
   onDevice("On-device", Icons.memory),
   voice("Voice", Icons.graphic_eq),
   reminders("Reminders", Icons.alarm),
+  skills("Skills", Icons.extension),
   sync("Sync", Icons.sync),
   providers("Providers", Icons.cloud_outlined),
   llms("LLMs", Icons.auto_awesome_outlined),
@@ -179,6 +181,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // Says so and offers nothing where there is no clock to schedule with —
       // see the section itself.
       SettingsCategory.reminders => const [RemindersSection()],
+      SettingsCategory.skills => const [SkillsSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],

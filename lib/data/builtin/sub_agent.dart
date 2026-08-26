@@ -128,6 +128,9 @@ class SubAgentRunner {
       projectWorkspace: projectWorkspace,
       model: model,
       options: options,
+      // The same skills the parent sees: a skill's workflow can be a worker's
+      // job too, and the skill that drove the fan-out may need reading there.
+      skills: library?.entries(CompletionKind.skill) ?? const [],
       approveMode: ApproveMode.never,
       temperature: temperature,
       reasoningEffort: reasoningEffort,

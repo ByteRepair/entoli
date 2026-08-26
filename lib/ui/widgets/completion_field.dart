@@ -26,7 +26,7 @@ typedef CompletionToken = ({CompletionKind kind, int start, String query});
 /// the very start of a message; `@` counts wherever a word begins. Anything
 /// offered here has to dispatch, so this matches `prompt_library.dart`'s
 /// patterns — and, before them, that a `!` message goes to the shell, where
-/// neither a command of Entoli's nor an agent means anything.
+/// neither a skill of Entoli's nor an agent means anything.
 CompletionToken? activeCompletionToken(TextEditingValue value) {
   if (shellBypassCommand(value.text) != null) return null;
   final selection = value.selection;
@@ -42,7 +42,7 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
 
   final query = value.text.substring(start + 1, caret);
   return switch (value.text[start]) {
-    "/" when start == 0 => (kind: CompletionKind.command, start: start, query: query),
+    "/" when start == 0 => (kind: CompletionKind.skill, start: start, query: query),
     "@" => (kind: CompletionKind.agent, start: start, query: query),
     _ => null,
   };
@@ -51,11 +51,11 @@ CompletionToken? activeCompletionToken(TextEditingValue value) {
 /// Space, tab, newline — every break a typed message can hold.
 bool _isSpace(int codeUnit) => codeUnit == 0x20 || codeUnit == 0x09 || codeUnit == 0x0A;
 
-/// Where [kind]'s trigger goes: a command's at the start of the message, since
-/// that is the only place `prompt_library.dart`'s `_command` reads one from, and a
-/// mention's wherever the caret is.
+/// Where [kind]'s trigger goes: a skill's at the start of the message, since
+/// that is the only place `prompt_library.dart`'s `_skillReference` reads one
+/// from, and a mention's wherever the caret is.
 int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
-      CompletionKind.command => 0,
+      CompletionKind.skill => 0,
       CompletionKind.agent =>
         value.selection.isValid ? value.selection.baseOffset : value.text.length,
     };
@@ -65,7 +65,7 @@ int _triggerAt(TextEditingValue value, CompletionKind kind) => switch (kind) {
 ///
 /// Here rather than in the field's own state because the empty chat's starter
 /// chips do the same thing from outside it, and the rule they have to agree on
-/// is *where* it lands: appended wherever the caret was, a `/command` is text
+/// is *where* it lands: appended wherever the caret was, a `/skill` is text
 /// the backend will never expand and the field's own menu will not recognise.
 void insertCompletion(
   TextEditingController controller,
@@ -115,7 +115,7 @@ typedef CompletionLayout = Widget Function(Widget menu, Widget field);
 Widget _stacked(Widget menu, Widget field) =>
     Column(mainAxisSize: MainAxisSize.min, children: [menu, field]);
 
-/// A text field that offers the app's `/commands` and `@agents` as they are
+/// A text field that offers the app's `/skills` and `@agents` as they are
 /// typed: a menu of what matches, arrows and tab and return to take one, and
 /// escape to close it. Everywhere a prompt is written — the composer, and the
 /// reminder editor — writes it into this, so the two cannot come to disagree
@@ -199,13 +199,13 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
     });
   }
 
-  /// Open [kind]'s menu by typing one — a command's trigger at the start of the
+  /// Open [kind]'s menu by typing one — a skill's trigger at the start of the
   /// message, the only place one is read from, and a mention's wherever the
   /// caret happens to be. The menu that opens is tapped rather than typed at,
   /// so the field is left unfocused.
   void openMenu(CompletionKind kind) {
     final value = widget.controller.value;
-    if (kind == CompletionKind.command && value.text.startsWith(kind.trigger)) {
+    if (kind == CompletionKind.skill && value.text.startsWith(kind.trigger)) {
       widget.controller.selection = const TextSelection.collapsed(offset: 1);
     } else {
       final at = _triggerAt(value, kind);
@@ -349,6 +349,16 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
                 "${kind.trigger}${option.name}",
                 style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
+              if (option.argumentHint != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  option.argumentHint!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
               if (option.description != null) ...[
                 const SizedBox(width: 12),
                 Expanded(

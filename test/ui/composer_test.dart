@@ -54,7 +54,7 @@ void main() {
       .where((s) => s.startsWith("/") || s.startsWith("@"))
       .toList();
 
-  testWidgets("typing / offers every command, in name order", (tester) async {
+  testWidgets("typing / offers every skill, in name order", (tester) async {
     await pump(tester);
     await type(tester, "/");
 
@@ -203,9 +203,9 @@ void main() {
     await settleIo(tester);
   }
 
-  testWidgets("the + button's Commands entry opens the command menu", (tester) async {
+  testWidgets("the + button's Skills entry opens the skill menu", (tester) async {
     await pump(tester);
-    await insertVia(tester, "Commands");
+    await insertVia(tester, "Skills");
 
     expect(controller.text, "/");
     expect(menuItems(tester), ["/init", "/revert", "/review"]);
@@ -219,7 +219,7 @@ void main() {
     expect(menuItems(tester), ["@build", "@explore"]);
   });
 
-  testWidgets("a command goes to the start of the message, a mention to the caret",
+  testWidgets("a skill goes to the start of the message, a mention to the caret",
       (tester) async {
     await pump(tester);
     await type(tester, "look here");
@@ -227,14 +227,14 @@ void main() {
     await insertVia(tester, "Agents");
     expect(controller.text, "look here @");
 
-    await insertVia(tester, "Commands");
+    await insertVia(tester, "Skills");
     expect(controller.text, "/look here @");
   });
 
-  testWidgets("asking for commands twice does not stack up slashes", (tester) async {
+  testWidgets("asking for skills twice does not stack up slashes", (tester) async {
     await pump(tester);
-    await insertVia(tester, "Commands");
-    await insertVia(tester, "Commands");
+    await insertVia(tester, "Skills");
+    await insertVia(tester, "Skills");
 
     expect(controller.text, "/");
     expect(menuItems(tester), ["/init", "/revert", "/review"]);
@@ -247,7 +247,7 @@ void main() {
     await settleIo(tester);
     expect(find.byType(ListView), findsNothing);
 
-    await insertVia(tester, "Commands");
+    await insertVia(tester, "Skills");
 
     expect(menuItems(tester), ["/init", "/revert", "/review"]);
   });
@@ -439,7 +439,7 @@ void main() {
     // to bring the keyboard up for.
     testWidgets("stays down for a menu opened from +", (tester) async {
       await pump(tester);
-      await insertVia(tester, "Commands");
+      await insertVia(tester, "Skills");
 
       expect(menuItems(tester), ["/init", "/revert", "/review"]);
       expect(tester.testTextInput.isVisible, isFalse);

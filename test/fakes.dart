@@ -74,12 +74,12 @@ const testModels = [
   ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
 ];
 
-/// A library whose commands include two names sharing a prefix, so tests can
+/// A library whose skills include two names sharing a prefix, so tests can
 /// assert the menu filters, and whose entries are deliberately out of order.
 PromptLibrary testLibrary() => PromptLibrary([
-      _doc(CompletionKind.command, "review", "review changes"),
-      _doc(CompletionKind.command, "revert", "undo the last turn"),
-      _doc(CompletionKind.command, "init", "guided AGENTS.md setup"),
+      _doc(CompletionKind.skill, "review", "review changes"),
+      _doc(CompletionKind.skill, "revert", "undo the last turn"),
+      _doc(CompletionKind.skill, "init", "guided AGENTS.md setup"),
       _doc(CompletionKind.agent, "explore", "fast codebase search"),
       _doc(CompletionKind.agent, "build", "the default agent"),
     ]);
@@ -468,7 +468,7 @@ class FakeBackend implements AgentBackend {
 
   /// The message itself rather than fields taken off it: what the model is
   /// shown of a turn is the whole message, so a test that wants the text, the
-  /// date or what a `/command` meant asks the message for it.
+  /// date or what a `/skill` meant asks the message for it.
   final List<({Message prompt, List<Message> history, TurnSettings settings})>
       prompts = [];
 

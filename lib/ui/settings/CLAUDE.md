@@ -63,7 +63,15 @@ the way a row for a missing device would. The permission rows re-read on the way
 back to the app, since their answers can only change while it is behind in the
 system settings the rows open. The editor page is a route of its own;
 see "The reminder editor" below, and "Waking for a reminder" in
-`android/CLAUDE.md`. **Sync** is paired devices — this device's identity and
+`android/CLAUDE.md`. **Skills** is the list of what the agent can be told to do
+by name — the bundled ones, which ship with the app, and the user's own,
+imported from a `.skill` file or removed with their files. The user's skills
+live in their own directory beside the extracted presets, so a bundled one is
+not deletable and a user's is; import and delete are the two things that change
+it, and they reload the library the moment they are done, the one way a change
+to it lands without a restart, where a skill dropped into the directory by hand
+still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
+**Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
 handshake. **Providers** is the endpoints.
@@ -99,7 +107,7 @@ had a box a few lines tall to grow in before. Discarding asks, and so does the
 back key through a `PopScope`, since it is the one way out that loses what was
 typed.
 
-What is typed in it is `CompletionField` — the composer's, so `/commands` and
+What is typed in it is `CompletionField` — the composer's, so `/skills` and
 `@agents` complete there and the `+` offers them; a reminder's prompt is
 dispatched through the same library, and being offered them in a chat and not
 here was the tell. The preview is `MarkdownBody` under `replyStyleSheet`, which
