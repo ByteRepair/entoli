@@ -293,37 +293,12 @@ class LocalShell extends Shell {
   };
 }
 
-/// The dispatcher a persistent shell runs under. It reads the queue one line
-/// at a time — a base64 command, nothing else can be in it — decodes it, and
-/// evaluates it **in the shell itself**, so a `cd` or an `export` in it stands
-/// when the line is done. The trailing line says what the command exited with
-/// and where the shell is now, and is what Dart parses the run out of.
-///
-/// The `trap` is load-bearing: a non-interactive shell dies on the `SIGINT` a
-/// stop sends, and a session that dies on every Ctrl-C is a one-shot shell
-/// with extra steps. With it, the shell waits for the interrupted command to
-/// go, reports its 130, and keeps whatever state it had.
-///
-/// The `EXIT` trap is the other end of that: a command that runs `exit` takes
-/// the shell down with it, and the trap is what says how it went — the code
-/// and the directory — before the pipe closes. Without it, an `exit 3` is a
-/// dead shell with no answer.
-///
-/// The command's stdin is `/dev/null`, so nothing in it can drink the queue,
-/// and its stderr is merged onto the stdout Dart reads, in order.
-String _dispatcherScript(String token) => _dispatcherTemplate.replaceAll(
-      "@TOKEN@",
-      token,
-    );
-
-const _dispatcherTemplate = r"""
-trap 'true' INT
-trap 'printf "\n@@E@TOKEN@ rc=%s cwd=%s@@\n" "$?" "$(pwd)"' EXIT
-while IFS= read -r line; do
-  eval "$(printf '%s' "$line" | base64 -d)" </dev/null 2>&1
-  printf '\n@@E@TOKEN@ rc=%s cwd=%s@@\n' "$?" "$(pwd)"
-done
-""";
+/// The dispatcher the persistent shell runs under lives in `domain/shell.dart`
+/// now, shared with `IshShell`: the contract — a Ctrl-C the shell traps into a
+/// 130 while keeping its state, an `EXIT` trap that reports where the shell
+/// died, and a base64 line that keeps a multi-line command from stealing the
+/// queue — is the same whether the shell is a child process or an emulated
+/// guest. See `dispatcherScript` there.
 
 /// What the flush of a pipe whose writers have gone is worth waiting for. A
 /// command that left one holding it pays this in full, once.
@@ -451,8 +426,8 @@ class _Session {
   Future<void> _spawn(List<String> command, Map<String, String> env) async {
     await _teardown();
     final token = const Uuid().v4();
-    _marker = "@@E$token rc=";
-    final argv = [...command.skip(1), "-c", _dispatcherScript(token)];
+    _marker = dispatcherMarker(token);
+    final argv = [...command.skip(1), "-c", dispatcherScript(token)];
     try {
       // `setsid` execs in place, so the pid it reports is the new group's —
       // which is what a stop kills. Whether it is there is learned by trying
