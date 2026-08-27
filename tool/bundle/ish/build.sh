@@ -78,7 +78,7 @@ common_cflags=(
 )
 
 build_lib() {
-  local sdk=$1 arch=$2 triple=$3 outname=$4
+  local sdk=$1 arch=$2 outname=$3
   local destdir="$work/$outname"
   mkdir -p "$destdir"
   local sdkroot; sdkroot=$(xcrun --sdk "$sdk" --show-sdk-path)
@@ -105,9 +105,9 @@ mkdir -p "$out"
 
 # Device (arm64) and simulator (arm64, x86_64). The simulator x86_64 slice is
 # what an Intel Mac runs; arm64 sim is Apple Silicon.
-build_lib iphoneos arm64 aarch64-apple-ios device
-build_lib iphonesimulator arm64 aarch64-apple-ios-simulator sim-arm64
-build_lib iphonesimulator x86_64 x86_64-apple-ios-simulator sim-x86_64
+build_lib iphoneos arm64 device
+build_lib iphonesimulator arm64 sim-arm64
+build_lib iphonesimulator x86_64 sim-x86_64
 
 xcodebuild -create-xcframework \
   -library "$out/libishcore_device.a" \

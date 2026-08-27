@@ -16,11 +16,7 @@ import "../../domain/shell.dart";
 // The opaque pointer Dart holds for a session.
 typedef ish_session_ptr = Pointer<Void>;
 
-// C callback signature: void(ish_result*, void*).
-typedef _ish_result_callback_c = Void Function(
-    Pointer<ish_result> result, Pointer<Void> userData);
-
-// The result struct the bridge posts back. Matches ish_bridge.h's ish_result.
+// The result struct the bridge writes into. Matches ish_bridge.h's ish_result.
 @Packed(4)
 final class ish_result extends Struct {
   @Int32()
@@ -48,6 +44,8 @@ typedef _init_c = Pointer<Void> Function(
     Pointer<Utf8> rootfsDir,
     Pointer<Utf8> dataDir,
     Pointer<Utf8> home,
+    Pointer<Utf8> dispatcher,
+    Pointer<Utf8> token,
     Pointer<Pointer<Utf8>> env,
     Int32 envCount,
     Pointer<Pointer<Utf8>> error);
@@ -55,6 +53,8 @@ typedef _init_dart = ish_session_ptr Function(
     Pointer<Utf8> rootfsDir,
     Pointer<Utf8> dataDir,
     Pointer<Utf8> home,
+    Pointer<Utf8> dispatcher,
+    Pointer<Utf8> token,
     Pointer<Pointer<Utf8>> env,
     int envCount,
     Pointer<Pointer<Utf8>> error);
@@ -63,14 +63,12 @@ typedef _run_c = Void Function(
     ish_session_ptr session,
     Pointer<Utf8> scriptB64,
     Int32 timeoutMs,
-    Pointer<NativeFunction<_ish_result_callback_c>> callback,
-    Pointer<Void> userData);
+    Pointer<ish_result> out);
 typedef _run_dart = void Function(
     ish_session_ptr session,
     Pointer<Utf8> scriptB64,
     int timeoutMs,
-    Pointer<NativeFunction<_ish_result_callback_c>> callback,
-    Pointer<Void> userData);
+    Pointer<ish_result> out);
 
 typedef _interrupt_c = Void Function(ish_session_ptr session);
 typedef _interrupt_dart = void Function(ish_session_ptr session);

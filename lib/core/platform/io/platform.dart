@@ -1,4 +1,5 @@
 import "dart:io";
+import "dart:isolate";
 
 import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart";
@@ -313,10 +314,18 @@ String? platformHostname() {
 
 /// iOS's rootfs unpack: iSH's `fakefsify` in-process, not the system `tar`
 /// (which iOS denies an app a child process to run). Converts the tarball into
-/// the fakefs SQLite layout the emulator reads. Called through FFI on the
-/// background isolate; `ishFakefsifyFn` is null off iOS, so this is never
-/// reached on a desktop or a browser.
+/// the fakefs SQLite layout the emulator reads. The FFI call blocks, so it
+/// runs on a fresh isolate rather than the UI one; `ishFakefsifyFn` is null
+/// off iOS, so this is never reached on a desktop or a browser.
 Future<ProcessResult> _ishFakefsify(String archive, String into) async {
+  if (!ishLinked) {
+    return ProcessResult(
+        1, 1, "", "iSH fakefsify is not linked into this build.");
+  }
+  return Isolate.run(() => _ishFakefsifyBody(archive, into));
+}
+
+ProcessResult _ishFakefsifyBody(String archive, String into) {
   final fn = ishFakefsifyFn;
   if (fn == null) {
     return ProcessResult(

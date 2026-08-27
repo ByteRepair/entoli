@@ -5,6 +5,7 @@ import "dart:isolate" show Isolate, ReceivePort, SendPort;
 
 import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart" show ValueListenable, ValueNotifier;
+import "package:uuid/uuid.dart";
 
 import "../../domain/shell.dart";
 import "ish_ffi.dart";
@@ -21,8 +22,8 @@ import "ish_ffi.dart";
 /// session map, each entry an iSH handle driven through `ish_ffi.dart` on a
 /// long-lived background isolate, so a guest command does not block the UI.
 ///
-/// The dispatcher script (`dispatcherScript` in `domain/shell.dart`) is shared
-/// with `LocalShell`: it runs inside the guest's own `/bin/sh`, so a `cd` or an
+/// The dispatcher script (`dispatcherScript` in `domain/shell.dart`) is passed
+/// to the C bridge and runs inside the guest's own `/bin/sh`, so a `cd` or an
 /// `export` in one emulated command sticks for the next, the same contract the
 /// host shell keeps. The marker the guest writes back is parsed for the exit
 /// code and the directory the shell is now in, the same way `LocalShell._Session`
@@ -67,7 +68,6 @@ class IshShell extends Shell {
         dataDir: dataDir,
         home: home,
         script: command,
-        cwd: cwd,
         timeout: timeout,
         environment: _compose(home: home, environment: environment),
       );
@@ -92,6 +92,7 @@ class IshShell extends Shell {
     Map<String, String>? environment,
   }) =>
       {
+        ...defaultShellEnvironment,
         "HOME": home,
         ..._environment(),
         ...?environment,
@@ -106,13 +107,12 @@ class _IshSession {
   final String _home;
 
   int? _sessionId;
-  bool _dead = true;
   Future<void> _queue = Future.value();
   _IshRun? _current;
 
   ShellRun start(String command, Duration timeout,
       {Map<String, String>? environment, bool restart = false}) {
-    final run = _IshRun(timeout);
+    final run = _IshRun(timeout, this);
     _queue = _queue.then((_) => _execute(run, command, timeout,
         environment: environment, restart: restart));
     return run;
@@ -125,7 +125,7 @@ class _IshSession {
     Map<String, String>? environment,
     bool restart = false,
   }) async {
-    if (restart || _dead || _sessionId == null) {
+    if (restart || _sessionId == null) {
       try {
         _sessionId = await _IshIsolate.instance.init(
           rootfsDir: _shell.rootfsDir,
@@ -133,7 +133,6 @@ class _IshSession {
           home: _home,
           env: _shell._compose(home: _home, environment: environment),
         );
-        _dead = false;
         _shell._cwds[_cwdPath]?.value = _cwdPath;
       } catch (e) {
         run.state.complete(ShellResult.failed(
@@ -160,10 +159,9 @@ class _IshSession {
     } catch (e) {
       _current = null;
       run.state.timeoutTimer?.cancel();
-      _dead = true;
+      _sessionId = null;
       run.state.complete(ShellResult.failed(
-          "An error occurred while executing the command: $e",
-          output: run.state.output));
+          "An error occurred while executing the command: $e"));
     }
   }
 
@@ -181,11 +179,9 @@ class _IshSession {
     final id = _sessionId;
     if (id != null) _IshIsolate.instance.destroy(id);
     _sessionId = null;
-    _dead = true;
   }
 
   Future<void> close() async {
-    _dead = true;
     final run = _current;
     _current = null;
     if (run != null && !run.state.done.isCompleted) {
@@ -193,7 +189,7 @@ class _IshSession {
       run.state.escalateTimer?.cancel();
       run.state.complete(ShellResult(
         returnCode: -1,
-        output: run.state.output,
+        output: "",
         exceptionInfo: "The iSH shell was restarted while the command was running.",
       ));
     }
@@ -209,8 +205,6 @@ class _IshRunState {
   bool interrupted = false;
   bool byTimeout = false;
   final Completer<ShellResult> done = Completer();
-  final List<String> chunks = [];
-  String get output => chunks.join("");
   void complete(ShellResult result) {
     if (!done.isCompleted) done.complete(result);
   }
@@ -220,16 +214,14 @@ class _IshRunState {
 }
 
 class _IshRun implements ShellRun {
-  _IshRun(this.timeout) : state = _IshRunState(timeout);
+  _IshRun(this.timeout, this._session) : state = _IshRunState(timeout);
   final Duration timeout;
+  final _IshSession _session;
   final _IshRunState state;
   @override
   Future<ShellResult> get result => state.done.future;
   @override
-  Future<void> kill() async {
-    state.interrupted = true;
-    state.byTimeout = false;
-  }
+  Future<void> kill() async => _session._interrupt(this, byTimeout: false);
 }
 
 class _IshOneShotRun implements ShellRun {
@@ -238,7 +230,6 @@ class _IshOneShotRun implements ShellRun {
     required this.dataDir,
     required this.home,
     required this.script,
-    required this.cwd,
     required this.timeout,
     required this.environment,
   }) {
@@ -249,53 +240,50 @@ class _IshOneShotRun implements ShellRun {
   final String dataDir;
   final String home;
   final String script;
-  final String cwd;
   final Duration timeout;
   final Map<String, String> environment;
 
   @override
   late final Future<ShellResult> result;
-  bool _killed = false;
+  int? _sessionId;
 
   @override
-  Future<void> kill() async => _killed = true;
+  Future<void> kill() async {
+    final id = _sessionId;
+    if (id != null) _IshIsolate.instance.interrupt(id);
+  }
 
   Future<ShellResult> _run() async {
     if (!ishLinked) {
       return const ShellResult.failed(
           "The iSH shell is not available on this platform.");
     }
-    final id = await _IshIsolate.instance.init(
+    _sessionId = await _IshIsolate.instance.init(
       rootfsDir: rootfsDir,
       dataDir: dataDir,
       home: home,
       env: environment,
     );
     final scriptB64 = base64.encode(utf8.encode(script));
-    final timer = Timer(timeout, () => _IshIsolate.instance.interrupt(id));
+    final timer = Timer(timeout, () => _IshIsolate.instance.interrupt(_sessionId!));
     try {
       final res = await _IshIsolate.instance.run(
-        sessionId: id,
+        sessionId: _sessionId!,
         scriptB64: scriptB64,
         timeout: timeout,
       );
-      if (_killed) {
+      if (!timer.isActive) {
         return ShellResult(
           returnCode: -1,
           output: res.output,
-          exceptionInfo: "The command was interrupted and killed.",
+          exceptionInfo: "The command timed out after ${timeout.inSeconds}s. "
+              "Anything it printed before that is above.",
         );
       }
-      if (timer.isActive) return res;
-      return ShellResult(
-        returnCode: -1,
-        output: res.output,
-        exceptionInfo: "The command timed out after ${timeout.inSeconds}s. "
-            "Anything it printed before that is above.",
-      );
+      return res;
     } finally {
       timer.cancel();
-      _IshIsolate.instance.destroy(id);
+      _IshIsolate.instance.destroy(_sessionId!);
     }
   }
 }
@@ -340,12 +328,15 @@ class _IshIsolate {
   }) async {
     if (!ishLinked) return -1;
     await _ensure();
+    final token = const Uuid().v4();
+    final dispatcher = dispatcherScript(token);
     final replyId = _nextReplyId++;
     final reply = Completer<dynamic>();
     _pending[replyId] = reply;
     final sessionId = _nextReplyId++;
     _sendPort!.send([
       _kInit, replyId, sessionId, rootfsDir, dataDir, home,
+      dispatcher, token,
       env.entries.map((e) => "${e.key}=${e.value}").toList(),
     ]);
     final error = await reply.future as String?;
@@ -407,7 +398,9 @@ class _IshIsolate {
           final rootfsDir = msg[3] as String;
           final dataDir = msg[4] as String;
           final home = msg[5] as String;
-          final env = msg[6] as List;
+          final dispatcher = msg[6] as String;
+          final token = msg[7] as String;
+          final env = msg[8] as List;
           final initFn = ishInitFn;
           if (initFn == null) {
             main.send([_kReply, replyId, "iSH is not linked", null]);
@@ -423,6 +416,8 @@ class _IshIsolate {
             rootfsDir.toNativeUtf8(),
             dataDir.toNativeUtf8(),
             home.toNativeUtf8(),
+            dispatcher.toNativeUtf8(),
+            token.toNativeUtf8(),
             envPtrs,
             env.length,
             errPtr,
@@ -452,12 +447,18 @@ class _IshIsolate {
             return;
           }
           final scriptPtr = scriptB64.toNativeUtf8();
-          // The bridge posts the result through a callback. A synchronous
-          // bridge fills a struct the isolate reads back; an async one posts
-          // a _kReply once the marker lands. The contract is the same.
           final result = calloc<ish_result>();
-          runFn(handle, scriptPtr, timeoutMs, nullptr, nullptr);
+          runFn(handle, scriptPtr, timeoutMs, result);
           final shellResult = result.ref.toShellResult();
+          if (result.ref.output.address != 0) {
+            calloc.free(result.ref.output);
+          }
+          if (result.ref.cwd.address != 0) {
+            calloc.free(result.ref.cwd);
+          }
+          if (result.ref.exception.address != 0) {
+            calloc.free(result.ref.exception);
+          }
           calloc.free(scriptPtr);
           calloc.free(result);
           main.send([_kReply, replyId, null, shellResult]);

@@ -53,14 +53,6 @@ typedef struct {
     const char *exception;  // NUL-terminated, or null where there was none.
 } ish_result;
 
-// Dart passes a callback that receives the result struct. The bridge calls it
-// once ish_session_run's guest execution returns.
-typedef void (*ish_result_cb)(ish_result result, void *user_data);
-
-// The environment as Dart sends it: a flat array of "KEY=VALUE" C strings,
-// NUL-terminated, with a count. iSH's guest gets these as its initial
-// environment below the dispatcher's own.
-
 // ---- lifecycle ----
 
 // Boot iSH's kernel once. Idempotent: the second call is a no-op. Called from
@@ -96,6 +88,8 @@ ish_session *ish_session_init(
     const char *rootfs_dir,
     const char *data_dir,
     const char *home,
+    const char *dispatcher,
+    const char *token,
     const char **env,
     int32_t env_count,
     const char **error);
@@ -103,16 +97,13 @@ ish_session *ish_session_init(
 // Run one command in the session's persistent guest shell. The script is
 // already base64-encoded — the bridge writes it as one line to the guest's
 // stdin, the dispatcher decodes and evals it, and writes a marker line back.
-// Blocks until the marker lands or the timeout expires.
-//
-// interrupt is called from Dart's kill(): it delivers a SIGINT to the guest,
-// which the dispatcher's trap turns into a 130 while the shell survives.
+// Blocks until the marker lands or the timeout expires. The result is written
+// into *out, which the caller allocates.
 void ish_session_run(
     ish_session *session,
     const char *script_b64,
     int32_t timeout_ms,
-    ish_result_cb callback,
-    void *user_data);
+    ish_result *out);
 
 void ish_session_interrupt(ish_session *session);
 

@@ -239,6 +239,21 @@ class _Unavailable implements ShellRun {
   Future<void> kill() async {}
 }
 
+/// What mini-swe-agent's own config sets: anything that would otherwise wait
+/// for a keypress or redraw a progress bar into the transcript. `BASH_ENV`
+/// is the empty one because a non-interactive shell sources it, and this
+/// shell answers to nothing but its queue.
+const defaultShellEnvironment = {
+  "PAGER": "cat",
+  "MANPAGER": "cat",
+  "GIT_PAGER": "cat",
+  "LESS": "-R",
+  "PIP_PROGRESS_BAR": "off",
+  "TQDM_DISABLE": "1",
+  "TERM": "dumb",
+  "BASH_ENV": "",
+};
+
 /// The persistent-shell dispatcher script, templated on a per-session token.
 /// Both the host shell ([LocalShell]) and the in-process emulator
 /// ([IshShell]) use it, which is why it lives here: the contract — a Ctrl-C

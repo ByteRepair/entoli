@@ -26,23 +26,8 @@
 // ---- internal state ----
 
 static bool ish_booted = false;
-static char *g_last_output = NULL;
-static char *g_last_cwd = NULL;
 
 // ---- helpers ----
-
-// Generate a UUID v4 token, the way LocalShell's _Session does (uuid package).
-// iSH has no uuidlib; a cheap random one is enough — the marker only has to be
-// unique to the shell's life, not cryptographically unpredictable.
-static void make_token(char *out, size_t n) {
-    static const char hex[] = "0123456789abcdef";
-    for (size_t i = 0; i < n - 1; i++) {
-        // A deterministic-ish scramble; good enough to not collide within a
-        // session. Real randomness is iSH's own job if it ever needs it.
-        out[i] = hex[(rand() >> (i % 16 * 2)) & 0xf];
-    }
-    out[n - 1] = '\0';
-}
 
 // Parse the dispatcher's marker line: "@@E<token> rc=<int> cwd=<path>@@".
 // Returns true and fills rc/cwd on a match, false where the line is not one.
@@ -81,6 +66,8 @@ ish_session *ish_session_init(
     const char *rootfs_dir,
     const char *data_dir,
     const char *home,
+    const char *dispatcher,
+    const char *token,
     const char **env,
     int32_t env_count,
     const char **error)
@@ -94,7 +81,7 @@ ish_session *ish_session_init(
         *error = "out of memory";
         return NULL;
     }
-    make_token(s->token, sizeof(s->token));
+    strncpy(s->token, token, sizeof(s->token) - 1);
 
     // Bind the app's data directory into the guest at the same path. realfs is
     // the host POSIX filesystem type iSH registers; the app's own data dir is
@@ -122,17 +109,9 @@ ish_session *ish_session_init(
 
     // Start the persistent guest /bin/sh under the dispatcher. The argv is
     // [/bin/sh, -c, <dispatcher>], the same shape LocalShell builds. The
-    // dispatcher's stdin is the read end of the stdin pipe; its stdout is the
-    // write end of the stdout pipe; its stderr is dup'd onto stdout.
-    //
-    // iSH's exec is do_execve, which loads a guest ELF into a new task. The
-    // argv and envp are guest pointers built from the C strings we hold.
-    char *argv[] = {"/bin/sh", "-c", NULL, NULL};
-    // The dispatcher script is generated here to match domain/shell.dart's
-    // dispatcherScript(token). Kept as a literal so the two cannot drift.
-    // (It is templated on @TOKEN@ before being handed to /bin/sh -c.)
-    extern char *build_dispatcher(const char *token);
-    argv[2] = build_dispatcher(s->token);
+    // dispatcher script comes from domain/shell.dart's dispatcherScript(token),
+    // passed in here so the wire protocol has one source of truth.
+    char *argv[] = {"/bin/sh", "-c", (char *)dispatcher, NULL};
 
     // Build the guest environment: the app's variables over the guest's own.
     char **envp = calloc(env_count + 1, sizeof(char *));
@@ -146,7 +125,6 @@ ish_session *ish_session_init(
     s->task = task_create();
     if (!s->task) {
         *error = "failed to create the guest task";
-        free(argv[2]);
         free(envp);
         free(s);
         return NULL;
@@ -157,7 +135,6 @@ ish_session *ish_session_init(
     do_dup2(s->task, stdout_pipe[1], 2);
     do_execve(s->task, "/bin/sh", argv, envp);
 
-    free(argv[2]);
     free(envp);
     *error = NULL;
     return s;
@@ -167,8 +144,7 @@ void ish_session_run(
     ish_session *session,
     const char *script_b64,
     int32_t timeout_ms,
-    ish_result_cb callback,
-    void *user_data)
+    ish_result *out)
 {
     // Write the base64 line to the guest's stdin, followed by a newline. The
     // dispatcher reads one line at a time, so the newline is what makes the
@@ -179,14 +155,8 @@ void ish_session_run(
 
     // Read from the guest's stdout until the marker lands. The output before
     // the marker is the command's; the marker line carries rc and cwd.
-    //
-    // iSH's read is event-driven through its poll loop. This loop pumps it
-    // until the marker is seen or the timeout expires. A real implementation
-    // uses iSH's async I/O; the structure here is the contract.
     char buf[65536];
     size_t total = 0;
-    // Pump the guest until the marker for this session's token appears.
-    // (task_run_current advances the guest; do_read pulls from the pipe.)
     bool done = false;
     int32_t rc = -1;
     const char *cwd = NULL;
@@ -200,37 +170,25 @@ void ish_session_run(
         const char *parsed_cwd;
         if (parse_marker(buf, session->token, &parsed_rc, &parsed_cwd)) {
             rc = parsed_rc;
-            // The cwd is not NUL-terminated in buf; copy it out.
             size_t cwd_len = strstr(parsed_cwd, "@@") - parsed_cwd;
-            free(g_last_cwd);
-            g_last_cwd = malloc(cwd_len + 1);
-            memcpy(g_last_cwd, parsed_cwd, cwd_len);
-            g_last_cwd[cwd_len] = '\0';
-            cwd = g_last_cwd;
-            // The output is everything before the marker line.
-            const char *marker_start = buf;
-            // Find the newline that begins the marker.
-            // (parse_marker already located it via the \n prefix.)
+            cwd = malloc(cwd_len + 1);
+            memcpy((void *)cwd, parsed_cwd, cwd_len);
+            ((char *)cwd)[cwd_len] = '\0';
             done = true;
         }
     }
 
-    // Free the previous output and hold this one for the callback.
-    free(g_last_output);
-    // The output is buf up to the marker, or all of buf where no marker was
-    // found (a killed or timed-out command).
     size_t out_len = done ? (size_t)(strstr(buf, "\n@@E") - buf) : total;
-    g_last_output = malloc(out_len + 1);
-    memcpy(g_last_output, buf, out_len);
-    g_last_output[out_len] = '\0';
+    char *output = malloc(out_len + 1);
+    memcpy(output, buf, out_len);
+    output[out_len] = '\0';
 
-    ish_result result = {
+    *out = (ish_result){
         .return_code = rc,
-        .output = g_last_output,
+        .output = output,
         .cwd = cwd,
         .exception = done ? NULL : "The command did not complete.",
     };
-    callback(result, user_data);
 }
 
 void ish_session_interrupt(ish_session *session) {
@@ -245,27 +203,7 @@ void ish_session_destroy(ish_session *session) {
     if (session->task) {
         do_kill(session->task, session->task->pid, SIGKILL_);
     }
-    free(g_last_output);
-    g_last_output = NULL;
-    free(g_last_cwd);
-    g_last_cwd = NULL;
     free(session);
-}
-
-// Build the dispatcher script, templated on the session's token. A literal
-// copy of domain/shell.dart's _dispatcherTemplate, so the wire protocol the
-// guest runs is the one the Dart side parses.
-char *build_dispatcher(const char *token) {
-    const char *tmpl =
-        "trap 'true' INT\n"
-        "trap 'printf \"\\n@@E%s rc=%s cwd=%s@@\\n\" \"$?\" \"$(pwd)\"' EXIT\n"
-        "while IFS= read -r line; do\n"
-        "  eval \"$(printf '%%s' \"$line\" | base64 -d)\" </dev/null 2>&1\n"
-        "  printf '\\n@@E%s rc=%s cwd=%s@@\\n' \"$?\" \"$(pwd)\"\n"
-        "done\n";
-    char *out = malloc(256);
-    snprintf(out, 256, tmpl, token, "%s", "%s", token, "%s", "%s");
-    return out;
 }
 
 // Convert a tarball into iSH's fakefs layout, in-process. iSH's own
