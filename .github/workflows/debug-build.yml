@@ -12,7 +12,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  android-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - id: tools
+        uses: ./.github/actions/bundled-tools
+        with:
+          stage: false
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: bundled-tools
+          path: tool/android/dist/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   android:
+    needs: android-tools
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -27,7 +46,14 @@ jobs:
 
       - uses: ./.github/actions/flutter-setup
 
-      - uses: ./.github/actions/bundled-tools
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: bundled-tools
+          path: tool/android/dist
+
+      - name: Stage the tools into the APK's native libraries
+        shell: bash
+        run: tool/android/stage.sh
 
       # Every APK is otherwise version code 1, Flutter's default where pubspec
       # names no build number, and an installer refuses to replace an installed

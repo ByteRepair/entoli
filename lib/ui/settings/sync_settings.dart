@@ -1,20 +1,23 @@
 import "dart:async";
+
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:mobile_scanner/mobile_scanner.dart";
+import "package:qr_flutter/qr_flutter.dart";
 
 import "../../data/sync/sync_hub.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
-import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
-/// The Sync category: this device's identity and name, the relay and TURN
-/// settings for reaching peers over the internet, and the list of paired
-/// devices. Shown on every platform — a browser pairs as the joiner side, so
-/// the identity and the paired-device list are still its business.
+/// The Sync category: this device's identity and name, then how to pair a new
+/// device, the paired-device list, and the relay and TURN settings for reaching
+/// peers over the internet. Shown on every platform — a browser pairs as the
+/// joiner side, so the identity and the paired-device list are still its
+/// business.
 class SyncSection extends ConsumerWidget {
   const SyncSection({super.key});
 
@@ -53,17 +56,18 @@ class SyncSection extends ConsumerWidget {
           ),
         ),
         Divider(),
-        _RelaySection(settings: settings),
-        Divider(),
-        _TurnSection(settings: settings),
+        ValueListenableBuilder(
+          valueListenable: hub.pairing,
+          builder: (context, pairing, _) => pairing == null
+              ? _PairingControls(hub: hub)
+              : _PairingStatus(pairing: pairing, hub: hub),
+        ),
         Divider(),
         _PairedDevices(hub: hub),
         Divider(),
-        ValueListenableBuilder(
-          valueListenable: hub.pairing,
-          builder: (context, pairing, _) =>
-              _PairingControls(hub: hub, pairing: pairing),
-        ),
+        _RelaySection(settings: settings),
+        Divider(),
+        _TurnSection(settings: settings),
       ],
     );
   }
@@ -210,8 +214,7 @@ class _PairedDevices extends ConsumerWidget {
         SectionHeader(
           "Paired devices",
           description: peers.isEmpty
-              ? "No devices paired yet. Open a pairing window below and "
-                  "paste the code into another device."
+              ? "No devices paired yet. Pair a new device above."
               : null,
         ),
         for (final peer in peers)
@@ -220,15 +223,12 @@ class _PairedDevices extends ConsumerWidget {
             onRevoke: () => hub.revoke(peer.deviceId),
             onConnect: () => hub.connect(peer.deviceId),
             onDisconnect: () => hub.disconnect(peer.deviceId),
-            onFailed: (error) => _say(context, error),
+            onFailed: (error) => say(context, error),
           ),
       ],
     );
   }
 }
-
-void _say(BuildContext context, Object error) => ScaffoldMessenger.of(context)
-    .showSnackBar(SnackBar(content: Text(error.toString())));
 
 class _PairedDeviceRow extends StatelessWidget {
   const _PairedDeviceRow({
@@ -326,11 +326,14 @@ class _PairedDeviceRow extends StatelessWidget {
   }
 }
 
+/// The buttons that start a pairing, plus the paste-a-code field. The two
+/// pairing flows push their own pages; nothing renders inline here. Drawn only
+/// while no pairing is in flight — the parent swaps in `_PairingStatus` once
+/// one is.
 class _PairingControls extends ConsumerStatefulWidget {
-  const _PairingControls({required this.hub, required this.pairing});
+  const _PairingControls({required this.hub});
 
   final SyncHub hub;
-  final PairingActivity? pairing;
 
   @override
   ConsumerState<_PairingControls> createState() => _PairingControlsState();
@@ -338,18 +341,15 @@ class _PairingControls extends ConsumerStatefulWidget {
 
 class _PairingControlsState extends ConsumerState<_PairingControls> {
   final _joinController = TextEditingController();
-  final _busy = ValueNotifier(false);
 
   @override
   void dispose() {
     _joinController.dispose();
-    _busy.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final pairing = widget.pairing;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -357,118 +357,122 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
           "Pair a new device",
           description: kIsWeb
               ? "A browser can only join: paste a code from another device, "
-                  "or set a relay URL above and open a window over it."
+                  "or set a relay URL below and open a window over it."
               : "Open a window and show the code, or paste a code "
                   "from another device.",
         ),
-        if (pairing == null) ...[
-          ValueListenableBuilder<bool>(
-            valueListenable: _busy,
-            builder: (context, busy, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      FilledButton(
-                        onPressed: busy ? null : _openWindow,
-                        child: const Text("Open pairing window"),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.tonal(
-                        onPressed: busy ? null : _createInvite,
-                        child: const Text("Manual invite"),
-                      ),
-                    ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: _openWindow,
+                child: const Text("Open pairing window"),
+              ),
+              FilledButton.tonal(
+                onPressed: _createInvite,
+                child: const Text("Manual invite"),
+              ),
+            ],
+          ),
+        ),
+        LabelledField(
+          label: "Or paste a pairing code",
+          child: Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _joinController,
+                  decoration: const InputDecoration(
+                    hintText: "entoli-pair:…",
+                    isDense: true,
                   ),
+                  onFieldSubmitted: (_) => _join(),
                 ),
-                LabelledField(
-                  label: "Or paste a pairing code",
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _joinController,
-                          decoration: const InputDecoration(
-                            hintText: "entoli-pair:…",
-                            isDense: true,
-                          ),
-                          onFieldSubmitted: (_) => _join(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: busy ? null : _join,
-                        child: const Text("Pair"),
-                      ),
-                    ],
-                  ),
+              ),
+              if (defaultTargetPlatform == TargetPlatform.android) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: "Scan QR code",
+                  icon: const Icon(Icons.qr_code_scanner),
+                  onPressed: _scan,
                 ),
               ],
-            ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _join,
+                child: const Text("Pair"),
+              ),
+            ],
           ),
-        ] else ...[
-          _PairingProgress(pairing: pairing, hub: widget.hub),
-        ],
+        ),
       ],
     );
   }
 
-  Future<void> _openWindow() =>
-      whileBusy(context, _busy, widget.hub.startPairingWindow);
-
-  Future<void> _createInvite() => whileBusy(context, _busy, () async {
-        final blob = await widget.hub.createManualInvite();
-        if (mounted) await _showBlob(context, blob);
-      });
-
-  Future<void> _join() {
-    final text = _joinController.text.trim();
-    if (text.isEmpty) return Future.value();
-    return whileBusy(context, _busy, () async {
-      final reply = await widget.hub.pairWith(text);
-      if (reply != null && mounted) {
-        await _showBlob(context, reply, isAnswer: true);
+  Future<void> _openWindow() async {
+    try {
+      await widget.hub.startPairingWindow();
+      if (mounted) {
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => PairingWindowPage(hub: widget.hub),
+        ));
       }
-    });
+    } catch (e) {
+      if (mounted) say(context, e);
+    }
   }
 
-  Future<void> _showBlob(BuildContext context, String blob,
-      {bool isAnswer = false}) async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(isAnswer ? "Paste this on the other device" : "Pairing invite"),
-        content: SingleChildScrollView(
-          child: SelectableText(
-            blob,
-            style: const TextStyle(fontFamily: "monospace", fontSize: 12),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              copyToClipboard(context, blob, said: "Pairing code copied");
-              Navigator.pop(context);
-            },
-            child: const Text("Copy and close"),
-          ),
-        ],
-      ),
+  Future<void> _createInvite() async {
+    try {
+      final blob = await widget.hub.createManualInvite();
+      if (mounted) {
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => ManualInvitePage(hub: widget.hub, offer: blob),
+        ));
+      }
+    } catch (e) {
+      if (mounted) say(context, e);
+    }
+  }
+
+  Future<void> _join() async {
+    final text = _joinController.text.trim();
+    if (text.isEmpty) return;
+    try {
+      // A manual invite's answer comes back as a non-null reply; `pairWith`
+      // completes the pair from this end, and the activity notifier swaps the
+      // status view in — no acknowledgment of our own is needed.
+      await widget.hub.pairWith(text);
+    } catch (e) {
+      if (mounted) say(context, e);
+    }
+  }
+
+  Future<void> _scan() async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const _ScanQrPage()),
     );
+    if (scanned != null && scanned.isNotEmpty) {
+      _joinController.text = scanned;
+      _join();
+    }
   }
 }
 
-class _PairingProgress extends ConsumerWidget {
-  const _PairingProgress({required this.pairing, required this.hub});
+/// The non-page status: a pairing the joiner started by pasting a code (LAN or
+/// relay) shows its SAS confirm inline, since the joiner did not open a window
+/// page. The window host's pairing is shown on the window page itself.
+class _PairingStatus extends StatelessWidget {
+  const _PairingStatus({required this.pairing, required this.hub});
 
   final PairingActivity pairing;
   final SyncHub hub;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -478,22 +482,8 @@ class _PairingProgress extends ConsumerWidget {
             PairingStage.connecting => const Text("Waiting for a device…"),
             PairingStage.confirming => _SasConfirm(pairing: pairing, hub: hub),
             PairingStage.done => const Text("Paired."),
-            PairingStage.failed => Text("Failed: ${pairing.error ?? "unknown"}",
-                style: TextStyle(color: theme.colorScheme.error)),
+            PairingStage.failed => _pairingFailed(context, pairing.error),
           },
-          if (pairing.qr != null && pairing.stage == PairingStage.connecting) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                border: Border.all(color: theme.dividerColor),
-              ),
-              child: SelectableText(
-                pairing.qr!,
-                style: const TextStyle(fontFamily: "monospace", fontSize: 11),
-              ),
-            ),
-          ],
           if (pairing.stage != PairingStage.done &&
               pairing.stage != PairingStage.confirming)
             TextButton(
@@ -501,6 +491,266 @@ class _PairingProgress extends ConsumerWidget {
               child: const Text("Cancel"),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// The host's pairing window, as its own page: a QR and the selectable code,
+/// and the SAS confirm once a device connects. Going back cancels the window.
+class PairingWindowPage extends StatelessWidget {
+  const PairingWindowPage({super.key, required this.hub});
+
+  final SyncHub hub;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      // Back cancels: leaving the page is giving up on the window, and an open
+      // window left behind would hold a server and a relay room for nobody.
+      // `onPopInvokedWithResult` runs before dispose, when the tree is not
+      // locked, so the notifier's listeners can hear the cancel.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        hub.cancelPairingWindow();
+        Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text("Pairing window")),
+        body: ValueListenableBuilder<PairingActivity?>(
+          valueListenable: hub.pairing,
+          builder: (context, pairing, _) {
+            if (pairing == null) {
+              return const Center(child: Text("Pairing cancelled."));
+            }
+            return switch (pairing.stage) {
+              PairingStage.confirming =>
+                _SasConfirm(pairing: pairing, hub: hub),
+              PairingStage.done => const Center(child: Text("Paired.")),
+              PairingStage.failed => _pairingFailed(context, pairing.error),
+              PairingStage.connecting => _PairingCodeBody(activity: pairing),
+            };
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _PairingCodeBody extends StatelessWidget {
+  const _PairingCodeBody({required this.activity});
+
+  final PairingActivity activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final code = activity.qr;
+    if (code == null) {
+      return const Center(child: Text("Waiting for a route…"));
+    }
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const Text(
+          "Show this code to the other device, or have it scan the QR. "
+          "Going back cancels.",
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: QrImageView(
+            data: code,
+            size: 280,
+            backgroundColor: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _CodeBox(context, code),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton.icon(
+            icon: const Icon(Icons.copy_outlined),
+            label: const Text("Copy code"),
+            onPressed: () => copyToClipboard(context, code,
+                said: "Pairing code copied"),
+          ),
+        ),
+        if (activity.code != null) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              "One-time code: ${activity.code}",
+              style: const TextStyle(fontFamily: "monospace", fontSize: 16,
+                  letterSpacing: 2),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Manual invite's own page: the offer blob is too large for a reliable QR
+/// (it carries a full SDP offer), so it is selectable text only. The invited
+/// device pastes our offer on its end, answers, and pastes the reply back here.
+/// Going back cancels the pending invite.
+class ManualInvitePage extends StatefulWidget {
+  const ManualInvitePage({super.key, required this.hub, required this.offer});
+
+  final SyncHub hub;
+  final String offer;
+
+  @override
+  State<ManualInvitePage> createState() => _ManualInvitePageState();
+}
+
+class _ManualInvitePageState extends State<ManualInvitePage> {
+  final _replyController = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _replyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      // Back cancels: `cancelPairingWindow` drops the pending manual invite so
+      // the held peer connection is not left open for nobody. Done here rather
+      // than in `dispose` so the notifier's listeners hear it before the tree
+      // locks.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        widget.hub.cancelManualInvite();
+        Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text("Manual invite")),
+        body: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const Text(
+              "Manual invite works without a relay or local network. Send this "
+              "code to the other device any way you like; it replies with a "
+              "second code you paste back here. Going back cancels.",
+            ),
+            const SizedBox(height: 16),
+            _CodeBox(context, widget.offer),
+            const SizedBox(height: 12),
+            Center(
+              child: TextButton.icon(
+                icon: const Icon(Icons.copy_outlined),
+                label: const Text("Copy invite"),
+                onPressed: () => copyToClipboard(context, widget.offer,
+                    said: "Invite code copied"),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text("Paste the other device's reply here:"),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _replyController,
+              minLines: 3,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                hintText: "entoli-pair:…",
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _busy ? null : _complete,
+              child: const Text("Pair"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _complete() async {
+    final text = _replyController.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await widget.hub.pairWith(text);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) say(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
+
+/// The bordered monospace block a pairing code or manual invite is shown in,
+/// selectable so it can be copied by hand. Used by the window page and the
+/// manual invite page, which were two copies of the same container.
+// ignore: non_constant_identifier_names
+Widget _CodeBox(BuildContext context, String text) => Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).dividerColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SelectableText(
+        text,
+        style: const TextStyle(fontFamily: "monospace", fontSize: 11),
+      ),
+    );
+
+/// The failure row, selectable so the error can be copied into an issue.
+/// Drawn by both the window page and the inline status, so the styling lives
+/// once rather than twice.
+Widget _pairingFailed(BuildContext context, String? error) => Padding(
+      padding: const EdgeInsets.all(24),
+      child: SelectableText(
+        "Failed: ${error ?? "unknown"}",
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
+    );
+
+/// The camera scanner for a pairing code, Android-only by the button that
+/// opens it. Pops with the scanned text on a successful detect.
+class _ScanQrPage extends StatefulWidget {
+  const _ScanQrPage();
+
+  @override
+  State<_ScanQrPage> createState() => _ScanQrPageState();
+}
+
+class _ScanQrPageState extends State<_ScanQrPage> {
+  final _controller = MobileScannerController();
+  bool _done = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Scan QR code")),
+      body: MobileScanner(
+        controller: _controller,
+        onDetect: (capture) {
+          if (_done) return;
+          for (final barcode in capture.barcodes) {
+            final value = barcode.displayValue ?? barcode.rawValue;
+            if (value != null && value.isNotEmpty) {
+              _done = true;
+              _controller.stop();
+              Navigator.of(context).pop(value);
+              return;
+            }
+          }
+        },
       ),
     );
   }

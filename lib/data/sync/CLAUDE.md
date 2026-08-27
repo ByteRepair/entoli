@@ -99,11 +99,17 @@ exposes `sendJson` / `jsonIncoming` for the NDJSON control protocol and
 1. **Same-LAN** (`signaling_server.dart`): HTTP server binding `0.0.0.0` on an
    ephemeral port, serving CORS + Private-Network-Access preflights. QR
    carries `{hosts, port, one-time code, psk}`. The joiner POSTs its offer;
-   the host answers in the same response.
+   the host answers in the same response. The HTTP is cleartext on a direct
+   IP and always is: the server only ever sees the SDP blobs (opaque without
+   the keys) and a one-time code, the pairing secret travels out-of-band, and
+   DTLS + the app-layer AEAD encrypt everything after. Android 9+ blocks
+   cleartext by default, which hung pairing at the signaling step — the
+   joiner's POST never reached the host — so the manifest carries
+   `usesCleartextTraffic` for it.
 2. **Internet relay** (`relay_signaler.dart`): both sides dial a user-supplied
    `wss://` URL and join the same room — derived from the pairing secret's
    SHA-256, so the relay learns nothing. A reference relay is
-   `tool/sync_relay_server.dart`.
+   `tool/sync/sync_relay_server.dart`.
 3. **Manual copy-paste**: the SDP rides in the pairing blob itself, pasted
    through a human. Universal fallback; the only route that works with no
    network beyond the data channel's own ICE.
@@ -417,7 +423,13 @@ back to the first characters of the key fingerprint. A user's own name for it
 wins over both. The hostname comes in as a constructor argument rather than
 being read in the hub: `Platform.localHostname` is `dart:io`'s, and a browser
 has no name of its own to give — `location.hostname` is the server the page
-came from, which is a different machine entirely.
+came from, which is a different machine entirely. On Android
+`Platform.localHostname` is `localhost`, so the system device name is read
+through `agent_chat/device` instead — `Settings.Global device_name`, the name
+the user set in system settings, falling back to `Build.MODEL`. `minSdk` is 26
+and the setting has been there since 24, so no fallback path is needed. The
+read is async because it crosses a method channel, which is why
+`deviceHostname` is a `Future<String?>` and `main` awaits it.
 
 ## Being dialled again
 
@@ -478,6 +490,24 @@ every one of those buttons goes through a catch that reports.
 
 Revoking asks first, and says what it does not do: the other device keeps this
 one until somebody revokes there too.
+
+## The pairing flows as pages
+
+"Open pairing window" and "Manual invite" each push their own page rather than
+rendering inline, and going back cancels. The window page shows the
+`entoli-pair:` code as a QR (`qr_flutter`) and selectable text; the SAS
+confirm renders on the same page once a device connects. Manual invite's offer
+blob carries a full SDP offer and is too large for a reliable QR, so that page
+is selectable text only, with a field for the reply the other device sends
+back. Back cancels through a `PopScope` rather than `dispose`: `dispose` runs
+with the widget tree locked, and the activity notifier's
+`ValueListenableBuilder` would otherwise be told to rebuild mid-unmount. The
+invite page calls `cancelManualInvite` — which closes the held `RtcLink` as
+well as dropping the pending reference — rather than `cancelPairingWindow`,
+since a manual invite never opened a window. The window page cancels its own
+window the same way. The paste-a-code field has a camera-scan button on
+Android only (`mobile_scanner`); the manifest carries `CAMERA` and a
+non-required camera feature for it.
 
 ## Secrets at rest
 

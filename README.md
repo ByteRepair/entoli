@@ -59,8 +59,8 @@ device with no rootfs installed there is no git.
 Build them once per ABI, then stage them:
 
 ```sh
-ANDROID_NDK_ROOT=$HOME/.android/ndk/<version> tool/bundle/build.sh arm64-v8a
-tool/bundle/stage.sh
+ANDROID_NDK_ROOT=$HOME/.android/ndk/<version> tool/android/build.sh arm64-v8a
+tool/android/stage.sh
 ```
 
 - `arm64-v8a` is what a phone wants; add `armeabi-v7a` and `x86_64` for
@@ -73,8 +73,8 @@ tool/bundle/stage.sh
   `libggml-vulkan.so` is 36 MB of it — and a 32-bit phone cannot map a model
   anyway, x86_64 Android being an emulator.
 - The NPU wants Qualcomm's Hexagon SDK, and a build without it is a build
-  without the NPU. `tool/android-setup.sh` fetches it into
-  `tool/bundle/toolchains/`, checked against the SHA-256 pinned in
+  without the NPU. `tool/android/setup.sh` fetches it into
+  `tool/android/toolchains/`, checked against the SHA-256 pinned in
   `versions.sh`, and `build.sh` picks it up from there. Only the NPU is gated on
   it: the build always carries the CPU and the Vulkan GPU backend, so skipping
   the fetch still accelerates most phones, and the settings page says the device
@@ -89,9 +89,9 @@ server, and which cannot run a Linux at all.
 
 #### Adding another precompiled tool
 
-1. Pin the source in `tool/bundle/versions.sh`; version, URL and SHA-256. That
+1. Pin the source in `tool/android/versions.sh`; version, URL and SHA-256. That
    file and the recipe are what the CI cache builds from.
-2. Add a step to `tool/bundle/build.sh` that builds it against the NDK toolchain
+2. Add a step to `tool/android/build.sh` that builds it against the NDK toolchain
    the script has already exported (`CC`, `AR`, `STRIP`, and a `CFLAGS` carrying
    API 26 and 16 KB page alignment), and strip the result into
    `$out/lib<name>.so`. Anything it links has to be built here too and linked
@@ -159,7 +159,7 @@ stubbed out via `dependency_overrides`, so it never enters the web bundle.
 
 ### AppImage
 
-`linux/packaging/make-appimage.sh` packages a `flutter build linux` bundle and
+`tool/linux/make-appimage.sh` packages a `flutter build linux` bundle and
 downloads `appimagetool` itself locally (pinned to a release, SHA-256 checked):
 
-    linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage
+    tool/linux/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage

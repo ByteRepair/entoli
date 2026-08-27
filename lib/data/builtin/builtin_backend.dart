@@ -19,6 +19,7 @@ import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/web_search.dart";
 import "../local/file_sub_agent_log.dart";
+import "../prompts/skill_package.dart";
 import "builtin_agent.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
@@ -327,6 +328,18 @@ class BuiltinBackend implements AgentBackend {
             return artifactId;
           }
           return store.createArtifact(chatId, resolved, project: project);
+        },
+        packageSkill: (path, name) async {
+          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+          final pkg = await packageSkillDirectory(config.fs, resolved, name);
+          final bytes = packageSkillBytes(pkg);
+          final installId = const Uuid().v4();
+          final stagingDir = config.skillStagingDir(chatId, installId, project: project);
+          await config.fs.directory(stagingDir).create(recursive: true);
+          await config.fs
+              .file(config.fs.path.join(stagingDir, "package.skill"))
+              .writeAsBytes(bytes);
+          return (installId: installId, name: pkg.name);
         },
       );
       _running.add(chatId, agent.cancel);

@@ -58,7 +58,7 @@ Keeping it off the web takes one deliberate piece of machinery.
 and that package declares a 14 MB WebAssembly build of onnxruntime as a
 web-platform asset. Plugin assets are not tree-shaken, so simply adding the
 dependency put 14 MB into a build that can never call it — measured: the web
-build went from 43 MB to 58 MB. `tool/sherpa_onnx_web_stub` is a local package
+build went from 43 MB to 58 MB. `tool/web/sherpa_onnx_web_stub` is a local package
 of the same name, overridden in `dependency_overrides`, holding the two members
 the web plugin registrant reaches for and no assets at all. Nothing on the web
 imports `package:sherpa_onnx`, so none of the real API is ever wanted.

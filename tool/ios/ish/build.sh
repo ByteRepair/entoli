@@ -3,12 +3,12 @@
 # producing an XCFramework the app links. iSH runs the whole guest in-process
 # (see ios/CLAUDE.md), so this is a library, not an executable the app spawns.
 #
-#   tool/bundle/ish/build.sh
+#   tool/ios/ish/build.sh
 #
 # Needs macOS and Xcode (xcrun, the iOS SDK). Produces, in dist/:
 #   IshCore.xcframework  — the emulator core + bridge, for device and sim.
 #
-# Not run by the app build, the way tool/bundle/build.sh is not: without it an
+# Not run by the app build, the way tool/android/build.sh is not: without it an
 # iOS build has no emulator to link. See "The iSH driver" in ios/CLAUDE.md.
 set -euo pipefail
 
@@ -21,7 +21,7 @@ jobs=${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc)}
 
 # Ensure the iSH submodule is checked out. A contributor or CI that cloned
 # without --recurse-submodules has an empty src/ here; init it shallowly so
-# the build is self-contained the way tool/bundle/build.sh is for Android.
+# the build is self-contained the way tool/android/build.sh is for Android.
 if [ ! -f "$src/kernel/calls.h" ]; then
     git submodule update --init --recursive --depth 1
 fi

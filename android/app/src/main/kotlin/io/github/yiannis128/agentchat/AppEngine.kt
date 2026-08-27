@@ -41,6 +41,7 @@ object AppEngine {
         // activity for the life of the process.
         IconChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         ThemeChannel.register(appContext, engine.dartExecutor.binaryMessenger)
+        DeviceChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         ForegroundWork.register(appContext, engine.dartExecutor.binaryMessenger)
         FilesChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         AssistantChannel.register(engine.dartExecutor.binaryMessenger)

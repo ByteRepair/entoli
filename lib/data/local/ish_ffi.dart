@@ -4,7 +4,7 @@ import "dart:io" show Platform;
 import "package:ffi/ffi.dart";
 
 import "../../domain/shell.dart";
-// The dart:ffi bindings to the iSH bridge (tool/bundle/ish/ish_bridge.c). The
+// The dart:ffi bindings to the iSH bridge (tool/ios/ish/ish_bridge.c). The
 // bridge runs the iSH emulator core in-process — see ios/CLAUDE.md for why a
 // child-process shell cannot work on iOS.
 //
@@ -104,7 +104,7 @@ void _resolve() {
 }
 
 /// Whether the iSH bridge is linked into this build. Only iOS, where the
-/// XCFramework from tool/bundle/ish/build.sh is linked; false everywhere else,
+/// XCFramework from tool/ios/ish/build.sh is linked; false everywhere else,
 /// so the FFI lookups are never made and the symbol is never touched.
 bool get ishLinked => Platform.isIOS;
 

@@ -5,7 +5,7 @@ publish_to: "none"
 # No `+build` suffix: release-build.yml derives the Android version code from
 # these three numbers, and a second number to bump is a second number to
 # forget.
-version: 1.0.0
+version: 1.1.0
 
 environment:
   sdk: ^3.12.2
@@ -86,10 +86,10 @@ dependencies:
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a
 # web-platform asset. Plugin assets are not tree-shaken, so a web build that
-# can never run voice mode would carry all of it. See tool/sherpa_onnx_web_stub.
+# can never run voice mode would carry all of it. See tool/web/sherpa_onnx_web_stub.
 dependency_overrides:
   sherpa_onnx_web:
-    path: tool/sherpa_onnx_web_stub
+    path: tool/web/sherpa_onnx_web_stub
 
 dev_dependencies:
   flutter_test:
@@ -108,14 +108,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    # One entry per skill: an asset directory does not include its
-    # subdirectories, and a skill is a subdirectory. Adding a skill means an
-    # entry here — the guard test in prompt_sources_test fails when one is
-    # forgotten.
-    - assets/prompts/skills/artifact/
-    - assets/prompts/skills/deep-research/
-    - assets/prompts/skills/skill-creator/
-    - assets/prompts/agents/
+    # Bundled skills and agents are embedded in code by
+    # tool/gen_bundled_skills.dart, not shipped as Flutter assets.
     - assets/icons/
     # The font's licence, read into `LicenseRegistry` at startup. An asset
     # rather than only a file in the repo, since the OFL asks for it to travel

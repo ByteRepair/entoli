@@ -10,7 +10,7 @@ here at all. An iOS build with no answer to that is one where every command the
 agent runs fails, which is the whole of why this platform ships an emulator
 instead.
 
-The emulator is iSH, a git submodule under `tool/bundle/ish/src/` (shallow —
+The emulator is iSH, a git submodule under `tool/ios/ish/src/` (shallow —
 `shallow = true` in `.gitmodules`, so `git submodule update --init` fetches
 one commit, not the full history) and built as a static library linked into
 the app (see "The iSH driver" below). It runs a Linux

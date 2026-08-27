@@ -12,14 +12,14 @@
 // so a cd or an export in one emulated command sticks for the next — the same
 // contract the host shell keeps.
 //
-// Built by tool/bundle/ish/build.sh alongside the iSH core, and linked into
+// Built by tool/ios/ish/build.sh alongside the iSH core, and linked into
 // the same XCFramework. The Dart side is lib/data/local/ish_ffi.dart.
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 
-// iSH's own headers, vendored under tool/bundle/ish/src/.
+// iSH's own headers, vendored under tool/ios/ish/src/.
 #include "kernel/calls.h"
 #include "kernel/fs.h"
 #include "kernel/task.h"

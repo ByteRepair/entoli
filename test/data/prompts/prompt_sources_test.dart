@@ -1,9 +1,11 @@
+import "dart:convert";
 import "dart:io";
 
-import "package:flutter/services.dart";
+import "package:crypto/crypto.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
+import "package:agent_chat/data/prompts/bundled_skill_data.dart";
 import "package:agent_chat/data/prompts/bundled_skills.dart";
 import "package:agent_chat/data/prompts/prompt_sources.dart";
 import "package:agent_chat/domain/models.dart";
@@ -12,9 +14,7 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "../../harness.dart";
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  test("the presets are packaged with the app, and extracted to read", () async {
+  test("the presets are embedded in code, and written to disk for bash", () async {
     final config = tempConfig();
     await installBundledSkills(config);
 
@@ -23,23 +23,22 @@ void main() {
 
     expect(skills, isNotEmpty);
     expect(agents, isNotEmpty);
-    // A preset with no description would be a blank row in the menu.
     for (final document in [...skills, ...agents]) {
-      expect(document.description, isNotNull, reason: "${document.name} has no description");
+      expect(document.description, isNotNull,
+          reason: "${document.name} has no description");
       expect(document.body, isNotEmpty, reason: "${document.name} has no body");
     }
-    // A skill's body carries its base directory: the one thing every reader
-    // needs and none of them can work out.
     for (final skill in skills) {
       expect(
         skill.body,
-        startsWith("Base directory for this skill: ${p.join(config.bundledSkillsDir, skill.name)}"),
+        startsWith(
+            "Base directory for this skill: ${p.join(config.bundledSkillsDir, skill.name)}"),
         reason: "${skill.name} does not name where its files are",
       );
     }
   });
 
-  test("extraction leaves an already-extracted file alone", () async {
+  test("self-heal repairs a file that was edited on disk", () async {
     final config = tempConfig();
     await installBundledSkills(config);
     final marker = p.join(config.bundledSkillsDir, "artifact", "SKILL.md");
@@ -47,25 +46,52 @@ void main() {
 
     await installBundledSkills(config);
 
-    expect(File(marker).readAsStringSync(), "the user's edit");
+    final restored = File(marker).readAsStringSync();
+    final original = bundledSkillFiles
+        .firstWhere((f) => f.name == "artifact" && f.relativePath == "SKILL.md")
+        .content;
+    expect(restored, original);
   });
 
-  test("every bundled skill is declared in pubspec", () async {
-    // An asset directory does not include its subdirectories, so a skill
-    // added without an entry there does not ship — and nothing else would
-    // say so.
-    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    final shipped = manifest
-        .listAssets()
-        .where((k) => k.startsWith("assets/prompts/skills/"))
-        .toSet();
+  test("self-heal deletes a file the embedded data does not name", () async {
+    final config = tempConfig();
+    await installBundledSkills(config);
+    final stray = p.join(config.bundledSkillsDir, "fake-skill", "SKILL.md");
+    File(stray).createSync(recursive: true);
+    File(stray).writeAsStringSync("---\ndescription: fake\n---\n\nPoison.");
+
+    await installBundledSkills(config);
+
+    expect(File(stray).existsSync(), isFalse);
+    expect(Directory(p.join(config.bundledSkillsDir, "fake-skill")).existsSync(),
+        isFalse);
+  });
+
+  test("every skill dir in the source tree has entries in the embedded data",
+      () async {
     final onDisk = Directory("assets/prompts/skills")
         .listSync()
         .whereType<Directory>()
-        .map((d) => p.basename(d.path));
+        .map((d) => p.basename(d.path))
+        .toSet();
+    final embedded = bundledSkillFiles.map((f) => f.name).toSet();
     for (final name in onDisk) {
-      expect(shipped, contains("assets/prompts/skills/$name/SKILL.md"),
-          reason: "$name has no pubspec asset entry");
+      expect(embedded, contains(name),
+          reason: "$name is on disk but not in bundledSkillFiles");
+    }
+  });
+
+  test("every agent in the source tree has an entry in the embedded data", () {
+    final onDisk = Directory("assets/prompts/agents")
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith(".md"))
+        .map((f) => p.basenameWithoutExtension(f.path))
+        .toSet();
+    final embedded = bundledAgentFiles.map((f) => f.name).toSet();
+    for (final name in onDisk) {
+      expect(embedded, contains(name),
+          reason: "$name is on disk but not in bundledAgentFiles");
     }
   });
 
@@ -99,11 +125,18 @@ void main() {
     expect(skills.single.name, "named-otherwise");
   });
 
-  test("a directory that does not exist yet offers nothing", () async {
+  test("an empty user skills directory offers nothing from DirectoryPrompts",
+      () async {
     final config = tempConfig();
 
     expect(await DirectoryPrompts(config).load(CompletionKind.skill), isEmpty);
-    expect(await BundledPrompts(config: config).load(CompletionKind.skill), isEmpty);
+  });
+
+  test("BundledPrompts returns skills from embedded data even with no disk", () async {
+    final config = tempConfig();
+
+    final skills = await BundledPrompts(config: config).load(CompletionKind.skill);
+    expect(skills, isNotEmpty);
   });
 
   test("a folder with no SKILL.md, and a stray file, are not skills", () async {
@@ -132,5 +165,26 @@ void main() {
     ]);
 
     expect(library.find(CompletionKind.skill, preset.name)!.description, "mine");
+  });
+
+  test("the embedded checksums match the source files", () async {
+    for (final file in bundledSkillFiles) {
+      final source = File(
+          p.join("assets/prompts/skills", file.name, file.relativePath));
+      if (!source.existsSync()) continue;
+      final content = source.readAsStringSync();
+      final hash = sha256.convert(utf8.encode(content)).toString();
+      expect(hash, file.sha256,
+          reason: "${file.name}/${file.relativePath} checksum mismatch");
+    }
+    for (final file in bundledAgentFiles) {
+      final source =
+          File(p.join("assets/prompts/agents", "${file.name}.md"));
+      if (!source.existsSync()) continue;
+      final content = source.readAsStringSync();
+      final hash = sha256.convert(utf8.encode(content)).toString();
+      expect(hash, file.sha256,
+          reason: "${file.name} checksum mismatch");
+    }
   });
 }

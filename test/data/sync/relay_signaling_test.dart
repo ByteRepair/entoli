@@ -4,10 +4,10 @@ import "dart:convert";
 import "package:agent_chat/data/sync/signaling/relay_signaler.dart";
 import "package:flutter_test/flutter_test.dart";
 
-import "../../../tool/sync_relay_server.dart";
+import "../../../tool/sync/sync_relay_server.dart";
 
 /// The relay, both halves, with no socket between them. `RelayRooms` is the
-/// shipped forwarding — `tool/sync_relay_server.dart` is what a user would
+/// shipped forwarding — `tool/sync/sync_relay_server.dart` is what a user would
 /// run, imported here rather than copied, since a second implementation in the
 /// test would let the one people actually run drift out from under it. A relay
 /// that forwarded to the wrong side would be found by nothing else.

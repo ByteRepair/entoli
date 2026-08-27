@@ -24,12 +24,18 @@ class SkillImportException implements Exception {
 
 /// A skill archive, decoded and named, not yet written anywhere.
 class SkillPackage {
-  SkillPackage(this.name, this.entries);
+  SkillPackage(this.name, this.entries, {this.description, this.body = ""});
 
   /// The frontmatter's `name` where the SKILL.md has one, the folder it was
   /// packaged from otherwise. What a skill is *called* and where it *lands*
   /// are the same string, so importing one twice replaces itself.
   final String name;
+
+  /// The frontmatter `description` and the SKILL.md body, parsed once where the
+  /// archive is decoded so a reader does not parse it again. Empty/null where
+  /// the producer does not care (the packager zips and discards).
+  final String? description;
+  final String body;
 
   /// Paths as they sit inside the skill's own directory — the top-level
   /// folder a zip of one adds is already taken off, so where it lands is not
@@ -90,7 +96,8 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
   if (!_isFolderName(name)) {
     throw const SkillImportException("its name cannot be a folder name");
   }
-  return SkillPackage(name, entries);
+  return SkillPackage(name, entries,
+      description: document.description, body: document.body);
 }
 
 /// One directory under `skills/` and nothing else: a name holding a separator

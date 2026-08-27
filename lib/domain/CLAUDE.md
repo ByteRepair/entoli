@@ -570,17 +570,18 @@ prefix, an explanation on the next line, thirty words instead of twenty.
 ## Skills and agents
 
 `PromptLibrary` is the whole of what the composer's `/` and `@` menus offer,
-built from two `PromptSource`s in precedence order: the presets packaged under
-`assets/prompts/`, then the user's own directory. A file the user wrote replaces
+built from two `PromptSource`s in precedence order: the presets embedded in the
+binary (see the root notes, "On-disk layout", for why they are code rather
+than assets), then the user's own directory. A skill the user wrote replaces
 the preset it shares a name with, and entries come back sorted by name, so the
 menu does not reorder when a source does. It is built once at startup, because
-reading assets is async and nothing downstream should wait on it; a skill
-dropped into the directory by hand therefore does not appear until a restart,
-though nothing would break if it did — a message resolves against whatever the
-library holds when it is composed, and keeps the answer. The one route that buys
-a refresh is the Skills settings page: it is where a user changes the library
-from inside the app, and it reloads after an import or a delete, so that change
-lands without a restart.
+the user's directory is read off disk and nothing downstream should wait on it;
+a skill dropped into the directory by hand therefore does not appear until a
+restart, though nothing would break if it did — a message resolves against
+whatever the library holds when it is composed, and keeps the answer. The routes
+that buy a refresh are the places that change the library from inside the app —
+the Skills settings page and a `create_skill` install — each reloads after it
+writes, so the change lands without a restart.
 
 A skill is a **directory**, not a file: a `SKILL.md` and whatever files it runs
 with. Its name is the frontmatter's `name` where it has one, the folder
@@ -762,6 +763,19 @@ without a run in between; `canHoldTurn` is true wherever there is nothing to
 ask, so this is Android's problem alone. See "Waking for a reminder" in
 `android/CLAUDE.md` for the other end, and for the hold the receiver takes and
 `doneFiring` releases.
+
+**`doneFiring` is a no-op while a fire's turn is running.** A fire stamps the
+reminder list mid-turn through `onReminderFired`, which re-enters `reload`
+(the `ref.listen` on the list), and a duplicate exact alarm re-nudges; either
+calling `doneFiring` then would release the receiver's hold before the turn's
+own foreground-service hold (`TurnKeepAlive`'s `running`) had registered, and
+the process is killed under it — the hazard "Staying alive off screen" names.
+`_runningIds` holds the fire from before its first await until it completes, so
+the release is gated on it being empty: a re-entrant reload or a duplicate nudge
+does nothing, and the fire's own handler releases once the turn is done, by
+which point `turns > 0` has the service. The turn completing is also what
+advances `nextFireAt`, so a kill that left it stale — and catch-up re-firing it
+as "Ran late" on the next open — no longer happens.
 
 **Catch-up fires overdue reminders at launch**, the same lazy semantics the
 temp-chat sweep uses. A one-shot more than two minutes past its time says

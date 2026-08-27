@@ -7,10 +7,10 @@ Pod::Spec.new do |s|
   s.author           = { 'ish-app' => 'https://github.com/ish-app/ish' }
   s.source           = { :path => '.' }
   s.ios.deployment_target = '14.0'
-  # The XCFramework built by tool/bundle/ish/build.sh. A prebuilt binary
+  # The XCFramework built by tool/ios/ish/build.sh. A prebuilt binary
   # rather than source compilation, because the asbestos gadgets are
   # hand-written assembly and the build needs Xcode — the same reason the
-  # Android build ships .so files laid out by tool/bundle/build.sh.
+  # Android build ships .so files laid out by tool/android/build.sh.
   s.vendored_frameworks = 'dist/IshCore.xcframework'
   s.libraries        = 'sqlite3', 'archive'
   s.frameworks       = 'Foundation'

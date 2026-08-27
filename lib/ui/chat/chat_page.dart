@@ -247,7 +247,7 @@ class _EmptyChat extends ConsumerWidget {
             const AppMark(size: 56),
             const SizedBox(height: 20),
             Text(
-              "What would you like to discuss?",
+              emptyChatQuestionFor(project),
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium,
             ),

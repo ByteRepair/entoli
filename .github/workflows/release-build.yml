@@ -108,8 +108,41 @@ jobs:
                  + [{file: $appimage, artifact: "appimage"}]')"
           } >> "$GITHUB_OUTPUT"
 
-  android:
+  # The native tools build and the APK build run on separate runners. The tools
+  # job fetches the 660 MiB Hexagon SDK and cross-compiles proot and llama.cpp
+  # for three ABIs — several gigabytes of intermediates that the APK build does
+  # not need and that left a single runner with no disk. It builds only, uploads
+  # the stripped dist/ as an artifact, and the runner is recycled with all its
+  # build directories. The APK job downloads that artifact onto a fresh runner
+  # with the full disk free for Gradle.
+  android-tools:
     needs: version
+    runs-on: ubuntu-latest
+    outputs:
+      abis: ${{ steps.tools.outputs.abis }}
+      llama-abis: ${{ steps.tools.outputs.llama-abis }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+
+      - id: tools
+        uses: ./.github/actions/bundled-tools
+        with:
+          stage: false
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: bundled-tools
+          path: tool/android/dist/
+          if-no-files-found: error
+          # Already stripped .so files; recompressing buys little and costs time.
+          compression-level: 0
+          # Only the android job below reads it, and it runs right after.
+          retention-days: 1
+
+  android:
+    needs: [version, android-tools]
     runs-on: ubuntu-latest
     env:
       APKS: ${{ needs.version.outputs.apks }}
@@ -147,14 +180,16 @@ jobs:
 
       - uses: ./.github/actions/flutter-setup
 
-      # Cheap on a job that already has the SDK warm, and this is the build
-      # whose output cannot be quietly replaced once people have downloaded it.
-      - run: flutter test
+      # The tools were built on a separate runner; download and stage them.
+      # See "Bundled tools" in CLAUDE.md.
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: bundled-tools
+          path: tool/android/dist
 
-      # Before the APK is built: what this stages is packaged from the working
-      # tree. See "Bundled tools" in CLAUDE.md.
-      - id: tools
-        uses: ./.github/actions/bundled-tools
+      - name: Stage the tools into the APK's native libraries
+        shell: bash
+        run: tool/android/stage.sh
 
       # Scoped to this step rather than the whole job. Without the environment
       # build.gradle.kts falls back to the debug key, which the next step
@@ -230,8 +265,8 @@ jobs:
       # everything each of these looks for.
       - name: Check each APK holds its own ABI and nothing else
         env:
-          TOOL_ABIS: ${{ steps.tools.outputs.abis }}
-          LLAMA_ABIS: ${{ steps.tools.outputs.llama-abis }}
+          TOOL_ABIS: ${{ needs.android-tools.outputs.abis }}
+          LLAMA_ABIS: ${{ needs.android-tools.outputs.llama-abis }}
         run: |
           set -euo pipefail
           has() { [[ " $1 " == *" $2 "* ]]; }

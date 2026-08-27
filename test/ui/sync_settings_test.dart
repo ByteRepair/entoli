@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:qr_flutter/qr_flutter.dart";
 
 import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/app_settings.dart";
@@ -182,10 +183,38 @@ void main() {
       await settleIo(tester);
 
       expect(hub.pairing.value?.qr, startsWith("entoli-pair:"));
+      // The button pushed the window page, so it is gone from the list behind.
       expect(find.text("Open pairing window"), findsNothing);
       // Holding the window is the "i" side, in the room the secret derives.
       expect(relay.dialled.single.$1, "wss://relay.example.com");
       expect(relay.dialled.single.$3, "i");
+    });
+
+    testWidgets("the window page shows a QR for the code", (tester) async {
+      await open(tester, relayUrl: "wss://relay.example.com");
+
+      await scrollTo(tester, find.text("Open pairing window"));
+      await tester.tap(find.text("Open pairing window"));
+      await settleIo(tester);
+
+      // The window page renders the QR and the selectable code, not the inline
+      // box the list used to draw.
+      expect(find.byType(QrImageView), findsOneWidget);
+      expect(find.textContaining("entoli-pair:"), findsOneWidget);
+    });
+
+    testWidgets("going back from the window page cancels it", (tester) async {
+      await open(tester, relayUrl: "wss://relay.example.com");
+
+      await scrollTo(tester, find.text("Open pairing window"));
+      await tester.tap(find.text("Open pairing window"));
+      await settleIo(tester);
+      expect(hub.pairing.value, isNotNull);
+
+      await tester.pageBack();
+      await settleIo(tester);
+
+      expect(hub.pairing.value, isNull);
     });
   });
 }

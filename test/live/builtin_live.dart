@@ -136,6 +136,8 @@ void main() {
           log("! ${run.command} -> rc=${run.returnCode} ${_oneLine(run.output)}");
         case ArtifactEvent(:final title, :final entryFile):
           log("artifact: $title (entry: $entryFile)");
+        case SkillInstallEvent(:final title):
+          log("skill offered: $title");
         case RetryEvent(:final attempt, :final message):
           log("retry $attempt: $message");
         // Drawn as a row beside the spinner in the app; here it is one line per

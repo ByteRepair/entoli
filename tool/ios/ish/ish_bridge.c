@@ -13,7 +13,7 @@
 // contract the host shell keeps.
 //
 // This is the bridge's specification. It compiles once linked against the iSH
-// XCFramework (built by tool/bundle/ish/build.sh on macOS); the iSH types and
+// XCFramework (built by tool/ios/ish/build.sh on macOS); the iSH types and
 // entry points it names are the ones the vendored core exposes. The Dart side
 // (lib/data/local/ish_ffi.dart) drives it through dart:ffi.
 

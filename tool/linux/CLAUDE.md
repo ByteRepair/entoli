@@ -7,11 +7,11 @@ goes into the AppDir whole and unrearranged, under `usr/bin`, and `AppRun`
 execs it where it lies. Anything lifted out of it is a file the app cannot
 open.
 
-**The packaging is `linux/packaging/make-appimage.sh`, not a step of the
+**The packaging is `tool/linux/make-appimage.sh`, not a step of the
 workflow**, and it takes a bundle and an output path. It is the only genuinely
 new thing in the release machinery, and left inside a YAML step the only way to
 try a change to it would have been to push and dispatch. The action builds and
-then calls it; `linux/packaging/` holds what it assembles — `AppRun` and the
+then calls it; `tool/linux/` holds what it assembles — `AppRun` and the
 desktop entry, named for the application id the way everything else on Linux
 is. The icon it takes is `web/icons/Icon-512.png` and its file name comes from
 the entry's own `Icon=`, so there is one authority for that string.
