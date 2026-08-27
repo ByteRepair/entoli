@@ -5,7 +5,7 @@
 # the one place an app is allowed to exec from. See "Bundled tools" in
 # CLAUDE.md.
 #
-#   ANDROID_NDK_ROOT=~/.android/ndk/28.2.13676358 tool/android/build.sh arm64-v8a
+#   ANDROID_NDK_ROOT=$HOME/.android/ndk/<version> tool/android/build.sh arm64-v8a
 #
 # Output, stripped, in dist/<abi>: libproot.so and its loader
 # (libproot-loader.so, plus libproot-loader32.so where the architecture can run
