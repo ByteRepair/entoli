@@ -3,6 +3,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 
@@ -18,13 +19,12 @@ void main() {
     await pumpSettings(tester, app, SettingsCategory.terminal);
   }
 
-  testWidgets("a platform that cannot run one says so, and offers nothing to "
+  testWidgets("a platform with no shell says so, and offers nothing to "
       "download", (tester) async {
     app = TestApp.create();
     await pumpTerminal(tester);
 
-    expect(find.textContaining("runs commands on the machine it is on"),
-        findsOneWidget);
+    expect(find.textContaining("no terminal"), findsOneWidget);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
     expect(find.text("Commands run on"), findsNothing);
     expect(find.textContaining("tool/android/build.sh"), findsNothing);
@@ -37,8 +37,8 @@ void main() {
 
     expect(find.textContaining("no proot in it for arm64-v8a"), findsOneWidget);
     expect(find.textContaining("tool/android/build.sh arm64-v8a"), findsOneWidget);
-    expect(find.textContaining("runs commands on the machine it is on"),
-        findsNothing);
+    expect(find.text("Host"), findsOneWidget);
+    expect(find.textContaining("What driver to use"), findsOneWidget);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
   });
 
@@ -65,13 +65,13 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
-  testWidgets("nothing installed means nothing to pick: commands run on Android",
+  testWidgets("nothing installed means nothing to pick: commands run on the host",
       (tester) async {
     app = TestApp.create(proot: true);
     await pumpTerminal(tester);
 
     expect(find.text("Commands run on"), findsOneWidget);
-    expect(find.text("Android"), findsOneWidget);
+    expect(find.text("Host"), findsOneWidget);
     expect(find.text("Alpine Linux"), findsNothing);
   });
 
@@ -88,7 +88,7 @@ void main() {
     // Installed is not the same as chosen: what commands run on is the user's
     // to say, and a download is not that.
     expect(app.container.read(appSettingsProvider).rootfsId, isNull);
-    await tester.tap(find.text("Android"));
+    await tester.tap(find.text("Host"));
     await settleIo(tester);
     expect(find.text("Alpine Linux"), findsWidgets);
   });
@@ -97,7 +97,7 @@ void main() {
     app = TestApp.create(proot: true, linuxes: const {"alpine"});
     await pumpTerminal(tester);
 
-    await tester.tap(find.text("Android"));
+    await tester.tap(find.text("Host"));
     await settleIo(tester);
     await tester.tap(find.text("Alpine Linux").last);
     await settleIo(tester);
@@ -105,7 +105,7 @@ void main() {
     expect(app.container.read(appSettingsProvider).rootfsId, "alpine");
   });
 
-  testWidgets("deleting the one commands run in puts them back on Android",
+  testWidgets("deleting the one commands run in puts them back on the host",
       (tester) async {
     app = TestApp.create(proot: true, linuxes: const {"alpine"});
     await io(tester,
@@ -141,5 +141,19 @@ void main() {
 
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(app.container.read(installedRootfsProvider), isEmpty);
+  });
+
+  testWidgets("a desktop with a host shell and no proot shows the picker with "
+      "only the host, and no catalog", (tester) async {
+    app = TestApp.create(shell: LocalShell(environment: () => const {}));
+    await pumpTerminal(tester);
+
+    expect(find.text("Commands run on"), findsOneWidget);
+    expect(find.text("Host"), findsOneWidget);
+    expect(find.textContaining("What driver to use"), findsOneWidget);
+    // No proot, so no catalog and no build-fault warning.
+    expect(find.text("Alpine Linux 3.24.1"), findsNothing);
+    expect(find.textContaining("tool/android/build.sh"), findsNothing);
+    expect(find.byTooltip("Download"), findsNothing);
   });
 }
