@@ -150,11 +150,8 @@ void main() {
     expect(runner.firedIds, ["r1"]);
   });
 
-  // The hold an alarm took is released through doneFiring. A fire stamps the
-  // reminder list mid-turn, which re-enters reload; a duplicate exact alarm
-  // re-nudges. Either releasing while the turn is still mid-way stops the
-  // foreground service before the turn's own hold has registered, and the
-  // process is killed under it. The release is a no-op until nothing is running.
+  // Releasing mid-turn stops the service before the turn's own hold registers,
+  // killing the process under it — so doneFiring is a no-op while one runs.
   test("a reload while a fire's turn is running does not release the hold", () async {
     list.reminders = [reminder(nextFireAt: DateTime(2000))];
     runner.gate = Completer<void>();
