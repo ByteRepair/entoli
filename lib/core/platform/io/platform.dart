@@ -9,6 +9,7 @@ import "package:path_provider/path_provider.dart";
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/local/android_assistant_launch.dart";
+import "../../../data/local/android_device_name.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/android_reminder_alarms.dart";
 import "../../../data/local/bundled_tools.dart";
@@ -266,10 +267,16 @@ SecretStore platformSecretStore(AppConfig config) =>
 /// window by the hub, so the factory needs nothing from its caller.
 LanSignaling? platformLanSignaling() => SignalingServer();
 
-/// What this machine calls itself, for the sync device name. Guarded: a host
-/// with no resolvable name throws rather than answering, and a pairing that
-/// failed over the machine's name would be a strange way to lose.
-String? platformHostname() {
+/// What this machine calls itself, for the sync device name.
+///
+/// On Android, `Platform.localHostname` is "localhost", so the system device
+/// name is read through `AndroidDeviceName` instead — the name the user set in
+/// system settings, falling back to the model. On Linux the hostname is the
+/// machine's own and used directly. Guarded: a host with no resolvable name
+/// throws rather than answering, and a pairing that failed over the machine's
+/// name would be a strange way to lose.
+Future<String?> platformHostname() async {
+  if (Platform.isAndroid) return AndroidDeviceName.read();
   try {
     final name = Platform.localHostname.trim();
     return name.isEmpty ? null : name;

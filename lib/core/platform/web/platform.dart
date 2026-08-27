@@ -140,7 +140,7 @@ LanSignaling? platformLanSignaling() => createWebLanSignaling();
 
 /// A browser has no hostname of its own to give. `location.hostname` is the
 /// server the page came from, which is a different machine's name entirely.
-String? platformHostname() => null;
+Future<String?> platformHostname() async => null;
 
 /// No-op: a browser has no `chmod`, and no `bash` to guard against. The file
 /// tools' `safeRelativePath` already prevents reaching skill dirs.

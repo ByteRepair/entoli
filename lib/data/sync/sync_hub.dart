@@ -161,6 +161,7 @@ class SyncHub {
   void cancelPairingWindow() => _signaling.cancelPairingWindow();
   Future<String?> pairWith(String text) => _signaling.pairWith(text);
   Future<String> createManualInvite() => _signaling.createManualInvite();
+  void cancelManualInvite() => _signaling.cancelManualInvite();
   void confirmPairing(bool ok) => _signaling.confirmPairing(ok);
   Future<void> connect(String deviceId) => _signaling.connect(deviceId);
   Future<void> disconnect(String deviceId) => _signaling.disconnect(deviceId);
