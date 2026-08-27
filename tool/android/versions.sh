@@ -52,7 +52,7 @@ VULKAN_HEADERS_URL="https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/
 VULKAN_HEADERS_SHA256=17f8ff30fd79fb7531efcb7c78c02c17a595208d482a150f06836b0ca97ef8f2
 
 # The Hexagon SDK, which the NPU backend is built against. Fetched by
-# tool/android-setup.sh; build.sh uses it if it is there.
+# tool/android/setup.sh; build.sh uses it if it is there.
 #
 # The one entry here that is not the upstream project's own tarball. Qualcomm
 # ships this through an installer that wants a package manager on the host, so

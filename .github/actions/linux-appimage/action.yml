@@ -1,7 +1,7 @@
 name: Build the Linux app
 description: >
   Builds the Linux bundle in one mode and packages it as an AppImage. What that
-  packaging is lives in `linux/packaging/`, where it can also be run by hand.
+  packaging is lives in `tool/linux/`, where it can also be run by hand.
 
 inputs:
   mode:
@@ -49,7 +49,7 @@ runs:
         NAME: ${{ inputs.name }}
       run: |
         set -euo pipefail
-        linux/packaging/make-appimage.sh "build/linux/x64/$MODE/bundle" "dist/$NAME"
+        tool/linux/make-appimage.sh "build/linux/x64/$MODE/bundle" "dist/$NAME"
         {
           echo "bundle=build/linux/x64/$MODE/bundle"
           echo "appimage=dist/$NAME"

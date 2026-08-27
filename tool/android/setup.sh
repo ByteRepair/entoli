@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Fetches what tool/bundle/build.sh needs but does not build itself: the Hexagon
+# Fetches what tool/android/build.sh needs but does not build itself: the Hexagon
 # SDK, which is the whole of the NPU backend. It lands in
-# tool/bundle/toolchains/, which is gitignored, and build.sh looks for it there
+# tool/android/toolchains/, which is gitignored, and build.sh looks for it there
 # on its own.
 #
-#   tool/android-setup.sh
-#   ANDROID_NDK_ROOT=$HOME/.android/ndk/<version> tool/bundle/build.sh arm64-v8a
+#   tool/android/setup.sh
+#   ANDROID_NDK_ROOT=$HOME/.android/ndk/<version> tool/android/build.sh arm64-v8a
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "$here/bundle/versions.sh"
+source "$here/versions.sh"
 
 # The only prebuilt Qualcomm publishes for Linux is x86_64.
 [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ] ||
   { echo "the Hexagon SDK build here is Linux x86_64 only" >&2; exit 1; }
 
-toolchains=$here/bundle/toolchains
+toolchains=$here/toolchains
 sdk=$toolchains/hexagon/$HEXAGON_SDK_VERSION
 if [ -d "$sdk" ]; then
   echo "==> Hexagon SDK $HEXAGON_SDK_VERSION already unpacked"

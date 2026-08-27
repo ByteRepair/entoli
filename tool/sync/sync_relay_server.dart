@@ -5,7 +5,7 @@
 //
 // Run it anywhere a WebSocket can be reached:
 //
-//   dart run tool/sync_relay_server.dart --port 8090
+//   dart run tool/sync/sync_relay_server.dart --port 8090
 import "dart:async";
 import "dart:convert";
 import "dart:io";

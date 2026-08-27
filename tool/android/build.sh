@@ -5,7 +5,7 @@
 # the one place an app is allowed to exec from. See "Bundled tools" in
 # CLAUDE.md.
 #
-#   ANDROID_NDK_ROOT=~/.android/ndk/28.2.13676358 tool/bundle/build.sh arm64-v8a
+#   ANDROID_NDK_ROOT=~/.android/ndk/28.2.13676358 tool/android/build.sh arm64-v8a
 #
 # Output, stripped, in dist/<abi>: libproot.so and its loader
 # (libproot-loader.so, plus libproot-loader32.so where the architecture can run
@@ -13,7 +13,7 @@
 # libraries it loads beside it.
 #
 # The NPU is opt-in, since what it emits is built by Qualcomm's own toolchain.
-# `tool/android-setup.sh` fetches the SDK and this picks it up from where that
+# `tool/android/setup.sh` fetches the SDK and this picks it up from where that
 # put it; HEXAGON_SDK_ROOT overrides for an SDK installed some other way. See
 # "Running a model on the device" in CLAUDE.md for what it buys and what it
 # costs.
@@ -254,7 +254,7 @@ else
       -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
       -DCMAKE_EXE_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
     )
-    # Fetched by tool/android-setup.sh, or wherever HEXAGON_SDK_ROOT names. The
+    # Fetched by tool/android/setup.sh, or wherever HEXAGON_SDK_ROOT names. The
     # backend arrives as two more `libggml-*.so` and is found like the CPU's.
     #
     # Naming a path asserts it exists, so a typo in it stops the build; the

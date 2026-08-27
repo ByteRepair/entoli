@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Put built tools where the APK packages them from.
 #
-#   tool/bundle/stage.sh [source]
+#   tool/android/stage.sh [source]
 #
-# `source` defaults to tool/bundle/dist and holds one directory per ABI.
+# `source` defaults to tool/android/dist and holds one directory per ABI.
 # Anything already in jniLibs for an ABI is replaced, so a stale build cannot
 # ride along.
 set -euo pipefail

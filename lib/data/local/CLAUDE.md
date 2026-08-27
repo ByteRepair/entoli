@@ -67,7 +67,7 @@ package manager here and cannot be one. What lifts that is not another binary
 but proot, and a whole Linux behind it — see "A whole Linux under proot" below,
 which is where a package manager actually comes from.
 
-Building them is `tool/bundle/`: `versions.sh` pins what is built and its
+Building them is `tool/android/`: `versions.sh` pins what is built and its
 checksums, `build.sh` cross-compiles talloc and then proot against it, and
 llama.cpp's server for arm64, `stage.sh` puts the result where the APK packages
 it from. The output needs nothing but `libz`, `libdl` and `libc`, all of which
@@ -120,7 +120,7 @@ refuse to run; a second entry here is what would answer that.
 
 **The tarball's checksum is pinned and checked before anything is unpacked.**
 Everything in there becomes a program this device will execute, so arriving is
-not the same as being what was checked — the bargain `tool/bundle/versions.sh`
+not the same as being what was checked — the bargain `tool/android/versions.sh`
 already makes for what is built into the APK. Bumping Alpine is a line in the
 catalog.
 
@@ -402,7 +402,7 @@ cores slider moved nothing, since there was nothing on the CPU to move.
 What the Hexagon backend does *not* need is a signature. It enables an unsigned
 process domain itself on the DSP, so an ordinary APK can drive the NPU — the
 thing that would otherwise have made this a Qualcomm-partners feature. What it
-does need is Hexagon SDK 6.6 or later at **build** time. `tool/android-setup.sh`
+does need is Hexagon SDK 6.6 or later at **build** time. `tool/android/setup.sh`
 fetches it — Qualcomm's own route wants a package manager installed on the host,
 so this is the Community Edition repackaging llama.cpp's own CI builds in, pinned
 by SHA-256 in `versions.sh` — and `build.sh` picks it up from where that leaves

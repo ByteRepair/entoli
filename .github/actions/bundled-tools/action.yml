@@ -31,12 +31,12 @@ runs:
       id: cache
       uses: actions/cache@v6.1.0
       with:
-        path: tool/bundle/dist
+        path: tool/android/dist
         # The recipe and the versions between them decide every byte of the
         # output — this file included, since whether it fetches the Hexagon SDK
         # below is the difference between an arm64 build with an NPU backend in
         # it and one without, and nothing under tool/ changes when that does.
-        key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/bundle/versions.sh', 'tool/bundle/build.sh', 'tool/bundle/talloc-config.h', '.github/actions/bundled-tools/action.yml') }}
+        key: bundled-tools-${{ steps.abis.outputs.list }}-${{ hashFiles('tool/android/versions.sh', 'tool/android/build.sh', 'tool/android/talloc-config.h', '.github/actions/bundled-tools/action.yml') }}
 
     # The runner image ships one, and llama.cpp's build is generated for it.
     # Checked rather than assumed: an image that dropped it would otherwise fail
@@ -55,7 +55,7 @@ runs:
     - name: Fetch the Hexagon SDK the NPU backend is built against
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: tool/android-setup.sh
+      run: tool/android/setup.sh
 
     - name: Build the tools
       if: steps.cache.outputs.cache-hit != 'true'
@@ -67,9 +67,9 @@ runs:
         set -euo pipefail
         export LLAMA_ABIS="${{ steps.abis.outputs.llama }}"
         for abi in ${{ steps.abis.outputs.list }}; do
-          tool/bundle/build.sh "$abi"
+          tool/android/build.sh "$abi"
         done
 
     - name: Stage them into the APK's native libraries
       shell: bash
-      run: tool/bundle/stage.sh
+      run: tool/android/stage.sh
