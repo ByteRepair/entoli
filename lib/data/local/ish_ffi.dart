@@ -78,11 +78,15 @@ typedef _interrupt_dart = void Function(ish_session_ptr session);
 typedef _destroy_c = Void Function(ish_session_ptr session);
 typedef _destroy_dart = void Function(ish_session_ptr session);
 
+typedef _fakefsify_c = Int32 Function(Pointer<Utf8> archive, Pointer<Utf8> into);
+typedef _fakefsify_dart = int Function(Pointer<Utf8> archive, Pointer<Utf8> into);
+
 // The lazy lookups. Null until first use, and only ever resolved on iOS.
 _init_dart? _initFn;
 _run_dart? _runFn;
 _interrupt_dart? _interruptFn;
 _destroy_dart? _destroyFn;
+_fakefsify_dart? _fakefsifyFn;
 
 bool _resolved = false;
 
@@ -97,6 +101,8 @@ void _resolve() {
       lib.lookupFunction<_interrupt_c, _interrupt_dart>("ish_session_interrupt");
   _destroyFn =
       lib.lookupFunction<_destroy_c, _destroy_dart>("ish_session_destroy");
+  _fakefsifyFn =
+      lib.lookupFunction<_fakefsify_c, _fakefsify_dart>("ish_fakefsify");
 }
 
 /// Whether the iSH bridge is linked into this build. Only iOS, where the
@@ -127,4 +133,11 @@ _interrupt_dart? get ishInterruptFn {
 _destroy_dart? get ishDestroyFn {
   _resolve();
   return _destroyFn;
+}
+
+/// The resolved fakefsify function, or null. Called to unpack a rootfs tarball
+/// into iSH's fakefs layout in-process — the iOS analog of `tar -xzf`.
+_fakefsify_dart? get ishFakefsifyFn {
+  _resolve();
+  return _fakefsifyFn;
 }

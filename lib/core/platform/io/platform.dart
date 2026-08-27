@@ -1,5 +1,7 @@
+import "dart:ffi";
 import "dart:io";
 
+import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
 import "package:fs_shim/fs.dart";
@@ -17,6 +19,7 @@ import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
 import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
+import "../../../data/local/ish_ffi.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/shared_backup.dart";
@@ -78,8 +81,10 @@ ShellDriver? platformDriver({
 }
 
 /// Which architecture this install is for, which decides the rootfs a download
-/// fetches. Null off Android.
-Future<String?> platformAbi() => BundledTools.abi();
+/// fetches. Null off Android and iOS — iOS has no Android ABI, but it has its
+/// own rootfs key ("ios") since iSH emulates x86 and not the device's arm64.
+Future<String?> platformAbi() =>
+    Platform.isIOS ? Future.value("ios") : BundledTools.abi();
 
 /// Here `version.json` is inside `flutter_assets`, so the bundle has it.
 Future<String?> platformVersionJson() async {
@@ -91,9 +96,12 @@ Future<String?> platformVersionJson() async {
 }
 
 /// Where a downloaded Linux is kept: beside the voice models, outside the data
-/// directory, and for the same reasons — see [RootfsStore].
+/// directory, and for the same reasons — see [RootfsStore]. On iOS the tar
+/// callback is iSH's fakefsify, not the system tar (which the exec ban denies).
 RootfsStore platformRootfsStore(String cacheDir) =>
-    FileRootfsStore(p.join(cacheDir, "rootfs"));
+    Platform.isIOS
+        ? FileRootfsStore(p.join(cacheDir, "rootfs"), tar: _ishFakefsify)
+        : FileRootfsStore(p.join(cacheDir, "rootfs"));
 
 /// Lay out whatever this build ships for the device's ABI, under [cacheDir]
 /// rather than the data directory: it is rebuilt from the APK on demand, so a
@@ -276,4 +284,24 @@ String? platformHostname() {
   } catch (_) {
     return null;
   }
+}
+
+/// iOS's rootfs unpack: iSH's `fakefsify` in-process, not the system `tar`
+/// (which iOS denies an app a child process to run). Converts the tarball into
+/// the fakefs SQLite layout the emulator reads. Called through FFI on the
+/// background isolate; `ishFakefsifyFn` is null off iOS, so this is never
+/// reached on a desktop or a browser.
+Future<ProcessResult> _ishFakefsify(String archive, String into) async {
+  final fn = ishFakefsifyFn;
+  if (fn == null) {
+    return ProcessResult(
+        1, 1, "", "iSH fakefsify is not linked into this build.");
+  }
+  final archivePtr = archive.toNativeUtf8();
+  final intoPtr = into.toNativeUtf8();
+  final rc = fn(archivePtr, intoPtr);
+  calloc.free(archivePtr);
+  calloc.free(intoPtr);
+  if (rc == 0) return ProcessResult(0, 0, "", "");
+  return ProcessResult(1, rc, "", "fakefsify failed (errno $rc)");
 }

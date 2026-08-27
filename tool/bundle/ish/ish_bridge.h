@@ -119,3 +119,13 @@ void ish_session_interrupt(ish_session *session);
 // Tear down: kill the guest, close the pipes. The session handle is invalid
 // after this.
 void ish_session_destroy(ish_session *session);
+
+// Convert a tarball into iSH's fakefs layout, in-process. The iOS analog of
+// `tar -xzf` — iOS denies an app a child process, so the system `tar` cannot
+// be exec'd, and the rootfs must be unpacked into the fakefs SQLite database
+// iSH's fs/fake.c models rather than into a plain directory. iSH's own
+// tools/fakefsify does this against libarchive; this entry point wraps it.
+//
+// Returns 0 on success, a negative errno on failure (which FileRootfsStore
+// reports as a failed download rather than a half-unpacked rootfs).
+int32_t ish_fakefsify(const char *archive, const char *into);

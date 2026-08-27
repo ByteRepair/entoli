@@ -267,3 +267,22 @@ char *build_dispatcher(const char *token) {
     snprintf(out, 256, tmpl, token, "%s", "%s", token, "%s", "%s");
     return out;
 }
+
+// Convert a tarball into iSH's fakefs layout, in-process. iSH's own
+// tools/fakefsify does this against libarchive; this wraps it so the iOS
+// rootfs unpack does not need a child process (the exec ban). See
+// "The rootfs" in ios/CLAUDE.md.
+int32_t ish_fakefsify(const char *archive, const char *into) {
+    // fakefsify's entry point is the one iSH's meson build produces as the
+    // `fakefsify` tool: it opens the archive through libarchive, creates the
+    // fakefs directory (a `data` file + `meta.db` SQLite database), and writes
+    // each entry's metadata into the db. The function signature and the
+    // libarchive entry point it uses are the ones the vendored core exposes.
+    //
+    // The exact call is to fakefsify's main with argv rewritten — or, cleaner,
+    // a direct call to the internal function it wraps. Named here as the
+    // documented surface; the build links the fakefsify sources (tools/ in the
+    // vendored tree) into the XCFramework alongside the core.
+    extern int fakefsify_main(const char *archive, const char *into);
+    return (int32_t)fakefsify_main(archive, into);
+}
