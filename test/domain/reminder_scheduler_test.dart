@@ -150,6 +150,40 @@ void main() {
     expect(runner.firedIds, ["r1"]);
   });
 
+  // The hold an alarm took is released through doneFiring. A fire stamps the
+  // reminder list mid-turn, which re-enters reload; a duplicate exact alarm
+  // re-nudges. Either releasing while the turn is still mid-way stops the
+  // foreground service before the turn's own hold has registered, and the
+  // process is killed under it. The release is a no-op until nothing is running.
+  test("a reload while a fire's turn is running does not release the hold", () async {
+    list.reminders = [reminder(nextFireAt: DateTime(2000))];
+    runner.gate = Completer<void>();
+    final sched = scheduler(list, runner, alarms);
+
+    final first = sched.catchUp();
+    await pumpEventQueue();
+    // The re-entrant reload a fire's own stamp triggers, mid-turn.
+    await sched.reload();
+    expect(alarms.released, 0);
+    runner.gate!.complete();
+    await first;
+  });
+
+  test("a nudge while a fire's turn is running does not release the hold", () async {
+    list.reminders = [reminder(nextFireAt: DateTime(2000))];
+    runner.gate = Completer<void>();
+    final sched = scheduler(list, runner, alarms);
+
+    final first = sched.catchUp();
+    await pumpEventQueue();
+    // A duplicate exact alarm delivers another nudge for the running fire.
+    alarms.fire("r1");
+    await sched.onNudged();
+    expect(alarms.released, 0);
+    runner.gate!.complete();
+    await first;
+  });
+
   test("sync arms every enabled reminder and cancels the dropped ones", () async {
     final kept = reminder(id: "kept", nextFireAt: DateTime(2026, 9), code: 3);
     await list.write([kept, reminder(id: "dropped", nextFireAt: DateTime(2026, 9), code: 4)]);
