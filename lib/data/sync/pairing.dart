@@ -224,14 +224,20 @@ class SyncPairing {
     unawaited(_relaySocket?.close());
     _relaySocket = null;
     _server?.disarm();
-    // A manual invite left pending is cancelled here too: the invite page
-    // cancels on back, and leaving the offer half-open would hold a peer
-    // connection for a pairing nobody is watching.
-    _pendingManual = null;
     // The offers subscription is *not* cancelled: it answers reconnects too,
     // and every pairing ends by closing its window. Cancelled here, the first
     // successful pair was also the last time anything answered a dial.
     activity.value = null;
+  }
+
+  /// Drops a pending manual invite, closing the peer connection it held open.
+  /// A manual invite is not a window — `cancelPairingWindow` does not touch
+  /// it — so the invite page calls this on back, and the `RtcLink` that was
+  /// waiting for a reply is torn down rather than leaked.
+  void cancelManualInvite() {
+    final pending = _pendingManual;
+    _pendingManual = null;
+    if (pending != null) unawaited(pending.link.close());
   }
 
   /// A joiner reads [text] — scanned or pasted — and completes its half.

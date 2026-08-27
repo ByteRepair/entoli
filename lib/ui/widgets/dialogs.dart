@@ -17,6 +17,11 @@ Future<void> copyToClipboard(
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
 }
 
+/// Report [error] in a snack bar. The one-line form several pages spell out
+/// for a caught failure, hoisted so they stop duplicating it.
+void say(BuildContext context, Object error) =>
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$error")));
+
 /// Ask which project something belongs under. The answer is wrapped because
 /// the default project is null as well, and a dismissed dialog must not read
 /// as picking it.

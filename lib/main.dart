@@ -127,6 +127,11 @@ class AppSession {
     // that read until after the container exists — the same pattern the
     // repository uses with `() => ref.read(appSettingsProvider)`.
     final secretStore = platform.createSecretStore(config);
+    // Started alongside the identity load: on Android the hostname is a
+    // method-channel round-trip and the identity is keyring/file I/O, so the
+    // two are independent and overlap rather than serialise on the startup
+    // path.
+    final hostname = platform.deviceHostname();
     final identity = await SyncIdentity.load(secretStore);
     final registry = FileDeviceRegistry(config, secretStore);
     // Assigned two statements down, and read only from a running app — the
@@ -137,7 +142,7 @@ class AppSession {
       registry: registry,
       settings: () => settingsHome.read(appSettingsProvider),
       lanSignaling: platform.createLanSignaling,
-      hostname: await platform.deviceHostname(),
+      hostname: await hostname,
     );
     final container = ProviderContainer(
       overrides: [

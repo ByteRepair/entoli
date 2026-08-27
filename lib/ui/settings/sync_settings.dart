@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:io" show Platform;
 
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
@@ -59,8 +58,9 @@ class SyncSection extends ConsumerWidget {
         Divider(),
         ValueListenableBuilder(
           valueListenable: hub.pairing,
-          builder: (context, pairing, _) =>
-              _PairingControls(hub: hub, pairing: pairing),
+          builder: (context, pairing, _) => pairing == null
+              ? _PairingControls(hub: hub)
+              : _PairingStatus(pairing: pairing, hub: hub),
         ),
         Divider(),
         _PairedDevices(hub: hub),
@@ -223,15 +223,12 @@ class _PairedDevices extends ConsumerWidget {
             onRevoke: () => hub.revoke(peer.deviceId),
             onConnect: () => hub.connect(peer.deviceId),
             onDisconnect: () => hub.disconnect(peer.deviceId),
-            onFailed: (error) => _say(context, error),
+            onFailed: (error) => say(context, error),
           ),
       ],
     );
   }
 }
-
-void _say(BuildContext context, Object error) => ScaffoldMessenger.of(context)
-    .showSnackBar(SnackBar(content: Text(error.toString())));
 
 class _PairedDeviceRow extends StatelessWidget {
   const _PairedDeviceRow({
@@ -330,12 +327,13 @@ class _PairedDeviceRow extends StatelessWidget {
 }
 
 /// The buttons that start a pairing, plus the paste-a-code field. The two
-/// pairing flows push their own pages; nothing renders inline here.
+/// pairing flows push their own pages; nothing renders inline here. Drawn only
+/// while no pairing is in flight — the parent swaps in `_PairingStatus` once
+/// one is.
 class _PairingControls extends ConsumerStatefulWidget {
-  const _PairingControls({required this.hub, required this.pairing});
+  const _PairingControls({required this.hub});
 
   final SyncHub hub;
-  final PairingActivity? pairing;
 
   @override
   ConsumerState<_PairingControls> createState() => _PairingControlsState();
@@ -350,15 +348,8 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
     super.dispose();
   }
 
-  bool get _canScan => !kIsWeb && Platform.isAndroid;
-
   @override
   Widget build(BuildContext context) {
-    // A pairing in flight takes over: the window page or the SAS confirm has
-    // the stage, and neither belongs back here. Cancel is on the page itself.
-    if (widget.pairing != null) {
-      return _PairingStatus(pairing: widget.pairing!, hub: widget.hub);
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -401,7 +392,7 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
                   onFieldSubmitted: (_) => _join(),
                 ),
               ),
-              if (_canScan) ...[
+              if (defaultTargetPlatform == TargetPlatform.android) ...[
                 const SizedBox(width: 8),
                 IconButton(
                   tooltip: "Scan QR code",
@@ -430,7 +421,7 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
         ));
       }
     } catch (e) {
-      if (mounted) _say(context, e);
+      if (mounted) say(context, e);
     }
   }
 
@@ -443,7 +434,7 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
         ));
       }
     } catch (e) {
-      if (mounted) _say(context, e);
+      if (mounted) say(context, e);
     }
   }
 
@@ -451,15 +442,12 @@ class _PairingControlsState extends ConsumerState<_PairingControls> {
     final text = _joinController.text.trim();
     if (text.isEmpty) return;
     try {
-      final reply = await widget.hub.pairWith(text);
-      if (reply != null && mounted) {
-        // A manual invite's answer: the other device pasted our offer and sent
-        // back its reply, which completes the pair from this end.
-        _joinController.clear();
-        _say(context, "Pairing…");
-      }
+      // A manual invite's answer comes back as a non-null reply; `pairWith`
+      // completes the pair from this end, and the activity notifier swaps the
+      // status view in — no acknowledgment of our own is needed.
+      await widget.hub.pairWith(text);
     } catch (e) {
-      if (mounted) _say(context, e);
+      if (mounted) say(context, e);
     }
   }
 
@@ -485,7 +473,6 @@ class _PairingStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -495,9 +482,7 @@ class _PairingStatus extends StatelessWidget {
             PairingStage.connecting => const Text("Waiting for a device…"),
             PairingStage.confirming => _SasConfirm(pairing: pairing, hub: hub),
             PairingStage.done => const Text("Paired."),
-            PairingStage.failed => SelectableText(
-                "Failed: ${pairing.error ?? "unknown"}",
-                style: TextStyle(color: theme.colorScheme.error)),
+            PairingStage.failed => _pairingFailed(context, pairing.error),
           },
           if (pairing.stage != PairingStage.done &&
               pairing.stage != PairingStage.confirming)
@@ -543,7 +528,7 @@ class PairingWindowPage extends StatelessWidget {
               PairingStage.confirming =>
                 _SasConfirm(pairing: pairing, hub: hub),
               PairingStage.done => const Center(child: Text("Paired.")),
-              PairingStage.failed => _FailedBody(error: pairing.error),
+              PairingStage.failed => _pairingFailed(context, pairing.error),
               PairingStage.connecting => _PairingCodeBody(activity: pairing),
             };
           },
@@ -581,17 +566,7 @@ class _PairingCodeBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(color: Theme.of(context).dividerColor),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: SelectableText(
-            code,
-            style: const TextStyle(fontFamily: "monospace", fontSize: 11),
-          ),
-        ),
+        _CodeBox(context, code),
         const SizedBox(height: 12),
         Center(
           child: TextButton.icon(
@@ -650,7 +625,7 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        widget.hub.cancelPairingWindow();
+        widget.hub.cancelManualInvite();
         Navigator.of(context).pop();
       },
       child: Scaffold(
@@ -664,17 +639,7 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
               "second code you paste back here. Going back cancels.",
             ),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).dividerColor),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: SelectableText(
-                widget.offer,
-                style: const TextStyle(fontFamily: "monospace", fontSize: 11),
-              ),
-            ),
+            _CodeBox(context, widget.offer),
             const SizedBox(height: 12),
             Center(
               child: TextButton.icon(
@@ -713,31 +678,41 @@ class _ManualInvitePageState extends State<ManualInvitePage> {
     setState(() => _busy = true);
     try {
       await widget.hub.pairWith(text);
-      if (mounted) Navigator.of(context).maybePop();
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      if (mounted) _say(context, e);
+      if (mounted) say(context, e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 }
 
-class _FailedBody extends StatelessWidget {
-  const _FailedBody({this.error});
+/// The bordered monospace block a pairing code or manual invite is shown in,
+/// selectable so it can be copied by hand. Used by the window page and the
+/// manual invite page, which were two copies of the same container.
+// ignore: non_constant_identifier_names
+Widget _CodeBox(BuildContext context, String text) => Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).dividerColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SelectableText(
+        text,
+        style: const TextStyle(fontFamily: "monospace", fontSize: 11),
+      ),
+    );
 
-  final String? error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
+/// The failure row, selectable so the error can be copied into an issue.
+/// Drawn by both the window page and the inline status, so the styling lives
+/// once rather than twice.
+Widget _pairingFailed(BuildContext context, String? error) => Padding(
       padding: const EdgeInsets.all(24),
       child: SelectableText(
         "Failed: ${error ?? "unknown"}",
         style: TextStyle(color: Theme.of(context).colorScheme.error),
       ),
     );
-  }
-}
 
 /// The camera scanner for a pairing code, Android-only by the button that
 /// opens it. Pops with the scanned text on a successful detect.

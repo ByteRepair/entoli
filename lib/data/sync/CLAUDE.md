@@ -500,11 +500,13 @@ confirm renders on the same page once a device connects. Manual invite's offer
 blob carries a full SDP offer and is too large for a reliable QR, so that page
 is selectable text only, with a field for the reply the other device sends
 back. Back cancels through a `PopScope` rather than `dispose`: `dispose` runs
-with the widget tree locked, and `cancelPairingWindow` sets the activity
-notifier, whose `ValueListenableBuilder` would otherwise be told to rebuild mid
--unmount. `cancelPairingWindow` clears a pending manual invite too, so back
-cancels either flow uniformly. The paste-a-code field has a camera-scan button
-on Android only (`mobile_scanner`); the manifest carries `CAMERA` and a
+with the widget tree locked, and the activity notifier's
+`ValueListenableBuilder` would otherwise be told to rebuild mid-unmount. The
+invite page calls `cancelManualInvite` — which closes the held `RtcLink` as
+well as dropping the pending reference — rather than `cancelPairingWindow`,
+since a manual invite never opened a window. The window page cancels its own
+window the same way. The paste-a-code field has a camera-scan button on
+Android only (`mobile_scanner`); the manifest carries `CAMERA` and a
 non-required camera feature for it.
 
 ## Secrets at rest
