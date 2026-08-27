@@ -477,7 +477,7 @@ toggles rather than a set with one always down.
 The built-in projects have badges, and they are always on offer: `everyProject`
 leads with them after the default, so a user who has never made a project sees
 the built-ins alone rather than nothing. What the row names for one is its
-label, not its directory — `Anonymous`, not `anonymous` — the same rule the
+label, not its directory — `🕶️ Anon`, not `anonymous` — the same rule the
 menus and the title bar keep.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
