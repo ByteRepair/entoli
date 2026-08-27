@@ -74,11 +74,16 @@ class ReminderScheduler {
   /// alarm that woke the process holds it, and by here whatever it woke us for
   /// has run. Every other caller is an edit, where there is no hold to release
   /// and this says so to a platform that already agrees.
+  ///
+  /// It is a no-op while a fire's turn is running: a fire stamps the reminder
+  /// list mid-turn, which re-enters here, and releasing then would drop the
+  /// receiver's hold before the turn's own foreground-service hold has
+  /// registered. See "Waking for a reminder" in `android/CLAUDE.md`.
   Future<void> reload() async {
     await sync();
     await catchUp();
     _arm();
-    await alarms.doneFiring();
+    if (_runningIds.isEmpty) await alarms.doneFiring();
   }
 
   /// The system noticed a fire while Dart was not listening — or while it was,
@@ -89,8 +94,11 @@ class ReminderScheduler {
     await catchUp(only: ids.toSet());
     _arm();
     // The receiver held the process for these; they are dealt with now, one
-    // way or the other.
-    await alarms.doneFiring();
+    // way or the other — unless one is still running, in which case its turn
+    // will release once it ends. Releasing here would stop the service before
+    // the turn's own hold has registered, and a duplicate exact alarm can
+    // deliver a nudge mid-turn.
+    if (_runningIds.isEmpty) await alarms.doneFiring();
   }
 
   void _tick() => unawaited(_onTick());
