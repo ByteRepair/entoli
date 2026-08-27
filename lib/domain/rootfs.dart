@@ -67,7 +67,7 @@ class RootfsImage {
 
   /// Checked before anything is unpacked. This is a filesystem full of programs
   /// that will then be run, so it is the one download in the app that is not
-  /// merely trusted to have arrived — the same bargain `tool/bundle/versions.sh`
+  /// merely trusted to have arrived — the same bargain `tool/android/versions.sh`
   /// makes for what is built into the APK.
   final String sha256;
 }

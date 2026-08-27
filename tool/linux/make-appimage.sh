@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Packages a `flutter build linux` bundle as an AppImage, e.g.
-#   linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage
+#   tool/linux/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage
 set -euo pipefail
 
 bundle="${1:?usage: make-appimage.sh <bundle-dir> <output.AppImage>}"
