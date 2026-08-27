@@ -1,4 +1,3 @@
-import "dart:ffi";
 import "dart:io";
 
 import "package:ffi/ffi.dart";
@@ -20,6 +19,7 @@ import "../../../data/local/file_kv_cache.dart";
 import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
 import "../../../data/local/ish_ffi.dart";
+import "../../../data/local/ish_shell.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/shared_backup.dart";
@@ -50,8 +50,33 @@ import "signaling_server.dart";
 Shell platformShell({
   required Map<String, String> Function() environment,
   required ShellDriver? Function() driver,
-}) =>
-    LocalShell(environment: environment, driver: driver);
+  String? dataDir,
+  RootfsStore? rootfsStore,
+  String? rootfsId,
+}) {
+  if (Platform.isIOS) {
+    // iOS has no host shell and no proot — the driver callback (which picks
+    // between the two on other platforms) is not exec-based here. IshShell
+    // drives the emulator through FFI; it resolves the rootfs the way
+    // platformDriver does, but without producing a ShellDriver, since there
+    // is nothing to exec. See ios/CLAUDE.md.
+    final rootfs = rootfsById(rootfsId);
+    final dir = rootfs != null && rootfsStore != null
+        ? rootfsStore.directoryOfSync(rootfs.id)
+        : null;
+    final installed = rootfs != null && dir != null;
+    return IshShell(
+      rootfsDir: dir ?? "",
+      dataDir: dataDir ?? "",
+      environment: environment,
+      platformDescription: installed
+          ? rootfs.describe("ios")
+          : "iOS, with no Linux installed. Install one from the Terminal "
+              "settings to run commands.",
+    );
+  }
+  return LocalShell(environment: environment, driver: driver);
+}
 
 /// What the next command runs under: the Linux the settings page picked,
 /// where it is installed, or the machine itself where there is no pick, or

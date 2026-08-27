@@ -72,6 +72,11 @@ BuiltinBackend createBackend(
         rootfsId: settings().rootfsId,
         abi: abi,
       ),
+      // iOS resolves its own shell (IshShell, not LocalShell) from these —
+      // the driver callback above is exec-based and iOS denies a child process.
+      dataDir: config.dataDir,
+      rootfsStore: rootfs,
+      rootfsId: settings().rootfsId,
     ),
     webSearch: platformWebSearch(),
     store: store,
