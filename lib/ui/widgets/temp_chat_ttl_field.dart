@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/builtin_project.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "resettable_field.dart";
@@ -26,10 +27,13 @@ class TempChatTtlField extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final projectTtl = ref.watch(projectSettingsProvider(project)).tempChatTtl;
     final appTtl = ref.watch(appSettingsProvider).tempChatTtl;
+    // Mirrors the tail of `ChatRepository._resolveTempTtl` minus the chat's own
+    // value, which `value` is editing: the inherited default a null resolves to.
     return InheritableDropdown<TempChatTtl>(
       label: "Temporary chat",
       value: value,
-      inherited: (projectTtl ?? appTtl).label,
+      inherited: (projectTtl ?? builtinProjectOf(project)?.tempChatTtl ?? appTtl)
+          .label,
       options: tempChatTtlLabels,
       onChanged: onChanged,
     );

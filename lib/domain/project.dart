@@ -22,6 +22,16 @@ const defaultProjectDir = "default";
 String projectLabel(String? project) =>
     project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
 
+/// The empty-chat screen's question when no built-in ships its own. A const
+/// the way [defaultProjectLabel] is, so the screen and its tests name one
+/// string.
+const defaultEmptyChatQuestion = "What would you like to discuss?";
+
+/// The question the empty-chat screen asks for a project: a built-in's own, or
+/// the default. Mirrors [projectLabel] in resolving a built-in's shipped string.
+String emptyChatQuestionFor(String? project) =>
+    builtinProjectOf(project)?.emptyChatQuestion ?? defaultEmptyChatQuestion;
+
 /// Every project there is, the default one first, then the built-in ones, then
 /// the user's — the order the menus offer them in, and the order a chat is
 /// looked for in.
