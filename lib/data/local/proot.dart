@@ -3,6 +3,10 @@ import "dart:io" show Platform;
 import "../../domain/rootfs.dart";
 import "../../domain/shell.dart";
 
+/// The guest path where the project workspace is mounted: Alpine's `/root`,
+/// which is also `HOME` inside the guest.
+const guestHome = "/root";
+
 /// How a command is run inside a downloaded Linux: the proot invocation, the
 /// environment on both sides of it bar `HOME`, and the sentence the model is
 /// told.
@@ -15,62 +19,63 @@ ShellDriver prootDriver({
   required Rootfs rootfs,
   required String rootfsDir,
   required String dataDir,
+  required String skillsBundledDir,
+  required String userSkillsDir,
   String? abi,
 }) =>
     ShellDriver(
-      command: [
+      commandFor: (cwd, home) => [
         proot.binary,
         "-r", rootfsDir,
-        // The tracees are killed with the tracer. Without it a timed-out build
-        // is merely detached from proot and carries on running.
         "--kill-on-exit",
-        // A hard link is what a package manager unpacks with, and app storage
-        // does not always allow one.
         "--link2symlink",
-        // The guest believes it is root, which is what lets it install
-        // packages. It is a lie told to the guest, not a privilege: the process
-        // is still the app's own uid to the kernel.
         "-0",
         "-b", "/dev",
         "-b", "/proc",
         "-b", "/sys",
-        // At its own path, not somewhere tidier. Every path the app has ever
-        // handed the model — the chat's workspace, the project's, an artifact —
-        // then means the same thing inside the guest as outside it, and nothing
-        // else in the app has to learn that commands are running elsewhere.
-        "-b", "$dataDir:$dataDir",
+        // The project workspace at a clean guest path, not its own Android
+        // path. The chat's workspace is inside it, so it is reachable at
+        // $guestHome + the suffix of cwd past home. The rest of the device
+        // is not there.
+        "-b", "$home:$guestHome",
+        // Skills need a real base directory so their scripts run; bound at
+        // clean paths so the model is told those, not the host's.
+        "-b", "$skillsBundledDir:/opt/skills-bundled",
+        "-b", "$userSkillsDir:/opt/skills",
         "-b", "${proot.tmpDir}:/tmp",
-        // Android keeps no such file, so the guest is given one — see
-        // `BundledTools`, which writes it at every launch.
         "-b", "${proot.resolvConf}:/etc/resolv.conf",
-        // The directory the process was started in, which proot would otherwise
-        // replace with `/`. It reads the same either way round — as a host path
-        // or as a guest one — which is what the bind above buys.
-        "-w", ".",
+        // The guest path of the chat workspace, not "." — proot stores -w as
+        // the guest cwd, and "." resolves against the guest root, not the
+        // host's working directory.
+        "-w", guestWorkspacePath(home, cwd),
         "/bin/sh",
       ],
       environment: {
-        // proot's own, read before it has traced anything. The loader is the
-        // one file that is really exec'd, so it has to be named where it is
-        // allowed to be: the native library directory.
         "PROOT_LOADER": proot.loader,
         if (proot.loader32 != null) "PROOT_LOADER_32": proot.loader32!,
-        // proot writes its own temporary files here. The system's temporary
-        // directory is not somewhere an app may write.
         "PROOT_TMP_DIR": proot.tmpDir,
-        // Everything below this line is the guest's rather than proot's.
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        // No `HOME`: [projectHome] is what tells the shell to set it, to the
-        // project's workspace.
         "LANG": "C.UTF-8",
       },
-      // A guest is one project's home at a time, which the shell answers from
-      // this field rather than from knowing it is a guest.
       projectHome: true,
+      guestRoot: guestHome,
+      hostToGuestPaths: {
+        skillsBundledDir: "/opt/skills-bundled",
+        userSkillsDir: "/opt/skills",
+      },
       description: "${rootfs.describe(abi)}, in which ${rootfs.packageManager} "
-          "installs anything else you need. The chat's files are at the same "
-          "paths inside it as outside, and the rest of the device is not there. "
+          "installs anything else you need. Your home directory (~) is the "
+          "project workspace, and the rest of the device is not there. "
           "It is running under proot on ${Platform.operatingSystem} "
           "${Platform.operatingSystemVersion}, so filesystem-heavy commands are "
           "slower than they look",
     );
+
+/// The guest path of a chat workspace, given the project workspace [home] and
+/// the chat workspace [cwd]. The chat workspace is a folder inside the project
+/// workspace, so its guest path is [guestHome] + the suffix of [cwd] past
+/// [home].
+String guestWorkspacePath(String home, String cwd) {
+  final suffix = cwd.length > home.length ? cwd.substring(home.length) : "";
+  return "$guestHome$suffix";
+}

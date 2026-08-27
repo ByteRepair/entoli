@@ -322,7 +322,7 @@ class BuiltinBackend implements AgentBackend {
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
         saveArtifact: (path, {artifactId}) async {
-          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
           if (artifactId != null) {
             await store.updateArtifact(chatId, artifactId, resolved, project: project);
             return artifactId;
@@ -330,7 +330,7 @@ class BuiltinBackend implements AgentBackend {
           return store.createArtifact(chatId, resolved, project: project);
         },
         packageSkill: (path, name) async {
-          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
           final pkg = await packageSkillDirectory(config.fs, resolved, name);
           final bytes = packageSkillBytes(pkg);
           final installId = const Uuid().v4();

@@ -38,6 +38,8 @@ Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 /// be run under.
 ShellDriver? platformDriver({
   required String dataDir,
+  required String skillsBundledDir,
+  required String userSkillsDir,
   Toolset? tools,
   Proot? proot,
   RootfsStore? store,

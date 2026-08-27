@@ -87,14 +87,35 @@ EditArgs? editArgsFrom(String? json) {
 /// path is sanitised by [safeRelativePath] before joining, so `..` and a
 /// leading separator cannot escape. An absolute path is the machine naming a
 /// place of its own: it is used as written, normalised.
+///
+/// [guestRoot] is where [projectWorkspace] appears inside a proot guest (e.g.
+/// `/root`), or null on the machine itself. Paths starting with `~/` are
+/// expanded to [projectWorkspace]; paths starting with [guestRoot] are
+/// translated back to [projectWorkspace] so the host filesystem can find them.
 String resolveWorkspacePath(
   FileSystem fs,
   String path,
   String workspace,
-  String projectWorkspace,
-) {
+  String projectWorkspace, {
+  String? guestRoot,
+}) {
   final project = path.startsWith("project:");
-  final rest = project ? path.substring("project:".length) : path;
+  var rest = project ? path.substring("project:".length) : path;
+  // Expand `~` to the project workspace, the way the shell does inside a guest
+  // or on Android where HOME is the project workspace.
+  if (rest.startsWith("~/")) {
+    rest = fs.path.join(projectWorkspace, rest.substring(2));
+  } else if (rest == "~") {
+    rest = projectWorkspace;
+  }
+  // Translate a guest path back to the host's, so the file tools — which use
+  // the host filesystem — can find what the model named inside the guest.
+  if (guestRoot != null && rest.startsWith(guestRoot)) {
+    final suffix = rest.substring(guestRoot.length);
+    rest = suffix.isEmpty
+        ? projectWorkspace
+        : fs.path.join(projectWorkspace, suffix);
+  }
   if (!fs.path.isAbsolute(rest)) {
     return fs.path.join(
         project ? projectWorkspace : workspace, safeRelativePath(fs, rest));

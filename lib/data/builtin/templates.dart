@@ -115,13 +115,18 @@ String turnPrompt({
   required bool canRunCommands,
   bool sharedWorkspace = true,
   required bool projectHome,
+  String? guestRoot,
 }) {
-  // The project's workspace is shared only where the project says so; a
-  // project that does not share one names nothing of it.
+  // Where the model is told its workspace is: `~` inside a guest, the real
+  // path on the machine. The chat workspace is `~/chats/<id>` inside a guest.
+  final homeDisplay = guestRoot ?? projectWorkspace;
+  final workspaceDisplay = guestRoot != null
+      ? "$guestRoot${workspace.substring(projectWorkspace.length)}"
+      : workspace;
   final shared = sharedWorkspace
       ? "\n\n"
           "It is a folder inside the project workspace, which is shared with "
-          "every other\nconversation in this project: $projectWorkspace\n"
+          "every other\nconversation in this project: $homeDisplay\n"
           "Work the user will come back to — a checkout, notes, data you "
           "built up — goes\nthere, so another conversation can pick it up. "
           "Write to it by path; you do not\nhave to be in it."
@@ -131,7 +136,7 @@ String turnPrompt({
       """
 ## Your workspace
 
-Your shell starts in this conversation's own workspace: $workspace
+Your shell starts in this conversation's own workspace: $workspaceDisplay
 It is yours; the files in it survive between turns, and nothing else writes
 there.$shared${projectHome || !sharedWorkspace ? """
 A command's home directory is the project workspace, so anything a tool keeps

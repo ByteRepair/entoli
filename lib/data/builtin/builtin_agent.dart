@@ -67,8 +67,9 @@ const _bashCommonArgs = {
   "timeout": {
     "type": "integer",
     "description":
-        "How long the command may run, in milliseconds. Defaults to 60000 "
-        "and cannot exceed it.",
+        "How long the command may run, in milliseconds. Set this to give a "
+        "command a different deadline than the default 60000; values above "
+        "180000 (3 minutes) are capped to it.",
   },
 };
 
@@ -114,7 +115,7 @@ const bashToolOneShot = LlmTool(
 class BuiltinOptions {
   const BuiltinOptions({
     this.stepLimit = 40,
-    this.commandTimeout = const Duration(seconds: 60),
+    this.commandTimeout = const Duration(minutes: 3),
     this.maxAttempts = 4,
     this.retryBackoff = const Duration(seconds: 1),
     this.maxConcurrentSubAgents = 8,
@@ -659,6 +660,7 @@ class BuiltinAgent {
       canRunCommands: caps.commands,
       sharedWorkspace: sharedWorkspace,
       projectHome: shell.projectHome,
+      guestRoot: shell.guestRoot,
     );
     final head = [
       agentSystemMessage(
@@ -989,7 +991,18 @@ class BuiltinAgent {
       return;
     }
     yield ToolResultEvent(
-        ToolResult(callId: call.id, returnCode: 0, output: skillPrompt(document, arguments)));
+        ToolResult(callId: call.id, returnCode: 0, output: _skillOutput(document, arguments)));
+  }
+
+  /// The skill body with its base directory translated to the guest's paths,
+  /// where the shell runs inside one, so the model can `cd` to it and run
+  /// its scripts.
+  String _skillOutput(PromptDocument document, String arguments) {
+    var body = skillPrompt(document, arguments);
+    for (final MapEntry(:key, :value) in shell.hostToGuestPaths.entries) {
+      body = body.replaceAll(key, value);
+    }
+    return body;
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same
@@ -1042,7 +1055,7 @@ class BuiltinAgent {
           'The $readToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1092,7 +1105,7 @@ class BuiltinAgent {
           "those arguments were missing.");
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1117,7 +1130,7 @@ class BuiltinAgent {
           '"new_string": "..."}; those arguments were missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1301,7 +1314,7 @@ class BuiltinAgent {
           'The $artifactToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, parsed.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, parsed.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1348,7 +1361,7 @@ class BuiltinAgent {
       yield* _reject(call, createSkillFormatError);
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,

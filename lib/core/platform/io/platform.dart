@@ -57,6 +57,8 @@ Shell platformShell({
 /// synchronously because it is asked before every command.
 ShellDriver? platformDriver({
   required String dataDir,
+  required String skillsBundledDir,
+  required String userSkillsDir,
   Toolset? tools,
   Proot? proot,
   RootfsStore? store,
@@ -72,6 +74,8 @@ ShellDriver? platformDriver({
       rootfs: rootfs,
       rootfsDir: dir,
       dataDir: dataDir,
+      skillsBundledDir: skillsBundledDir,
+      userSkillsDir: userSkillsDir,
       abi: abi,
     );
   }
