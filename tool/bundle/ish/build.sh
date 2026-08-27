@@ -19,6 +19,17 @@ work=${WORK_DIR:-$here/build}
 out=${OUT_DIR:-$here/dist}
 jobs=${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc)}
 
+# Ensure the iSH submodule is checked out. A contributor or CI that cloned
+# without --recurse-submodules has an empty src/ here; init it shallowly so
+# the build is self-contained the way tool/bundle/build.sh is for Android.
+if [ ! -f "$src/kernel/calls.h" ]; then
+    git submodule update --init --recursive --depth 1
+fi
+if [ ! -f "$src/kernel/calls.h" ]; then
+    echo "iSH source is not present. Run 'git submodule update --init --recursive' from the repo root." >&2
+    exit 1
+fi
+
 # The source files the kernel=ish build compiles, taken from src/meson.build's
 # `src` list. Platform host is darwin (iOS is Darwin), so platform/darwin.c.
 kernel_src=(
@@ -40,6 +51,11 @@ kernel_src=(
 # build; we compile it in directly.
 fakefs_src=(fs/fake-db.c fs/fake-migrate.c fs/fake-rebuild.c)
 
+# The rootfs unpack tool. iSH's tools/fakefsify converts a tarball to fakefs
+# in-process; the bridge's ish_fakefsify wraps it. Needs libarchive (iSH's
+# deps/libarchive submodule).
+fakefsify_src=(tools/fakefsify.c)
+
 # The emulator (asbestos) is hand-written assembly gadgets per host arch. The
 # iOS device and the simulator are both arm64, so gadgets-arm64 is the one.
 emu_src=(
@@ -51,7 +67,7 @@ emu_src=(
   asbestos/gadgets-arm64/misc.S
 )
 
-all_src=("${kernel_src[@]}" "${fakefs_src[@]}" "${emu_src[@]}" "$bridge")
+all_src=("${kernel_src[@]}" "${fakefs_src[@]}" "${fakefsify_src[@]}" "${emu_src[@]}" "$bridge")
 
 # Flags shared across every target. iSH's meson build sets c_std=gnu11 and
 # -Wno-switch; the asbestos gadgets are assembly.
@@ -67,7 +83,8 @@ build_lib() {
   mkdir -p "$destdir"
   local sdkroot; sdkroot=$(xcrun --sdk "$sdk" --show-sdk-path)
   local cflags=("${common_cflags[@]}" -isysroot "$sdkroot" \
-    -arch "$arch" -fPIC -O2 -g)
+    -arch "$arch" -fPIC -O2 -g \
+    -I"$src/deps/libarchive/libarchive")
   # Compile each .c to a .o, then the assembly gadgets the same way.
   local objs=()
   for f in "${all_src[@]}"; do

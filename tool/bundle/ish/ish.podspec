@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   # hand-written assembly and the build needs Xcode — the same reason the
   # Android build ships .so files laid out by tool/bundle/build.sh.
   s.vendored_frameworks = 'dist/IshCore.xcframework'
-  s.libraries        = 'sqlite3'
+  s.libraries        = 'sqlite3', 'archive'
   s.frameworks       = 'Foundation'
   s.pod_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => '' }
 end

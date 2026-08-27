@@ -320,6 +320,12 @@ is `logDetail`, which is debug-only.
   toolbox, and is built for arm64 alone. `$HOME` rather than `~`: a tilde is not
   expanded as an argument to `env` or inside quotes, and the build then fails on
   a literal `~`.
+- iSH (iOS's emulator): `tool/bundle/ish/build.sh`. The iSH source is a git
+  submodule (shallow) at `tool/bundle/ish/src/`; the build inits it and its
+  `deps/` submodules, then compiles the core + the FFI bridge into an
+  XCFramework. Needs macOS and Xcode. Not run by the app build; without it an
+  iOS build has no shell to run commands in. `git submodule update --init
+  --recursive` fetches the source — a clone without it has an empty `src/`.
 - git is no longer among them. The agent gets it from `apk` inside the Alpine
   rootfs, which is a distribution's job to patch rather than ours — so a device
   with no rootfs installed has no git.

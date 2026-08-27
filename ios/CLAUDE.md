@@ -10,8 +10,10 @@ here at all. An iOS build with no answer to that is one where every command the
 agent runs fails, which is the whole of why this platform ships an emulator
 instead.
 
-The emulator is iSH, vendored under `tool/bundle/ish/` and built as a static
-library linked into the app (see "The iSH driver" below). It runs a Linux
+The emulator is iSH, a git submodule under `tool/bundle/ish/src/` (shallow —
+`shallow = true` in `.gitmodules`, so `git submodule update --init` fetches
+one commit, not the full history) and built as a static library linked into
+the app (see "The iSH driver" below). It runs a Linux
 userspace **in-process**: no child process, and no writable-executable memory
 either, which is the other iOS ban. iSH's threaded-code interpreter is a table
 of function pointers with tail-calls rather than a JIT that emits machine code,
