@@ -168,7 +168,8 @@ class BuiltinBackend implements AgentBackend {
         await _runBypass(chatId, prompt, controller,
             history: history,
             project: project,
-            sharedWorkspace: settings.sharedWorkspace);
+            sharedWorkspace: settings.sharedWorkspace,
+            environment: settings.environment);
         return;
       }
 
@@ -213,6 +214,7 @@ class BuiltinBackend implements AgentBackend {
         fs: config.fs,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
+        environment: settings.environment,
         model: target.modelId,
         library: library,
         options: options,
@@ -293,6 +295,7 @@ class BuiltinBackend implements AgentBackend {
         fs: config.fs,
         workspace: workspace,
         projectWorkspace: projectWorkspace,
+        environment: settings.environment,
         model: target.modelId,
         options: options,
         skills: library?.entries(CompletionKind.skill) ?? const [],
@@ -410,6 +413,7 @@ class BuiltinBackend implements AgentBackend {
     required List<Message> history,
     required String? project,
     required bool sharedWorkspace,
+    Map<String, String> environment = const {},
   }) async {
     final command = shellBypassCommand(prompt.plainText)!;
     await config.ensureChatDirs(chatId, project: project);
@@ -421,20 +425,29 @@ class BuiltinBackend implements AgentBackend {
             project: project,
             sharedWorkspace: sharedWorkspace),
         sharedHome: sharedWorkspace,
-        timeout: options.commandTimeout);
+        timeout: options.commandTimeout,
+        environment: environment);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.add(chatId, run.kill);
     controller.add(StatusEvent(runningTool(bashToolName)));
 
+    // The session does not feed the command and the command does not feed it:
+    // a chat reopened after a restart fills its session from the log, and that
+    // reading runs while the command takes its time rather than ahead of it.
+    final filling = _sessionOf(chatId, history);
     final result = await run.result;
+    final session = await filling;
     // An aborted turn writes no part, so the session must not hold one either.
     if (controller.isClosed) return;
+    // The directory the shell was left in rides on the part as a fact; the
+    // projection words the change, the way it does for the model's commands.
     final part = ShellRunPart(
       command: command,
       returnCode: result.returnCode,
       output: result.output,
       exceptionInfo: result.exceptionInfo,
+      cwd: result.cwd,
     );
     controller.add(ShellRunEvent(part));
     controller.add(const DoneEvent());
@@ -442,7 +455,6 @@ class BuiltinBackend implements AgentBackend {
     // part that was just reported: the prompt through `projectionOf`, the reply
     // through `assistantMessages`. The `!` turn writes its own reply, and that
     // is the only way it differs.
-    final session = await _sessionOf(chatId, history);
     final opens = !session.hasConversation;
     session.messages
       ..addAll(await projectionOf([prompt],
@@ -887,9 +899,16 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<void> disposeChat(String chatId) async {
+    // Before the store forgets it: which project the chat's shell stood in.
+    final project = await store.projectOf(chatId);
+    shell.closeSession(config.workspaceDir(chatId, project: project));
     await abort(chatId);
     _sessions.remove(chatId);
   }
+
+  @override
+  void closeChatShell(String chatId, {required String? project}) =>
+      shell.closeSession(config.workspaceDir(chatId, project: project));
 
   /// Concurrently: this runs on the way out, and the app would otherwise wait
   /// out every live turn's process kill one after another.

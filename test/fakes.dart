@@ -539,8 +539,15 @@ class FakeBackend implements AgentBackend {
 
   final List<String> disposed = [];
 
+  /// The shells [closeChatShell] ended, as the chat and the project it left.
+  final List<(String, String?)> closedShells = [];
+
   @override
   Future<void> disposeChat(String chatId) async => disposed.add(chatId);
+
+  @override
+  void closeChatShell(String chatId, {required String? project}) =>
+      closedShells.add((chatId, project));
 
   List<ModelOption> modelList = testModels;
 

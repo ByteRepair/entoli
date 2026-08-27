@@ -59,6 +59,9 @@ void main() {
       expect(result.returnCode, 0);
       expect(result.output, contains("The answer is hello."));
       expect(shell.ran, ["echo hello"]);
+      // One-shot over the parent's shell: the fan-out's commands get a fresh
+      // subshell each, and never the parent's standing one.
+      expect(shell.oneShots, [true]);
     });
 
     test("a missing agent name falls back to general", () async {

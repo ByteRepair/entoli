@@ -24,6 +24,7 @@ import "package:agent_chat/domain/chat_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/reminder.dart";
+import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
@@ -112,6 +113,7 @@ class TestApp {
     PromptLibrary? library,
     bool launcherIcons = true,
     ChatStore? store,
+    Shell? shell,
     FakeFileHandoff? handoff,
     FakeVoice? voice,
     FakeReminderAlarms? reminderAlarms,
@@ -180,6 +182,7 @@ class TestApp {
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
+          shellProvider.overrideWithValue(shell ?? const UnavailableShell()),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider

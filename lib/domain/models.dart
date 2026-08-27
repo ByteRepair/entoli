@@ -212,11 +212,15 @@ sealed class MessagePart with _$MessagePart {
   ///
   /// [command] is here as well as in the prompt above because the projection
   /// words one message at a time and has no prompt beside it to read.
+  /// [cwd] is the directory the run's shell was left in, where the shell is
+  /// the chat's own persistent one and reports it. The projection turns the
+  /// change in it into the note a later turn reads; see "The projection".
   const factory MessagePart.shellRun({
     required String command,
     required int returnCode,
     required String output,
     String? exceptionInfo,
+    String? cwd,
   }) = ShellRunPart;
   const factory MessagePart.file({
     required String resource,
@@ -253,11 +257,16 @@ abstract class ToolCall with _$ToolCall {
 
 @freezed
 abstract class ToolResult with _$ToolResult {
+  /// [cwd] is the directory the chat's shell was left in, where the shell is
+  /// the persistent one and reports it — the fact a directory move is, rather
+  /// than the wording of it. The projection words the change into a note; see
+  /// "The projection".
   const factory ToolResult({
     required String callId,
     required int returnCode,
     required String output,
     String? exceptionInfo,
+    String? cwd,
   }) = _ToolResult;
 
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);

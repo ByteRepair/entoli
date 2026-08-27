@@ -45,7 +45,7 @@ class LlamaBinaries {
 }
 
 /// How the server is invoked, and the environment that finds everything it
-/// loads. A pure function over paths for the reason `prootSandbox` is one: what
+/// loads. A pure function over paths for the reason `prootDriver` is one: what
 /// the server is asked to do is the whole of what this feature does, and it is
 /// the part of it that can be pinned by a test on a machine with no Android on
 /// it.

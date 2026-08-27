@@ -13,10 +13,13 @@ import "../../providers.dart";
 import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
 import "../theme.dart";
+import "../widgets/add_button_row.dart";
 import "../widgets/anchored_menu.dart";
 import "../widgets/busy.dart";
 import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/editable_row.dart";
+import "../widgets/environment_section.dart";
 import "../widgets/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
@@ -703,7 +706,7 @@ class _InstructionsSection extends ConsumerWidget {
           onChanged: (value) =>
               ref.read(appSettingsProvider.notifier).setNestedInstructions(value),
         ),
-        _EditableRow(
+        EditableRow(
           title: "Excluded files",
           subtitle: excludes.isEmpty ? "None" : excludes.join("\n"),
           removeLabel: "Clear exclusions",
@@ -872,7 +875,7 @@ class _ProvidersEditor extends ConsumerWidget {
                   "the models it offers.",
         ),
         for (final provider in providers)
-          _EditableRow(
+          EditableRow(
             title: provider.displayName,
             subtitle: _describe(provider),
             removeLabel: "Remove ${provider.id}",
@@ -880,7 +883,7 @@ class _ProvidersEditor extends ConsumerWidget {
                 initial: provider, title: "Edit ${provider.displayName}"),
             onRemove: () => _remove(ref, provider),
           ),
-        _AddButtonRow(
+        AddButtonRow(
           // The button's own context, which is what the menu is anchored under.
           child: Builder(
             builder: (context) => OutlinedButton.icon(
@@ -928,102 +931,14 @@ class _ProvidersEditor extends ConsumerWidget {
 class _EnvironmentSection extends ConsumerWidget {
   const _EnvironmentSection();
 
-  Future<void> _edit(BuildContext context, WidgetRef ref, {String? name}) async {
-    final env = ref.read(appSettingsProvider).environment;
-    final pair = await promptForPair(
-      context,
-      title: name == null ? "Add variable" : "Edit $name",
-      nameLabel: "Name",
-      valueLabel: "Value",
-      name: name ?? "",
-      value: name == null ? "" : env[name] ?? "",
-    );
-    if (pair == null) return;
-    // A rename drops the old key rather than leaving both behind.
-    final next = {...env}..remove(name);
-    next[pair.name] = pair.value;
-    await ref.read(appSettingsProvider.notifier).setEnvironment(next);
-  }
-
-  Future<void> _remove(WidgetRef ref, String name) async {
-    final next = {...ref.read(appSettingsProvider).environment}..remove(name);
-    await ref.read(appSettingsProvider.notifier).setEnvironment(next);
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final env = ref.watch(appSettingsProvider).environment;
-    final names = env.keys.toList()..sort();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          "Environment",
-          description: "Passed to every command the agent runs. A command already "
-              "running keeps what it started with.",
-        ),
-        for (final name in names)
-          _EditableRow(
-            title: name,
-            // These are mostly API keys, and settings is a page people show
-            // people.
-            subtitle: "•" * env[name]!.length.clamp(0, 24),
-            removeLabel: "Remove $name",
-            onTap: () => _edit(context, ref, name: name),
-            onRemove: () => _remove(ref, name),
-          ),
-        _AddButtonRow(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text("Add variable"),
-            onPressed: () => _edit(context, ref),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// One entry in an editable list: tap the row to change it, the cross to drop
-/// it. Both list sections here are the same affordance over different data.
-class _EditableRow extends StatelessWidget {
-  const _EditableRow({
-    required this.title,
-    required this.subtitle,
-    required this.removeLabel,
-    required this.onTap,
-    required this.onRemove,
-  });
-
-  final String title;
-  final String subtitle;
-  final String removeLabel;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-        dense: true,
-        title: Text(title),
-        subtitle: Text(subtitle),
-        onTap: onTap,
-        trailing: IconButton(
-          icon: const Icon(Icons.close),
-          tooltip: removeLabel,
-          onPressed: onRemove,
-        ),
+  Widget build(BuildContext context, WidgetRef ref) => EnvironmentSection(
+        env: ref.watch(appSettingsProvider).environment,
+        description: "Passed to every command the agent runs. A command already "
+            "running keeps what it started with.",
+        onSaved: (env) =>
+            ref.read(appSettingsProvider.notifier).setEnvironment(env),
       );
-}
-
-class _AddButtonRow extends StatelessWidget {
-  const _AddButtonRow({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) =>
-      Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 8), child: child);
 }
 
 class _DeleteAllChats extends ConsumerWidget {
@@ -1159,7 +1074,7 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
           ),
           // The icons the explorer already uses for the same two directions:
           // a download leaves the app, an upload arrives in it.
-          _AddButtonRow(
+          AddButtonRow(
             child: ValueListenableBuilder(
               valueListenable: _busy,
               builder: (context, busy, _) => Row(

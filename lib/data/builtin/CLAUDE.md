@@ -104,31 +104,78 @@ so `bashTool` is dropped from the request and a system prompt with no tool
 instructions is used; the turn ends when the model replies with text and no
 tool call, the same termination signal the shell path uses.
 
-**Which shell that is, is resolved rather than named.** `bash` then `sh` off
-`PATH`, then `/bin/bash`, `/system/bin/sh`, `/bin/sh` — the two places a shell
-sits that a `PATH` may not name, a stripped environment and Android, which has
-no `/bin` at all. It was `/bin/bash` or `/bin/sh`, which meant a phone was
+**What the commands run under is a `ShellDriver`, and which one is resolved
+rather than named.** The host driver is the machine's own shell — `bash` then
+`sh` off `PATH`, then `/bin/bash`, `/system/bin/sh`, `/bin/sh`, the two places a
+shell sits that a `PATH` may not name, a stripped environment and Android, which
+has no `/bin` at all. It was `/bin/bash` or `/bin/sh`, which meant a phone was
 offered the `bash` tool and then failed every command it ran, one at a time.
-Nothing found is `canRunCommands: false`, which is the browser's answer and the
-honest one: the loop stops offering a tool there is nothing behind.
+Nothing found is a null driver and `canRunCommands: false`, which is the
+browser's answer and the honest one: the loop stops offering a tool there is
+nothing behind. The other driver is the guest — see "A whole Linux under proot"
+in `data/local/` — and `platformDriver` picks between the two per command.
+`LocalShell` runs whichever it is handed, since to it both are a command that
+ends in a shell, and that is the whole of what a new driver owes it.
 
-`LocalShell` prepends `exec 2>&1` to the script rather than merging two Dart
-streams — a compiler's errors interleaved with its progress is the whole value
-of reading them, and separate pipes arrive in whatever order they flush. It
-spawns under `setsid` where that exists so a timeout can kill the process
-group: a timed-out `npm install` that only loses its shell keeps downloading.
-Whether `setsid` is there is learned by trying it, not by probing first.
+**The commands run in one shell per chat, and its state is machine state the
+conversation builds on.** A fresh subshell per command made a `cd` or an
+`export` a private joke: the model moved the shell in one command, and the next
+command was back in the workspace having heard nothing. So a chat has one
+non-interactive shell — the agent's `bash` and the user's `!` share it, and it
+is keyed by the chat's own workspace, which is unique to the chat — and what
+one command did to the directory or the environment stands for the next.
 
-Killing the group is not the same as closing the pipe, and the pipe is what the
-run waits on. A command that puts a child in a session of its own — a daemon
-started with `setsid`, anything a `nohup` left behind — leaves that child
-holding stdout after the shell is gone, so the stream never ends. Waited on,
-that is a turn nothing can finish: the agent is inside `await run.result`, the
-timeout has already fired and killed everything it could reach, and there is no
-second timeout behind it. So the output is read for a moment longer and the
-subscription is then cancelled, which closes the read end. What that costs is
-whatever the escaped child had still to say, which is the right thing to lose —
-it is still saying it.
+Each command crosses as one base64 line on the shell's stdin: the raw script
+never touches the wire, so a multi-line command, a quote or a `read` in it
+cannot steal the next line of the queue. The dispatcher decodes the line and
+evaluates it **in the shell itself** — a subshell would undo the point — and
+then prints a sentinel naming the command's exit code and the directory the
+shell is now in. The sentinel carries a token unique to the shell's life, so a
+command's output cannot forge the end of a run, and the run completes on the
+sentinel rather than on the pipe closing. That is the answer to the old
+hazard: a child in a session of its own — a daemon started with `setsid`,
+anything a `nohup` left behind — holds the pipe open after the shell is gone,
+and held it open forever, so a run waited on the pipe was a turn nothing could
+finish. The sentinel makes the run end when the command does; what the escaped
+child can still delay is the settling of a run whose shell *died*, and that is
+bounded by a grace on the process's exit rather than waited on.
+
+Stopping a command is a `SIGINT` to the process group — a Ctrl-C, not a
+murder — and a non-interactive shell dies on that signal unless it is told
+otherwise, which is load-bearing: the dispatcher traps the interrupt so the
+shell waits for the interrupted command to go, reports its 130, and keeps
+whatever state it had. A trap on `EXIT` is the other end: a command that runs
+`exit` takes the shell down with it, and the trap is what says how it went —
+the code and the directory — before the pipe closes. A stop the command
+ignores is wedging the shell, and a grace past it kills the group for real,
+the shell coming back cold on the next command. A timeout escalates whichever
+way: what a non-interactive shell starts in the background ignores the
+interrupt, and a timed-out `npm install` that only lost its shell keeps
+downloading — so the kill lands the moment the command's own sentinel comes,
+the interrupt spent and the grace unable to reach any sooner, or at the end of
+the grace where the command never answered at all. The
+group is the reason the shell is spawned under `setsid` where that exists —
+learned by trying it, not by probing first.
+
+A command that moved the shell records the directory it left it in, on the
+result as a fact, and the projection words the change into a note the model
+reads — the note is derived at wording time from the fact the part carries,
+not baked into the output, so a reload words what the live turn did and the
+output stays what the command printed. It tracks the directory across the
+turn's commands and notes a move once it has been told where the shell is
+standing; the turn's opening move is un-noted, the model having run the `cd`
+itself. The composer's bar watches the same directory live while a `!` command
+is being typed, and a tap copies it out.
+
+What a shell is spawned with — its command and environment — is fingerprinted,
+and a change respawns the shell cold: a variable added in settings, or a Linux
+installed or deleted, reaches the next command rather than the next launch.
+
+Sub-agents run `oneShot` instead: a fresh subshell per command, no state, no
+sharing. A fan-out of workers wants concurrency rather than a terminal, and a
+shell they all `cd` around is as many races as there are of them. The flag
+reaches the shell and the prompt and the tool description together, so the
+model is not told a state it cannot keep.
 
 ### Running a command yourself
 
@@ -136,8 +183,10 @@ A message that starts with `!` is a command, and `BuiltinBackend._runBypass`
 runs it and ends the turn. No model call, no tools, no approval — the user typed
 the command, so there is nobody to ask and nothing to classify. The check comes
 before the model is resolved, which is what makes `!ls` work in a chat with no
-provider configured at all. It is the shell the agent uses, in the same
-workspace and under the same `commandTimeout`, and Stop kills it:
+provider configured at all. It runs in the chat's own persistent shell — the
+one the agent's commands use — in the same workspace and under the same
+`commandTimeout`, so a `cd` the user ran stands for the next thing either of
+them does, and a cwd note lands in the turn the same way. Stop kills it:
 `_RunningTurns` holds a stop callback rather than a `BuiltinAgent`, so a
 command's `kill` and an agent's `cancel` are the same thing to it.
 

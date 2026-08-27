@@ -28,8 +28,7 @@ import "signaling.dart";
 
 Shell platformShell({
   required Map<String, String> Function() environment,
-  Toolset? tools,
-  Sandbox? Function()? sandbox,
+  required ShellDriver? Function() driver,
 }) =>
     const UnavailableShell();
 
@@ -37,8 +36,9 @@ Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 
 /// A browser cannot run a command at all, so there is nothing for a Linux to
 /// be run under.
-Sandbox? platformSandbox({
+ShellDriver? platformDriver({
   required String dataDir,
+  Toolset? tools,
   Proot? proot,
   RootfsStore? store,
   String? rootfsId,

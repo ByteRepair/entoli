@@ -86,9 +86,10 @@ with nothing either, which is why nothing user-facing names it at all.
 
 ### On-disk layout
 
- `<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`,
- the project's memories beside what its chats share.
-A chat is
+`<dataDir>/projects/<project>/` holds `chats/`, `workspace/` and `memory/`,
+the project's memories beside what its chats share, and `project.json` — the
+project's own overrides: the temporary-chat TTL, the command environment its
+chats run under, and whether it keeps an auto-memory store of its own. A chat is
 `chats/<chat-id>/` with `state.json`, `conv.jsonl`, `meta.json`, `resources/`
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
@@ -220,12 +221,16 @@ offered. What is special about it is what a *turn* in it may not have, and that
 
 Two workspaces reach a turn, and they answer different questions. The project's
 (`<project>/workspace/`) is where work another conversation should find goes,
-and it is the `HOME` of every command — so a repository cloned, a package
-installed or a `~/.gitconfig` written by one conversation is already there for
-the next, and one project is one environment. The chat's own is a folder
-*inside* it (`<project>/workspace/chats/<id>/`) and is the working directory of
-every command: a turn's scratch files stay the turn's without being hidden from
-the user or from the next conversation. What a chat *is* — the log, and what was
+and it is the `HOME` of every command where a command gets a project's home at
+all — inside a guest, whose own home is one directory every project would
+share, and in a chat whose workspace is not shared, where the home is the
+chat's own — so a repository cloned, a package installed or a `~/.gitconfig`
+written by one conversation is already there for the next, and one project is
+one environment; where the home is shared, the machine's own `HOME` stands and
+is shared by every project. The chat's own is a folder *inside* it
+(`<project>/workspace/chats/<id>/`) and is the working directory every command
+starts in — the shell that runs them keeps whatever directory a command moved
+it to, one per chat; see "Running the commands". What a chat *is* — the log, and what was
 attached to it — stays in `chats/`, which the agent is never given a path to.
 
 `moveChat` therefore moves two directories, and `delete` removes two.

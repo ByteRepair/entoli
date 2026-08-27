@@ -46,34 +46,35 @@ import "signaling_server.dart";
 
 Shell platformShell({
   required Map<String, String> Function() environment,
-  Toolset? tools,
-  Sandbox? Function()? sandbox,
+  required ShellDriver? Function() driver,
 }) =>
-    LocalShell(environment: environment, tools: tools, sandbox: sandbox);
+    LocalShell(environment: environment, driver: driver);
 
-/// How a command is run inside the Linux the user installed, or null where
-/// there is none to run it in — no proot in this build, nothing picked in
-/// settings, or a pick whose files are not on disk. Answered synchronously
-/// because it is asked before every command.
-Sandbox? platformSandbox({
+/// What the next command runs under: the Linux the settings page picked,
+/// where it is installed, or the machine itself where there is no pick, or
+/// the pick's files have gone, or this build carries no proot. Answered
+/// synchronously because it is asked before every command.
+ShellDriver? platformDriver({
   required String dataDir,
+  Toolset? tools,
   Proot? proot,
   RootfsStore? store,
   String? rootfsId,
   String? abi,
 }) {
-  if (proot == null || store == null) return null;
   final rootfs = rootfsById(rootfsId);
-  if (rootfs == null) return null;
-  final dir = store.directoryOfSync(rootfs.id);
-  if (dir == null) return null;
-  return prootSandbox(
-    proot: proot,
-    rootfs: rootfs,
-    rootfsDir: dir,
-    dataDir: dataDir,
-    abi: abi,
-  );
+  final dir =
+      rootfs != null && store != null ? store.directoryOfSync(rootfs.id) : null;
+  if (rootfs != null && proot != null && dir != null) {
+    return prootDriver(
+      proot: proot,
+      rootfs: rootfs,
+      rootfsDir: dir,
+      dataDir: dataDir,
+      abi: abi,
+    );
+  }
+  return LocalShell.hostDriver(tools: tools);
 }
 
 /// Which architecture this install is for, which decides the rootfs a download

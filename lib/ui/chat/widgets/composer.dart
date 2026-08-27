@@ -5,8 +5,10 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../../providers.dart";
+import "../../fonts.dart";
 import "../../widgets/attachment_chip.dart";
 import "../../widgets/completion_field.dart";
+import "../../widgets/dialogs.dart";
 import "code_block.dart";
 
 class _SendIntent extends Intent {
@@ -33,6 +35,7 @@ class Composer extends ConsumerStatefulWidget {
     required this.onSend,
     required this.onAbort,
     this.onVoice,
+    this.workspace,
   });
 
   final TextEditingController controller;
@@ -43,6 +46,11 @@ class Composer extends ConsumerStatefulWidget {
   /// Opens voice mode. Null where the platform cannot listen at all, which is
   /// the web — the same rule that takes `bash` off the agent there.
   final VoidCallback? onVoice;
+
+  /// Where this chat's shell starts: its own workspace. Null where the chat
+  /// does not exist yet, which draws no bar at all. Drawn in shell mode, live
+  /// as a `cd` moves it, and copied whole on a tap.
+  final String? workspace;
 
   @override
   ConsumerState<Composer> createState() => _ComposerState();
@@ -149,6 +157,7 @@ class _ComposerState extends ConsumerState<Composer> {
             mainAxisSize: MainAxisSize.min,
             children: [
               menu,
+              if (_shell) _cwdBar(theme),
               if (_attachments.isNotEmpty)
                 AttachmentStrip(
                   children: [
@@ -247,6 +256,55 @@ class _ComposerState extends ConsumerState<Composer> {
       fillColor: theme.colorScheme.surfaceContainerHighest,
       enabledBorder: outline(1),
       focusedBorder: outline(2),
+    );
+  }
+
+  /// Where a `!` command is about to run: the shell's own directory, live,
+  /// since a `cd` in an earlier one moved it. The completion menu's dressing,
+  /// one row of it, and a tap copies the whole path out.
+  Widget _cwdBar(ThemeData theme) {
+    final workspace = widget.workspace;
+    if (workspace == null) return const SizedBox.shrink();
+    final notifier = ref.watch(chatShellCwdProvider(workspace));
+    Widget row(String? live) => Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          constraints: const BoxConstraints(minHeight: 32),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => copyToClipboard(context, live ?? workspace,
+                said: "Copied working directory"),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.terminal,
+                      size: 14, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      live ?? workspace,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: monoFamily,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+    if (notifier == null) return row(null);
+    return ValueListenableBuilder<String?>(
+      valueListenable: notifier,
+      builder: (context, value, _) => row(value),
     );
   }
 

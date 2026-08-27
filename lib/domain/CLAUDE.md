@@ -326,6 +326,16 @@ one that failed has its reason in `exceptionInfo` and no answers, so it reads
 like any other failure. That last part was wrong on both sides before, and
 silently: the model was told nothing at all.
 
+The directory a command left the shell in rides on the result the same way — a
+`cwd` on the `ToolResult` and the user's `ShellRunPart` — and the projection is
+what turns the change in it into the note a later command reads. It tracks the
+directory across the turn's commands as it words them and notes a move once it
+has been told where the shell is standing; the turn's opening move is un-noted,
+the model having run the `cd` itself. Deriving it here rather than holding the
+directory on the session is what keeps a reload wording what the live turn did:
+both walk the same parts in the same order, so both word the same notes, and
+the output stays what the command printed.
+
 A call whose result never landed is answered anyway, since a provider that sees
 a tool call with no result rejects the next turn — worded by what was called,
 which is the next section.

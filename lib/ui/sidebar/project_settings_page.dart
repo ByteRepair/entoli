@@ -9,6 +9,7 @@ import "../profile/profile_page.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/environment_section.dart";
 import "../widgets/resettable_field.dart";
 import "../workspace/workspace_page.dart";
 import "sidebar.dart";
@@ -107,6 +108,8 @@ class ProjectSettingsPage extends ConsumerWidget {
           ],
           const Divider(),
           _TempChatTtlRow(project: project),
+          const Divider(),
+          _EnvironmentRow(project: project),
           const Divider(),
           DestructiveButton(
             icon: Icons.delete,
@@ -214,6 +217,57 @@ class _UseProjectMemoryRow extends ConsumerWidget {
       value: on,
       onChanged: (value) =>
           ref.read(projectSettingsProvider(project).notifier).setUseProjectMemory(value),
+    );
+  }
+}
+
+/// The project's own command variables, beside the app-level ones. A name set
+/// here wins over one set there, and nothing set here is anything but the
+/// app's where the project sets none.
+class _EnvironmentRow extends ConsumerWidget {
+  const _EnvironmentRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    final count = settings.environment?.length ?? 0;
+    return ListTile(
+      leading: const Icon(Icons.key_outlined),
+      title: const Text("Environment"),
+      subtitle: Text(count == 0
+          ? "Default (inherited)"
+          : "$count variable${count == 1 ? "" : "s"}"),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => _ProjectEnvironmentPage(project: project),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProjectEnvironmentPage extends ConsumerWidget {
+  const _ProjectEnvironmentPage({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(projectSettingsProvider(project));
+    return Scaffold(
+      appBar: AppBar(title: const Text("Environment")),
+      body: EnvironmentSection(
+        env: settings.environment ?? const {},
+        description: "Passed to every command the project's chats run, over the "
+            "app-level variables. A command already running keeps what it "
+            "started with.",
+        onSaved: (env) => ref
+            .read(projectSettingsProvider(project).notifier)
+             .setEnvironment(env.isEmpty ? null : env),
+       ),
     );
   }
 }

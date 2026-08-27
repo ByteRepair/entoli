@@ -1180,7 +1180,8 @@ void main() {
       expect(client.sent.first.map((m) => m.text).join(), contains("diagram.png"));
     });
 
-    test("disposing a chat forgets it", () async {
+    test("disposing a chat forgets it, and closes the shell that was running in it",
+        () async {
       final backend = backendOver([
         [finish],
         [finish],
@@ -1190,6 +1191,7 @@ void main() {
       await send(backend, "second");
 
       expect(client.sent.last.map((m) => m.text).join(), isNot(contains("first")));
+      expect(shell.closedSessions, [config.workspaceDir(chatId)]);
     });
   });
 

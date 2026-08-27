@@ -4,6 +4,8 @@
 /// of the model is here too, since it is the same shell it reaches.
 library;
 
+import "package:flutter/foundation.dart" show ValueListenable;
+
 /// The command a message runs itself, or null where it is prose for the model.
 /// A leading `!` is the whole of the rule, and what follows it is the command —
 /// blank included, so the composer can say what it is about to do from the
@@ -23,13 +25,23 @@ class ShellResult {
     required this.returnCode,
     required this.output,
     this.exceptionInfo,
+    this.cwd,
   });
 
-  const ShellResult.failed(this.exceptionInfo, {this.output = ""}) : returnCode = -1;
+  const ShellResult.failed(this.exceptionInfo,
+      {this.output = ""}) :
+    returnCode = -1,
+    cwd = null;
 
   final int returnCode;
   final String output;
   final String? exceptionInfo;
+
+  /// The working directory the shell was left in, from a shell whose state
+  /// carries over — the one that runs the chat's commands. Null where there is
+  /// no such state to report: a one-shot subshell is gone with the command,
+  /// and a command that was killed or never ran left no directory to read.
+  final String? cwd;
 }
 
 /// What this build ships beside the machine's own commands: the environment a
@@ -79,26 +91,44 @@ class Proot {
   final String resolvConf;
 }
 
-/// A guest system the agent's commands run *inside* rather than beside. One
-/// value again, and the same reason: what a command is run under and what the
-/// model is told it is on cannot be allowed to disagree.
-class Sandbox {
-  const Sandbox({
+/// What a command runs under: the executable that ends in the shell, the
+/// environment that shell starts with, whose home its `HOME` is, and the
+/// sentence the model is told. One value again, and the same reason: what a
+/// command is run under and what the model is told it is on cannot be allowed
+/// to disagree.
+///
+/// The machine's own shell is a driver too, which is what lets a guest, an
+/// emulator or a container arrive as a new value the shell does not have to
+/// learn about: the session machinery runs whatever [command] ends in, and the
+/// resolver in `core/platform/` picks one per command.
+class ShellDriver {
+  const ShellDriver({
     required this.command,
     required this.environment,
+    required this.projectHome,
     required this.description,
   });
 
-  /// The executable and its arguments, ending in the guest's own shell. The
-  /// script goes on the end as `-c`, exactly as it does without one.
+  /// The executable and its arguments, ending in the shell a command runs in.
+  /// The script goes on the end as `-c`, exactly as it does on the machine's
+  /// own shell.
   final List<String> command;
 
-  /// The guest's environment. It **replaces** [Toolset.environment] rather than
-  /// layering over it: the host toolset's paths are the host's, and a command
-  /// inside the guest should find none of them. Settings still win over both.
+  /// The environment the shell starts with, below the app's and the project's
+  /// variables, which still win over it. A guest's, where [command] reaches a
+  /// guest: the host toolset's paths are the host's, and a command inside the
+  /// guest should find none of them.
   final Map<String, String> environment;
 
-  /// What the model is told it is on, e.g. `Alpine Linux 3.24 (aarch64)`.
+  /// Whether a command's `HOME` is the project workspace rather than the
+  /// machine's own home directory. True of a driver that reaches a guest,
+  /// whose home is one directory every project would share; on the machine
+  /// itself [Shell.start]'s `sharedHome` answers for it instead.
+  final bool projectHome;
+
+  /// What the model is told it is operating on, e.g. `Alpine Linux 3.24
+  /// (aarch64)`, or the machine's own shell where the command runs on the
+  /// machine itself. The agent's system prompt carries it.
   final String description;
 }
 
@@ -121,12 +151,27 @@ abstract class Shell {
   /// takes [home] for its guest, and so does a turn whose home it does not
   /// share ([sharedHome] false): a home nothing shares is the chat's own.
   /// Where the home is shared on a machine, `HOME` is the user's and stays
-  /// that way.
+  /// that way. [environment] is layered over whatever the app's settings
+  /// provide, with a name set in it winning over the app-level one — the
+  /// project's own variables, which the app-level are the fallback for.
+  ///
+  /// [oneShot] runs the command in a subshell that is gone when it finishes:
+  /// no `cd` or export carries over to anything after it. That is what
+  /// sub-agents run under — a fan-out of workers that need concurrency, not a
+  /// terminal. The default is the chat's own persistent shell, one per [cwd],
+  /// whose state carries over from one command to the next and which the
+  /// agent's commands and the user's `!` commands share.
+  ///
+  /// [restart] drops that shell's state before running: the command starts
+  /// back in [cwd] with nothing exported.
   ShellRun start(String command,
       {required String cwd,
       required String home,
       required Duration timeout,
-      bool sharedHome = true});
+      Map<String, String>? environment,
+      bool sharedHome = true,
+      bool oneShot = false,
+      bool restart = false});
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -139,6 +184,24 @@ abstract class Shell {
   /// Without that, a browser could never finish a turn — submitting is itself
   /// a command.
   bool get canRunCommands => true;
+
+  /// Whether a command's `HOME` is the project workspace rather than the
+  /// machine's own because the shell reaches a guest, whose home is one
+  /// directory every project would share. A shell on the machine itself is
+  /// false, where [start]'s `sharedHome` answers for it instead.
+  bool get projectHome => false;
+
+  /// Where [cwd]'s persistent shell is standing, live: the directory a `cd`
+  /// in it leaves it in. Null where this shell runs nothing persistent or has
+  /// no session for [cwd] yet, which the caller falls back to [cwd] itself
+  /// for. The composer's bar is what asks.
+  ValueListenable<String?>? sessionCwd(String cwd) => null;
+
+  /// End [cwd]'s persistent shell, where this one runs them. A no-op where it
+  /// does not. Called when the chat the shell belongs to is deleted or leaves
+  /// its project: a shell standing in a directory that is gone — or moving —
+  /// is a process outliving the thing it was for.
+  void closeSession(String cwd) {}
 }
 
 /// The web's shell: there isn't one. A command that reaches it anyway is
@@ -158,7 +221,10 @@ class UnavailableShell extends Shell {
           {required String cwd,
           required String home,
           required Duration timeout,
-          bool sharedHome = true}) =>
+          Map<String, String>? environment,
+          bool sharedHome = true,
+          bool oneShot = false,
+          bool restart = false}) =>
       const _Unavailable();
 }
 

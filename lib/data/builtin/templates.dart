@@ -80,10 +80,16 @@ String systemPrompt({
   Profile? profile,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
+  bool oneShot = false,
 }) =>
     caps.commands
         ? _withShell(
-            platform: platform, profile: profile, caps: caps, skills: skills)
+            platform: platform,
+            profile: profile,
+            caps: caps,
+            skills: skills,
+            oneShot: oneShot,
+          )
         : _withoutShell(profile: profile, caps: caps, skills: skills);
 
 /// The half that changes: where this conversation's files are, and whatever an
@@ -103,6 +109,7 @@ String turnPrompt({
   String? recall,
   required bool canRunCommands,
   bool sharedWorkspace = true,
+  required bool projectHome,
 }) {
   // The project's workspace is shared only where the project says so; a
   // project that does not share one names nothing of it.
@@ -112,17 +119,22 @@ String turnPrompt({
           "every other\nconversation in this project: $projectWorkspace\n"
           "Work the user will come back to — a checkout, notes, data you "
           "built up — goes\nthere, so another conversation can pick it up. "
-          "Write to it by path; you do not\nhave to be in it. Anything a "
-          "tool keeps in a home directory is the project's\ntoo, so a "
-          "repository cloned or a package installed by one conversation is\n"
-          "already there for the next."
+          "Write to it by path; you do not\nhave to be in it."
       : "";
   final parts = [
     if (canRunCommands)
-      "## Your workspace\n\n"
-          "Every command runs in this conversation's own workspace: $workspace\n"
-          "It is yours; the files in it survive between turns, and nothing else "
-          "writes\nthere.$shared",
+      """
+## Your workspace
+
+Your shell starts in this conversation's own workspace: $workspace
+It is yours; the files in it survive between turns, and nothing else writes
+there.$shared${projectHome || !sharedWorkspace ? """
+A command's home directory is the project workspace, so anything a tool keeps
+in a home directory is the project's too, and a repository cloned or a package
+installed by one conversation is already there for the next.""" : """
+A command's home directory is the machine user's own, not the project
+workspace, so a `~` and a tool that writes to its home go there rather than to
+the project."""}""",
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
     if (pinned != null && pinned.isNotEmpty)
@@ -236,9 +248,10 @@ const _files = """
 
 Read, write, and edit files in your workspace with `read`, `write`, and `edit`.
 Paths are relative to your workspace. Prefix a path with `project:` to reach the
-project workspace instead. Use `write` to create or overwrite a file, `edit` for
-targeted changes, and `read` to look at what is there. The files survive between
-turns.""";
+project workspace instead. An absolute path reaches the machine directly,
+outside both workspaces, and is offered to the user for approval before it
+runs. Use `write` to create or overwrite a file, `edit` for targeted changes,
+and `read` to look at what is there. The files survive between turns.""";
 
 /// The one thing both prompts say about artifacts, because the viewer is
 /// available with or without a shell — a browser can still open a page.
@@ -275,11 +288,29 @@ String _toolFragments(AgentCapabilities caps) {
   return acts.length == 2 ? "$head or ${acts.last}" : "$head, or ${acts.last}";
 }
 
+/// The shell contract the chat's own shell keeps: one per workspace, and what
+/// one command does to it stands for the next.
+const _persistentShell = """
+The commands run in one shell that keeps its state between calls: a `cd` or an
+export made by one command is still in force for the next, and a plain `cd`
+moves the shell. Where you are is yours to keep track of — a `cd` you ran is
+still in force — and where in doubt, `pwd` says. If the state looks wrong, run
+a command with `"restart": true` to start the shell back in your workspace.""";
+
+/// The contract a sub-agent's commands run under instead: a fresh subshell
+/// each, since a fan-out of workers wants concurrency rather than a shell to
+/// race over.
+const _oneShotShell = """
+Every command runs in a new subshell, so a `cd` or an export does not carry
+over to the next one. Prefix instead: `MY_VAR=value cd some/dir && ...`, or
+write what you need to a file and read it back.""";
+
 String _withShell({
   required String platform,
   Profile? profile,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
+  bool oneShot = false,
 }) {
   final skillsText = skillsSection(skills);
   final sections = <String>[
@@ -337,10 +368,7 @@ String _withShell({
       "A command only runs when you call the `bash` tool with it. Writing "
       "a command\nas text, in a code block or otherwise, does nothing at "
       "all.\n\n"
-      "Every command runs in a new subshell, so a `cd` or an export does "
-      "not carry\nover to the next one. Prefix instead: `MY_VAR=value cd "
-      "some/dir && ...`, or\nwrite what you need to a file and read it "
-      "back.\n\n"
+      "${oneShot ? _oneShotShell : _persistentShell}\n\n"
       "Your reasoning text is what the user reads as your reply, so write "
       "it for\nthem: say what you found and what you did, not just what "
       "you are about to run.\n\n"
@@ -384,6 +412,16 @@ cannot be sure of before relying on it, and finish the turn as normal.""";
 String unknownTool(String name, Iterable<String> available) =>
     "There is no tool called '$name'. The tools you have are "
     "${available.map((t) => "`$t`").join(" and ")}.";
+
+/// What the projection appends when a result's reported directory differs from
+/// the one it tracked just before it. Null where there is nothing to say: the
+/// turn's opening move, where nothing is tracked yet, a command that was killed
+/// or never ran, which leaves no directory to read, and one that stayed where
+/// it was. See "The projection" in `lib/domain/CLAUDE.md`.
+String? cwdChangedNote(String? before, String? after) =>
+    (after == null || before == null || after == before)
+        ? null
+        : "Note: your current working directory is now $after.";
 
 const _fullOutputLimit = 10000;
 const _elidedHalf = 5000;

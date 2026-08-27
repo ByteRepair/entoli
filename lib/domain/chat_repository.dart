@@ -139,8 +139,13 @@ class ChatRepository {
   }
 
   /// File a chat under another project. Its own workspace travels with it; the
-  /// shared one it can reach is the new project's from the next turn on.
+  /// shared one it can reach is the new project's from the next turn on. The
+  /// shell it stood in ends with the move, for the project it left: it is
+  /// standing in the directory that is about to move out from under it, and
+  /// the next turn starts one in the new one.
   Future<void> moveChat(String chatId, String? project) async {
+    final from = await _store.projectOf(chatId);
+    if (from != project) _backend.closeChatShell(chatId, project: from);
     await _store.moveChat(chatId, project);
     _changes.add(Moved(chatId, project));
   }
@@ -299,6 +304,7 @@ class ChatRepository {
       // A turn nobody watches must not be able to park on an answer.
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
+    final projectSettings = await projectSettingsOf(project);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -313,6 +319,8 @@ class ChatRepository {
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
       disabled: disabled,
       bundledInstructions: builtIn?.bundledInstructions,
+      // The project's own command variables, beside the app-level ones.
+      environment: projectSettings.environment ?? const {},
     );
   }
 
