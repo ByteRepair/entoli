@@ -763,6 +763,19 @@ ask, so this is Android's problem alone. See "Waking for a reminder" in
 `android/CLAUDE.md` for the other end, and for the hold the receiver takes and
 `doneFiring` releases.
 
+**`doneFiring` is a no-op while a fire's turn is running.** A fire stamps the
+reminder list mid-turn through `onReminderFired`, which re-enters `reload`
+(the `ref.listen` on the list), and a duplicate exact alarm re-nudges; either
+calling `doneFiring` then would release the receiver's hold before the turn's
+own foreground-service hold (`TurnKeepAlive`'s `running`) had registered, and
+the process is killed under it — the hazard "Staying alive off screen" names.
+`_runningIds` holds the fire from before its first await until it completes, so
+the release is gated on it being empty: a re-entrant reload or a duplicate nudge
+does nothing, and the fire's own handler releases once the turn is done, by
+which point `turns > 0` has the service. The turn completing is also what
+advances `nextFireAt`, so a kill that left it stale — and catch-up re-firing it
+as "Ran late" on the next open — no longer happens.
+
 **Catch-up fires overdue reminders at launch**, the same lazy semantics the
 temp-chat sweep uses. A one-shot more than two minutes past its time says
 "Ran late" in its completion notification; an exact alarm arrives within
