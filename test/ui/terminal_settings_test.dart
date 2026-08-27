@@ -27,7 +27,7 @@ void main() {
         findsOneWidget);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
     expect(find.text("Commands run on"), findsNothing);
-    expect(find.textContaining("tool/bundle/build.sh"), findsNothing);
+    expect(find.textContaining("tool/android/build.sh"), findsNothing);
   });
 
   testWidgets("a phone whose build has no proot in it blames the build, not "
@@ -36,7 +36,7 @@ void main() {
     await pumpTerminal(tester);
 
     expect(find.textContaining("no proot in it for arm64-v8a"), findsOneWidget);
-    expect(find.textContaining("tool/bundle/build.sh arm64-v8a"), findsOneWidget);
+    expect(find.textContaining("tool/android/build.sh arm64-v8a"), findsOneWidget);
     expect(find.textContaining("runs commands on the machine it is on"),
         findsNothing);
     expect(find.text("Alpine Linux 3.24.1"), findsNothing);
@@ -51,7 +51,7 @@ void main() {
     expect(find.textContaining("aarch64"), findsOneWidget);
     expect(find.byTooltip("Download"), findsOneWidget);
     expect(find.byTooltip("Delete"), findsNothing);
-    expect(find.textContaining("tool/bundle/build.sh"), findsNothing);
+    expect(find.textContaining("tool/android/build.sh"), findsNothing);
   });
 
   testWidgets("an architecture this build has no image for is said rather than "

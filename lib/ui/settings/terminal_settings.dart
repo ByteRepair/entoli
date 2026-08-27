@@ -84,7 +84,7 @@ class _Unpackaged extends StatelessWidget {
           Expanded(
             child: Text(
               "This build has no proot in it for $abi. Run "
-              "tool/bundle/build.sh $abi and tool/bundle/stage.sh, then build "
+              "tool/android/build.sh $abi and tool/android/stage.sh, then build "
               "the APK again.",
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.error),

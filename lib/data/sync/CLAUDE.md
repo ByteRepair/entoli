@@ -109,7 +109,7 @@ exposes `sendJson` / `jsonIncoming` for the NDJSON control protocol and
 2. **Internet relay** (`relay_signaler.dart`): both sides dial a user-supplied
    `wss://` URL and join the same room — derived from the pairing secret's
    SHA-256, so the relay learns nothing. A reference relay is
-   `tool/sync_relay_server.dart`.
+   `tool/sync/sync_relay_server.dart`.
 3. **Manual copy-paste**: the SDP rides in the pairing blob itself, pasted
    through a human. Universal fallback; the only route that works with no
    network beyond the data channel's own ICE.

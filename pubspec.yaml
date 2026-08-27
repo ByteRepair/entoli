@@ -83,10 +83,10 @@ dependencies:
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a
 # web-platform asset. Plugin assets are not tree-shaken, so a web build that
-# can never run voice mode would carry all of it. See tool/sherpa_onnx_web_stub.
+# can never run voice mode would carry all of it. See tool/web/sherpa_onnx_web_stub.
 dependency_overrides:
   sherpa_onnx_web:
-    path: tool/sherpa_onnx_web_stub
+    path: tool/web/sherpa_onnx_web_stub
 
 dev_dependencies:
   flutter_test:

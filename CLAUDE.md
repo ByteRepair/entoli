@@ -60,7 +60,7 @@ named in a cross-reference is findable from this list.
   all up
 - `lib/ui/widgets/CLAUDE.md` — Shared UI, A catalog of things to download
 - `.github/workflows/CLAUDE.md` — Releasing
-- `linux/packaging/CLAUDE.md` — The Linux AppImage
+- `tool/linux/CLAUDE.md` — The Linux AppImage
 - `test/CLAUDE.md` — how the tests are written and what they fake
 
 ## Architecture
@@ -314,10 +314,10 @@ is `logDetail`, which is debug-only.
 - Voice mode on Linux needs `parecord` on `PATH` (`pulseaudio-utils`); without
   it a session fails to start rather than hearing nothing.
 - Package the Linux build:
-  `linux/packaging/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
+  `tool/linux/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.
 - Bundled tools (Android's proot and llama.cpp): `ANDROID_NDK_ROOT=$HOME/.android/ndk/<version>
-  tool/bundle/build.sh arm64-v8a` then `tool/bundle/stage.sh`. None of it is run
+  tool/android/build.sh arm64-v8a` then `tool/android/stage.sh`. None of it is run
   by the app build; without them an APK has no way to run a Linux and no model
   server. The llama.cpp half needs cmake and ninja, so the `flutter-dev`
   toolbox, and is built for arm64 alone. `$HOME` rather than `~`: a tilde is not
@@ -326,8 +326,8 @@ is `logDetail`, which is debug-only.
 - git is no longer among them. The agent gets it from `apk` inside the Alpine
   rootfs, which is a distribution's job to patch rather than ours — so a device
   with no rootfs installed has no git.
-- The NPU wants Qualcomm's SDK: `tool/android-setup.sh` fetches it into
-  `tool/bundle/toolchains/` against a pinned SHA-256 and `build.sh` finds it
+- The NPU wants Qualcomm's SDK: `tool/android/setup.sh` fetches it into
+  `tool/android/toolchains/` against a pinned SHA-256 and `build.sh` finds it
   there. CI runs it too, so what a release ships is what this builds. Only the
   NPU is gated on it: the build always carries the CPU and the Vulkan GPU
   backend, so a build without the SDK still accelerates most phones, and the
