@@ -1,7 +1,0 @@
-/distfiles
-/output*
-.sconsign.dblite
-ssh_client.pem
-
-# npm related dirs.
-node_modules
