@@ -43,6 +43,8 @@ named in a cross-reference is findable from this list.
 - `android/CLAUDE.md` — Staying alive off screen, The workspaces in the Files
   app, Being the assistant, Waking for a reminder, The app icon, The debug
   build's own
+- `ios/CLAUDE.md` — Why no host shell, The iSH driver, The rootfs, The
+  workspace inside the guest
 - `lib/ui/chat/CLAUDE.md` — When a turn is over, Thinking and tool runs,
   Selecting a reply, and copying it, How a reply is set, Code blocks, A command
   the user ran, A chat whose home device is elsewhere, The chat page
