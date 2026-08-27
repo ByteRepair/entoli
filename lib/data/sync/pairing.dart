@@ -224,6 +224,10 @@ class SyncPairing {
     unawaited(_relaySocket?.close());
     _relaySocket = null;
     _server?.disarm();
+    // A manual invite left pending is cancelled here too: the invite page
+    // cancels on back, and leaving the offer half-open would hold a peer
+    // connection for a pairing nobody is watching.
+    _pendingManual = null;
     // The offers subscription is *not* cancelled: it answers reconnects too,
     // and every pairing ends by closing its window. Cancelled here, the first
     // successful pair was also the last time anything answered a dial.

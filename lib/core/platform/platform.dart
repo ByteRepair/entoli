@@ -302,8 +302,10 @@ List<PromptSource> createPromptSources(AppConfig config) => [
 
 /// What this machine calls itself, where it has a name. The sync device name
 /// starts here, so two paired machines are told apart by something the user
-/// already recognises rather than by a slice of a key fingerprint.
-String? deviceHostname() => platformHostname();
+/// already recognises rather than by a slice of a key fingerprint. On Android
+/// this is the system device name, read through a method channel; on Linux the
+/// hostname; null where the platform has none of its own (the web).
+Future<String?> deviceHostname() => platformHostname();
 
 /// Makes the skill directories read-only so a model running `bash` cannot
 /// unintentionally write to them. No-op on the web (no bash). See

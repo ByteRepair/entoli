@@ -137,7 +137,7 @@ class AppSession {
       registry: registry,
       settings: () => settingsHome.read(appSettingsProvider),
       lanSignaling: platform.createLanSignaling,
-      hostname: platform.deviceHostname(),
+      hostname: await platform.deviceHostname(),
     );
     final container = ProviderContainer(
       overrides: [

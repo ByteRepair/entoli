@@ -33,6 +33,12 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
+    <!-- Sync: scan a pairing QR from the paste-code field on Android. Linux has
+         no camera, so the button is Android-only. Not required: a device with
+         no camera still pairs by typing the code. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
     <!-- The Android-system voice engines, which the sentinel picks resolve to.
          From Android 11 an app sees only the packages it declares an interest
          in, and the queries for a recognition service and for a TTS engine are
@@ -51,7 +57,16 @@
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_cookie">
+        android:icon="@mipmap/ic_cookie"
+        android:usesCleartextTraffic="true">
+        <!-- The LAN signaling server (`lan_signaler.dart`) is plain HTTP on a
+             direct IP. Android 9+ blocks cleartext by default, which hung
+             pairing at the signaling step: the joiner's POST never reached the
+             host, and both waited out their timeouts. It is safe because the
+             server only ever sees the WebRTC SDP blobs (opaque without the
+             keys) and a one-time code; the pairing secret travels out-of-band,
+             DTLS encrypts the data channel, and framing.dart adds app-layer
+             ChaCha20-Poly1305 AEAD with keys from the handshake. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

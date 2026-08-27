@@ -1,7 +1,7 @@
 import "dart:io";
 
 import "package:flutter/foundation.dart";
-import "package:flutter/services.dart" show rootBundle;
+import "package:flutter/services.dart" show MethodChannel, rootBundle;
 import "package:fs_shim/fs.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
@@ -266,10 +266,22 @@ SecretStore platformSecretStore(AppConfig config) =>
 /// window by the hub, so the factory needs nothing from its caller.
 LanSignaling? platformLanSignaling() => SignalingServer();
 
-/// What this machine calls itself, for the sync device name. Guarded: a host
-/// with no resolvable name throws rather than answering, and a pairing that
-/// failed over the machine's name would be a strange way to lose.
-String? platformHostname() {
+/// What this machine calls itself, for the sync device name.
+///
+/// On Android, `Platform.localHostname` is "localhost", so the system device
+/// name is read through `agent_chat/device` instead — the name the user set in
+/// system settings, falling back to the model. On Linux the hostname is the
+/// machine's own and used directly. Guarded: a host with no resolvable name
+/// throws rather than answering, and a pairing that failed over the machine's
+/// name would be a strange way to lose.
+Future<String?> platformHostname() async {
+  if (Platform.isAndroid) {
+    try {
+      return await const MethodChannel("agent_chat/device").invokeMethod<String>("name");
+    } catch (_) {
+      return null;
+    }
+  }
   try {
     final name = Platform.localHostname.trim();
     return name.isEmpty ? null : name;
