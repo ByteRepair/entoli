@@ -1,0 +1,10 @@
+ish src/ at upstream commit d189985e5cc6d0e70629efeb31505b51a9ce78af
+(2026-08-22). Classic kernel=ish core only: emu/, kernel/, fs/, asbestos/,
+vdso/, util/, platform/, tools/, plus top-level headers and meson.build. The
+iOS app shell (app/), the ISH_LINUX kernel (linux/), the Xcode project, and
+tests/ are excluded.
+
+deps/libarchive and deps/libapps were copied in beside the source as
+deps-libarchive/ and deps-libapps/ (flattened out of deps/ to avoid pulling
+the aports and Linux kernel the iSH deps/ dir also holds). The fakefsify tool
+the iOS rootfs unpack uses needs libarchive.
