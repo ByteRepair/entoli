@@ -277,6 +277,14 @@ class FileChatStore implements ChatStore {
     project = project ?? await _projectOf(chatId);
     return config.artifactDir(chatId, artifactId, project: project);
   }
+
+  @override
+  Future<Uint8List?> readSkillInstall(String chatId, String installId) async {
+    final project = await _projectOf(chatId);
+    final dir = config.skillStagingDir(chatId, installId, project: project);
+    final file = _fs.file(_fs.path.join(dir, "package.skill"));
+    return await file.exists() ? file.readAsBytes() : null;
+  }
 }
 
 /// Copy a directory's contents from [source] to [target]. If [source] is a

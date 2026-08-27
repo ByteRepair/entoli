@@ -465,6 +465,25 @@ an empty list produces nothing at all: a device with no skills keeps the prompt
 and the warmed prefix over it exactly as it was, which is why the section is
 absent rather than empty.
 
+### Drafting one (the `create_skill` tool)
+
+`create_skill` is `skill` run backwards: the model drafts a skill and offers it
+for install rather than loading one. It writes the skill as a directory in the
+workspace — a `SKILL.md` plus its `scripts/`, `references/`, and `assets/` —
+then calls the tool with that directory's path. The backend's `packageSkill`
+callback reads the directory, zips it into a `.skill`, stages it under the chat
+(`skill-installs/<installId>/`, deleted with the chat, the way an artifact is),
+and the tool emits a `SkillInstallEvent`. The chat draws a card; the user taps
+it to review the skill and press Install, which lands it in the user's own
+`skills/` directory — shadowing a bundled skill of the same name, never
+replacing it, since the bundled half is code. The model cannot install it
+itself: it is offered on a top-level turn (the backend hands the agent the
+packager), and dropped for a sub-agent (no callback, so the tool is not on the
+list), the same `one value decides what the prompt names and what the tool list
+carries` rule. The install and the settings page's import and delete write
+through `withWritableDir`, because the skills directories are read-only — see
+the root notes, "On-disk layout".
+
 ## Memory
 
 What the settings page calls Memory is two subsystems under one category:

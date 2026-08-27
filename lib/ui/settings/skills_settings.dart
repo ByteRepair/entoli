@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs.dart";
 
+import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
@@ -85,7 +86,12 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     }
 
     await _guard(() async {
-      await installSkillPackage(ref.read(appConfigProvider), package);
+      final config = ref.read(appConfigProvider);
+      await platform.withWritableDir(
+          config.promptsDir(CompletionKind.skill),
+          () async {
+            await installSkillPackage(config, package);
+          });
       await ref.read(promptLibraryProvider.notifier).reload();
       await _scan();
       _say("Imported ${package.name}.");
@@ -106,7 +112,13 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
 
     await _guard(() async {
       final config = ref.read(appConfigProvider);
-      await config.fs.directory(skillDirectory(config, skill.name)).delete(recursive: true);
+      await platform.withWritableDir(
+          config.promptsDir(CompletionKind.skill),
+          () async {
+            await config.fs
+                .directory(skillDirectory(config, skill.name))
+                .delete(recursive: true);
+          });
       await ref.read(promptLibraryProvider.notifier).reload();
       await _scan();
       _say("Removed ${skill.name}.");

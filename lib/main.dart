@@ -16,6 +16,7 @@ import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
+import "domain/models.dart" show CompletionKind;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
@@ -69,9 +70,15 @@ class AppSession {
     final version = platform.appVersion();
     final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
-    // Before the library is built: the bundled skills are read back off the
-    // directory this writes them into, not off the asset bundle.
+    // Before the library is built: the bundled skills are written from
+    // embedded code to a real directory for bash access, and self-healed.
     await installBundledSkills(config);
+    // Read-only so a model running bash cannot unintentionally write to a
+    // skill directory. The install/delete paths toggle this where they need to.
+    await platform.chmodReadOnly([
+      config.bundledSkillsDir,
+      config.promptsDir(CompletionKind.skill),
+    ]);
     final store = platform.createChatStore(config);
     final library = await PromptLibrary.from(platform.createPromptSources(config));
     final handoff = platform.createFileHandoff(config);

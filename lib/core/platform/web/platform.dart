@@ -141,3 +141,12 @@ LanSignaling? platformLanSignaling() => createWebLanSignaling();
 /// A browser has no hostname of its own to give. `location.hostname` is the
 /// server the page came from, which is a different machine's name entirely.
 String? platformHostname() => null;
+
+/// No-op: a browser has no `chmod`, and no `bash` to guard against. The file
+/// tools' `safeRelativePath` already prevents reaching skill dirs.
+Future<void> platformChmodReadOnly(List<String> paths) async {}
+
+/// No-op on the web: there is nothing to toggle. The action runs directly.
+Future<T> platformWithWritableDir<T>(
+        String path, Future<T> Function() action) async =>
+    await action();

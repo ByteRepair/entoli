@@ -96,6 +96,7 @@ List<VoiceLine> linesOf(MessageRole role, MessagePart part, [SpeakableText? grow
     case ToolResultPart():
     case FilePart():
     case ArtifactPart():
+    case SkillInstallPart():
       return const [];
   }
 }
