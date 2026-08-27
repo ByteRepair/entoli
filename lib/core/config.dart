@@ -138,6 +138,12 @@ class AppConfig {
   String artifactDir(String chatId, String artifactId, {String? project}) =>
       fs.path.join(artifactsDir(chatId, project: project), artifactId);
 
+  /// Where a `create_skill` tool's packaged `.skill` is staged for the user to
+  /// install. A sibling of `artifacts/` — one dir per install, deleted with the
+  /// chat.
+  String skillStagingDir(String chatId, String installId, {String? project}) =>
+      fs.path.join(chatDir(chatId, project: project), "skill-installs", installId);
+
   /// Where a chat's commands run, under the workspace they share rather than
   /// beside the conversation: see the layout above.
   String workspaceDir(String chatId, {String? project}) =>

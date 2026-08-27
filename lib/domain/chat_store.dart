@@ -86,6 +86,10 @@ abstract class ChatStore {
   /// need to verify it exists should use [readArtifactFile] instead.
   Future<String> artifactPath(String chatId, String artifactId, {String? project});
 
+  /// Read a staged skill package out of `skill-installs/<installId>/`. Null
+  /// once the chat (and its staging) is gone.
+  Future<Uint8List?> readSkillInstall(String chatId, String installId);
+
   Future<ChatMeta> loadMeta(String chatId);
 
   Future<void> saveMeta(String chatId, ChatMeta meta);

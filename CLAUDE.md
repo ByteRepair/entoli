@@ -96,10 +96,16 @@ inside the workspace the project shares rather than beside the conversation.
 Every project is a directory under `projects/`, the default one included.
 `<dataDir>/skills/<name>/` is a skill — a directory with a `SKILL.md` and the
 files it runs with, not a single file — and `<dataDir>/agents/*.md` are the
-user's agents, beside `settings.json`. The bundled skills are extracted to
-`<dataDir>/skills-bundled/` at startup, beside `skills/` rather than in it: a
-skill's scripts want a real base directory, and deleting one's own skill must
-not reach the presets. `settings.json` holds the app-level model default, the
+user's agents, beside `settings.json`. The bundled skills and agents live in
+the binary: `tool/gen_bundled_skills.dart` writes them, build-time, from
+`assets/prompts/` into `lib/data/prompts/bundled_skill_data.dart`, so the
+library the model reads cannot be poisoned from the skills directory.
+`<dataDir>/skills-bundled/` is a read-only copy of those on disk, there only so
+`bash` can reach a skill's scripts (which want a real base directory); it is
+self-healed from the embedded data at startup — a file that drifted is
+re-written by checksum, and a stray the embedded data does not name is deleted.
+It is beside `skills/` rather than in it, so deleting one's own skill does not
+reach the presets. `settings.json` holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
  `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's

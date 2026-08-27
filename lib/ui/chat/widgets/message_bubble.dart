@@ -466,6 +466,13 @@ class _MessageBubbleState extends State<MessageBubble> {
             entryFile: entryFile,
             title: title,
           ));
+        case SkillInstallPart(:final installId, :final title):
+          flushRun();
+          rows.add(SkillInstallLabel(
+            chatId: widget.chatId,
+            installId: installId,
+            title: title,
+          ));
         case ShellRunPart():
           // Not a label: a command the user ran is the answer to their message
           // rather than something the turn did on its way to one.

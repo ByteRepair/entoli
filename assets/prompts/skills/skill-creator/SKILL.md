@@ -408,13 +408,15 @@ Take `best_description` from the JSON output and update the skill's SKILL.md fro
 
 ### Package
 
-Package the skill so the user can install it:
+The skill is a directory in the workspace — a `SKILL.md` plus any `scripts/`, `references/`, and `assets/` it needs. Once the user is happy with it, offer it for install with the `create_skill` tool:
 
-```bash
-python -m scripts.package_skill <path/to/skill-folder>
+```
+create_skill(path: "<path/to/skill-folder>")
 ```
 
-Then tell the user where the resulting `.skill` file is: they import it in Settings, under Skills.
+Pass the directory that holds `SKILL.md` (the `name` argument is optional; it defaults to the directory name, which should match the frontmatter's `name`). The tool packages the directory, stages it, and posts a card into the chat. The user taps the card to review the skill and press Install — that is what puts it into their own skills directory, where it shows up in the `/` menu and the system prompt from the next turn on.
+
+You cannot install it yourself, and you do not need to run `scripts/package_skill.py` or point the user at Settings: the card is the whole of the hand-off. If the user changes their mind or wants a different name, re-run `create_skill` on the updated directory — each call posts a fresh card rather than overwriting the last.
 
 ---
 
@@ -427,7 +429,7 @@ This skill ships inside Entoli, a chat app over a coding agent. The environment 
 - Feedback the viewer collects comes back as a `feedback.json` download — ask the user to drop it into the workspace or paste it into the chat.
 - The `claude` CLI is not available, so Description Optimization's automated loop (Step 3) does not run; that section says what to do instead.
 - Python is whatever the machine has: on a desktop it is the system `python3`, on Android it is inside the Linux the commands run under, and in a browser there is none at all. Where there is none, the parts of this skill that are scripts rather than instructions are out of reach — say so and work without them.
-- A `.skill` file you package is imported by the user in Settings, under Skills. Installing it for them is not something you can do.
+- Packaging is the `create_skill` tool rather than a script: it takes the skill's directory, posts a card, and the user installs from there. There is no `.skill` file to hand over and no Settings page to point at. See the Package section.
 
 ---
 
@@ -453,7 +455,7 @@ Repeating one more time the core loop here for emphasis:
   - Create benchmark.json and run `eval-viewer/generate_review.py` to help the user review them
   - Run quantitative evals
 - Repeat until you and the user are satisfied
-- Package the final skill and return it to the user.
+- Offer the final skill for install with `create_skill`, and let the user install it from the card.
 
 Please add steps to your task list, if you have such a thing, to make sure you don't forget — particularly "Create evals JSON and run `eval-viewer/generate_review.py` so the human can review test cases".
 

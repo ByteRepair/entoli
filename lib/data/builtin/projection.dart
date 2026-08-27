@@ -174,6 +174,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         case ToolResultPart():
         case FilePart():
         case ArtifactPart():
+        case SkillInstallPart():
         case ErrorPart():
           // Results are read off `results` by the call they answer. An error is
           // what the turn reported to the user; the model never saw it, so
@@ -238,6 +239,7 @@ String? _responseIdOf(MessagePart part) => switch (part) {
       ShellRunPart() ||
       FilePart() ||
       ArtifactPart() ||
+      SkillInstallPart() ||
       ErrorPart() =>
         null,
     };

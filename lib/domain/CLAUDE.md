@@ -570,17 +570,18 @@ prefix, an explanation on the next line, thirty words instead of twenty.
 ## Skills and agents
 
 `PromptLibrary` is the whole of what the composer's `/` and `@` menus offer,
-built from two `PromptSource`s in precedence order: the presets packaged under
-`assets/prompts/`, then the user's own directory. A file the user wrote replaces
+built from two `PromptSource`s in precedence order: the presets embedded in the
+binary (see the root notes, "On-disk layout", for why they are code rather
+than assets), then the user's own directory. A skill the user wrote replaces
 the preset it shares a name with, and entries come back sorted by name, so the
 menu does not reorder when a source does. It is built once at startup, because
-reading assets is async and nothing downstream should wait on it; a skill
-dropped into the directory by hand therefore does not appear until a restart,
-though nothing would break if it did — a message resolves against whatever the
-library holds when it is composed, and keeps the answer. The one route that buys
-a refresh is the Skills settings page: it is where a user changes the library
-from inside the app, and it reloads after an import or a delete, so that change
-lands without a restart.
+the user's directory is read off disk and nothing downstream should wait on it;
+a skill dropped into the directory by hand therefore does not appear until a
+restart, though nothing would break if it did — a message resolves against
+whatever the library holds when it is composed, and keeps the answer. The routes
+that buy a refresh are the places that change the library from inside the app —
+the Skills settings page and a `create_skill` install — each reloads after it
+writes, so the change lands without a restart.
 
 A skill is a **directory**, not a file: a `SKILL.md` and whatever files it runs
 with. Its name is the frontmatter's `name` where it has one, the folder
