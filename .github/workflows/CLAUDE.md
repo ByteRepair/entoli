@@ -43,6 +43,17 @@ what they do with what comes back, which is a bundle and an AppImage either
 way. The four signing secrets are named at the call site rather than
 `inherit`ed, since only one of the two jobs signs anything.
 
+**The Android build is two jobs, not one.** The native tools build fetches the
+Hexagon SDK and cross-compiles proot and llama.cpp — several gigabytes of
+intermediates a single runner did not have room for beside the Gradle APK
+build. `android-tools` builds only, uploads the stripped `dist/` as an
+artifact, and the runner is recycled with all its build directories. `android`
+downloads that artifact onto a fresh runner, stages it, and builds the APK.
+The `bundled-tools` composite action takes a `stage` input for this: false on
+the tools job, true (the default) where a caller wants both in one step.
+`debug-build.yml` splits the same way, for the same reason. The tools job does
+not touch Dart and needs no Flutter SDK.
+
 **Every job that touches Dart starts with `.github/actions/flutter-setup`** —
 the SDK pin, the packages and codegen in one step, `linux-appimage`'s own job
 included, so no workflow spells a Flutter version out. The generated sources
