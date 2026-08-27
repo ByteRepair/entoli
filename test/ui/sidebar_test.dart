@@ -292,7 +292,7 @@ void main() {
       await pumpBeside(tester);
       await openProjectMenu(tester);
 
-      expect(find.text("Anonymous"), findsOneWidget);
+      expect(find.text("\u{1F576}\uFE0F Anon"), findsOneWidget);
       expect(find.text("Delete project…"), findsNothing);
     });
 
@@ -301,7 +301,7 @@ void main() {
     testWidgets("a built-in project has no settings page or workspace button",
         (tester) async {
       await pumpBeside(tester);
-      await switchTo(tester, "Anonymous");
+      await switchTo(tester, "\u{1F576}\uFE0F Anon");
 
       expect(app.container.read(selectedProjectProvider), "anonymous");
       expect(find.byTooltip("Project settings"), findsNothing);

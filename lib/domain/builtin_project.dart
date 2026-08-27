@@ -1,4 +1,5 @@
 import "profile.dart";
+import "temp_chat_ttl.dart";
 
 /// A project the app ships rather than the user creates.
 ///
@@ -46,6 +47,17 @@ class BuiltinProject {
   /// offered to write, so there is no file to delete or edit away from under
   /// the turn.
   String? get bundledInstructions => null;
+
+  /// The temporary-chat TTL a built-in ships as its own default, in place of
+  /// the app-level one. Null falls through to the app default the way a user's
+  /// project does. A chat's own override still wins, the way it does for any
+  /// project.
+  TempChatTtl? get tempChatTtl => null;
+
+  /// The question the empty-chat screen asks when this is the project the next
+  /// chat goes to. Null is the default question, shared with every project
+  /// that is not a built-in.
+  String? get emptyChatQuestion => null;
 }
 
 /// What a turn's "About the user" is.
@@ -82,7 +94,7 @@ class AnonymousProject extends BuiltinProject {
   const AnonymousProject()
       : super(
           dir: "anonymous",
-          label: "Anonymous",
+          label: "\u{1F576}\uFE0F Anon",
           profilePolicy: ProfilePolicy.none,
           memory: MemoryPolicy.off,
           sharedWorkspace: false,
@@ -95,6 +107,13 @@ class AnonymousProject extends BuiltinProject {
       "nothing about it is remembered. There is no profile of the user and no "
       "memory of earlier chats, and this note stands in for the instruction "
       "files the other projects read.";
+
+  /// Anonymous chats are scratch: they live a day by default, not forever.
+  @override
+  TempChatTtl? get tempChatTtl => TempChatTtl.hours24;
+
+  @override
+  String? get emptyChatQuestion => "What would you like to discuss anonymously?";
 }
 
 /// The built-in projects, in the order the menus offer them.

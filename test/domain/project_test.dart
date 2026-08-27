@@ -2,6 +2,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/project.dart";
+import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 void main() {
   test("a plain name is kept as it was typed", () {
@@ -56,7 +57,8 @@ void main() {
 
     test("is a project-shaped directory name", () {
       expect(dir, "anonymous");
-      expect(builtIn.label, "Anonymous");
+      // The label, not the directory, is what the menus and bar read.
+      expect(builtIn.label, "\u{1F576}\uFE0F Anon");
       expect(isProjectDirName(dir), isTrue);
       expect(isBuiltinProject(dir), isTrue);
       expect(builtinProjectOf(dir), same(builtIn));
@@ -86,6 +88,18 @@ void main() {
       expect(
           const BuiltinProject(dir: "work", label: "work")
               .bundledInstructions,
+          isNull);
+    });
+
+    // Anonymous chats are scratch: they ship a 24h TTL and their own empty-chat
+    // question. A built-in with neither leaves both null, the way a user's
+    // project does.
+    test("ships its own TTL default and empty-chat question", () {
+      expect(builtIn.tempChatTtl, TempChatTtl.hours24);
+      expect(builtIn.emptyChatQuestion, "What would you like to discuss anonymously?");
+      expect(const BuiltinProject(dir: "work", label: "work").tempChatTtl, isNull);
+      expect(
+          const BuiltinProject(dir: "work", label: "work").emptyChatQuestion,
           isNull);
     });
 

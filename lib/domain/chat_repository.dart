@@ -360,15 +360,17 @@ class ChatRepository {
       ProjectSettings.load(_config, project: project);
 
   /// Which TTL applies to a chat: its own choice wins, else the project's, else
-  /// the app default. [project] is passed in by [saveState], which is holding
-  /// the state it is about to write and so already knows; without it the answer
-  /// is read back off disk.
+  /// a built-in project's shipped default, else the app default. [project] is
+  /// passed in by [saveState], which is holding the state it is about to write
+  /// and so already knows; without it the answer is read back off disk.
   Future<TempChatTtl> _resolveTempTtl(String chatId, {String? project}) async {
     final meta = await loadMeta(chatId);
     if (meta.tempChatTtl != null) return meta.tempChatTtl!;
     final proj = project ?? await projectOf(chatId);
     final projectSettings = await projectSettingsOf(proj);
     if (projectSettings.tempChatTtl != null) return projectSettings.tempChatTtl!;
+    final builtIn = builtinProjectOf(proj);
+    if (builtIn?.tempChatTtl != null) return builtIn!.tempChatTtl!;
     return _settings().tempChatTtl;
   }
 

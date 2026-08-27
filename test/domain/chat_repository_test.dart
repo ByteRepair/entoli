@@ -301,6 +301,34 @@ void main() {
     expect(loaded.state.tempTtlExpiresAt, anchored.tempTtlExpiresAt);
   });
 
+  // An anonymous chat ships a 24h TTL rather than the app default, but a chat's
+  // own override still wins, the way it does for any project.
+  group("an anonymous chat's TTL", () {
+    test("defaults to 24h even with the app default off", () async {
+      final repo = repoWith(AppSettings()); // app default is off
+      final chat = await repo.createChat(project: "anonymous");
+
+      final anchored = await repo.saveState(chat.state);
+
+      expect(anchored.tempTtlSince, isNotNull);
+      expect(
+        anchored.tempTtlExpiresAt!.difference(anchored.tempTtlSince!),
+        const Duration(hours: 24),
+      );
+    });
+
+    test("a per-chat override still wins", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await repo.createChat(project: "anonymous");
+      await repo.saveMeta(chat.state.id, ChatMeta(tempChatTtl: TempChatTtl.off));
+
+      final anchored = await repo.saveState(chat.state);
+
+      expect(anchored.tempTtlSince, isNull);
+      expect(anchored.tempTtlExpiresAt, isNull);
+    });
+  });
+
   group("naming a chat", () {
     ChatRepository repoWithTitleModel() => repoWith(
         AppSettings(titleProviderId: "anthropic", titleModelId: "claude-haiku-3"));

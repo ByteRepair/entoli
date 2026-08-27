@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/builtin_project.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "resettable_field.dart";
@@ -29,7 +30,9 @@ class TempChatTtlField extends ConsumerWidget {
     return InheritableDropdown<TempChatTtl>(
       label: "Temporary chat",
       value: value,
-      inherited: (projectTtl ?? appTtl).label,
+      inherited: (projectTtl ?? builtinProjectOf(project)?.tempChatTtl ??
+              appTtl)
+          .label,
       options: tempChatTtlLabels,
       onChanged: onChanged,
     );

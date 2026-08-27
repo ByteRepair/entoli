@@ -5,6 +5,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/agent_backend.dart";
+import "../../domain/builtin_project.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart";
@@ -247,7 +248,8 @@ class _EmptyChat extends ConsumerWidget {
             const AppMark(size: 56),
             const SizedBox(height: 20),
             Text(
-              "What would you like to discuss?",
+              builtinProjectOf(project)?.emptyChatQuestion ??
+                  "What would you like to discuss?",
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium,
             ),

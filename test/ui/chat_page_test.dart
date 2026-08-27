@@ -159,20 +159,32 @@ void main() {
         (tester) async {
       await openEmpty(tester);
 
-      expect(find.widgetWithText(ChoiceChip, "Anonymous"), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, "\u{1F576}\uFE0F Anon"), findsOneWidget);
       expect(find.byType(ChoiceChip), findsOneWidget);
     });
 
     testWidgets("picking the built-in badge moves the chat to it", (tester) async {
       await openEmpty(tester);
 
-      await pick(tester, "Anonymous");
+      await pick(tester, "\u{1F576}\uFE0F Anon");
 
       expect(app.container.read(selectedProjectProvider), "anonymous");
 
       await sendMessage(tester, "hello");
 
       expect(await projectOfMade(tester), "anonymous");
+    });
+
+    // The built-in ships its own question, so picking it asks what the chat is.
+    testWidgets("picking the built-in asks the question anonymously", (tester) async {
+      await openEmpty(tester);
+
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+
+      await pick(tester, "\u{1F576}\uFE0F Anon");
+
+      expect(find.text("What would you like to discuss anonymously?"), findsOneWidget);
+      expect(find.text("What would you like to discuss?"), findsNothing);
     });
 
     // The badge says where the next chat goes, which is all it can say: there
@@ -340,7 +352,9 @@ void main() {
 
     await open(tester, chat.state.id);
 
-    expect(find.descendant(of: find.byType(AppBar), matching: find.text("Anonymous")),
+    expect(
+        find.descendant(
+            of: find.byType(AppBar), matching: find.text("\u{1F576}\uFE0F Anon")),
         findsOneWidget);
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("anonymous")),
         findsNothing);
