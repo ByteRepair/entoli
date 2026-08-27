@@ -240,6 +240,17 @@ sealed class MessagePart with _$MessagePart {
     required String title,
   }) = ArtifactPart;
 
+  /// A skill the model drafted and packaged for the user to install. The
+  /// [installId] names the staged `.skill` package under the chat's directory;
+  /// [name] and [description] are from the SKILL.md frontmatter; [title] is
+  /// what the label reads. The package lives on disk, not in the log.
+  const factory MessagePart.skillInstall({
+    required String installId,
+    required String name,
+    required String description,
+    required String title,
+  }) = SkillInstallPart;
+
   factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
 }
 
@@ -329,10 +340,10 @@ abstract class ModelOption with _$ModelOption {
 typedef ModelChoice = ({String? providerId, String? modelId});
 
 /// What a message can address, the character that starts one, and the
-/// directory the files defining them live in — under `assets/prompts/` when
-/// they ship with the app, under `$AGENT_CHAT_CONFIG/` when the user adds one.
-/// A skill's directory holds a `SKILL.md` (and whatever else the skill needs);
-/// an agent's holds flat `.md` files.
+/// directory the files defining them live in — the app's own are embedded in
+/// code (generated from `assets/prompts/` at build time), the user's are under
+/// `$AGENT_CHAT_CONFIG/`. A skill's directory holds a `SKILL.md` (and whatever
+/// else the skill needs); an agent's holds flat `.md` files.
 enum CompletionKind {
   skill("/", "Skills", "skills"),
   agent("@", "Agents", "agents");

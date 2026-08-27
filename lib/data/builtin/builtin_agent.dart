@@ -20,6 +20,7 @@ import "artifact_tool.dart";
 import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
+import "skill_create_tool.dart";
 import "skill_tool.dart";
 import "sub_agent.dart";
 import "task_tool.dart";
@@ -246,6 +247,7 @@ List<LlmTool> agentTools({
   List<PromptDocument> skills = const [],
   required bool offerMemory,
   bool oneShot = false,
+  bool offerCreateSkill = false,
 }) =>
     [
       file_tool_defs.readTool,
@@ -257,6 +259,7 @@ List<LlmTool> agentTools({
       if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
       if (caps.artifact) artifactTool,
+      if (offerCreateSkill) createSkillTool,
       if (offerMemory)
         ...[
           memorySaveTool,
@@ -297,6 +300,7 @@ class BuiltinAgent {
     this.webSearch,
     this.profile,
     this.saveArtifact,
+    this.packageSkill,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -457,6 +461,11 @@ class BuiltinAgent {
   /// support) and copies the dir; the agent just passes the args through.
   final Future<String> Function(String path, {String? artifactId})? saveArtifact;
 
+  /// Packages a skill drafted in the workspace and stages the `.skill` for the
+  /// user to install. Null where the agent is a sub-agent: a worker does not
+  /// offer skills for install. Returns the install id.
+  final Future<String> Function(String path, String? name)? packageSkill;
+
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
   /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
@@ -479,6 +488,7 @@ class BuiltinAgent {
         skills: skills,
         offerMemory: memoryStore != null,
         oneShot: oneShot,
+        offerCreateSkill: packageSkill != null,
       );
 
   bool _cancelled = false;
@@ -761,6 +771,11 @@ class BuiltinAgent {
 
       if (call.name == artifactToolName && saveArtifact != null) {
         yield* _artifact(call);
+        continue;
+      }
+
+      if (call.name == createSkillToolName && packageSkill != null) {
+        yield* _createSkill(call);
         continue;
       }
 
@@ -1320,6 +1335,70 @@ class BuiltinAgent {
           output: "Artifact $label published. The user can view it in the app. "
               "It is saved with the chat. To update it, edit the files and call "
               "artifact again with artifact_id: \"$artifactId\".",
+        ));
+  }
+
+  /// Package a skill the model drafted in its workspace and offer it to the
+  /// user to install. Mirrors [_artifact]: the model writes files, calls the
+  /// tool, and a card appears in the chat. The user reviews and installs from
+  /// the card — the model cannot install it itself.
+  Stream<AgentEvent> _createSkill(LlmToolCall call) async* {
+    final args = createSkillArgsFrom(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call, createSkillFormatError);
+      return;
+    }
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: args.path,
+    ));
+    String? installId;
+    String? skillName;
+    String? skillDescription;
+    Future<ShellResult> run() async {
+      final skillDir = fs.directory(path);
+      if (!await skillDir.exists()) {
+        return ShellResult.failed(
+            "The directory '$path' does not exist. Write the skill there first "
+            "with write/edit, then call create_skill.");
+      }
+      final skillMdPath = fs.path.join(path, "SKILL.md");
+      if (!await fs.file(skillMdPath).exists()) {
+        return ShellResult.failed(
+            "The directory '$path' has no SKILL.md. A skill needs one.");
+      }
+      final skillMd = await fs.file(skillMdPath).readAsString();
+      final parsed = PromptDocument.parse(CompletionKind.skill, "", skillMd);
+      skillName = args.name ?? parsed.frontmatter["name"] ?? fs.path.basename(path);
+      skillDescription = parsed.description ?? "";
+      installId = await packageSkill!(args.path, args.name);
+      return const ShellResult(returnCode: 0, output: "");
+    }
+    if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
+      yield* _runGated(call, call.argumentsJson, createSkillToolName, run,
+          argumentsText: path);
+    } else {
+      _commandResult = await run();
+    }
+    final id = installId;
+    if (_commandResult!.returnCode != 0 || id == null) {
+      yield ToolResultEvent(_ran(call, _commandResult!));
+      return;
+    }
+    yield SkillInstallEvent(
+      installId: id,
+      name: skillName ?? args.name ?? args.path,
+      description: skillDescription ?? "",
+      title: skillName ?? args.name ?? args.path,
+    );
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: "Skill '${skillName ?? args.name ?? args.path}' packaged. "
+              "The user can review and install it from the card below.",
         ));
   }
 

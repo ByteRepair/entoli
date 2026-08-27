@@ -568,6 +568,8 @@ class FakeChatStore implements ChatStore {
   final Map<String, Map<String, Uint8List>> _resources = {};
   /// artifactId → relativePath → bytes, per chat.
   final Map<String, Map<String, Map<String, Uint8List>>> _artifacts = {};
+  /// installId → package bytes, per chat.
+  final Map<String, Map<String, Uint8List>> _skillInstalls = {};
   final Set<String> _projects = {};
 
   /// The chat's log, as it has been appended to. What the log tests assert on.
@@ -667,6 +669,14 @@ class FakeChatStore implements ChatStore {
   @override
   Future<String> artifactPath(String chatId, String artifactId, {String? project}) async =>
       "/tmp/test/$chatId/artifacts/$artifactId";
+
+  @override
+  Future<Uint8List?> readSkillInstall(String chatId, String installId) async =>
+      _skillInstalls[chatId]?[installId];
+
+  /// Stages a skill package under the fake, the way the backend would.
+  void stageSkillInstall(String chatId, String installId, Uint8List bytes) =>
+      _skillInstalls.putIfAbsent(chatId, () => {})[installId] = bytes;
 
   @override
   Future<ChatMeta> loadMeta(String chatId) async => _metas[chatId] ?? ChatMeta();

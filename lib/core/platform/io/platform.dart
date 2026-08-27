@@ -277,3 +277,39 @@ String? platformHostname() {
     return null;
   }
 }
+
+/// Makes each path in [paths] read-only (chmod -R 555) so a weak model running
+/// `bash` cannot unintentionally write to a skill directory. No-op on Windows
+/// and macOS: the app targets Linux, Android, and Web, and the guard is only
+/// meaningful where `chmod` exists. A determined model can `chmod u+w` its way
+/// past this (the shell runs as the app's own uid), but that is a deliberate
+/// bypass, not an unintentional edit — the approval regime disclaims that.
+Future<void> platformChmodReadOnly(List<String> paths) async {
+  if (!Platform.isLinux && !Platform.isAndroid) return;
+  for (final path in paths) {
+    try {
+      await Process.run("chmod", ["-R", "555", path]);
+    } catch (_) {}
+  }
+}
+
+/// Toggles [path] writable for [action], then restores it to read-only. The
+/// install and delete paths use this: they are the app's own writes, not the
+/// model's, and they need the directory writable for the duration.
+Future<T> platformWithWritableDir<T>(
+    String path, Future<T> Function() action) async {
+  if (Platform.isLinux || Platform.isAndroid) {
+    try {
+      await Process.run("chmod", ["-R", "u+w", path]);
+    } catch (_) {}
+  }
+  try {
+    return await action();
+  } finally {
+    if (Platform.isLinux || Platform.isAndroid) {
+      try {
+        await Process.run("chmod", ["-R", "555", path]);
+      } catch (_) {}
+    }
+  }
+}

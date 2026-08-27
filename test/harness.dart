@@ -704,7 +704,15 @@ AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
   Directory(config.chatsDir()).createSync(recursive: true);
   Directory(config.projectWorkspaceDir()).createSync(recursive: true);
   addTearDown(() {
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    if (!tmp.existsSync()) return;
+    // The read-only guard leaves the skills directories `555`; a deletion
+    // needs the parent writable, so give it back before tearing down.
+    if (Platform.isLinux || Platform.isAndroid) {
+      try {
+        Process.runSync("chmod", ["-R", "u+w", tmp.path]);
+      } catch (_) {}
+    }
+    tmp.deleteSync(recursive: true);
   });
   return config;
 }

@@ -78,6 +78,23 @@ class ArtifactEvent extends AgentEvent {
   final String title;
 }
 
+/// A skill was drafted in the workspace and packaged for the user to install.
+/// Persisted as a [MessagePart] like [ArtifactEvent], so a reloaded chat redraws
+/// the install card. The `.skill` package is staged under the chat's directory,
+/// so it is deleted with the chat.
+class SkillInstallEvent extends AgentEvent {
+  const SkillInstallEvent({
+    required this.installId,
+    required this.name,
+    required this.description,
+    required this.title,
+  });
+  final String installId;
+  final String name;
+  final String description;
+  final String title;
+}
+
 class ApprovalRequestEvent extends AgentEvent {
   const ApprovalRequestEvent(this.approval);
   final ToolApproval approval;

@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../fonts.dart";
+import "../../skills/skill_install_preview.dart";
 import "../../../domain/ask.dart";
 import "../../../domain/models.dart";
 import "../../../domain/tool_arg.dart";
@@ -387,6 +388,115 @@ class ArtifactLabel extends ConsumerWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A `create_skill` call, once it is history: a prominent card the user taps
+/// to review and install the skill the model drafted. Mirrors [ArtifactLabel]:
+/// a skill offered for install is output the user came for, not background
+/// activity, so it breaks an activity run the way an artifact does.
+class SkillInstallLabel extends ConsumerWidget {
+  const SkillInstallLabel({
+    super.key,
+    required this.chatId,
+    required this.installId,
+    required this.name,
+    required this.description,
+    required this.title,
+  });
+
+  final String chatId;
+  final String installId;
+  final String name;
+  final String description;
+  final String title;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final label = title.isEmpty ? "Install skill" : title;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Material(
+          color: scheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => _openPreview(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: scheme.onSecondaryContainer.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.extension,
+                      size: 20,
+                      color: scheme.onSecondaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Skill",
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSecondaryContainer
+                                .withValues(alpha: 0.75),
+                            letterSpacing: 0.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: scheme.onSecondaryContainer,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.install_desktop,
+                    size: 18,
+                    color: scheme.onSecondaryContainer.withValues(alpha: 0.7),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openPreview(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SkillInstallPreviewPage(
+          chatId: chatId,
+          installId: installId,
         ),
       ),
     );

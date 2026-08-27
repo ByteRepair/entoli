@@ -1,51 +1,71 @@
-// Where prompt files come from: the presets packaged with the app, and the
-// user's own directory beside them.
-import "package:flutter/services.dart";
+// Where prompt files come from: the presets embedded in code, and the user's
+// own directory beside them.
 import "package:fs_shim/fs.dart";
-import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
+import "bundled_skill_data.dart";
 
-/// The presets, packaged at build time under `assets/prompts/`. Agents are
-/// single `.md` files read straight off the bundle; skills are directories,
-/// and a skill's scripts and reference files need a real base directory
-/// rather than an asset key — so they are extracted to the config's
-/// filesystem at startup (see `bundled_skills.dart`) and read back from
-/// there by [loadSkillDirectories].
+/// The presets, embedded in code at build time by `tool/gen_bundled_skills.dart`.
+/// The app is the source of truth for bundled skills and agents: the library
+/// reads from the const lists, not from the disk or the asset bundle. The disk
+/// copy under `skills-bundled/` is a self-healed cache for bash access, written
+/// by `installBundledSkills` at startup — the library never reads it.
 class BundledPrompts implements PromptSource {
-  const BundledPrompts({this.bundle, this.config});
+  const BundledPrompts({this.config});
 
-  /// Null means [rootBundle] — resolved on use, because a test binding swaps
-  /// it out after this has been constructed.
-  final AssetBundle? bundle;
-
-  /// Whose filesystem the extracted skills are read back off. Null loads no
-  /// skills: a test exercising the agent half alone.
+  /// Whose filesystem the bundled skills' base directories are written to.
+  /// Null loads no skills: a test exercising the agent half alone.
   final AppConfig? config;
-
-  static String directoryFor(CompletionKind kind) => "assets/prompts/${kind.folder}/";
 
   @override
   Future<List<PromptDocument>> load(CompletionKind kind) async {
-    if (kind == CompletionKind.skill) {
-      final config = this.config;
-      if (config == null) return const [];
-      return loadSkillDirectories(config.fs, config.bundledSkillsDir);
+    switch (kind) {
+      case CompletionKind.skill:
+        final config = this.config;
+        if (config == null) return const [];
+        return _loadBundledSkills(config);
+      case CompletionKind.agent:
+        return [
+          for (final file in bundledAgentFiles)
+            PromptDocument.parse(kind, file.name, file.content),
+        ];
     }
-    final assets = bundle ?? rootBundle;
-    final manifest = await AssetManifest.loadFromAssetBundle(assets);
-    final directory = directoryFor(kind);
+  }
+
+  /// Builds [PromptDocument]s from the embedded skill data, grouping files by
+  /// skill name and prepending the base directory the same way
+  /// [loadSkillDirectories] does for user skills. Only the `SKILL.md` entry is
+  /// parsed — the other files (scripts, references) are for bash to reach by
+  /// path, not for the library.
+  List<PromptDocument> _loadBundledSkills(AppConfig config) {
+    final bySkill = <String, List<BundledPromptFile>>{};
+    for (final file in bundledSkillFiles) {
+      bySkill.putIfAbsent(file.name, () => []).add(file);
+    }
     final documents = <PromptDocument>[];
-    for (final key in manifest.listAssets()) {
-      if (!key.startsWith(directory) || !key.endsWith(".md")) continue;
-      documents.add(PromptDocument.parse(
-        kind,
-        p.basenameWithoutExtension(key),
-        await assets.loadString(key),
-      ));
+    for (final entry in bySkill.entries) {
+      final skillName = entry.key;
+      final skillMd = entry.value.firstWhere(
+        (f) => f.relativePath == "SKILL.md",
+        orElse: () => entry.value.first,
+      );
+      try {
+        final parsed = PromptDocument.parse(
+            CompletionKind.skill, skillName, skillMd.content);
+        documents.add(PromptDocument(
+          kind: CompletionKind.skill,
+          name: parsed.frontmatter["name"] ?? skillName,
+          frontmatter: parsed.frontmatter,
+          body: _withBaseDir(
+              config.fs.path.join(config.bundledSkillsDir, skillName),
+              parsed.body),
+        ));
+      } catch (e) {
+        logFailure("skills", "could not parse bundled skill $skillName: $e");
+      }
     }
     return documents;
   }

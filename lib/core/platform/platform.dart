@@ -141,6 +141,9 @@ LocalPrefill? createLocalPrefill(
           // no memory tools; a turn with them misses the cache rather than
           // the cache serving a list no turn sends.
           offerMemory: false,
+          // A default top-level turn can offer skills for install, so the
+          // warmed prefix carries the tool a cold turn would.
+          offerCreateSkill: true,
         ),
       );
     },
@@ -304,3 +307,15 @@ List<PromptSource> createPromptSources(AppConfig config) => [
 /// starts here, so two paired machines are told apart by something the user
 /// already recognises rather than by a slice of a key fingerprint.
 String? deviceHostname() => platformHostname();
+
+/// Makes the skill directories read-only so a model running `bash` cannot
+/// unintentionally write to them. No-op on the web (no bash). See
+/// `platformChmodReadOnly`.
+Future<void> chmodReadOnly(List<String> paths) => platformChmodReadOnly(paths);
+
+/// Toggles a directory writable for [action], then restores it read-only. The
+/// install and delete paths use this — they are the app's writes, not the
+/// model's.
+Future<T> withWritableDir<T>(
+        String path, Future<T> Function() action) =>
+    platformWithWritableDir(path, action);
