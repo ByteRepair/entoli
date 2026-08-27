@@ -1,4 +1,4 @@
-package io.github.yiannis128.agent_chat
+package io.github.yiannis128.agentchat
 
 import android.Manifest
 import android.content.Context

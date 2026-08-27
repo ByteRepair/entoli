@@ -1,6 +1,6 @@
 # Entoli
 
-Flutter (Linux/Web/Android) ChatGPT-style UI over a coding agent. Client-side:
+Flutter (Linux/Web/Android/iOS) ChatGPT-style UI over a coding agent. Client-side:
 it calls the user's own LLM endpoints and runs commands on their machine.
 
 The app is named Entoli; most of the identifiers are not, and deliberately.
@@ -10,13 +10,14 @@ of those would leave the chats already written where nothing reads them, for a
 string nobody sees.
 
 The one identifier that did move is the application id, from the placeholder
-`com.agentchat.agent_chat` to `io.github.yiannis128.agent_chat` — the first was
-a reverse-DNS name for a domain nobody here owns. Android and GTK both refuse a
-hyphen in an id, so the last segment is `agent_chat` rather than `agent-chat`.
-It is the Android `applicationId` and `namespace` and the Linux
-`APPLICATION_ID`, all one string. Changing it makes this a different app to
-Android, which is only free before a release; it is why the Kotlin package
-moved with it.
+`com.agentchat.agent_chat` to `io.github.yiannis128.agentchat` — the first was
+a reverse-DNS name for a domain nobody here owns. The last segment carries no
+separator: Android's `applicationId`/`namespace`, GTK's `APPLICATION_ID` and
+iOS's `CFBundleIdentifier` all accept the same string this way, where each
+refused a different separator of the two (`agent_chat`, `agent-chat`), and a
+per-platform split was one more thing to keep in step. It is the same string on
+every platform now. Changing it makes this a different app to Android, which is
+only free before a release; it is why the Kotlin package moved with it.
 
 ## Where the rest of this is
 

@@ -23,7 +23,7 @@ val keystoreAlias = signingSetting("ANDROID_KEY_ALIAS", "keyAlias")
 val keystoreAliasPassword = signingSetting("ANDROID_KEY_PASSWORD", "keyPassword")
 
 android {
-    namespace = "io.github.yiannis128.agent_chat"
+    namespace = "io.github.yiannis128.agentchat"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -63,7 +63,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "io.github.yiannis128.agent_chat"
+        applicationId = "io.github.yiannis128.agentchat"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // 26, not flutter.minSdkVersion (24): adaptive icons start here, and
