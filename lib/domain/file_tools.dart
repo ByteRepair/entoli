@@ -82,6 +82,23 @@ EditArgs? editArgsFrom(String? json) {
   );
 }
 
+/// The guest path of a chat workspace, given the [guestRoot] where the project
+/// workspace is mounted inside the guest, the project workspace [projectWorkspace]
+/// on the host, and the chat workspace [workspace] on the host. The chat
+/// workspace is a folder inside the project workspace, so its guest path is
+/// [guestRoot] + the suffix of [workspace] past [projectWorkspace].
+String guestWorkspacePath(
+  String guestRoot,
+  String projectWorkspace,
+  String workspace,
+) {
+  final suffix =
+      workspace.length > projectWorkspace.length
+          ? workspace.substring(projectWorkspace.length)
+          : "";
+  return "$guestRoot$suffix";
+}
+
 /// Resolve a file tool's path. A path starting with `project:` is joined onto
 /// [projectWorkspace]; anything else is joined onto [workspace]. A relative
 /// path is sanitised by [safeRelativePath] before joining, so `..` and a

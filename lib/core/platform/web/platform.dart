@@ -37,7 +37,6 @@ Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 /// A browser cannot run a command at all, so there is nothing for a Linux to
 /// be run under.
 ShellDriver? platformDriver({
-  required String dataDir,
   required String skillsBundledDir,
   required String userSkillsDir,
   Toolset? tools,

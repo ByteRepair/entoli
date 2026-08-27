@@ -2,6 +2,7 @@ import "dart:convert";
 
 import "../../domain/ask.dart";
 import "../../domain/builtin_project.dart";
+import "../../domain/file_tools.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
@@ -121,7 +122,7 @@ String turnPrompt({
   // path on the machine. The chat workspace is `~/chats/<id>` inside a guest.
   final homeDisplay = guestRoot ?? projectWorkspace;
   final workspaceDisplay = guestRoot != null
-      ? "$guestRoot${workspace.substring(projectWorkspace.length)}"
+      ? guestWorkspacePath(guestRoot, projectWorkspace, workspace)
       : workspace;
   final shared = sharedWorkspace
       ? "\n\n"

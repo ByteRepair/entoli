@@ -1,5 +1,6 @@
 import "dart:io" show Platform;
 
+import "../../domain/file_tools.dart";
 import "../../domain/rootfs.dart";
 import "../../domain/shell.dart";
 
@@ -18,7 +19,6 @@ ShellDriver prootDriver({
   required Proot proot,
   required Rootfs rootfs,
   required String rootfsDir,
-  required String dataDir,
   required String skillsBundledDir,
   required String userSkillsDir,
   String? abi,
@@ -47,7 +47,7 @@ ShellDriver prootDriver({
         // The guest path of the chat workspace, not "." — proot stores -w as
         // the guest cwd, and "." resolves against the guest root, not the
         // host's working directory.
-        "-w", guestWorkspacePath(home, cwd),
+        "-w", guestWorkspacePath(guestHome, home, cwd),
         "/bin/sh",
       ],
       environment: {
@@ -70,12 +70,3 @@ ShellDriver prootDriver({
           "${Platform.operatingSystemVersion}, so filesystem-heavy commands are "
           "slower than they look",
     );
-
-/// The guest path of a chat workspace, given the project workspace [home] and
-/// the chat workspace [cwd]. The chat workspace is a folder inside the project
-/// workspace, so its guest path is [guestHome] + the suffix of [cwd] past
-/// [home].
-String guestWorkspacePath(String home, String cwd) {
-  final suffix = cwd.length > home.length ? cwd.substring(home.length) : "";
-  return "$guestHome$suffix";
-}

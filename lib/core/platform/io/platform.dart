@@ -56,7 +56,6 @@ Shell platformShell({
 /// the pick's files have gone, or this build carries no proot. Answered
 /// synchronously because it is asked before every command.
 ShellDriver? platformDriver({
-  required String dataDir,
   required String skillsBundledDir,
   required String userSkillsDir,
   Toolset? tools,
@@ -73,13 +72,13 @@ ShellDriver? platformDriver({
       proot: proot,
       rootfs: rootfs,
       rootfsDir: dir,
-      dataDir: dataDir,
       skillsBundledDir: skillsBundledDir,
       userSkillsDir: userSkillsDir,
       abi: abi,
     );
   }
-  return LocalShell.hostDriver(tools: tools);
+  return LocalShell.hostDriver(
+      tools: tools, projectHome: Platform.isAndroid);
 }
 
 /// Which architecture this install is for, which decides the rootfs a download

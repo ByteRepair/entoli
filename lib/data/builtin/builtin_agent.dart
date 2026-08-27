@@ -1045,6 +1045,12 @@ class BuiltinAgent {
     yield ToolResultEvent(_ran(call, result));
   }
 
+  /// Resolve a file-tool path through the workspaces and the guest root, so
+  /// every call site carries the guest translation without spelling it out.
+  String _resolvePath(String path) =>
+      resolveWorkspacePath(fs, path, workspace, projectWorkspace,
+          guestRoot: shell.guestRoot);
+
   /// Read a file. A path the workspaces hold runs without asking, the way
   /// `bash` reads in `never` mode; one that reaches past them is offered to
   /// the user first, on the same terms a command is.
@@ -1055,7 +1061,7 @@ class BuiltinAgent {
           'The $readToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1105,7 +1111,7 @@ class BuiltinAgent {
           "those arguments were missing.");
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1130,7 +1136,7 @@ class BuiltinAgent {
           '"new_string": "..."}; those arguments were missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1314,7 +1320,7 @@ class BuiltinAgent {
           'The $artifactToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, parsed.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
+    final path = _resolvePath(parsed.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1361,7 +1367,7 @@ class BuiltinAgent {
       yield* _reject(call, createSkillFormatError);
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace, guestRoot: shell.guestRoot);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,

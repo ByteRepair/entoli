@@ -65,7 +65,6 @@ BuiltinBackend createBackend(
       // settings page reaches the next command, and one deleted stops being
       // where commands run without the app having to be restarted.
       driver: () => platformDriver(
-        dataDir: config.dataDir,
         skillsBundledDir: config.bundledSkillsDir,
         userSkillsDir: config.fs.path.join(config.dataDir, "skills"),
         tools: tools,

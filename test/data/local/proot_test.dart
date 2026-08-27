@@ -1,6 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/local/proot.dart";
+import "package:agent_chat/domain/file_tools.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -23,7 +24,6 @@ void main() {
         proot: from,
         rootfs: alpine,
         rootfsDir: "/data/user/0/pkg/cache/rootfs/alpine",
-        dataDir: dataDir,
         skillsBundledDir: skillsBundled,
         userSkillsDir: userSkills,
         abi: abi,
@@ -143,7 +143,7 @@ void main() {
   });
 
   test("guestWorkspacePath computes the guest path from home and cwd", () {
-    expect(guestWorkspacePath(home, cwd), "/root/chats/abc-123");
-    expect(guestWorkspacePath(home, home), "/root");
+    expect(guestWorkspacePath("/root", home, cwd), "/root/chats/abc-123");
+    expect(guestWorkspacePath("/root", home, home), "/root");
   });
 }

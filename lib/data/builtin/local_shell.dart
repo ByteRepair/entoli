@@ -135,6 +135,7 @@ class LocalShell extends Shell {
   static ShellDriver? hostDriver({
     Toolset? tools,
     String? Function()? shell,
+    bool projectHome = false,
   }) {
     final path = (shell ?? (() => shellPath))();
     if (path == null) return null;
@@ -142,28 +143,22 @@ class LocalShell extends Shell {
         "commands run under $path";
     final bundled = tools?.names;
     if (bundled != null) {
-      return _host(path, tools, "$where, with $bundled bundled with the app");
+      return _host(path, tools, "$where, with $bundled bundled with the app",
+          projectHome: projectHome);
     }
-    // Android's shell is toybox and nothing else — no git, and no way to add
-    // one outside a guest. Said rather than left to be discovered, since the
-    // alternative is the model working around the absence one `command not
-    // found` at a time.
     final description = Platform.isAndroid && tools?.proot != null
         ? "$where. There is no git and no package manager here; installing "
             "a Linux from the Terminal settings gives you both"
         : where;
-    return _host(path, tools, description);
+    return _host(path, tools, description, projectHome: projectHome);
   }
 
-  static ShellDriver _host(String path, Toolset? tools, String description) =>
+  static ShellDriver _host(String path, Toolset? tools, String description,
+      {bool projectHome = false}) =>
       ShellDriver(
         commandFor: (_, _) => [path],
         environment: tools?.environment ?? const {},
-        // Android's own home is a shared app user's, not a project workspace;
-        // setting HOME to the project workspace makes one project one
-        // environment the way a guest does. A desktop's HOME is the user's
-        // own and the tools there expect what is in it.
-        projectHome: Platform.isAndroid,
+        projectHome: projectHome,
         description: description,
       );
 
@@ -514,7 +509,7 @@ class _Session {
     // The marker is short and can only be at the end, so the end is all that
     // is looked at; the whole is joined once, when a marker is found.
     if (!run.tail(_marker.length + 8).contains(_marker)) return;
-    final buf = run.peekAll();
+    final buf = run.output;
     final start = buf.lastIndexOf("\n$_marker");
     if (start == -1) return;
     final end = buf.indexOf("@@\n", start);
@@ -522,7 +517,7 @@ class _Session {
     // The full sentinel is present — safe to consume the buffer now. Calling
     // takeAll before this would lose data if the sentinel was split across two
     // _onData calls.
-    run.takeAll();
+    run.chunks.clear();
     final line = buf.substring(start + 1, end);
     final rcAt = line.indexOf(" rc=") + " rc=".length;
     final cwdAt = line.indexOf(" cwd=", rcAt);
@@ -666,10 +661,6 @@ class _RunState {
     }
     return out;
   }
-
-  /// The whole, joined without emptying — for checking whether the full
-  /// sentinel has arrived before consuming the buffer.
-  String peekAll() => chunks.join("");
 
   /// The whole, joined and emptied — called once, when the run is over.
   String takeAll() {
