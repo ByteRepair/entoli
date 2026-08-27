@@ -61,12 +61,12 @@ BuiltinBackend createBackend(
     library: library,
     shell: platformShell(
       environment: () => settings().environment,
-      tools: tools,
       // Resolved per command rather than once: a Linux installed from the
       // settings page reaches the next command, and one deleted stops being
       // where commands run without the app having to be restarted.
-      sandbox: () => platformSandbox(
+      driver: () => platformDriver(
         dataDir: config.dataDir,
+        tools: tools,
         proot: tools?.proot,
         store: rootfs,
         rootfsId: settings().rootfsId,

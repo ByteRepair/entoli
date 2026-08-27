@@ -66,10 +66,13 @@ on the voice one is a download that stops.
 on — whether this build could run a Linux at all, and which are installed — with
 `FakeRootfsStore` behind them. Its `installing` completer holds a download open
 so a test can see the row mid-flight. What a command actually runs under is not
-faked either: `local_shell_test.dart` builds a `Sandbox` out of `/usr/bin/env`,
-which really runs, and `proot_test.dart` pins the invocation itself as a pure
-function — between them they are what can be checked about proot on a machine
-with no Android on it.
+faked either: `local_shell_test.dart` builds a `ShellDriver` out of
+`/usr/bin/env`, which really runs, and `proot_test.dart` pins the guest driver's
+invocation itself as a pure function — between them they are what can be checked
+about proot on a machine with no Android on it. The persistent shell's own contract is checked the same
+way: its session tests run real commands through the host's real shell, so a
+`cd` that does not stick, a stop that kills the shell, or a sentinel the
+dispatcher cannot print is a test failure rather than a discovery.
 
 `TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
 page — whether this build has a server at all, and which models are downloaded.

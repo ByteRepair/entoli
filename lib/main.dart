@@ -136,6 +136,7 @@ class AppSession {
       overrides: [
         chatStoreProvider.overrideWithValue(store),
         agentBackendProvider.overrideWithValue(backend),
+        shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
         promptLibraryProvider.overrideWith(() => PromptLibraryNotifier(library)),

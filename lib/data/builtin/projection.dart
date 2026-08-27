@@ -126,6 +126,19 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
   // answers must not be read as missing.
   final results = message.toolResults;
 
+  // The directory the shell is standing in, as the parts of this message
+  // report it, walked in the order the commands ran. It starts nowhere, which
+  // is what keeps the turn's opening move un-noted — the model ran the `cd`
+  // itself — and it is the whole of the tracking, since the note is derived
+  // from the fact the part carries rather than held on the session. A reload
+  // walks the same parts in the same order, so it words the same notes.
+  String? cwd;
+  String noted(String text, String? moved) {
+    final note = cwdChangedNote(cwd, moved);
+    if (moved != null) cwd = moved;
+    return note == null ? text : "$text\n\n$note";
+  }
+
   for (final response in _responses(message.parts)) {
     final reasoning = StringBuffer();
     final text = StringBuffer();
@@ -149,11 +162,14 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
           // The user's own command, worded as what the app did for them. It is
           // the whole of its turn, so there is nothing else in this response
           // for it to run into.
-          text.write(shellRunTranscript(
-            command: part.command,
-            returnCode: part.returnCode,
-            output: part.output,
-            exceptionInfo: part.exceptionInfo,
+          text.write(noted(
+            shellRunTranscript(
+              command: part.command,
+              returnCode: part.returnCode,
+              output: part.output,
+              exceptionInfo: part.exceptionInfo,
+            ),
+            part.cwd,
           ));
         case ToolResultPart():
         case FilePart():
@@ -187,7 +203,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
         toolCallId: call.id,
         text: result == null
             ? _interruptedText(call.name)
-            : _toolResultText(call.name, result),
+            : noted(_toolResultText(call.name, result), result.cwd),
       );
     }
   }

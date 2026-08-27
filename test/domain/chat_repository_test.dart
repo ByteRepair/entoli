@@ -255,6 +255,17 @@ void main() {
       // A user's project reads its files; nothing ships in their place.
       expect(settings.bundledInstructions, isNull);
     });
+
+    test("a move ends the shell the chat stood in, and only that one", () async {
+      final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
+      final chat = await repo.createChat();
+      await writeChatVia(repo, chat);
+
+      await repo.moveChat(chat.state.id, "work");
+
+      expect(backend.closedShells, [(chat.state.id, null)]);
+      expect(backend.disposed, isEmpty);
+    });
   });
 
   // A rename that wrote the whole chat would put back the conversation it read.

@@ -121,10 +121,28 @@ class FakeShell extends Shell {
   /// Whether each of [ran] was given a home to keep, in step with it.
   final List<bool> sharedHomes = [];
 
+  /// The timeout each of [ran] was given, in step with it.
+  final List<Duration> timeouts = [];
+
+  /// The project environment each of [ran] was handed, in step with it.
+  final List<Map<String, String>?> environments = [];
+
+  /// Whether each of [ran] was a one-shot, in step with it.
+  final List<bool> oneShots = [];
+
+  /// Whether each of [ran] asked for a restart, in step with it.
+  final List<bool> restarts = [];
+
   final List<String> killed = [];
+
+  /// The sessions [closeSession] ended, in the order they ended.
+  final List<String> closedSessions = [];
 
   /// Commands that never finish on their own, so a test can drive an abort.
   final Set<String> hang = {};
+
+  @override
+  void closeSession(String cwd) => closedSessions.add(cwd);
 
   @override
   final bool canRunCommands;
@@ -137,11 +155,18 @@ class FakeShell extends Shell {
       {required String cwd,
       required String home,
       required Duration timeout,
-      bool sharedHome = true}) {
+      Map<String, String>? environment,
+      bool sharedHome = true,
+      bool oneShot = false,
+      bool restart = false}) {
     ran.add(command);
     cwds.add(cwd);
     homes.add(home);
     sharedHomes.add(sharedHome);
+    timeouts.add(timeout);
+    environments.add(environment);
+    oneShots.add(oneShot);
+    restarts.add(restart);
     return _FakeRun(this, command);
   }
 }
@@ -168,13 +193,19 @@ class _FakeRun implements ShellRun {
 }
 
 /// One assistant turn that calls `bash` with [command].
-LlmCompletion bashCall(String command, {String id = "call-1", String text = ""}) =>
+LlmCompletion bashCall(
+  String command, {
+  String id = "call-1",
+  String text = "",
+  Map<String, Object?> extra = const {},
+}) =>
     LlmCompletion(
       message: LlmMessage(
         role: LlmRole.assistant,
         text: text,
         toolCalls: [
-          LlmToolCall(id: id, name: "bash", argumentsJson: jsonEncode({"command": command})),
+          LlmToolCall(
+              id: id, name: "bash", argumentsJson: jsonEncode({"command": command, ...extra})),
         ],
       ),
     );
@@ -396,7 +427,8 @@ class FakeWebSearch extends WebSearch {
   }
 }
 
-ShellResult ok(String output) => ShellResult(returnCode: 0, output: output);
+ShellResult ok(String output, {String? cwd}) =>
+    ShellResult(returnCode: 0, output: output, cwd: cwd);
 
 /// A classifier that answers from a table instead of reaching a model.
 class FakeClassifier implements PermissionClassifier {

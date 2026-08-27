@@ -78,11 +78,12 @@ void main() {
     expect(result.output.trim(), "cat dumb");
   });
 
-  test("a command that overruns is killed and says so", () async {
+  test("a command that overruns is interrupted and says so", () async {
     final result = await run("echo starting; sleep 30",
         timeout: const Duration(milliseconds: 300));
 
-    expect(result.returnCode, -1);
+    // A timeout is a Ctrl-C to the group, and the command dies as 130.
+    expect(result.returnCode, 130);
     expect(result.output, "starting\n");
     expect(result.exceptionInfo, contains("timed out"));
   });
@@ -90,13 +91,16 @@ void main() {
   test("what the command spawned is killed with it", () async {
     final marker = p.join(workspace.path, "survivor");
     final result = await run(
-      "(sleep 2; touch $marker) & echo started; sleep 30",
+      "(sleep 4; touch $marker) & echo started; sleep 30",
       timeout: const Duration(milliseconds: 300),
     );
 
     expect(result.exceptionInfo, contains("timed out"));
     // The background child outlives its shell unless the whole group goes.
-    await Future<void>.delayed(const Duration(seconds: 3));
+    // The kill lands the moment the command's own sentinel comes, so the
+    // child's sleep is far past it: a runner that schedules late still kills
+    // it first.
+    await Future<void>.delayed(const Duration(seconds: 5));
     expect(File(marker).existsSync(), isFalse);
   });
 
@@ -118,7 +122,8 @@ void main() {
     expect(result.output, "started\n");
   });
 
-  test("killing it early reports the interruption rather than an exit code", () async {
+  test("killing it early reports the interruption rather than an exit code",
+      () async {
     final run = LocalShell()
         .start("sleep 30",
             cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 30));
@@ -126,7 +131,7 @@ void main() {
     await run.kill();
 
     final result = await run.result;
-    expect(result.returnCode, -1);
+    expect(result.returnCode, 130);
     expect(result.exceptionInfo, contains("interrupted"));
   });
 
@@ -143,64 +148,186 @@ void main() {
     expect(result.output.trim(), Platform.environment["HOME"]);
   });
 
+  group("in one shell", () {
+    /// The one session these tests share, so the second command sees the
+    /// first.
+    late LocalShell shell;
+    late Directory sub;
+
+    setUp(() {
+      shell = LocalShell();
+      sub = Directory(p.join(workspace.path, "sub"))..createSync();
+    });
+
+    ShellRun start(String command, {bool restart = false}) => shell.start(
+        command,
+        cwd: workspace.path,
+        home: home.path,
+        timeout: const Duration(seconds: 10),
+        restart: restart);
+
+    test("a cd and an export stand when the command is done", () async {
+      await start("cd sub && export MARK=one").result;
+      final result = await start("pwd; echo \$MARK").result;
+
+      expect(result.output, "${sub.path}\none\n");
+      expect(result.cwd, sub.path);
+    });
+
+    test("the place the shell is standing is what the composer is told",
+        () async {
+      final cwd = shell.sessionCwd(workspace.path);
+      expect(cwd, isNotNull);
+      expect(cwd!.value, workspace.path);
+
+      await start("cd sub").result;
+
+      expect(cwd.value, sub.path);
+    });
+
+    test("a stop leaves the shell where it was", () async {
+      final run = start("cd sub && sleep 30");
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await run.kill();
+
+      final killed = await run.result;
+      expect(killed.returnCode, 130);
+      expect(killed.exceptionInfo, contains("interrupted"));
+
+      // The interrupted command's cd went ahead of its sleep, so it stands.
+      final after = await start("pwd").result;
+      expect(after.returnCode, 0);
+      expect(after.cwd, sub.path);
+    });
+
+    test("a restart puts the shell back where it started", () async {
+      await start("cd sub").result;
+      final result = await start("pwd", restart: true).result;
+
+      expect(result.output, "${workspace.path}\n");
+      expect(result.cwd, workspace.path);
+    });
+
+    test("a command that exits takes the shell down, and the shell comes back",
+        () async {
+      final result = await start("echo hello; exit 3").result;
+      expect(result.returnCode, 3);
+      expect(result.output, "hello\n");
+
+      // A command written while the shell is still dying is the one that
+      // finds it gone; whatever follows it starts the shell again.
+      await start("pwd").result;
+      final after = await start("pwd").result;
+      expect(after.returnCode, 0);
+      expect(after.cwd, workspace.path);
+    });
+
+    test("one-shot commands keep the old contract: fresh every time",
+        () async {
+      final a = shell
+          .start("cd sub && export MARK=one",
+              cwd: workspace.path,
+              home: home.path,
+              timeout: const Duration(seconds: 10),
+              oneShot: true)
+          .result;
+      final b = await shell
+          .start("pwd; echo \$MARK",
+              cwd: workspace.path,
+              home: home.path,
+              timeout: const Duration(seconds: 10),
+              oneShot: true)
+          .result;
+      await a;
+
+      expect(b.output, "${workspace.path}\n\n");
+      expect(b.cwd, isNull);
+    });
+
+    test("closing a session closes the shell with it", () async {
+      final cwd = shell.sessionCwd(workspace.path);
+      await start("cd sub").result;
+      expect(cwd!.value, sub.path);
+
+      shell.closeSession(workspace.path);
+
+      // What is asked again is a new bar, standing where the shell starts.
+      final again = shell.sessionCwd(workspace.path);
+      expect(again, isNot(cwd));
+      expect(again!.value, workspace.path);
+    });
+  });
+
   test("what the model is told names the shell, and the tools beside it", () {
-    expect(LocalShell(shell: () => "/system/bin/sh").platformDescription,
-        contains("/system/bin/sh"));
     expect(
         LocalShell(
-          shell: () => "/system/bin/sh",
-          tools: const Toolset(environment: {}, names: "git"),
-        ).platformDescription,
+                driver:
+                    () => LocalShell.hostDriver(shell: () => "/system/bin/sh"))
+            .platformDescription,
+        contains("/system/bin/sh"));
+    expect(
+        LocalShell(driver: () => LocalShell.hostDriver(
+              shell: () => "/system/bin/sh",
+              tools: const Toolset(environment: {}, names: "git"),
+            )).platformDescription,
         contains("git"));
   });
 
-  group("inside a sandbox", () {
+  test("the host driver answers for the machine, and for nothing where "
+      "there is no shell", () {
+    final driver = LocalShell.hostDriver(shell: () => "/bin/sh");
+
+    expect(driver!.command, ["/bin/sh"]);
+    expect(driver.projectHome, isFalse);
+    expect(LocalShell.hostDriver(shell: () => null), isNull);
+  });
+
+  group("inside a guest", () {
     /// What proot is on a device, faked with something every machine running
     /// these tests has: a prefix that really runs, ending in a shell.
-    Sandbox guest({Map<String, String> environment = const {}}) => Sandbox(
+    ShellDriver guest({Map<String, String> environment = const {}}) =>
+        ShellDriver(
           command: ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
           environment: environment,
-          description: "Alpine Linux 3.24.1 (x86_64), in which apk installs things",
+          projectHome: true,
+          description: "Alpine Linux 3.24.1 (x86_64), in which apk installs "
+              "things. It is running under proot, so filesystem-heavy commands "
+              "are slower than they look",
         );
 
     Future<dynamic> inGuest(
       String command, {
-      Sandbox? sandbox,
-      Toolset? tools,
+      ShellDriver? driver,
       Map<String, String> settings = const {},
     }) =>
         LocalShell(
           environment: () => settings,
-          tools: tools,
-          sandbox: () => sandbox ?? guest(),
+          driver: () => driver ?? guest(),
         )
             .start(command,
                 cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 10))
             .result;
 
-    test("the command is run by what the sandbox names, not by the machine's shell",
+    test("the command is run by what the driver names, not by the machine's shell",
         () async {
       final result = await inGuest(r'echo "$IN_GUEST"');
 
       expect(result.output.trim(), "yes");
     });
 
-    test("the guest's environment stands in place of the bundled tools', which "
-        "name directories that are not in there", () async {
+    test("the guest's environment is what the command runs with", () async {
       final result = await inGuest(
-        r'echo "[$GIT_EXEC_PATH][$IN_ALPINE]"',
-        sandbox: guest(environment: {"IN_ALPINE": "1"}),
-        tools: const Toolset(
-            environment: {"GIT_EXEC_PATH": "/data/tools/libexec"}, names: "git"),
+        r'echo "[$IN_ALPINE]"',
+        driver: guest(environment: {"IN_ALPINE": "1"}),
       );
 
-      expect(result.output.trim(), "[][1]");
+      expect(result.output.trim(), "[1]");
     });
 
     test("a variable from settings still wins over the guest's own", () async {
       final result = await inGuest(
         r'echo "$LANG"',
-        sandbox: guest(environment: {"LANG": "C.UTF-8"}),
+        driver: guest(environment: {"LANG": "C.UTF-8"}),
         settings: {"LANG": "en_GB.UTF-8"},
       );
 
@@ -220,17 +347,91 @@ void main() {
     });
 
     test("what the model is told is the guest, not the machine it is on", () {
-      final shell = LocalShell(shell: () => "/system/bin/sh", sandbox: guest);
+      final shell = LocalShell(driver: guest);
 
       expect(shell.platformDescription, contains("Alpine Linux 3.24.1"));
       expect(shell.platformDescription, contains("proot"));
-      expect(shell.platformDescription, isNot(contains("/system/bin/sh")));
     });
 
     test("brings its own shell, so a machine that has none can still run commands",
         () {
-      expect(LocalShell(shell: () => null, sandbox: guest).canRunCommands, isTrue);
-      expect(LocalShell(shell: () => null).canRunCommands, isFalse);
+      expect(LocalShell(driver: guest).canRunCommands, isTrue);
+      expect(LocalShell(driver: () => null).canRunCommands, isFalse);
+    });
+  });
+
+  group("what a command runs under", () {
+    const host = ShellDriver(
+      command: ["/bin/sh"],
+      environment: {"PAGER": "less", "GIT_EXEC_PATH": "/data/tools/libexec"},
+      projectHome: false,
+      description: "host",
+    );
+
+    test("the driver's environment is the base, over the defaults", () {
+      final env = LocalShell.composeEnvironment(
+        defaults: const {"PAGER": "cat", "TERM": "dumb"},
+        driver: host,
+        home: "/home",
+        sharedHome: true,
+        app: const {},
+      );
+
+      expect(env, {"PAGER": "less", "TERM": "dumb", "GIT_EXEC_PATH": "/data/tools/libexec"});
+      expect(env.containsKey("HOME"), isFalse);
+    });
+
+    test("the app's variables win over the driver's, and the project's over "
+        "the app's", () {
+      final env = LocalShell.composeEnvironment(
+        defaults: const {},
+        driver: host,
+        home: "/home",
+        sharedHome: true,
+        app: const {"PAGER": "most", "OWN": "app"},
+        project: const {"OWN": "project"},
+      );
+
+      expect(env["PAGER"], "most");
+      expect(env["OWN"], "project");
+    });
+
+    test("HOME is the workspace where the driver reaches a guest, and where "
+        "the home is not shared", () {
+      final guest = ShellDriver(
+        command: ["/bin/sh"],
+        environment: const {},
+        projectHome: true,
+        description: "guest",
+      );
+      // A guest takes the workspace for its home, shared or not.
+      expect(
+          LocalShell.composeEnvironment(
+              defaults: const {},
+              driver: guest,
+              home: "/workspace",
+              sharedHome: true,
+              app: const {})["HOME"],
+          "/workspace");
+      // On the machine itself a shared home keeps the machine's own.
+      expect(
+          LocalShell.composeEnvironment(
+              defaults: const {},
+              driver: host,
+              home: "/workspace",
+              sharedHome: true,
+              app: const {})
+              .containsKey("HOME"),
+          isFalse);
+      // and an unshared one is the chat's own.
+      expect(
+          LocalShell.composeEnvironment(
+              defaults: const {},
+              driver: host,
+              home: "/workspace",
+              sharedHome: false,
+              app: const {})["HOME"],
+          "/workspace");
     });
   });
 
@@ -257,11 +458,11 @@ void main() {
 
     test("a machine with nothing to run commands in says so", () {
       expect(resolve("/usr/bin", const {}), isNull);
-      expect(LocalShell(shell: () => null).canRunCommands, isFalse);
+      expect(LocalShell(driver: () => null).canRunCommands, isFalse);
     });
 
     test("and a command sent to it anyway fails rather than throwing", () async {
-      final result = await LocalShell(shell: () => null)
+      final result = await LocalShell(driver: () => null)
           .start("echo hi",
               cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 1))
           .result;

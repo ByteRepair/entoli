@@ -25,10 +25,13 @@ optional pair, used only by auto mode, and off by default.
 `settings.json`'s `environment` is what every command runs under, and where a
 provider that names its key rather than holding it looks. It is read off disk
 when used rather than captured at startup, so an edit applies to the next
-command. Settings wins over the process's own environment, but a key already
-exported is found without having to be pasted in. Old files with the former
-`opencodeEnv` key still load, and rewrite themselves under the new name on the
-next save.
+command — and reaches a persistent shell by respawning it, since a command
+already running keeps what it started with. Settings wins over the process's
+own environment, but a key already exported is found without having to be
+pasted in. A project carries the same list of its own in `project.json`,
+edited from its settings page, and a name set there wins over one set in
+`settings.json`. Old files with the former `opencodeEnv` key still load, and
+rewrite themselves under the new name on the next save.
 
 The settings page is ten categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:

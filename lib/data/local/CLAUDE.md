@@ -46,9 +46,10 @@ Android that is the support directory and so is not evictable — see "Where the
 models live".
 
 The environment is the rest of it, and with git gone it is `TMPDIR` and little
-else. It is layered in `LocalShell` beside the defaults that were already there,
-so the one place that decides what a command runs under decides this too, and
-settings still win over all of it — a variable the user set is the one that
+else. It rides in the host `ShellDriver` — the value that says what a command
+runs under, and the one `LocalShell` layers its defaults and the settings over
+— so the one place that decides what a command runs under decides this too,
+and settings still win over all of it: a variable the user set is the one that
 reaches the command.
 
 **What was laid out and what the model is told about it are one value**, the
@@ -160,21 +161,22 @@ a clone or an installed package is worth having in the next conversation, and a
 per-chat `HOME` would fetch it again every time.
 
 It is `LocalShell` that sets it, from the `home` its caller passes beside `cwd`:
-`prootSandbox` is built once for the app and cannot know which project is
-running. Only inside a guest — on a desktop `HOME` is the user's own and the
-tools there expect what is in it — which is the same "am I in a guest" branch
-the file already makes three times.
+the driver says whose home a command's is and cannot know which project is
+running. Only where it says so — a guest, or Android, where the machine's own
+home is a shared app user's — a desktop's `HOME` is the user's own and the tools
+there expect what is in it.
 
-**A `Sandbox` replaces the `Toolset` rather than layering over it.** Every path
-the host toolset names is the host's, and a `TMPDIR` under the app's own
-directory is not where a guest's `/tmp` is. So the guest gets the guest's `PATH`
-and nothing of the host's — and settings still win over both, which is the rule
-that was already there.
+**The guest driver's environment is the whole of its base.** Every path the host
+toolset names is the host's, and a `TMPDIR` under the app's own directory is not
+where a guest's `/tmp` is. That used to be a rule a sandbox kept — replacing the
+toolset rather than layering over it — and is now the shape: a driver carries
+its own environment, and there is no host one beside it to replace. Settings
+still win over it, which is the rule that was already there.
 
 **Which one commands run in is read per command**, through the same seam
 `LocalShell` re-reads `environment` through, so installing a Linux or going back
 to Android reaches the next command rather than the next launch. That is why
-`platformSandbox` is synchronous and `RootfsStore` has a `directoryOfSync`: it
+`platformDriver` is synchronous and `RootfsStore` has a `directoryOfSync`: it
 is asked before every command, and on this side of the app that is one `stat`.
 
 **Android keeps no `/etc/resolv.conf`**, and a guest program reads nothing else
@@ -187,18 +189,21 @@ device is actually on rather than the one it was on the day the rootfs was
 downloaded. Android saying nothing writes nothing: a guest that cannot resolve a
 name is honest, where a silent fallback to someone else's resolver is not.
 
-The invocation itself is `data/local/proot.dart`, a pure function so that the
-whole of what this feature does can be pinned by a test on a machine with no
-Android on it. `--kill-on-exit` because a killed tracer otherwise leaves its
+The invocation itself is `data/local/proot.dart`: `prootDriver`, a pure
+function so that the whole of what this feature does can be pinned by a test on
+a machine with no Android on it. What it answers is the guest's `ShellDriver`,
+and the machine's own shell is the host driver, the other one: `LocalShell`
+runs whichever it is handed, and to it a guest is only a longer command that
+ends in a shell. `--kill-on-exit` because a killed tracer otherwise leaves its
 tracees running; `--link2symlink` because a package manager unpacks with hard
 links and app storage may not have them; `-0` because `apk` wants to be root,
 which is a lie told to the guest rather than a privilege — the process is still
 the app's own uid to the kernel.
 
 What it costs is worth knowing: proot is ptrace-based, so filesystem-heavy work
-is noticeably slower than native, which is why `platformDescription` tells the
-model so. What it does not cost is size — 300 KB an ABI, against git's 12 MB,
-and the rootfs is downloaded rather than shipped.
+is noticeably slower than native, which is why the guest driver's description
+tells the model so. What it does not cost is size — 300 KB an ABI, against
+git's 12 MB, and the rootfs is downloaded rather than shipped.
 
 Building it is `build.sh` again, beside git. proot is termux's fork rather than
 proot-me's, for the Android work already in it, and its one dependency is

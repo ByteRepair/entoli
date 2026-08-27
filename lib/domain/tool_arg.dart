@@ -23,3 +23,13 @@ String? stringArg(String? json, String key) {
   final value = decoded[key];
   return value is String && value.isNotEmpty ? value : null;
 }
+
+/// Pull an integer argument out of a tool call's JSON, or null when it is
+/// missing or not an integer. A number the model writes as `1e3` is not an
+/// integer it meant, so it is refused rather than rounded.
+int? intArg(String? json, String key) {
+  final decoded = decodeArgs(json);
+  if (decoded == null) return null;
+  final value = decoded[key];
+  return value is int ? value : null;
+}

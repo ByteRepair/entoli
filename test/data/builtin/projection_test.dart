@@ -123,6 +123,82 @@ void main() {
     expect(projected.last.text, observation(returnCode: 1, output: "nope"));
   });
 
+  MessagePart moved(String id, String cwd, {String output = ""}) =>
+      MessagePart.toolResult(
+        result: ToolResult(
+            callId: id, returnCode: 0, output: output, cwd: cwd),
+      );
+
+  // The note is derived at wording time from the directory the result carries,
+  // so the parts worded live and the same parts worded on a reload say the
+  // same thing.
+  group("the directory a command leaves the shell in", () {
+    test("the turn's opening move is not noted: the model ran the cd itself",
+        () async {
+      final projected = await project([
+        said(MessageRole.assistant, [
+          call("c1", "bash", '{"command":"cd elsewhere"}', response: "r1"),
+          moved("c1", "/elsewhere"),
+        ]),
+      ]);
+
+      expect(projected.last.text, observation(returnCode: 0, output: ""));
+    });
+
+    test("a later move in the same turn is noted, after the observation",
+        () async {
+      final projected = await project([
+        said(MessageRole.assistant, [
+          call("c1", "bash", '{"command":"cd one"}', response: "r1"),
+          moved("c1", "/one"),
+          call("c2", "bash", '{"command":"cd two"}', response: "r1"),
+          moved("c2", "/two"),
+        ]),
+      ]);
+
+      final tools = projected.where((m) => m.role == LlmRole.tool).toList();
+      expect(tools[0].text, observation(returnCode: 0, output: ""));
+      expect(tools[1].text,
+          "${observation(returnCode: 0, output: "")}\n\n"
+          "Note: your current working directory is now /two.");
+    });
+
+    test("a command that stays where it is says nothing new", () async {
+      final projected = await project([
+        said(MessageRole.assistant, [
+          call("c1", "bash", '{"command":"cd one"}', response: "r1"),
+          moved("c1", "/one"),
+          call("c2", "bash", '{"command":"ls"}', response: "r1"),
+          moved("c2", "/one", output: "here"),
+        ]),
+      ]);
+
+      final tools = projected.where((m) => m.role == LlmRole.tool).toList();
+      expect(tools[1].text, observation(returnCode: 0, output: "here"));
+    });
+
+    test("and the tracking resets at each turn", () async {
+      final projected = await project([
+        asked("move"),
+        said(MessageRole.assistant, [
+          call("c1", "bash", '{"command":"cd one"}', response: "r1"),
+          moved("c1", "/one"),
+        ]),
+        asked("move again"),
+        said(MessageRole.assistant, [
+          call("c2", "bash", '{"command":"cd two"}', response: "r1"),
+          moved("c2", "/two"),
+        ]),
+      ]);
+
+      final tools = projected.where((m) => m.role == LlmRole.tool).toList();
+      // Each turn's opening move is un-noted, the model having run the `cd`
+      // itself, whatever the previous turn left the shell in.
+      expect(tools[0].text, observation(returnCode: 0, output: ""));
+      expect(tools[1].text, observation(returnCode: 0, output: ""));
+    });
+  });
+
   // The answers are the answer; wrapping them as a command's outcome would put
   // the user's own words behind a return code.
   test("an ask_user result goes back as the answers themselves", () async {

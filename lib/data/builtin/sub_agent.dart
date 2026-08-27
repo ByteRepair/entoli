@@ -20,9 +20,12 @@ import "templates.dart";
 /// Spawns sub-agents for `task` tool calls. Each sub-agent gets a fresh
 /// [BuiltinSession], the named `@agent`'s body as its system-prompt overlay,
 /// and runs to completion headless — no `ask_user`, no `task` (sub-agents do
-/// not spawn their own sub-agents), no per-command approval banners. The
-/// parent's approval setting gates the parent's own commands; a sub-agent's
-/// commands run autonomously, which is what makes a 75-vote fan-out usable.
+/// not spawn their own sub-agents), no per-command approval banners. Its
+/// commands run one-shot over the parent's shell: a fresh subshell per
+/// command, since a fan-out of workers wants concurrency, not a shell they
+/// all `cd` around. The parent's approval setting gates the parent's own
+/// commands; a sub-agent's commands run autonomously, which is what makes a
+/// 75-vote fan-out usable.
 class SubAgentRunner {
   SubAgentRunner({
     required this.client,
@@ -30,6 +33,7 @@ class SubAgentRunner {
     required this.fs,
     required this.workspace,
     required this.projectWorkspace,
+    this.environment = const {},
     required this.model,
     required this.library,
     this.options = const BuiltinOptions(),
@@ -47,6 +51,7 @@ class SubAgentRunner {
   final FileSystem fs;
   final String workspace;
   final String projectWorkspace;
+  final Map<String, String> environment;
   final String model;
   final PromptLibrary? library;
   final BuiltinOptions options;
@@ -123,9 +128,13 @@ class SubAgentRunner {
       session: session,
       client: client,
       shell: shell,
+      // One-shot over the same shell: a fresh subshell per command, so the
+      // fan-out's commands never share a directory or an environment.
+      oneShot: true,
       fs: fs,
       workspace: workspace,
       projectWorkspace: projectWorkspace,
+      environment: environment,
       model: model,
       options: options,
       // The same skills the parent sees: a skill's workflow can be a worker's

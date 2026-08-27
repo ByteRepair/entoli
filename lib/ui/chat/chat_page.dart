@@ -163,6 +163,9 @@ class _NewChatState extends ConsumerState<_NewChat> {
             onVoice: ref.watch(voiceProvider).available
                 ? () => startVoiceChat(context, ref, meta: _meta)
                 : null,
+            // No chat, no shell: the first command of it runs in a workspace
+            // the send names, so there is no directory to draw yet.
+            workspace: null,
           ),
           child: _EmptyChat(
             project: ref.watch(selectedProjectProvider),
@@ -497,6 +500,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         onVoice: ref.watch(voiceProvider).available
             ? () => openVoice(context, ref, widget.chatId)
             : null,
+        workspace: ref
+            .watch(appConfigProvider)
+            .workspaceDir(widget.chatId, project: chat.state.project),
       ),
     );
   }
@@ -540,7 +546,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   deviceName: deviceName, onRelease: controls.release)
               : null,
       bottom: held
-          ? _turnBar(view: view, driver: driver)
+          ? _turnBar(view: view, driver: driver, workspace: null)
           : ViewOnlyBar(
               online: online,
               asking: control.asking,
@@ -634,10 +640,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// What a running turn puts on screen, and what answers it. A question takes
   /// the composer's place rather than sitting above it: the turn is waiting on
   /// this answer, and there is nothing useful to type until it has it.
+  ///
+  /// [workspace] is where this chat's shell stands, for the composer's bar —
+  /// null on a mirrored chat, whose commands run on the device they are
+  /// driven to rather than this one.
   Widget _turnBar({
     required ChatViewState view,
     required TurnDriver driver,
     VoidCallback? onVoice,
+    String? workspace,
   }) =>
       Column(
         mainAxisSize: MainAxisSize.min,
@@ -651,6 +662,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   driver.send(text, attachments: attachments),
               onAbort: driver.abort,
               onVoice: onVoice,
+              workspace: workspace,
             )
           else
             TurnQuestions(view: view, notifier: driver),
