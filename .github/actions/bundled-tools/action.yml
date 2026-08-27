@@ -6,6 +6,15 @@ description: >
   neither the versions nor the recipe pays for a download rather than three
   cross-compiles.
 
+inputs:
+  stage:
+    description: >
+      Whether to stage the built tools into jniLibs. The tools job sets this
+      false and uploads dist/ as an artifact; the APK job downloads it and
+      runs stage.sh itself, so the two never share a runner.
+    required: false
+    default: 'true'
+
 outputs:
   abis:
     description: The ABIs built, for a caller that has to check what shipped.
@@ -71,5 +80,6 @@ runs:
         done
 
     - name: Stage them into the APK's native libraries
+      if: inputs.stage == 'true'
       shell: bash
       run: tool/android/stage.sh
