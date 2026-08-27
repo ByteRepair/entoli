@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -159,14 +160,14 @@ void main() {
         (tester) async {
       await openEmpty(tester);
 
-      expect(find.widgetWithText(ChoiceChip, "\u{1F576}\uFE0F Anon"), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, anonProjectLabel), findsOneWidget);
       expect(find.byType(ChoiceChip), findsOneWidget);
     });
 
     testWidgets("picking the built-in badge moves the chat to it", (tester) async {
       await openEmpty(tester);
 
-      await pick(tester, "\u{1F576}\uFE0F Anon");
+      await pick(tester, anonProjectLabel);
 
       expect(app.container.read(selectedProjectProvider), "anonymous");
 
@@ -181,7 +182,7 @@ void main() {
 
       expect(find.text("What would you like to discuss?"), findsOneWidget);
 
-      await pick(tester, "\u{1F576}\uFE0F Anon");
+      await pick(tester, anonProjectLabel);
 
       expect(find.text("What would you like to discuss anonymously?"), findsOneWidget);
       expect(find.text("What would you like to discuss?"), findsNothing);
@@ -354,7 +355,7 @@ void main() {
 
     expect(
         find.descendant(
-            of: find.byType(AppBar), matching: find.text("\u{1F576}\uFE0F Anon")),
+            of: find.byType(AppBar), matching: find.text(anonProjectLabel)),
         findsOneWidget);
     expect(find.descendant(of: find.byType(AppBar), matching: find.text("anonymous")),
         findsNothing);

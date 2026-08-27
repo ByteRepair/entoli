@@ -85,6 +85,11 @@ enum MemoryPolicy {
 /// change with the shell, not with the project.
 enum AgentCapability { ask, task, artifact, webSearch }
 
+/// What the menus and the title bar call the anonymous built-in. A const so
+/// the emoji variation selector cannot drift between the label and the tests
+/// that assert it, the way `defaultProjectLabel` does for the default project.
+const anonProjectLabel = "\u{1F576}\uFE0F Anon";
+
 /// A chat with no profile, no project memory, and no workspace it shares
 /// with another chat: the tools and the context that would reach them are
 /// simply not there. Its instructions are the app's own note about what it is,
@@ -94,7 +99,7 @@ class AnonymousProject extends BuiltinProject {
   const AnonymousProject()
       : super(
           dir: "anonymous",
-          label: "\u{1F576}\uFE0F Anon",
+          label: anonProjectLabel,
           profilePolicy: ProfilePolicy.none,
           memory: MemoryPolicy.off,
           sharedWorkspace: false,

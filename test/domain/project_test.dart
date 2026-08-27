@@ -58,7 +58,7 @@ void main() {
     test("is a project-shaped directory name", () {
       expect(dir, "anonymous");
       // The label, not the directory, is what the menus and bar read.
-      expect(builtIn.label, "\u{1F576}\uFE0F Anon");
+      expect(builtIn.label, anonProjectLabel);
       expect(isProjectDirName(dir), isTrue);
       expect(isBuiltinProject(dir), isTrue);
       expect(builtinProjectOf(dir), same(builtIn));

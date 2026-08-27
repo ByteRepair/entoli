@@ -369,8 +369,8 @@ class ChatRepository {
     final proj = project ?? await projectOf(chatId);
     final projectSettings = await projectSettingsOf(proj);
     if (projectSettings.tempChatTtl != null) return projectSettings.tempChatTtl!;
-    final builtIn = builtinProjectOf(proj);
-    if (builtIn?.tempChatTtl != null) return builtIn!.tempChatTtl!;
+    final builtInTtl = builtinProjectOf(proj)?.tempChatTtl;
+    if (builtInTtl != null) return builtInTtl;
     return _settings().tempChatTtl;
   }
 

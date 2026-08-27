@@ -27,11 +27,12 @@ class TempChatTtlField extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final projectTtl = ref.watch(projectSettingsProvider(project)).tempChatTtl;
     final appTtl = ref.watch(appSettingsProvider).tempChatTtl;
+    // Mirrors the tail of `ChatRepository._resolveTempTtl` minus the chat's own
+    // value, which `value` is editing: the inherited default a null resolves to.
     return InheritableDropdown<TempChatTtl>(
       label: "Temporary chat",
       value: value,
-      inherited: (projectTtl ?? builtinProjectOf(project)?.tempChatTtl ??
-              appTtl)
+      inherited: (projectTtl ?? builtinProjectOf(project)?.tempChatTtl ?? appTtl)
           .label,
       options: tempChatTtlLabels,
       onChanged: onChanged,
