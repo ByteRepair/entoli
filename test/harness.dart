@@ -10,6 +10,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
+import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
@@ -41,6 +42,17 @@ import "package:agent_chat/ui/theme.dart";
 import "package:agent_chat/ui/widgets/model_picker.dart";
 
 import "fakes.dart";
+
+/// The shell a test gets by default: a real host shell where the test pretends
+/// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise,
+/// which is the web default. The terminal settings page gates on
+/// `canRunCommands`, so a test pretending to be Android has to answer true the
+/// way the real one would. A test pretending to be a native desktop that the
+/// two knobs cannot distinguish passes [shell] explicitly.
+Shell _defaultShell(bool proot, String? abi) =>
+    proot || abi != null
+        ? LocalShell(environment: () => const {})
+        : const UnavailableShell();
 
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
@@ -182,7 +194,8 @@ class TestApp {
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
-          shellProvider.overrideWithValue(shell ?? const UnavailableShell()),
+          shellProvider.overrideWithValue(
+              shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider
