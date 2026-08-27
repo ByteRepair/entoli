@@ -135,16 +135,13 @@ LocalPrefill? createLocalPrefill(
           const LlmMessage(role: LlmRole.user, text: "Hello"),
         ],
          tools: agentTools(
-           caps: caps,
-           skills: backend.library?.entries(CompletionKind.skill) ?? const [],
-           // A default turn has auto-memory off, so the warmed prefix carries
-          // no memory tools; a turn with them misses the cache rather than
-          // the cache serving a list no turn sends.
-          offerMemory: false,
-          // A default top-level turn can offer skills for install, so the
-          // warmed prefix carries the tool a cold turn would.
-          offerCreateSkill: true,
-        ),
+            caps: caps,
+            skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+            // A default turn has auto-memory off, so the warmed prefix carries
+           // no memory tools; a turn with them misses the cache rather than
+           // the cache serving a list no turn sends.
+           offerMemory: false,
+         ),
       );
     },
   );

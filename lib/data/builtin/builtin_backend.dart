@@ -339,7 +339,7 @@ class BuiltinBackend implements AgentBackend {
           await config.fs
               .file(config.fs.path.join(stagingDir, "package.skill"))
               .writeAsBytes(bytes);
-          return installId;
+          return (installId: installId, name: pkg.name);
         },
       );
       _running.add(chatId, agent.cancel);

@@ -286,11 +286,11 @@ String? platformHostname() {
 /// bypass, not an unintentional edit — the approval regime disclaims that.
 Future<void> platformChmodReadOnly(List<String> paths) async {
   if (!Platform.isLinux && !Platform.isAndroid) return;
-  for (final path in paths) {
+  await Future.wait(paths.map((path) async {
     try {
       await Process.run("chmod", ["-R", "555", path]);
     } catch (_) {}
-  }
+  }));
 }
 
 /// Toggles [path] writable for [action], then restores it to read-only. The

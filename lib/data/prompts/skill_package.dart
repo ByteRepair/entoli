@@ -25,19 +25,23 @@ Future<SkillPackage> packageSkillDirectory(
   final skillName = name ?? parsed.frontmatter["name"] ?? folderName;
 
   final entries = <(String, Uint8List)>[];
-  await _collectFiles(fs, dir, dir, entries);
+  final files = <(String, File)>[];
+  await _collectFiles(fs, dir, dir, files);
+  final contents = await Future.wait([for (final (_, f) in files) f.readAsBytes()]);
+  for (var i = 0; i < files.length; i++) {
+    entries.add((files[i].$1, contents[i]));
+  }
 
-  return SkillPackage(skillName, entries);
+  return SkillPackage(skillName, entries,
+      description: parsed.description, body: parsed.body);
 }
 
-Future<void> _collectFiles(
-    FileSystem fs, String dir, String root, List<(String, Uint8List)> entries) async {
+Future<void> _collectFiles(FileSystem fs, String dir, String root,
+    List<(String, File)> entries) async {
   final path = fs.path;
   await for (final entity in fs.directory(dir).list()) {
     if (entity is File) {
-      final relative = path.relative(entity.path, from: root);
-      final content = await entity.readAsBytes();
-      entries.add((relative, content));
+      entries.add((path.relative(entity.path, from: root), entity));
     } else if (entity is Directory) {
       await _collectFiles(fs, entity.path, root, entries);
     }

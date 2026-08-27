@@ -19,6 +19,7 @@ class AgentCapabilities {
     required this.ask,
     required this.task,
     required this.artifact,
+    required this.createSkill,
   });
 
   /// The full set, before the platform's facts or a project's takes away any
@@ -29,6 +30,7 @@ class AgentCapabilities {
     ask: true,
     task: true,
     artifact: true,
+    createSkill: true,
   );
 
   /// Whether a command can run at all: the platform's fact, which a project
@@ -38,6 +40,7 @@ class AgentCapabilities {
   final bool ask;
   final bool task;
   final bool artifact;
+  final bool createSkill;
 
   /// What this device can offer, minus what [disabled] takes away — the
   /// project's takes, and a headless turn's.
@@ -51,6 +54,7 @@ class AgentCapabilities {
           ask: !disabled.contains(AgentCapability.ask),
           task: !disabled.contains(AgentCapability.task),
           artifact: !disabled.contains(AgentCapability.artifact),
+          createSkill: !disabled.contains(AgentCapability.createSkill),
         );
 
   /// What a sub-agent runs under: unattended, so it asks nothing, fans out
@@ -61,6 +65,7 @@ class AgentCapabilities {
         ask: false,
         task: false,
         artifact: false,
+        createSkill: false,
       );
 }
 

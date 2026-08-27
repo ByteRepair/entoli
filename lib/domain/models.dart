@@ -242,12 +242,11 @@ sealed class MessagePart with _$MessagePart {
 
   /// A skill the model drafted and packaged for the user to install. The
   /// [installId] names the staged `.skill` package under the chat's directory;
-  /// [name] and [description] are from the SKILL.md frontmatter; [title] is
-  /// what the label reads. The package lives on disk, not in the log.
+  /// [title] is what the card reads. The name, description and body are read
+  /// back from the package on the preview page, not carried on the part. The
+  /// package lives on disk, not in the log.
   const factory MessagePart.skillInstall({
     required String installId,
-    required String name,
-    required String description,
     required String title,
   }) = SkillInstallPart;
 

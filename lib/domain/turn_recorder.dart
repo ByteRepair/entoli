@@ -128,8 +128,8 @@ class TurnRecorder {
         addPart(run);
       case ArtifactEvent(:final artifactId, :final entryFile, :final title):
         addPart(MessagePart.artifact(artifactId: artifactId, entryFile: entryFile, title: title));
-      case SkillInstallEvent(:final installId, :final name, :final description, :final title):
-        addPart(MessagePart.skillInstall(installId: installId, name: name, description: description, title: title));
+      case SkillInstallEvent(:final installId, :final title):
+        addPart(MessagePart.skillInstall(installId: installId, title: title));
       case ErrorEvent(:final message):
         _appendError(message);
       // Turn-scoped view state, or the turn's own end. Listed rather than

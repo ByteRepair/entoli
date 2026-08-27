@@ -1,4 +1,3 @@
-import "dart:convert";
 import "dart:typed_data";
 
 import "package:flutter/material.dart";
@@ -8,7 +7,6 @@ import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
-import "../../domain/prompt_library.dart";
 import "../../providers.dart";
 import "../chat/widgets/reply_style.dart";
 import "../widgets/dialogs.dart";
@@ -142,22 +140,15 @@ class _SkillInstallPreviewPageState
 
   Widget _previewBody(ThemeData theme) {
     final pkg = _package!;
-    final skillMdEntry = pkg.entries.firstWhere(
-      (e) => e.$1 == "SKILL.md",
-      orElse: () => pkg.entries.first,
-    );
-    final skillMd = utf8.decode(skillMdEntry.$2);
-    final parsed = PromptDocument.parse(
-        CompletionKind.skill, pkg.name, skillMd);
     final otherFiles = pkg.entries.where((e) => e.$1 != "SKILL.md").toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(pkg.name, style: theme.textTheme.headlineSmall),
-        if (parsed.description != null) ...[
+        if (pkg.description != null) ...[
           const SizedBox(height: 4),
-          Text(parsed.description!, style: theme.textTheme.bodyMedium),
+          Text(pkg.description!, style: theme.textTheme.bodyMedium),
         ],
         const SizedBox(height: 24),
         Text("SKILL.md", style: theme.textTheme.titleSmall),
@@ -169,7 +160,7 @@ class _SkillInstallPreviewPageState
           ),
           padding: const EdgeInsets.all(16),
           child: MarkdownBody(
-            data: parsed.body,
+            data: pkg.body,
             styleSheet: replyStyleSheet(theme),
           ),
         ),

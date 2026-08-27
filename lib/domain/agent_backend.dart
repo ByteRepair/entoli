@@ -85,13 +85,9 @@ class ArtifactEvent extends AgentEvent {
 class SkillInstallEvent extends AgentEvent {
   const SkillInstallEvent({
     required this.installId,
-    required this.name,
-    required this.description,
     required this.title,
   });
   final String installId;
-  final String name;
-  final String description;
   final String title;
 }
 

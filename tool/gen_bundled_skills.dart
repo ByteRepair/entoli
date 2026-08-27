@@ -12,8 +12,8 @@ import "dart:io";
 import "package:crypto/crypto.dart";
 
 void main() {
-  final skills = _collect("assets/prompts/skills", "skill");
-  final agents = _collect("assets/prompts/agents", "agent");
+  final skills = _collect("assets/prompts/skills");
+  final agents = _collect("assets/prompts/agents");
   final licence = File("assets/prompts/skills/skill-creator/LICENSE.txt")
       .readAsStringSync();
 
@@ -24,8 +24,7 @@ void main() {
   buf.writeln();
   buf.writeln("class BundledPromptFile {");
   buf.writeln("  const BundledPromptFile(");
-  buf.writeln("      this.kind, this.name, this.relativePath, this.sha256, this.content);");
-  buf.writeln("  final String kind;");
+  buf.writeln("      this.name, this.relativePath, this.sha256, this.content);");
   buf.writeln("  final String name;");
   buf.writeln("  final String relativePath;");
   buf.writeln("  final String sha256;");
@@ -46,8 +45,7 @@ void main() {
 }
 
 class _Entry {
-  _Entry(this.kind, this.name, this.relativePath, this.sha256, this.content);
-  final String kind;
+  _Entry(this.name, this.relativePath, this.sha256, this.content);
   final String name;
   final String relativePath;
   final String sha256;
@@ -57,17 +55,17 @@ class _Entry {
 /// Walks [dir] and collects every file under it. For skills, [name] is the
 /// top-level folder and [relativePath] is the path within it. For agents,
 /// [name] is the filename without extension and [relativePath] is empty.
-List<_Entry> _collect(String dir, String kind) {
+List<_Entry> _collect(String dir) {
   final root = Directory(dir);
   if (!root.existsSync()) return [];
   final entries = <_Entry>[];
 
-  if (kind == "agent") {
+  if (dir.endsWith("agents")) {
     for (final entity in root.listSync()) {
       if (entity is! File || !entity.path.endsWith(".md")) continue;
       final name = entity.path.split("/").last.replaceAll(".md", "");
       final content = entity.readAsStringSync();
-      entries.add(_Entry(kind, name, "", _hash(content), content));
+      entries.add(_Entry(name, "", _hash(content), content));
     }
   } else {
     for (final skillDir in root.listSync().whereType<Directory>()) {
@@ -76,8 +74,7 @@ List<_Entry> _collect(String dir, String kind) {
           in _allFiles(skillDir, skillDir.path, skillDir.path)) {
         final content = File(file).readAsStringSync();
         final relative = file.substring(skillDir.path.length + 1);
-        entries.add(
-            _Entry(kind, skillName, relative, _hash(content), content));
+        entries.add(_Entry(skillName, relative, _hash(content), content));
       }
     }
   }
@@ -105,7 +102,6 @@ void _emitList(StringBuffer buf, String varName, List<_Entry> entries) {
   buf.writeln("const $varName = <BundledPromptFile>[");
   for (final e in entries) {
     buf.writeln("  BundledPromptFile(");
-    buf.writeln("      ${_stringLiteral(e.kind)},");
     buf.writeln("      ${_stringLiteral(e.name)},");
     buf.writeln("      ${_stringLiteral(e.relativePath)},");
     buf.writeln("      ${_stringLiteral(e.sha256)},");

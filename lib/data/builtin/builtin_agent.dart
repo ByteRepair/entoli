@@ -247,7 +247,6 @@ List<LlmTool> agentTools({
   List<PromptDocument> skills = const [],
   required bool offerMemory,
   bool oneShot = false,
-  bool offerCreateSkill = false,
 }) =>
     [
       file_tool_defs.readTool,
@@ -259,7 +258,7 @@ List<LlmTool> agentTools({
       if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
       if (caps.artifact) artifactTool,
-      if (offerCreateSkill) createSkillTool,
+      if (caps.createSkill) createSkillTool,
       if (offerMemory)
         ...[
           memorySaveTool,
@@ -464,7 +463,8 @@ class BuiltinAgent {
   /// Packages a skill drafted in the workspace and stages the `.skill` for the
   /// user to install. Null where the agent is a sub-agent: a worker does not
   /// offer skills for install. Returns the install id.
-  final Future<String> Function(String path, String? name)? packageSkill;
+  final Future<({String installId, String name})> Function(
+      String path, String? name)? packageSkill;
 
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
@@ -476,6 +476,7 @@ class BuiltinAgent {
         ask: caps.ask,
         task: caps.task && subAgentRunner != null,
         artifact: caps.artifact && saveArtifact != null,
+        createSkill: caps.createSkill && packageSkill != null,
       );
 
   /// What the model may call, and what the system prompt says. One value for
@@ -488,7 +489,6 @@ class BuiltinAgent {
         skills: skills,
         offerMemory: memoryStore != null,
         oneShot: oneShot,
-        offerCreateSkill: packageSkill != null,
       );
 
   bool _cancelled = false;
@@ -1357,7 +1357,6 @@ class BuiltinAgent {
     ));
     String? installId;
     String? skillName;
-    String? skillDescription;
     Future<ShellResult> run() async {
       final skillDir = fs.directory(path);
       if (!await skillDir.exists()) {
@@ -1370,11 +1369,9 @@ class BuiltinAgent {
         return ShellResult.failed(
             "The directory '$path' has no SKILL.md. A skill needs one.");
       }
-      final skillMd = await fs.file(skillMdPath).readAsString();
-      final parsed = PromptDocument.parse(CompletionKind.skill, "", skillMd);
-      skillName = args.name ?? parsed.frontmatter["name"] ?? fs.path.basename(path);
-      skillDescription = parsed.description ?? "";
-      installId = await packageSkill!(args.path, args.name);
+      final result = await packageSkill!(args.path, args.name);
+      installId = result.installId;
+      skillName = result.name;
       return const ShellResult(returnCode: 0, output: "");
     }
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
@@ -1388,16 +1385,12 @@ class BuiltinAgent {
       yield ToolResultEvent(_ran(call, _commandResult!));
       return;
     }
-    yield SkillInstallEvent(
-      installId: id,
-      name: skillName ?? args.name ?? args.path,
-      description: skillDescription ?? "",
-      title: skillName ?? args.name ?? args.path,
-    );
+    final name = skillName ?? args.name ?? args.path;
+    yield SkillInstallEvent(installId: id, title: name);
     yield ToolResultEvent(ToolResult(
           callId: call.id,
           returnCode: 0,
-          output: "Skill '${skillName ?? args.name ?? args.path}' packaged. "
+          output: "Skill '$name' packaged. "
               "The user can review and install it from the card below.",
         ));
   }

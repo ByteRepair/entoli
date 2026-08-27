@@ -403,15 +403,11 @@ class SkillInstallLabel extends ConsumerWidget {
     super.key,
     required this.chatId,
     required this.installId,
-    required this.name,
-    required this.description,
     required this.title,
   });
 
   final String chatId;
   final String installId;
-  final String name;
-  final String description;
   final String title;
 
   @override

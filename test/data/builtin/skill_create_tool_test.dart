@@ -70,7 +70,7 @@ void main() {
         packageSkill: (path, name) async {
           packaged.add((path: path, name: name));
           onPackage?.call();
-          return "install-1";
+          return (installId: "install-1", name: name ?? path.split("/").last);
         },
       );
 
@@ -137,8 +137,7 @@ void main() {
 
       final install = events.whereType<SkillInstallEvent>().single;
       expect(install.installId, "install-1");
-      expect(install.name, "demo");
-      expect(install.description, "does the demo thing");
+      expect(install.title, "demo");
 
       final result = events
           .whereType<ToolResultEvent>()
@@ -158,8 +157,7 @@ void main() {
           await agentWith(client).run(userMessage("go")).toList();
 
       final install = events.whereType<SkillInstallEvent>().single;
-      expect(install.name, "letterbox");
-      expect(install.description, "no name in the frontmatter");
+      expect(install.title, "letterbox");
     });
 
     test("a name argument wins over the frontmatter", () async {
@@ -172,7 +170,7 @@ void main() {
           await agentWith(client).run(userMessage("go")).toList();
 
       final install = events.whereType<SkillInstallEvent>().single;
-      expect(install.name, "renamed");
+      expect(install.title, "renamed");
       // The packager is told the name the model chose, so the staged package
       // lands where its card says it will.
       expect(packaged.single.name, "renamed");

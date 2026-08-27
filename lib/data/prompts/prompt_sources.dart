@@ -53,15 +53,10 @@ class BundledPrompts implements PromptSource {
         orElse: () => entry.value.first,
       );
       try {
-        final parsed = PromptDocument.parse(
-            CompletionKind.skill, skillName, skillMd.content);
-        documents.add(PromptDocument(
-          kind: CompletionKind.skill,
-          name: parsed.frontmatter["name"] ?? skillName,
-          frontmatter: parsed.frontmatter,
-          body: _withBaseDir(
-              config.fs.path.join(config.bundledSkillsDir, skillName),
-              parsed.body),
+        documents.add(_skillDocument(
+          skillName,
+          skillMd.content,
+          config.fs.path.join(config.bundledSkillsDir, skillName),
         ));
       } catch (e) {
         logFailure("skills", "could not parse bundled skill $skillName: $e");
@@ -125,19 +120,26 @@ Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String director
     final file = fs.file(path.join(entity.path, "SKILL.md"));
     try {
       if (!await file.exists()) continue;
-      final parsed =
-          PromptDocument.parse(CompletionKind.skill, folderName, await file.readAsString());
-      documents.add(PromptDocument(
-        kind: CompletionKind.skill,
-        name: parsed.frontmatter["name"] ?? folderName,
-        frontmatter: parsed.frontmatter,
-        body: _withBaseDir(entity.path, parsed.body),
-      ));
+      documents.add(_skillDocument(folderName, await file.readAsString(), entity.path));
     } catch (e) {
       logFailure("skills", "could not read $folderName: $e");
     }
   }
   return documents;
+}
+
+/// The one way a skill becomes a [PromptDocument], whether it was read from
+/// disk or from the embedded const. The name is the frontmatter's where it has
+/// one, the folder's otherwise, and the body carries the base directory above
+/// the template — the one thing every reader needs and none can work out.
+PromptDocument _skillDocument(String folderName, String skillMd, String baseDir) {
+  final parsed = PromptDocument.parse(CompletionKind.skill, folderName, skillMd);
+  return PromptDocument(
+    kind: CompletionKind.skill,
+    name: parsed.frontmatter["name"] ?? folderName,
+    frontmatter: parsed.frontmatter,
+    body: _withBaseDir(baseDir, parsed.body),
+  );
 }
 
 /// The skill as the model is given it: where its files are, then the

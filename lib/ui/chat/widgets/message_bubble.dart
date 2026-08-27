@@ -466,13 +466,11 @@ class _MessageBubbleState extends State<MessageBubble> {
             entryFile: entryFile,
             title: title,
           ));
-        case SkillInstallPart(:final installId, :final name, :final description, :final title):
+        case SkillInstallPart(:final installId, :final title):
           flushRun();
           rows.add(SkillInstallLabel(
             chatId: widget.chatId,
             installId: installId,
-            name: name,
-            description: description,
             title: title,
           ));
         case ShellRunPart():
