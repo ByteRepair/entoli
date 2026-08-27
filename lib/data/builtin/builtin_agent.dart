@@ -61,14 +61,51 @@ const bashToolName = "bash";
 
 /// The only tool for doing anything to the machine. Everything else — reading
 /// a file, editing it, running the tests — is a command.
+const _bashCommonArgs = {
+  "command": {"type": "string", "description": "The bash command to execute"},
+  "timeout": {
+    "type": "integer",
+    "description":
+        "How long the command may run, in milliseconds. Defaults to 60000 "
+        "and cannot exceed it.",
+  },
+};
+
 const bashTool = LlmTool(
   name: bashToolName,
-  description: "Execute a bash command in the workspace directory.",
+  description:
+      "Execute a bash command in the chat's persistent shell, which starts in "
+      "the workspace directory and keeps its state between commands: a `cd` or "
+      "an export made by one command is still there for the next.",
   schema: {
     "type": "object",
     "properties": {
-      "command": {"type": "string", "description": "The bash command to execute"},
+      ..._bashCommonArgs,
+      "restart": {
+        "type": "boolean",
+        "description":
+            "Restart the shell before running, discarding any directory a "
+            "`cd` moved it to and anything an export gave it. Use it when a "
+            "command's failure looks like the shell's state is the problem.",
+      },
     },
+    "required": ["command"],
+  },
+);
+
+/// [bashTool] as a sub-agent is offered it: the commands run one-shot, so
+/// there is no state the `restart` could drop and none the description could
+/// promise.
+const bashToolOneShot = LlmTool(
+  name: bashToolName,
+  description:
+      "Execute a bash command. Every command runs in a fresh subshell that "
+      "starts in the workspace directory, so a `cd` or an export does not "
+      "carry over to the next command: prefix what it needs, or use absolute "
+      "paths.",
+  schema: {
+    "type": "object",
+    "properties": _bashCommonArgs,
     "required": ["command"],
   },
 );
@@ -123,7 +160,9 @@ class BuiltinOptions {
 /// fresh task.
 ///
 /// **What it holds is what `projectionOf` would build out of `conv.jsonl`**, and
-/// [forTurn] is the only exception, for the length of one turn.
+/// [forTurn] is the only exception, for the length of one turn. Nothing of the
+/// machine's state rides on it: the directory a command left the shell in is a
+/// field on the result, and the projection words the change from it.
 class BuiltinSession {
   final List<LlmMessage> messages = [];
 
@@ -180,6 +219,7 @@ LlmMessage agentSystemMessage({
   Profile? profile,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
+  bool oneShot = false,
 }) =>
     LlmMessage(
       role: LlmRole.system,
@@ -188,6 +228,7 @@ LlmMessage agentSystemMessage({
         profile: profile,
         caps: caps,
         skills: skills,
+        oneShot: oneShot,
       ),
     );
 
@@ -204,12 +245,13 @@ List<LlmTool> agentTools({
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   required bool offerMemory,
+  bool oneShot = false,
 }) =>
     [
       file_tool_defs.readTool,
       file_tool_defs.writeTool,
       file_tool_defs.editTool,
-      if (caps.commands) bashTool,
+      if (caps.commands) (oneShot ? bashToolOneShot : bashTool),
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
@@ -234,9 +276,11 @@ class BuiltinAgent {
     required this.session,
     required this.client,
     required this.shell,
+    this.oneShot = false,
     required this.fs,
     required this.workspace,
     required this.projectWorkspace,
+    this.environment = const {},
     required this.model,
     required this.approve,
     required this.answer,
@@ -266,7 +310,16 @@ class BuiltinAgent {
   final BuiltinSession session;
 
   final LlmClient client;
+
   final Shell shell;
+
+  /// Whether the agent's commands run one-shot — each in a subshell that is
+  /// gone when it finishes, no state carried over — rather than the chat's
+  /// own persistent shell. A sub-agent's: a fan-out of workers wants
+  /// concurrency, not a shell to race over. It reaches the shell at
+  /// [shell.start] and the prompt at [agentSystemMessage], the two halves the
+  /// model would otherwise be told different things about.
+  final bool oneShot;
 
   /// Where an attachment's bytes come from when the turn being opened is
   /// projected. Defaulted because a sub-agent has no chat under it to read
@@ -321,12 +374,18 @@ class BuiltinAgent {
   /// a browser — and the file tools work everywhere, unlike `bash`.
   final FileSystem fs;
 
-  /// The chat's own directory, and where every command runs.
+  /// The chat's own directory, and where the shell starts.
   final String workspace;
 
   /// The one every chat in the project shares. Not the working directory:
   /// what a turn puts there is what it means other chats to find.
   final String projectWorkspace;
+
+  /// The project's own command variables, layered over the app-level ones by
+  /// the shell. The app-level ones are the shell's to read on each command,
+  /// for the reason they are settings; these travel here because they were
+  /// resolved where the project was, which is the backend's.
+  final Map<String, String> environment;
 
   final String model;
   final BuiltinOptions options;
@@ -419,6 +478,7 @@ class BuiltinAgent {
         caps: _offered,
         skills: skills,
         offerMemory: memoryStore != null,
+        oneShot: oneShot,
       );
 
   bool _cancelled = false;
@@ -588,6 +648,7 @@ class BuiltinAgent {
       recall: recall,
       canRunCommands: caps.commands,
       sharedWorkspace: sharedWorkspace,
+      projectHome: shell.projectHome,
     );
     final head = [
       agentSystemMessage(
@@ -595,6 +656,7 @@ class BuiltinAgent {
         profile: profile,
         caps: caps,
         skills: skills,
+        oneShot: oneShot,
       ),
       if (turn.isNotEmpty) LlmMessage(role: LlmRole.system, text: turn),
     ];
@@ -723,7 +785,8 @@ class BuiltinAgent {
         argumentsText: command,
       ));
 
-      yield* _runGated(call, call.argumentsJson, "bash", () => _execute(command),
+      yield* _runGated(call, call.argumentsJson, "bash",
+          () => _execute(call, command),
           argumentsText: command);
       final result = _commandResult!;
 
@@ -842,12 +905,14 @@ class BuiltinAgent {
   }
 
   /// A command's outcome as the result of the call that asked for it: one that
-  /// ran, one that was refused, one that was never reached.
+  /// ran, one that was refused, one that was never reached. The directory the
+  /// shell was left in rides on it as a fact; the projection words the change.
   ToolResult _ran(LlmToolCall call, ShellResult result) => ToolResult(
         callId: call.id,
         returnCode: result.returnCode,
         output: result.output,
         exceptionInfo: result.exceptionInfo,
+        cwd: result.cwd,
       );
 
   /// The model asking the user something. The call and its answers are a pair
@@ -952,9 +1017,9 @@ class BuiltinAgent {
     yield ToolResultEvent(_ran(call, result));
   }
 
-  /// Read a file from the workspace. No approval: the workspace is the
-  /// agent's own dir, and `bash` already reads from it without a banner in
-  /// `never` mode.
+  /// Read a file. A path the workspaces hold runs without asking, the way
+  /// `bash` reads in `never` mode; one that reaches past them is offered to
+  /// the user first, on the same terms a command is.
   Stream<AgentEvent> _read(LlmToolCall call) async* {
     final args = readArgsFrom(call.argumentsJson);
     if (args == null) {
@@ -962,54 +1027,48 @@ class BuiltinAgent {
           'The $readToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final resolved = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
       argumentsJson: call.argumentsJson,
       argumentsText: args.path,
     ));
-    final file = fs.file(resolved);
-    if (!await file.exists()) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "File not found: ${args.path}",
-          ));
-      return;
+    Future<ShellResult> run() async {
+      final file = fs.file(path);
+      if (!await file.exists()) {
+        return ShellResult(
+            returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
+      }
+      final content = await file.readAsString();
+      final lines = content.split("\n");
+      final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
+      final limit = args.limit ?? lines.length;
+      final end = (offset + limit - 1).clamp(1, lines.length);
+      final buf = StringBuffer();
+      for (var i = offset; i <= end; i++) {
+        buf.writeln("$i: ${lines[i - 1]}");
+      }
+      final result = buf.toString();
+      final nested = memory.nested
+          ? await findNestedInstructions(
+              fs,
+              path,
+              alreadyLoaded: _loadedInstructions,
+              projectWorkspace: projectWorkspace,
+              excludes: memory.excludes,
+            )
+          : const <InstructionFile>[];
+      final output = nested.isEmpty
+          ? (result.isEmpty ? "(empty file)" : result)
+          : "$result\n\n${renderInstructions(nested)}";
+      return ShellResult(returnCode: 0, output: output);
     }
-    final content = await file.readAsString();
-    final lines = content.split("\n");
-    final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
-    final limit = args.limit ?? lines.length;
-    final end = (offset + limit - 1).clamp(1, lines.length);
-    final buf = StringBuffer();
-    for (var i = offset; i <= end; i++) {
-      buf.writeln("$i: ${lines[i - 1]}");
-    }
-    final result = buf.toString();
-    final nested = memory.nested
-        ? await findNestedInstructions(
-            fs,
-            resolved,
-            alreadyLoaded: _loadedInstructions,
-            projectWorkspace: projectWorkspace,
-            excludes: memory.excludes,
-          )
-        : const <InstructionFile>[];
-    final output = nested.isEmpty
-        ? (result.isEmpty ? "(empty file)" : result)
-        : "$result\n\n${renderInstructions(nested)}";
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: output,
-        ));
+    yield* _runFileTool(call, path, readToolName, run);
   }
 
-  /// Write a file to the workspace, creating or overwriting. No approval:
-  /// the workspace is the agent's own dir.
+  /// Write a file, creating or overwriting. The same gate as [read]: the
+  /// workspaces run, the machine is asked.
   Stream<AgentEvent> _write(LlmToolCall call) async* {
     final args = writeArgsFrom(call.argumentsJson);
     if (args == null) {
@@ -1018,25 +1077,23 @@ class BuiltinAgent {
           "those arguments were missing.");
       return;
     }
-    final resolved = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
       argumentsJson: call.argumentsJson,
       argumentsText: args.path,
     ));
-    await fs.directory(fs.path.dirname(resolved)).create(recursive: true);
-    await fs.file(resolved).writeAsString(args.content);
-    final bytes = args.content.length;
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Wrote $bytes bytes to ${args.path}",
-        ));
+    Future<ShellResult> run() async {
+      await fs.directory(fs.path.dirname(path)).create(recursive: true);
+      await fs.file(path).writeAsString(args.content);
+      return ShellResult(
+          returnCode: 0, output: "Wrote ${args.content.length} bytes to ${args.path}");
+    }
+    yield* _runFileTool(call, path, writeToolName, run);
   }
 
-  /// Edit a file by exact string replacement. No approval: the workspace is
-  /// the agent's own dir.
+  /// Edit a file by exact string replacement. The same gate as [read].
   Stream<AgentEvent> _edit(LlmToolCall call) async* {
     final args = editArgsFrom(call.argumentsJson);
     if (args == null) {
@@ -1045,53 +1102,41 @@ class BuiltinAgent {
           '"new_string": "..."}; those arguments were missing.');
       return;
     }
-    final resolved = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
       argumentsJson: call.argumentsJson,
       argumentsText: args.path,
     ));
-    final file = fs.file(resolved);
-    if (!await file.exists()) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
+    Future<ShellResult> run() async {
+      final file = fs.file(path);
+      if (!await file.exists()) {
+        return ShellResult(
+            returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
+      }
+      final content = await file.readAsString();
+      final count = content.split(args.oldString).length - 1;
+      if (count == 0) {
+        return ShellResult(returnCode: -1, output: "",
+            exceptionInfo: "old_string not found in ${args.path}");
+      }
+      if (!args.replaceAll && count > 1) {
+        return ShellResult(
             returnCode: -1,
             output: "",
-            exceptionInfo: "File not found: ${args.path}",
-          ));
-      return;
+            exceptionInfo:
+                "old_string appears $count times in ${args.path}; "
+                "add context to make it unique or set replace_all.");
+      }
+      final updated = args.replaceAll
+          ? content.replaceAll(args.oldString, args.newString)
+          : content.replaceFirst(args.oldString, args.newString);
+      await file.writeAsString(updated);
+      return ShellResult(
+          returnCode: 0, output: "Edited ${args.path}: replaced $count occurrence(s).");
     }
-    final content = await file.readAsString();
-    final count = content.split(args.oldString).length - 1;
-    if (count == 0) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "old_string not found in ${args.path}",
-          ));
-      return;
-    }
-    if (!args.replaceAll && count > 1) {
-      yield ToolResultEvent(ToolResult(
-            callId: call.id,
-            returnCode: -1,
-            output: "",
-            exceptionInfo: "old_string appears $count times in ${args.path}; "
-                "add context to make it unique or set replace_all.",
-          ));
-      return;
-    }
-    final updated = args.replaceAll
-        ? content.replaceAll(args.oldString, args.newString)
-        : content.replaceFirst(args.oldString, args.newString);
-    await file.writeAsString(updated);
-    yield ToolResultEvent(ToolResult(
-          callId: call.id,
-          returnCode: 0,
-          output: "Edited ${args.path}: replaced $count occurrence(s).",
-        ));
+    yield* _runFileTool(call, path, editToolName, run);
   }
 
   /// A fact the model judged worth keeping. No approval: like `websearch`, it
@@ -1231,8 +1276,9 @@ class BuiltinAgent {
   }
 
   /// Publish an artifact from a workspace path. Copies the dir (or the file's
-  /// parent) into the chat's `artifacts/` dir. No approval: like `websearch`,
-  /// it reaches nothing and runs nothing.
+  /// parent) into the chat's `artifacts/` dir. A path the workspaces hold
+  /// runs without asking; one that reaches past them is offered to the user
+  /// first, since publishing is what makes the file's bytes part of the chat.
   Stream<AgentEvent> _artifact(LlmToolCall call) async* {
     final parsed = artifactArgsFrom(call.argumentsJson);
     if (parsed == null) {
@@ -1240,14 +1286,30 @@ class BuiltinAgent {
           'The $artifactToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
+    final path = resolveWorkspacePath(fs, parsed.path, workspace, projectWorkspace);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
       argumentsJson: call.argumentsJson,
       argumentsText: parsed.title.isEmpty ? parsed.path : parsed.title,
     ));
-    final artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
-    yield ArtifactEvent(artifactId: artifactId, entryFile: parsed.entryFile, title: parsed.title);
+    String? artifactId;
+    Future<ShellResult> run() async {
+      artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
+      return const ShellResult(returnCode: 0, output: "");
+    }
+    if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
+      yield* _runGated(call, call.argumentsJson, artifactToolName, run,
+          argumentsText: path);
+    } else {
+      _commandResult = await run();
+    }
+    final id = artifactId;
+    if (_commandResult!.returnCode != 0 || id == null) {
+      yield ToolResultEvent(_ran(call, _commandResult!));
+      return;
+    }
+    yield ArtifactEvent(artifactId: id, entryFile: parsed.entryFile, title: parsed.title);
     final label = parsed.title.isEmpty ? parsed.path : "'${parsed.title}'";
     // One output, so the model is told how to update it on a reload too — the
     // instructions used to be said to the model alone and were lost with the
@@ -1290,6 +1352,26 @@ class BuiltinAgent {
       case ApproveMode.never:
         _commandResult = await run();
     }
+  }
+
+  /// Run a file-touching tool behind the workspace gate: a path the workspaces
+  /// hold runs straight, one that reaches past them is offered first. The
+  /// three file tools share this tail — read, write and edit — differing only
+  /// in their `run`; the artifact tool has its own, since it emits a second
+  /// event on success.
+  Stream<AgentEvent> _runFileTool(
+    LlmToolCall call,
+    String path,
+    String toolName,
+    Future<ShellResult> Function() run,
+  ) async* {
+    if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
+      yield* _runGated(call, call.argumentsJson, toolName, run,
+          argumentsText: path);
+    } else {
+      _commandResult = await run();
+    }
+    yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
   /// Emit the approval banner, wait for the user, and run [run] if allowed.
@@ -1353,15 +1435,28 @@ class BuiltinAgent {
     }
   }
 
-  Future<ShellResult> _execute(String command) async {
+  Future<ShellResult> _execute(LlmToolCall call, String command) async {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
     }
+    // The model's own bound for this command, capped at what the chat allows:
+    // a small model's estimate of a build is as likely to be too short as too
+    // long, and a cap is the only one that is never wrong.
+    final args = decodeArgs(call.argumentsJson);
+    final requested = intArg(call.argumentsJson, "timeout");
+    final timeout = Duration(
+      milliseconds: requested == null || requested <= 0
+          ? options.commandTimeout.inMilliseconds
+          : requested.clamp(0, options.commandTimeout.inMilliseconds),
+    );
     final run = shell.start(command,
         cwd: workspace,
         home: projectWorkspace,
         sharedHome: sharedWorkspace,
-        timeout: options.commandTimeout);
+        timeout: timeout,
+        environment: environment,
+        oneShot: oneShot,
+        restart: args?["restart"] == true);
     _running = run;
     try {
       return await run.result;

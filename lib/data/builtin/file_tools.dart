@@ -7,15 +7,16 @@ const readTool = LlmTool(
   name: readToolName,
   description: "Read a file from the workspace and return its contents with "
       "line numbers. Paths are relative to the workspace; prefix with "
-      "`project:` to read from the project workspace. Use `offset` and "
-      "`limit` (1-indexed) to read a slice of a large file.",
+      "`project:` to read from the project workspace; an absolute path reads "
+      "the machine directly, and the user is asked before it runs. Use "
+      "`offset` and `limit` (1-indexed) to read a slice of a large file.",
   schema: {
     "type": "object",
     "properties": {
       "path": {
         "type": "string",
-        "description": "Workspace-relative path, or `project:` + path for "
-            "the project workspace.",
+        "description": "Workspace-relative path, `project:` + path for the "
+            "project workspace, or an absolute path (asked of the user).",
       },
       "offset": {
         "type": "integer",
@@ -36,15 +37,17 @@ const writeTool = LlmTool(
   name: writeToolName,
   description: "Write a file to the workspace, creating or overwriting it. "
       "Paths are relative to the workspace; prefix with `project:` to write "
-      "to the project workspace. The content is the full file — no append "
-      "or merge. Use `edit` for partial changes to an existing file.",
+      "to the project workspace; an absolute path writes the machine "
+      "directly, and the user is asked before it runs. The content is the "
+      "full file — no append or merge. Use `edit` for partial changes to an "
+      "existing file.",
   schema: {
     "type": "object",
     "properties": {
       "path": {
         "type": "string",
-        "description": "Workspace-relative path, or `project:` + path for "
-            "the project workspace.",
+        "description": "Workspace-relative path, `project:` + path for the "
+            "project workspace, or an absolute path (asked of the user).",
       },
       "content": {
         "type": "string",
@@ -62,15 +65,17 @@ const editTool = LlmTool(
   description: "Edit a file by replacing `old_string` with `new_string`. The "
       "`old_string` must appear exactly once in the file, or set "
       "`replace_all` to replace every occurrence. Paths are relative to the "
-      "workspace; prefix with `project:` to edit in the project workspace. "
-      "Use `write` to create a new file or overwrite one entirely.",
+      "workspace; prefix with `project:` to edit in the project workspace; "
+      "an absolute path edits the machine directly, and the user is asked "
+      "before it runs. Use `write` to create a new file or overwrite one "
+      "entirely.",
   schema: {
     "type": "object",
     "properties": {
       "path": {
         "type": "string",
-        "description": "Workspace-relative path, or `project:` + path for "
-            "the project workspace.",
+        "description": "Workspace-relative path, `project:` + path for the "
+            "project workspace, or an absolute path (asked of the user).",
       },
       "old_string": {
         "type": "string",
@@ -89,3 +94,4 @@ const editTool = LlmTool(
     "required": ["path", "old_string", "new_string"],
   },
 );
+

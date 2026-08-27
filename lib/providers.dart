@@ -37,6 +37,7 @@ import "domain/reminder_alarms.dart";
 import "domain/reminder_runner.dart";
 import "domain/reminder_scheduler.dart";
 import "domain/rootfs_store.dart";
+import "domain/shell.dart";
 import "data/sync/sync_hub.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/theme_colour.dart";
@@ -48,6 +49,17 @@ import "domain/voice_model_store.dart";
 
 final chatStoreProvider = Provider<ChatStore>((ref) => throw UnimplementedError());
 final agentBackendProvider = Provider<AgentBackend>((ref) => throw UnimplementedError());
+final shellProvider = Provider<Shell>((ref) => throw UnimplementedError());
+
+/// Where the shell for [workspace] is standing, live: what the composer's bar
+/// draws while a `!` command is being typed. Null where there is no workspace
+/// to ask about, or the shell holds no session for one — which the caller falls
+/// back to the workspace itself for.
+final chatShellCwdProvider =
+    Provider.family<ValueListenable<String?>?, String?>((ref, workspace) {
+  if (workspace == null) return null;
+  return ref.watch(shellProvider).sessionCwd(workspace);
+});
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError());
 final attachmentPickerProvider = Provider<AttachmentPicker>((ref) => throw UnimplementedError());
 final fileHandoffProvider = Provider<FileHandoff>((ref) => throw UnimplementedError());
@@ -819,6 +831,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// sharing the default project's.
   Future<void> setUseProjectMemory(bool value) async {
     final next = state.copy()..useProjectMemory = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The project's own command variables. Null means none, and the app-level
+  /// ones stand alone.
+  Future<void> setEnvironment(Map<String, String>? environment) async {
+    final next = state.copy()..environment = environment;
     state = next;
     await next.save(_config, project: project);
   }

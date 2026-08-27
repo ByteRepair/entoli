@@ -975,6 +975,119 @@ void main() {
       expect(tools, containsAll(["read", "write", "edit"]));
       expect(tools, isNot(contains("bash")));
     });
+
+    test("an absolute path into the workspace runs without asking", () async {
+      final turns = <List<LlmChunk>>[];
+      final agent = agentOver(FakeLlmClient(turns), approveMode: ApproveMode.ask);
+      final inside = p.join(agent.workspace, "inside.txt");
+      turns
+        ..add([writeCall(inside, "in")])
+        ..add([finish]);
+      final events = await agent.run(userMessage("write inside")).toList();
+
+      expect(events.whereType<ApprovalRequestEvent>(), isEmpty);
+      expect(File(inside).readAsStringSync(), "in");
+    });
+  });
+
+  group("a path past the workspaces", () {
+    /// The file tools reach the machine itself, so in ask mode they are
+    /// offered to the user before they run. The script is built around the
+    /// path the agent's own workspaces leave out.
+    (BuiltinAgent, String) scriptWritingOutside(FakeLlmClient client,
+        {List<ApprovalResponse> approvals = const []}) {
+      final agent =
+          agentOver(client, approveMode: ApproveMode.ask, approvals: approvals);
+      final outside = p.join(p.dirname(agent.projectWorkspace), "outside.txt");
+      client.turns
+        ..add([writeCall(outside, "there")])
+        ..add([finish]);
+      return (agent, outside);
+    }
+
+    test("is offered to the user before it runs", () async {
+      final (agent, outside) = scriptWritingOutside(FakeLlmClient([]));
+      final events = await agent.run(userMessage("write outside")).toList();
+
+      expect(events.whereType<ApprovalRequestEvent>().single.approval.argumentsText,
+          outside);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, 0);
+      expect(result.output, contains("Wrote"));
+    });
+
+    test("that the user declines runs nothing", () async {
+      final (agent, outside) = scriptWritingOutside(FakeLlmClient([]),
+          approvals: [ApprovalResponse.deny]);
+      final events = await agent.run(userMessage("write outside")).toList();
+
+      expect(events.whereType<ApprovalRequestEvent>().single.approval.argumentsText,
+          outside);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("denied"));
+      expect(File(outside).existsSync(), isFalse);
+    });
+  });
+
+  group("the shell a command runs in", () {
+    test("the directory a command leaves the shell in is on the result, not "
+        "in its output", () async {
+      final moved = "/tmp/somewhere/else";
+      final client = FakeLlmClient([
+        [bashCall("cd somewhere/else")],
+        [bashCall("pwd")],
+        [finish],
+      ]);
+      final events = await agentOver(
+              client, respond: (c) => ok(c.contains("cd") ? "moved" : "here", cwd: moved))
+          .run(userMessage("move and stay")).toList();
+
+      final results = events.whereType<ToolResultEvent>().toList();
+      // The move is a fact the projection words, so the output stays what the
+      // command printed.
+      expect(results[0].result.cwd, moved);
+      expect(results[1].result.cwd, moved);
+      expect(results[0].result.output, "moved");
+      expect(results[1].result.output, "here");
+    });
+
+    test("and the fact carries into the results of the turn after", () async {
+      final moved = "/tmp/somewhere/else";
+      final client = FakeLlmClient([
+        [bashCall("cd somewhere/else")],
+        [bashCall("ls")],
+        [finish],
+      ]);
+      await agentOver(client, respond: (c) => ok("", cwd: moved))
+          .run(userMessage("move")).toList();
+
+      final again = FakeLlmClient([
+        [bashCall("pwd")],
+        [finish],
+      ]);
+      final events = await agentOver(again, respond: (c) => ok("", cwd: moved))
+          .run(userMessage("stay")).toList();
+
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.cwd, moved);
+      expect(result.output, "");
+    });
+
+    test("the model's timeout reaches the shell, capped by the chat's", () async {
+      final client = FakeLlmClient([
+        [bashCall("a build", extra: {"timeout": 5000})],
+        [bashCall("again", extra: {"timeout": 999999999, "restart": true})],
+        [finish],
+      ]);
+      await agentOver(client,
+              options: const BuiltinOptions(commandTimeout: Duration(seconds: 60)))
+          .run(userMessage("build")).toList();
+
+      expect(shell.timeouts, [const Duration(seconds: 5), const Duration(seconds: 60)]);
+      expect(shell.restarts, [false, true]);
+      expect(shell.oneShots, [false, false]);
+    });
   });
 
   group("memory tools", () {

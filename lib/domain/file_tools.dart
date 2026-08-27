@@ -82,19 +82,38 @@ EditArgs? editArgsFrom(String? json) {
   );
 }
 
-/// Resolve a workspace-relative path, handling the `project:` prefix. A path
-/// starting with `project:` is joined onto [projectWorkspace]; anything else
-/// is joined onto [workspace]. The path is sanitised by [safeRelativePath]
-/// before joining, so `..` and leading separators cannot escape.
+/// Resolve a file tool's path. A path starting with `project:` is joined onto
+/// [projectWorkspace]; anything else is joined onto [workspace]. A relative
+/// path is sanitised by [safeRelativePath] before joining, so `..` and a
+/// leading separator cannot escape. An absolute path is the machine naming a
+/// place of its own: it is used as written, normalised.
 String resolveWorkspacePath(
   FileSystem fs,
   String path,
   String workspace,
   String projectWorkspace,
 ) {
-  if (path.startsWith("project:")) {
-    return fs.path.join(projectWorkspace, safeRelativePath(fs, path.substring(8)));
+  final project = path.startsWith("project:");
+  final rest = project ? path.substring("project:".length) : path;
+  if (!fs.path.isAbsolute(rest)) {
+    return fs.path.join(
+        project ? projectWorkspace : workspace, safeRelativePath(fs, rest));
   }
-  return fs.path.join(workspace, safeRelativePath(fs, path));
+  return fs.path.normalize(rest);
 }
+
+/// Whether [path] — one [resolveWorkspacePath] has already resolved — is one
+/// the workspaces do not hold: an absolute path reaching past both of them,
+/// the machine itself, and on the web the rest of the data store the app
+/// lives in. An absolute path *into* a workspace is the model using the place
+/// it was told, and is not outside. The file tools are gated on this: a path
+/// the workspaces hold runs without asking, one they do not is offered to the
+/// user first.
+bool outsideWorkspaces(
+  FileSystem fs,
+  String path,
+  String workspace,
+  String projectWorkspace,
+) =>
+    !isUnder(fs, path, workspace) && !isUnder(fs, path, projectWorkspace);
 

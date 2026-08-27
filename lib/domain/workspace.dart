@@ -183,6 +183,16 @@ Future<void> deleteEntries(FileSystem fs, List<String> paths) async {
 /// separator are what this exists for: a shared file names itself, and one
 /// naming `../../settings.json` would otherwise be written there. Everything
 /// left is kept, so a folder upload keeps its shape.
+/// Whether [path] is [root] itself or under it, for two resolved paths. The
+/// check is an exact prefix plus a separator, so a sibling that only shares
+/// the root's spelling — `/workspace` and `/workspace-two` — is not under it.
+bool isUnder(FileSystem fs, String path, String root) =>
+    path == root || path.startsWith("$root${fs.path.separator}");
+
+/// A path from outside, made safe to join onto a workspace. `..` and a leading
+/// separator are what this exists for: a shared file names itself, and one
+/// naming `../../settings.json` would otherwise be written there. Everything
+/// left is kept, so a folder upload keeps its shape.
 String safeRelativePath(FileSystem fs, String path) {
   final segments = path
       .split(_separator)

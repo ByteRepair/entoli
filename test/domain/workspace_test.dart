@@ -7,6 +7,8 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/domain/file_handoff.dart";
+import "package:agent_chat/domain/file_tools.dart"
+    show outsideWorkspaces, resolveWorkspacePath;
 import "package:agent_chat/domain/workspace.dart";
 
 import "../fakes.dart";
@@ -277,6 +279,47 @@ void main() {
 
     test("takes the separator a Windows share would use", () {
       expect(safeRelativePath(fileSystemIo, r"notes\today\a.txt"), "notes/today/a.txt");
+    });
+  });
+
+  group("resolveWorkspacePath", () {
+    const workspace = "chats/c1";
+    String resolve(String path) =>
+        resolveWorkspacePath(fileSystemIo, path, "$dir/$workspace", dir);
+    bool outside(String path) =>
+        outsideWorkspaces(fileSystemIo, resolve(path), "$dir/$workspace", dir);
+
+    test("a relative path lands in the chat's workspace, and is not outside", () {
+      expect(resolve("notes/a.txt"), "$dir/$workspace/notes/a.txt");
+      expect(outside("notes/a.txt"), isFalse);
+    });
+
+    test("a project-relative path lands in the project's workspace", () {
+      expect(resolve("project:notes/a.txt"), "$dir/notes/a.txt");
+      expect(outside("project:notes/a.txt"), isFalse);
+    });
+
+    test("an absolute path into a workspace is the model using the path it was told", () {
+      expect(resolve("$dir/$workspace/notes/a.txt"), "$dir/$workspace/notes/a.txt");
+      expect(outside("$dir/$workspace/notes/a.txt"), isFalse);
+    });
+
+    test("as is one into the project's own", () {
+      expect(outside("$dir/notes/a.txt"), isFalse);
+    });
+
+    test("an absolute path the workspaces do not hold is the machine itself", () {
+      expect(resolve("/etc/hosts"), "/etc/hosts");
+      expect(outside("/etc/hosts"), isTrue);
+    });
+
+    test("and the outside does not change where it lands", () {
+      expect(resolve("/etc/hosts"), "/etc/hosts");
+    });
+
+    test("an absolute path that climbs is normalised before it is judged", () {
+      expect(resolve("$dir/$workspace/notes/../../shared"), "$dir/chats/shared");
+      expect(outside("$dir/$workspace/notes/../../shared"), isFalse);
     });
   });
 }

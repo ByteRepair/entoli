@@ -281,6 +281,11 @@ class TurnSettings {
   /// AGENTS.md file is read, and the nested walk on a file read is off.
   final String? bundledInstructions;
 
+  /// The project's own command variables, layered over the app-level ones by
+  /// the shell. Empty where the project sets none; the app-level ones are the
+  /// shell's to read on each command, for the reason they are settings.
+  final Map<String, String> environment;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -293,6 +298,7 @@ class TurnSettings {
     this.sharedWorkspace = true,
     this.disabled = const {},
     this.bundledInstructions,
+    this.environment = const {},
   });
 }
 
@@ -362,6 +368,12 @@ abstract class AgentBackend {
 
   /// Release resources for a chat (keeps on-disk data).
   Future<void> disposeChat(String chatId);
+
+  /// End the chat's persistent shell in [project]'s workspace, where the
+  /// shell runs one: the chat is leaving that project, and its shell is
+  /// standing in the directory that moves out from under it. The chat's
+  /// session and running turn are kept — a move is not a delete.
+  void closeChatShell(String chatId, {required String? project});
 
   Future<List<ModelOption>> models();
 }

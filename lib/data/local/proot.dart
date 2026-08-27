@@ -1,3 +1,5 @@
+import "dart:io" show Platform;
+
 import "../../domain/rootfs.dart";
 import "../../domain/shell.dart";
 
@@ -8,14 +10,14 @@ import "../../domain/shell.dart";
 /// A pure function over paths, deliberately — what proot is asked to do is the
 /// part of this feature that can be pinned by a test on a machine with no
 /// Android on it.
-Sandbox prootSandbox({
+ShellDriver prootDriver({
   required Proot proot,
   required Rootfs rootfs,
   required String rootfsDir,
   required String dataDir,
   String? abi,
 }) =>
-    Sandbox(
+    ShellDriver(
       command: [
         proot.binary,
         "-r", rootfsDir,
@@ -58,10 +60,17 @@ Sandbox prootSandbox({
         "PROOT_TMP_DIR": proot.tmpDir,
         // Everything below this line is the guest's rather than proot's.
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        // No `HOME`: `LocalShell` sets it, to the project's workspace.
+        // No `HOME`: [projectHome] is what tells the shell to set it, to the
+        // project's workspace.
         "LANG": "C.UTF-8",
       },
+      // A guest is one project's home at a time, which the shell answers from
+      // this field rather than from knowing it is a guest.
+      projectHome: true,
       description: "${rootfs.describe(abi)}, in which ${rootfs.packageManager} "
           "installs anything else you need. The chat's files are at the same "
-          "paths inside it as outside, and the rest of the device is not there",
+          "paths inside it as outside, and the rest of the device is not there. "
+          "It is running under proot on ${Platform.operatingSystem} "
+          "${Platform.operatingSystemVersion}, so filesystem-heavy commands are "
+          "slower than they look",
     );

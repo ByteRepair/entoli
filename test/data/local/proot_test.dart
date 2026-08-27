@@ -15,7 +15,7 @@ void main() {
   );
   const dataDir = "/data/user/0/pkg/app_flutter/agent-chat";
 
-  Sandbox build({Proot from = proot, String? abi = "x86_64"}) => prootSandbox(
+  ShellDriver build({Proot from = proot, String? abi = "x86_64"}) => prootDriver(
         proot: from,
         rootfs: alpine,
         rootfsDir: "/data/user/0/pkg/cache/rootfs/alpine",
@@ -32,16 +32,16 @@ void main() {
 
   test("the loader is named where it is, since it is the one file really exec'd",
       () {
-    final sandbox = build();
+    final driver = build();
 
-    expect(sandbox.environment["PROOT_LOADER"], proot.loader);
+    expect(driver.environment["PROOT_LOADER"], proot.loader);
     // Nothing to name, so nothing is said: proot would otherwise be handed an
     // empty path for an architecture that has no 32-bit guests.
-    expect(sandbox.environment.containsKey("PROOT_LOADER_32"), isFalse);
+    expect(driver.environment.containsKey("PROOT_LOADER_32"), isFalse);
   });
 
   test("a 32-bit loader is named where the architecture has one", () {
-    final sandbox = build(
+    final driver = build(
         from: const Proot(
       binary: "/lib/libproot.so",
       loader: "/lib/libproot-loader.so",
@@ -50,48 +50,52 @@ void main() {
       resolvConf: "/tmp/resolv.conf",
     ));
 
-    expect(sandbox.environment["PROOT_LOADER_32"], "/lib/libproot-loader32.so");
+    expect(driver.environment["PROOT_LOADER_32"], "/lib/libproot-loader32.so");
   });
 
   test("the data directory is bound at its own path, so every path the app has "
       "handed the model still means what it meant", () {
-    final sandbox = build();
+    final driver = build();
 
-    expect(valuesOf(sandbox.command, "-b"), contains("$dataDir:$dataDir"));
+    expect(valuesOf(driver.command, "-b"), contains("$dataDir:$dataDir"));
   });
 
   test("the guest is given a resolver, since Android keeps no such file", () {
-    final sandbox = build();
+    final driver = build();
 
-    expect(valuesOf(sandbox.command, "-b"),
+    expect(valuesOf(driver.command, "-b"),
         contains("${proot.resolvConf}:/etc/resolv.conf"));
   });
 
   test("it runs proot, ends in the guest's shell, and chroots into the rootfs",
       () {
-    final sandbox = build();
+    final driver = build();
 
-    expect(sandbox.command.first, proot.binary);
-    expect(sandbox.command.last, "/bin/sh");
-    expect(valuesOf(sandbox.command, "-r"),
+    expect(driver.command.first, proot.binary);
+    expect(driver.command.last, "/bin/sh");
+    expect(valuesOf(driver.command, "-r"),
         ["/data/user/0/pkg/cache/rootfs/alpine"]);
   });
 
   test("the tracees are killed with the tracer, and hard links are survivable",
       () {
-    final sandbox = build();
+    final driver = build();
 
-    expect(sandbox.command, contains("--kill-on-exit"));
-    expect(sandbox.command, contains("--link2symlink"));
-    expect(sandbox.command, contains("-0"));
+    expect(driver.command, contains("--kill-on-exit"));
+    expect(driver.command, contains("--link2symlink"));
+    expect(driver.command, contains("-0"));
   });
 
   test("the guest's own PATH, not the host's, and no HOME", () {
-    final sandbox = build();
+    final driver = build();
 
-    expect(sandbox.environment["PATH"], contains("/usr/bin"));
-    expect(sandbox.environment["PATH"], isNot(contains("/system/bin")));
-    expect(sandbox.environment.containsKey("HOME"), isFalse);
+    expect(driver.environment["PATH"], contains("/usr/bin"));
+    expect(driver.environment["PATH"], isNot(contains("/system/bin")));
+    expect(driver.environment.containsKey("HOME"), isFalse);
+  });
+
+  test("a guest's HOME is the project's workspace, so the shell sets it", () {
+    expect(build().projectHome, isTrue);
   });
 
   test("what the model is told is the distribution, the architecture it is "

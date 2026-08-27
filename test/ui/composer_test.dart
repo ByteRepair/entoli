@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart" show ValueListenable;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -6,6 +7,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 
+import "../data/builtin/builtin_fakes.dart";
 import "../fakes.dart";
 import "../harness.dart";
 
@@ -24,7 +26,9 @@ void main() {
   tearDown(() => app.dispose());
   tearDownAll(controller.dispose);
 
-  Future<void> pump(WidgetTester tester, {EdgeInsets bars = EdgeInsets.zero}) => app.pump(
+  Future<void> pump(WidgetTester tester,
+          {EdgeInsets bars = EdgeInsets.zero, String? workspace}) =>
+      app.pump(
         tester,
         underSystemBars(
           bars,
@@ -37,6 +41,7 @@ void main() {
                 sentAttachments.add(attachments);
               },
               onAbort: () {},
+              workspace: workspace,
             ),
           ),
         ),
@@ -415,6 +420,55 @@ void main() {
     });
   });
 
+  group("where a shell command will run", () {
+    const workspace = _ShellWithCwd.starting;
+
+    _ShellWithCwd withBar(WidgetTester tester) {
+      final shell = _ShellWithCwd();
+      app.dispose();
+      app = TestApp.create(shell: shell);
+      return shell;
+    }
+
+    testWidgets("shows the shell's own directory while a command is being typed",
+        (tester) async {
+      withBar(tester);
+      await pump(tester, workspace: workspace);
+      await type(tester, "!");
+
+      expect(find.text(workspace), findsOneWidget);
+    });
+
+    testWidgets("and follows the shell as a command moves it", (tester) async {
+      final shell = withBar(tester);
+      await pump(tester, workspace: workspace);
+      await type(tester, "!");
+
+      shell.cwd.value = "$workspace/sub";
+      await tester.pump();
+
+      expect(find.text("$workspace/sub"), findsOneWidget);
+    });
+
+    testWidgets("a tap copies the directory out", (tester) async {
+      withBar(tester);
+      await pump(tester, workspace: workspace);
+      await type(tester, "!");
+
+      final copied = clipboard(tester);
+      await tester.tap(find.text(workspace));
+      await settleIo(tester);
+
+      expect(copied, [workspace]);
+    });
+
+    testWidgets("and is not drawn at all outside a command", (tester) async {
+      withBar(tester);
+      await pump(tester, workspace: workspace);
+
+      expect(find.text(workspace), findsNothing);
+    });
+  });
   group("the keyboard", () {
     testWidgets("comes up when the field is tapped", (tester) async {
       await pump(tester);
@@ -445,4 +499,16 @@ void main() {
       expect(tester.testTextInput.isVisible, isFalse);
     });
   });
+}
+
+/// A shell that knows where it is standing, for the bar to watch.
+class _ShellWithCwd extends FakeShell {
+  _ShellWithCwd() : super((_) => ok(""));
+
+  static const starting = "/tmp/project/workspace";
+
+  final cwd = ValueNotifier<String?>(starting);
+
+  @override
+  ValueListenable<String?>? sessionCwd(String cwd) => this.cwd;
 }
