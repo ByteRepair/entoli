@@ -266,12 +266,11 @@ class ChatRepository {
   /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
-      bool replaces = false,
-      bool headless = false}) async* {
+      bool replaces = false}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, prompt,
         history: history,
-        settings: await _turnSettings(chatId, headless: headless));
+        settings: await _turnSettings(chatId));
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
@@ -293,15 +292,15 @@ class ChatRepository {
   /// whatever the app ships it with, whatever the settings say. A chat's own
   /// `memoryOff` is one of those takes: it turns the subsystem off for this
   /// chat alone, and where the project already took it away it cannot be given
-  /// back from here.
-  Future<TurnSettings> _turnSettings(String chatId, {bool headless = false}) async {
+  /// it back from here. `headless` is the other: a chat nobody watches (a
+  /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
+  Future<TurnSettings> _turnSettings(String chatId) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
     final builtIn = builtinProjectOf(project);
     final disabled = {...builtIn?.disabled ?? const <AgentCapability>{}};
-    if (headless) {
-      // A turn nobody watches must not be able to park on an answer.
+    if (meta.headless == true) {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
     final projectSettings = await projectSettingsOf(project);

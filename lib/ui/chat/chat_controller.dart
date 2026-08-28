@@ -109,6 +109,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// reach the next one.
   bool _interrupted = false;
 
+  /// Completes with the turn's [TurnEnd] (or null if interrupted) when the
+  /// current turn finishes. A caller that starts a turn through [send] or
+  /// [resume] and needs to know when it is done — the reminder runner, a voice
+  /// handover — awaits this. Null when no turn is running.
+  Completer<TurnEnd?>? _turnDone;
+  Future<TurnEnd?>? get turnDone => _turnDone?.future;
+
   @override
   ChatViewState build() {
     _recorder = TurnRecorder(
@@ -248,6 +255,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // comes back carries the TTL anchor the save resolved, and is kept.
     applyState(await repo.saveState(updated.state));
     _interrupted = false;
+    _turnDone = Completer<TurnEnd?>();
     _recorder.open(opening.last.id);
     await _recorder.write(recordsOf(opening,
         siblingOf: replacing?.id,
@@ -280,6 +288,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
     state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
     _interrupted = false;
+    _turnDone = Completer<TurnEnd?>();
     _recorder.open(reply.id, existing: reply.parts);
 
     _listen(ref.read(chatRepositoryProvider)
@@ -441,6 +450,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       reason = await _recorder.close();
     }
     if (!ref.mounted) return;
+    final done = _turnDone;
+    _turnDone = null;
     // Nothing is left to answer once the turn is over: the backend has already
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void.
@@ -458,6 +469,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
           ? "Step limit reached"
           : null,
     );
+    done?.complete(reason);
   }
 
   void _onError(Object e) {

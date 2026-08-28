@@ -709,9 +709,13 @@ class Reminders extends Notifier<List<Reminder>> implements ReminderList {
 final remindersProvider =
     NotifierProvider<Reminders, List<Reminder>>(() => Reminders(const []));
 
+final reminderTurnDriverProvider =
+    Provider<ReminderTurnDriver>((ref) => throw UnimplementedError());
+
 final reminderRunnerProvider = Provider<ReminderRunner>((ref) {
   return ReminderRunner(
     repo: ref.watch(chatRepositoryProvider),
+    driver: ref.watch(reminderTurnDriverProvider),
     onListChanged: (_) => ref.invalidate(chatListProvider),
     onReminderFired: (reminder) =>
         ref.read(remindersProvider.notifier).replace(reminder),

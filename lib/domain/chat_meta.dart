@@ -12,7 +12,8 @@ class ChatMeta {
       this.provider,
       this.approveMode,
       this.tempChatTtl,
-      this.memoryOff});
+      this.memoryOff,
+      this.headless});
 
   String? model;
   String? provider;
@@ -29,12 +30,19 @@ class ChatMeta {
   /// back from here.
   bool? memoryOff;
 
+  /// A chat nobody watches — a reminder's. Every turn on it drops `ask_user`
+  /// and `task`, since nobody is there to answer or to need the fan-out, and
+  /// suppresses the title model, since the reminder already named the chat. Null
+  /// means an ordinary chat the user drives.
+  bool? headless;
+
   factory ChatMeta.fromJson(Map<String, dynamic> json) => ChatMeta(
         model: json["model"] as String?,
         provider: json["provider"] as String?,
         approveMode: _approveMode(json),
         tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?),
         memoryOff: json["memoryOff"] as bool?,
+        headless: json["headless"] as bool?,
       );
 
   /// Null is a `meta.json` that was never written, which inherits everything —
@@ -64,6 +72,7 @@ class ChatMeta {
         approveMode: approveMode,
         tempChatTtl: tempChatTtl,
         memoryOff: memoryOff,
+        headless: headless,
       );
 
   /// Nothing overridden, so nothing to write down: this chat inherits the
@@ -76,6 +85,7 @@ class ChatMeta {
         if (approveMode != null) "approveMode": approveMode!.name,
         if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
         if (memoryOff != null) "memoryOff": memoryOff,
+        if (headless != null) "headless": headless,
       };
 
   String encode() => jsonEncode(toJson());
