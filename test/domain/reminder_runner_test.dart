@@ -7,12 +7,8 @@ import "package:agent_chat/core/config.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
-import "package:agent_chat/domain/agent_backend.dart";
-import "package:agent_chat/domain/builtin_project.dart";
-import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
-import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/reminder.dart";
 import "package:agent_chat/domain/reminder_runner.dart";
@@ -20,43 +16,60 @@ import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 import "../fakes.dart";
 
+/// A driver that stamps a completer before returning, so a test can assert
+/// the reminder was stamped before the turn would have run.
+class _StampThenHangDriver implements ReminderTurnDriver {
+  _StampThenHangDriver(this._inner, this.stampedDone);
+  final ReminderTurnDriver _inner;
+  final Completer<void> stampedDone;
+
+  @override
+  Future<({ReminderOutcome outcome, String snippet})> send(
+      String chatId, String prompt) async {
+    await stampedDone.future;
+    return _inner.send(chatId, prompt);
+  }
+}
+
 void main() {
   late Directory tmp;
   late AppConfig config;
-  late FakeBackend backend;
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync("reminder_runner_test_");
     config = AppConfig.forDirectory(tmp.path, fileSystemIo);
-    backend = FakeBackend();
   });
 
   tearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  ChatRepository repo() => ChatRepository(FileChatStore(config), backend,
-      () => AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude"), config);
+  ChatRepository repo() => ChatRepository(FileChatStore(config),
+      FakeBackend(), () => AppSettings(defaultProviderId: "anthropic", defaultModelId: "claude"), config);
 
-  /// The runner with its two callbacks captured, so a test can assert what it
-  /// stamped and when it told the sidebar.
-  (ReminderRunner, List<Reminder>, List<String>) runner(ChatRepository repository) {
+  /// The runner with its two callbacks and the fake driver captured, so a test
+  /// can assert what it stamped, when it told the sidebar, and what it drove.
+  (ReminderRunner, List<Reminder>, List<String>, FakeReminderTurnDriver)
+      runner(ChatRepository repository) {
     final stamped = <Reminder>[];
     final listed = <String>[];
+    final driver = FakeReminderTurnDriver();
     return (
       ReminderRunner(
         repo: repository,
+        driver: driver,
         onListChanged: listed.add,
         onReminderFired: (r) async => stamped.add(r),
       ),
       stamped,
       listed,
+      driver,
     );
   }
 
   test("runs the prompt in a new chat in the reminder's project", () async {
     final repository = repo();
-    final (run, _, listed) = runner(repository);
+    final (run, _, listed, driver) = runner(repository);
     final result = await run.run(
       Reminder(
         id: "r1",
@@ -67,20 +80,19 @@ void main() {
       const [],
     );
 
-    // Named after the reminder, in the default project, and announced to the
-    // sidebar — which is the only way a headless chat becomes visible.
     final chat = await repository.openChat(result.chatId);
     expect(chat.state.title, "Morning sweep");
     expect(chat.state.project, isNull);
     expect(listed, [result.chatId]);
-    expect(backend.prompts.single.prompt.plainText, "Check the builds");
+    expect(driver.calls.single.chatId, result.chatId);
+    expect(driver.calls.single.prompt, "Check the builds");
     expect(result.outcome, ReminderOutcome.done);
   });
 
   test("a named project is resolved against the ones that exist", () async {
     final repository = repo();
     await repository.createProject("work");
-    final (run, _, _) = runner(repository);
+    final (run, _, _, _) = runner(repository);
     final result = await run.run(
       Reminder(
           id: "r1",
@@ -95,20 +107,9 @@ void main() {
     expect(chat.state.project, "work");
   });
 
-  test("pins approveMode never and turns off ask_user for a headless turn", () async {
+  test("writes meta.json with headless, approveMode never, and the TTL", () async {
     final repository = repo();
-    final (run, _, _) = runner(repository);
-    await run.run(Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()), const []);
-
-    final settings = backend.prompts.single.settings;
-    // A turn nobody watches must never park on an approval or a question:
-    // there is nobody to answer either, and nothing behind that wait but time.
-    expect(settings.disabled, containsAll([AgentCapability.ask, AgentCapability.task]));
-  });
-
-  test("writes meta.json with the pins; the reminder's TTL is the chat's", () async {
-    final repository = repo();
-    final (run, _, _) = runner(repository);
+    final (run, _, _, _) = runner(repository);
     final result = await run.run(
       Reminder(
         id: "r1",
@@ -123,13 +124,14 @@ void main() {
     final meta =
         ChatMeta.parse(File(config.metaFile(result.chatId)).readAsStringSync());
     expect(meta.approveMode, ApproveMode.never);
+    expect(meta.headless, true);
     expect(meta.tempChatTtl, TempChatTtl.off);
     expect(File(config.stateFile(result.chatId)).existsSync(), isTrue);
   });
 
   test("no TTL of its own leaves the chat's to inherit", () async {
     final repository = repo();
-    final (run, _, _) = runner(repository);
+    final (run, _, _, _) = runner(repository);
     final result = await run.run(
       Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()),
       const [],
@@ -144,14 +146,11 @@ void main() {
     final repository = repo();
     final stamped = <Reminder>[];
     final stampedDone = Completer<void>();
-    backend.hold = Completer<void>();
-    addTearDown(() {
-      if (!(backend.hold?.isCompleted ?? true)) backend.hold!.complete();
-      backend.hold = null;
-    });
+    final driver = FakeReminderTurnDriver();
 
     final run = ReminderRunner(
       repo: repository,
+      driver: _StampThenHangDriver(driver, stampedDone),
       onListChanged: (_) {},
       onReminderFired: (r) async {
         stamped.add(r);
@@ -161,50 +160,22 @@ void main() {
     final done =
         run.run(Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()), const []);
     await stampedDone.future.timeout(const Duration(seconds: 5));
-    // Before the turn finished: a crash here must not re-run the prompt.
     expect(stamped.map((r) => r.id), ["r1"]);
     expect(stamped.single.lastFiredAt, isNotNull);
-    if (!backend.hold!.isCompleted) backend.hold!.complete();
     await done;
   });
 
-  test("the log reads as a finished turn: opening records and a turnEnd", () async {
-    backend.scriptedEvents = const [
-      ResponseStart("resp-1"),
-      TextDelta("All green."),
-      DoneEvent(),
-    ];
+  test("returns the driver's outcome and snippet", () async {
     final repository = repo();
-    final (run, _, _) = runner(repository);
-    final result =
-        await run.run(Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()), const []);
-
-    final records =
-        File(config.convFile(result.chatId)).readAsLinesSync().map(_decode).toList();
-    expect(records.whereType<MessageRecord>().length, 2);
-    expect(records.last, isA<TurnEndRecord>());
-    expect((records.last as TurnEndRecord).reason, TurnEnd.done);
-    expect(result.snippet, "All green.");
-  });
-
-  test("a failing turn still closes the log and reports error", () async {
-    backend.scriptedEvents = const [ErrorEvent("provider down")];
-    final repository = repo();
-    final (run, _, _) = runner(repository);
-    final result =
-        await run.run(Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()), const []);
+    final (run, _, _, driver) = runner(repository);
+    driver.outcome = ReminderOutcome.error;
+    driver.snippet = "partial reply";
+    final result = await run.run(
+      Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()),
+      const [],
+    );
 
     expect(result.outcome, ReminderOutcome.error);
-    final records = File(config.convFile(result.chatId)).readAsLinesSync();
-    expect(records.last.contains("turnEnd"), isTrue);
-    expect(records.any((l) => l.contains("provider down")), isTrue);
-    expect(result.snippet, isEmpty);
+    expect(result.snippet, "partial reply");
   });
-}
-
-/// One line of `conv.jsonl`. A broken line would be the one a kill landed in;
-/// here every line is whole or the test has written something wrong.
-ChatRecord _decode(String line) {
-  final parsed = decodeLog("$line\n");
-  return parsed.single;
 }

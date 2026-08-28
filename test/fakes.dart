@@ -29,6 +29,7 @@ import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
+import "package:agent_chat/domain/reminder_runner.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/download.dart";
@@ -1233,5 +1234,22 @@ class LoopbackChannel implements ByteChannel {
     // channel is something the other side is told about. Closing only this
     // one left the peer waiting out its timeouts for a channel already gone.
     await other?.close();
+  }
+}
+
+/// A [ReminderTurnDriver] that records what it was asked and returns a canned
+/// result. The runner's unit tests care about the orchestration — chat
+/// creation, stamping, the sidebar — not the turn itself, which is
+/// [ChatController]'s job and tested through it.
+class FakeReminderTurnDriver implements ReminderTurnDriver {
+  final List<({String chatId, String prompt})> calls = [];
+  ReminderOutcome outcome = ReminderOutcome.done;
+  String snippet = "";
+
+  @override
+  Future<({ReminderOutcome outcome, String snippet})> send(
+      String chatId, String prompt) async {
+    calls.add((chatId: chatId, prompt: prompt));
+    return (outcome: outcome, snippet: snippet);
   }
 }
