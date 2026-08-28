@@ -433,7 +433,8 @@ class _MessageBubbleState extends State<MessageBubble> {
               "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
               "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
               "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
-              _ => ToolLabel(call: toolCall, result: results[toolCall.id]),
+              _ => ToolLabel(call: toolCall, result: results[toolCall.id],
+                  running: isLive(i) && widget.message.hasText),
             }));
             break;
           }

@@ -37,17 +37,21 @@ enum TurnEnd {
   aborted,
 
   /// The turn reported an error and gave up — a rejected key, a provider that
-  /// stayed down, the step limit.
+  /// stayed down.
   error,
+
+  /// The agent hit its step limit without finishing. Resumable, like [error],
+  /// but not an error: the turn ran out of steps, not because something broke.
+  stepLimit,
 }
 
 extension ResumableTurn on TurnEnd {
   /// Whether a turn that ended this way is one to offer to carry on. Nobody
-  /// chose to end an [TurnEnd.error], which is why it is offered and
-  /// [TurnEnd.aborted] is not. Here rather than at the two places that ask —
-  /// the log's reader and the controller closing a turn — which have to agree
-  /// or the offer flickers on the next reload.
-  bool get resumable => this == TurnEnd.error;
+  /// chose to end an [TurnEnd.error] or hit [TurnEnd.stepLimit], which is why
+  /// both are offered and [TurnEnd.aborted] is not. Here rather than at the two
+  /// places that ask — the log's reader and the controller closing a turn —
+  /// which have to agree or the offer flickers on the next reload.
+  bool get resumable => this == TurnEnd.error || this == TurnEnd.stepLimit;
 }
 
 @freezed

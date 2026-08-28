@@ -192,6 +192,9 @@ class BuiltinBackend implements AgentBackend {
           workspace: workspace,
           project: project,
           sharedWorkspace: settings.sharedWorkspace);
+      String resolvePath(String path) => resolveWorkspacePath(
+          config.fs, path, workspace, projectWorkspace,
+          guestRoot: shell.guestRoot);
       // What this turn is offered: the device's facts minus a headless turn's
       // takes and the project's. One value, so the prompt and the tool list
       // cannot disagree.
@@ -322,7 +325,7 @@ class BuiltinBackend implements AgentBackend {
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
         saveArtifact: (path, {artifactId}) async {
-          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+          final resolved = resolvePath(path);
           if (artifactId != null) {
             await store.updateArtifact(chatId, artifactId, resolved, project: project);
             return artifactId;
@@ -330,7 +333,7 @@ class BuiltinBackend implements AgentBackend {
           return store.createArtifact(chatId, resolved, project: project);
         },
         packageSkill: (path, name) async {
-          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+          final resolved = resolvePath(path);
           final pkg = await packageSkillDirectory(config.fs, resolved, name);
           final bytes = packageSkillBytes(pkg);
           final installId = const Uuid().v4();

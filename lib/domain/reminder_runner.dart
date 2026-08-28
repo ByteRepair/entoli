@@ -101,6 +101,7 @@ class ReminderRunner implements ReminderRuns {
     final outcome = switch (reason) {
       TurnEnd.error => ReminderOutcome.error,
       TurnEnd.aborted => ReminderOutcome.aborted,
+      TurnEnd.stepLimit => ReminderOutcome.error,
       TurnEnd.done => ReminderOutcome.done,
     };
     final snippet = recorder.parts

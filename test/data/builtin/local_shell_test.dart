@@ -6,6 +6,8 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/domain/shell.dart";
 
+List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
+
 void main() {
   /// The project workspace and, inside it, the chat's own — what the two
   /// arguments to `start` are on a real run.
@@ -278,7 +280,7 @@ void main() {
       "there is no shell", () {
     final driver = LocalShell.hostDriver(shell: () => "/bin/sh");
 
-    expect(driver!.command, ["/bin/sh"]);
+    expect(driver!.commandFor("", ""), ["/bin/sh"]);
     expect(driver.projectHome, isFalse);
     expect(LocalShell.hostDriver(shell: () => null), isNull);
   });
@@ -288,7 +290,7 @@ void main() {
     /// these tests has: a prefix that really runs, ending in a shell.
     ShellDriver guest({Map<String, String> environment = const {}}) =>
         ShellDriver(
-          command: ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
+          commandFor: (_, _) => ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
           environment: environment,
           projectHome: true,
           description: "Alpine Linux 3.24.1 (x86_64), in which apk installs "
@@ -363,7 +365,7 @@ void main() {
 
   group("what a command runs under", () {
     const host = ShellDriver(
-      command: ["/bin/sh"],
+      commandFor: _hostCommand,
       environment: {"PAGER": "less", "GIT_EXEC_PATH": "/data/tools/libexec"},
       projectHome: false,
       description: "host",
@@ -400,7 +402,7 @@ void main() {
     test("HOME is the workspace where the driver reaches a guest, and where "
         "the home is not shared", () {
       final guest = ShellDriver(
-        command: ["/bin/sh"],
+        commandFor: _hostCommand,
         environment: const {},
         projectHome: true,
         description: "guest",
