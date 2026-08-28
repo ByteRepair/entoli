@@ -510,7 +510,7 @@ void main() {
           .toList();
 
       expect(client.sent, hasLength(3));
-      expect(events.whereType<ErrorEvent>().single.message, contains("3 steps"));
+      expect(events.whereType<StepLimitEvent>().single.limit, 3);
     });
 
     test("a retryable failure is announced and then tried again", () async {

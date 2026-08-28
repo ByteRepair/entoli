@@ -161,6 +161,16 @@ class ErrorEvent extends AgentEvent {
   final String message;
 }
 
+/// The agent ran out of steps without finishing. Not an [ErrorEvent]: the turn
+/// gave up because it hit the step limit, not because something broke, so no
+/// [ErrorPart] is added to the message. The turn still ends as
+/// [TurnEnd.stepLimit], which is resumable — the Continue bar offers to carry
+/// on.
+class StepLimitEvent extends AgentEvent {
+  const StepLimitEvent(this.limit);
+  final int limit;
+}
+
 /// A non-error notice the turn wants the UI to show — auto mode pausing, for
 /// instance. Turn-scoped like [RetryEvent]: it is view state, not a message
 /// part, so it is not persisted.

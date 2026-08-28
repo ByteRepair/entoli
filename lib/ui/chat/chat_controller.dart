@@ -22,6 +22,7 @@ class ChatViewState {
     this.runningSubAgents = const [],
     this.retry,
     this.status,
+    this.unfinishedNotice,
   });
   final Chat? chat;
   final bool isRunning;
@@ -45,6 +46,11 @@ class ChatViewState {
   /// what says the turn is alive.
   final String? status;
 
+  /// A notice for the [ResumeBar] when the turn ended resumable — "Step limit
+  /// reached" for a step limit, null otherwise. Turn-scoped: not persisted, so
+  /// a reload shows the default "Unfinished turn" text.
+  final String? unfinishedNotice;
+
   ChatViewState copyWith({
     Chat? chat,
     bool? isRunning,
@@ -55,6 +61,8 @@ class ChatViewState {
     bool clearRetry = false,
     String? status,
     bool clearStatus = false,
+    String? unfinishedNotice,
+    bool clearUnfinishedNotice = false,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -64,6 +72,9 @@ class ChatViewState {
         runningSubAgents: runningSubAgents ?? this.runningSubAgents,
         retry: clearRetry ? null : (retry ?? this.retry),
         status: clearStatus ? null : (status ?? this.status),
+        unfinishedNotice: clearUnfinishedNotice
+            ? null
+            : (unfinishedNotice ?? this.unfinishedNotice),
       );
 }
 
@@ -381,6 +392,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case ArtifactEvent():
       case SkillInstallEvent():
       case ErrorEvent():
+      case StepLimitEvent():
       case InfoEvent():
         break;
       case ApprovalRequestEvent(:final approval):
@@ -442,6 +454,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       runningSubAgents: const [],
       clearRetry: true,
       clearStatus: true,
+      unfinishedNotice: reason == TurnEnd.stepLimit
+          ? "Step limit reached"
+          : null,
     );
   }
 

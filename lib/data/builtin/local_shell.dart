@@ -5,6 +5,7 @@ import "dart:io";
 import "package:flutter/foundation.dart";
 import "package:uuid/uuid.dart";
 
+import "../../domain/file_tools.dart";
 import "../../domain/shell.dart";
 
 /// Runs commands where the [ShellDriver] it is given says they run: the
@@ -359,7 +360,8 @@ void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
 /// route the output to, and the queue is what keeps it that way even where a
 /// stop and a resend land close together.
 class _Session {
-  _Session(this._shell, this._cwdPath, this._home);
+  _Session(this._shell, this._cwdPath, this._home)
+      : _displayCwd = _computeDisplayCwd(_shell, _cwdPath, _home);
 
   final LocalShell _shell;
 
@@ -368,6 +370,19 @@ class _Session {
 
   /// The `HOME` the shell is given.
   final String _home;
+
+  /// The path the composer's cwd bar should show — the guest path where the
+  /// shell runs inside one, the host path otherwise. Set once at construction,
+  /// used in [_spawn] and [_settleExit] so the bar never flashes the host path.
+  final String _displayCwd;
+
+  static String _computeDisplayCwd(LocalShell shell, String cwd, String home) {
+    final driver = shell._driver();
+    final root = driver?.guestRoot;
+    return root != null
+        ? guestWorkspacePath(root, home, cwd)
+        : cwd;
+  }
 
   Process? _process;
   bool _ownsGroup = false;
@@ -499,7 +514,7 @@ class _Session {
           if (_process == process) _settleExit();
         })));
     // A fresh shell is standing where it was told to start.
-    _shell._cwds[_cwdPath]?.value = _cwdPath;
+    _shell._cwds[_cwdPath]?.value = _displayCwd;
   }
 
   void _onData(String chunk) {
@@ -572,7 +587,7 @@ class _Session {
                 "It starts again, in its starting directory, on the next command.",
       ));
     }
-    _shell._cwds[_cwdPath]?.value = _cwdPath;
+    _shell._cwds[_cwdPath]?.value = _displayCwd;
   }
 
   /// How the timeout is worded in an answer.

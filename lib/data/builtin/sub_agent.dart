@@ -177,6 +177,7 @@ class SubAgentRunner {
           case SubAgentEndEvent():
           case RetryEvent():
           case StatusEvent():
+          case StepLimitEvent():
           case InfoEvent():
           case DoneEvent():
             break;
