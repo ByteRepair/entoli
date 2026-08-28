@@ -38,6 +38,7 @@ class TurnSurface extends StatelessWidget {
           ResumeBar(
             startedAt: chat.messages.last.createdAt,
             onContinue: notifier.resume,
+            notice: view.unfinishedNotice,
           ),
         SubAgentStrip(agents: view.runningSubAgents),
         for (final approval in view.approvals)

@@ -132,6 +132,8 @@ class TurnRecorder {
         addPart(MessagePart.skillInstall(installId: installId, title: title));
       case ErrorEvent(:final message):
         _appendError(message);
+      case StepLimitEvent():
+        outcome ??= TurnEnd.stepLimit;
       // Turn-scoped view state, or the turn's own end. Listed rather than
       // defaulted so that a new kind of event has to be decided about here as
       // well as wherever it is drawn.

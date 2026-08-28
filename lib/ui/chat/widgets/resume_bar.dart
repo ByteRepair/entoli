@@ -6,10 +6,14 @@ import "activity_label.dart";
 /// the list, like the approval banner: scrolling back through the turn should
 /// not lose the way to carry it on.
 class ResumeBar extends StatelessWidget {
-  const ResumeBar({super.key, required this.startedAt, required this.onContinue});
+  const ResumeBar({super.key, required this.startedAt, required this.onContinue, this.notice});
 
   final DateTime startedAt;
   final VoidCallback onContinue;
+
+  /// An optional notice replacing the default "Unfinished turn" text — e.g.
+  /// "Step limit reached" when the turn ended that way.
+  final String? notice;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +35,8 @@ class ResumeBar extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              "Unfinished turn from ${formatAge(DateTime.now().difference(startedAt))}",
+              notice ??
+                  "Unfinished turn from ${formatAge(DateTime.now().difference(startedAt))}",
               style: theme.textTheme.bodySmall,
             ),
           ),

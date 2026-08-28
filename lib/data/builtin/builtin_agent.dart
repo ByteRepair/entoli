@@ -622,8 +622,7 @@ class BuiltinAgent {
       if (_cancelled) break;
 
       if (step == options.stepLimit - 1) {
-        yield ErrorEvent("Stopped after ${options.stepLimit} steps without finishing. "
-            "Ask again to carry on.");
+        yield StepLimitEvent(options.stepLimit);
       }
     }
 
