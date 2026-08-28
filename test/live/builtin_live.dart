@@ -159,6 +159,8 @@ void main() {
           log("sub-agent $id ${failed ? "failed" : "finished"}");
         case InfoEvent(:final message):
           log("info: $message");
+        case StepLimitEvent(:final limit):
+          log("step limit: $limit");
         case DoneEvent():
           log("done");
       }

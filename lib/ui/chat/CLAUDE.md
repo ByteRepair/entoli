@@ -59,6 +59,13 @@ under it stopped arriving before the call started, so a caret left there points
 at nothing while the label below is what is actually busy. It is a `WidgetSpan`
 so that it sits after the last word rather than under the paragraph.
 
+**A running tool label carries its own spinner** where the message has already
+said something, since the spinner below the message is gated on `!hasText` and
+a turn that says "Let me check that" before calling `bash` has text. The
+`ToolLabel` gets `running: true` only for the live label of a waiting turn that
+has text, so the two spinners never double up: the message-level spinner handles
+the no-text-yet case, the label-level spinner handles the has-text case.
+
 **Never both**, and that is one decision in `_rows` rather than two that happen
 to agree. Asked separately they did not: the spinner's question was
 `Message.hasText`, which trims, so a turn whose first flush was a blank line had

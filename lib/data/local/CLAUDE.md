@@ -138,13 +138,17 @@ reason the voice models are: `backup.dart` zips that directory whole, and a
 restore *replaces* it. A `.complete` marker written last is the whole of what
 "installed" means.
 
-**The data directory is bound into the guest at its own path.** Not a tidier
-`/workspace`: every path the app has ever handed the model — the chat's
-workspace, the project's, an artifact — then means the same thing inside the
-guest as outside it, the host `cwd` and proot's `-w` are the same string, and
-nothing else in the app has to learn that commands are running somewhere else.
-The workspace explorer, the `DocumentsProvider` and a resend of an old turn all
-keep working with no knowledge of any of this.
+**The project workspace is bound into the guest at `/root`, not the data
+directory at its own Android path.** The model sees `~` for the project
+workspace and `~/chats/<id>` for the chat's own, not the full
+`/data/user/0/...` path. The rest of the device is not there. Skills are bound
+at `/opt/skills-bundled` and `/opt/skills` so their scripts are reachable. The
+file tools translate `~` and guest paths back to the host's, since they use the
+host filesystem. `ShellDriver.commandFor` builds the proot invocation per chat,
+because the bind mounts and `-w` need the chat's own `cwd` and `home`. The
+`-w` flag takes the guest path of the chat workspace (e.g. `/root/chats/<id>`),
+not `.` — proot stores `-w` as the guest cwd, and `.` resolves against the
+guest root, not the host's working directory.
 
 **`HOME` inside the guest is the project's workspace, not `/root`.** The rootfs
 is one directory shared by every project and outside what a backup carries, so a
