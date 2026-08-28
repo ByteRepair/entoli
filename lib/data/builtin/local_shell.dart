@@ -173,8 +173,8 @@ class LocalShell extends Shell {
       bool sharedHome = true,
       bool oneShot = false,
       bool restart = false}) {
-    final driver = _driver();
     if (oneShot) {
+      final driver = _driver();
       return _OneShotRun(
         // The driver's shell, and whatever stands between it and the machine,
         // or nothing where there is no driver at all.

@@ -91,15 +91,16 @@ void main() {
   test("what the command spawned is killed with it", () async {
     final marker = p.join(workspace.path, "survivor");
     final result = await run(
-      "(sleep 4; touch $marker) & echo started; sleep 30",
+      "(trap '' INT; sleep 4; touch $marker) & echo started; sleep 30",
       timeout: const Duration(milliseconds: 300),
     );
 
     expect(result.exceptionInfo, contains("timed out"));
-    // The background child outlives its shell unless the whole group goes.
-    // The kill lands the moment the command's own sentinel comes, so the
-    // child's sleep is far past it: a runner that schedules late still kills
-    // it first.
+    // The background child ignores the group's SIGINT, so only the SIGKILL a
+    // timeout escalates to can reach it — which is the whole point: the group
+    // kill is what the test is about, and an interruptible child races the
+    // kill to the touch and flakes. Ignoring INT leaves the sleep alive past
+    // the interrupt and dead the moment the kill lands.
     await Future<void>.delayed(const Duration(seconds: 5));
     expect(File(marker).existsSync(), isFalse);
   });
