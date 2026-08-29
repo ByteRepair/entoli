@@ -1,3 +1,5 @@
+import "chat_meta.dart";
+import "permission.dart";
 import "temp_chat_ttl.dart";
 
 /// How often a reminder repeats. Declaration order is the order the editor
@@ -76,6 +78,15 @@ class Reminder {
   /// Derived codes would collide occasionally, and a collision silently
   /// overwrites another reminder's alarm.
   final int? requestCode;
+
+  /// The chat's `meta.json`: `approveMode` pinned to `never` because nobody is
+  /// there to press a banner, the TTL the reminder asked for, and `headless`
+  /// so every turn on the chat drops `ask_user` and `task`.
+  ChatMeta get meta => ChatMeta(
+        approveMode: ApproveMode.never,
+        tempChatTtl: tempChatTtl,
+        headless: true,
+      );
 
   Reminder copyWith({
     String? name,

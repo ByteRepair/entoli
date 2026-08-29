@@ -451,13 +451,10 @@ voice session handing the microphone to another is one — see "Taking turns".
 relaunch used to abort every live turn, so work nobody stopped came back
 recorded as though they had.
 
-It reaches only the chats a `ChatController` is already driving, and that leaves
-a hole. A reminder's turn has no controller — `ReminderRunner` owns its own
-recorder — so it is still aborted when the backend shuts down, still recorded as
-something the user ended, and still notified as "The task was stopped". Closing
-it properly means `AgentBackend` being able to stop a turn without claiming
-somebody chose to, rather than a second sweep; until then, the headless turns
-are the ones this does not cover.
+It reaches only the chats a `ChatController` is already driving, and a
+reminder's turn now has one — `ReminderRunner` drives the turn through
+`ChatController` via `ReminderTurnDriver`, the same path the user and
+`VoiceController` take, so `interruptLiveTurns` reaches it.
 
 `Chat.unfinished` carries the answer out of the store as a bool — an id would
 only ever be `messages.last.id`, an invariant nothing could enforce. The chat page
@@ -712,24 +709,27 @@ catch-up, `reminder_scheduler.dart`), and `ReminderAlarms` (the platform port,
 (`data/local/file_reminder_store.dart`); the port's Android impl is
 `AndroidReminderAlarms` (`data/local/android_reminder_alarms.dart`).
 
-**The runner is `ChatController._turn` without the UI.** It composes the prompt
-through `repo.composeUserPrompt`, writes the opening records through a
-`TurnRecorder`, drives `repo.sendPrompt` to completion, and closes the log with
-a `turnEnd`. Skipping any of those shows up elsewhere: no `turnEnd` and every
-later open offers to resume; no list invalidation and the chat is invisible until
-restart. The chat is `repo.createChat` with a `meta` — the same call the UI
-makes, since there is only one now; see "Starting a chat, and naming it" for
-the second one this replaced and why it existed.
+**The runner drives the turn through `ChatController`, not beside it.**
+`ReminderRunner` creates the chat and stamps the reminder, then hands the turn
+to a `ReminderTurnDriver` whose implementation (`reminder_turn_driver.dart`,
+in the UI layer) reads `chatControllerProvider(chatId).notifier` and calls
+`send()` — the same path the user and `VoiceController` take. There is one
+code path that drives a turn, not two, so `ChatController.isRunning` and the
+backend's `runningTurns` are always in sync: the user opening the chat while
+the reminder runs sees the controller already driving it (`isRunning: true`,
+no `ResumeBar`), and `interruptLiveTurns` reaches the reminder turn on the way
+out of the app. The chat is `repo.createChat` with a `meta` — the same call
+the UI makes.
 
 **A headless turn must not park on an answer.** `TurnSettings.disabled` is the
-set of capabilities a turn is not offered; `sendPrompt(headless: true)` adds
-`ask` and `task` to it, since an `ask_user` parks the turn on a completer nobody
-will complete and a `task` fan-out could do the same through a sub-agent. A
-built-in project's takes (`builtin_project.dart`) fold into the same set — see
-"Projects" — so one value answers what the turn is and is not offered, and the
-prompt and the tool list cannot disagree. `meta.approveMode` is pinned to
-`never` for the same reason: an approval banner nobody presses is a turn that
-never ends.
+set of capabilities a turn is not offered; `ChatMeta.headless` (set by the
+reminder on the chat's `meta.json`) adds `ask` and `task` to it, since an
+`ask_user` parks the turn on a completer nobody will complete and a `task`
+fan-out could do the same through a sub-agent. A built-in project's takes
+(`builtin_project.dart`) fold into the same set — see "Projects" — so one value
+answers what the turn is and is not offered, and the prompt and the tool list
+cannot disagree. `meta.approveMode` is pinned to `never` for the same reason:
+an approval banner nobody presses is a turn that never ends.
 
 **How long the chat lives is the reminder's `tempChatTtl`**, written onto its
 `meta.json` as it is, null and all — the same field the chat settings page sets,
@@ -739,7 +739,7 @@ key, where false meant `TempChatTtl.off` and true meant inherit.
 
 **`lastFiredAt` is stamped before the turn runs, never after.** A crash mid-turn
 costs a notification but must not re-run the whole prompt against the workspace.
-The stamp goes through `onReminderFired` before `sendPrompt` is called; the
+The stamp goes through `onReminderFired` before the driver is called; the
 scheduler recomputes `nextFireAt` after the turn completes. A one-shot that
 fired has `nextFireAt` null (nothing armed); a repeating reminder moves to its
 next occurrence.
