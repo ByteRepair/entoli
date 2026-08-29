@@ -137,6 +137,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     return messages == null || messages.isEmpty ? null : messages.last;
   }
 
+  /// The reply's text, for a caller that needs what the turn said without
+  /// watching the event stream — the reminder driver, after [turnDone].
+  String get replyText => _reply?.plainText ?? "";
+
   void _writeReply(List<MessagePart> parts) {
     final chat = state.chat;
     final reply = _reply;
@@ -162,14 +166,17 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     applyState(chat.state.copyWith(title: title));
   }
 
-  /// Name the chat after what started it. Nothing waits on this: it is a model
-  /// call of its own, and the turn it belongs to is already under way.
-  Future<void> _nameChat(String prompt) async {
-    final title = await ref.read(chatRepositoryProvider).suggestTitle(prompt);
+  /// Name the chat after what started it, unless it is headless — a reminder's
+  /// chat is already named. Nothing waits on this: it is a model call of its
+  /// own, and the turn it belongs to is already under way.
+  Future<void> _maybeNameChat(String prompt) async {
+    final repo = ref.read(chatRepositoryProvider);
+    if ((await repo.loadMeta(chatId)).headless == true) return;
+    final title = await repo.suggestTitle(prompt);
     final chat = state.chat;
     if (title == null || chat == null || !ref.mounted) return;
     applyTitle(title);
-    await ref.read(chatRepositoryProvider).retitle(chatId, title);
+    await repo.retitle(chatId, title);
     if (!ref.mounted) return;
     ref.invalidate(chatListProvider);
   }
@@ -249,10 +256,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     await _recorder.write(recordsOf(opening,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
-    // Only the first message names the chat. The list is not refreshed here:
-    // the chat was written, and listed, when it was created — and refreshing
-    // re-reads every chat off disk to draw the row it already has.
-    if (isFirst) unawaited(_nameChat(prompt.plainText));
+    // Only the first message names the chat, and not a headless one — the
+    // reminder already named it. The list is not refreshed here: the chat was
+    // written, and listed, when it was created — and refreshing re-reads every
+    // chat off disk to draw the row it already has.
+    if (isFirst) unawaited(_maybeNameChat(prompt.plainText));
 
     _listen(repo.sendPrompt(chatId, prompt,
         history: history, replaces: replacing != null));

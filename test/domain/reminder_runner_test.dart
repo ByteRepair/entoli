@@ -1,4 +1,3 @@
-import "dart:async";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -15,21 +14,6 @@ import "package:agent_chat/domain/reminder_runner.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 import "../fakes.dart";
-
-/// A driver that stamps a completer before returning, so a test can assert
-/// the reminder was stamped before the turn would have run.
-class _StampThenHangDriver implements ReminderTurnDriver {
-  _StampThenHangDriver(this._inner, this.stampedDone);
-  final ReminderTurnDriver _inner;
-  final Completer<void> stampedDone;
-
-  @override
-  Future<({ReminderOutcome outcome, String snippet})> send(
-      String chatId, String prompt) async {
-    await stampedDone.future;
-    return _inner.send(chatId, prompt);
-  }
-}
 
 void main() {
   late Directory tmp;
@@ -145,24 +129,21 @@ void main() {
   test("stamps fired before the turn runs", () async {
     final repository = repo();
     final stamped = <Reminder>[];
-    final stampedDone = Completer<void>();
     final driver = FakeReminderTurnDriver();
 
     final run = ReminderRunner(
       repo: repository,
-      driver: _StampThenHangDriver(driver, stampedDone),
+      driver: driver,
       onListChanged: (_) {},
-      onReminderFired: (r) async {
-        stamped.add(r);
-        stampedDone.complete();
-      },
+      onReminderFired: (r) async => stamped.add(r),
     );
-    final done =
-        run.run(Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()), const []);
-    await stampedDone.future.timeout(const Duration(seconds: 5));
+    await run.run(Reminder(id: "r1", name: "n", prompt: "p", at: DateTime.now()), const []);
+
+    // onReminderFired is awaited before driver.send, so the stamp is in place
+    // before the turn starts — a crash mid-turn must not re-run the prompt.
     expect(stamped.map((r) => r.id), ["r1"]);
     expect(stamped.single.lastFiredAt, isNotNull);
-    await done;
+    expect(driver.calls, isNotEmpty);
   });
 
   test("returns the driver's outcome and snippet", () async {

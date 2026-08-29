@@ -1,7 +1,6 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/chat_log.dart";
-import "../../domain/models.dart";
 import "../../domain/reminder_runner.dart";
 import "chat_controller.dart";
 
@@ -22,15 +21,12 @@ class ChatControllerReminderTurnDriver implements ReminderTurnDriver {
     final controller = _ref.read(chatControllerProvider(chatId).notifier);
     await controller.send(prompt);
     final reason = await controller.turnDone;
-    final messages = _ref.read(chatControllerProvider(chatId)).chat?.messages ??
-        const <Message>[];
-    final snippet = messages.lastOrNull?.plainText ?? "";
     final outcome = switch (reason) {
       TurnEnd.done => ReminderOutcome.done,
       TurnEnd.error => ReminderOutcome.error,
       TurnEnd.aborted => ReminderOutcome.aborted,
       null => ReminderOutcome.aborted,
     };
-    return (outcome: outcome, snippet: snippet);
+    return (outcome: outcome, snippet: controller.replyText);
   }
 }
