@@ -24,6 +24,7 @@ import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
 import "ui/chat/chat_controller.dart";
+import "ui/chat/reminder_turn_driver.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
@@ -160,6 +161,8 @@ class AppSession {
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
         reminderAlarmsProvider.overrideWithValue(platform.createReminderAlarms()),
         remindersProvider.overrideWith(() => Reminders(reminders)),
+        reminderTurnDriverProvider
+            .overrideWith((ref) => ChatControllerReminderTurnDriver(ref)),
         backupHandoffProvider
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),

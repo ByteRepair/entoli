@@ -206,6 +206,7 @@ class TestApp {
           assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
           remindersProvider.overrideWith(() => Reminders(reminders)),
+          reminderTurnDriverProvider.overrideWithValue(FakeReminderTurnDriver()),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
