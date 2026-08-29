@@ -24,6 +24,7 @@ import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
 import "data/builtin/llm/local_prefill.dart";
+import "data/local/byte_repair_store.dart";
 import "domain/local_llm.dart";
 import "domain/local_model.dart";
 import "domain/local_model_store.dart";
@@ -130,6 +131,20 @@ class InstalledRootfs extends Notifier<Set<String>> {
 
 final installedRootfsProvider =
     NotifierProvider<InstalledRootfs, Set<String>>(() => InstalledRootfs(const {}));
+
+/// The Byte Repair tooling store, overridden in `main` with one that knows the
+/// cache directory. Throws until then, the way `rootfsStoreProvider` does.
+final byteRepairStoreProvider =
+    Provider<ByteRepairStore>((ref) => throw UnimplementedError());
+
+/// The raw output of `esbmc --version`, or null where esbmc is not installed.
+/// Refreshed by the settings page after a setup run.
+final byteRepairVersionProvider =
+    FutureProvider<String?>((ref) async {
+  final store = ref.watch(byteRepairStoreProvider);
+  final shell = ref.watch(shellProvider);
+  return store.runVersion(shell);
+});
 
 final localModelStoreProvider =
     Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());

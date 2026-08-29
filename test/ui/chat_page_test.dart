@@ -161,7 +161,8 @@ void main() {
       await openEmpty(tester);
 
       expect(find.widgetWithText(ChoiceChip, anonProjectLabel), findsOneWidget);
-      expect(find.byType(ChoiceChip), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, byteRepairProjectLabel), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNWidgets(2));
     });
 
     testWidgets("picking the built-in badge moves the chat to it", (tester) async {

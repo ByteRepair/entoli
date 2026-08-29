@@ -90,6 +90,10 @@ enum AgentCapability { ask, task, artifact, createSkill, webSearch }
 /// that assert it, the way `defaultProjectLabel` does for the default project.
 const anonProjectLabel = "\u{1F576}\uFE0F Anon";
 
+/// What the menus and the title bar call the Byte Repair built-in. A const for
+/// the same reason `anonProjectLabel` is one.
+const byteRepairProjectLabel = "Byte-Repair \u{1F510}";
+
 /// A chat with no profile, no project memory, and no workspace it shares
 /// with another chat: the tools and the context that would reach them are
 /// simply not there. Its instructions are the app's own note about what it is,
@@ -121,9 +125,35 @@ class AnonymousProject extends BuiltinProject {
   String? get emptyChatQuestion => "What would you like to discuss anonymously?";
 }
 
+/// A chat for secure coding: the agent writes test harnesses alongside the
+/// code it writes and formally verifies C with ESBMC. Full capabilities —
+/// profile, memory and a shared workspace are all there, since verification
+/// work benefits from continuity — and the note stands in for the instruction
+/// files, the way the anonymous one does.
+class ByteRepairProject extends BuiltinProject {
+  const ByteRepairProject()
+      : super(
+          dir: "byte-repair",
+          label: byteRepairProjectLabel,
+        );
+
+  @override
+  String get bundledInstructions =>
+      "This is a Byte Repair chat, for secure coding. Write a test harness "
+      "alongside any code you write, and formally verify C with ESBMC before "
+      "considering it done. Treat a verification failure as a bug to fix, not "
+      "a warning to note. Prefer constructions you can prove correct over "
+      "clever ones you cannot. This note stands in for the instruction files "
+      "the other projects read.";
+
+  @override
+  String? get emptyChatQuestion => "What would you like to verify?";
+}
+
 /// The built-in projects, in the order the menus offer them.
 const builtinProjects = <BuiltinProject>[
   AnonymousProject(),
+  ByteRepairProject(),
 ];
 
 /// The built-in project [dir] is one, or null for a user's. [dir] is read the

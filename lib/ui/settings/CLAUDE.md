@@ -74,7 +74,13 @@ not deletable and a user's is; import and delete are the two things that change
 it, and they reload the library the moment they are done, the one way a change
 to it lands without a restart, where a skill dropped into the directory by hand
 still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
-**Sync** is paired devices — this device's identity and
+**Byte Repair** is the tooling for the built-in project of the same name: a
+banner saying whether the configured terminal env can run it, a button that
+runs a bundled install script through that env to put `make`, `github-cli` and
+ESBMC into the cache directory, and the ESBMC version found afterwards. On
+Android the "Host" terminal env has no package manager, so the category says
+so and hides the rest until a rootfs is picked from Terminal; on every other
+platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
 handshake. **Providers** is the endpoints.

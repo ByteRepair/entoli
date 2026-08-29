@@ -207,7 +207,7 @@ nothing means the default. `isProjectName` refuses `default` for the same
 reason: a second way to name it would be a second entry for it in every list.
 
 A **built-in project** is a directory the app ships rather than the user makes,
-declared in `builtin_project.dart` (`builtinProjects`, today just `anonymous`).
+declared in `builtin_project.dart` (`builtinProjects`, today `anonymous` and `byte-repair`).
 It is a project in every respect that matters to the store — same layout, same
 movement, a chat can be in one — but its name is refused by `isProjectName`, so
 it cannot be created, renamed or deleted, and `everyProject` is where it is

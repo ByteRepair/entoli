@@ -12,6 +12,7 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/local/byte_repair_store.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
@@ -218,6 +219,8 @@ class TestApp {
               () => InstalledVoiceModels({...voiceModels, ...system},
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
+          byteRepairStoreProvider.overrideWithValue(
+              ByteRepairStore(Directory.systemTemp.createTempSync("agent_chat_byte_repair_").path)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),
