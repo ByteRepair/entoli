@@ -87,7 +87,7 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
             ),
           ],
           const SizedBox(height: 16),
-          _VersionDisplay(),
+          _ToolStatusList(),
         ],
       ],
     );
@@ -104,7 +104,7 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
       final result = await store.install(shell);
       if (!mounted) return;
       if (result.returnCode == 0) {
-        ref.invalidate(byteRepairVersionProvider);
+        ref.invalidate(byteRepairToolVersionsProvider);
       } else {
         setState(() {
           _error = result.exceptionInfo ?? result.output.trim();
@@ -150,14 +150,16 @@ class _Banner extends StatelessWidget {
   }
 }
 
-class _VersionDisplay extends ConsumerWidget {
+class _ToolStatusList extends ConsumerWidget {
+  static const _tools = ["ESBMC", "make", "gh"];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final version = ref.watch(byteRepairVersionProvider);
+    final versions = ref.watch(byteRepairToolVersionsProvider);
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: version.when(
+      child: versions.when(
         loading: () => const SizedBox(
           height: 20,
           width: 20,
@@ -168,10 +170,35 @@ class _VersionDisplay extends ConsumerWidget {
           style: theme.textTheme.bodySmall
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
-        data: (v) => Text(
-          v != null ? "ESBMC $v" : "Not installed",
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        data: (map) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final tool in _tools)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 72,
+                      child: Text(
+                        tool,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        map[tool] ?? "Not installed",
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: map[tool] != null
+                              ? theme.colorScheme.onSurfaceVariant
+                              : theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

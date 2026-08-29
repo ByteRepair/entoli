@@ -60,29 +60,45 @@ class ByteRepairStore {
     }
   }
 
-  /// Runs `esbmc --version` through [shell] and returns its raw output, or null
-  /// where esbmc is not installed or the call failed. Uses a relative path for
-  /// the same reason [install] does: the host path is not visible inside a
-  /// proot guest, but `cwd=binDir` is.
-  Future<String?> runVersion(Shell shell) async {
-    if (esbmcPath == null) return null;
+  /// Runs `<command> --version` through [shell] and returns its raw output, or
+  /// null where the command is not installed or the call failed. [command] is
+  /// run from [binDir] as [cwd], so a relative path like `./esbmc` works under
+  /// proot the way a bare `make` on PATH does.
+  Future<String?> runToolVersion(Shell shell, String command) async {
     try {
       final run = shell.start(
-        "./esbmc --version",
+        "$command --version",
         cwd: binDir,
         home: binDir,
         timeout: const Duration(seconds: 15),
         oneShot: true,
       );
       final result = await run.result;
-      if (result.returnCode == 0) return result.output.trim();
+      if (result.returnCode == 0) return result.output.trim().split("\n").first;
       if (result.exceptionInfo != null) {
-        logFailure("byte-repair", "esbmc --version failed", result.exceptionInfo);
+        logFailure("byte-repair", "$command --version failed", result.exceptionInfo);
       }
       return null;
     } catch (e) {
-      logFailure("byte-repair", "esbmc --version threw", e);
+      logFailure("byte-repair", "$command --version threw", e);
       return null;
     }
+  }
+
+  /// Checks all three tools the setup installs — ESBMC, make and gh — and
+  /// returns a map of tool name to its version string (or null where not
+  /// installed). ESBMC is in [binDir] so it uses a relative path; make and gh
+  /// are on PATH, installed by the system package manager.
+  Future<Map<String, String?>> runToolVersions(Shell shell) async {
+    final results = await Future.wait([
+      runToolVersion(shell, "./esbmc"),
+      runToolVersion(shell, "make"),
+      runToolVersion(shell, "gh"),
+    ]);
+    return {
+      "ESBMC": results[0],
+      "make": results[1],
+      "gh": results[2],
+    };
   }
 }

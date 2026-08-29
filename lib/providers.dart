@@ -137,13 +137,13 @@ final installedRootfsProvider =
 final byteRepairStoreProvider =
     Provider<ByteRepairStore>((ref) => throw UnimplementedError());
 
-/// The raw output of `esbmc --version`, or null where esbmc is not installed.
-/// Refreshed by the settings page after a setup run.
-final byteRepairVersionProvider =
-    FutureProvider<String?>((ref) async {
+/// The version of each tool the setup installs (ESBMC, make, gh), or null
+/// where one is not installed. Refreshed by the settings page after a setup run.
+final byteRepairToolVersionsProvider =
+    FutureProvider<Map<String, String?>>((ref) async {
   final store = ref.watch(byteRepairStoreProvider);
   final shell = ref.watch(shellProvider);
-  return store.runVersion(shell);
+  return store.runToolVersions(shell);
 });
 
 final localModelStoreProvider =
