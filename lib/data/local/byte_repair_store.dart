@@ -28,15 +28,21 @@ class ByteRepairStore {
 
   /// Runs the bundled install script through [shell]'s configured terminal env.
   /// Returns the shell's result; a `returnCode` of 0 is success.
+  ///
+  /// The script is written to [binDir] on the host filesystem, then run with
+  /// `cwd: binDir`. Under proot, `home=binDir` is bound at `/root` in the guest
+  /// and `cwd` resolves to the guest path — so the command uses relative paths
+  /// (`sh _setup.sh .`) rather than the host path, which the guest shell cannot
+  /// see. On the host shell, `cwd=binDir` makes the relative path resolve the
+  /// same way.
   Future<ShellResult> install(Shell shell) async {
     await Directory(binDir).create(recursive: true);
-    final scriptPath = p.join(binDir, "_setup.sh");
-    final script = File(scriptPath);
+    final script = File(p.join(binDir, "_setup.sh"));
     try {
       final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
       await script.writeAsString(body);
       final run = shell.start(
-        "sh \"$scriptPath\" \"$binDir\"",
+        "sh _setup.sh .",
         cwd: binDir,
         home: binDir,
         timeout: const Duration(minutes: 10),
@@ -55,13 +61,14 @@ class ByteRepairStore {
   }
 
   /// Runs `esbmc --version` through [shell] and returns its raw output, or null
-  /// where esbmc is not installed or the call failed.
+  /// where esbmc is not installed or the call failed. Uses a relative path for
+  /// the same reason [install] does: the host path is not visible inside a
+  /// proot guest, but `cwd=binDir` is.
   Future<String?> runVersion(Shell shell) async {
-    final esbmc = esbmcPath;
-    if (esbmc == null) return null;
+    if (esbmcPath == null) return null;
     try {
       final run = shell.start(
-        "\"$esbmc\" --version",
+        "./esbmc --version",
         cwd: binDir,
         home: binDir,
         timeout: const Duration(seconds: 15),
