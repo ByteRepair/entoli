@@ -46,27 +46,35 @@ else
   exit 1
 fi
 
-# Extract bin/esbmc from the zip into a temp dir, then move it to /usr/local/bin.
+# Extract the whole archive, since the layout varies between releases
+# (v8.4: bin/esbmc at root; v8.5: release/bin/esbmc).
 TMPDIR_EXTRACT="/tmp/_esbmc_extract"
 mkdir -p "$TMPDIR_EXTRACT"
 
 if command -v unzip >/dev/null 2>&1; then
-  unzip -o "$TMPZIP" "bin/esbmc" -d "$TMPDIR_EXTRACT"
+  unzip -o "$TMPZIP" -d "$TMPDIR_EXTRACT"
 elif command -v python3 >/dev/null 2>&1; then
   python3 -c "
 import zipfile
 z = zipfile.ZipFile('$TMPZIP')
-z.extract('bin/esbmc', '$TMPDIR_EXTRACT')
+z.extractall('$TMPDIR_EXTRACT')
 "
 elif command -v busybox >/dev/null 2>&1 && busybox unzip >/dev/null 2>&1; then
-  busybox unzip -o "$TMPZIP" "bin/esbmc" -d "$TMPDIR_EXTRACT"
+  busybox unzip -o "$TMPZIP" -d "$TMPDIR_EXTRACT"
 else
   echo "no unzip tool available (unzip, python3, busybox)" >&2
   rm -f "$TMPZIP"
   exit 1
 fi
 
-mv "$TMPDIR_EXTRACT/bin/esbmc" "$ESBMC_DIR/esbmc"
+ESBMC_BIN=$(find "$TMPDIR_EXTRACT" -name esbmc -type f | head -1)
+if [ -z "$ESBMC_BIN" ]; then
+  echo "esbmc binary not found in archive" >&2
+  rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
+  exit 1
+fi
+
+mv "$ESBMC_BIN" "$ESBMC_DIR/esbmc"
 rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
 
 chmod +x "$ESBMC_DIR/esbmc"
