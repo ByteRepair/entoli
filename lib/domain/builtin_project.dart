@@ -18,6 +18,7 @@ class BuiltinProject {
     this.memory = MemoryPolicy.app,
     this.sharedWorkspace = true,
     this.disabled = const {},
+    this.rootfsIsolation = false,
   });
 
   /// The directory name under `projects/`, in the case it is created in.
@@ -41,6 +42,14 @@ class BuiltinProject {
   /// the platform's facts and a headless turn's restrictions apply on top,
   /// never under.
   final Set<AgentCapability> disabled;
+
+  /// Whether the project gets its own rootfs instance under its data directory,
+  /// so packages installed inside the guest do not appear in another project's
+  /// chats. The base download in cache is the template; the project's copy is
+  /// its living filesystem, backed up and surviving a cache clear. False on
+  /// user projects, which share the base rootfs in cache the way they always
+  /// have.
+  final bool rootfsIsolation;
 
   /// The instruction text the app ships for a turn in it. Where non-null it is
   /// the turn's instructions in full: no AGENTS.md file is read, and none is
@@ -135,6 +144,7 @@ class ByteRepairProject extends BuiltinProject {
       : super(
           dir: "byte-repair",
           label: byteRepairProjectLabel,
+          rootfsIsolation: true,
         );
 
   @override

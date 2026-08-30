@@ -47,6 +47,7 @@ class ByteRepairStore {
         home: binDir,
         timeout: const Duration(minutes: 10),
         oneShot: true,
+        project: "byte-repair",
       );
       return await run.result;
     } catch (e) {
@@ -72,6 +73,7 @@ class ByteRepairStore {
         home: binDir,
         timeout: const Duration(seconds: 15),
         oneShot: true,
+        project: "byte-repair",
       );
       final result = await run.result;
       if (result.returnCode == 0) return result.output.trim().split("\n").first;

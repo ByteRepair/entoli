@@ -139,5 +139,16 @@ void main() {
       expect(anon.memory, MemoryPolicy.off);
       expect(anon.sharedWorkspace, isFalse);
     });
+
+    // Byte Repair opts into rootfs isolation: packages installed inside the
+    // guest are scoped to that project alone. Anonymous and user projects do
+    // not, sharing the base rootfs in cache.
+    test("Byte Repair opts into rootfs isolation, others do not", () {
+      expect(byteRepair.rootfsIsolation, isTrue);
+      expect(anon.rootfsIsolation, isFalse);
+      expect(
+          const BuiltinProject(dir: "work", label: "work").rootfsIsolation,
+          isFalse);
+    });
   });
 }

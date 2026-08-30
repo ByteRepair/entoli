@@ -41,7 +41,7 @@ import "../../domain/shell.dart";
 class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,
-    ShellDriver? Function()? driver,
+    ShellDriver? Function({String? project})? driver,
   })  : _environment = environment ?? _none,
         _driver = driver ?? _hostDriver;
 
@@ -49,10 +49,11 @@ class LocalShell extends Shell {
   /// [_environment] is: installing a Linux from the settings page, or going
   /// back to the machine's own shell, reaches the next command rather than the
   /// next launch. Null is a machine with no shell at all, which is what a
-  /// command sent to one reports.
-  final ShellDriver? Function() _driver;
+  /// command sent to one reports. The project name reaches the driver so an
+  /// isolated built-in can resolve its own rootfs instance.
+  final ShellDriver? Function({String? project}) _driver;
 
-  static ShellDriver? _hostDriver() => hostDriver();
+  static ShellDriver? _hostDriver({String? project}) => hostDriver();
 
   /// Applied over the process's own environment. Read at each command rather
   /// than captured, so a variable added in settings reaches the next one.
@@ -188,9 +189,10 @@ class LocalShell extends Shell {
       Map<String, String>? environment,
       bool sharedHome = true,
       bool oneShot = false,
-      bool restart = false}) {
+      bool restart = false,
+      String? project}) {
     if (oneShot) {
-      final driver = _driver();
+      final driver = _driver(project: project);
       return _OneShotRun(
         // The driver's shell, built for this chat's cwd and home, or nothing
         // where there is no driver at all.
@@ -207,7 +209,7 @@ class LocalShell extends Shell {
       );
     }
     return _sessions
-        .putIfAbsent(cwd, () => _Session(this, cwd, home))
+        .putIfAbsent(cwd, () => _Session(this, cwd, home, project: project))
         .start(command, timeout,
             environment: environment,
             sharedHome: sharedHome,
@@ -366,7 +368,7 @@ void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
 /// route the output to, and the queue is what keeps it that way even where a
 /// stop and a resend land close together.
 class _Session {
-  _Session(this._shell, this._cwdPath, this._home)
+  _Session(this._shell, this._cwdPath, this._home, {this._project})
       : _displayCwd = _computeDisplayCwd(_shell, _cwdPath, _home);
 
   final LocalShell _shell;
@@ -376,6 +378,11 @@ class _Session {
 
   /// The `HOME` the shell is given.
   final String _home;
+
+  /// The project this session's chats belong to, so the driver can resolve a
+  /// per-project rootfs instance for an isolated built-in. Constant for a
+  /// session, since a session is keyed by the chat's cwd.
+  final String? _project;
 
   /// The path the composer's cwd bar should show — the guest path where the
   /// shell runs inside one, the host path otherwise. Set once at construction,
@@ -436,7 +443,7 @@ class _Session {
     bool sharedHome = true,
     bool restart = false,
   }) async {
-    final driver = _shell._driver();
+    final driver = _shell._driver(project: _project);
     final command0 = driver?.commandFor(_cwdPath, _home) ?? const [];
     if (command0.isEmpty) {
       run.state.complete(const ShellResult.failed(

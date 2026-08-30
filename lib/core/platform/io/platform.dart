@@ -2,7 +2,7 @@ import "dart:io";
 
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
-import "package:fs_shim/fs.dart";
+import "package:fs_shim/fs.dart" hide File, Directory;
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
@@ -29,6 +29,7 @@ import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
+import "../../../domain/builtin_project.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
@@ -47,7 +48,7 @@ import "signaling_server.dart";
 
 Shell platformShell({
   required Map<String, String> Function() environment,
-  required ShellDriver? Function() driver,
+  required ShellDriver? Function({String? project}) driver,
 }) =>
     LocalShell(environment: environment, driver: driver);
 
@@ -63,11 +64,22 @@ ShellDriver? platformDriver({
   RootfsStore? store,
   String? rootfsId,
   String? abi,
+  String? project,
+  AppConfig? config,
 }) {
   final rootfs = rootfsById(rootfsId);
-  final dir =
+  final baseDir =
       rootfs != null && store != null ? store.directoryOfSync(rootfs.id) : null;
-  if (rootfs != null && proot != null && dir != null) {
+  if (rootfs != null && proot != null && baseDir != null) {
+    // An isolated built-in project gets its own rootfs instance under its data
+    // directory, so packages installed inside the guest do not leak between
+    // projects. The base download in cache is the template; the project's copy
+    // is its living filesystem.
+    final dir = (project != null &&
+            config != null &&
+            builtinProjectOf(project)?.rootfsIsolation == true)
+        ? _projectRootfsDir(config, project, rootfs.id) ?? baseDir
+        : baseDir;
     return prootDriver(
       proot: proot,
       rootfs: rootfs,
@@ -79,6 +91,14 @@ ShellDriver? platformDriver({
   }
   return LocalShell.hostDriver(
       tools: tools, projectHome: Platform.isAndroid);
+}
+
+/// The per-project rootfs directory, or null where the copy has not been
+/// created yet. Lives under the project's data directory, beside its workspace
+/// and memory, so a backup carries it and a cache clear does not lose it.
+String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
+  final dir = p.join(config.projectDir(project: project), "rootfs", rootfsId);
+  return File(p.join(dir, ".complete")).existsSync() ? dir : null;
 }
 
 /// Which architecture this install is for, which decides the rootfs a download

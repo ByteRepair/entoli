@@ -264,12 +264,12 @@ void main() {
   test("what the model is told names the shell, and the tools beside it", () {
     expect(
         LocalShell(
-                driver:
-                    () => LocalShell.hostDriver(shell: () => "/system/bin/sh"))
+                driver: ({String? project}) =>
+                    LocalShell.hostDriver(shell: () => "/system/bin/sh"))
             .platformDescription,
         contains("/system/bin/sh"));
     expect(
-        LocalShell(driver: () => LocalShell.hostDriver(
+        LocalShell(driver: ({String? project}) => LocalShell.hostDriver(
               shell: () => "/system/bin/sh",
               tools: const Toolset(environment: {}, names: "git"),
             )).platformDescription,
@@ -305,7 +305,7 @@ void main() {
     }) =>
         LocalShell(
           environment: () => settings,
-          driver: () => driver ?? guest(),
+          driver: ({String? project}) => driver ?? guest(),
         )
             .start(command,
                 cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 10))
@@ -350,7 +350,7 @@ void main() {
     });
 
     test("what the model is told is the guest, not the machine it is on", () {
-      final shell = LocalShell(driver: guest);
+      final shell = LocalShell(driver: ({String? project}) => guest());
 
       expect(shell.platformDescription, contains("Alpine Linux 3.24.1"));
       expect(shell.platformDescription, contains("proot"));
@@ -358,8 +358,8 @@ void main() {
 
     test("brings its own shell, so a machine that has none can still run commands",
         () {
-      expect(LocalShell(driver: guest).canRunCommands, isTrue);
-      expect(LocalShell(driver: () => null).canRunCommands, isFalse);
+      expect(LocalShell(driver: ({String? project}) => guest()).canRunCommands, isTrue);
+      expect(LocalShell(driver: ({String? project}) => null).canRunCommands, isFalse);
     });
   });
 
@@ -461,11 +461,11 @@ void main() {
 
     test("a machine with nothing to run commands in says so", () {
       expect(resolve("/usr/bin", const {}), isNull);
-      expect(LocalShell(driver: () => null).canRunCommands, isFalse);
+      expect(LocalShell(driver: ({String? project}) => null).canRunCommands, isFalse);
     });
 
     test("and a command sent to it anyway fails rather than throwing", () async {
-      final result = await LocalShell(driver: () => null)
+      final result = await LocalShell(driver: ({String? project}) => null)
           .start("echo hi",
               cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 1))
           .result;

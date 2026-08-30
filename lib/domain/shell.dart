@@ -191,7 +191,8 @@ abstract class Shell {
       Map<String, String>? environment,
       bool sharedHome = true,
       bool oneShot = false,
-      bool restart = false});
+      bool restart = false,
+      String? project});
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -253,7 +254,8 @@ class UnavailableShell extends Shell {
           Map<String, String>? environment,
           bool sharedHome = true,
           bool oneShot = false,
-          bool restart = false}) =>
+          bool restart = false,
+          String? project}) =>
       const _Unavailable();
 }
 

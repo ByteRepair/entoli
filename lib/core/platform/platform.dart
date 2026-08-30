@@ -59,12 +59,13 @@ BuiltinBackend createBackend(
   return BuiltinBackend(
     config: config,
     library: library,
+    rootfsStore: rootfs,
     shell: platformShell(
       environment: () => settings().environment,
       // Resolved per command rather than once: a Linux installed from the
       // settings page reaches the next command, and one deleted stops being
       // where commands run without the app having to be restarted.
-      driver: () => platformDriver(
+      driver: ({String? project}) => platformDriver(
         skillsBundledDir: config.bundledSkillsDir,
         userSkillsDir: config.fs.path.join(config.dataDir, "skills"),
         tools: tools,
@@ -72,6 +73,8 @@ BuiltinBackend createBackend(
         store: rootfs,
         rootfsId: settings().rootfsId,
         abi: abi,
+        project: project,
+        config: config,
       ),
     ),
     webSearch: platformWebSearch(),
