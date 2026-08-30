@@ -1,17 +1,9 @@
 #!/bin/sh
-# Byte Repair setup: installs make, github-cli, and ESBMC into the target bin
-# directory. Runs inside the configured terminal env (proot rootfs on Android,
-# host shell on desktop), so uname -m picks the arch the binary actually runs on.
-#
-# Usage: sh byte-repair-setup.sh <bindir>
+# Byte Repair setup: installs make, github-cli, and ESBMC into the guest
+# rootfs so they are on PATH for every agent turn in the project. Runs inside
+# the configured terminal env (proot rootfs on Android, host shell on desktop),
+# so uname -m picks the arch the binary actually runs on.
 set -e
-
-BINDIR="$1"
-if [ -z "$BINDIR" ]; then
-  echo "usage: $0 <bindir>" >&2
-  exit 1
-fi
-mkdir -p "$BINDIR"
 
 # --- make and github-cli -----------------------------------------------------
 if command -v apk >/dev/null 2>&1; then
@@ -40,7 +32,10 @@ case "$ARCH" in
 esac
 
 URL="https://github.com/esbmc/esbmc/releases/latest/download/$ASSET"
-TMPZIP="$BINDIR/_esbmc.zip"
+TMPZIP="/tmp/_esbmc.zip"
+ESBMC_DIR="/usr/local/bin"
+
+mkdir -p "$ESBMC_DIR"
 
 if command -v wget >/dev/null 2>&1; then
   wget -q -O "$TMPZIP" "$URL"
@@ -51,33 +46,30 @@ else
   exit 1
 fi
 
-# Extract bin/esbmc into BINDIR.
+# Extract bin/esbmc from the zip into a temp dir, then move it to /usr/local/bin.
+TMPDIR_EXTRACT="/tmp/_esbmc_extract"
+mkdir -p "$TMPDIR_EXTRACT"
+
 if command -v unzip >/dev/null 2>&1; then
-  unzip -o "$TMPZIP" "bin/esbmc" -d "$BINDIR"
+  unzip -o "$TMPZIP" "bin/esbmc" -d "$TMPDIR_EXTRACT"
 elif command -v python3 >/dev/null 2>&1; then
   python3 -c "
-import zipfile, os, shutil
+import zipfile
 z = zipfile.ZipFile('$TMPZIP')
-z.extract('bin/esbmc', '$BINDIR')
-shutil.move(os.path.join('$BINDIR','bin','esbmc'), os.path.join('$BINDIR','esbmc'))
-os.rmdir(os.path.join('$BINDIR','bin'))
+z.extract('bin/esbmc', '$TMPDIR_EXTRACT')
 "
 elif command -v busybox >/dev/null 2>&1 && busybox unzip >/dev/null 2>&1; then
-  busybox unzip -o "$TMPZIP" "bin/esbmc" -d "$BINDIR"
+  busybox unzip -o "$TMPZIP" "bin/esbmc" -d "$TMPDIR_EXTRACT"
 else
   echo "no unzip tool available (unzip, python3, busybox)" >&2
   rm -f "$TMPZIP"
   exit 1
 fi
 
-# The zip extracts to bin/esbmc; flatten it to <bindir>/esbmc.
-if [ -f "$BINDIR/bin/esbmc" ]; then
-  mv "$BINDIR/bin/esbmc" "$BINDIR/esbmc"
-  rmdir "$BINDIR/bin" 2>/dev/null || true
-fi
+mv "$TMPDIR_EXTRACT/bin/esbmc" "$ESBMC_DIR/esbmc"
+rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
 
-chmod +x "$BINDIR/esbmc"
-rm -f "$TMPZIP"
+chmod +x "$ESBMC_DIR/esbmc"
 
-echo "ESBMC installed to $BINDIR/esbmc"
-"$BINDIR/esbmc" --version || true
+echo "ESBMC installed to $ESBMC_DIR/esbmc"
+"$ESBMC_DIR/esbmc" --version || true

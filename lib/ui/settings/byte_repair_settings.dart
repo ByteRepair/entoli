@@ -6,7 +6,7 @@ import "../../providers.dart";
 import "../widgets/section_header.dart";
 
 /// The Byte Repair category: whether the configured terminal env can run its
-/// tooling, a button that installs it, and the ESBMC version found afterwards.
+/// tooling, a button that installs it, and the versions found afterwards.
 ///
 /// On Android the "Host" terminal env has no package manager, so the category
 /// says so and hides the rest — nothing here can run until a rootfs is picked

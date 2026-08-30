@@ -220,7 +220,7 @@ class TestApp {
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
           byteRepairStoreProvider.overrideWithValue(
-              ByteRepairStore(Directory.systemTemp.createTempSync("agent_chat_byte_repair_").path)),
+              ByteRepairStore(config.projectWorkspaceDir(project: "byte-repair"))),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),

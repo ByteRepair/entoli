@@ -1,50 +1,32 @@
-import "dart:io";
-
 import "package:flutter/services.dart" show rootBundle;
-import "package:path/path.dart" as p;
 
 import "../../domain/shell.dart";
 import "../../core/log.dart";
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
-/// in `<cacheDir>/byte-repair/bin`. The install runs through the configured
-/// terminal env (proot rootfs on Android, host shell on desktop), so the script
-/// reaches the package manager the user's commands reach. `dart:io` for the
-/// same reason `FileRootfsStore` is: this side of the conditional import is the
-/// only one that can run what is in there.
+/// into the per-project rootfs, so they are on PATH for every agent turn in the
+/// project. The install runs through the configured terminal env (proot rootfs
+/// on Android, host shell on desktop) with `project: "byte-repair"`, so it
+/// reaches the project's own rootfs instance and the package manager inside it.
 class ByteRepairStore {
-  ByteRepairStore(this.cacheDir) : binDir = p.join(cacheDir, "byte-repair", "bin");
+  ByteRepairStore(this.workspace);
 
-  final String cacheDir;
-  final String binDir;
-
-  /// The path `esbmc` is installed to, or null where it is not there. A sync
-  /// stat the way `FileRootfsStore.directoryOfSync` is one — the version read
-  /// asks it before it asks the shell.
-  String? get esbmcPath {
-    final file = File(p.join(binDir, "esbmc"));
-    return file.existsSync() ? file.path : null;
-  }
+  /// The Byte Repair project's workspace, bound at `/root` inside the guest.
+  /// Used as cwd and home for the install script and the version checks.
+  final String workspace;
 
   /// Runs the bundled install script through [shell]'s configured terminal env.
-  /// Returns the shell's result; a `returnCode` of 0 is success.
-  ///
-  /// The script is written to [binDir] on the host filesystem, then run with
-  /// `cwd: binDir`. Under proot, `home=binDir` is bound at `/root` in the guest
-  /// and `cwd` resolves to the guest path — so the command uses relative paths
-  /// (`sh _setup.sh .`) rather than the host path, which the guest shell cannot
-  /// see. On the host shell, `cwd=binDir` makes the relative path resolve the
-  /// same way.
+  /// The script installs make, github-cli and ESBMC into the guest rootfs —
+  /// `apk` puts make and gh on PATH, and ESBMC is extracted to
+  /// `/usr/local/bin/esbmc`. Returns the shell's result; `returnCode` 0 is
+  /// success.
   Future<ShellResult> install(Shell shell) async {
-    await Directory(binDir).create(recursive: true);
-    final script = File(p.join(binDir, "_setup.sh"));
     try {
       final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
-      await script.writeAsString(body);
       final run = shell.start(
-        "sh _setup.sh .",
-        cwd: binDir,
-        home: binDir,
+        body,
+        cwd: workspace,
+        home: workspace,
         timeout: const Duration(minutes: 10),
         oneShot: true,
         project: "byte-repair",
@@ -53,24 +35,18 @@ class ByteRepairStore {
     } catch (e) {
       logFailure("byte-repair", "setup script failed", e);
       return ShellResult.failed(e.toString());
-    } finally {
-      try {
-        if (script.existsSync()) await script.delete();
-      } catch (_) {
-      }
     }
   }
 
   /// Runs `<command> --version` through [shell] and returns its raw output, or
-  /// null where the command is not installed or the call failed. [command] is
-  /// run from [binDir] as [cwd], so a relative path like `./esbmc` works under
-  /// proot the way a bare `make` on PATH does.
+  /// null where the command is not installed or the call failed. All three tools
+  /// are on PATH inside the guest rootfs, so bare command names work.
   Future<String?> runToolVersion(Shell shell, String command) async {
     try {
       final run = shell.start(
         "$command --version",
-        cwd: binDir,
-        home: binDir,
+        cwd: workspace,
+        home: workspace,
         timeout: const Duration(seconds: 15),
         oneShot: true,
         project: "byte-repair",
@@ -89,11 +65,10 @@ class ByteRepairStore {
 
   /// Checks all three tools the setup installs — ESBMC, make and gh — and
   /// returns a map of tool name to its version string (or null where not
-  /// installed). ESBMC is in [binDir] so it uses a relative path; make and gh
-  /// are on PATH, installed by the system package manager.
+  /// installed). All three are on PATH inside the per-project rootfs.
   Future<Map<String, String?>> runToolVersions(Shell shell) async {
     final results = await Future.wait([
-      runToolVersion(shell, "./esbmc"),
+      runToolVersion(shell, "esbmc"),
       runToolVersion(shell, "make"),
       runToolVersion(shell, "gh"),
     ]);
