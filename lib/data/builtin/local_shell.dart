@@ -72,6 +72,11 @@ class LocalShell extends Shell {
   static Future<({Process process, bool ownsGroup})> _spawnInGroup(
       List<String> command, String cwd, Map<String, String> env,
       {bool includeParentEnvironment = true}) async {
+    // The cwd is a directory the app lays out, and it may not be there yet:
+    // a project workspace before its first chat (a built-in project's setup
+    // runs in one) or one a user deleted from the Files app. A missing
+    // workingDirectory fails with ENOENT that names neither, so make it.
+    Directory(cwd).createSync(recursive: true);
     final argv = command.skip(1).toList();
     if (_hasSetsid != false) {
       try {

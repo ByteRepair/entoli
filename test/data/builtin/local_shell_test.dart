@@ -261,6 +261,52 @@ void main() {
     });
   });
 
+  // The cwd is a directory the app lays out, and it may not be there when a
+  // command is first asked to stand in it: a project workspace before any chat
+  // exists (a built-in project's setup runs in one) or one deleted from the
+  // Files app. The shell makes it rather than failing with an ENOENT that
+  // names neither the directory nor the reason.
+  group("a spawn cwd that is not there yet", () {
+    test("a one-shot run creates it and runs", () async {
+      final fresh = p.join(home.path, "not_yet");
+      expect(Directory(fresh).existsSync(), isFalse);
+
+      final result = await LocalShell().start("echo hi",
+              cwd: fresh, home: home.path, timeout: const Duration(seconds: 5),
+              oneShot: true)
+          .result;
+
+      expect(result.returnCode, 0);
+      expect(result.output, "hi\n");
+      expect(Directory(fresh).existsSync(), isTrue);
+    });
+
+    test("a persistent session recreates a deleted cwd on respawn", () async {
+      final shell = LocalShell();
+      final cwd = p.join(home.path, "session");
+      Directory(cwd).createSync();
+      await shell
+          .start("echo first",
+              cwd: cwd, home: home.path, timeout: const Duration(seconds: 5))
+          .result;
+
+      Directory(cwd).deleteSync(recursive: true);
+      expect(Directory(cwd).existsSync(), isFalse);
+
+      // `restart` forces a respawn, which has to put the directory back
+      // before standing in it again.
+      final result = await shell
+          .start("echo second",
+              cwd: cwd, home: home.path, timeout: const Duration(seconds: 5),
+              restart: true)
+          .result;
+
+      expect(result.returnCode, 0);
+      expect(result.output, "second\n");
+      expect(Directory(cwd).existsSync(), isTrue);
+    });
+  });
+
   test("what the model is told names the shell, and the tools beside it", () {
     expect(
         LocalShell(
