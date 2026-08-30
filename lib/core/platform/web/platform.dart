@@ -170,3 +170,14 @@ Future<void> platformChmodReadOnly(List<String> paths) async {}
 Future<T> platformWithWritableDir<T>(
         String path, Future<T> Function() action) async =>
     await action();
+
+/// The web has no rootfs under the data directory (the Byte Repair store is
+/// `Unavailable`), so there are no proot mode-0000 stubs to `chmod` past — a
+/// plain recursive delete is all the restore clear needs here. The signature
+/// matches the io side so `restoreBackup` calls one seam.
+Future<void> platformDeleteTree(String path) async {
+  final fs = fileSystemWeb;
+  if (await fs.isDirectory(path)) {
+    await fs.directory(path).delete(recursive: true);
+  }
+}

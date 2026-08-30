@@ -340,3 +340,13 @@ Future<void> chmodReadOnly(List<String> paths) => platformChmodReadOnly(paths);
 Future<T> withWritableDir<T>(
         String path, Future<T> Function() action) =>
     platformWithWritableDir(path, action);
+
+/// Deletes a tree that may contain proot's mode-0000 bind stubs. The io side
+/// delegates to `removeTree` (`tree_ops.dart`); the web side has no rootfs and
+/// no stubs, so it is a plain recursive delete. Called by `restoreBackup` for
+/// every top-level directory in the data dir — the stubs live deep inside a
+/// `projects/<project>/rootfs/` tree, so the whole `projects/` entry has to go
+/// through it. This is the same `removeTree` the rootfs stores use, so the one
+/// function that knows how to clear a stub-bearing tree is the one the restore
+/// reuses.
+Future<void> deleteTree(String path) => platformDeleteTree(path);

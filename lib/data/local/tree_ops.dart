@@ -13,8 +13,10 @@ import "package:path/path.dart" as p;
 /// shadows the stub, which exists only to be mounted over. On the host they
 /// are poison: a mode-0000 directory cannot be listed, so a recursive delete
 /// over a rootfs that hosted a session dies on one, and a copy that has to
-/// read one does too. Both failures were live on a device before this
-/// comment was written.
+/// read one does too. The backup walker hits the same wall, since a
+/// per-project `rootfs/` lives under the data directory — `writeBackup` skips
+/// it and `restoreBackup` clears it through `removeTree`. All three failures
+/// were live on a device before this comment was written.
 
 /// The bind-stub guest paths, as `--exclude` patterns in both the `./`-prefixed
 /// form tar archives them under and the bare one, so whichever form the

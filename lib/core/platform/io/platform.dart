@@ -23,6 +23,7 @@ import "../../../data/local/file_rootfs_store.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/shared_backup.dart";
+import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
@@ -362,4 +363,18 @@ Future<T> platformWithWritableDir<T>(
       } catch (_) {}
     }
   }
+}
+
+/// Deletes a tree that may contain proot's mode-0000 bind stubs, which a plain
+/// `Directory.delete(recursive: true)` cannot list and so dies on. Delegates to
+/// `removeTree` (`tree_ops.dart`), the one place that knows about the stubs —
+/// the same function the rootfs stores use to delete their own. Called by the
+/// restore clear for every top-level directory in the data dir, because the
+/// stubs sit deep inside `projects/<project>/rootfs/...` and a recursive delete
+/// of the `projects/` entry dies on one. `dart:io`-only on purpose: the web has
+/// no rootfs under the data directory and no stubs, so its side is a plain
+/// recursive delete.
+Future<void> platformDeleteTree(String path) async {
+  final err = await removeTree(path);
+  if (err != null) throw Exception("could not delete $path: $err");
 }

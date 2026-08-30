@@ -7,6 +7,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/backup.dart";
+import "package:agent_chat/data/local/tree_ops.dart";
 
 import "../harness.dart";
 
@@ -117,6 +118,49 @@ void main() {
     // A backup carries no `sync/` at all, so a restore is the one path that
     // deletes it and unpacks nothing over it.
     expect(Directory(config.syncDir).existsSync(), isTrue);
+  });
+
+  test("a rootfs directory is left out of the backup", () async {
+    // A per-project rootfs is a re-fetchable Linux tree that lives under the
+    // data dir, and the one a built-in with rootfs isolation puts there holds
+    // proot's mode-0000 bind stubs — see `tree_ops.dart`. The walker cannot
+    // list those, so `rootfs/` is skipped the way `sync/` is.
+    final rootfs = Directory(
+        "${config.projectDir(project: "byte-repair")}/rootfs/alpine/opt/skills-bundled");
+    rootfs.createSync(recursive: true);
+    // The stub: a mode-0000 directory, as proot leaves it on the host.
+    Process.runSync("chmod", ["0000", rootfs.path]);
+    addTearDown(() => Process.runSync("chmod", ["-R", "u+rwX", rootfs.path]));
+
+    final a = await archive();
+
+    // No member names anything under the rootfs.
+    expect(a.files.where((f) => f.name.contains("rootfs/")), isEmpty);
+  });
+
+  test("a restore clears a rootfs with mode-0000 stubs via deleteTree", () async {
+    // The latent half of the same bug: a restore wipes the data dir first, and
+    // a plain `Directory.delete(recursive: true)` dies on a mode-0000 stub the
+    // way the walker did. `deleteTree` is the io side's `removeTree`, which
+    // `chmod`s past them.
+    final rootfs = Directory(
+        "${config.projectDir(project: "byte-repair")}/rootfs/alpine/opt/skills");
+    rootfs.createSync(recursive: true);
+    File("${rootfs.path}/inside.txt").writeAsStringSync("guest file");
+    Process.runSync("chmod", ["0000", rootfs.path]);
+    addTearDown(() => Process.runSync("chmod", ["-R", "u+rwX", rootfs.path]));
+
+    final backup = await roundTrip();
+    Future<void> deleteTree(String path) async {
+      final err = await removeTree(path);
+      if (err != null) throw Exception("could not delete $path: $err");
+    }
+
+    // Without `deleteTree` this throws on the stub; with it, `removeTree`
+    // `chmod`s past it and the restore completes.
+    await restoreBackup(config, backup, deleteTree: deleteTree);
+
+    expect(rootfs.existsSync(), isFalse);
   });
 
   test("chats are counted from the state.json each one has", () async {

@@ -203,6 +203,18 @@ and a restore would drag them between machines and delete whatever was already
 downloaded. Keeping them outside is what makes both false, rather than an
 exception in here that someone has to remember — see "Where the models live".
 
+A per-project `rootfs/` is the one re-fetchable tree that *does* live under the
+data directory, because a built-in with rootfs isolation keeps its living
+filesystem there beside the chats. `writeBackup`'s `skipDir` leaves it out for
+the same reason the voice models are outside it, and for a second one: proot's
+mode-0000 bind stubs (see `tree_ops.dart`) sit inside it, and `dart:io` cannot
+list a mode-0000 directory, so a walker that reached one would throw. The
+restore clear routes every top-level directory through `removeTree` rather than
+a plain recursive delete, so the stubs a skipped `rootfs/` leaves behind are
+cleared on the way in too — the same `removeTree` the rootfs stores use, so the
+one function that knows how to delete a stub-bearing tree is the one the
+restore reuses.
+
 It was one JSON document holding every file first, and that is worse on every
 count that matters. Text in JSON is escaped inside a string inside an array,
 binary costs a third more as base64, and nothing compresses, where deflate takes

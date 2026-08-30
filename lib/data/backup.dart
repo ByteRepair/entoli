@@ -92,7 +92,20 @@ Future<Uint8List> writeBackup(AppConfig config) async {
     // Sync identity and pairing secrets: a backup must not carry private keys,
     // and a restore wipes the data directory first — so `sync/` in a backup
     // would silently unpair this device from its peers on every restore.
-    skipDir: (path) => config.fs.path.basename(path) == "sync",
+    //
+    // A per-project `rootfs/` is a re-fetchable Linux tree (the base download
+    // lives in the cache directory for the same reason), and the one a built-in
+    // with rootfs isolation copies under the data dir contains proot's
+    // mode-0000 bind stubs — see `tree_ops.dart`. `dart:io` cannot list those,
+    // so a walk that reached one would throw; and a tree that size has no
+    // business in an export a restore would unpack onto a fresh machine. The
+    // restore clear routes every top-level directory through `removeTree`
+    // rather than a plain recursive delete, so the stubs a skipped `rootfs/`
+    // leaves behind are cleared on the way in too.
+    skipDir: (path) {
+      final name = config.fs.path.basename(path);
+      return name == "sync" || name == "rootfs";
+    },
   );
   archive.add(ArchiveFile.string(
     manifestName,
@@ -145,12 +158,38 @@ Backup parseBackup(Uint8List bytes) {
 ///
 /// Nothing of the app may be running over these files while they are replaced,
 /// which is `AppRestart`'s to arrange rather than this function's to check.
-Future<void> restoreBackup(AppConfig config, Backup backup) async {
+///
+/// [deleteTree] clears a directory tree that may contain proot's mode-0000 bind
+/// stubs, which a plain `Directory.delete(recursive: true)` cannot list. It is
+/// called for each top-level directory in the data dir, because the stubs sit
+/// deep inside `projects/<project>/rootfs/...` and a recursive delete of the
+/// `projects/` entry dies on one. The default is a plain recursive delete —
+/// what a platform with no stubs (the web, where no rootfs is ever written)
+/// needs; the UI injects the io side's `removeTree`-backed one.
+Future<void> restoreBackup(
+  AppConfig config,
+  Backup backup, {
+  Future<void> Function(String path)? deleteTree,
+}) async {
   final fs = config.fs;
+  // The clear that knows about proot's mode-0000 stubs, where there is one;
+  // a plain recursive delete otherwise. The stubs live deep inside a
+  // `projects/<project>/rootfs/` tree, so the whole top-level entry has to go
+  // through it — a recursive delete of `projects/` recurses into the stub and
+  // dies the way the backup walker did. `removeTree` `chmod`s past it.
+  Future<void> clear(String path) async =>
+      deleteTree != null ? deleteTree(path) : fs.directory(path).delete(recursive: true);
+
   // Listed whole before anything goes: deleting out of a stream is deleting
   // the thing it is walking.
   final top = await fs.directory(config.dataDir).list().toList();
-  await deleteEntries(fs, [for (final entity in top) entity.path]);
+  await Future.wait([
+    for (final entity in top)
+      if (await fs.type(entity.path) == FileSystemEntityType.directory)
+        clear(entity.path)
+      else
+        fs.file(entity.path).delete(),
+  ]);
 
   // A member's name was written by whoever made the zip, and `writeIncoming`
   // is where a path from outside is made safe to join onto a directory.

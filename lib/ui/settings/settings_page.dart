@@ -6,6 +6,7 @@ import "../../domain/app_theme.dart";
 import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
+import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/temp_chat_ttl.dart";
@@ -1047,7 +1048,15 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     // against one writer could only approximate.
     final config = ref.read(appConfigProvider);
     await _guard(() => ref.read(appRestartProvider).restart(
-          whileStopped: () => restoreBackup(config, backup),
+          // `deleteTree` is the io side's `removeTree`-backed clear, which
+          // `chmod`s past proot's mode-0000 bind stubs deep inside a
+          // `projects/<project>/rootfs/` tree the restore is about to replace.
+          // See `restoreBackup` for why every top-level dir goes through it.
+          whileStopped: () => restoreBackup(
+            config,
+            backup,
+            deleteTree: platform.deleteTree,
+          ),
         ));
   }
 
