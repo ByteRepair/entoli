@@ -210,10 +210,23 @@ class _ProjectBadges extends ConsumerWidget {
         children: [
           for (final project in projects)
             ChoiceChip(
-              label: Text(projectLabel(project)),
-              avatar: projectIcon(project) != null
-                  ? Icon(projectIcon(project), size: 18)
-                  : null,
+              // The icon rides in the label rather than the avatar slot:
+              // Material's ChoiceChip paints the selected check over the
+              // avatar, so an icon there disappears under the tick when
+              // picked. In the label it sits beside the text, and the check
+              // keeps the leading slot to itself the way it had before the
+              // icon was added.
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (projectIcon(project) case final icon?)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(icon, size: 18),
+                    ),
+                  Text(projectLabel(project)),
+                ],
+              ),
               selected: project == selected,
               onSelected: (on) => selectProject(ref, on ? project : null),
             ),
