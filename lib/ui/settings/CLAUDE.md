@@ -77,8 +77,9 @@ still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
 **Byte Repair** is the tooling for the built-in project of the same name: a
 banner saying whether the configured terminal env can run it, a button that
 runs a bundled install script through that env to put `make`, `github-cli` and
-ESBMC into the project's own rootfs instance, and the versions found
-afterwards. On
+ESBMC into the project's own rootfs instance, a button to import a local ESBMC
+binary into the rootfs, a button to delete the whole environment (rootfs and
+workspace, not chats), and the versions found afterwards. On
 Android the "Host" terminal env has no package manager, so the category says
 so and hides the rest until a rootfs is picked from Terminal; on every other
 platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and

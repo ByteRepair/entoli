@@ -221,6 +221,7 @@ class TestApp {
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
           byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
+              config: config,
               project: ByteRepairProject().dir,
               workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir))),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),

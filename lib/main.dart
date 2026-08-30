@@ -174,6 +174,7 @@ class AppSession {
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
         rootfsStoreProvider.overrideWithValue(rootfs),
         byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
+            config: config,
             project: ByteRepairProject().dir,
             workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir))),
         installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
