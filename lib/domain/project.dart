@@ -1,3 +1,4 @@
+import "package:flutter/material.dart" show IconData;
 import "package:path/path.dart" as p;
 
 import "builtin_project.dart";
@@ -21,6 +22,11 @@ const defaultProjectDir = "default";
 
 String projectLabel(String? project) =>
     project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
+
+/// The icon a project's badge or menu row shows beside its label, or null where
+/// the project is a user's or the default — only a built-in ships one. Mirrors
+/// [projectLabel] in resolving a built-in's shipped value.
+IconData? projectIcon(String? project) => builtinProjectOf(project)?.icon;
 
 /// The empty-chat screen's question when no built-in ships its own. A const
 /// the way [defaultProjectLabel] is, so the screen and its tests name one

@@ -211,6 +211,9 @@ class _ProjectBadges extends ConsumerWidget {
           for (final project in projects)
             ChoiceChip(
               label: Text(projectLabel(project)),
+              avatar: projectIcon(project) != null
+                  ? Icon(projectIcon(project), size: 18)
+                  : null,
               selected: project == selected,
               onSelected: (on) => selectProject(ref, on ? project : null),
             ),

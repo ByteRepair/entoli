@@ -783,6 +783,7 @@ class _ProjectMenu extends ConsumerWidget {
   PopupMenuItem<VoidCallback> _row(
           {required bool checked,
           required String label,
+          IconData? icon,
           required VoidCallback pick}) =>
       PopupMenuItem(
         value: pick,
@@ -790,6 +791,13 @@ class _ProjectMenu extends ConsumerWidget {
           children: [
             Icon(Icons.check,
                 size: 18, color: checked ? null : Colors.transparent),
+            const SizedBox(width: 12),
+            // A built-in project's icon sits beside the check; a user project
+            // or a remote entry reserves the slot so the labels all align.
+            if (icon != null)
+              Icon(icon, size: 18)
+            else
+              const SizedBox(width: 18),
             const SizedBox(width: 12),
             Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
           ],
@@ -806,6 +814,7 @@ class _ProjectMenu extends ConsumerWidget {
         _row(
           checked: remote == null && project == selected,
           label: projectLabel(project),
+          icon: projectIcon(project),
           pick: () => selectProject(ref, project),
         ),
       if (remotes.isNotEmpty) const PopupMenuDivider(),

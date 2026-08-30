@@ -1,3 +1,5 @@
+import "package:flutter/material.dart" show Icons, IconData;
+
 import "profile.dart";
 import "temp_chat_ttl.dart";
 
@@ -14,6 +16,7 @@ class BuiltinProject {
   const BuiltinProject({
     required this.dir,
     required this.label,
+    this.icon,
     this.profilePolicy = ProfilePolicy.inherit,
     this.memory = MemoryPolicy.app,
     this.sharedWorkspace = true,
@@ -27,6 +30,12 @@ class BuiltinProject {
 
   /// What the menus and the title bar say.
   final String label;
+
+  /// The icon shown beside the label where the project is picked as a badge
+  /// (the empty-chat row) or a menu row (the sidebar switcher). Null for a
+  /// built-in that ships no icon, and for every user project — only a built-in
+  /// gets the slot, since a user's project is a name alone.
+  final IconData? icon;
 
   /// What the turn's "About the user" is.
   final ProfilePolicy profilePolicy;
@@ -102,13 +111,15 @@ enum MemoryPolicy {
 enum AgentCapability { ask, task, artifact, createSkill, webSearch }
 
 /// What the menus and the title bar call the anonymous built-in. A const so
-/// the emoji variation selector cannot drift between the label and the tests
-/// that assert it, the way `defaultProjectLabel` does for the default project.
-const anonProjectLabel = "\u{1F576}\uFE0F Anon";
+/// the label and the tests that assert it name one string, the way
+/// `defaultProjectLabel` does for the default project. The incognito glyph is
+/// the project's [BuiltinProject.icon], not the emoji it once carried.
+const anonProjectLabel = "Anon";
 
 /// What the menus and the title bar call the Byte Repair built-in. A const for
-/// the same reason `anonProjectLabel` is one.
-const byteRepairProjectLabel = "Byte-Repair \u{1F510}";
+/// the same reason `anonProjectLabel` is one; the shield is its
+/// [BuiltinProject.icon].
+const byteRepairProjectLabel = "Byte-Repair";
 
 /// A chat with no profile, no project memory, and no workspace it shares
 /// with another chat: the tools and the context that would reach them are
@@ -120,6 +131,7 @@ class AnonymousProject extends BuiltinProject {
       : super(
           dir: "anonymous",
           label: anonProjectLabel,
+          icon: Icons.visibility_off,
           profilePolicy: ProfilePolicy.none,
           memory: MemoryPolicy.off,
           sharedWorkspace: false,
@@ -151,6 +163,7 @@ class ByteRepairProject extends BuiltinProject {
       : super(
           dir: "byte-repair",
           label: byteRepairProjectLabel,
+          icon: Icons.verified_user,
           rootfsIsolation: true,
           requiresSetup: true,
         );

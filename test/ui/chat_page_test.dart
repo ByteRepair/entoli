@@ -166,6 +166,9 @@ void main() {
       expect(find.widgetWithText(ChoiceChip, anonProjectLabel), findsOneWidget);
       expect(find.widgetWithText(ChoiceChip, byteRepairProjectLabel), findsOneWidget);
       expect(find.byType(ChoiceChip), findsNWidgets(2));
+      // Each built-in's badge carries its icon as the chip's avatar.
+      expect(find.byIcon(Icons.visibility_off), findsOneWidget);
+      expect(find.byIcon(Icons.verified_user), findsOneWidget);
     });
 
     testWidgets("picking the built-in badge moves the chat to it", (tester) async {
