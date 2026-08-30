@@ -48,11 +48,6 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
                 "environment.",
           )
         else ...[
-          _Banner(
-            icon: Icons.check_circle_outline,
-            color: theme.colorScheme.primary,
-            text: "Byte Repair tooling can run with this configuration.",
-          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

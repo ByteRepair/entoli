@@ -176,7 +176,7 @@ class BuiltinBackend implements AgentBackend {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
       if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
-        await _ensureProjectRootfs(project, settings);
+        await _ensureProjectRootfs(project);
         await _runBypass(chatId, prompt, controller,
             history: history,
             project: project,
@@ -198,7 +198,7 @@ class BuiltinBackend implements AgentBackend {
 
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
-      await _ensureProjectRootfs(project, settings);
+      await _ensureProjectRootfs(project);
       final workspace = config.workspaceDir(chatId, project: project);
       final projectWorkspace = _projectWorkspaceFor(
           workspace: workspace,
@@ -437,40 +437,23 @@ class BuiltinBackend implements AgentBackend {
   /// from cache into the project's data directory on first use, so `apk`
   /// installs are scoped to that project alone. No-op where the project is not
   /// isolated, no rootfs is selected, or the copy already exists.
-  Future<void> _ensureProjectRootfs(String? project, TurnSettings settings) async {
+  Future<void> _ensureProjectRootfs(String? project) async {
     final spec = builtinProjectOf(project);
     if (spec?.rootfsIsolation != true) return;
-    // The rootfs id is read from app settings, not TurnSettings — it is an
-    // app-level pick, not a per-turn one.
     final id = AppSettings.load(config).rootfsId;
     if (id == null || rootfsStore == null) return;
     final baseDir = rootfsStore!.directoryOfSync(id);
     if (baseDir == null) return;
-    final target = p.join(config.projectDir(project: project), "rootfs", id);
+    final target = config.projectRootfsDir(project: project, rootfsId: id);
     final marker = File(p.join(target, ".complete"));
     if (await marker.exists()) return;
     await Directory(target).create(recursive: true);
-    await _copyDirectory(Directory(baseDir), Directory(target));
-    await marker.writeAsString(id);
-  }
-
-  /// Recursively copy a directory, preserving symlinks (copying the link
-  /// itself rather than following it). The rootfs is symlinks and execute
-  /// bits, and a copy that follows a link duplicates the target rather than
-  /// preserving the tree Alpine's `tar` unpacked.
-  Future<void> _copyDirectory(Directory source, Directory target) async {
-    await for (final entity in source.list(followLinks: false)) {
-      final dest = p.join(target.path, p.basename(entity.path));
-      if (entity is Link) {
-        final linkTarget = await entity.target();
-        await Link(dest).create(linkTarget);
-      } else if (entity is Directory) {
-        await Directory(dest).create();
-        await _copyDirectory(entity, Directory(dest));
-      } else if (entity is File) {
-        await entity.copy(dest);
-      }
+    final result = await Process.run("cp", ["-a", "$baseDir/.", target]);
+    if (result.exitCode != 0) {
+      logFailure("byte-repair", "rootfs copy failed", result.stderr);
+      return;
     }
+    await marker.writeAsString(id);
   }
 
   /// Run what [prompt] says and be done: no model call, no tools, and no

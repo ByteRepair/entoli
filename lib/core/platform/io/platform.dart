@@ -97,7 +97,7 @@ ShellDriver? platformDriver({
 /// created yet. Lives under the project's data directory, beside its workspace
 /// and memory, so a backup carries it and a cache clear does not lose it.
 String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
-  final dir = p.join(config.projectDir(project: project), "rootfs", rootfsId);
+  final dir = config.projectRootfsDir(project: project, rootfsId: rootfsId);
   return File(p.join(dir, ".complete")).existsSync() ? dir : null;
 }
 

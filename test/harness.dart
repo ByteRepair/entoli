@@ -19,6 +19,7 @@ import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -219,8 +220,9 @@ class TestApp {
               () => InstalledVoiceModels({...voiceModels, ...system},
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
-          byteRepairStoreProvider.overrideWithValue(
-              ByteRepairStore(config.projectWorkspaceDir(project: "byte-repair"))),
+          byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
+              project: ByteRepairProject().dir,
+              workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir))),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),

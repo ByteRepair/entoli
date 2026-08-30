@@ -111,6 +111,12 @@ class AppConfig {
   String projectWorkspaceDir({String? project}) =>
       fs.path.join(projectDir(project: project), "workspace");
 
+  /// A project's own rootfs copy, for a built-in that opts into rootfs
+  /// isolation. The base download in cache is the template; this is its
+  /// living filesystem.
+  String projectRootfsDir({String? project, required String rootfsId}) =>
+      fs.path.join(projectDir(project: project), "rootfs", rootfsId);
+
   String chatDir(String chatId, {String? project}) =>
       fs.path.join(chatsDir(project: project), chatId);
 
