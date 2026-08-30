@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:io";
 
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -17,6 +18,7 @@ import "domain/assistant_view.dart";
 import "domain/attachment_picker.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
+import "domain/builtin_project.dart";
 import "domain/chat_repository.dart";
 import "domain/corner_radius.dart";
 import "domain/chat_store.dart";
@@ -144,6 +146,18 @@ final byteRepairToolVersionsProvider =
   final store = ref.watch(byteRepairStoreProvider);
   final shell = ref.watch(shellProvider);
   return store.runToolVersions(shell);
+});
+
+/// Whether a project requiring setup has been set up. True for projects that
+/// don't require setup (the common case); for one that does, checks the
+/// `.setup-complete` marker in the project's directory. Invalidated by the
+/// settings page after Run Setup or Delete.
+final setupCompleteProvider =
+    Provider.family<bool, String?>((ref, project) {
+  final spec = builtinProjectOf(project);
+  if (spec?.requiresSetup != true) return true;
+  final config = ref.watch(appConfigProvider);
+  return File(config.setupCompleteFile(project: project)).existsSync();
 });
 
 final localModelStoreProvider =

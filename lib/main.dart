@@ -176,7 +176,8 @@ class AppSession {
         byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
             config: config,
             project: ByteRepairProject().dir,
-            workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir))),
+            workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+            rootfsStore: rootfs)),
         installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),

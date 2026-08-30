@@ -117,6 +117,11 @@ class AppConfig {
   String projectRootfsDir({String? project, required String rootfsId}) =>
       fs.path.join(projectDir(project: project), "rootfs", rootfsId);
 
+  /// The marker file that says a project requiring setup has been set up.
+  /// Written by the store that runs setup, read by `setupCompleteProvider`.
+  String setupCompleteFile({String? project}) =>
+      fs.path.join(projectDir(project: project), ".setup-complete");
+
   String chatDir(String chatId, {String? project}) =>
       fs.path.join(chatsDir(project: project), chatId);
 

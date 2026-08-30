@@ -150,5 +150,16 @@ void main() {
           const BuiltinProject(dir: "work", label: "work").rootfsIsolation,
           isFalse);
     });
+
+    // Byte Repair requires setup before turns can be sent: the chat page
+    // gates the composer on a `.setup-complete` marker. Anonymous and user
+    // projects do not.
+    test("Byte Repair requires setup, others do not", () {
+      expect(byteRepair.requiresSetup, isTrue);
+      expect(anon.requiresSetup, isFalse);
+      expect(
+          const BuiltinProject(dir: "work", label: "work").requiresSetup,
+          isFalse);
+    });
   });
 }

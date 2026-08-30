@@ -76,10 +76,15 @@ to it lands without a restart, where a skill dropped into the directory by hand
 still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
 **Byte Repair** is the tooling for the built-in project of the same name: a
 banner saying whether the configured terminal env can run it, a button that
-runs a bundled install script through that env to put `make`, `github-cli` and
-ESBMC into the project's own rootfs instance, a button to import a local ESBMC
-binary into the rootfs, a button to delete the whole environment (rootfs and
-workspace, not chats), and the versions found afterwards. On
+runs a bundled install script through that env to create the project's own
+rootfs instance and put `make`, `github-cli` and ESBMC into it, a button to
+import a local ESBMC binary into the rootfs, a button to delete the whole
+environment (rootfs, workspace, and all chats in the project), and the
+versions found afterwards. "Run Setup" owns the full lifecycle — it copies
+the base rootfs from cache, runs the install script, and writes a
+`.setup-complete` marker — so the turn path no longer creates the rootfs
+lazily. The chat page gates the composer on that marker, showing a "setup
+required" bar until it is there. On
 Android the "Host" terminal env has no package manager, so the category says
 so and hides the rest until a rootfs is picked from Terminal; on every other
 platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and

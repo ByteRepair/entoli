@@ -19,6 +19,7 @@ class BuiltinProject {
     this.sharedWorkspace = true,
     this.disabled = const {},
     this.rootfsIsolation = false,
+    this.requiresSetup = false,
   });
 
   /// The directory name under `projects/`, in the case it is created in.
@@ -50,6 +51,12 @@ class BuiltinProject {
   /// user projects, which share the base rootfs in cache the way they always
   /// have.
   final bool rootfsIsolation;
+
+  /// Whether the project needs a setup step before turns can be sent. The
+  /// chat page hides the composer and shows a "setup required" bar until a
+  /// `.setup-complete` marker appears in the project's directory. The store
+  /// that runs setup writes the marker; a delete removes it.
+  final bool requiresSetup;
 
   /// The instruction text the app ships for a turn in it. Where non-null it is
   /// the turn's instructions in full: no AGENTS.md file is read, and none is
@@ -145,6 +152,7 @@ class ByteRepairProject extends BuiltinProject {
           dir: "byte-repair",
           label: byteRepairProjectLabel,
           rootfsIsolation: true,
+          requiresSetup: true,
         );
 
   @override

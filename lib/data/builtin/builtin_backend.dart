@@ -1,24 +1,19 @@
 import "dart:async";
 import "dart:convert";
-import "dart:io";
 
 import "package:collection/collection.dart";
 import "package:flutter/foundation.dart";
-import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/agent_backend.dart";
-import "../../domain/app_settings.dart";
 import "../../domain/ask.dart";
-import "../../domain/builtin_project.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
-import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
@@ -51,7 +46,6 @@ class BuiltinBackend implements AgentBackend {
     required this.webSearch,
     required this.store,
     this.library,
-    this.rootfsStore,
     this.options = const BuiltinOptions(),
   });
 
@@ -62,10 +56,6 @@ class BuiltinBackend implements AgentBackend {
   /// The chat store, which the agent writes artifacts to. Held here rather
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
-
-  /// The rootfs store, for creating a per-project rootfs copy where a
-  /// built-in project opts into rootfs isolation. Null on the web platform.
-  final RootfsStore? rootfsStore;
 
   /// Entoli's own skills and agents. A turn's own references travel on the
   /// message, resolved where it was composed, so this is left for the `task`
@@ -176,7 +166,6 @@ class BuiltinBackend implements AgentBackend {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
       if (prompt != null && shellBypassCommand(prompt.plainText) != null) {
-        await _ensureProjectRootfs(project);
         await _runBypass(chatId, prompt, controller,
             history: history,
             project: project,
@@ -198,7 +187,6 @@ class BuiltinBackend implements AgentBackend {
 
       await config.ensureChatDirs(chatId, project: project);
       await config.ensureProjectDirs(project: project);
-      await _ensureProjectRootfs(project);
       final workspace = config.workspaceDir(chatId, project: project);
       final projectWorkspace = _projectWorkspaceFor(
           workspace: workspace,
@@ -432,29 +420,6 @@ class BuiltinBackend implements AgentBackend {
     required bool sharedWorkspace,
   }) =>
       sharedWorkspace ? config.projectWorkspaceDir(project: project) : workspace;
-
-  /// Where a built-in project opts into rootfs isolation, copy the base rootfs
-  /// from cache into the project's data directory on first use, so `apk`
-  /// installs are scoped to that project alone. No-op where the project is not
-  /// isolated, no rootfs is selected, or the copy already exists.
-  Future<void> _ensureProjectRootfs(String? project) async {
-    final spec = builtinProjectOf(project);
-    if (spec?.rootfsIsolation != true) return;
-    final id = AppSettings.load(config).rootfsId;
-    if (id == null || rootfsStore == null) return;
-    final baseDir = rootfsStore!.directoryOfSync(id);
-    if (baseDir == null) return;
-    final target = config.projectRootfsDir(project: project, rootfsId: id);
-    final marker = File(p.join(target, ".complete"));
-    if (await marker.exists()) return;
-    await Directory(target).create(recursive: true);
-    final result = await Process.run("cp", ["-a", "$baseDir/.", target]);
-    if (result.exitCode != 0) {
-      logFailure("byte-repair", "rootfs copy failed", result.stderr);
-      return;
-    }
-    await marker.writeAsString(id);
-  }
 
   /// Run what [prompt] says and be done: no model call, no tools, and no
   /// approval, since the user typed the command rather than being asked to

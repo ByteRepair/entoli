@@ -7,6 +7,7 @@ import "package:path/path.dart" as p;
 import "../../core/config.dart";
 import "../../core/log.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
@@ -14,18 +15,32 @@ import "../../domain/shell.dart";
 /// project. The install runs through the configured terminal env (proot rootfs
 /// on Android, host shell on desktop) with [project], so it reaches the
 /// project's own rootfs instance and the package manager inside it.
+///
+/// "Run Setup" owns the full lifecycle: it copies the base rootfs from cache
+/// into the project's data directory (for a project that opts into rootfs
+/// isolation), runs the install script, and writes a `.setup-complete` marker.
+/// The turn path no longer creates the rootfs copy — it relies on setup having
+/// been run, and the chat page gates the composer on [isSetupComplete].
 class ByteRepairStore {
   ByteRepairStore({
     required this.config,
     required this.project,
     required this.workspace,
+    this.rootfsStore,
   });
 
   final AppConfig config;
   final String project;
   final String workspace;
+  final RootfsStore? rootfsStore;
 
   static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
+
+  /// Whether setup has been run: the `.setup-complete` marker exists in the
+  /// project's directory. Read by `setupCompleteProvider` to gate the chat
+  /// page's composer.
+  bool get isSetupComplete =>
+      File(config.setupCompleteFile(project: project)).existsSync();
 
   Future<ShellResult> _run(Shell shell, String script, Duration timeout) async {
     try {
@@ -44,14 +59,41 @@ class ByteRepairStore {
     }
   }
 
+  /// Copy the base rootfs from cache into the project's data directory, for a
+  /// project that opts into rootfs isolation. No-op where there is no rootfs
+  /// selected or no store (desktop, web). Returns null on success or an error
+  /// string.
+  Future<String?> _ensureRootfs() async {
+    final id = AppSettings.load(config).rootfsId;
+    if (id == null || rootfsStore == null) return null;
+    final baseDir = rootfsStore!.directoryOfSync(id);
+    if (baseDir == null) return "No rootfs is installed. Download one from Terminal settings.";
+    final target = config.projectRootfsDir(project: project, rootfsId: id);
+    final marker = File(p.join(target, ".complete"));
+    if (await marker.exists()) return null;
+    await Directory(target).create(recursive: true);
+    final result = await Process.run("cp", ["-a", "$baseDir/.", target]);
+    if (result.exitCode != 0) {
+      logFailure("byte-repair", "rootfs copy failed", result.stderr);
+      return "Failed to copy rootfs: ${result.stderr}";
+    }
+    await marker.writeAsString(id);
+    return null;
+  }
+
   /// Runs the bundled install script through [shell]'s configured terminal env.
-  /// The script installs make, github-cli and ESBMC into the guest rootfs —
-  /// `apk` puts make and gh on PATH, and ESBMC is extracted to
-  /// `/usr/local/bin/esbmc`. Returns the shell's result; `returnCode` 0 is
-  /// success.
+  /// First copies the base rootfs into the project's data directory (for rootfs
+  /// isolation), then runs the script to install make, github-cli and ESBMC,
+  /// and writes the `.setup-complete` marker on success.
   Future<ShellResult> install(Shell shell) async {
+    final err = await _ensureRootfs();
+    if (err != null) return ShellResult.failed(err);
     final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
-    return _run(shell, body, const Duration(minutes: 10));
+    final result = await _run(shell, body, const Duration(minutes: 10));
+    if (result.returnCode == 0) {
+      File(config.setupCompleteFile(project: project)).writeAsStringSync("done");
+    }
+    return result;
   }
 
   /// Copies a user-picked ESBMC binary into the per-project rootfs at
@@ -77,9 +119,11 @@ class ByteRepairStore {
   }
 
   /// Deletes the Byte Repair environment: the per-project rootfs (the Alpine
-  /// copy and everything installed into it) and the workspace (cloned repos,
-  /// scratch files). Chats are not touched. The rootfs is re-created from the
-  /// cache template on the next turn; the workspace on the next file write.
+  /// copy and everything installed into it), the workspace (cloned repos,
+  /// scratch files), and the `.setup-complete` marker. Chats are deleted by
+  /// the settings page through the repository; this method does not touch
+  /// them. The rootfs is re-created by the next "Run Setup"; the workspace on
+  /// the next file write.
   Future<String?> deleteEnvironment() async {
     try {
       final rootfsRoot = p.join(config.projectDir(project: project), "rootfs");
@@ -87,6 +131,8 @@ class ByteRepairStore {
       if (await dir.exists()) await dir.delete(recursive: true);
       final ws = Directory(config.projectWorkspaceDir(project: project));
       if (await ws.exists()) await ws.delete(recursive: true);
+      final marker = File(config.setupCompleteFile(project: project));
+      if (await marker.exists()) await marker.delete();
       return null;
     } catch (e) {
       logFailure("byte-repair", "delete environment failed", e);

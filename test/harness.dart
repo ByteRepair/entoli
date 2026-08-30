@@ -223,7 +223,8 @@ class TestApp {
           byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
               config: config,
               project: ByteRepairProject().dir,
-              workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir))),
+              workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+              rootfsStore: linux)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),

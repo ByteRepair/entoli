@@ -3,6 +3,7 @@ import "package:flutter/foundation.dart" show defaultTargetPlatform, TargetPlatf
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/builtin_project.dart";
 import "../../providers.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/section_header.dart";
@@ -104,17 +105,25 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
             label: "Delete Byte Repair Data",
             confirmTitle: "Delete Byte Repair environment?",
             confirmMessage: "This deletes the Byte Repair rootfs (the Linux "
-                "copy and everything installed into it) and its workspace "
-                "(cloned repos, scratch files). Chats are not affected. The "
-                "rootfs is re-created on the next turn.",
+                "copy and everything installed into it), its workspace "
+                "(cloned repos, scratch files), and all chats in the "
+                "project. Run Setup to use Byte Repair again.",
             onConfirmed: () async {
               final store = ref.read(byteRepairStoreProvider);
+              final repo = ref.read(chatRepositoryProvider);
+              final project = ByteRepairProject().dir;
+              final chats = await repo.listChats();
+              await Future.wait(
+                chats.where((c) => c.project == project).map((c) => repo.deleteChat(c.id)),
+              );
               final error = await store.deleteEnvironment();
               if (!mounted) return;
               if (error != null) {
                 setState(() => _error = error);
               } else {
                 ref.invalidate(byteRepairToolVersionsProvider);
+                ref.invalidate(setupCompleteProvider(project));
+                ref.invalidate(chatListProvider);
               }
             },
           ),
@@ -135,6 +144,7 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
       if (!mounted) return;
       if (result.returnCode == 0) {
         ref.invalidate(byteRepairToolVersionsProvider);
+        ref.invalidate(setupCompleteProvider(ByteRepairProject().dir));
       } else {
         setState(() {
           _error = result.exceptionInfo ?? result.output.trim();

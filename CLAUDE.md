@@ -214,7 +214,9 @@ it cannot be created, renamed or deleted, and `everyProject` is where it is
 offered. What is special about it is what a *turn* in it may not have, and that
  is a `BuiltinProject` spec: which profile it runs under (`ProfilePolicy`),
  whether project memory runs (`MemoryPolicy`), whether its workspace is shared
- between its chats, which capabilities it takes away, and, where it ships
+ between its chats, which capabilities it takes away, whether it opts into
+ rootfs isolation, whether it requires a setup step before turns can be sent,
+ and, where it ships
  one, a note that stands in for the instruction files. `anonymous` turns all
  of the first four off and is the one that ships a note: no profile, no
  memory, a workspace it does not share, and its own account of what an

@@ -62,14 +62,16 @@ enum SettingsCategory {
 }
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.initialCategory});
+
+  final SettingsCategory? initialCategory;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  SettingsCategory _category = SettingsCategory.general;
+  late SettingsCategory _category = widget.initialCategory ?? SettingsCategory.general;
 
   /// The state is kept where the category is a page of its own too, so that a
   /// window widened while one is open lands on it rather than on General.

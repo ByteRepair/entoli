@@ -59,7 +59,6 @@ BuiltinBackend createBackend(
   return BuiltinBackend(
     config: config,
     library: library,
-    rootfsStore: rootfs,
     shell: platformShell(
       environment: () => settings().environment,
       // Resolved per command rather than once: a Linux installed from the
