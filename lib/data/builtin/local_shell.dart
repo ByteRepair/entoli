@@ -69,12 +69,15 @@ class LocalShell extends Shell {
   /// the same thing without costing a subprocess. Returns the process and
   /// whether it owns a process group a stop can kill.
   static Future<({Process process, bool ownsGroup})> _spawnInGroup(
-      List<String> command, String cwd, Map<String, String> env) async {
+      List<String> command, String cwd, Map<String, String> env,
+      {bool includeParentEnvironment = true}) async {
     final argv = command.skip(1).toList();
     if (_hasSetsid != false) {
       try {
         final process = await Process.start("setsid", [command.first, ...argv],
-            workingDirectory: cwd, environment: env);
+            workingDirectory: cwd,
+            environment: env,
+            includeParentEnvironment: includeParentEnvironment);
         _hasSetsid = true;
         return (process: process, ownsGroup: true);
       } on ProcessException {
@@ -82,7 +85,9 @@ class LocalShell extends Shell {
       }
     }
     final process = await Process.start(command.first, argv,
-        workingDirectory: cwd, environment: env);
+        workingDirectory: cwd,
+        environment: env,
+        includeParentEnvironment: includeParentEnvironment);
     return (process: process, ownsGroup: false);
   }
 
@@ -198,6 +203,7 @@ class LocalShell extends Shell {
             driver: driver,
             sharedHome: sharedHome,
             environment: environment),
+        includeParentEnvironment: driver?.includeParentEnvironment ?? true,
       );
     }
     return _sessions
@@ -445,7 +451,8 @@ class _Session {
     final fp = _fingerprint(command0, env);
     if (restart || _fp != fp) {
       try {
-        await _spawn(command0, env);
+        await _spawn(command0, env,
+            includeParentEnvironment: driver?.includeParentEnvironment ?? true);
       } catch (e) {
         run.state.complete(
             ShellResult.failed("An error occurred while starting the shell: $e"));
@@ -483,7 +490,8 @@ class _Session {
   static String _fingerprint(List<String> command, Map<String, String> env) =>
       "${command.join("\u0000")}\u0000${env.entries.map((e) => "${e.key}=${e.value}").join("\u0000")}";
 
-  Future<void> _spawn(List<String> command, Map<String, String> env) async {
+  Future<void> _spawn(List<String> command, Map<String, String> env,
+      {bool includeParentEnvironment = true}) async {
     await _teardown();
     final token = const Uuid().v4();
     _marker = "@@E$token rc=";
@@ -493,7 +501,8 @@ class _Session {
       // which is what a stop kills. Whether it is there is learned by trying
       // it, the way the one-shot run learns it.
       final started = await LocalShell._spawnInGroup(
-          [command.first, ...argv], _cwdPath, env);
+          [command.first, ...argv], _cwdPath, env,
+          includeParentEnvironment: includeParentEnvironment);
       _process = started.process;
       _ownsGroup = started.ownsGroup;
     } catch (e) {
@@ -720,6 +729,7 @@ class _OneShotRun implements ShellRun {
     required this.cwd,
     required this.timeout,
     required this.environment,
+    this.includeParentEnvironment = true,
   }) {
     result = _run();
   }
@@ -733,6 +743,7 @@ class _OneShotRun implements ShellRun {
   final String cwd;
   final Duration timeout;
   final Map<String, String> environment;
+  final bool includeParentEnvironment;
 
   @override
   late final Future<ShellResult> result;
@@ -804,7 +815,9 @@ class _OneShotRun implements ShellRun {
   /// first: a failed spawn says the same thing without costing a subprocess.
   Future<Process> _spawn() async {
     final argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
-    final started = await LocalShell._spawnInGroup([command.first, ...argv], cwd, environment);
+    final started = await LocalShell._spawnInGroup(
+        [command.first, ...argv], cwd, environment,
+        includeParentEnvironment: includeParentEnvironment);
     _ownsGroup = started.ownsGroup;
     return started.process;
   }

@@ -109,6 +109,7 @@ class ShellDriver {
     required this.description,
     this.guestRoot,
     this.hostToGuestPaths = const {},
+    this.includeParentEnvironment = true,
   });
 
   /// The executable and its arguments, ending in the shell a command runs in,
@@ -143,6 +144,12 @@ class ShellDriver {
   /// (aarch64)`, or the machine's own shell where the command runs on the
   /// machine itself. The agent's system prompt carries it.
   final String description;
+
+  /// Whether the process's own environment is merged under [environment]. A
+  /// host driver inherits the machine's `PATH`, `DISPLAY` and the rest; a guest
+  /// driver does not, since the parent's values are host paths the guest cannot
+  /// see and [environment] names every var the guest needs.
+  final bool includeParentEnvironment;
 }
 
 /// A command already running. Separate from its result so an aborted turn can
