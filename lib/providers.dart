@@ -1,11 +1,11 @@
 import "dart:async";
-import "dart:io";
 
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
-import "../core/platform/platform.dart" show createPromptSources;
+import "../core/platform/platform.dart"
+    show createPromptSources, setupComplete;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
@@ -149,15 +149,14 @@ final byteRepairToolVersionsProvider =
 });
 
 /// Whether a project requiring setup has been set up. True for projects that
-/// don't require setup (the common case); for one that does, checks the
-/// `.setup-complete` marker in the project's directory. Invalidated by the
-/// settings page after Run Setup or Delete.
+/// don't require setup (the common case); for one that does, asks the platform
+/// about the `.setup-complete` marker in the project's directory. Invalidated
+/// by the settings page after Run Setup or Delete.
 final setupCompleteProvider =
     Provider.family<bool, String?>((ref, project) {
   final spec = builtinProjectOf(project);
   if (spec?.requiresSetup != true) return true;
-  final config = ref.watch(appConfigProvider);
-  return File(config.setupCompleteFile(project: project)).existsSync();
+  return setupComplete(ref.watch(appConfigProvider), project);
 });
 
 final localModelStoreProvider =

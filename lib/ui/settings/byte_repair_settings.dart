@@ -109,22 +109,26 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
                 "(cloned repos, scratch files), and all chats in the "
                 "project. Run Setup to use Byte Repair again.",
             onConfirmed: () async {
+              // The environment first: it is the half that can fail, and
+              // failing before the chats are gone leaves the user something
+              // to retry with.
               final store = ref.read(byteRepairStoreProvider);
+              final error = await store.deleteEnvironment();
+              if (!mounted) return;
+              if (error != null) {
+                setState(() => _error = error);
+                return;
+              }
               final repo = ref.read(chatRepositoryProvider);
               final project = ByteRepairProject().dir;
               final chats = await repo.listChats();
               await Future.wait(
                 chats.where((c) => c.project == project).map((c) => repo.deleteChat(c.id)),
               );
-              final error = await store.deleteEnvironment();
               if (!mounted) return;
-              if (error != null) {
-                setState(() => _error = error);
-              } else {
-                ref.invalidate(byteRepairToolVersionsProvider);
-                ref.invalidate(setupCompleteProvider(project));
-                ref.invalidate(chatListProvider);
-              }
+              ref.invalidate(byteRepairToolVersionsProvider);
+              ref.invalidate(setupCompleteProvider(project));
+              ref.invalidate(chatListProvider);
             },
           ),
         ],

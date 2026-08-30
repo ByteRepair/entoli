@@ -150,6 +150,22 @@ because the bind mounts and `-w` need the chat's own `cwd` and `home`. The
 not `.` — proot stores `-w` as the guest cwd, and `.` resolves against the
 guest root, not the host's working directory.
 
+**proot creates mode-0000 stubs at its bind targets, and they are why
+`tree_ops.dart` exists.** Where a bind's guest path does not exist in the
+rootfs — `/opt/skills`, `/opt/skills-bundled`, `/etc/resolv.conf` are the three
+this app's binds produce, since the Alpine tarball has none of them — proot
+creates an inaccessible placeholder to mount over. In the guest the stub is
+invisible; on the host it is poison, because `dart:io` cannot list a mode-0000
+directory, so a recursive delete over a rootfs that hosted a session dies on
+one and a `cp` that has to read one does too — both were live on a device. So
+the per-project rootfs copy (`FileByteRepairStore.ensureRootfs`) is a tar round
+trip through `copyTree`, which excludes the stub paths (nothing there is
+reachable in the guest anyway) and starts by clearing whatever an earlier
+attempt left; and every rootfs deletion — the project's environment, and the
+Terminal page's — goes through `removeTree`, which `chmod -R u+rwX`es first
+because a guest `chmod` is a real one on the host and may have closed
+directories that have to be reopened to be deleted.
+
 **`HOME` inside the guest is the project's workspace, not `/root`.** The rootfs
 is one directory shared by every project and outside what a backup carries, so a
 `~/.gitconfig`, an `npm` cache or a key written there belongs to whichever chat

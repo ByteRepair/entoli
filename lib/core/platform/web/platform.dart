@@ -8,6 +8,7 @@ import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
+import "../../../data/local/byte_repair_store.dart";
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
@@ -35,7 +36,8 @@ Shell platformShell({
 Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 
 /// A browser cannot run a command at all, so there is nothing for a Linux to
-/// be run under.
+/// be run under. The [project] and [config] parameters are unused here: the
+/// io side resolves a per-project rootfs instance from them.
 ShellDriver? platformDriver({
   required String skillsBundledDir,
   required String userSkillsDir,
@@ -44,6 +46,8 @@ ShellDriver? platformDriver({
   RootfsStore? store,
   String? rootfsId,
   String? abi,
+  String? project,
+  AppConfig? config,
 }) =>
     null;
 
@@ -60,6 +64,21 @@ Future<String?> platformVersionJson() async {
 }
 
 RootfsStore platformRootfsStore(String cacheDir) => const UnavailableRootfsStore();
+
+/// Nothing to copy a rootfs onto and no shell to run an install script in:
+/// every operation answers with an error from the store itself.
+ByteRepairStore platformByteRepairStore(
+  AppConfig config,
+  String project,
+  String workspace,
+  RootfsStore? rootfs,
+) =>
+    UnavailableByteRepairStore(
+        config: config, project: project, workspace: workspace);
+
+/// True: there is no marker to read and nothing that could write one, so a
+/// project that requires setup never gates a chat here.
+bool platformSetupComplete(AppConfig config, String? project) => true;
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 

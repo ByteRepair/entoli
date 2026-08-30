@@ -1,12 +1,8 @@
-import "dart:io";
-
 import "package:file_selector/file_selector.dart";
 import "package:flutter/services.dart" show rootBundle;
-import "package:path/path.dart" as p;
 
 import "../../core/config.dart";
 import "../../core/log.dart";
-import "../../domain/app_settings.dart";
 import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 
@@ -20,8 +16,14 @@ import "../../domain/shell.dart";
 /// into the project's data directory (for a project that opts into rootfs
 /// isolation), runs the install script, and writes a `.setup-complete` marker.
 /// The turn path no longer creates the rootfs copy — it relies on setup having
-/// been run, and the chat page gates the composer on [isSetupComplete].
-class ByteRepairStore {
+/// been run, and the chat page gates the composer on that marker.
+///
+/// Split the way `RootfsStore`/`FileRootfsStore` are, for the same reason: the
+/// type has to be nameable where `dart:io` is not compiled, so the shell-driven
+/// halves live here and the filesystem halves — the rootfs copy, the ESBMC
+/// import, the environment delete, the markers — are [FileByteRepairStore]'s on
+/// io and [UnavailableByteRepairStore]'s on the web.
+abstract class ByteRepairStore {
   ByteRepairStore({
     required this.config,
     required this.project,
@@ -32,15 +34,11 @@ class ByteRepairStore {
   final AppConfig config;
   final String project;
   final String workspace;
+
+  /// The base rootfs a copy is made from. Null on the web platform.
   final RootfsStore? rootfsStore;
 
   static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
-
-  /// Whether setup has been run: the `.setup-complete` marker exists in the
-  /// project's directory. Read by `setupCompleteProvider` to gate the chat
-  /// page's composer.
-  bool get isSetupComplete =>
-      File(config.setupCompleteFile(project: project)).existsSync();
 
   Future<ShellResult> _run(Shell shell, String script, Duration timeout) async {
     try {
@@ -59,95 +57,40 @@ class ByteRepairStore {
     }
   }
 
-  /// Copy the base rootfs from cache into the project's data directory, for a
-  /// project that opts into rootfs isolation. No-op where there is no rootfs
-  /// selected or no store (desktop, web). Returns null on success or an error
-  /// string.
-  Future<String?> _ensureRootfs() async {
-    final id = AppSettings.load(config).rootfsId;
-    if (id == null || rootfsStore == null) return null;
-    final baseDir = rootfsStore!.directoryOfSync(id);
-    if (baseDir == null) return "No rootfs is installed. Download one from Terminal settings.";
-    final target = config.projectRootfsDir(project: project, rootfsId: id);
-    final marker = File(p.join(target, ".complete"));
-    if (await marker.exists()) return null;
-    await Directory(target).create(recursive: true);
-    final result = await Process.run("cp", ["-a", "$baseDir/.", target]);
-    if (result.exitCode != 0) {
-      logFailure("byte-repair", "rootfs copy failed", result.stderr);
-      return "Failed to copy rootfs: ${result.stderr}";
-    }
-    await marker.writeAsString(id);
-    return null;
-  }
+  /// Copies the base rootfs from cache into the project's data directory, for
+  /// a project that opted into rootfs isolation. A no-op where no rootfs is
+  /// selected (the desktop case); an error string where it cannot. [install]
+  /// calls this first.
+  Future<String?> ensureRootfs();
 
-  /// Runs the bundled install script through [shell]'s configured terminal env.
-  /// First copies the base rootfs into the project's data directory (for rootfs
-  /// isolation), then runs the script to install make, github-cli and ESBMC,
-  /// and writes the `.setup-complete` marker on success.
+  /// Writes the `.setup-complete` marker, the one `setupCompleteProvider`
+  /// reads to lift the chat page's gate. [install] calls this on success.
+  Future<void> markSetupComplete();
+
+  /// Runs the bundled install script through [shell]'s configured terminal
+  /// env: [ensureRootfs] first, then the script — which puts `make`,
+  /// `github-cli` and ESBMC on PATH inside the rootfs — then the marker.
   Future<ShellResult> install(Shell shell) async {
-    final err = await _ensureRootfs();
+    final err = await ensureRootfs();
     if (err != null) return ShellResult.failed(err);
     final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
     final result = await _run(shell, body, const Duration(minutes: 10));
-    if (result.returnCode == 0) {
-      File(config.setupCompleteFile(project: project)).writeAsStringSync("done");
-    }
+    if (result.returnCode == 0) await markSetupComplete();
     return result;
   }
 
   /// Copies a user-picked ESBMC binary into the per-project rootfs at
   /// `/usr/local/bin/esbmc`, making it executable. The rootfs must already
-  /// exist — run [install] first. Returns null on success, or an error
-  /// message.
-  Future<String?> importEsbmc(XFile file) async {
-    final rootfsDir = _rootfsDir;
-    if (rootfsDir == null) {
-      return "The Byte Repair rootfs has not been set up yet. Run Setup first.";
-    }
-    try {
-      final destDir = Directory(p.join(rootfsDir, "usr", "local", "bin"));
-      await destDir.create(recursive: true);
-      final dest = p.join(destDir.path, "esbmc");
-      await File(dest).writeAsBytes(await file.readAsBytes());
-      await Process.run("chmod", ["+x", dest]);
-      return null;
-    } catch (e) {
-      logFailure("byte-repair", "import ESBMC failed", e);
-      return e.toString();
-    }
-  }
+  /// exist — run [install] first. Null on success, an error message on
+  /// failure.
+  Future<String?> importEsbmc(XFile file);
 
   /// Deletes the Byte Repair environment: the per-project rootfs (the Alpine
   /// copy and everything installed into it), the workspace (cloned repos,
-  /// scratch files), and the `.setup-complete` marker. Chats are deleted by
-  /// the settings page through the repository; this method does not touch
-  /// them. The rootfs is re-created by the next "Run Setup"; the workspace on
-  /// the next file write.
-  Future<String?> deleteEnvironment() async {
-    try {
-      final rootfsRoot = p.join(config.projectDir(project: project), "rootfs");
-      final dir = Directory(rootfsRoot);
-      if (await dir.exists()) await dir.delete(recursive: true);
-      final ws = Directory(config.projectWorkspaceDir(project: project));
-      if (await ws.exists()) await ws.delete(recursive: true);
-      final marker = File(config.setupCompleteFile(project: project));
-      if (await marker.exists()) await marker.delete();
-      return null;
-    } catch (e) {
-      logFailure("byte-repair", "delete environment failed", e);
-      return e.toString();
-    }
-  }
-
-  /// The per-project rootfs directory for the currently selected rootfs id, or
-  /// null where the copy has not been created yet.
-  String? get _rootfsDir {
-    final id = AppSettings.load(config).rootfsId;
-    if (id == null) return null;
-    final dir = config.projectRootfsDir(project: project, rootfsId: id);
-    return File(p.join(dir, ".complete")).existsSync() ? dir : null;
-  }
+  /// scratch files), and the `.setup-complete` marker. Chats are the settings
+  /// page's to delete, through the repository. Null on success, an error
+  /// message on failure.
+  Future<String?> deleteEnvironment();
 
   /// Runs `<command> --version` through [shell] and returns its raw output, or
   /// null where the command is not installed or the call failed. All three tools
@@ -170,4 +113,32 @@ class ByteRepairStore {
     );
     return Map.fromEntries(entries);
   }
+}
+
+/// The web's store: no filesystem to copy a rootfs onto and no shell to run
+/// the install script in, so every io-side operation answers with an error
+/// rather than failing obscurely. Setup reads as complete (see
+/// `platformSetupComplete`), so the chat page never gates on a marker nothing
+/// could write.
+class UnavailableByteRepairStore extends ByteRepairStore {
+  UnavailableByteRepairStore({
+    required super.config,
+    required super.project,
+    required super.workspace,
+  });
+
+  static const _why =
+      "Byte Repair needs a terminal environment, which this platform does not have.";
+
+  @override
+  Future<String?> ensureRootfs() async => _why;
+
+  @override
+  Future<void> markSetupComplete() async {}
+
+  @override
+  Future<String?> importEsbmc(XFile file) async => _why;
+
+  @override
+  Future<String?> deleteEnvironment() async => _why;
 }

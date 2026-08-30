@@ -13,6 +13,8 @@ import "../../../data/local/android_device_name.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/android_reminder_alarms.dart";
 import "../../../data/local/bundled_tools.dart";
+import "../../../data/local/byte_repair_store.dart";
+import "../../../data/local/file_byte_repair_store.dart";
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
@@ -118,6 +120,24 @@ Future<String?> platformVersionJson() async {
 /// directory, and for the same reasons — see [RootfsStore].
 RootfsStore platformRootfsStore(String cacheDir) =>
     FileRootfsStore(p.join(cacheDir, "rootfs"));
+
+/// The Byte Repair store, which copies that rootfs into the project's data
+/// directory and installs the tooling into it. [project] and [workspace] are
+/// named by the caller so both sides of the conditional import agree on what
+/// the store is for.
+ByteRepairStore platformByteRepairStore(
+  AppConfig config,
+  String project,
+  String workspace,
+  RootfsStore? rootfs,
+) =>
+    FileByteRepairStore(
+        config: config, project: project, workspace: workspace, rootfsStore: rootfs);
+
+/// Whether a project's `.setup-complete` marker is there. Synchronous because
+/// the chat page asks it in a build.
+bool platformSetupComplete(AppConfig config, String? project) =>
+    File(config.setupCompleteFile(project: project)).existsSync();
 
 /// Lay out whatever this build ships for the device's ABI, under [cacheDir]
 /// rather than the data directory: it is rebuilt from the APK on demand, so a

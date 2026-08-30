@@ -12,12 +12,10 @@ import "core/platform/platform.dart" as platform;
 import "core/platform/system_palette.dart";
 import "data/local/file_reminder_store.dart";
 import "data/local/file_selector_picker.dart";
-import "data/local/byte_repair_store.dart";
 import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
-import "domain/builtin_project.dart";
 import "domain/models.dart" show CompletionKind;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
@@ -173,11 +171,8 @@ class AppSession {
         installedVoiceModelsProvider
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
         rootfsStoreProvider.overrideWithValue(rootfs),
-        byteRepairStoreProvider.overrideWithValue(ByteRepairStore(
-            config: config,
-            project: ByteRepairProject().dir,
-            workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
-            rootfsStore: rootfs)),
+        byteRepairStoreProvider.overrideWithValue(
+            platform.createByteRepairStore(config, rootfs)),
         installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),
