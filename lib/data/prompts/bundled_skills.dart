@@ -17,7 +17,7 @@ import "../../core/config.dart";
 import "../../core/log.dart";
 import "bundled_skill_data.dart";
 
-/// Writes every bundled skill file from [bundledPromptFiles] into the project
+/// Writes every bundled skill file from [bundledSkillFiles] into the project
 /// directories it belongs to, keeping the tree. **Self-healing**: a file that
 /// exists but differs from the embedded copy (by SHA-256) is re-written, so
 /// an edit — accidental or deliberate — is repaired on the next launch. A
@@ -28,7 +28,7 @@ import "bundled_skill_data.dart";
 /// from the embedded const, not from this disk write, so even a self-heal
 /// failure leaves the library correct — this is purely for bash access.
 Future<void> installBundledSkills(AppConfig config) async {
-  final projects = bundledPromptFiles.map((f) => f.project).toSet();
+  final projects = bundledSkillFiles.map((f) => f.project).toSet();
   for (final project in projects) {
     await _installFor(config, project);
   }
@@ -40,7 +40,7 @@ Future<void> _installFor(AppConfig config, String project) async {
   final root = fs.directory(config.bundledSkillsDir(project: project));
 
   final known = <String>{};
-  for (final file in bundledPromptFiles) {
+  for (final file in bundledSkillFiles) {
     if (file.project != project) continue;
     final dest = path.join(
         config.bundledSkillsDir(project: project), file.name, file.relativePath);

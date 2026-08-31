@@ -49,7 +49,7 @@ void main() {
     await installBundledSkills(config);
 
     final restored = File(marker).readAsStringSync();
-    final original = bundledPromptFiles
+    final original = bundledSkillFiles
         .firstWhere((f) => f.name == "artifact" && f.relativePath == "SKILL.md")
         .content;
     expect(restored, original);
@@ -78,11 +78,10 @@ void main() {
         .whereType<Directory>()
         .map((d) => p.basename(d.path))
         .toSet();
-    final embedded =
-        bundledPromptFiles.map((f) => f.name).toSet();
+    final embedded = bundledSkillFiles.map((f) => f.name).toSet();
     for (final name in onDisk) {
       expect(embedded, contains(name),
-          reason: "$name is on disk but not in bundledPromptFiles");
+          reason: "$name is on disk but not in bundledSkillFiles");
     }
   });
 
@@ -93,11 +92,10 @@ void main() {
         .where((f) => f.path.endsWith(".md"))
         .map((f) => p.basenameWithoutExtension(f.path))
         .toSet();
-    final embedded =
-        bundledPromptFiles.map((f) => f.name).toSet();
+    final embedded = bundledAgentFiles.map((f) => f.name).toSet();
     for (final name in onDisk) {
       expect(embedded, contains(name),
-          reason: "$name is on disk but not in bundledPromptFiles");
+          reason: "$name is on disk but not in bundledAgentFiles");
     }
   });
 
@@ -175,7 +173,7 @@ void main() {
   });
 
   test("the embedded checksums match the source files", () async {
-    for (final file in bundledPromptFiles) {
+    for (final file in bundledSkillFiles) {
       final source = File(p.join(
           "assets/prompts/projects", file.project, "skills", file.name, file.relativePath));
       if (!source.existsSync()) continue;
@@ -184,8 +182,7 @@ void main() {
       expect(hash, file.sha256,
           reason: "${file.name}/${file.relativePath} checksum mismatch");
     }
-    for (final file in bundledPromptFiles) {
-      if (file.relativePath.isNotEmpty) continue; // agents only
+    for (final file in bundledAgentFiles) {
       final source = File(
           p.join("assets/prompts/projects", file.project, "agents", "${file.name}.md"));
       if (!source.existsSync()) continue;
@@ -196,22 +193,42 @@ void main() {
   });
 
   group("project scoping", () {
+    test("the default project offers its own skills and agents, no others", () async {
+      final skills =
+          await BundledPrompts(config: tempConfig()).load(CompletionKind.skill);
+      final agents = await const BundledPrompts().load(CompletionKind.agent);
+
+      expect(skills.map((s) => s.name).toSet(),
+          {"artifact", "deep-research", "skill-creator"});
+      expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
+    });
+
+    test("byte-repair inherits the default's agents and adds esbmc-verifier, "
+        "and ships no skills of its own", () async {
+      final config = tempConfig();
+      await installBundledSkills(config);
+      final skills = await BundledPrompts(config: config, project: "byte-repair")
+          .load(CompletionKind.skill);
+      final agents = await const BundledPrompts(project: "byte-repair")
+          .load(CompletionKind.agent);
+
+      expect(skills.map((s) => s.name).toSet(),
+          {"artifact", "deep-research", "skill-creator"});
+      expect(agents.map((a) => a.name).toSet(),
+          {"explore", "general", "esbmc-verifier"});
+    });
+
     test("esbmc-verifier is byte-repair's alone", () async {
-      // The default project inherits the base set and nothing of byte-repair's.
       final defaultAgents =
           await const BundledPrompts().load(CompletionKind.agent);
       final byteRepairAgents =
           await const BundledPrompts(project: "byte-repair")
               .load(CompletionKind.agent);
 
-      expect(
-          defaultAgents.any((a) => a.name == "esbmc-verifier"), isFalse,
+      expect(defaultAgents.any((a) => a.name == "esbmc-verifier"), isFalse,
           reason: "esbmc-verifier must not be visible to the default project");
       expect(byteRepairAgents.any((a) => a.name == "esbmc-verifier"), isTrue,
           reason: "esbmc-verifier must be visible to byte-repair");
-      // Default's agents (explore, general) are still visible to byte-repair.
-      expect(defaultAgents.any((a) => a.name == "explore"), isTrue);
-      expect(byteRepairAgents.any((a) => a.name == "explore"), isTrue);
     });
 
     test("a project's own agent overrides a same-named default one", () async {

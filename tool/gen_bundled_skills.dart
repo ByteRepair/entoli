@@ -17,29 +17,25 @@ import "dart:io";
 import "package:crypto/crypto.dart";
 
 void main() {
-  final entries = <_Entry>[];
+  final skills = <_Entry>[];
+  final agents = <_Entry>[];
   for (final projectDir in _projectDirs()) {
     final project = _basename(projectDir.path);
     final skillsRoot = Directory("${projectDir.path}/skills");
     if (skillsRoot.existsSync()) {
       for (final e in _collectSkills(skillsRoot, project)) {
-        entries.add(e);
+        skills.add(e);
       }
     }
     final agentsRoot = Directory("${projectDir.path}/agents");
     if (agentsRoot.existsSync()) {
       for (final e in _collectAgents(agentsRoot, project)) {
-        entries.add(e);
+        agents.add(e);
       }
     }
   }
-  entries.sort((a, b) {
-    final c = a.project.compareTo(b.project);
-    if (c != 0) return c;
-    final d = a.name.compareTo(b.name);
-    if (d != 0) return d;
-    return a.relativePath.compareTo(b.relativePath);
-  });
+  _sort(skills);
+  _sort(agents);
 
   final licence = File(
           "assets/prompts/projects/default/skills/skill-creator/LICENSE.txt")
@@ -61,7 +57,39 @@ void main() {
   buf.writeln("}");
   buf.writeln();
 
-  buf.writeln("const bundledPromptFiles = <BundledPromptFile>[");
+  _emitList(buf, "bundledSkillFiles", skills);
+  _emitList(buf, "bundledAgentFiles", agents);
+
+  buf.writeln("const bundledSkillLicence = ${_stringLiteral(licence)};");
+  buf.writeln();
+
+  File("lib/data/prompts/bundled_skill_data.dart")
+      .writeAsStringSync(buf.toString());
+  stdout.writeln("Wrote lib/data/prompts/bundled_skill_data.dart "
+      "(${skills.length} skill files, ${agents.length} agent files).");
+}
+
+class _Entry {
+  _Entry(this.project, this.name, this.relativePath, this.sha256, this.content);
+  final String project;
+  final String name;
+  final String relativePath;
+  final String sha256;
+  final String content;
+}
+
+void _sort(List<_Entry> entries) {
+  entries.sort((a, b) {
+    final c = a.project.compareTo(b.project);
+    if (c != 0) return c;
+    final d = a.name.compareTo(b.name);
+    if (d != 0) return d;
+    return a.relativePath.compareTo(b.relativePath);
+  });
+}
+
+void _emitList(StringBuffer buf, String varName, List<_Entry> entries) {
+  buf.writeln("const $varName = <BundledPromptFile>[");
   for (final e in entries) {
     buf.writeln("  BundledPromptFile(");
     buf.writeln("      ${_stringLiteral(e.project)},");
@@ -72,23 +100,6 @@ void main() {
   }
   buf.writeln("];");
   buf.writeln();
-
-  buf.writeln("const bundledSkillLicence = ${_stringLiteral(licence)};");
-  buf.writeln();
-
-  File("lib/data/prompts/bundled_skill_data.dart")
-      .writeAsStringSync(buf.toString());
-  stdout.writeln("Wrote lib/data/prompts/bundled_skill_data.dart "
-      "(${entries.length} files).");
-}
-
-class _Entry {
-  _Entry(this.project, this.name, this.relativePath, this.sha256, this.content);
-  final String project;
-  final String name;
-  final String relativePath;
-  final String sha256;
-  final String content;
 }
 
 /// The project directories under `assets/prompts/projects/`, sorted. `default`

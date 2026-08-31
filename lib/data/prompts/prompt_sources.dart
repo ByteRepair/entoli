@@ -47,20 +47,16 @@ class BundledPrompts implements PromptSource {
   List<PromptDocument> _loadBundledAgents() {
     final project = this.project ?? defaultProjectDir;
     final documents = <PromptDocument>[];
-    // Agents are flat `.md` files — `relativePath` is empty — distinguished
-    // from a skill's sub-files, which share the `bundledPromptFiles` list.
     // Default's first: the base set. A project's entries follow, so a
     // same-named override replaces the default one for that project.
-    for (final file in bundledPromptFiles) {
-      if (file.project != defaultProjectDir || file.relativePath.isNotEmpty) {
-        continue;
-      }
+    for (final file in bundledAgentFiles) {
+      if (file.project != defaultProjectDir) continue;
       documents.add(
           PromptDocument.parse(CompletionKind.agent, file.name, file.content));
     }
     if (project != defaultProjectDir) {
-      for (final file in bundledPromptFiles) {
-        if (file.project != project || file.relativePath.isNotEmpty) continue;
+      for (final file in bundledAgentFiles) {
+        if (file.project != project) continue;
         documents.add(
             PromptDocument.parse(CompletionKind.agent, file.name, file.content));
       }
@@ -82,7 +78,7 @@ class BundledPrompts implements PromptSource {
     final documents = <PromptDocument>[];
     void emitFor(String tag) {
       final bySkill = <String, List<BundledPromptFile>>{};
-      for (final file in bundledPromptFiles) {
+      for (final file in bundledSkillFiles) {
         if (file.project != tag) continue;
         bySkill.putIfAbsent(file.name, () => []).add(file);
       }
