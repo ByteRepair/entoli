@@ -4,7 +4,8 @@ import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
-import "../core/platform/platform.dart" show createPromptSources;
+import "../core/platform/platform.dart"
+    show createPromptSources, setupComplete;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
@@ -17,6 +18,7 @@ import "domain/assistant_view.dart";
 import "domain/attachment_picker.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
+import "domain/builtin_project.dart";
 import "domain/chat_repository.dart";
 import "domain/corner_radius.dart";
 import "domain/chat_store.dart";
@@ -24,6 +26,7 @@ import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
 import "data/builtin/llm/local_prefill.dart";
+import "data/local/byte_repair_store.dart";
 import "domain/local_llm.dart";
 import "domain/local_model.dart";
 import "domain/local_model_store.dart";
@@ -130,6 +133,31 @@ class InstalledRootfs extends Notifier<Set<String>> {
 
 final installedRootfsProvider =
     NotifierProvider<InstalledRootfs, Set<String>>(() => InstalledRootfs(const {}));
+
+/// The Byte Repair tooling store, overridden in `main` with one that knows the
+/// cache directory. Throws until then, the way `rootfsStoreProvider` does.
+final byteRepairStoreProvider =
+    Provider<ByteRepairStore>((ref) => throw UnimplementedError());
+
+/// The version of each tool the setup installs (ESBMC, make, gh), or null
+/// where one is not installed. Refreshed by the settings page after a setup run.
+final byteRepairToolVersionsProvider =
+    FutureProvider<Map<String, String?>>((ref) async {
+  final store = ref.watch(byteRepairStoreProvider);
+  final shell = ref.watch(shellProvider);
+  return store.runToolVersions(shell);
+});
+
+/// Whether a project requiring setup has been set up. True for projects that
+/// don't require setup (the common case); for one that does, asks the platform
+/// about the `.setup-complete` marker in the project's directory. Invalidated
+/// by the settings page after Run Setup or Delete.
+final setupCompleteProvider =
+    Provider.family<bool, String?>((ref, project) {
+  final spec = builtinProjectOf(project);
+  if (spec?.requiresSetup != true) return true;
+  return setupComplete(ref.watch(appConfigProvider), project);
+});
 
 final localModelStoreProvider =
     Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());

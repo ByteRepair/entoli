@@ -9,6 +9,7 @@ import "../download.dart";
 import "../../domain/download.dart";
 import "../../domain/rootfs.dart";
 import "../../domain/rootfs_store.dart";
+import "tree_ops.dart";
 
 /// A downloaded Linux in a directory of its own, outside the data directory —
 /// see [RootfsStore] for why that matters. `dart:io` rather than the config's
@@ -66,10 +67,15 @@ class FileRootfsStore extends RootfsStore {
     return out;
   }
 
+  /// A rootfs that hosted a session contains proot's mode-0000 bind stubs,
+  /// which `dart:io` cannot list — see `tree_ops.dart` — so the removal goes
+  /// through [removeTree] rather than a plain recursive delete.
   @override
   Future<void> delete(Rootfs rootfs) async {
-    final dir = Directory(directoryFor(rootfs.id));
-    if (await dir.exists()) await dir.delete(recursive: true);
+    final err = await removeTree(directoryFor(rootfs.id));
+    if (err != null) {
+      throw ProcessException("rm", ["-rf", directoryFor(rootfs.id)], err);
+    }
   }
 
   /// One tarball, checked and then unpacked. The fetching and the giving up are

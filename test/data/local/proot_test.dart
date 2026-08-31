@@ -116,6 +116,10 @@ void main() {
     expect(driver.environment.containsKey("HOME"), isFalse);
   });
 
+  test("the parent's environment does not leak into the guest", () {
+    expect(build().includeParentEnvironment, isFalse);
+  });
+
   test("a guest's HOME is the project's workspace, so the shell sets it", () {
     expect(build().projectHome, isTrue);
   });

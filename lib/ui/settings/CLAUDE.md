@@ -74,7 +74,20 @@ not deletable and a user's is; import and delete are the two things that change
 it, and they reload the library the moment they are done, the one way a change
 to it lands without a restart, where a skill dropped into the directory by hand
 still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
-**Sync** is paired devices — this device's identity and
+**Byte Repair** is the tooling for the built-in project of the same name: a
+banner saying whether the configured terminal env can run it, a button that
+runs a bundled install script through that env to create the project's own
+rootfs instance and put `make`, `github-cli` and ESBMC into it, a button to
+import a local ESBMC binary into the rootfs, a button to delete the whole
+environment (rootfs, workspace, and all chats in the project), and the
+versions found afterwards. "Run Setup" owns the full lifecycle — it copies
+the base rootfs from cache, runs the install script, and writes a
+`.setup-complete` marker — so the turn path no longer creates the rootfs
+lazily. The chat page gates the composer on that marker, showing a "setup
+required" bar until it is there. On
+Android the "Host" terminal env has no package manager, so the category says
+so and hides the rest until a rootfs is picked from Terminal; on every other
+platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
 handshake. **Providers** is the endpoints.
@@ -189,6 +202,18 @@ hundred megabytes of bytes that can be fetched again would be in every export,
 and a restore would drag them between machines and delete whatever was already
 downloaded. Keeping them outside is what makes both false, rather than an
 exception in here that someone has to remember — see "Where the models live".
+
+A per-project `rootfs/` is the one re-fetchable tree that *does* live under the
+data directory, because a built-in with rootfs isolation keeps its living
+filesystem there beside the chats. `writeBackup`'s `skipDir` leaves it out for
+the same reason the voice models are outside it, and for a second one: proot's
+mode-0000 bind stubs (see `tree_ops.dart`) sit inside it, and `dart:io` cannot
+list a mode-0000 directory, so a walker that reached one would throw. The
+restore clear routes every top-level directory through `removeTree` rather than
+a plain recursive delete, so the stubs a skipped `rootfs/` leaves behind are
+cleared on the way in too — the same `removeTree` the rootfs stores use, so the
+one function that knows how to delete a stub-bearing tree is the one the
+restore reuses.
 
 It was one JSON document holding every file first, and that is worse on every
 count that matters. Text in JSON is escaped inside a string inside an array,

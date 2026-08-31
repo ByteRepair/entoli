@@ -59,6 +59,7 @@ ShellDriver prootDriver({
       },
       projectHome: true,
       guestRoot: guestHome,
+      includeParentEnvironment: false,
       hostToGuestPaths: {
         skillsBundledDir: "/opt/skills-bundled",
         userSkillsDir: "/opt/skills",

@@ -41,7 +41,7 @@ import "../../domain/shell.dart";
 class LocalShell extends Shell {
   LocalShell({
     Map<String, String> Function()? environment,
-    ShellDriver? Function()? driver,
+    ShellDriver? Function({String? project})? driver,
   })  : _environment = environment ?? _none,
         _driver = driver ?? _hostDriver;
 
@@ -49,10 +49,11 @@ class LocalShell extends Shell {
   /// [_environment] is: installing a Linux from the settings page, or going
   /// back to the machine's own shell, reaches the next command rather than the
   /// next launch. Null is a machine with no shell at all, which is what a
-  /// command sent to one reports.
-  final ShellDriver? Function() _driver;
+  /// command sent to one reports. The project name reaches the driver so an
+  /// isolated built-in can resolve its own rootfs instance.
+  final ShellDriver? Function({String? project}) _driver;
 
-  static ShellDriver? _hostDriver() => hostDriver();
+  static ShellDriver? _hostDriver({String? project}) => hostDriver();
 
   /// Applied over the process's own environment. Read at each command rather
   /// than captured, so a variable added in settings reaches the next one.
@@ -69,12 +70,20 @@ class LocalShell extends Shell {
   /// the same thing without costing a subprocess. Returns the process and
   /// whether it owns a process group a stop can kill.
   static Future<({Process process, bool ownsGroup})> _spawnInGroup(
-      List<String> command, String cwd, Map<String, String> env) async {
+      List<String> command, String cwd, Map<String, String> env,
+      {bool includeParentEnvironment = true}) async {
+    // The cwd is a directory the app lays out, and it may not be there yet:
+    // a project workspace before its first chat (a built-in project's setup
+    // runs in one) or one a user deleted from the Files app. A missing
+    // workingDirectory fails with ENOENT that names neither, so make it.
+    Directory(cwd).createSync(recursive: true);
     final argv = command.skip(1).toList();
     if (_hasSetsid != false) {
       try {
         final process = await Process.start("setsid", [command.first, ...argv],
-            workingDirectory: cwd, environment: env);
+            workingDirectory: cwd,
+            environment: env,
+            includeParentEnvironment: includeParentEnvironment);
         _hasSetsid = true;
         return (process: process, ownsGroup: true);
       } on ProcessException {
@@ -82,7 +91,9 @@ class LocalShell extends Shell {
       }
     }
     final process = await Process.start(command.first, argv,
-        workingDirectory: cwd, environment: env);
+        workingDirectory: cwd,
+        environment: env,
+        includeParentEnvironment: includeParentEnvironment);
     return (process: process, ownsGroup: false);
   }
 
@@ -183,9 +194,10 @@ class LocalShell extends Shell {
       Map<String, String>? environment,
       bool sharedHome = true,
       bool oneShot = false,
-      bool restart = false}) {
+      bool restart = false,
+      String? project}) {
     if (oneShot) {
-      final driver = _driver();
+      final driver = _driver(project: project);
       return _OneShotRun(
         // The driver's shell, built for this chat's cwd and home, or nothing
         // where there is no driver at all.
@@ -198,10 +210,11 @@ class LocalShell extends Shell {
             driver: driver,
             sharedHome: sharedHome,
             environment: environment),
+        includeParentEnvironment: driver?.includeParentEnvironment ?? true,
       );
     }
     return _sessions
-        .putIfAbsent(cwd, () => _Session(this, cwd, home))
+        .putIfAbsent(cwd, () => _Session(this, cwd, home, project: project))
         .start(command, timeout,
             environment: environment,
             sharedHome: sharedHome,
@@ -360,7 +373,7 @@ void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
 /// route the output to, and the queue is what keeps it that way even where a
 /// stop and a resend land close together.
 class _Session {
-  _Session(this._shell, this._cwdPath, this._home)
+  _Session(this._shell, this._cwdPath, this._home, {this._project})
       : _displayCwd = _computeDisplayCwd(_shell, _cwdPath, _home);
 
   final LocalShell _shell;
@@ -370,6 +383,11 @@ class _Session {
 
   /// The `HOME` the shell is given.
   final String _home;
+
+  /// The project this session's chats belong to, so the driver can resolve a
+  /// per-project rootfs instance for an isolated built-in. Constant for a
+  /// session, since a session is keyed by the chat's cwd.
+  final String? _project;
 
   /// The path the composer's cwd bar should show — the guest path where the
   /// shell runs inside one, the host path otherwise. Set once at construction,
@@ -430,7 +448,7 @@ class _Session {
     bool sharedHome = true,
     bool restart = false,
   }) async {
-    final driver = _shell._driver();
+    final driver = _shell._driver(project: _project);
     final command0 = driver?.commandFor(_cwdPath, _home) ?? const [];
     if (command0.isEmpty) {
       run.state.complete(const ShellResult.failed(
@@ -445,7 +463,8 @@ class _Session {
     final fp = _fingerprint(command0, env);
     if (restart || _fp != fp) {
       try {
-        await _spawn(command0, env);
+        await _spawn(command0, env,
+            includeParentEnvironment: driver?.includeParentEnvironment ?? true);
       } catch (e) {
         run.state.complete(
             ShellResult.failed("An error occurred while starting the shell: $e"));
@@ -483,7 +502,8 @@ class _Session {
   static String _fingerprint(List<String> command, Map<String, String> env) =>
       "${command.join("\u0000")}\u0000${env.entries.map((e) => "${e.key}=${e.value}").join("\u0000")}";
 
-  Future<void> _spawn(List<String> command, Map<String, String> env) async {
+  Future<void> _spawn(List<String> command, Map<String, String> env,
+      {bool includeParentEnvironment = true}) async {
     await _teardown();
     final token = const Uuid().v4();
     _marker = "@@E$token rc=";
@@ -493,7 +513,8 @@ class _Session {
       // which is what a stop kills. Whether it is there is learned by trying
       // it, the way the one-shot run learns it.
       final started = await LocalShell._spawnInGroup(
-          [command.first, ...argv], _cwdPath, env);
+          [command.first, ...argv], _cwdPath, env,
+          includeParentEnvironment: includeParentEnvironment);
       _process = started.process;
       _ownsGroup = started.ownsGroup;
     } catch (e) {
@@ -720,6 +741,7 @@ class _OneShotRun implements ShellRun {
     required this.cwd,
     required this.timeout,
     required this.environment,
+    this.includeParentEnvironment = true,
   }) {
     result = _run();
   }
@@ -733,6 +755,7 @@ class _OneShotRun implements ShellRun {
   final String cwd;
   final Duration timeout;
   final Map<String, String> environment;
+  final bool includeParentEnvironment;
 
   @override
   late final Future<ShellResult> result;
@@ -804,7 +827,9 @@ class _OneShotRun implements ShellRun {
   /// first: a failed spawn says the same thing without costing a subprocess.
   Future<Process> _spawn() async {
     final argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
-    final started = await LocalShell._spawnInGroup([command.first, ...argv], cwd, environment);
+    final started = await LocalShell._spawnInGroup(
+        [command.first, ...argv], cwd, environment,
+        includeParentEnvironment: includeParentEnvironment);
     _ownsGroup = started.ownsGroup;
     return started.process;
   }

@@ -25,6 +25,7 @@ import "mirror_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
+import "widgets/needs_setup_bar.dart";
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
 
@@ -139,6 +140,28 @@ class _NewChatState extends ConsumerState<_NewChat> {
     );
   }
 
+  /// The composer, or a "setup required" bar where the project needs setup
+  /// and has not been set up yet. The bar replaces the composer entirely,
+  /// the way `ViewOnlyBar` does for a mirrored chat.
+  Widget _bottomBar() {
+    final project = ref.watch(selectedProjectProvider);
+    if (ref.watch(setupCompleteProvider(project))) {
+      return Composer(
+        controller: _controller,
+        isRunning: false,
+        onSend: _send,
+        onAbort: () {},
+        onVoice: ref.watch(voiceProvider).available
+            ? () => startVoiceChat(context, ref, meta: _meta)
+            : null,
+        workspace: null,
+      );
+    }
+    return NeedsSetupBar(
+      onOpenSettings: () => openSetupSettings(context),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         drawer: widget.withDrawer ? const NavDrawer(child: Sidebar()) : null,
@@ -153,20 +176,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
           ],
         ),
         body: _ReadableColumn(
-          bottom: Composer(
-            controller: _controller,
-            isRunning: false,
-            onSend: _send,
-            // Nothing to abort: `isRunning` is false until there is a chat for
-            // a turn to run in, and by then this screen is gone.
-            onAbort: () {},
-            onVoice: ref.watch(voiceProvider).available
-                ? () => startVoiceChat(context, ref, meta: _meta)
-                : null,
-            // No chat, no shell: the first command of it runs in a workspace
-            // the send names, so there is no directory to draw yet.
-            workspace: null,
-          ),
+          bottom: _bottomBar(),
           child: _EmptyChat(
             project: ref.watch(selectedProjectProvider),
             controller: _controller,
@@ -200,7 +210,23 @@ class _ProjectBadges extends ConsumerWidget {
         children: [
           for (final project in projects)
             ChoiceChip(
-              label: Text(projectLabel(project)),
+              // The icon rides in the label rather than the avatar slot:
+              // Material's ChoiceChip paints the selected check over the
+              // avatar, so an icon there disappears under the tick when
+              // picked. In the label it sits beside the text, and the check
+              // keeps the leading slot to itself the way it had before the
+              // icon was added.
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (projectIcon(project) case final icon?)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(icon, size: 18),
+                    ),
+                  Text(projectLabel(project)),
+                ],
+              ),
               selected: project == selected,
               onSelected: (on) => selectProject(ref, on ? project : null),
             ),
@@ -494,16 +520,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         MaterialPageRoute(builder: (_) => ChatSettingsPage(chatId: widget.chatId)),
       ),
       whenEmpty: _EmptyChat(project: chat.state.project, controller: _controller),
-      bottom: _turnBar(
-        view: view,
-        driver: notifier,
-        onVoice: ref.watch(voiceProvider).available
-            ? () => openVoice(context, ref, widget.chatId)
-            : null,
-        workspace: ref
-            .watch(appConfigProvider)
-            .workspaceDir(widget.chatId, project: chat.state.project),
-      ),
+      bottom: ref.watch(setupCompleteProvider(chat.state.project))
+          ? _turnBar(
+              view: view,
+              driver: notifier,
+              onVoice: ref.watch(voiceProvider).available
+                  ? () => openVoice(context, ref, widget.chatId)
+                  : null,
+              workspace: ref
+                  .watch(appConfigProvider)
+                  .workspaceDir(widget.chatId, project: chat.state.project),
+            )
+          : NeedsSetupBar(
+              onOpenSettings: () => openSetupSettings(context),
+            ),
     );
   }
 

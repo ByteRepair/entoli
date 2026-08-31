@@ -227,6 +227,7 @@ class BuiltinBackend implements AgentBackend {
         log: subAgentLog,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        project: project,
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
@@ -324,6 +325,7 @@ class BuiltinBackend implements AgentBackend {
         memoryChat: settings.memory.agentTool ? chatId : null,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        project: project,
         saveArtifact: (path, {artifactId}) async {
           final resolved = resolvePath(path);
           if (artifactId != null) {
@@ -442,7 +444,8 @@ class BuiltinBackend implements AgentBackend {
             sharedWorkspace: sharedWorkspace),
         sharedHome: sharedWorkspace,
         timeout: options.commandTimeout,
-        environment: environment);
+        environment: environment,
+        project: project);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.add(chatId, run.kill);

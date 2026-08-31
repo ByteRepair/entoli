@@ -12,12 +12,14 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/local/file_byte_repair_store.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -218,6 +220,11 @@ class TestApp {
               () => InstalledVoiceModels({...voiceModels, ...system},
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
+          byteRepairStoreProvider.overrideWithValue(FileByteRepairStore(
+              config: config,
+              project: ByteRepairProject().dir,
+              workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+              rootfsStore: linux)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),
