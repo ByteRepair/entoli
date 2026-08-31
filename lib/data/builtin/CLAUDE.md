@@ -117,6 +117,14 @@ in `data/local/` — and `platformDriver` picks between the two per command.
 `LocalShell` runs whichever it is handed, since to it both are a command that
 ends in a shell, and that is the whole of what a new driver owes it.
 
+**The shell creates the directory it is told to stand in if it is not there.**
+A spawn `workingDirectory` that does not exist fails with an ENOENT that names
+neither the directory nor the reason, and the cwds the app hands the shell are
+its own laid-out paths that may legitimately be missing: a project workspace
+before its first chat — a built-in project's setup runs in one — or one a user
+deleted from the Files app. So `_spawnInGroup` makes it before `Process.start`,
+in the one place both the one-shot and the persistent paths spawn through.
+
 **The commands run in one shell per chat, and its state is machine state the
 conversation builds on.** A fresh subshell per command made a `cd` or an
 `export` a private joke: the model moved the shell in one command, and the next

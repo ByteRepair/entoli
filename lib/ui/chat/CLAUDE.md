@@ -354,6 +354,14 @@ floats over the conversation, and `bottom` is a composer or a bar saying why
 there is none. Written out twice, the mirrored copy had already lost the jump
 button, the empty-chat starter and the running-turn spinner.
 
+**A project that requires setup hides the composer until setup is run.**
+`BuiltinProject.requiresSetup` is a general flag; `setupCompleteProvider`
+checks a `.setup-complete` marker in the project's directory. Where it is
+false, `_NewChat` and `_local` swap the composer for a `NeedsSetupBar` —
+the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
+button that opens Settings at the project's category. The turn path no
+longer creates the rootfs lazily; "Run Setup" owns the full lifecycle.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
@@ -484,8 +492,10 @@ toggles rather than a set with one always down.
 The built-in projects have badges, and they are always on offer: `everyProject`
 leads with them after the default, so a user who has never made a project sees
 the built-ins alone rather than nothing. What the row names for one is its
-label, not its directory — `🕶️ Anon`, not `anonymous` — the same rule the
-menus and the title bar keep.
+label, not its directory — `Anon`, not `anonymous` — the same rule the
+menus and the title bar keep. A built-in's badge carries its icon as the chip's
+avatar, and the sidebar's project menu shows the same icon beside the label; a
+user project has neither, since only a built-in ships one.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it

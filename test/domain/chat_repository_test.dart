@@ -195,6 +195,30 @@ void main() {
       // async, so its refusal is a future error.
       expect(() => repo.createProject("anonymous"), throwsArgumentError);
       await expectLater(repo.deleteProject("anonymous"), throwsArgumentError);
+      expect(() => repo.createProject("byte-repair"), throwsArgumentError);
+      await expectLater(repo.deleteProject("byte-repair"), throwsArgumentError);
+    });
+
+    test("a turn in Byte Repair keeps the profile, memory and shared workspace",
+        () async {
+      final repo = repoWith(AppSettings(
+        profile: const Profile(name: "Tea Fan"),
+        autoMemory: true,
+      ));
+      final chat = await repo.createChat(project: "byte-repair");
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, "byte-repair");
+      // Byte Repair inherits the app's profile and memory, unlike Anonymous.
+      expect(settings.profile, isNotNull);
+      expect(settings.memory.autoMemory, isTrue);
+      expect(settings.sharedWorkspace, isTrue);
+      expect(settings.disabled, isEmpty);
+      // It ships its own note about secure coding and ESBMC.
+      expect(settings.bundledInstructions, contains("ESBMC"));
     });
 
     test("a turn in a built-in project drops the profile and memory", () async {

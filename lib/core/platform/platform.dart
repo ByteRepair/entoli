@@ -11,11 +11,13 @@ import "../../data/builtin/llm/local_kv_cache.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/local/file_chat_store.dart";
+import "../../data/local/byte_repair_store.dart";
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/background_work.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
+import "../../domain/builtin_project.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/local_llm.dart";
@@ -64,7 +66,7 @@ BuiltinBackend createBackend(
       // Resolved per command rather than once: a Linux installed from the
       // settings page reaches the next command, and one deleted stops being
       // where commands run without the app having to be restarted.
-      driver: () => platformDriver(
+      driver: ({String? project}) => platformDriver(
         skillsBundledDir: config.bundledSkillsDir,
         userSkillsDir: config.fs.path.join(config.dataDir, "skills"),
         tools: tools,
@@ -72,6 +74,8 @@ BuiltinBackend createBackend(
         store: rootfs,
         rootfsId: settings().rootfsId,
         abi: abi,
+        project: project,
+        config: config,
       ),
     ),
     webSearch: platformWebSearch(),
@@ -190,6 +194,23 @@ Future<Toolset?> installBundledTools(String cacheDir) =>
 /// what it has been told to run in — the arrangement the voice models already
 /// have.
 RootfsStore createRootfsStore(String cacheDir) => platformRootfsStore(cacheDir);
+
+/// The Byte Repair tooling store, over that rootfs store. Which project it is
+/// for is decided here rather than in each side of the conditional import, so
+/// the two cannot disagree.
+ByteRepairStore createByteRepairStore(AppConfig config, RootfsStore? rootfs) =>
+    platformByteRepairStore(
+      config,
+      ByteRepairProject().dir,
+      config.projectWorkspaceDir(project: ByteRepairProject().dir),
+      rootfs,
+    );
+
+/// Whether a project that requires setup has its `.setup-complete` marker.
+/// Synchronous because the chat page asks it in a build; true on the web,
+/// where nothing could write the marker and nothing is gated by it.
+bool setupComplete(AppConfig config, String? project) =>
+    platformSetupComplete(config, project);
 
 Future<String?> deviceAbi() => platformAbi();
 
@@ -319,3 +340,13 @@ Future<void> chmodReadOnly(List<String> paths) => platformChmodReadOnly(paths);
 Future<T> withWritableDir<T>(
         String path, Future<T> Function() action) =>
     platformWithWritableDir(path, action);
+
+/// Deletes a tree that may contain proot's mode-0000 bind stubs. The io side
+/// delegates to `removeTree` (`tree_ops.dart`); the web side has no rootfs and
+/// no stubs, so it is a plain recursive delete. Called by `restoreBackup` for
+/// every top-level directory in the data dir — the stubs live deep inside a
+/// `projects/<project>/rootfs/` tree, so the whole `projects/` entry has to go
+/// through it. This is the same `removeTree` the rootfs stores use, so the one
+/// function that knows how to clear a stub-bearing tree is the one the restore
+/// reuses.
+Future<void> deleteTree(String path) => platformDeleteTree(path);

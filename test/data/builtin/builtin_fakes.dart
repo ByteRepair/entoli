@@ -158,7 +158,8 @@ class FakeShell extends Shell {
       Map<String, String>? environment,
       bool sharedHome = true,
       bool oneShot = false,
-      bool restart = false}) {
+      bool restart = false,
+      String? project}) {
     ran.add(command);
     cwds.add(cwd);
     homes.add(home);

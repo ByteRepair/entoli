@@ -1,3 +1,5 @@
+import "dart:io";
+
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -12,6 +14,7 @@ import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
+import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
 
@@ -161,7 +164,11 @@ void main() {
       await openEmpty(tester);
 
       expect(find.widgetWithText(ChoiceChip, anonProjectLabel), findsOneWidget);
-      expect(find.byType(ChoiceChip), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, byteRepairProjectLabel), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNWidgets(2));
+      // Each built-in's badge carries its icon as the chip's avatar.
+      expect(find.byIcon(Icons.visibility_off), findsOneWidget);
+      expect(find.byIcon(Icons.verified_user), findsOneWidget);
     });
 
     testWidgets("picking the built-in badge moves the chat to it", (tester) async {
@@ -174,6 +181,44 @@ void main() {
       await sendMessage(tester, "hello");
 
       expect(await projectOfMade(tester), "anonymous");
+    });
+
+    // Byte Repair requires setup: until the marker is there the bar stands in
+    // for the composer, so nothing can be sent into a rootfs that is not
+    // there. See "Setup required" in `needs_setup_bar.dart`.
+    testWidgets("a project that needs setup stands a bar in for the composer",
+        (tester) async {
+      await openEmpty(tester);
+
+      await pick(tester, byteRepairProjectLabel);
+
+      expect(find.byType(NeedsSetupBar), findsOneWidget);
+      expect(find.byType(Composer), findsNothing);
+    });
+
+    testWidgets("the composer is back once setup has been run", (tester) async {
+      File(app.config.setupCompleteFile(project: ByteRepairProject().dir))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("done");
+      await openEmpty(tester);
+
+      await pick(tester, byteRepairProjectLabel);
+
+      expect(find.byType(Composer), findsOneWidget);
+      expect(find.byType(NeedsSetupBar), findsNothing);
+    });
+
+    // An existing chat in the project is gated the same way — the bar is the
+    // whole of the bottom slot there too, not a notice above the composer.
+    testWidgets("an open chat in the project is gated too", (tester) async {
+      final chat =
+          await io(tester, () => app.seedChat(project: "byte-repair"));
+      app.container.read(selectedChatIdProvider.notifier).select(chat.state.id);
+      await app.pump(tester, const ChatPage(), settle: false);
+      await pumpUntil(tester, find.byType(NeedsSetupBar));
+      await settleIo(tester);
+
+      expect(find.byType(Composer), findsNothing);
     });
 
     // The built-in ships its own question, so picking it asks what the chat is.

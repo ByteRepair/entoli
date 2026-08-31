@@ -171,6 +171,8 @@ class AppSession {
         installedVoiceModelsProvider
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
         rootfsStoreProvider.overrideWithValue(rootfs),
+        byteRepairStoreProvider.overrideWithValue(
+            platform.createByteRepairStore(config, rootfs)),
         installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),

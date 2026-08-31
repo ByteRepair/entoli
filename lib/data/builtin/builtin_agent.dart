@@ -296,6 +296,7 @@ class BuiltinAgent {
     this.rateLimitGate,
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
+    this.project,
     this.skills = const [],
     this.webSearch,
     this.profile,
@@ -437,6 +438,11 @@ class BuiltinAgent {
   /// the chat's own workspace is also its `HOME` and the prompt says nothing
   /// of a shared one.
   final bool sharedWorkspace;
+
+  /// The project this agent's turn is in, so the shell driver can resolve a
+  /// per-project rootfs instance for an isolated built-in. Null for the
+  /// default project and user projects.
+  final String? project;
 
   /// The whole skill library, both invocation halves of it. The system prompt
   /// lists the model-invocable ones, the `skill` tool refuses the rest, and a
@@ -1546,7 +1552,8 @@ class BuiltinAgent {
         timeout: timeout,
         environment: environment,
         oneShot: oneShot,
-        restart: args?["restart"] == true);
+        restart: args?["restart"] == true,
+        project: project);
     _running = run;
     try {
       return await run.result;
