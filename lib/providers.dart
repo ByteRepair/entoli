@@ -34,6 +34,7 @@ import "domain/models.dart";
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
+import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
@@ -320,32 +321,60 @@ final systemVoiceLanguagesProvider =
 
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.
-/// The prompt library, built once at startup and rebuilt only where something
-/// on screen says the disk changed — the Skills page, importing or deleting
-/// one. See "Skills and agents" in `lib/domain/CLAUDE.md` for why it is
-/// otherwise read once: nothing downstream waits on it, and a file added
+/// The prompt library, per project: the default's is the base set every other
+/// project inherits, and a project's own overrides a same-named default entry
+/// for that project alone. Built once at startup and rebuilt only where
+/// something on screen says the disk changed — the Skills page, importing or
+/// deleting one. See "Skills and agents" in `lib/domain/CLAUDE.md` for why it
+/// is otherwise read once: nothing downstream waits on it, and a file added
 /// behind the app's back reaches the next launch.
+///
+/// `null` is the default project, the way it is everywhere a project is named.
+/// A project not yet seeded (one created after launch) falls back to the
+/// default's library, which is exactly what it should resolve to until it has
+/// overrides of its own — and the first `reload` builds its real one.
 class PromptLibraryNotifier extends Notifier<PromptLibrary> {
-  PromptLibraryNotifier([PromptLibrary? initial]) : _initial = initial;
+  PromptLibraryNotifier(this.project, [this._initial]);
 
+  final String? project;
   final PromptLibrary? _initial;
 
   @override
-  PromptLibrary build() => _initial ?? PromptLibrary.empty;
+  PromptLibrary build() {
+    final seeded = _initial;
+    if (seeded != null) return seeded;
+    if (project == null) return PromptLibrary.empty;
+    // An unseeded project inherits the default's set, which is what it
+    // resolves to until it has overrides of its own.
+    return ref.read(promptLibraryProvider(null));
+  }
 
   /// Read the sources again, and hand the backend its copy: the agent holds
   /// one of its own for the `task` tool and the skills it offers a turn.
   Future<void> reload() async {
-    final next =
-        await PromptLibrary.from(createPromptSources(ref.read(appConfigProvider)));
+    final next = await PromptLibrary.from(
+        createPromptSources(ref.read(appConfigProvider), project: project));
     state = next;
     final backend = ref.read(agentBackendProvider);
-    if (backend is BuiltinBackend) backend.library = next;
+    if (backend is BuiltinBackend) backend.setLibrary(project, next);
   }
 }
 
-final promptLibraryProvider = NotifierProvider<PromptLibraryNotifier, PromptLibrary>(
-    PromptLibraryNotifier.new);
+final promptLibraryProvider =
+    NotifierProvider.family<PromptLibraryNotifier, PromptLibrary, String?>(
+        (project) => PromptLibraryNotifier(project));
+
+/// Reload every project's library at once. The Skills page and a skill install
+/// touch the default's directory (and possibly a project's), so a change has to
+/// land everywhere rather than in the one the page happens to be looking at.
+/// The project list comes from the cached [projectListProvider] rather than a
+/// fresh directory walk, and the per-project reloads overlap since each reads
+/// its own dir.
+Future<void> reloadAllPromptLibraries(WidgetRef ref) async {
+  final named = await ref.read(projectListProvider.future);
+  await Future.wait(everyProject(named).map((project) =>
+      ref.read(promptLibraryProvider(project).notifier).reload()));
+}
 
 class AppSettingsNotifier extends Notifier<AppSettings> {
   late final AppConfig _config;
@@ -776,7 +805,11 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     ref.watch(agentBackendProvider),
     () => ref.read(appSettingsProvider),
     ref.watch(appConfigProvider),
-    library: ref.watch(promptLibraryProvider),
+    // The library is resolved per project at compose time: the message is
+    // composed against the project's library, not an app-wide one — see
+    // "Skills and agents" in `lib/domain/CLAUDE.md`. Read fresh each time
+    // rather than captured, so a reload reaches the next message.
+    libraryFor: (project) => ref.read(promptLibraryProvider(project)),
   );
 });
 
@@ -835,10 +868,15 @@ final attachmentBytesProvider =
   return ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource);
 });
 
-/// The composer's `/` and `@` menus, read straight off the library: Entoli
-/// owns its commands and agents, so nothing has to be asked what it knows.
-final completionsProvider = Provider.family<List<CompletionOption>, CompletionKind>(
-    (ref, kind) => ref.watch(promptLibraryProvider).options(kind));
+/// The composer's `/` and `@` menus, read straight off the project's library:
+/// Entoli owns its commands and agents, so nothing has to be asked what it
+/// knows. The library is per project — `null` is the default, the way it is
+/// everywhere a project is named — so a menu offers what the project it is in
+/// offers, including an override the project ships.
+final completionsProvider =
+    Provider.family<List<CompletionOption>, ({String? project, CompletionKind kind})>(
+        (ref, spec) =>
+            ref.watch(promptLibraryProvider(spec.project)).options(spec.kind));
 
 /// A project's own settings, loaded off `project.json`. Null is the default
 /// project, which lives in the data directory. The project name is the

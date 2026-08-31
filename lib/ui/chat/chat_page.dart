@@ -151,6 +151,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
         isRunning: false,
         onSend: _send,
         onAbort: () {},
+        project: project,
         onVoice: ref.watch(voiceProvider).available
             ? () => startVoiceChat(context, ref, meta: _meta)
             : null,
@@ -260,7 +261,7 @@ class _EmptyChat extends ConsumerWidget {
     final theme = Theme.of(context);
     final starters = [
       for (final kind in CompletionKind.values)
-        for (final option in ref.watch(completionsProvider(kind)))
+        for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
           (kind: kind, option: option),
     ].take(_most).toList();
 
@@ -524,6 +525,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           ? _turnBar(
               view: view,
               driver: notifier,
+              project: chat.state.project,
               onVoice: ref.watch(voiceProvider).available
                   ? () => openVoice(context, ref, widget.chatId)
                   : null,
@@ -576,7 +578,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   deviceName: deviceName, onRelease: controls.release)
               : null,
       bottom: held
-          ? _turnBar(view: view, driver: driver, workspace: null)
+          ? _turnBar(
+              view: view,
+              driver: driver,
+              project: chat.state.project,
+              workspace: null)
           : ViewOnlyBar(
               online: online,
               asking: control.asking,
@@ -677,6 +683,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   Widget _turnBar({
     required ChatViewState view,
     required TurnDriver driver,
+    required String? project,
     VoidCallback? onVoice,
     String? workspace,
   }) =>
@@ -691,6 +698,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               onSend: (text, attachments) =>
                   driver.send(text, attachments: attachments),
               onAbort: driver.abort,
+              project: project,
               onVoice: onVoice,
               workspace: workspace,
             )

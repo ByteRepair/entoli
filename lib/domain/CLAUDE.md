@@ -567,18 +567,25 @@ prefix, an explanation on the next line, thirty words instead of twenty.
 ## Skills and agents
 
 `PromptLibrary` is the whole of what the composer's `/` and `@` menus offer,
-built from two `PromptSource`s in precedence order: the presets embedded in the
-binary (see the root notes, "On-disk layout", for why they are code rather
-than assets), then the user's own directory. A skill the user wrote replaces
-the preset it shares a name with, and entries come back sorted by name, so the
-menu does not reorder when a source does. It is built once at startup, because
-the user's directory is read off disk and nothing downstream should wait on it;
-a skill dropped into the directory by hand therefore does not appear until a
-restart, though nothing would break if it did — a message resolves against
-whatever the library holds when it is composed, and keeps the answer. The routes
-that buy a refresh are the places that change the library from inside the app —
-the Skills settings page and a `create_skill` install — each reloads after it
-writes, so the change lands without a restart.
+and it is **per project**: the default project's is the base set every other
+project inherits, and a project's own entry replaces a same-named default entry
+for that project alone. `byte-repair`'s `esbmc-verifier` agent is byte-repair's
+alone — the default project and any other see nothing of it — because the
+generator tagged it with the project it belongs to and the library it is served
+to filters by that tag. The library is built from two `PromptSource`s in
+precedence order: the presets embedded in the binary (see the root notes,
+"On-disk layout", for why they are code rather than assets, and for the
+per-project tagging), then the user's own directory under the project. A skill
+the user wrote replaces the preset it shares a name with, and entries come back
+sorted by name, so the menu does not reorder when a source does. One library is
+built per project at startup, because the directories are read off disk and
+nothing downstream should wait on it; a skill dropped into the directory by
+hand therefore does not appear until a restart, though nothing would break if it
+did — a message resolves against whatever the library holds when it is
+composed, and keeps the answer. The routes that buy a refresh are the places
+that change the library from inside the app — the Skills settings page and a
+`create_skill` install — each reloads every project's library after it writes,
+so the change lands without a restart.
 
 A skill is a **directory**, not a file: a `SKILL.md` and whatever files it runs
 with. Its name is the frontmatter's `name` where it has one, the folder
@@ -644,7 +651,11 @@ whatever that name means today. The mentions stay in the text and are not
 stripped, so what the user reads and what the model reads name the same agent.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
-reads the library directly and is synchronous.
+is a family keyed by project, reading the project's library directly and
+synchronous. The composer and the reminder editor pass the project they are in;
+the repository's `composeUserPrompt` resolves the project's library through
+`libraryFor`, so a message is composed against the same set the chat it lands
+in will offer.
 
 ## Resending a message
 

@@ -65,9 +65,13 @@ class Moved extends RepoEvent {
 /// on, and owns which thread of a conversation is being read. The turn itself
 /// is accumulated and saved by `ChatController` as events arrive.
 class ChatRepository {
-  ChatRepository(this._store, this._backend, this._settings, this._config,
-      {PromptLibrary? library})
-      : _library = library ?? PromptLibrary.empty;
+  ChatRepository(
+    this._store,
+    this._backend,
+    this._settings,
+    this._config, {
+    PromptLibrary Function(String? project)? libraryFor,
+  }) : _libraryFor = libraryFor ?? ((_) => PromptLibrary.empty);
 
   final ChatStore _store;
   final AgentBackend _backend;
@@ -78,9 +82,9 @@ class ChatRepository {
   /// Where project settings live. Read on use, like [_settings].
   final AppConfig _config;
 
-  /// The commands and agents a message's references are resolved against, once,
-  /// as it is composed — see [composeUserPrompt].
-  final PromptLibrary _library;
+  /// Resolves the library a message's references are composed against, by
+  /// project. See [composeUserPrompt].
+  final PromptLibrary Function(String? project) _libraryFor;
 
   final _changes = StreamController<RepoEvent>.broadcast();
 
@@ -386,14 +390,15 @@ class ChatRepository {
   /// [files] are already under the chat's `resources/`: the composer saves what
   /// it is holding with [saveAttachments] first, and a resend passes on the
   /// parts the message it branches from already had.
-  Message composeUserPrompt(String text, {List<MessagePart> files = const []}) =>
+  Message composeUserPrompt(String text,
+      {String? project, List<MessagePart> files = const []}) =>
       Message(
         id: const Uuid().v4(),
         role: MessageRole.user,
         createdAt: DateTime.now(),
         // Files first, the order they are sent in and a resend rebuilds.
         parts: [...files, MessagePart.text(text: text)],
-        documents: promptDocuments(text, _library),
+        documents: promptDocuments(text, _libraryFor(project)),
       );
 
   /// Save what the user attached and describe it as the parts that outlive the

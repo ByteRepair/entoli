@@ -39,8 +39,10 @@ Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 /// be run under. The [project] and [config] parameters are unused here: the
 /// io side resolves a per-project rootfs instance from them.
 ShellDriver? platformDriver({
-  required String skillsBundledDir,
-  required String userSkillsDir,
+  required String defaultSkillsBundledDir,
+  required String defaultUserSkillsDir,
+  String? projectSkillsBundledDir,
+  String? projectUserSkillsDir,
   Toolset? tools,
   Proot? proot,
   RootfsStore? store,

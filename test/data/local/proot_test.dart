@@ -15,17 +15,25 @@ void main() {
     resolvConf: "/data/user/0/pkg/cache/tools/etc/resolv.conf",
   );
   const dataDir = "/data/user/0/pkg/app_flutter/agent-chat";
-  const skillsBundled = "$dataDir/skills-bundled";
-  const userSkills = "$dataDir/skills";
+  const defaultSkillsBundled = "$dataDir/projects/default/skills-bundled";
+  const defaultUserSkills = "$dataDir/projects/default/skills";
   const home = "$dataDir/projects/default/workspace";
   const cwd = "$home/chats/abc-123";
 
-  ShellDriver build({Proot from = proot, String? abi = "x86_64"}) => prootDriver(
+  ShellDriver build({
+    Proot from = proot,
+    String? abi = "x86_64",
+    String? projectSkillsBundled,
+    String? projectUserSkills,
+  }) =>
+      prootDriver(
         proot: from,
         rootfs: alpine,
         rootfsDir: "/data/user/0/pkg/cache/rootfs/alpine",
-        skillsBundledDir: skillsBundled,
-        userSkillsDir: userSkills,
+        defaultSkillsBundledDir: defaultSkillsBundled,
+        defaultUserSkillsDir: defaultUserSkills,
+        projectSkillsBundledDir: projectSkillsBundled,
+        projectUserSkillsDir: projectUserSkills,
         abi: abi,
       );
 
@@ -68,8 +76,25 @@ void main() {
   test("skills are bound at clean guest paths", () {
     final command = build().commandFor(cwd, home);
 
-    expect(valuesOf(command, "-b"), contains("$skillsBundled:/opt/skills-bundled"));
-    expect(valuesOf(command, "-b"), contains("$userSkills:/opt/skills"));
+    expect(valuesOf(command, "-b"), contains("$defaultSkillsBundled:/opt/skills-bundled"));
+    expect(valuesOf(command, "-b"), contains("$defaultUserSkills:/opt/skills"));
+  });
+
+  test("a project's own skills dirs are bound beside the default's", () {
+    const projectSkillsBundled = "$dataDir/projects/byte-repair/skills-bundled";
+    const projectUserSkills = "$dataDir/projects/byte-repair/skills";
+    final driver = build(
+        projectSkillsBundled: projectSkillsBundled,
+        projectUserSkills: projectUserSkills);
+    final command = driver.commandFor(cwd, home);
+
+    expect(valuesOf(command, "-b"),
+        contains("$projectSkillsBundled:/opt/skills-bundled-project"));
+    expect(valuesOf(command, "-b"),
+        contains("$projectUserSkills:/opt/skills-project"));
+    expect(driver.hostToGuestPaths[projectSkillsBundled],
+        "/opt/skills-bundled-project");
+    expect(driver.hostToGuestPaths[projectUserSkills], "/opt/skills-project");
   });
 
   test("the guest is given a resolver, since Android keeps no such file", () {
@@ -130,8 +155,8 @@ void main() {
 
   test("host-to-guest path mappings include skills", () {
     final mappings = build().hostToGuestPaths;
-    expect(mappings[skillsBundled], "/opt/skills-bundled");
-    expect(mappings[userSkills], "/opt/skills");
+    expect(mappings[defaultSkillsBundled], "/opt/skills-bundled");
+    expect(mappings[defaultUserSkills], "/opt/skills");
   });
 
   test("what the model is told is the distribution, the architecture it is "

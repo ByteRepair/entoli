@@ -225,7 +225,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         replacing == null ? chat.messages.length : chat.messages.indexOf(replacing);
     if (at < 0) return;
 
-    final userMsg = repo.composeUserPrompt(text, files: files);
+    final userMsg =
+        repo.composeUserPrompt(text, project: chat.state.project, files: files);
     await _turn(
       chat: chat,
       prompt: userMsg,

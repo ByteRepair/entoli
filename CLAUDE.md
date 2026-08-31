@@ -94,18 +94,25 @@ chats run under, and whether it keeps an auto-memory store of its own. A chat is
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
 Every project is a directory under `projects/`, the default one included.
-`<dataDir>/skills/<name>/` is a skill — a directory with a `SKILL.md` and the
-files it runs with, not a single file — and `<dataDir>/agents/*.md` are the
-user's agents, beside `settings.json`. The bundled skills and agents live in
-the binary: `tool/gen_bundled_skills.dart` writes them, build-time, from
-`assets/prompts/` into `lib/data/prompts/bundled_skill_data.dart`, so the
-library the model reads cannot be poisoned from the skills directory.
-`<dataDir>/skills-bundled/` is a read-only copy of those on disk, there only so
-`bash` can reach a skill's scripts (which want a real base directory); it is
-self-healed from the embedded data at startup — a file that drifted is
-re-written by checksum, and a stray the embedded data does not name is deleted.
-It is beside `skills/` rather than in it, so deleting one's own skill does not
-reach the presets. `settings.json` holds the app-level model default, the
+`<dataDir>/projects/<project>/skills/<name>/` is a skill — a directory with a
+`SKILL.md` and the files it runs with, not a single file — and
+`<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
+default project's skills and agents are the base set every other project
+inherits; another project's own replace a same-named default entry for that
+project alone. The bundled skills and agents live in the binary:
+`tool/gen_bundled_skills.dart` writes them, build-time, from
+`assets/prompts/projects/<project>/` into
+`lib/data/prompts/bundled_skill_data.dart`, tagged with the project they
+belong to, so the library the model reads cannot be poisoned from the skills
+directory and a project sees only what it is meant to (esbmc-verifier is
+byte-repair's alone).
+`<dataDir>/projects/<project>/skills-bundled/` is a read-only copy of that
+project's bundled skills on disk, there only so `bash` can reach a skill's
+scripts (which want a real base directory); it is self-healed from the
+embedded data at startup — a file that drifted is re-written by checksum, and
+a stray the embedded data does not name is deleted. It is beside `skills/`
+rather than in it, so deleting one's own skill does not reach the presets.
+`settings.json` holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
  `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's
