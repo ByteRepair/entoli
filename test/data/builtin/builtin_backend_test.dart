@@ -58,9 +58,8 @@ void main() {
   }) {
     client = FakeLlmClient(turns);
     shell = FakeShell(respond ?? okEmpty);
-    return BuiltinBackend(
+    final backend = BuiltinBackend(
       config: config,
-      library: library,
       shell: shell,
       webSearch: FakeWebSearch(),
       store: FileChatStore(config),
@@ -71,6 +70,8 @@ void main() {
         lookupEnv: (_) => null,
       ),
     );
+    if (library != null) backend.setLibrary(null, library);
+    return backend;
   }
 
   /// Most of these are not about approvals, so the default here is the chat

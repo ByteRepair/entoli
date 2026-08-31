@@ -75,28 +75,27 @@ class AppSession {
     // Before the library is built: the bundled skills are written from
     // embedded code to a real directory for bash access, and self-healed.
     await installBundledSkills(config);
+    final projects = everyProject(await config.projectNames());
     // Read-only so a model running bash cannot unintentionally write to a
     // skill directory. The install/delete paths toggle this where they need to.
     // Per project: each project's skills dirs are read-only the way the
     // default's are, since a `bash` command reaches any of them.
     await platform.chmodReadOnly([
-      for (final project in everyProject(await config.projectNames()))
-        ...[
-          config.bundledSkillsDir(project: project),
-          config.promptsDir(CompletionKind.skill, project: project),
-        ],
+      for (final project in projects) ...[
+        config.bundledSkillsDir(project: project),
+        config.promptsDir(CompletionKind.skill, project: project),
+      ],
     ]);
     final store = platform.createChatStore(config);
     // One library per project: the default's is the base set every other
     // project inherits, and a project's own overrides same-named default
     // entries for that project alone. Built once at startup so nothing
     // downstream waits on disk; see "Skills and agents" in
-    // `lib/domain/CLAUDE.md`.
-    final libraries = <String?, PromptLibrary>{};
-    for (final project in everyProject(await config.projectNames())) {
-      libraries[project] =
-          await PromptLibrary.from(platform.createPromptSources(config, project: project));
-    }
+    // `lib/domain/CLAUDE.md`. The builds read independent project dirs, so
+    // they overlap rather than serialise.
+    final libraries = Map.fromEntries(await Future.wait(projects.map((project) async =>
+        MapEntry(project,
+            await PromptLibrary.from(platform.createPromptSources(config, project: project))))));
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);

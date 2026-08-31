@@ -62,7 +62,6 @@ BuiltinBackend createBackend(
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
     config: config,
-    library: libraries[null],
     shell: platformShell(
       environment: () => settings().environment,
       // Resolved per command rather than once: a Linux installed from the
@@ -145,13 +144,13 @@ LocalPrefill? createLocalPrefill(
              // The same skills a turn's prompt lists, off the same library the
              // backend holds — a warm-up built without them caches a prefix no
              // chat ever sends.
-             skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+             skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
            ),
           const LlmMessage(role: LlmRole.user, text: "Hello"),
         ],
          tools: agentTools(
             caps: caps,
-            skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+            skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
             // A default turn has auto-memory off, so the warmed prefix carries
            // no memory tools; a turn with them misses the cache rather than
            // the cache serving a list no turn sends.

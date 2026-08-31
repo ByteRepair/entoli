@@ -176,14 +176,9 @@ class AppConfig {
   /// `workspace/`. Every project derives from the default one: a project's
   /// own entry replaces a same-named default entry for that project alone,
   /// and what it does not override falls through. See "Skills and agents"
-  /// in `lib/domain/CLAUDE.md`.
-  ///
-  /// [projectPromptsDir] is the per-project shape: `null` is the default
-  /// project, the way it is for every project-scoped path.
+  /// in `lib/domain/CLAUDE.md`. `null` is the default project, the way it is
+  /// for every project-scoped path.
   String promptsDir(CompletionKind kind, {String? project}) =>
-      projectPromptsDir(kind, project: project);
-
-  String projectPromptsDir(CompletionKind kind, {String? project}) =>
       fs.path.join(projectDir(project: project), kind.folder);
 
   /// Where the bundled skills are extracted to at startup, so a skill's
@@ -191,9 +186,6 @@ class AppConfig {
   /// user's [promptsDir] rather than in it: `skills/` is purely theirs, so
   /// deleting a skill there deletes it. Per-project, the way [promptsDir] is.
   String bundledSkillsDir({String? project}) =>
-      projectBundledSkillsDir(project: project);
-
-  String projectBundledSkillsDir({String? project}) =>
       fs.path.join(projectDir(project: project), "skills-bundled");
 
   /// Create a chat's directories. Reading a path no longer creates it, so the
@@ -214,7 +206,7 @@ class AppConfig {
         chatsDir(project: project),
         projectWorkspaceDir(project: project),
         for (final kind in CompletionKind.values)
-          projectPromptsDir(kind, project: project),
+          promptsDir(kind, project: project),
       ]);
 
   /// True where this call created the data directory, which is what says a

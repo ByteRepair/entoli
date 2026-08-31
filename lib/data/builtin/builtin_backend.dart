@@ -45,7 +45,6 @@ class BuiltinBackend implements AgentBackend {
     required this.shell,
     required this.webSearch,
     required this.store,
-    this.library,
     this.options = const BuiltinOptions(),
   });
 
@@ -69,12 +68,10 @@ class BuiltinBackend implements AgentBackend {
   /// named. A project inherits the default's set and overrides same-named
   /// entries of its own.
   final Map<String?, PromptLibrary> _libraries = {};
-  PromptLibrary? library; // Kept for the prefill, which warms the default's.
-  void setLibrary(String? project, PromptLibrary library) {
-    _libraries[project] = library;
-    if (project == null) this.library = library;
-  }
-  PromptLibrary? libraryFor(String? project) => _libraries[project] ?? _libraries[null];
+  void setLibrary(String? project, PromptLibrary library) =>
+      _libraries[project] = library;
+  PromptLibrary? libraryFor(String? project) =>
+      _libraries[project] ?? _libraries[null];
 
   /// Web search and fetch, chosen by the platform like [shell] is:
   /// `DuckDuckGoSearch` on desktop and Android, `UnavailableWebSearch` in a

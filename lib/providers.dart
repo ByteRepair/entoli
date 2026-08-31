@@ -367,12 +367,13 @@ final promptLibraryProvider =
 /// Reload every project's library at once. The Skills page and a skill install
 /// touch the default's directory (and possibly a project's), so a change has to
 /// land everywhere rather than in the one the page happens to be looking at.
+/// The project list comes from the cached [projectListProvider] rather than a
+/// fresh directory walk, and the per-project reloads overlap since each reads
+/// its own dir.
 Future<void> reloadAllPromptLibraries(WidgetRef ref) async {
-  final config = ref.read(appConfigProvider);
-  final named = await config.projectNames();
-  for (final project in everyProject(named)) {
-    await ref.read(promptLibraryProvider(project).notifier).reload();
-  }
+  final named = await ref.read(projectListProvider.future);
+  await Future.wait(everyProject(named).map((project) =>
+      ref.read(promptLibraryProvider(project).notifier).reload()));
 }
 
 class AppSettingsNotifier extends Notifier<AppSettings> {
