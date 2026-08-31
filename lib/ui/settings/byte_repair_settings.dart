@@ -3,10 +3,12 @@ import "package:flutter/foundation.dart" show defaultTargetPlatform, TargetPlatf
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../data/local/byte_repair_store.dart";
 import "../../domain/builtin_project.dart";
 import "../../providers.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/section_header.dart";
+import "../widgets/settings_warning_banner.dart";
 
 /// The Byte Repair category: whether the configured terminal env can run its
 /// tooling, a button that installs it, a button to import a local ESBMC
@@ -45,7 +47,7 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
               "environment, so it needs one with a package manager.",
         ),
         if (incompatible)
-          _Banner(
+          SettingsWarningBanner(
             icon: Icons.warning_amber_rounded,
             color: theme.colorScheme.error,
             text: 'Byte Repair does not work when using the "Host" terminal '
@@ -192,38 +194,7 @@ class _ByteRepairSectionState extends ConsumerState<ByteRepairSection> {
   }
 }
 
-class _Banner extends StatelessWidget {
-  const _Banner({required this.icon, required this.color, required this.text});
-
-  final IconData icon;
-  final Color color;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(color: color),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ToolStatusList extends ConsumerWidget {
-  static const _tools = ["ESBMC", "make", "gh"];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final versions = ref.watch(byteRepairToolVersionsProvider);
@@ -244,7 +215,7 @@ class _ToolStatusList extends ConsumerWidget {
         data: (map) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final tool in _tools)
+            for (final tool in ByteRepairStore.tools.keys)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Row(

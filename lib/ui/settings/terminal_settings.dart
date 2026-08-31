@@ -7,6 +7,7 @@ import "rootfs_downloads.dart";
 import "../widgets/catalog.dart";
 import "../widgets/formatting.dart";
 import "../widgets/section_header.dart";
+import "../widgets/settings_warning_banner.dart";
 
 /// Where the agent's commands run: the host driver — the machine's own shell,
 /// which every native platform has — or, where this build ships proot, a Linux
@@ -44,7 +45,20 @@ class TerminalSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader("Where commands run", description: description),
-        if (unpackagedAbi != null) _Unpackaged(abi: unpackagedAbi),
+        // An APK built without proot staged into it is a build fault and looks
+        // exactly like the feature having been removed: the catalog below is
+        // drawn from the same answer, so the page would otherwise be a Terminal
+        // page with no terminal on it and nothing saying why. The banner names
+        // the two commands, since the only person who can reach this is whoever
+        // built the APK — CI checks the tools are in a release one.
+        if (unpackagedAbi != null)
+          SettingsWarningBanner(
+            icon: Icons.warning_amber_rounded,
+            color: Theme.of(context).colorScheme.error,
+            text: "This build has no proot in it for $unpackagedAbi. Run "
+                "tool/android/build.sh $unpackagedAbi and "
+                "tool/android/stage.sh, then build the APK again.",
+          ),
         InstalledPicker(
           label: "Commands run on",
           // Null is an answer here rather than an absence, so it is an entry
@@ -60,43 +74,6 @@ class TerminalSection extends ConsumerWidget {
           onPick: (id) => ref.read(appSettingsProvider.notifier).setRootfs(id),
         ),
       ],
-    );
-  }
-}
-
-/// An APK built without proot staged into it, which is a build fault and looks
-/// exactly like the feature having been removed: the catalog below is drawn
-/// from the same answer, so the page would otherwise be a Terminal page with no
-/// terminal on it and nothing saying why. Names the two commands, since the
-/// only person who can reach this is whoever built the APK — CI checks the
-/// tools are in a release one.
-class _Unpackaged extends StatelessWidget {
-  const _Unpackaged({required this.abi});
-
-  final String abi;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.warning_amber_rounded,
-              size: 18, color: theme.colorScheme.error),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              "This build has no proot in it for $abi. Run "
-              "tool/android/build.sh $abi and tool/android/stage.sh, then build "
-              "the APK again.",
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

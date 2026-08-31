@@ -77,9 +77,9 @@ Future<String?> copyTree(String base, String target) async {
   try {
     final archive = p.join(temp.path, "tree.tar");
     final create =
-        await _tar(["-cf", archive, ..._bindStubExcludes, "-C", base, "."]);
+        await runTar(["-cf", archive, ..._bindStubExcludes, "-C", base, "."]);
     if (create.exitCode != 0) return "${create.stderr}".trim();
-    final extract = await _tar(["-xf", archive, "-C", target]);
+    final extract = await runTar(["-xf", archive, "-C", target]);
     if (extract.exitCode != 0) return "${extract.stderr}".trim();
     return null;
   } finally {
@@ -90,12 +90,13 @@ Future<String?> copyTree(String base, String target) async {
 }
 
 /// Android's `tar` is toybox's. The absolute path is the fallback for a
-/// device whose `PATH` does not name it — the same two-step
-/// `FileRootfsStore._systemTar` takes.
-Future<ProcessResult> _tar(List<String> args) async {
-  for (final tar in const ["tar", "/system/bin/tar"]) {
+/// device whose `PATH` does not name it — the same two-step `LocalShell` takes
+/// to find a shell. Shared with `FileRootfsStore`, which unpacks a rootfs
+/// through it for the same reasons `copyTree` does.
+Future<ProcessResult> runTar(List<String> args) async {
+  for (final t in const ["tar", "/system/bin/tar"]) {
     try {
-      return await Process.run(tar, args);
+      return await Process.run(t, args);
     } on ProcessException {
       continue;
     }
