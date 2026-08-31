@@ -181,14 +181,15 @@ Future<void> restoreBackup(
       deleteTree != null ? deleteTree(path) : fs.directory(path).delete(recursive: true);
 
   // Listed whole before anything goes: deleting out of a stream is deleting
-  // the thing it is walking.
+  // the thing it is walking. The entities `list()` returns already carry their
+  // type, so branching on it saves a `fs.type` round-trip per entry.
   final top = await fs.directory(config.dataDir).list().toList();
   await Future.wait([
     for (final entity in top)
-      if (await fs.type(entity.path) == FileSystemEntityType.directory)
+      if (entity is Directory)
         clear(entity.path)
-      else
-        fs.file(entity.path).delete(),
+      else if (entity is File)
+        entity.delete(),
   ]);
 
   // A member's name was written by whoever made the zip, and `writeIncoming`

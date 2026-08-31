@@ -133,19 +133,10 @@ class FileRootfsStore extends RootfsStore {
       ).stream;
 
   /// Android's `tar` is toybox's, and `-z` is the one thing this needs of it.
-  /// The absolute path is the fallback for a device whose `PATH` does not name
-  /// it, the same two-step `LocalShell` takes to find a shell.
-  static Future<ProcessResult> _systemTar(String archive, String into) async {
-    for (final tar in const ["tar", "/system/bin/tar"]) {
-      try {
-        return await Process.run(tar, ["-xzf", archive, "-C", into]);
-      } on ProcessException {
-        continue;
-      }
-    }
-    throw const ProcessException(
-        "tar", [], "This device has no tar to unpack a Linux with.");
-  }
+  /// `runTar` in `tree_ops` handles finding it on `PATH` or at
+  /// `/system/bin/tar`, so this is one call through it.
+  static Future<ProcessResult> _systemTar(String archive, String into) =>
+      runTar(["-xzf", archive, "-C", into]);
 }
 
 /// Where the hash of the download lands. `package:convert` has one of these and

@@ -69,15 +69,17 @@ class FileByteRepairStore extends ByteRepairStore {
 
   @override
   Future<String?> deleteEnvironment() async {
-    final err = await removeTree(p.join(config.projectDir(project: project), "rootfs"));
+    // The rootfs and workspace trees are independent, so the two `chmod`+`rm`
+    // runs go together — on a slow phone either alone is a long wait, and the
+    // workspace has no dependency on the rootfs being gone.
+    final errors = await Future.wait([
+      removeTree(p.join(config.projectDir(project: project), "rootfs")),
+      removeTree(config.projectWorkspaceDir(project: project)),
+    ]);
+    final err = errors.where((e) => e != null).firstOrNull;
     if (err != null) {
       logFailure("byte-repair", "delete environment failed", err);
       return err;
-    }
-    final wsErr = await removeTree(config.projectWorkspaceDir(project: project));
-    if (wsErr != null) {
-      logFailure("byte-repair", "delete environment failed", wsErr);
-      return wsErr;
     }
     try {
       final marker = File(config.setupCompleteFile(project: project));
