@@ -152,10 +152,19 @@ final byteRepairToolVersionsProvider =
 /// don't require setup (the common case); for one that does, asks the platform
 /// about the `.setup-complete` marker in the project's directory. Invalidated
 /// by the settings page after Run Setup or Delete.
+///
+/// A setup marker alone is not enough on Android: Byte Repair needs a rootfs
+/// with a package manager, and the "Host" env has none. The marker may still
+/// be on disk from an earlier setup run under a rootfs, so the env is checked
+/// alongside it — the same `incompatible` check the settings page makes.
 final setupCompleteProvider =
     Provider.family<bool, String?>((ref, project) {
   final spec = builtinProjectOf(project);
   if (spec?.requiresSetup != true) return true;
+  if (defaultTargetPlatform == TargetPlatform.android &&
+      ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == null) {
+    return false;
+  }
   return setupComplete(ref.watch(appConfigProvider), project);
 });
 
