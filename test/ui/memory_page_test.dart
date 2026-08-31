@@ -285,6 +285,23 @@ void main() {
       expect(find.widgetWithText(ListTile, "Instructions"), findsNothing);
     });
 
+    // Byte Repair is the built-in that has a settings page: its page shows the
+    // rows the user's files and the project's TTL and environment reach, and
+    // hides the ones a built-in cannot use — its own memory store and the
+    // delete button that would refuse it.
+    testWidgets("Byte Repair's page shows instructions, environment and temp "
+        "chats, and no project memory or delete", (tester) async {
+      await app.pump(tester, const ProjectSettingsPage(project: "byte-repair"));
+      await settleIo(tester);
+
+      expect(find.widgetWithText(ListTile, "Instructions"), findsOneWidget);
+      expect(find.text("Temporary chats"), findsOneWidget);
+      expect(find.text("Environment"), findsOneWidget);
+      expect(find.text("Project memory"), findsNothing);
+      expect(find.text("Project memories"), findsNothing);
+      expect(find.text("Delete project"), findsNothing);
+    });
+
     testWidgets("a project can keep its own rather than the default's",
         (tester) async {
       await io(tester, () => app.repo.createProject("research"));

@@ -322,6 +322,7 @@ class ChatRepository {
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
       disabled: disabled,
       bundledInstructions: builtIn?.bundledInstructions,
+      includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
     );
