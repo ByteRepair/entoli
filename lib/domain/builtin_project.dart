@@ -73,6 +73,24 @@ class BuiltinProject {
   /// the turn.
   String? get bundledInstructions => null;
 
+  /// Where a built-in ships a note ([bundledInstructions] non-null), whether
+  /// the user's instruction files are also read on top of it. False (the
+  /// default) keeps the note as the whole instructions, the way anonymous does;
+  /// true reads the global and project AGENTS.md after it, so a user's rules
+  /// reach the turn and win on conflict — rendered after the bundled entry,
+  /// which is the precedence this codebase already gives a project file over a
+  /// global one. Has no effect where there is no note: a user's project reads
+  /// its files regardless.
+  bool get includesUserInstructions => false;
+
+  /// Whether a turn in this project is configured from a project settings
+  /// page. A user project always has one; a built-in overrides this where the
+  /// page would show more than its name and path. Default false (anonymous),
+  /// since its turns run on the note alone and there is nothing on the page
+  /// to edit. `ByteRepairProject` turns it on, so the sidebar offers the
+  /// settings gear for it the way it does for a user's project.
+  bool get hasSettingsPage => false;
+
   /// The temporary-chat TTL a built-in ships as its own default, in place of
   /// the app-level one. Null falls through to the app default the way a user's
   /// project does. A chat's own override still wins, the way it does for any
@@ -167,6 +185,18 @@ class ByteRepairProject extends BuiltinProject {
           rootfsIsolation: true,
           requiresSetup: true,
         );
+
+  /// The note is the base, not the whole: the user's instruction files are
+  /// read after it, so a rule the user sets for Byte Repair reaches the turn
+  /// and wins where the two disagree — see `includesUserInstructions`.
+  @override
+  bool get includesUserInstructions => true;
+
+  /// The page is worth opening: it carries the Instructions row that edits the
+  /// project AGENTS.md read on top of the bundled note, beside Environment and
+  /// Temporary chats.
+  @override
+  bool get hasSettingsPage => true;
 
   @override
   String get bundledInstructions =>
