@@ -73,6 +73,16 @@ class BuiltinProject {
   /// the turn.
   String? get bundledInstructions => null;
 
+  /// Where a built-in ships a note ([bundledInstructions] non-null), whether
+  /// the user's instruction files are also read on top of it. False (the
+  /// default) keeps the note as the whole instructions, the way anonymous does;
+  /// true reads the global and project AGENTS.md after it, so a user's rules
+  /// reach the turn and win on conflict — rendered after the bundled entry,
+  /// which is the precedence this codebase already gives a project file over a
+  /// global one. Has no effect where there is no note: a user's project reads
+  /// its files regardless.
+  bool get includesUserInstructions => false;
+
   /// The temporary-chat TTL a built-in ships as its own default, in place of
   /// the app-level one. Null falls through to the app default the way a user's
   /// project does. A chat's own override still wins, the way it does for any
@@ -167,6 +177,12 @@ class ByteRepairProject extends BuiltinProject {
           rootfsIsolation: true,
           requiresSetup: true,
         );
+
+  /// The note is the base, not the whole: the user's instruction files are
+  /// read after it, so a rule the user sets for Byte Repair reaches the turn
+  /// and wins where the two disagree — see `includesUserInstructions`.
+  @override
+  bool get includesUserInstructions => true;
 
   @override
   String get bundledInstructions =>

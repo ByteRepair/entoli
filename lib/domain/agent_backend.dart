@@ -304,6 +304,13 @@ class TurnSettings {
   /// AGENTS.md file is read, and the nested walk on a file read is off.
   final String? bundledInstructions;
 
+  /// Where [bundledInstructions] is set, whether the user's instruction files
+  /// are also read on top of the bundled note. False keeps the note as the
+  /// whole instructions; true reads the global and project AGENTS.md after it,
+  /// so the user's rules win on conflict. Has no effect where there is no
+  /// bundled note — a user's project reads its files regardless.
+  final bool includesUserInstructions;
+
   /// The project's own command variables, layered over the app-level ones by
   /// the shell. Empty where the project sets none; the app-level ones are the
   /// shell's to read on each command, for the reason they are settings.
@@ -321,6 +328,7 @@ class TurnSettings {
     this.sharedWorkspace = true,
     this.disabled = const {},
     this.bundledInstructions,
+    this.includesUserInstructions = false,
     this.environment = const {},
   });
 }

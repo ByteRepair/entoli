@@ -236,24 +236,22 @@ class BuiltinBackend implements AgentBackend {
       // excludes answers are the only halves a turn may withhold. Where the
       // turn's project ships a note of its own it stands in for the whole
       // block: no file is read, and nothing a file read would pull in can
-      // either. Started before the recall reads below, which it is
-      // independent of: a turn's two file loads are not a queue.
+      // either. Where it ships a note *and* asks for the user's instructions
+      // (`includesUserInstructions`), the files are read after the note, so
+      // the user's rules reach the turn and win on conflict. Started before
+      // the recall reads below, which it is independent of: a turn's two file
+      // loads are not a queue.
       final bundled = settings.bundledInstructions;
-      final instructionsF = bundled != null
-          ? Future.value([
-              InstructionFile(
-                path: settings.project ?? "the built-in project",
-                kind: InstructionKind.bundled,
-                content: bundled,
-              ),
-            ])
-          : loadInstructions(
+      final readFiles = bundled == null || settings.includesUserInstructions;
+      final instructionsF = readFiles
+          ? loadInstructions(
               config.fs,
               projectWorkspace: projectWorkspace,
               global: config.globalInstructionsFile,
               imports: settings.memory.imports,
               excludes: settings.memory.excludes,
-            );
+            )
+          : Future.value(const <InstructionFile>[]);
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a
       // turn, so recall and the agent's tools share one.
@@ -285,7 +283,25 @@ class BuiltinBackend implements AgentBackend {
           logFailure("memory", "recall failed: $e");
         }
       }
-      final instructions = await instructionsF;
+      final loaded = await instructionsF;
+      final instructions = bundled == null
+          ? loaded
+          : settings.includesUserInstructions
+              ? [
+                  InstructionFile(
+                    path: settings.project ?? "the built-in project",
+                    kind: InstructionKind.bundled,
+                    content: bundled,
+                  ),
+                  ...loaded,
+                ]
+              : [
+                  InstructionFile(
+                    path: settings.project ?? "the built-in project",
+                    kind: InstructionKind.bundled,
+                    content: bundled,
+                  ),
+                ];
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {

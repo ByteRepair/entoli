@@ -95,15 +95,23 @@ void main() {
 
     // The only AGENTS.md each has is the one the app ships, in code rather
     // than on a disk a user could delete or edit away from under a turn.
+    // Byte Repair is the exception that proves the rule: it ships a note and
+    // also reads the user's files on top of it.
     test("ship their own instructions and read no file", () {
       expect(anon, isA<AnonymousProject>());
       expect(anon.bundledInstructions, contains("anonymous chat"));
+      expect(anon.includesUserInstructions, isFalse);
       expect(byteRepair, isA<ByteRepairProject>());
       expect(byteRepair.bundledInstructions, contains("ESBMC"));
+      expect(byteRepair.includesUserInstructions, isTrue);
       expect(
           const BuiltinProject(dir: "work", label: "work")
               .bundledInstructions,
           isNull);
+      expect(
+          const BuiltinProject(dir: "work", label: "work")
+              .includesUserInstructions,
+          isFalse);
     });
 
     // Anonymous ships a 24h TTL and its own question; Byte Repair inherits the

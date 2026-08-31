@@ -101,8 +101,11 @@ class ProjectSettingsPage extends ConsumerWidget {
             trailing: Text("$count"),
           ),
           // A built-in that ships its own note reads no file, so there is no
-          // instructions to edit for one.
-          if (builtinProjectOf(project)?.bundledInstructions == null) ...[
+          // instructions to edit for one — unless it asks for the user's files
+          // on top of the note, in which case the project AGENTS.md is the
+          // file the row opens.
+          if (builtinProjectOf(project)?.bundledInstructions == null ||
+              builtinProjectOf(project)?.includesUserInstructions == true) ...[
             const Divider(),
             _ProfileRow(project: project),
           ],
