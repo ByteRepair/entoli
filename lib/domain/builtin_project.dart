@@ -83,6 +83,14 @@ class BuiltinProject {
   /// its files regardless.
   bool get includesUserInstructions => false;
 
+  /// Whether a turn in this project is configured from a project settings
+  /// page. A user project always has one; a built-in overrides this where the
+  /// page would show more than its name and path. Default false (anonymous),
+  /// since its turns run on the note alone and there is nothing on the page
+  /// to edit. `ByteRepairProject` turns it on, so the sidebar offers the
+  /// settings gear for it the way it does for a user's project.
+  bool get hasSettingsPage => false;
+
   /// The temporary-chat TTL a built-in ships as its own default, in place of
   /// the app-level one. Null falls through to the app default the way a user's
   /// project does. A chat's own override still wins, the way it does for any
@@ -183,6 +191,12 @@ class ByteRepairProject extends BuiltinProject {
   /// and wins where the two disagree — see `includesUserInstructions`.
   @override
   bool get includesUserInstructions => true;
+
+  /// The page is worth opening: it carries the Instructions row that edits the
+  /// project AGENTS.md read on top of the bundled note, beside Environment and
+  /// Temporary chats.
+  @override
+  bool get hasSettingsPage => true;
 
   @override
   String get bundledInstructions =>

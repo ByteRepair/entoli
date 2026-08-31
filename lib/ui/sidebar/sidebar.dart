@@ -190,8 +190,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   /// What the slot beside the switcher holds for [project]. The default
   /// project has no settings page, so its workspace and its memories; a
-  /// built-in the halves its spec says it has; a user's project its settings
-  /// page.
+  /// built-in the halves its spec says it has, plus a settings gear where its
+  /// spec says it has a page worth opening; a user's project its settings
+  /// page. The gear visibility is one predicate across every kind — see
+  /// `projectHasSettingsPage`.
   List<Widget> _projectButtons(
       BuildContext context, WidgetRef ref, String? project) {
     final spec = builtinProjectOf(project);
@@ -224,27 +226,21 @@ class _SidebarState extends ConsumerState<Sidebar> {
             ),
           ),
         );
-    if (project == null) return [workspace(), memories()];
-    if (spec != null) {
-      return [
-        if (spec.sharedWorkspace) workspace(),
-        if (spec.memory != MemoryPolicy.off) memories(),
-      ];
-    }
-    if (isProjectName(project)) {
-      return [
-        IconButton(
+    Widget settingsGear() => IconButton(
           icon: const Icon(Icons.settings),
           tooltip: "Project settings",
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => ProjectSettingsPage(project: project),
+              builder: (_) => ProjectSettingsPage(project: project!),
             ),
           ),
-        ),
-      ];
-    }
-    return const [];
+        );
+    if (project == null) return [workspace(), memories()];
+    return [
+      if (spec?.sharedWorkspace ?? true) workspace(),
+      if (spec == null || spec.memory != MemoryPolicy.off) memories(),
+      if (projectHasSettingsPage(project)) settingsGear(),
+    ];
   }
 
   @override

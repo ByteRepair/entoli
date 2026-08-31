@@ -297,16 +297,29 @@ void main() {
       expect(find.text("Delete project…"), findsNothing);
     });
 
-    // A built-in has neither a settings page nor a shared workspace, so the
-    // slot beside the switcher holds nothing for it.
-    testWidgets("a built-in project has no settings page or workspace button",
-        (tester) async {
+    // Anonymous has neither a settings page nor a shared workspace, so the
+    // slot beside the switcher holds nothing for it. Byte Repair has both,
+    // since its spec ships a note and reads the user's files on top of it.
+    testWidgets("anonymous has no settings page or workspace button", (tester) async {
       await pumpBeside(tester);
       await switchTo(tester, anonProjectLabel);
 
       expect(app.container.read(selectedProjectProvider), "anonymous");
       expect(find.byTooltip("Project settings"), findsNothing);
       expect(find.byTooltip("Default workspace"), findsNothing);
+    });
+
+    testWidgets("Byte Repair has a settings gear that opens its page",
+        (tester) async {
+      await pumpBeside(tester);
+      await switchTo(tester, byteRepairProjectLabel);
+
+      expect(app.container.read(selectedProjectProvider), "byte-repair");
+      expect(find.byTooltip("Project settings"), findsOneWidget);
+      await tester.tap(find.byTooltip("Project settings"));
+      await settleIo(tester);
+
+      expect(find.byType(ProjectSettingsPage), findsOneWidget);
     });
 
     testWidgets("a named project's still goes to its settings", (tester) async {

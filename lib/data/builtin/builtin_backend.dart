@@ -286,22 +286,14 @@ class BuiltinBackend implements AgentBackend {
       final loaded = await instructionsF;
       final instructions = bundled == null
           ? loaded
-          : settings.includesUserInstructions
-              ? [
-                  InstructionFile(
-                    path: settings.project ?? "the built-in project",
-                    kind: InstructionKind.bundled,
-                    content: bundled,
-                  ),
-                  ...loaded,
-                ]
-              : [
-                  InstructionFile(
-                    path: settings.project ?? "the built-in project",
-                    kind: InstructionKind.bundled,
-                    content: bundled,
-                  ),
-                ];
+          : [
+              InstructionFile(
+                path: settings.project ?? "the built-in project",
+                kind: InstructionKind.bundled,
+                content: bundled,
+              ),
+              if (settings.includesUserInstructions) ...loaded,
+            ];
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {

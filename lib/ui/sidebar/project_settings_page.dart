@@ -68,6 +68,12 @@ class ProjectSettingsPage extends ConsumerWidget {
     final chats = ref.watch(chatListProvider).value ?? const [];
     final count = chats.where((c) => c.project == project).length;
     final path = ref.watch(appConfigProvider).projectDir(project: project);
+    // A built-in reaches this page where its spec says it has one; the rows a
+    // built-in cannot use — its own memory store, and deletion — are hidden
+    // for one. `isProjectName` refuses a built-in, so `deleteProject` would
+    // throw, and a built-in with `MemoryPolicy.app` reads the default project's
+    // store rather than keeping one of its own.
+    final builtIn = builtinProjectOf(project);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Project settings")),
@@ -89,12 +95,14 @@ class ProjectSettingsPage extends ConsumerWidget {
             root: ref.watch(appConfigProvider).projectWorkspaceDir(project: project),
             title: "Project workspace",
           ),
-          const Divider(),
-          _UseProjectMemoryRow(project: project),
-          MemoryTile(
-            dir: ref.watch(appConfigProvider).memoryDir(project: project),
-            title: "Project memories",
-          ),
+          if (builtIn == null) ...[
+            const Divider(),
+            _UseProjectMemoryRow(project: project),
+            MemoryTile(
+              dir: ref.watch(appConfigProvider).memoryDir(project: project),
+              title: "Project memories",
+            ),
+          ],
           const Divider(),
           ListTile(
             title: const Text("Chats"),
@@ -104,8 +112,8 @@ class ProjectSettingsPage extends ConsumerWidget {
           // instructions to edit for one — unless it asks for the user's files
           // on top of the note, in which case the project AGENTS.md is the
           // file the row opens.
-          if (builtinProjectOf(project)?.bundledInstructions == null ||
-              builtinProjectOf(project)?.includesUserInstructions == true) ...[
+          if (builtIn?.bundledInstructions == null ||
+              builtIn?.includesUserInstructions == true) ...[
             const Divider(),
             _ProfileRow(project: project),
           ],
@@ -113,17 +121,19 @@ class ProjectSettingsPage extends ConsumerWidget {
           _TempChatTtlRow(project: project),
           const Divider(),
           _EnvironmentRow(project: project),
-          const Divider(),
-          DestructiveButton(
-            icon: Icons.delete,
-            label: "Delete project",
-            confirmTitle: "Delete project?",
-            confirmMessage: "Delete \"$project\", its $count "
-                "${count == 1 ? "chat" : "chats"} and its shared workspace? "
-                "This cannot be undone.",
-            onConfirmed: () => deleteProject(context, ref, project,
-                popToRoot: true, confirm: false),
-          ),
+          if (builtIn == null) ...[
+            const Divider(),
+            DestructiveButton(
+              icon: Icons.delete,
+              label: "Delete project",
+              confirmTitle: "Delete project?",
+              confirmMessage: "Delete \"$project\", its $count "
+                  "${count == 1 ? "chat" : "chats"} and its shared workspace? "
+                  "This cannot be undone.",
+              onConfirmed: () => deleteProject(context, ref, project,
+                  popToRoot: true, confirm: false),
+            ),
+          ],
         ],
       ),
     );
