@@ -6,15 +6,39 @@
 // disk copy under skills-bundled/ is a self-healed cache for bash access.
 // Agents are code-only — never written to disk — since nothing reads them
 // by path.
+//
+// Each entry is tagged with the project it belongs to. `default` is the base
+// set every project inherits; another project's entries override a
+// same-named default one for that project alone. See "Skills and agents" in
+// lib/domain/CLAUDE.md.
 import "dart:convert";
 import "dart:io";
 
 import "package:crypto/crypto.dart";
 
 void main() {
-  final skills = _collect("assets/prompts/skills");
-  final agents = _collect("assets/prompts/agents");
-  final licence = File("assets/prompts/skills/skill-creator/LICENSE.txt")
+  final skills = <_Entry>[];
+  final agents = <_Entry>[];
+  for (final projectDir in _projectDirs()) {
+    final project = _basename(projectDir.path);
+    final skillsRoot = Directory("${projectDir.path}/skills");
+    if (skillsRoot.existsSync()) {
+      for (final e in _collectSkills(skillsRoot, project)) {
+        skills.add(e);
+      }
+    }
+    final agentsRoot = Directory("${projectDir.path}/agents");
+    if (agentsRoot.existsSync()) {
+      for (final e in _collectAgents(agentsRoot, project)) {
+        agents.add(e);
+      }
+    }
+  }
+  _sort(skills);
+  _sort(agents);
+
+  final licence = File(
+          "assets/prompts/projects/default/skills/skill-creator/LICENSE.txt")
       .readAsStringSync();
 
   final buf = StringBuffer();
@@ -24,7 +48,8 @@ void main() {
   buf.writeln();
   buf.writeln("class BundledPromptFile {");
   buf.writeln("  const BundledPromptFile(");
-  buf.writeln("      this.name, this.relativePath, this.sha256, this.content);");
+  buf.writeln("      this.project, this.name, this.relativePath, this.sha256, this.content);");
+  buf.writeln("  final String project;");
   buf.writeln("  final String name;");
   buf.writeln("  final String relativePath;");
   buf.writeln("  final String sha256;");
@@ -45,63 +70,29 @@ void main() {
 }
 
 class _Entry {
-  _Entry(this.name, this.relativePath, this.sha256, this.content);
+  _Entry(this.project, this.name, this.relativePath, this.sha256, this.content);
+  final String project;
   final String name;
   final String relativePath;
   final String sha256;
   final String content;
 }
 
-/// Walks [dir] and collects every file under it. For skills, [name] is the
-/// top-level folder and [relativePath] is the path within it. For agents,
-/// [name] is the filename without extension and [relativePath] is empty.
-List<_Entry> _collect(String dir) {
-  final root = Directory(dir);
-  if (!root.existsSync()) return [];
-  final entries = <_Entry>[];
-
-  if (dir.endsWith("agents")) {
-    for (final entity in root.listSync()) {
-      if (entity is! File || !entity.path.endsWith(".md")) continue;
-      final name = entity.path.split("/").last.replaceAll(".md", "");
-      final content = entity.readAsStringSync();
-      entries.add(_Entry(name, "", _hash(content), content));
-    }
-  } else {
-    for (final skillDir in root.listSync().whereType<Directory>()) {
-      final skillName = skillDir.path.split("/").last;
-      for (final file
-          in _allFiles(skillDir, skillDir.path, skillDir.path)) {
-        final content = File(file).readAsStringSync();
-        final relative = file.substring(skillDir.path.length + 1);
-        entries.add(_Entry(skillName, relative, _hash(content), content));
-      }
-    }
-  }
-
+void _sort(List<_Entry> entries) {
   entries.sort((a, b) {
-    final c = a.name.compareTo(b.name);
-    return c != 0 ? c : a.relativePath.compareTo(b.relativePath);
+    final c = a.project.compareTo(b.project);
+    if (c != 0) return c;
+    final d = a.name.compareTo(b.name);
+    if (d != 0) return d;
+    return a.relativePath.compareTo(b.relativePath);
   });
-  return entries;
-}
-
-List<String> _allFiles(Directory dir, String root, String fullRoot) {
-  final files = <String>[];
-  for (final entity in dir.listSync()) {
-    if (entity is Directory) {
-      files.addAll(_allFiles(entity, root, fullRoot));
-    } else if (entity is File) {
-      files.add(entity.path);
-    }
-  }
-  return files;
 }
 
 void _emitList(StringBuffer buf, String varName, List<_Entry> entries) {
   buf.writeln("const $varName = <BundledPromptFile>[");
   for (final e in entries) {
     buf.writeln("  BundledPromptFile(");
+    buf.writeln("      ${_stringLiteral(e.project)},");
     buf.writeln("      ${_stringLiteral(e.name)},");
     buf.writeln("      ${_stringLiteral(e.relativePath)},");
     buf.writeln("      ${_stringLiteral(e.sha256)},");
@@ -109,6 +100,58 @@ void _emitList(StringBuffer buf, String varName, List<_Entry> entries) {
   }
   buf.writeln("];");
   buf.writeln();
+}
+
+/// The project directories under `assets/prompts/projects/`, sorted. `default`
+/// is one of them, the way every project is one directory under `projects/`.
+List<Directory> _projectDirs() {
+  final root = Directory("assets/prompts/projects");
+  if (!root.existsSync()) return const [];
+  return root.listSync().whereType<Directory>().toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
+}
+
+String _basename(String path) => path.split("/").last;
+
+/// Walks the `skills/` directory of a project and collects every file under
+/// each skill folder. [name] is the skill folder, [relativePath] is the path
+/// within it.
+List<_Entry> _collectSkills(Directory skillsRoot, String project) {
+  final entries = <_Entry>[];
+  for (final skillDir in skillsRoot.listSync().whereType<Directory>()) {
+    final skillName = _basename(skillDir.path);
+    for (final file in _allFiles(skillDir)) {
+      final content = File(file).readAsStringSync();
+      final relative = file.substring(skillDir.path.length + 1);
+      entries.add(_Entry(project, skillName, relative, _hash(content), content));
+    }
+  }
+  return entries;
+}
+
+/// Walks the `agents/` directory of a project: one `.md` file per agent, named
+/// by the filename without extension. [relativePath] is empty.
+List<_Entry> _collectAgents(Directory agentsRoot, String project) {
+  final entries = <_Entry>[];
+  for (final entity in agentsRoot.listSync()) {
+    if (entity is! File || !entity.path.endsWith(".md")) continue;
+    final name = _basename(entity.path).replaceAll(".md", "");
+    final content = entity.readAsStringSync();
+    entries.add(_Entry(project, name, "", _hash(content), content));
+  }
+  return entries;
+}
+
+List<String> _allFiles(Directory dir) {
+  final files = <String>[];
+  for (final entity in dir.listSync()) {
+    if (entity is Directory) {
+      files.addAll(_allFiles(entity));
+    } else if (entity is File) {
+      files.add(entity.path);
+    }
+  }
+  return files;
 }
 
 String _hash(String content) =>

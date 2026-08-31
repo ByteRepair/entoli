@@ -371,7 +371,7 @@ void main() {
       await settleIo(tester);
       await tester.enterText(find.byType(TextField), "My Side Project");
       await tester.tap(find.text("Create"));
-      await settleIo(tester);
+      await settleIo(tester, least: 20);
 
       expect(app.container.read(selectedProjectProvider), "My-Side-Project");
       expect(Directory(app.config.projectWorkspaceDir(project: "My-Side-Project")).existsSync(), isTrue);
