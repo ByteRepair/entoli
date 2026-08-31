@@ -17,6 +17,7 @@ import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
 import "domain/models.dart" show CompletionKind;
+import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
@@ -76,12 +77,26 @@ class AppSession {
     await installBundledSkills(config);
     // Read-only so a model running bash cannot unintentionally write to a
     // skill directory. The install/delete paths toggle this where they need to.
+    // Per project: each project's skills dirs are read-only the way the
+    // default's are, since a `bash` command reaches any of them.
     await platform.chmodReadOnly([
-      config.bundledSkillsDir,
-      config.promptsDir(CompletionKind.skill),
+      for (final project in everyProject(await config.projectNames()))
+        ...[
+          config.bundledSkillsDir(project: project),
+          config.promptsDir(CompletionKind.skill, project: project),
+        ],
     ]);
     final store = platform.createChatStore(config);
-    final library = await PromptLibrary.from(platform.createPromptSources(config));
+    // One library per project: the default's is the base set every other
+    // project inherits, and a project's own overrides same-named default
+    // entries for that project alone. Built once at startup so nothing
+    // downstream waits on disk; see "Skills and agents" in
+    // `lib/domain/CLAUDE.md`.
+    final libraries = <String?, PromptLibrary>{};
+    for (final project in everyProject(await config.projectNames())) {
+      libraries[project] =
+          await PromptLibrary.from(platform.createPromptSources(config, project: project));
+    }
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
@@ -96,7 +111,7 @@ class AppSession {
     final server = await localLlm;
     // Beside the pool, so the two agree on where the server's slot dumps go.
     final kvCache = platform.createLocalKvCache(cache, server);
-    final backend = platform.createBackend(config, library, store,
+    final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
@@ -152,7 +167,10 @@ class AppSession {
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
-        promptLibraryProvider.overrideWith(() => PromptLibraryNotifier(library)),
+        // Seed every project's library at startup: each family member gets its
+        // own seeded library, so nothing downstream waits on disk.
+        promptLibraryProvider.overrideWith2(
+            (project) => PromptLibraryNotifier(project, libraries[project])),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),

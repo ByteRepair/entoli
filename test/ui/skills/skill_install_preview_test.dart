@@ -73,7 +73,7 @@ void main() {
     expect(find.text("scripts/run.sh"), findsOneWidget);
 
     await tester.tap(_installButton);
-    await settleIo(tester);
+    await settleIo(tester, least: 20, tries: 80);
 
     // The install reached the user's skills directory, files and all.
     final dir = p.join(app.config.promptsDir(CompletionKind.skill), "letterbox");

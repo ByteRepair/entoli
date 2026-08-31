@@ -60,8 +60,10 @@ Shell platformShell({
 /// the pick's files have gone, or this build carries no proot. Answered
 /// synchronously because it is asked before every command.
 ShellDriver? platformDriver({
-  required String skillsBundledDir,
-  required String userSkillsDir,
+  required String defaultSkillsBundledDir,
+  required String defaultUserSkillsDir,
+  String? projectSkillsBundledDir,
+  String? projectUserSkillsDir,
   Toolset? tools,
   Proot? proot,
   RootfsStore? store,
@@ -87,8 +89,10 @@ ShellDriver? platformDriver({
       proot: proot,
       rootfs: rootfs,
       rootfsDir: dir,
-      skillsBundledDir: skillsBundledDir,
-      userSkillsDir: userSkillsDir,
+      defaultSkillsBundledDir: defaultSkillsBundledDir,
+      defaultUserSkillsDir: defaultUserSkillsDir,
+      projectSkillsBundledDir: projectSkillsBundledDir,
+      projectUserSkillsDir: projectUserSkillsDir,
       abi: abi,
     );
   }

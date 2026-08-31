@@ -92,7 +92,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
           () async {
             await installSkillPackage(config, package);
           });
-      await ref.read(promptLibraryProvider.notifier).reload();
+      await reloadAllPromptLibraries(ref);
       await _scan();
       _say("Imported ${package.name}.");
     });
@@ -119,7 +119,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
                 .directory(skillDirectory(config, skill.name))
                 .delete(recursive: true);
           });
-      await ref.read(promptLibraryProvider.notifier).reload();
+      await reloadAllPromptLibraries(ref);
       await _scan();
       _say("Removed ${skill.name}.");
     });
@@ -146,7 +146,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final skills = ref.watch(promptLibraryProvider).entries(CompletionKind.skill);
+    final skills = ref.watch(promptLibraryProvider(null)).entries(CompletionKind.skill);
     final userSkills = _userSkills;
 
     return Column(

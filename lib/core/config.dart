@@ -16,17 +16,19 @@ const instructionFileName = "AGENTS.md";
 /// Layout:
 ///   `<dataDir>/settings.json`
 ///   `<dataDir>/reminders.json`
-///   `<dataDir>/commands/*.md`, `<dataDir>/agents/*.md`
 ///   `<dataDir>/projects/<project>/`
 ///     `project.json`
 ///     `chats/<chat-id>/` — state.json, conv.jsonl, meta.json, resources/,
 ///        artifacts/, subagents/
 ///     `workspace/`, holding `chats/<chat-id>/`
+///     `agents/*.md`, `skills/<name>/`, `skills-bundled/<name>/`
 ///
-/// Every path but the first three is a project's, and every project is a
+/// Every path but the first two is a project's, and every project is a
 /// directory under `projects/` — the default one included, under the name
-/// `defaultProjectDir`. Moving any of it in a release is what `migrations.dart`
-/// is for.
+/// `defaultProjectDir`. The default project holds the base skills and agents
+/// every other project inherits; another project's own `agents/` and `skills/`
+/// override a same-named default entry for that project alone. Moving any of
+/// it in a release is what `migrations.dart` is for.
 ///
 /// A chat's own workspace is *inside* the project's rather than beside its
 /// conversation: it is where the chat's commands start, and the project
@@ -170,15 +172,29 @@ class AppConfig {
   String subAgentFile(String chatId, String callId, {String? project}) =>
       fs.path.join(subAgentsDir(chatId, project: project), "$callId.jsonl");
 
-  /// Where the user's own skills and agents go, beside the presets the app
-  /// ships with. App-wide: a project scopes files, not what the composer offers.
-  String promptsDir(CompletionKind kind) => fs.path.join(dataDir, kind.folder);
+  /// The default project's own skills and agents, beside its `chats/` and
+  /// `workspace/`. Every project derives from the default one: a project's
+  /// own entry replaces a same-named default entry for that project alone,
+  /// and what it does not override falls through. See "Skills and agents"
+  /// in `lib/domain/CLAUDE.md`.
+  ///
+  /// [projectPromptsDir] is the per-project shape: `null` is the default
+  /// project, the way it is for every project-scoped path.
+  String promptsDir(CompletionKind kind, {String? project}) =>
+      projectPromptsDir(kind, project: project);
+
+  String projectPromptsDir(CompletionKind kind, {String? project}) =>
+      fs.path.join(projectDir(project: project), kind.folder);
 
   /// Where the bundled skills are extracted to at startup, so a skill's
   /// scripts and reference files have a real base directory. Beside the
   /// user's [promptsDir] rather than in it: `skills/` is purely theirs, so
-  /// deleting a skill there deletes it.
-  String get bundledSkillsDir => fs.path.join(dataDir, "skills-bundled");
+  /// deleting a skill there deletes it. Per-project, the way [promptsDir] is.
+  String bundledSkillsDir({String? project}) =>
+      projectBundledSkillsDir(project: project);
+
+  String projectBundledSkillsDir({String? project}) =>
+      fs.path.join(projectDir(project: project), "skills-bundled");
 
   /// Create a chat's directories. Reading a path no longer creates it, so the
   /// few places that need them on the filesystem say so.
@@ -191,26 +207,30 @@ class AppConfig {
 
   /// A project is its directories: there is nothing else to create one, and
   /// the shared workspace is named in the agent's prompt whether or not
-  /// anything has been put in it yet.
+  /// anything has been put in it yet. Its own skills and agents dirs are made
+  /// here too, so a project's overrides have somewhere to live the moment it
+  /// exists — the way the default one's do at startup.
   Future<void> ensureProjectDirs({String? project}) => _ensure([
         chatsDir(project: project),
         projectWorkspaceDir(project: project),
+        for (final kind in CompletionKind.values)
+          projectPromptsDir(kind, project: project),
       ]);
 
   /// True where this call created the data directory, which is what says a
   /// migration has nothing here to move — asked by the call that creates them,
   /// since afterwards there is nobody left to ask.
   ///
-  /// The prompt directories are created empty rather than on demand: an
-  /// absent one is a worse hint than an empty one about where a custom
-  /// command goes.
+  /// The default project's prompt directories are created empty rather than on
+  /// demand: an absent one is a worse hint than an empty one about where a
+  /// custom command goes. Every other project's are made with it, through
+  /// [ensureProjectDirs].
   Future<bool> ensureDirs() async {
     final fresh = !await fs.directory(dataDir).exists();
     await _ensure([
       dataDir,
       projectsDir,
       syncDir,
-      for (final kind in CompletionKind.values) promptsDir(kind),
     ]);
     await ensureProjectDirs();
     return fresh;

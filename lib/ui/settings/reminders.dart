@@ -315,7 +315,8 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
 
   Future<void> _editPrompt() async {
     final edited = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => ReminderPromptPage(prompt: _prompt)),
+      MaterialPageRoute(
+          builder: (_) => ReminderPromptPage(prompt: _prompt, project: _project)),
     );
     if (edited == null || !mounted) return;
     setState(() => _prompt = edited);
@@ -473,9 +474,14 @@ class _PromptPreview extends StatelessWidget {
 ///
 /// Pops the new prompt, or nothing where it was discarded.
 class ReminderPromptPage extends StatefulWidget {
-  const ReminderPromptPage({super.key, required this.prompt});
+  const ReminderPromptPage({super.key, required this.prompt, this.project});
 
   final String prompt;
+
+  /// The project whose library the `/` and `@` menus offer, so a reminder's
+  /// prompt is composed against the same set the chat it makes will be. Null is
+  /// the default project, the way it is everywhere a project is named.
+  final String? project;
 
   @override
   State<ReminderPromptPage> createState() => _ReminderPromptPageState();
@@ -542,6 +548,7 @@ class _ReminderPromptPageState extends State<ReminderPromptPage> {
           child: CompletionField(
             key: _field,
             controller: _controller,
+            project: widget.project,
             expands: true,
             maxLines: null,
             autofocus: true,

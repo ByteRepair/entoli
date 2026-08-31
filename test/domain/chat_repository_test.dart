@@ -25,7 +25,7 @@ void main() {
 
   ChatRepository repoWith(AppSettings settings, {PromptLibrary? library}) =>
       ChatRepository(FileChatStore(config), backend, () => settings, config,
-          library: library);
+          libraryFor: library == null ? null : (_) => library);
 
 
 

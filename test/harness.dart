@@ -200,8 +200,8 @@ class TestApp {
               shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
-          promptLibraryProvider
-              .overrideWith(() => PromptLibraryNotifier(library ?? testLibrary())),
+          promptLibraryProvider.overrideWith2(
+              (project) => PromptLibraryNotifier(project, library ?? testLibrary())),
           launcherIconsProvider.overrideWithValue(launcher),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),

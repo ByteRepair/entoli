@@ -44,12 +44,14 @@ import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 /// prompt sources below are built once rather than per platform.
 
 /// The agent, wired to what this platform can reach and to whatever the
-/// settings page last wrote. [library] is Entoli's commands and agents, which
-/// the agent expands itself. [store] is the chat store, which the agent needs
-/// to write artifacts to the chat's `artifacts/` dir.
+/// settings page last wrote. [libraries] is Entoli's commands and agents per
+/// project — the default's is the base set every other project inherits. The
+/// agent expands references itself, against the project's library. [store] is
+/// the chat store, which the agent needs to write artifacts to the chat's
+/// `artifacts/` dir.
 BuiltinBackend createBackend(
   AppConfig config,
-  PromptLibrary library,
+  Map<String?, PromptLibrary> libraries,
   ChatStore store, {
   Toolset? tools,
   RootfsStore? rootfs,
@@ -58,17 +60,21 @@ BuiltinBackend createBackend(
   LocalKvCache? kvCache,
 }) {
   AppSettings settings() => AppSettings.load(config);
-  return BuiltinBackend(
+  final backend = BuiltinBackend(
     config: config,
-    library: library,
+    library: libraries[null],
     shell: platformShell(
       environment: () => settings().environment,
       // Resolved per command rather than once: a Linux installed from the
       // settings page reaches the next command, and one deleted stops being
       // where commands run without the app having to be restarted.
       driver: ({String? project}) => platformDriver(
-        skillsBundledDir: config.bundledSkillsDir,
-        userSkillsDir: config.fs.path.join(config.dataDir, "skills"),
+        defaultSkillsBundledDir: config.bundledSkillsDir(),
+        defaultUserSkillsDir: config.promptsDir(CompletionKind.skill),
+        projectSkillsBundledDir:
+            project == null ? null : config.bundledSkillsDir(project: project),
+        projectUserSkillsDir:
+            project == null ? null : config.promptsDir(CompletionKind.skill, project: project),
         tools: tools,
         proot: tools?.proot,
         store: rootfs,
@@ -87,6 +93,10 @@ BuiltinBackend createBackend(
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
     ),
   );
+  for (final entry in libraries.entries) {
+    backend.setLibrary(entry.key, entry.value);
+  }
+  return backend;
 }
 
 /// The on-device prompt warm-up, built where the shell that words the system
@@ -314,12 +324,14 @@ AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 ReminderAlarms createReminderAlarms() => platformReminderAlarms();
 
 /// The presets, and the user's own beside them. Their directory is on the
-/// config's filesystem, so it exists on every platform now. The bundled skills
-/// are extracted to the config's filesystem first — `installBundledSkills`,
-/// called before the library is built in `main`.
-List<PromptSource> createPromptSources(AppConfig config) => [
-      BundledPrompts(config: config),
-      DirectoryPrompts(config),
+/// config's filesystem, so it exists on every platform now. The bundled
+/// skills are extracted to the config's filesystem first — `installBundledSkills`,
+/// called before the library is built in `main`. [project] is the project
+/// whose overrides are layered on top of the default set; `null` is the
+/// default project, the way it is everywhere else a project is named.
+List<PromptSource> createPromptSources(AppConfig config, {String? project}) => [
+      BundledPrompts(config: config, project: project),
+      DirectoryPrompts(config, project: project),
     ];
 
 /// What this machine calls itself, where it has a name. The sync device name

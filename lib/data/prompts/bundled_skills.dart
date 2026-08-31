@@ -2,6 +2,11 @@
 // skill's scripts and reference files have to be somewhere a command can
 // reach, and an asset key is not. The embedded data is the source of truth;
 // the disk copy is a self-healed cache for bash access.
+//
+// Each project that ships bundled skills has its own `skills-bundled/`
+// directory, beside its `skills/`. The default project's is the base set;
+// another project's holds its overrides. Self-heal runs over both, so an
+// edit or a stray in either is repaired on the next launch.
 import "dart:convert";
 
 import "package:crypto/crypto.dart";
@@ -12,23 +17,33 @@ import "../../core/config.dart";
 import "../../core/log.dart";
 import "bundled_skill_data.dart";
 
-/// Writes every bundled skill file from [bundledSkillFiles] into
-/// `<dataDir>/skills-bundled/`, keeping the tree. **Self-healing**: a file that
-/// exists but differs from the embedded copy (by SHA-256) is re-written, so an
-/// edit — accidental or deliberate — is repaired on the next launch. A file not
-/// in the embedded list is deleted, so nothing an LLM left behind survives.
+/// Writes every bundled skill file from [bundledPromptFiles] into the project
+/// directories it belongs to, keeping the tree. **Self-healing**: a file that
+/// exists but differs from the embedded copy (by SHA-256) is re-written, so
+/// an edit — accidental or deliberate — is repaired on the next launch. A
+/// file not in the embedded list is deleted, so nothing an LLM left behind
+/// survives.
 ///
-/// Runs at startup, before the prompt library is built. The library reads from
-/// the embedded const, not from this disk write, so even a self-heal failure
-/// leaves the library correct — this is purely for bash access.
+/// Runs at startup, before the prompt library is built. The library reads
+/// from the embedded const, not from this disk write, so even a self-heal
+/// failure leaves the library correct — this is purely for bash access.
 Future<void> installBundledSkills(AppConfig config) async {
+  final projects = bundledPromptFiles.map((f) => f.project).toSet();
+  for (final project in projects) {
+    await _installFor(config, project);
+  }
+}
+
+Future<void> _installFor(AppConfig config, String project) async {
   final fs = config.fs;
   final path = fs.path;
-  final root = fs.directory(config.bundledSkillsDir);
+  final root = fs.directory(config.bundledSkillsDir(project: project));
 
   final known = <String>{};
-  for (final file in bundledSkillFiles) {
-    final dest = path.join(config.bundledSkillsDir, file.name, file.relativePath);
+  for (final file in bundledPromptFiles) {
+    if (file.project != project) continue;
+    final dest = path.join(
+        config.bundledSkillsDir(project: project), file.name, file.relativePath);
     known.add(dest);
     try {
       final target = fs.file(dest);

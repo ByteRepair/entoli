@@ -128,6 +128,7 @@ class CompletionField extends ConsumerStatefulWidget {
   const CompletionField({
     super.key,
     required this.controller,
+    this.project,
     this.decoration,
     this.style,
     this.minLines,
@@ -141,6 +142,11 @@ class CompletionField extends ConsumerStatefulWidget {
   });
 
   final TextEditingController controller;
+
+  /// The project whose library the `/` and `@` menus offer. Null is the
+  /// default project, the way it is everywhere a project is named. The
+  /// composer passes the chat's own; a reminder editor passes the reminder's.
+  final String? project;
   final InputDecoration? decoration;
   final TextStyle? style;
   final int? minLines;
@@ -249,7 +255,7 @@ class CompletionFieldState extends ConsumerState<CompletionField> {
     final token = _token;
     final options = token == null
         ? const <CompletionOption>[]
-        : ref.watch(completionsProvider(token.kind));
+        : ref.watch(completionsProvider((project: widget.project, kind: token.kind)));
     final matches = _matching(options, token?.query ?? "");
 
     final field = Shortcuts(

@@ -57,13 +57,24 @@ class BuiltinBackend implements AgentBackend {
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
 
-  /// Entoli's own skills and agents. A turn's own references travel on the
-  /// message, resolved where it was composed, so this is left for the `task`
-  /// tool — which names an `@agent` the user never wrote — and for the skills
-  /// offered to the model. Mutable because the Skills page can change what is
-  /// on disk and reload the library; a turn already running keeps what it
-  /// started with, the way a running command keeps its environment.
-  PromptLibrary? library;
+  /// Entoli's own skills and agents, per project. A turn's own references
+  /// travel on the message, resolved where it was composed against the
+  /// project's library, so this is left for the `task` tool — which names an
+  /// `@agent` the user never wrote — and for the skills offered to the model.
+  /// Mutable because the Skills page can change what is on disk and reload the
+  /// library; a turn already running keeps what it started with, the way a
+  /// running command keeps its environment.
+  ///
+  /// Keyed by project, `null` the default the way it is everywhere a project is
+  /// named. A project inherits the default's set and overrides same-named
+  /// entries of its own.
+  final Map<String?, PromptLibrary> _libraries = {};
+  PromptLibrary? library; // Kept for the prefill, which warms the default's.
+  void setLibrary(String? project, PromptLibrary library) {
+    _libraries[project] = library;
+    if (project == null) this.library = library;
+  }
+  PromptLibrary? libraryFor(String? project) => _libraries[project] ?? _libraries[null];
 
   /// Web search and fetch, chosen by the platform like [shell] is:
   /// `DuckDuckGoSearch` on desktop and Android, `UnavailableWebSearch` in a
@@ -220,7 +231,7 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
         model: target.modelId,
-        library: library,
+        library: libraryFor(project),
         options: options,
         webSearch: webSearch,
         rateLimitGate: rateLimitGate,
@@ -303,7 +314,7 @@ class BuiltinBackend implements AgentBackend {
         environment: settings.environment,
         model: target.modelId,
         options: options,
-        skills: library?.entries(CompletionKind.skill) ?? const [],
+        skills: libraryFor(settings.project)?.entries(CompletionKind.skill) ?? const [],
         approveMode: settings.approveMode,
         classifier: classifier,
         approve: _awaitApproval,
