@@ -33,7 +33,7 @@ edited from its settings page, and a name set there wins over one set in
 `settings.json`. Old files with the former `opencodeEnv` key still load, and
 rewrite themselves under the new name on the next save.
 
-The settings page is ten categories, picked from a panel beside it or, below
+The settings page is eleven categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
@@ -74,6 +74,15 @@ not deletable and a user's is; import and delete are the two things that change
 it, and they reload the library the moment they are done, the one way a change
 to it lands without a restart, where a skill dropped into the directory by hand
 still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
+**Agents** is the list of what a message can address by name — the bundled
+ones, which ship with the app and are read-only, and the user's own, written
+in-app and editable or removable. An agent is one flat `.md` file (a system
+prompt with `description` frontmatter), so it is written through an editor
+page rather than imported the way a skill's directory is; the name is the file
+name and is fixed once the agent exists, since renaming it would orphan every
+`@name` mention already written into a conversation. Add, edit and delete
+reload the library the moment they are done, the same one way a change to it
+lands without a restart. See "Skills and agents" in `lib/domain/CLAUDE.md`.
 **Byte Repair** is the tooling for the built-in project of the same name: a
 banner saying whether the configured terminal env can run it, a button that
 runs a bundled install script through that env to create the project's own
