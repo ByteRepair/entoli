@@ -1,5 +1,6 @@
 import "dart:io";
 
+import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride, TargetPlatform;
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
@@ -10,6 +11,7 @@ import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
@@ -200,6 +202,10 @@ void main() {
       File(app.config.setupCompleteFile(project: ByteRepairProject().dir))
         ..createSync(recursive: true)
         ..writeAsStringSync("done");
+      // The test platform is Android, and Byte Repair needs a rootfs env there:
+      // the marker alone is not enough. Pick one so the env check passes.
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier).setRootfs("alpine"));
       await openEmpty(tester);
 
       await pick(tester, byteRepairProjectLabel);
@@ -218,6 +224,65 @@ void main() {
       await pumpUntil(tester, find.byType(NeedsSetupBar));
       await settleIo(tester);
 
+      expect(find.byType(Composer), findsNothing);
+    });
+
+    // The marker alone is not enough on Android: Byte Repair needs a rootfs
+    // with a package manager, and "Host" has none. A setup run under a rootfs
+    // leaves the marker on disk, so switching the terminal env back to Host
+    // must put the bar back — otherwise a turn would be sent into an env that
+    // cannot run it. The `androidTest` wrapper sets the platform override the
+    // way `link_opener_test.dart` does, and undoes it before the tear-down.
+    void androidTest(String description, Future<void> Function(WidgetTester) body) {
+      testWidgets(description, (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          await body(tester);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    }
+
+    androidTest("Host env on Android blocks the composer despite the marker",
+        (tester) async {
+      app.dispose();
+      app = TestApp.create(proot: true, linuxes: const {"alpine"});
+      File(app.config.setupCompleteFile(project: ByteRepairProject().dir))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("done");
+      await openEmpty(tester);
+
+      await pick(tester, byteRepairProjectLabel);
+
+      // No rootfs picked: Host is the active env, and the bar stands in.
+      expect(find.byType(NeedsSetupBar), findsOneWidget);
+      expect(find.byType(Composer), findsNothing);
+    });
+
+    androidTest("a rootfs env on Android lets the composer through with the marker",
+        (tester) async {
+      app.dispose();
+      app = TestApp.create(proot: true, linuxes: const {"alpine"});
+      File(app.config.setupCompleteFile(project: ByteRepairProject().dir))
+        ..createSync(recursive: true)
+        ..writeAsStringSync("done");
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier).setRootfs("alpine"));
+      await openEmpty(tester);
+
+      await pick(tester, byteRepairProjectLabel);
+
+      expect(find.byType(Composer), findsOneWidget);
+      expect(find.byType(NeedsSetupBar), findsNothing);
+
+      // Switching back to Host puts the bar back without touching the marker.
+      await io(tester, () => app.container
+          .read(appSettingsProvider.notifier).setRootfs(null));
+      await tester.pump();
+      await settleIo(tester);
+
+      expect(find.byType(NeedsSetupBar), findsOneWidget);
       expect(find.byType(Composer), findsNothing);
     });
 
