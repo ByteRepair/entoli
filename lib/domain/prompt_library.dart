@@ -73,6 +73,17 @@ class PromptDocument {
     }
     return value;
   }
+
+  /// The `.md` source for a document: a `description` frontmatter where there
+  /// is one, then the body. The inverse of [parse] for the scalars an agent
+  /// editor writes — `description` is the only one, and an empty description
+  /// is omitted rather than written as an empty value, which [parse] reads as
+  /// the opening of a nested block.
+  static String toSource({String? description, required String body}) {
+    final desc = description?.trim() ?? "";
+    final head = desc.isEmpty ? "" : "---\ndescription: $desc\n---\n\n";
+    return "$head${body.trim()}";
+  }
 }
 
 /// Somewhere prompt files come from — the app's own assets, or a directory the

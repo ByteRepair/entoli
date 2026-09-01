@@ -27,6 +27,7 @@ import "../widgets/provider_dialog.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "agents_settings.dart";
 import "assistant_settings.dart";
 import "byte_repair_settings.dart";
 import "local_model_settings.dart";
@@ -48,6 +49,7 @@ enum SettingsCategory {
   voice("Voice", Icons.graphic_eq),
   reminders("Reminders", Icons.alarm),
   skills("Skills", Icons.extension),
+  agents("Agents", Icons.person_outline),
   byteRepair("Byte Repair", Icons.verified_user),
   sync("Sync", Icons.sync),
   providers("Providers", Icons.cloud_outlined),
@@ -190,6 +192,7 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // see the section itself.
       SettingsCategory.reminders => const [RemindersSection()],
       SettingsCategory.skills => const [SkillsSection()],
+      SettingsCategory.agents => const [AgentsSection()],
       SettingsCategory.byteRepair => const [ByteRepairSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
