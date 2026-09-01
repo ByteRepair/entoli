@@ -6,6 +6,7 @@ import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
 import "../../core/platform/platform.dart" as platform;
+import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
@@ -86,7 +87,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   }
 
   Future<void> _save(AgentEdit edit, {required bool replacing}) async {
-    if (!_isValidName(edit.name)) {
+    if (!isFolderName(edit.name)) {
       _say("That name cannot be a file name.");
       return;
     }
@@ -112,10 +113,11 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
         () async {
           final file = config.fs.file(_agentPath(config, edit.name));
           await file.create(recursive: true);
-          await file.writeAsString(_encode(edit.description, edit.body));
+          await file.writeAsString(
+              PromptDocument.toSource(description: edit.description, body: edit.body));
         },
       );
-      await ref.read(promptLibraryProvider(null).notifier).reload();
+      await reloadAllPromptLibraries(ref);
       await _scan();
       _say(replacing ? "Saved ${edit.name}." : "Added ${edit.name}.");
     });
@@ -140,7 +142,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
           await config.fs.file(_agentPath(config, agent.name)).delete();
         },
       );
-      await ref.read(promptLibraryProvider(null).notifier).reload();
+      await reloadAllPromptLibraries(ref);
       await _scan();
       _say("Removed ${agent.name}.");
     });
@@ -197,18 +199,16 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   /// The trailing half of a row: the user's agents can be edited or removed,
   /// the bundled ones say so, and while the scan is still out neither is drawn
   /// — a button that flashes in is a row lying twice in a second.
-  Widget _row(PromptDocument agent, Set<String>? userAgents) => ListTile(
-        dense: true,
-        title: Text(agent.name),
-        subtitle: agent.description == null ? null : Text(agent.description!),
-        onTap: switch (userAgents?.contains(agent.name)) {
-          null => null,
-          true => () => _edit(agent),
-          false => null,
-        },
-        trailing: switch (userAgents?.contains(agent.name)) {
-          null => null,
-          true => Row(
+  Widget _row(PromptDocument agent, Set<String>? userAgents) {
+    final owned = userAgents?.contains(agent.name);
+    return ListTile(
+      dense: true,
+      title: Text(agent.name),
+      subtitle: agent.description == null ? null : Text(agent.description!),
+      onTap: owned == true ? () => _edit(agent) : null,
+      trailing: switch (owned) {
+        null => null,
+        true => Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
@@ -223,33 +223,18 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
               ),
             ],
           ),
-          false => const Padding(
+        false => const Padding(
             padding: EdgeInsets.only(right: 12),
             child: Text("Bundled"),
           ),
-        },
-      );
+      },
+    );
+  }
 }
 
 /// Where an agent called [name] lives in the user's agents directory.
 String _agentPath(AppConfig config, String name) =>
     config.fs.path.join(config.promptsDir(CompletionKind.agent), "$name.md");
-
-/// One directory segment, nothing more: a name holding a separator would reach
-/// outside the agents directory, and a dot-name is invisible to nothing but the
-/// eye. The same rule the skill importer holds a skill's folder to.
-bool _isValidName(String name) =>
-    name.isNotEmpty &&
-    !name.startsWith(".") &&
-    !name.contains("/") &&
-    !name.contains("\\");
-
-/// The `.md` source for an agent: a `description` frontmatter, then the body.
-String _encode(String description, String body) {
-  final desc = description.trim();
-  final head = desc.isEmpty ? "" : "---\ndescription: $desc\n---\n\n";
-  return "$head${body.trim()}";
-}
 
 /// What the editor page hands back on save.
 typedef AgentEdit = ({String name, String description, String body});
@@ -282,7 +267,6 @@ class _AgentEditorPageState extends State<AgentEditorPage> {
   late final TextEditingController _description =
       TextEditingController(text: widget.initialDescription);
   late final TextEditingController _body = TextEditingController(text: widget.initialBody);
-  final GlobalKey<CompletionFieldState> _field = GlobalKey();
   String? _nameError;
 
   @override
@@ -318,7 +302,7 @@ class _AgentEditorPageState extends State<AgentEditorPage> {
       setState(() => _nameError = "A name is required.");
       return;
     }
-    if (!_isValidName(name)) {
+    if (!isFolderName(name)) {
       setState(() => _nameError = "That name cannot be a file name.");
       return;
     }
@@ -373,7 +357,6 @@ class _AgentEditorPageState extends State<AgentEditorPage> {
               LabelledField(
                 label: "System prompt",
                 child: CompletionField(
-                  key: _field,
                   controller: _body,
                   minLines: 6,
                   maxLines: 12,
