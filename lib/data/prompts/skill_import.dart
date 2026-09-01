@@ -93,7 +93,7 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
     utf8.decode(skillMd),
   );
   final name = document.frontmatter["name"] ?? prefix.replaceAll("/", "");
-  if (!_isFolderName(name)) {
+  if (!isFolderName(name)) {
     throw const SkillImportException("its name cannot be a folder name");
   }
   return SkillPackage(name, entries,
@@ -102,7 +102,8 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
 
 /// One directory under `skills/` and nothing else: a name holding a separator
 /// would reach outside it, and a dot-name is invisible to nothing but the eye.
-bool _isFolderName(String name) =>
+/// The agents settings page holds agent file names to the same rule.
+bool isFolderName(String name) =>
     name.isNotEmpty && !name.startsWith(".") && !name.contains("/") && !name.contains("\\");
 
 /// Write [package] into the user's skills directory. A skill already there of
