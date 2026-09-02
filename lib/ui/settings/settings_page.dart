@@ -31,6 +31,7 @@ import "agents_settings.dart";
 import "assistant_settings.dart";
 import "byte_repair_settings.dart";
 import "local_model_settings.dart";
+import "privacy_policy_page.dart";
 import "reminders.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
@@ -504,6 +505,14 @@ class _AboutSection extends ConsumerWidget {
           subtitle: Text("$_repository"),
           trailing: const Icon(Icons.open_in_new, size: 18),
           onTap: () => ref.read(linkOpenerProvider).open(context, _repository),
+        ),
+        ListTile(
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text("Privacy policy"),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
+          ),
         ),
         ListTile(
           leading: const Icon(Icons.balance_outlined),
