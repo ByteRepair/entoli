@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:io";
 
+import "package:clock/clock.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -56,6 +57,12 @@ Shell _defaultShell(bool proot, String? abi) =>
         ? LocalShell(environment: () => const {})
         : const UnavailableShell();
 
+/// The fixed "now" every test runs under, so a reminder's fire time is judged
+/// against this rather than the wall clock. Picked before every reminder fire
+/// date the suite uses, so a reminder due "today" stays due and one set for
+/// later is not yet due.
+final _testNow = DateTime(2026, 7, 1, 12);
+
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
@@ -78,8 +85,11 @@ class TestApp {
     required this.localLlm,
     required this.prefill,
     required this.work,
+    required this.clock,
     required this.container,
   });
+
+  final Clock clock;
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
@@ -146,6 +156,7 @@ class TestApp {
     Map<String, String> drivenBy = const {},
     MirrorControl control = const MirrorControl(),
     SyncHub? hub,
+    Clock? clock,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -154,6 +165,10 @@ class TestApp {
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch();
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
+    // Pinned so a reminder's fire time is not judged against the wall clock
+    // the suite happens to run on. A test that needs a different now passes
+    // its own [Clock.fixed].
+    final testClock = clock ?? Clock.fixed(_testNow);
     final backups = FakeBackupHandoff();
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
@@ -192,6 +207,7 @@ class TestApp {
       localLlm: server,
       prefill: warmUp,
       work: work,
+      clock: testClock,
       container: ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
@@ -209,6 +225,7 @@ class TestApp {
           reminderAlarmsProvider.overrideWithValue(alarms),
           remindersProvider.overrideWith(() => Reminders(reminders)),
           reminderTurnDriverProvider.overrideWithValue(FakeReminderTurnDriver()),
+          clockProvider.overrideWithValue(testClock),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),

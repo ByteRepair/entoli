@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -723,6 +724,12 @@ final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
 final reminderAlarmsProvider =
     Provider<ReminderAlarms>((ref) => const UnavailableReminderAlarms());
 
+/// The app's clock, read as "now" by whatever needs a swappable time. The
+/// system clock in production; tests override it with [Clock.fixed] so a
+/// feature that judges dates against "now" — the reminder feature today — is
+/// not judged against the wall clock the suite happens to run on.
+final clockProvider = Provider<Clock>((ref) => const Clock());
+
 /// The user's reminders, seeded from disk before the container exists and
 /// written through on every change — the same bargain [InstalledRootfs] makes.
 class Reminders extends Notifier<List<Reminder>> implements ReminderList {
@@ -765,7 +772,7 @@ class Reminders extends Notifier<List<Reminder>> implements ReminderList {
     final at = state.indexWhere((r) => r.id == id);
     if (at < 0) return;
     final reminder = state[at];
-    final next = enabled ? reminder.nextOccurrence(DateTime.now()) : null;
+    final next = enabled ? reminder.nextOccurrence(ref.read(clockProvider).now()) : null;
     // Disabling disarms it; re-enabling re-aims at the next occurrence.
     await replace(reminder.copyWith(enabled: enabled, clearNextFireAt: true)
         .copyWith(nextFireAt: next));
@@ -785,6 +792,7 @@ final reminderRunnerProvider = Provider<ReminderRunner>((ref) {
     onListChanged: (_) => ref.invalidate(chatListProvider),
     onReminderFired: (reminder) =>
         ref.read(remindersProvider.notifier).replace(reminder),
+    clock: ref.watch(clockProvider),
   );
 });
 
@@ -797,6 +805,7 @@ final reminderSchedulerProvider = Provider<ReminderScheduler>((ref) {
     runner: ref.watch(reminderRunnerProvider),
     list: ref.watch(remindersProvider.notifier),
     projects: () => ref.read(chatRepositoryProvider).listProjects(),
+    clock: ref.watch(clockProvider),
   );
   ref.onDispose(scheduler.dispose);
   ref.listen(remindersProvider, (_, _) {

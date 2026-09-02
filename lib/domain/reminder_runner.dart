@@ -1,3 +1,5 @@
+import "package:clock/clock.dart";
+
 import "chat_repository.dart";
 import "project.dart";
 import "reminder.dart";
@@ -34,10 +36,12 @@ class ReminderRunner implements ReminderRuns {
     required this.driver,
     required this.onListChanged,
     required this.onReminderFired,
+    this.clock = const Clock(),
   });
 
   final ChatRepository repo;
   final ReminderTurnDriver driver;
+  final Clock clock;
 
   /// The sidebar learns about the new chat when its first state lands.
   final void Function(String chatId) onListChanged;
@@ -57,7 +61,7 @@ class ReminderRunner implements ReminderRuns {
       project: project,
       meta: reminder.meta,
     );
-    await onReminderFired(reminder.copyWith(lastFiredAt: DateTime.now()));
+    await onReminderFired(reminder.copyWith(lastFiredAt: clock.now()));
     onListChanged(chat.state.id);
     final result = await driver.send(chat.state.id, reminder.prompt);
     return (chatId: chat.state.id, outcome: result.outcome, snippet: result.snippet);
