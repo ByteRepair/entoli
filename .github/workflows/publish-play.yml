@@ -1,0 +1,130 @@
+name: Publish to Google Play
+
+# Uploads the App Bundle built by release-build.yml to Google Play, which
+# resigns it into per-device APKs of its own. Called by release.yml and nothing
+# else. Setup is documented under "Releasing" in CLAUDE.md.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag of the release whose notes become the Play release notes
+        required: true
+        type: string
+      version:
+        description: Version the bundle is named after, and the Play release name
+        required: true
+        type: string
+      version_code:
+        description: Reported in the summary; the value is already inside the bundle
+        required: true
+        type: string
+    secrets:
+      service_account_json:
+        description: JSON key for a service account with release permissions on the app
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Narrower than the build: this reads a release and uploads to Google.
+    # Nothing here writes to the repository or mints an attestation.
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ inputs.tag }}
+      BUNDLE: dist/entoli-${{ inputs.version }}.aab
+      # Uploaded and reported from one value, so the summary cannot claim a
+      # track the release did not go to.
+      TRACK: alpha
+      # Back to production and `${{ inputs.publish && 'completed' || 'draft'
+      # }}` together when Play unlocks it; a draft reaches no tester.
+      STATUS: completed
+    steps:
+      - name: Check the service account is configured
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.service_account_json }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::Secret PLAY_SERVICE_ACCOUNT_JSON is not available to this repository"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: aab
+          path: dist
+
+      # From the artifact: GitHub drops a job output whose value contains a
+      # secret, and the key alias is a substring of the id.
+      - name: Read the application id
+        id: package
+        run: |
+          set -euo pipefail
+          name="$(cat dist/package.txt)"
+          if [ -z "$name" ]; then
+            echo "::error::dist/package.txt is empty; the build recorded no application id"
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      # Play caps notes at 500 characters and rejects rather than truncating.
+      # Over the cap they are dropped, a listing cut mid-sentence being worse.
+      - name: Collect the release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body)"
+
+          if [ -z "$body" ]; then
+            echo "::notice::Release $TAG has no notes; Play keeps whatever the listing already says"
+            echo "directory=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$(printf '%s' "$body" | wc -m)" -gt 500 ]; then
+            echo "::warning title=Play release notes::Notes for $TAG are over Play's 500-character limit and were not uploaded; write them in the Console"
+            echo "directory=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # whatsnew-<BCP 47 locale> is the API's filename. Only en-US: the
+          # release body is English, and Greek keeps what the Console holds.
+          mkdir -p whatsnew
+          printf '%s' "$body" > whatsnew/whatsnew-en-US
+          echo "directory=whatsnew" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the bundle to Google Play
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.service_account_json }}
+          packageName: ${{ steps.package.outputs.name }}
+          releaseFiles: ${{ env.BUNDLE }}
+          releaseName: ${{ inputs.version }}
+          tracks: ${{ env.TRACK }}
+          status: ${{ env.STATUS }}
+          # Empty where the notes were skipped above, which the action reads as
+          # having none rather than as a missing directory.
+          whatsNewDirectory: ${{ steps.notes.outputs.directory }}
+
+      - name: Report what reached Play
+        env:
+          VERSION: ${{ inputs.version }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          PACKAGE: ${{ steps.package.outputs.name }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Google Play"
+            echo
+            echo '```'
+            echo "package       $PACKAGE"
+            echo "version       $VERSION"
+            echo "version code  $VERSION_CODE"
+            echo "track         $TRACK"
+            echo "status        $STATUS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
