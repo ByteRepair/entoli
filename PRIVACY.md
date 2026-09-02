@@ -1,7 +1,7 @@
 # Privacy Policy
 
-Entoli is a chat UI that runs a coding agent on your device. This policy
-describes what the app stores and what leaves your device.
+Entoli is a chat harness for coding agents and language models on your
+device. This policy describes what the app stores and what leaves your device.
 
 ## Data stored on your device
 
