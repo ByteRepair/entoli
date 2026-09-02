@@ -1,4 +1,4 @@
-package io.github.yiannis128.agent_chat
+package io.byterepair.entoli
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -140,7 +140,7 @@ abstract class ForegroundWork : Service() {
 
     companion object {
         private const val TAG = "ForegroundWork"
-        const val ACTION_STOP = "io.github.yiannis128.agent_chat.STOP"
+        const val ACTION_STOP = "io.byterepair.entoli.STOP"
         private const val WAKE_LOCK_TIMEOUT_MS = 6L * 60 * 60 * 1000
 
         // Static because a service has to reach the channel and is not what

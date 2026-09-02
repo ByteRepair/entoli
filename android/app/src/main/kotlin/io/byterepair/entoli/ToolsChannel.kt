@@ -1,4 +1,4 @@
-package io.github.yiannis128.agent_chat
+package io.byterepair.entoli
 
 import android.content.Context
 import android.net.ConnectivityManager

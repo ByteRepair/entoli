@@ -1,4 +1,4 @@
-package io.github.yiannis128.agent_chat
+package io.byterepair.entoli
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -39,7 +39,7 @@ class ReminderReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "ReminderReceiver"
-        const val ACTION_FIRE = "io.github.yiannis128.agent_chat.FIRE_REMINDER"
+        const val ACTION_FIRE = "io.byterepair.entoli.FIRE_REMINDER"
         const val EXTRA_ID = "reminder_id"
     }
 }

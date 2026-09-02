@@ -9,14 +9,10 @@ The data directory is still `~/.config/agent-chat`, the env var is still
 of those would leave the chats already written where nothing reads them, for a
 string nobody sees.
 
-The one identifier that did move is the application id, from the placeholder
-`com.agentchat.agent_chat` to `io.github.yiannis128.agent_chat` — the first was
-a reverse-DNS name for a domain nobody here owns. Android and GTK both refuse a
-hyphen in an id, so the last segment is `agent_chat` rather than `agent-chat`.
-It is the Android `applicationId` and `namespace` and the Linux
-`APPLICATION_ID`, all one string. Changing it makes this a different app to
-Android, which is only free before a release; it is why the Kotlin package
-moved with it.
+The application id is `io.byterepair.entoli` — the Android `applicationId` and
+`namespace` and the Linux `APPLICATION_ID`, all one string. Changing it makes
+this a different app to Android, which is only free before a release; it is why
+the Kotlin package moved with it.
 
 ## Where the rest of this is
 
