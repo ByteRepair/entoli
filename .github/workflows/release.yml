@@ -1,9 +1,10 @@
 name: Release
 
 # Attaches the binaries a published release is downloaded from — a signed APK
-# per ABI and a Linux AppImage — to the tag they were built from, each with a
-# provenance attestation beside it. `release-build.yml` is what builds them and
-# can be run on its own; `pages.yml` answers the same event for the web app.
+# per ABI, a signed App Bundle for Google Play, and a Linux AppImage — to the
+# tag they were built from, each with a provenance attestation beside it, and
+# uploads the bundle to Play. `release-build.yml` is what builds them and can
+# be run on its own; `pages.yml` answers the same event for the web app.
 # See "Releasing" in CLAUDE.md.
 on:
   release:
@@ -38,7 +39,7 @@ jobs:
 
   # A job of its own so the keystore and `contents: write` are never held by
   # the same one, and one run of it per file so a bundle on the release is
-  # about the file it sits beside rather than naming all four.
+  # about the file it sits beside rather than naming all five.
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -87,3 +88,17 @@ jobs:
             echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Upload the App Bundle to Google Play. Separate from the publish matrix,
+  # which attaches binaries to the GitHub release: this is the one path that
+  # sends the bundle to Play, which resigns it into per-device APKs of its own.
+  # See "Releasing" in CLAUDE.md.
+  play:
+    needs: build
+    uses: ./.github/workflows/publish-play.yml
+    with:
+      tag: ${{ inputs.tag || github.event.release.tag_name }}
+      version: ${{ needs.build.outputs.version }}
+      version_code: ${{ needs.build.outputs.code }}
+    secrets:
+      service_account_json: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
