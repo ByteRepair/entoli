@@ -583,9 +583,9 @@ const voiceModelPair = (recognition: "whisper-tiny", speech: "piper-en_US-amy");
 final voiceModelIds = {voiceModelPair.recognition, voiceModelPair.speech};
 
 /// What About reads. Nothing serves `version.json` under `flutter test`, so a
-/// test that asserts on the version asserts on this. Carries a build number,
-/// which is the shape a built app reports — see `appVersion` in `core/platform/`.
-const testAppVersion = "1.2.3+4";
+/// test that asserts on the version asserts on this — see `appVersion` in
+/// `core/platform/`.
+const testAppVersion = "1.2.3";
 
 /// Whether [button] would do anything if it were pressed. A dead one is still
 /// drawn and still hit by a tap, so its callback is the only thing that says so.
