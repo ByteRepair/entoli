@@ -437,7 +437,7 @@ jobs:
         with:
           name: aab
           path: |
-            dist/$AAB
+            dist/${{ env.AAB }}
             dist/package.txt
           if-no-files-found: error
           compression-level: 0
