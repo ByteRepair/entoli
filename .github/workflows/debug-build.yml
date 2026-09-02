@@ -36,24 +36,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # Java 17 to match android/app/build.gradle.kts, rather than whichever
-      # JDK the runner image currently defaults to.
-      - uses: actions/setup-java@v5.7.0
+      - uses: ./.github/actions/android-build-setup
         with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-
-      - uses: ./.github/actions/flutter-setup
-
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: bundled-tools
-          path: tool/android/dist
-
-      - name: Stage the tools into the APK's native libraries
-        shell: bash
-        run: tool/android/stage.sh
+          release: false
 
       # Every APK is otherwise version code 1, Flutter's default where pubspec
       # names no build number, and an installer refuses to replace an installed

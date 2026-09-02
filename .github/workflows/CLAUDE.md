@@ -50,21 +50,21 @@ intermediates a single runner did not have room for beside the Gradle build.
 `android-tools` builds only, uploads the stripped `dist/` as an artifact, and
 the runner is recycled with all its build directories. `android` and `aab`
 each download that artifact onto a fresh runner, stage it, and build — split
-APKs and an App Bundle respectively, in parallel. The `bundled-tools`
-composite action takes a `stage` input for this: false on the tools job, true
-(the default) where a caller wants both in one step. `debug-build.yml` splits
-the same way, for the same reason. The tools job does not touch Dart and needs
-no Flutter SDK.
+APKs and an App Bundle respectively, in parallel. `debug-build.yml` splits the
+same way, for the same reason. The tools job does not touch Dart.
+
+The setup those three build jobs share — keystore decode (release only), Java
+17, Flutter, the tools download and staging — is one composite,
+`.github/actions/android-build-setup`, gated by a `release` boolean: debug
+passes `false` and skips the keystore; the release jobs pass it the four
+secrets. The keystore decode runs first, before the SDK installs, so a missing
+one fails in seconds rather than after a toolchain download.
 
 **Every job that touches Dart starts with `.github/actions/flutter-setup`** —
-the SDK pin, the packages and codegen in one step, `linux-appimage`'s own job
-included, so no workflow spells a Flutter version out. The generated sources
-are not committed, so build_runner runs on every job; the action caches its
-asset graph, since the minute it takes is mostly compiling its own entrypoint
-rather than producing the four files. It also means the release workflows now
-need `tool/prepare.sh` to exist *in the tagged tree*, where before they needed
-only `flutter pub get`: rebuilding an older release breaks if the script is
-renamed.
+the SDK pin, packages and codegen in one step. The generated sources are not
+committed, so build_runner runs on every job; the action caches its asset
+graph. The release workflows therefore need `tool/prepare.sh` in the tagged
+tree: rebuilding an older release breaks if the script is renamed.
 
 **The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
 job of its own before either build. Every file name is composed there, because
@@ -97,29 +97,23 @@ against these. They carry their own name and icon too: see
 **Signing material never enters the repository.** Four secrets —
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
 `ANDROID_KEY_PASSWORD` — are decoded into the runner's temp directory, never
-into the workspace an artifact is uploaded from.
-`android/app/build.gradle.kts` reads the environment first and
-`android/key.properties` second, which is deliberate twice over: a stray
-properties file in a workspace cannot then change what CI signs with, and a
-password survives the environment unaltered, where `java.util.Properties`
-reads a backslash in a value as an escape and would corrupt one. A fifth
-secret, `PLAY_SERVICE_ACCOUNT_JSON`, is the service-account key for the Play
-upload; see "Google Play" below.
+into the workspace. `build.gradle.kts` reads the environment first and
+`android/key.properties` second, so a stray properties file in a workspace
+cannot change what CI signs with, and a password survives the environment
+unaltered (where `java.util.Properties` would read a backslash as an escape).
+A fifth secret, `PLAY_SERVICE_ACCOUNT_JSON`, is the Play service-account key;
+see "Google Play".
 
 **Where nothing is configured the release build falls back to the debug key,
-and that fallback is what the checks are built around.** It keeps
-`flutter run --release` working on a machine with no keystore, and Gradle
-generates a debug keystore on any runner that lacks one — so a build with the
-secrets missing still *succeeds*, and ships an APK that nothing installs over
-at the next release. So the run fails before it builds if any of the four
-secrets is empty, and asserts on the signer certificate afterwards;
-`CN=Android Debug` in `apksigner verify --print-certs` fails the APK job, and
-the same string in `keytool -printcert -jarfile` fails the AAB job — a bundle
-is a signed jar rather than an APK, so `apksigner` does not apply. Gradle
-applies the same rule to its own inputs — all four settings or none, since a
-half-filled `key.properties` would otherwise reach AGP as a signing config
-with null members. The signer's SHA-256 goes in the run summary, because a
-change in it is the one thing a user cannot recover from.
+and that fallback is what the checks are built around.** Gradle generates a
+debug keystore on any runner that lacks one, so a build with the secrets
+missing still succeeds and ships an APK nothing installs over at the next
+release. The run fails before it builds if any secret is empty, and asserts on
+the signer afterwards: `CN=Android Debug` in `apksigner verify --print-certs`
+fails the APK job, and the same string in `keytool -printcert -jarfile` fails
+the AAB job (a bundle is a signed jar, so `apksigner` does not apply). The
+signer's SHA-256 goes in the run summary, because a change in it is the one
+thing a user cannot recover from.
 
 **The keystore is the maintainer's and nothing here can regenerate it.**
 Android identifies an app by its signing key, so losing it ends the ability to
