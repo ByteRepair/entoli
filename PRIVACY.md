@@ -42,6 +42,15 @@ the app.
 The agent's web search queries DuckDuckGo directly from your device over
 HTTPS.
 
+### Model, voice, and Linux downloads
+
+Downloading an on-device model, a voice model, or a Linux rootfs makes a
+request to the host that serves the file: Hugging Face for models and voice
+recognition models, GitHub for voice synthesis models, and the Alpine Linux
+CDN for the rootfs. The request includes your IP address and standard HTTP
+headers, under the host's own privacy policy. The files are stored on your
+device; inference and voice processing happen locally.
+
 ### Android speech recognition and text-to-speech
 
 Voice mode on Android uses the operating system's speech recognition and
