@@ -95,8 +95,8 @@ No permission collects data in the background.
 
 ## Children
 
-The app is not directed at children under 13 and is not intended for their
-use.
+The app is not intended for use by children. It is recommended that a parent
+or guardian supervise any use by a minor.
 
 ## Contact
 
