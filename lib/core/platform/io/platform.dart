@@ -112,7 +112,7 @@ String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
 /// fetches. Null off Android.
 Future<String?> platformAbi() => BundledTools.abi();
 
-/// Here `version.json` is inside `flutter_assets`, so the bundle has it.
+/// `version.json` is a declared asset, so every platform's bundle carries it.
 Future<String?> platformVersionJson() async {
   try {
     return await rootBundle.loadString("version.json");

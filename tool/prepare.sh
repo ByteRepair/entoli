@@ -6,3 +6,8 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 flutter pub get
 dart run tool/gen_bundled_skills.dart
 dart run build_runner build
+
+# `version.json` is a declared asset; About reads it on platforms whose
+# build tool does not write its own.
+version="$(sed -n 's/^version: *\([^+ ]*\).*/\1/p' pubspec.yaml)"
+printf '{"version":"%s"}\n' "$version" > assets/version.json
