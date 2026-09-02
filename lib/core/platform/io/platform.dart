@@ -112,10 +112,11 @@ String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
 /// fetches. Null off Android.
 Future<String?> platformAbi() => BundledTools.abi();
 
-/// `version.json` is a declared asset, so every platform's bundle carries it.
+/// `assets/version.json` is a declared asset; the `assets/` prefix is part of
+/// the key, not just the on-disk path.
 Future<String?> platformVersionJson() async {
   try {
-    return await rootBundle.loadString("version.json");
+    return await rootBundle.loadString("assets/version.json");
   } catch (_) {
     return null;
   }
