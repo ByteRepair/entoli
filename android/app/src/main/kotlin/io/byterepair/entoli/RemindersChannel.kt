@@ -1,4 +1,4 @@
-package io.github.yiannis128.agent_chat
+package io.byterepair.entoli
 
 import android.app.ActivityManager
 import android.app.AlarmManager

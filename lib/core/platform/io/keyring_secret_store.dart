@@ -19,7 +19,7 @@ import "../../../domain/secret_store.dart";
 class KeyringSecretStore implements SecretStore {
   KeyringSecretStore(this._fallback);
 
-  static const _schema = "io.github.yiannis128.agent_chat.sync";
+  static const _schema = "io.byterepair.entoli.sync";
   static const _labels = {
     identitySecretKey: "Entoli — sync identity",
     pairingSecretsKey: "Entoli — paired devices",
