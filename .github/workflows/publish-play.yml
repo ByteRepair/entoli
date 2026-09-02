@@ -81,21 +81,17 @@ jobs:
 
           if [ -z "$body" ]; then
             echo "::notice::Release $TAG has no notes; Play keeps whatever the listing already says"
-            echo "directory=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "$(printf '%s' "$body" | wc -m)" -gt 500 ]; then
+          elif [ "$(printf '%s' "$body" | wc -m)" -gt 500 ]; then
             echo "::warning title=Play release notes::Notes for $TAG are over Play's 500-character limit and were not uploaded; write them in the Console"
-            echo "directory=" >> "$GITHUB_OUTPUT"
+          else
+            # whatsnew-<BCP 47 locale> is the API's filename. Only en-US: the
+            # release body is English, and Greek keeps what the Console holds.
+            mkdir -p whatsnew
+            printf '%s' "$body" > whatsnew/whatsnew-en-US
+            echo "directory=whatsnew" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          # whatsnew-<BCP 47 locale> is the API's filename. Only en-US: the
-          # release body is English, and Greek keeps what the Console holds.
-          mkdir -p whatsnew
-          printf '%s' "$body" > whatsnew/whatsnew-en-US
-          echo "directory=whatsnew" >> "$GITHUB_OUTPUT"
+          echo "directory=" >> "$GITHUB_OUTPUT"
 
       - name: Upload the bundle to Google Play
         uses: r0adkll/upload-google-play@v1.1.5
