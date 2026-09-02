@@ -223,10 +223,11 @@ bool setupComplete(AppConfig config, String? project) =>
 
 Future<String?> deviceAbi() => platformAbi();
 
-/// The version this build was made from, out of the `version.json` Flutter
-/// writes into every bundle. Reading it is the platform's, since where it lands
-/// varies; the build number after the `+` is the build's own, and pubspec
-/// carries none — see "What the app is".
+/// The version this build was made from, out of the `version.json` asset.
+/// `tool/prepare.sh` writes it from pubspec's `version:`, and it is declared
+/// in pubspec so every platform's bundle carries it — Flutter only writes its
+/// own for Linux and Web, which overrides ours where one exists. The build
+/// number is the build's own and not reported — see "What the app is".
 ///
 /// Null if it could not be read, which About leaves the line out for rather
 /// than a startup failing over a string nothing depends on.
@@ -234,11 +235,7 @@ Future<String?> appVersion() async {
   final source = await platformVersionJson();
   if (source == null) return null;
   try {
-    final json = jsonDecode(source) as Map<String, dynamic>;
-    final version = json["version"] as String?;
-    final build = json["build_number"] as String?;
-    if (version == null) return null;
-    return build == null || build.isEmpty ? version : "$version+$build";
+    return (jsonDecode(source) as Map<String, dynamic>)["version"] as String?;
   } catch (_) {
     return null;
   }
