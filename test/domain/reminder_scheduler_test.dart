@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:clock/clock.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/reminder.dart";
@@ -7,6 +8,11 @@ import "package:agent_chat/domain/reminder_runner.dart";
 import "package:agent_chat/domain/reminder_scheduler.dart";
 
 import "../fakes.dart";
+
+/// After every reminder fire date the suite seeds, so a reminder due "today"
+/// is due under it. Pinned rather than the wall clock so the suite does not
+/// rot against the calendar.
+final _now = Clock.fixed(DateTime(2026, 8, 23, 9));
 
 /// The list, held in memory — the scheduler reads and writes it through this,
 /// exactly as it does through the provider in the app.
@@ -46,12 +52,18 @@ class StubRunner implements ReminderRuns {
   }
 }
 
-ReminderScheduler scheduler(FakeList list, StubRunner runner, FakeReminderAlarms alarms) =>
+ReminderScheduler scheduler(
+  FakeList list,
+  StubRunner runner,
+  FakeReminderAlarms alarms, {
+  required Clock clock,
+}) =>
     ReminderScheduler(
       alarms: alarms,
       runner: runner,
       list: list,
       projects: () async => const [],
+      clock: clock,
     );
 
 void main() {
@@ -86,7 +98,7 @@ void main() {
 
   test("catch-up fires what is overdue once and disarms the one-shot", () async {
     list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9))];
-    await scheduler(list, runner, alarms).catchUp();
+    await scheduler(list, runner, alarms, clock: _now).catchUp();
 
     expect(runner.firedIds, ["r1"]);
     final after = list.reminders.single;
@@ -103,31 +115,32 @@ void main() {
         nextFireAt: DateTime(2026, 8, 22, 9),
       ),
     ];
-    await scheduler(list, runner, alarms).catchUp();
+    await scheduler(list, runner, alarms, clock: _now).catchUp();
 
     expect(list.reminders.single.nextFireAt!.isAfter(DateTime(2026, 8, 23)), isTrue);
   });
 
   test("a fire well past its time says so in the notification", () async {
     list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 1, 9))];
-    await scheduler(list, runner, alarms).catchUp();
+    await scheduler(list, runner, alarms, clock: _now).catchUp();
 
     expect(alarms.posted.single.body, contains("late"));
     expect(alarms.posted.single.chatId, "chat-r1");
   });
 
   test("a fire on time does not", () async {
+    final onTime = _now.now().subtract(const Duration(seconds: 5));
     list.reminders = [
-      reminder(nextFireAt: DateTime.now().subtract(const Duration(seconds: 5))),
+      reminder(nextFireAt: onTime),
     ];
-    await scheduler(list, runner, alarms).catchUp();
+    await scheduler(list, runner, alarms, clock: _now).catchUp();
 
     expect(alarms.posted.single.body, isNot(contains("late")));
   });
 
   test("a disabled reminder never fires", () async {
     list.reminders = [reminder(enabled: false, nextFireAt: DateTime(2000))];
-    await scheduler(list, runner, alarms).catchUp();
+    await scheduler(list, runner, alarms, clock: _now).catchUp();
 
     expect(runner.firedIds, isEmpty);
     expect(alarms.posted, isEmpty);
@@ -136,7 +149,7 @@ void main() {
   test("a second trigger while a run is under way stands down", () async {
     list.reminders = [reminder(nextFireAt: DateTime(2000))];
     runner.gate = Completer<void>();
-    final sched = scheduler(list, runner, alarms);
+    final sched = scheduler(list, runner, alarms, clock: _now);
 
     final first = sched.catchUp();
     // Far enough in for the run to have started: asking the platform for the
@@ -155,7 +168,7 @@ void main() {
   test("a reload while a fire's turn is running does not release the hold", () async {
     list.reminders = [reminder(nextFireAt: DateTime(2000))];
     runner.gate = Completer<void>();
-    final sched = scheduler(list, runner, alarms);
+    final sched = scheduler(list, runner, alarms, clock: _now);
 
     final first = sched.catchUp();
     await pumpEventQueue();
@@ -169,7 +182,7 @@ void main() {
   test("a nudge while a fire's turn is running does not release the hold", () async {
     list.reminders = [reminder(nextFireAt: DateTime(2000))];
     runner.gate = Completer<void>();
-    final sched = scheduler(list, runner, alarms);
+    final sched = scheduler(list, runner, alarms, clock: _now);
 
     final first = sched.catchUp();
     await pumpEventQueue();
@@ -182,9 +195,12 @@ void main() {
   });
 
   test("sync arms every enabled reminder and cancels the dropped ones", () async {
+    // Before the reminders' fire time, so catch-up leaves them armed: this
+    // tests the sync/diff, not firing.
+    final before = Clock.fixed(DateTime(2026, 7, 1));
     final kept = reminder(id: "kept", nextFireAt: DateTime(2026, 9), code: 3);
     await list.write([kept, reminder(id: "dropped", nextFireAt: DateTime(2026, 9), code: 4)]);
-    final sched = scheduler(list, runner, alarms);
+    final sched = scheduler(list, runner, alarms, clock: before);
     await sched.reload();
     expect(alarms.scheduled.keys.toSet(), {3, 4});
 
@@ -199,7 +215,7 @@ void main() {
     test("a fire the platform will not hold is handed back to the alarm", () async {
       alarms.canHold = false;
       list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9), code: 5)];
-      await scheduler(list, runner, alarms).catchUp();
+      await scheduler(list, runner, alarms, clock: _now).catchUp();
 
       expect(runner.firedIds, isEmpty);
       // Re-armed for the time it was already due, which the system delivers at
@@ -211,7 +227,7 @@ void main() {
     test("the fire that comes back runs, held", () async {
       alarms.canHold = false;
       list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9), code: 5)];
-      final sched = scheduler(list, runner, alarms);
+      final sched = scheduler(list, runner, alarms, clock: _now);
       await sched.catchUp();
 
       alarms.canHold = true;
@@ -224,7 +240,7 @@ void main() {
     test("a hold refused twice runs it anyway rather than never", () async {
       alarms.canHold = false;
       list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9), code: 5)];
-      final sched = scheduler(list, runner, alarms);
+      final sched = scheduler(list, runner, alarms, clock: _now);
       await sched.catchUp();
       await sched.catchUp();
 
@@ -234,14 +250,14 @@ void main() {
     test("a platform with no alarms runs it where it is", () async {
       final none = FakeReminderAlarms(available: false)..canHold = false;
       list.reminders = [reminder(nextFireAt: DateTime(2026, 8, 22, 9))];
-      await scheduler(list, runner, none).catchUp();
+      await scheduler(list, runner, none, clock: _now).catchUp();
 
       expect(runner.firedIds, ["r1"]);
     });
 
     test("the wake is released once the fires are dealt with", () async {
       list.reminders = [reminder(nextFireAt: DateTime(2000))];
-      final sched = scheduler(list, runner, alarms);
+      final sched = scheduler(list, runner, alarms, clock: _now);
       alarms.fire("r1");
       await sched.onNudged();
 
@@ -250,7 +266,7 @@ void main() {
     });
 
     test("a launch with nothing due releases it too", () async {
-      await scheduler(list, runner, alarms).reload();
+      await scheduler(list, runner, alarms, clock: _now).reload();
 
       expect(alarms.released, 1);
     });
@@ -262,7 +278,7 @@ void main() {
       nudged,
       reminder(id: "other", nextFireAt: DateTime(2000), code: 8),
     ]);
-    final sched = scheduler(list, runner, alarms);
+    final sched = scheduler(list, runner, alarms, clock: _now);
 
     alarms.fire("nudged");
     await sched.onNudged();
