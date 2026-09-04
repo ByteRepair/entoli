@@ -157,8 +157,14 @@ class RetryEvent extends AgentEvent {
 }
 
 class ErrorEvent extends AgentEvent {
-  const ErrorEvent(this.message);
+  const ErrorEvent(this.message, {this.retryable = false});
   final String message;
+
+  /// Whether carrying the turn on could plausibly succeed — a connection that
+  /// dropped, a provider that hiccuped — as opposed to one nothing retries
+  /// out of: a rejected key, a bad request, no model selected. What the
+  /// controller's automatic retry rounds ask before re-entering [resume].
+  final bool retryable;
 }
 
 /// The agent ran out of steps without finishing. Not an [ErrorEvent]: the turn

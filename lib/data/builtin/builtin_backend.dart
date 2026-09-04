@@ -318,7 +318,10 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
         model: target.modelId,
-        options: options,
+        // One attempt per request: the controller retries a failed turn itself,
+        // and the two retrying would be the same patience twice. Sub-agents
+        // keep the default — see the parent runner below.
+        options: options.parent,
         skills: libraryFor(settings.project)?.entries(CompletionKind.skill) ?? const [],
         approveMode: settings.approveMode,
         classifier: classifier,
