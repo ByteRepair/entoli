@@ -110,8 +110,13 @@ class AppSession {
     final server = await localLlm;
     // Beside the pool, so the two agree on where the server's slot dumps go.
     final kvCache = platform.createLocalKvCache(cache, server);
+    // Where Byte Repair's fetched tools land on the host, and the one
+    // directory both the store that fills it and the turns' driver that
+    // injects it on PATH are built from.
+    final byteRepairBin = platform.byteRepairBinDir(cache);
     final backend = platform.createBackend(config, libraries, store,
-        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache);
+        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
+        byteRepairBinDir: byteRepairBin);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -189,7 +194,8 @@ class AppSession {
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
         rootfsStoreProvider.overrideWithValue(rootfs),
         byteRepairStoreProvider.overrideWithValue(
-            platform.createByteRepairStore(config, rootfs)),
+            platform.createByteRepairStore(config, cache, rootfs)),
+        byteRepairBinDirProvider.overrideWithValue(byteRepairBin),
         installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),

@@ -17,11 +17,17 @@ class FileByteRepairStore extends ByteRepairStore {
     required super.config,
     required super.project,
     required super.workspace,
+    required super.installDir,
     super.rootfsStore,
   });
 
   @override
   Future<String?> ensureRootfs() async {
+    // The per-project copy is the proot guest's filesystem. Where no guest
+    // can run — every platform but Android — there is nothing to copy onto,
+    // and a rootfsId left over from another device must not pay for a copy
+    // nothing reads.
+    if (!Platform.isAndroid) return null;
     final id = AppSettings.load(config).rootfsId;
     if (id == null || rootfsStore == null) return null;
     final baseDir = rootfsStore!.directoryOfSync(id);
@@ -50,12 +56,15 @@ class FileByteRepairStore extends ByteRepairStore {
 
   @override
   Future<String?> importEsbmc(XFile file) async {
-    final rootfsDir = _rootfsDir;
-    if (rootfsDir == null) {
+    // On the host the binary lands in the app's own bin directory, which
+    // exists once setup has run; the rootfs path is a guest's, and is null
+    // until setup has made the copy — which is the gate the message names.
+    final destDirPath = Platform.isAndroid ? _guestEsbmcDir : installDir;
+    if (destDirPath == null) {
       return "The Byte Repair rootfs has not been set up yet. Run Setup first.";
     }
     try {
-      final destDir = Directory(p.join(rootfsDir, "usr", "local", "bin"));
+      final destDir = Directory(destDirPath);
       await destDir.create(recursive: true);
       final dest = p.join(destDir.path, "esbmc");
       await File(dest).writeAsBytes(await file.readAsBytes());
@@ -75,6 +84,10 @@ class FileByteRepairStore extends ByteRepairStore {
     final errors = await Future.wait([
       removeTree(p.join(config.projectDir(project: project), "rootfs")),
       removeTree(config.projectWorkspaceDir(project: project)),
+      // The host's fetched binaries. No proot stubs are possible in here, but
+      // removeTree costs nothing over a plain delete and is the one delete
+      // this app has.
+      if (!Platform.isAndroid) removeTree(p.dirname(installDir)),
     ]);
     final err = errors.where((e) => e != null).firstOrNull;
     if (err != null) {
@@ -98,5 +111,12 @@ class FileByteRepairStore extends ByteRepairStore {
     if (id == null) return null;
     final dir = config.projectRootfsDir(project: project, rootfsId: id);
     return File(p.join(dir, ".complete")).existsSync() ? dir : null;
+  }
+
+  /// Where a guest keeps the tools the setup fetches — `/usr/local/bin` inside
+  /// its own rootfs copy, reached only after setup has made the copy.
+  String? get _guestEsbmcDir {
+    final dir = _rootfsDir;
+    return dir == null ? null : p.join(dir, "usr", "local", "bin");
   }
 }

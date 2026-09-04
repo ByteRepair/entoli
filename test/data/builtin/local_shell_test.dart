@@ -407,6 +407,22 @@ void main() {
       expect(LocalShell(driver: ({String? project}) => guest()).canRunCommands, isTrue);
       expect(LocalShell(driver: ({String? project}) => null).canRunCommands, isFalse);
     });
+
+    test("an environment named beside the driver is the shell's base, so a "
+        "host driver can point at a directory its tools sit in", () {
+      final driver = LocalShell.hostDriver(
+          shell: () => "/bin/sh",
+          environment: const {"PATH": "/cache/byte-repair/bin:/usr/bin"});
+
+      expect(driver!.environment["PATH"], "/cache/byte-repair/bin:/usr/bin");
+      // The toolset's own vars are still laid under it.
+      final withTools = LocalShell.hostDriver(
+          shell: () => "/bin/sh",
+          environment: const {"PATH": "/cache/byte-repair/bin"},
+          tools: const Toolset(environment: {"TMPDIR": "/tmp/app"}));
+      expect(withTools!.environment,
+          {"PATH": "/cache/byte-repair/bin", "TMPDIR": "/tmp/app"});
+    });
   });
 
   group("what a command runs under", () {
@@ -481,6 +497,22 @@ void main() {
               sharedHome: false,
               app: const {})["HOME"],
           "/workspace");
+    });
+
+    test("a variable the store puts in the command environment survives the "
+        "layering, and one a user set in settings cannot override it", () {
+      // The store passes ENV_INSTALL_DIR as the command's own environment,
+      // which is the project layer — the last one, over the app's settings.
+      final env = LocalShell.composeEnvironment(
+        defaults: const {},
+        driver: host,
+        home: "/home",
+        sharedHome: true,
+        app: const {"ENV_INSTALL_DIR": "/somewhere/else"},
+        project: const {"ENV_INSTALL_DIR": "/cache/byte-repair/bin"},
+      );
+
+      expect(env["ENV_INSTALL_DIR"], "/cache/byte-repair/bin");
     });
   });
 

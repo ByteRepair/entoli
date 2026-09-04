@@ -7,10 +7,18 @@ import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
-/// into the per-project rootfs, so they are on PATH for every agent turn in the
-/// project. The install runs through the configured terminal env (proot rootfs
-/// on Android, host shell on desktop) with [project], so it reaches the
-/// project's own rootfs instance and the package manager inside it.
+/// so they are on PATH for every agent turn in the project. The install runs
+/// through the configured terminal env (proot rootfs on Android, host shell on
+/// desktop) with [project], so it reaches the project's own rootfs instance or
+/// the injected bin directory.
+///
+/// The script's environment is declared by the caller, never probed by the
+/// script: [installDir] is where tools land (`/usr/local/bin` inside a guest,
+/// `<cacheDir>/byte-repair/bin` on the host), sent as `ENV_INSTALL_DIR`; the
+/// driver's environment carries `ENV_PACKAGE_MANAGER` (`apk` in a guest,
+/// nothing on the host, where the machine's package manager is not ours to
+/// touch and static binaries are fetched instead). A binary already on PATH
+/// is never re-fetched — the script skips it.
 ///
 /// "Run Setup" owns the full lifecycle: it copies the base rootfs from cache
 /// into the project's data directory (for a project that opts into rootfs
@@ -28,6 +36,7 @@ abstract class ByteRepairStore {
     required this.config,
     required this.project,
     required this.workspace,
+    required this.installDir,
     this.rootfsStore,
   });
 
@@ -35,10 +44,20 @@ abstract class ByteRepairStore {
   final String project;
   final String workspace;
 
+  /// Where the install script puts the tools it fetches: the rootfs's own
+  /// `/usr/local/bin` inside a guest, the app's bin directory on the host.
+  /// Always set — the script refuses to guess a destination itself.
+  final String installDir;
+
   /// The base rootfs a copy is made from. Null on the web platform.
   final RootfsStore? rootfsStore;
 
   static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
+
+  /// Ten minutes inside a guest, where apk is a local package manager; thirty
+  /// on the host, where ESBMC is a 240 MB release zip over the network.
+  Duration get installTimeout =>
+      rootfsStore == null ? _guestInstallTimeout : _hostInstallTimeout;
 
   Future<ShellResult> _run(Shell shell, String script, Duration timeout) async {
     try {
@@ -49,6 +68,13 @@ abstract class ByteRepairStore {
         timeout: timeout,
         oneShot: true,
         project: project,
+        environment: {
+          // The script answers to what it is told, never to what it can
+          // probe: where to install is the store's to say, and a user-set
+          // ENV_INSTALL_DIR in settings cannot override it — command
+          // environment wins over the app's own (see composeEnvironment).
+          "ENV_INSTALL_DIR": installDir,
+        },
       );
       return await run.result;
     } catch (e) {
@@ -74,7 +100,7 @@ abstract class ByteRepairStore {
     final err = await ensureRootfs();
     if (err != null) return ShellResult.failed(err);
     final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
-    final result = await _run(shell, body, const Duration(minutes: 10));
+    final result = await _run(shell, body, installTimeout);
     if (result.returnCode == 0) await markSetupComplete();
     return result;
   }
@@ -106,7 +132,8 @@ abstract class ByteRepairStore {
 
   /// Checks all three tools the setup installs — ESBMC, make and gh — and
   /// returns a map of tool name to its version string (or null where not
-  /// installed). All three are on PATH inside the per-project rootfs.
+  /// installed). All three are on PATH inside the per-project rootfs, or in
+  /// the injected bin directory on the host.
   Future<Map<String, String?>> runToolVersions(Shell shell) async {
     final entries = await Future.wait(
       tools.entries.map((e) async => MapEntry(e.key, await runToolVersion(shell, e.value))),
@@ -114,6 +141,14 @@ abstract class ByteRepairStore {
     return Map.fromEntries(entries);
   }
 }
+
+const _guestInstallTimeout = Duration(minutes: 10);
+const _hostInstallTimeout = Duration(minutes: 30);
+
+/// Where a guest's install script lands its tools: the rootfs's own
+/// `/usr/local/bin`, now declared rather than implied. The host's answer is
+/// composed per platform beside the cache directory.
+const guestEsbmcInstallDir = "/usr/local/bin";
 
 /// The web's store: no filesystem to copy a rootfs onto and no shell to run
 /// the install script in, so every io-side operation answers with an error
@@ -125,6 +160,7 @@ class UnavailableByteRepairStore extends ByteRepairStore {
     required super.config,
     required super.project,
     required super.workspace,
+    required super.installDir,
   });
 
   static const _why =

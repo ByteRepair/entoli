@@ -158,7 +158,9 @@ final byteRepairToolVersionsProvider =
 /// A setup marker alone is not enough on Android: Byte Repair needs a rootfs
 /// with a package manager, and the "Host" env has none. The marker may still
 /// be on disk from an earlier setup run under a rootfs, so the env is checked
-/// alongside it — the same `incompatible` check the settings page makes.
+/// alongside it — the same `incompatible` check the settings page makes. On
+/// the host the platform asks after the binary itself as well, since the
+/// cache it lives in can be cleared between setups.
 final setupCompleteProvider =
     Provider.family<bool, String?>((ref, project) {
   final spec = builtinProjectOf(project);
@@ -167,8 +169,14 @@ final setupCompleteProvider =
       ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == null) {
     return false;
   }
-  return setupComplete(ref.watch(appConfigProvider), project);
+  return setupComplete(ref.watch(appConfigProvider), project,
+      ref.watch(byteRepairBinDirProvider));
 });
+
+/// Where Byte Repair's fetched tools land on the host — the directory both
+/// the turns' driver injects on PATH and `setupComplete` asks after. Resolved
+/// once in `main` beside the cache directory; null where there is none.
+final byteRepairBinDirProvider = Provider<String?>((ref) => null);
 
 final localModelStoreProvider =
     Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());

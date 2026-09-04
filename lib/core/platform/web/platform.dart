@@ -8,7 +8,8 @@ import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
-import "../../../data/local/byte_repair_store.dart";
+import "../../../data/local/byte_repair_store.dart"
+    show ByteRepairStore, UnavailableByteRepairStore, guestEsbmcInstallDir;
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
@@ -73,14 +74,23 @@ ByteRepairStore platformByteRepairStore(
   AppConfig config,
   String project,
   String workspace,
+  String cacheDir,
   RootfsStore? rootfs,
 ) =>
     UnavailableByteRepairStore(
-        config: config, project: project, workspace: workspace);
+        config: config,
+        project: project,
+        workspace: workspace,
+        installDir: guestEsbmcInstallDir);
+
+/// No bin directory: there is no shell to inject one into.
+String? platformByteRepairBinDir(String cacheDir) => null;
 
 /// True: there is no marker to read and nothing that could write one, so a
 /// project that requires setup never gates a chat here.
-bool platformSetupComplete(AppConfig config, String? project) => true;
+bool platformSetupComplete(AppConfig config, String? project,
+        {String? byteRepairBinDir}) =>
+    true;
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 

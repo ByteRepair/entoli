@@ -11,7 +11,7 @@ import "../../data/builtin/llm/local_kv_cache.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/local/file_chat_store.dart";
-import "../../data/local/byte_repair_store.dart";
+import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/background_work.dart";
@@ -58,6 +58,7 @@ BuiltinBackend createBackend(
   String? abi,
   required LocalLlm localLlm,
   LocalKvCache? kvCache,
+  String? byteRepairBinDir,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -81,6 +82,7 @@ BuiltinBackend createBackend(
         abi: abi,
         project: project,
         config: config,
+        byteRepairBinDir: byteRepairBinDir,
       ),
     ),
     webSearch: platformWebSearch(),
@@ -205,21 +207,31 @@ Future<Toolset?> installBundledTools(String cacheDir) =>
 RootfsStore createRootfsStore(String cacheDir) => platformRootfsStore(cacheDir);
 
 /// The Byte Repair tooling store, over that rootfs store. Which project it is
-/// for is decided here rather than in each side of the conditional import, so
-/// the two cannot disagree.
-ByteRepairStore createByteRepairStore(AppConfig config, RootfsStore? rootfs) =>
+/// for and where its fetched tools land are decided here rather than in each
+/// side of the conditional import, so the two cannot disagree — and so the
+/// store the turns' driver injects on PATH and the store that fills it are
+/// built from the one directory. [cacheDir] is the resolved cache directory;
+/// where the install goes is the platform side's to answer.
+ByteRepairStore createByteRepairStore(
+        AppConfig config, String cacheDir, RootfsStore? rootfs) =>
     platformByteRepairStore(
       config,
       ByteRepairProject().dir,
       config.projectWorkspaceDir(project: ByteRepairProject().dir),
+      cacheDir,
       rootfs,
     );
+
+/// The bin directory the host side injects on PATH for rootfs-isolated
+/// projects, or null where there is none. Resolved from the same cache
+/// directory the store was, so the two cannot disagree.
+String? byteRepairBinDir(String cacheDir) => platformByteRepairBinDir(cacheDir);
 
 /// Whether a project that requires setup has its `.setup-complete` marker.
 /// Synchronous because the chat page asks it in a build; true on the web,
 /// where nothing could write the marker and nothing is gated by it.
-bool setupComplete(AppConfig config, String? project) =>
-    platformSetupComplete(config, project);
+bool setupComplete(AppConfig config, String? project, String? binDir) =>
+    platformSetupComplete(config, project, byteRepairBinDir: binDir);
 
 Future<String?> deviceAbi() => platformAbi();
 
