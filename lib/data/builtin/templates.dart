@@ -164,7 +164,10 @@ String turnPrompt({
 
 Your shell starts in this conversation's own workspace: $workspaceDisplay
 It is yours; the files in it survive between turns, and nothing else writes
-there.$shared${projectHome || !sharedWorkspace ? """
+there. Intermediate work — scratch scripts, downloads, files you build a
+deliverable from — goes here too, not in the machine's /tmp: /tmp is outside
+both workspaces, is not kept with this conversation, and a write there is
+asked about.$shared${projectHome || !sharedWorkspace ? """
 A command's home directory is the project workspace, so anything a tool keeps
 in a home directory is the project's too, and a repository cloned or a package
 installed by one conversation is already there for the next.""" : """

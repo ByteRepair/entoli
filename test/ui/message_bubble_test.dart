@@ -234,6 +234,22 @@ void main() {
     expect(find.text("Retry"), findsNothing);
   });
 
+  // A turn that failed and was carried on: the stale error is still in the
+  // parts, but the round after it said something, so the turn did not end on
+  // one and Retry has nothing to answer for.
+  testWidgets("a reply that errored and was carried on offers no Retry", (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, const [
+        ErrorPart(message: "connection lost"),
+        TextPart(text: "carried on and finished"),
+      ]),
+      onRegenerate: () {},
+    );
+
+    expect(find.text("Retry"), findsNothing);
+  });
+
   testWidgets("thinking reads as a label, and stays out of the bubble", (tester) async {
     await pump(
       tester,

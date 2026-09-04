@@ -247,7 +247,13 @@ the banner), `auto` (a classifier model decides allow/ask/deny per command),
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
-message, `ask` escalates to the same banner `ask` mode uses. A circuit
+message that says not to retry it, `ask` escalates to the same banner `ask`
+mode uses. The classifier's rubric is workspace-anchored: reads of anything
+and writes inside the workspace allow, anything modifying state past it (the
+machine's `/tmp` included) asks, and deny is reserved for irreversible
+destruction rather than being a stronger ask — a write the model is unsure
+about is an ask, which is what keeps a scratch script from being refused five
+times over. A circuit
 breaker pauses auto mode after 3 consecutive or 20 total escalations in one
 turn, falling back to `ask` for the rest — emitted as an `InfoEvent` so the
 UI can say "auto mode paused." `NoClassifier` always asks, which is why the
