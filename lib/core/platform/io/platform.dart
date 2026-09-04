@@ -59,6 +59,11 @@ Shell platformShell({
 /// where it is installed, or the machine itself where there is no pick, or
 /// the pick's files have gone, or this build carries no proot. Answered
 /// synchronously because it is asked before every command.
+///
+/// On the machine itself, a rootfs-isolated built-in project's bin directory
+/// rides in as a `PATH` prefix: the tools its setup fetched are its
+/// environment, not every project's, the way its rootfs copy is. A user-set
+/// `PATH` in the command environment still wins over it.
 ShellDriver? platformDriver({
   required String defaultSkillsBundledDir,
   required String defaultUserSkillsDir,
@@ -71,18 +76,22 @@ ShellDriver? platformDriver({
   String? abi,
   String? project,
   AppConfig? config,
+  String? byteRepairBinDir,
 }) {
   final rootfs = rootfsById(rootfsId);
   final baseDir =
       rootfs != null && store != null ? store.directoryOfSync(rootfs.id) : null;
+  // The isolation fact both branches ask: a rootfs-isolated built-in gets its
+  // own environment, the guest copy inside a proot and the bin directory on
+  // the host's PATH, rather than everything every project runs under.
+  final isolated =
+      project != null && builtinProjectOf(project)?.rootfsIsolation == true;
   if (rootfs != null && proot != null && baseDir != null) {
     // An isolated built-in project gets its own rootfs instance under its data
     // directory, so packages installed inside the guest do not leak between
     // projects. The base download in cache is the template; the project's copy
     // is its living filesystem.
-    final dir = (project != null &&
-            config != null &&
-            builtinProjectOf(project)?.rootfsIsolation == true)
+    final dir = (isolated && config != null)
         ? _projectRootfsDir(config, project, rootfs.id) ?? baseDir
         : baseDir;
     return prootDriver(
@@ -97,7 +106,14 @@ ShellDriver? platformDriver({
     );
   }
   return LocalShell.hostDriver(
-      tools: tools, projectHome: Platform.isAndroid);
+      tools: tools,
+      projectHome: Platform.isAndroid,
+      environment: isolated && byteRepairBinDir != null
+          ? {
+              "PATH":
+                  "$byteRepairBinDir:${Platform.environment["PATH"] ?? ""}"
+            }
+          : null);
 }
 
 /// The per-project rootfs directory, or null where the copy has not been
@@ -127,23 +143,62 @@ Future<String?> platformVersionJson() async {
 RootfsStore platformRootfsStore(String cacheDir) =>
     FileRootfsStore(p.join(cacheDir, "rootfs"));
 
-/// The Byte Repair store, which copies that rootfs into the project's data
-/// directory and installs the tooling into it. [project] and [workspace] are
-/// named by the caller so both sides of the conditional import agree on what
-/// the store is for.
+/// The Byte Repair store, which installs the tooling — into the project's
+/// rootfs copy on Android, the app's own bin directory on the desktop —
+/// and reports on it. [project] and [workspace] are named by the caller so
+/// both sides of the conditional import agree on what the store is for.
+///
+/// Where the fetched tools land follows the shell they will run under: a
+/// guest's `/usr/local/bin` where a rootfs can run (Android), the bin
+/// directory [platformByteRepairBinDir] names elsewhere — Linux being the
+/// desktop this app targets, and the only one whose host shell runs setup.
 ByteRepairStore platformByteRepairStore(
   AppConfig config,
   String project,
   String workspace,
+  String cacheDir,
   RootfsStore? rootfs,
 ) =>
     FileByteRepairStore(
-        config: config, project: project, workspace: workspace, rootfsStore: rootfs);
+      config: config,
+      project: project,
+      workspace: workspace,
+      installDir:
+          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir)!,
+      // A guest's apk is a local package manager; the host fetches a 240 MB
+      // ESBMC release zip over the network.
+      installTimeout: Platform.isAndroid
+          ? const Duration(minutes: 10)
+          : const Duration(minutes: 30),
+      rootfsStore: rootfs,
+    );
+
+/// The bin directory a rootfs-isolated project's turns find the fetched tools
+/// on, or null where there is nothing to inject — a guest reaches its own
+/// `/usr/local/bin` without help, and every platform but Linux has no host
+/// install to point at. The one composition of the path: the store's
+/// `installDir` is derived from this, so the store that fills the directory
+/// and the driver that injects it cannot disagree.
+String? platformByteRepairBinDir(String cacheDir) =>
+    Platform.isLinux ? p.join(cacheDir, "byte-repair", "bin") : null;
 
 /// Whether a project's `.setup-complete` marker is there. Synchronous because
 /// the chat page asks it in a build.
-bool platformSetupComplete(AppConfig config, String? project) =>
-    File(config.setupCompleteFile(project: project)).existsSync();
+///
+/// On the host the marker alone is not enough: the tools live in a cache
+/// directory the OS may empty, so the binary the gate stands for has to be
+/// there too. A cache clear between setups then leaves the chat page gated —
+/// honestly, since nothing is on PATH — and Run Setup repairs it. Inside a
+/// guest the marker is enough, since the rootfs copy it was written after is
+/// under the data directory a backup carries.
+bool platformSetupComplete(AppConfig config, String? project,
+    {String? byteRepairBinDir}) {
+  if (!File(config.setupCompleteFile(project: project)).existsSync()) {
+    return false;
+  }
+  if (byteRepairBinDir == null) return true;
+  return File(p.join(byteRepairBinDir, "esbmc")).existsSync();
+}
 
 /// Lay out whatever this build ships for the device's ABI, under [cacheDir]
 /// rather than the data directory: it is rebuilt from the APK on demand, so a

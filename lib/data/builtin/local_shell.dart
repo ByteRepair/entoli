@@ -143,11 +143,14 @@ class LocalShell extends Shell {
   /// resolved, whatever this build bundles beside it, and the sentence the
   /// model is told. Null where the machine has no shell at all, which is the
   /// browser's answer. [shell] answers for the machine where a test wants it
-  /// to.
+  /// to. [environment] is layered under the app's own settings the way a
+  /// toolset's is — the one way a host driver names a directory its tools
+  /// sit in.
   static ShellDriver? hostDriver({
     Toolset? tools,
     String? Function()? shell,
     bool projectHome = false,
+    Map<String, String>? environment,
   }) {
     final path = (shell ?? (() => shellPath))();
     if (path == null) return null;
@@ -156,20 +159,21 @@ class LocalShell extends Shell {
     final bundled = tools?.names;
     if (bundled != null) {
       return _host(path, tools, "$where, with $bundled bundled with the app",
-          projectHome: projectHome);
+          projectHome: projectHome, environment: environment);
     }
     final description = Platform.isAndroid && tools?.proot != null
         ? "$where. There is no git and no package manager here; installing "
             "a Linux from the Terminal settings gives you both"
         : where;
-    return _host(path, tools, description, projectHome: projectHome);
+    return _host(path, tools, description,
+        projectHome: projectHome, environment: environment);
   }
 
   static ShellDriver _host(String path, Toolset? tools, String description,
-      {bool projectHome = false}) =>
+          {bool projectHome = false, Map<String, String>? environment}) =>
       ShellDriver(
         commandFor: (_, _) => [path],
-        environment: tools?.environment ?? const {},
+        environment: {...?environment, ...?tools?.environment},
         projectHome: projectHome,
         description: description,
       );
