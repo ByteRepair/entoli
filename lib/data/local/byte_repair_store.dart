@@ -36,7 +36,8 @@ abstract class ByteRepairStore {
     required this.config,
     required this.project,
     required this.workspace,
-    required this.installDir,
+    this.installDir = guestEsbmcInstallDir,
+    this.installTimeout = _guestInstallTimeout,
     this.rootfsStore,
   });
 
@@ -49,17 +50,19 @@ abstract class ByteRepairStore {
   /// Always set — the script refuses to guess a destination itself.
   final String installDir;
 
+  /// How long the install script may run. Thirty minutes on the host, where
+  /// ESBMC is a 240 MB release zip over the network; ten inside a guest,
+  /// where apk is a local package manager. Chosen by the platform factory
+  /// beside [installDir], which is where the guest/host fact lives.
+  final Duration installTimeout;
+
   /// The base rootfs a copy is made from. Null on the web platform.
   final RootfsStore? rootfsStore;
 
   static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
 
-  /// Ten minutes inside a guest, where apk is a local package manager; thirty
-  /// on the host, where ESBMC is a 240 MB release zip over the network.
-  Duration get installTimeout =>
-      rootfsStore == null ? _guestInstallTimeout : _hostInstallTimeout;
-
-  Future<ShellResult> _run(Shell shell, String script, Duration timeout) async {
+  Future<ShellResult> _run(Shell shell, String script, Duration timeout,
+      {Map<String, String>? environment}) async {
     try {
       final run = shell.start(
         script,
@@ -68,13 +71,7 @@ abstract class ByteRepairStore {
         timeout: timeout,
         oneShot: true,
         project: project,
-        environment: {
-          // The script answers to what it is told, never to what it can
-          // probe: where to install is the store's to say, and a user-set
-          // ENV_INSTALL_DIR in settings cannot override it — command
-          // environment wins over the app's own (see composeEnvironment).
-          "ENV_INSTALL_DIR": installDir,
-        },
+        environment: environment,
       );
       return await run.result;
     } catch (e) {
@@ -95,20 +92,23 @@ abstract class ByteRepairStore {
 
   /// Runs the bundled install script through [shell]'s configured terminal
   /// env: [ensureRootfs] first, then the script — which puts `make`,
-  /// `github-cli` and ESBMC on PATH inside the rootfs — then the marker.
+  /// `github-cli` and ESBMC where [installDir] names — then the marker. The
+  /// script answers to what it is told, never to what it can probe, and a
+  /// user-set ENV_INSTALL_DIR in settings cannot override the store (command
+  /// environment wins over the app's own; see `composeEnvironment`).
   Future<ShellResult> install(Shell shell) async {
     final err = await ensureRootfs();
     if (err != null) return ShellResult.failed(err);
     final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
-    final result = await _run(shell, body, installTimeout);
+    final result = await _run(shell, body, installTimeout,
+        environment: {"ENV_INSTALL_DIR": installDir});
     if (result.returnCode == 0) await markSetupComplete();
     return result;
   }
 
-  /// Copies a user-picked ESBMC binary into the per-project rootfs at
-  /// `/usr/local/bin/esbmc`, making it executable. The rootfs must already
-  /// exist — run [install] first. Null on success, an error message on
-  /// failure.
+  /// Copies a user-picked ESBMC binary next to the tools the setup fetched,
+  /// making it executable. The rootfs must already exist — run [install]
+  /// first. Null on success, an error message on failure.
   Future<String?> importEsbmc(XFile file);
 
   /// Deletes the Byte Repair environment: the per-project rootfs (the Alpine
@@ -143,7 +143,6 @@ abstract class ByteRepairStore {
 }
 
 const _guestInstallTimeout = Duration(minutes: 10);
-const _hostInstallTimeout = Duration(minutes: 30);
 
 /// Where a guest's install script lands its tools: the rootfs's own
 /// `/usr/local/bin`, now declared rather than implied. The host's answer is
@@ -160,7 +159,6 @@ class UnavailableByteRepairStore extends ByteRepairStore {
     required super.config,
     required super.project,
     required super.workspace,
-    required super.installDir,
   });
 
   static const _why =

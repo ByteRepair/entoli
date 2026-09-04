@@ -81,9 +81,8 @@ ShellDriver prootDriver({
       "PROOT_TMP_DIR": proot.tmpDir,
       "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       "LANG": "C.UTF-8",
-      // The install scripts answer to what they are told rather than what
-      // they can probe. It is the catalog's own word, so what the model is
-      // told about the guest and what a script sees agree by construction.
+      // Declared rather than probed, the catalog's own word — what the model
+      // is told and what a script sees agree by construction.
       "ENV_PACKAGE_MANAGER": rootfs.packageManager,
     },
     projectHome: true,

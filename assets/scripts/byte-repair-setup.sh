@@ -23,50 +23,41 @@ have() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# Best-effort install of a tool through the provided package manager. $1 is
-# the tool's binary name; the package name it maps to is settled here, since
-# apk and pacman call gh github-cli and the rest call it gh.
-#
-# Where no manager was provided this is a skip, not a failure: the host's
-# package manager is not ours to reach for. Where one was provided and it
-# fails, the failure propagates — a guest install that did not happen must
-# not read as done.
-try_install() {
-  case "$1:$ENV_PACKAGE_MANAGER" in
-    make:*)            pkg=make ;;
-    gh:apk|gh:pacman)  pkg=github-cli ;;
-    gh:*)              pkg=gh ;;
-    *)                 pkg="$1" ;;
+# --- make and github-cli ------------------------------------------------------
+# One invocation, not one per tool: apk --no-cache re-fetches the package
+# index on every call, and a phone pays that twice otherwise.
+PKGS=""
+have make || PKGS="make"
+have gh || PKGS="$PKGS gh"
+if [ -n "$PKGS" ]; then
+  # The mapping is the script's, not the call site's: apk and pacman call gh
+  # github-cli and the rest call it gh.
+  case "$ENV_PACKAGE_MANAGER" in
+    apk)     PKGS=" ${PKGS%% gh} github-cli" ;;
+    apt-get|dnf|yum|pacman|"") ;;
+    *)       echo "Unknown package manager: $ENV_PACKAGE_MANAGER" >&2; exit 1 ;;
   esac
   case "$ENV_PACKAGE_MANAGER" in
     "")
-      echo "No package manager was provided; skipping: $1" >&2
+      echo "No package manager was provided; skipping: $PKGS" >&2
       ;;
     apk)
-      apk add --no-cache "$pkg"
+      apk add --no-cache $PKGS
       ;;
     apt-get)
-      apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg"
+      apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y $PKGS
       ;;
     dnf)
-      dnf install -y "$pkg"
+      dnf install -y $PKGS
       ;;
     yum)
-      yum install -y "$pkg"
+      yum install -y $PKGS
       ;;
     pacman)
-      pacman -Sy --noconfirm "$pkg"
-      ;;
-    *)
-      echo "Unknown package manager: $ENV_PACKAGE_MANAGER" >&2
-      return 1
+      pacman -Sy --noconfirm $PKGS
       ;;
   esac
-}
-
-# --- make and github-cli ------------------------------------------------------
-have make || try_install make
-have gh || try_install gh
+fi
 
 # --- ESBMC --------------------------------------------------------------------
 ARCH=$(uname -m)
@@ -121,11 +112,11 @@ z.extractall('$TMPDIR_EXTRACT')
   fi
 
   mv "$ESBMC_BIN" "$BIN/esbmc"
+  chmod +x "$BIN/esbmc"
   rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
 fi
 
-# Skipped installs leave no file here — esbmc found on PATH is a machine the
-# script had nothing to do for — so both of these are the found-binary's own
-# business rather than this run's.
-chmod +x "$BIN/esbmc" 2>/dev/null || true
+# A skipped install leaves no file here — esbmc found on PATH is a machine
+# the script had nothing to do for — so the version print reads the found
+# binary, wherever it is.
 "$BIN/esbmc" --version 2>/dev/null || esbmc --version || true

@@ -13,8 +13,6 @@ import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
-import "package:agent_chat/data/local/byte_repair_store.dart"
-    show guestEsbmcInstallDir;
 import "package:agent_chat/data/local/file_byte_repair_store.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
@@ -117,9 +115,6 @@ class TestApp {
   /// build could run one at all — the two halves the Terminal page turns on.
   /// The default is a build with no proot in it, which is every platform but
   /// Android and so what most of the suite should be pretending to be.
-  /// [byteRepairInstallDir] is where the Byte Repair store says its tools are
-  /// fetched to; null is the store's own decision, which is the guest's
-  /// `/usr/local/bin` where the tests run a desktop VM's shape.
   /// [abi] is what the device answers with, and only Android answers at all —
   /// so it is named by a test that is about one, and left alone by the rest.
   /// [systemAccent] is the colour the system is themed to, which is the other
@@ -151,7 +146,6 @@ class TestApp {
     NativeVoiceEngines nativeVoice = NativeVoiceEngines.none,
     Set<String> linuxes = const {},
     bool proot = false,
-    String? byteRepairInstallDir,
     Set<String> localModels = const {},
     FakeLocalLlm? localLlm,
     bool prefill = false,
@@ -247,7 +241,6 @@ class TestApp {
               config: config,
               project: ByteRepairProject().dir,
               workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
-              installDir: byteRepairInstallDir ?? guestEsbmcInstallDir,
               rootfsStore: linux)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),

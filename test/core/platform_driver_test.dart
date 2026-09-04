@@ -1,7 +1,6 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/core/config.dart";
@@ -11,6 +10,8 @@ import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/models.dart" show CompletionKind;
 import "package:agent_chat/domain/shell.dart";
 
+import "../harness.dart";
+
 /// What a turn runs under on the machine itself, where the tools a built-in
 /// project's setup fetched have to reach its commands and no one else's. The
 /// driver is asked per command, so what is pinned here is the resolution,
@@ -18,22 +19,12 @@ import "package:agent_chat/domain/shell.dart";
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late Directory temp;
-  late Directory second;
   late AppConfig config;
   late AppConfig unmarked;
 
-  setUp(() async {
-    temp = await Directory.systemTemp.createTemp("platform-driver-test");
-    second = await Directory.systemTemp.createTemp("platform-driver-test-2");
-    config = AppConfig.forDirectory(temp.path, fileSystemIo);
-    unmarked = AppConfig.forDirectory(second.path, fileSystemIo);
-  });
-
-  tearDown(() async {
-    for (final dir in [temp, second]) {
-      if (dir.existsSync()) await dir.delete(recursive: true);
-    }
+  setUp(() {
+    config = tempConfig();
+    unmarked = tempConfig();
   });
 
   const binDir = "/cache/agent-chat/byte-repair/bin";
@@ -67,7 +58,8 @@ void main() {
     expect(driverOf(bin: null, project: null)?.environment["PATH"], isNull);
   });
 
-  test("the bin directory is composed from the cache directory", () {
+  test("the bin directory is composed from the cache directory, and the "
+      "store's install dir is the same answer", () {
     expect(platformByteRepairBinDir("/cache/root"),
         "/cache/root/byte-repair/bin");
   });
@@ -75,7 +67,7 @@ void main() {
   test("setup reads as done only where the marker names a binary that is "
       "there, since the cache can be cleared between setups", () {
     final project = ByteRepairProject().dir;
-    final real = platformByteRepairBinDir(temp.path);
+    final real = platformByteRepairBinDir(config.dataDir);
     // No marker: gated whatever else is true.
     expect(platformSetupComplete(config, project, byteRepairBinDir: real),
         isFalse);

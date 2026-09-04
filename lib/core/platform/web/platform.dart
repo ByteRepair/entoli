@@ -9,7 +9,7 @@ import "package:web/web.dart" as web;
 import "../../../data/backup_handoff.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/byte_repair_store.dart"
-    show ByteRepairStore, UnavailableByteRepairStore, guestEsbmcInstallDir;
+    show ByteRepairStore, UnavailableByteRepairStore;
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
@@ -37,8 +37,9 @@ Shell platformShell({
 Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 
 /// A browser cannot run a command at all, so there is nothing for a Linux to
-/// be run under. The [project] and [config] parameters are unused here: the
-/// io side resolves a per-project rootfs instance from them.
+/// be run under. The [project], [config] and [byteRepairBinDir] parameters
+/// are unused here: the io side resolves a per-project rootfs instance and a
+/// per-project bin directory from them.
 ShellDriver? platformDriver({
   required String defaultSkillsBundledDir,
   required String defaultUserSkillsDir,
@@ -51,6 +52,7 @@ ShellDriver? platformDriver({
   String? abi,
   String? project,
   AppConfig? config,
+  String? byteRepairBinDir,
 }) =>
     null;
 
@@ -78,10 +80,7 @@ ByteRepairStore platformByteRepairStore(
   RootfsStore? rootfs,
 ) =>
     UnavailableByteRepairStore(
-        config: config,
-        project: project,
-        workspace: workspace,
-        installDir: guestEsbmcInstallDir);
+        config: config, project: project, workspace: workspace);
 
 /// No bin directory: there is no shell to inject one into.
 String? platformByteRepairBinDir(String cacheDir) => null;

@@ -17,7 +17,8 @@ class FileByteRepairStore extends ByteRepairStore {
     required super.config,
     required super.project,
     required super.workspace,
-    required super.installDir,
+    super.installDir,
+    super.installTimeout,
     super.rootfsStore,
   });
 
@@ -56,9 +57,6 @@ class FileByteRepairStore extends ByteRepairStore {
 
   @override
   Future<String?> importEsbmc(XFile file) async {
-    // On the host the binary lands in the app's own bin directory, which
-    // exists once setup has run; the rootfs path is a guest's, and is null
-    // until setup has made the copy — which is the gate the message names.
     final destDirPath = Platform.isAndroid ? _guestEsbmcDir : installDir;
     if (destDirPath == null) {
       return "The Byte Repair rootfs has not been set up yet. Run Setup first.";
@@ -84,9 +82,7 @@ class FileByteRepairStore extends ByteRepairStore {
     final errors = await Future.wait([
       removeTree(p.join(config.projectDir(project: project), "rootfs")),
       removeTree(config.projectWorkspaceDir(project: project)),
-      // The host's fetched binaries. No proot stubs are possible in here, but
-      // removeTree costs nothing over a plain delete and is the one delete
-      // this app has.
+      // The host's fetched binaries.
       if (!Platform.isAndroid) removeTree(p.dirname(installDir)),
     ]);
     final err = errors.where((e) => e != null).firstOrNull;

@@ -81,14 +81,17 @@ ShellDriver? platformDriver({
   final rootfs = rootfsById(rootfsId);
   final baseDir =
       rootfs != null && store != null ? store.directoryOfSync(rootfs.id) : null;
+  // The isolation fact both branches ask: a rootfs-isolated built-in gets its
+  // own environment, the guest copy inside a proot and the bin directory on
+  // the host's PATH, rather than everything every project runs under.
+  final isolated =
+      project != null && builtinProjectOf(project)?.rootfsIsolation == true;
   if (rootfs != null && proot != null && baseDir != null) {
     // An isolated built-in project gets its own rootfs instance under its data
     // directory, so packages installed inside the guest do not leak between
     // projects. The base download in cache is the template; the project's copy
     // is its living filesystem.
-    final dir = (project != null &&
-            config != null &&
-            builtinProjectOf(project)?.rootfsIsolation == true)
+    final dir = (isolated && config != null)
         ? _projectRootfsDir(config, project, rootfs.id) ?? baseDir
         : baseDir;
     return prootDriver(
@@ -102,8 +105,6 @@ ShellDriver? platformDriver({
       abi: abi,
     );
   }
-  final isolated =
-      project != null && builtinProjectOf(project)?.rootfsIsolation == true;
   return LocalShell.hostDriver(
       tools: tools,
       projectHome: Platform.isAndroid,
@@ -148,9 +149,9 @@ RootfsStore platformRootfsStore(String cacheDir) =>
 /// both sides of the conditional import agree on what the store is for.
 ///
 /// Where the fetched tools land follows the shell they will run under: a
-/// guest's `/usr/local/bin` where a rootfs can run (Android), the app's own
-/// bin directory beside the cache elsewhere — Linux being the desktop this
-/// app targets, and the only one whose host shell runs setup.
+/// guest's `/usr/local/bin` where a rootfs can run (Android), the bin
+/// directory [platformByteRepairBinDir] names elsewhere — Linux being the
+/// desktop this app targets, and the only one whose host shell runs setup.
 ByteRepairStore platformByteRepairStore(
   AppConfig config,
   String project,
@@ -162,16 +163,22 @@ ByteRepairStore platformByteRepairStore(
       config: config,
       project: project,
       workspace: workspace,
-      installDir: Platform.isAndroid
-          ? guestEsbmcInstallDir
-          : p.join(cacheDir, "byte-repair", "bin"),
+      installDir:
+          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir)!,
+      // A guest's apk is a local package manager; the host fetches a 240 MB
+      // ESBMC release zip over the network.
+      installTimeout: Platform.isAndroid
+          ? const Duration(minutes: 10)
+          : const Duration(minutes: 30),
       rootfsStore: rootfs,
     );
 
 /// The bin directory a rootfs-isolated project's turns find the fetched tools
 /// on, or null where there is nothing to inject — a guest reaches its own
 /// `/usr/local/bin` without help, and every platform but Linux has no host
-/// install to point at.
+/// install to point at. The one composition of the path: the store's
+/// `installDir` is derived from this, so the store that fills the directory
+/// and the driver that injects it cannot disagree.
 String? platformByteRepairBinDir(String cacheDir) =>
     Platform.isLinux ? p.join(cacheDir, "byte-repair", "bin") : null;
 
