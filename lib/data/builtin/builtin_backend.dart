@@ -345,13 +345,14 @@ class BuiltinBackend implements AgentBackend {
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
         project: project,
-        saveArtifact: (path, {artifactId}) async {
+        saveArtifact: (path, entryFile, {artifactId}) async {
           final resolved = resolvePath(path);
           if (artifactId != null) {
-            await store.updateArtifact(chatId, artifactId, resolved, project: project);
+            await store.updateArtifact(chatId, artifactId, resolved, entryFile,
+                project: project);
             return artifactId;
           }
-          return store.createArtifact(chatId, resolved, project: project);
+          return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
         packageSkill: (path, name) async {
           final resolved = resolvePath(path);

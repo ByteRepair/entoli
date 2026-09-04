@@ -666,14 +666,20 @@ class FakeChatStore implements ChatStore {
       _resources[chatId]?[resource];
 
   @override
-  Future<String> createArtifact(String chatId, String sourceDir, {String? project}) async {
+  Future<String> createArtifact(
+      String chatId, String sourceDir, String entryFile,
+      {String? project}) async {
     final artifactId = const Uuid().v4();
-    _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {"index.html": Uint8List.fromList(utf8.encode("<p>"))};
+    _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {
+      entryFile: Uint8List.fromList(utf8.encode("<p>")),
+    };
     return artifactId;
   }
 
   @override
-  Future<void> updateArtifact(String chatId, String artifactId, String sourceDir, {String? project}) async {
+  Future<void> updateArtifact(String chatId, String artifactId,
+      String sourceDir, String entryFile,
+      {String? project}) async {
     // Record that an update happened; the fake doesn't actually copy.
     _artifacts.putIfAbsent(chatId, () => {}).putIfAbsent(artifactId, () => {});
   }

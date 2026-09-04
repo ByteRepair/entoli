@@ -199,6 +199,20 @@ since 1.0.0, and neither is in the chain: the user's `commands/` became
 `commands/` left on disk is not read rather than migrated — and `memory/`, a
 directory created on first use rather than moved. The chain stays empty.
 
+### Artifacts
+
+`chats/<id>/artifacts/<artifact-id>/` holds the files the model published,
+copied from its workspace at the moment it called the `artifact` tool, with the
+base stylesheet (`lib/domain/artifact_style.dart`) injected into the entry file
+**at publish time**. That timing is the one load-bearing fact: the desktop
+opener serves the directory itself over `file://`, so the entry file on disk
+must already be the whole page — the model's `read` tool and every future
+reader see the same styled file, and a temp copy at open time would break every
+relative reference to the files beside it. Android and the web still layer
+their runtime paths (an HTTP server, blob URLs) over the same injected copy,
+where the marker makes the second injection a no-op. Artifacts published before
+the injection moved open unstyled on desktop until the model re-publishes them.
+
 ### Projects
 
 A project is a directory holding its own chats, one workspace they share, and
