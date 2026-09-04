@@ -38,6 +38,7 @@ import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
 import "voice_settings.dart";
+import "welcome_page.dart";
 
 /// The page's categories, in the order they are offered. Everything an
 /// endpoint is is Providers, everything a model is asked to do is LLMs, General
@@ -45,6 +46,7 @@ import "voice_settings.dart";
 /// the workspaces as one file to keep — and About is the app rather than
 /// anything it does, which is why it is last.
 enum SettingsCategory {
+  welcome("Welcome", Icons.waving_hand),
   general("General", Icons.tune),
   terminal("Terminal", Icons.terminal),
   onDevice("On-device", Icons.memory),
@@ -108,8 +110,15 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           SizedBox(width: navPanelWidth, child: categories),
           const VerticalDivider(width: 1),
+          // The tour sizes itself to the pane rather than scrolling in one,
+          // so it is rendered whole where the other categories are lists.
           Expanded(
-            child: ListView(key: ValueKey(_category), children: _sectionsOf(_category)),
+            child: _category == SettingsCategory.welcome
+                ? const KeyedSubtree(
+                    key: ValueKey(SettingsCategory.welcome),
+                    child: WelcomeTour(),
+                  )
+                : ListView(key: ValueKey(_category), children: _sectionsOf(_category)),
           ),
         ],
       ),
@@ -138,7 +147,9 @@ class _CategoryPage extends StatelessWidget {
     }
     return Scaffold(
       appBar: AppBar(title: Text(category.label)),
-      body: ListView(children: _sectionsOf(category)),
+      body: category == SettingsCategory.welcome
+          ? const WelcomeTour()
+          : ListView(children: _sectionsOf(category)),
     );
   }
 }
@@ -146,6 +157,9 @@ class _CategoryPage extends StatelessWidget {
 /// What is filed under a category, whether it is drawn beside the list or on a
 /// page of its own.
 List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
+      // The tour is a pager with its own bar rather than a list of sections,
+      // so the two layouts branch on it instead of filing anything here.
+      SettingsCategory.welcome => const [],
       // The agent's own settings are here rather than under LLMs: the mode is a
       // behaviour, and the classifier picker travels with it because auto mode
       // is unusable without one.
@@ -198,13 +212,13 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       SettingsCategory.byteRepair => const [ByteRepairSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
-      SettingsCategory.llms => const [_DefaultsSection()],
+      SettingsCategory.llms => const [DefaultsSection()],
       // The two things the agent carries between conversations: the files the
       // user writes (instructions) and the ones it writes (memories).
       SettingsCategory.memory => const [
-          _InstructionsSection(),
+          InstructionsSection(),
           Divider(),
-          _AutoMemorySection(),
+          AutoMemorySection(),
         ],
       SettingsCategory.data => const [_BackupSection()],
       SettingsCategory.about => const [_AboutSection()],
@@ -567,8 +581,8 @@ class _IconChoice extends StatelessWidget {
 
 /// What a new chat gets. A live reference, not a snapshot: retargeting it
 /// retargets every chat that pinned nothing.
-class _DefaultsSection extends ConsumerWidget {
-  const _DefaultsSection();
+class DefaultsSection extends ConsumerWidget {
+  const DefaultsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -720,8 +734,8 @@ class _RetryTurnsField extends ConsumerWidget {
 /// Whether the agent reads AGENTS.md at all, and the sub-gates of a file it
 /// does read: the imports it follows, the nested ones a read pulls in, and
 /// the patterns that keep a file out.
-class _InstructionsSection extends ConsumerWidget {
-  const _InstructionsSection();
+class InstructionsSection extends ConsumerWidget {
+  const InstructionsSection({super.key});
 
   Future<void> _editExcludes(BuildContext context, WidgetRef ref) async {
     final text = await promptForText(
@@ -789,8 +803,8 @@ class _InstructionsSection extends ConsumerWidget {
 
 /// Whether the auto-memory subsystem runs: the master gate, its three sub-gates
 /// and the background model that writes memories.
-class _AutoMemorySection extends ConsumerWidget {
-  const _AutoMemorySection();
+class AutoMemorySection extends ConsumerWidget {
+  const AutoMemorySection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
