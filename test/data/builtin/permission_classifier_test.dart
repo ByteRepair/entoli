@@ -89,6 +89,18 @@ void main() {
       expect(system, contains("deny"));
       expect(system, contains("ask"));
     });
+
+    test("the system prompt anchors allow on workspace writes", () async {
+      final c = classifierOver([saidOnly("allow")]);
+      await c.classify("bash", '{"command": "ls"}', workspace: "/tmp");
+      final system = client.sent.single.first.text;
+      // The rubric's key facts: in-workspace writes are what auto mode allows,
+      // /tmp is a write past them (ask, not deny), and deny is reserved for
+      // destruction rather than being a stronger ask.
+      expect(system, contains("writes only inside the workspace"));
+      expect(system, contains("output to /tmp is ask"));
+      expect(system, contains("Deny is not a stronger ask"));
+    });
   });
 
   group("NoClassifier", () {

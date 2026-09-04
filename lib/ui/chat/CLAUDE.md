@@ -43,7 +43,11 @@ error block in the bubble, not five. Nothing follows an error in a round's
 stream (it closes after the event), so trailing-only is the safe shape of that
 supersede. The recovery case keeps the failed round's error part: resuming
 appends to the reply, and the log has no deletion — the same shape a
-user-pressed Continue has always left.
+user-pressed Continue has always left. The Retry button under a reply reads
+the same shape from the other side: it shows when an `ErrorPart` is
+*trailing*, since that is "the last round failed"; asking "is any error part
+in the reply" showed the button under every turn a round had been carried on
+from, whose stale errors stay in the parts.
 
 **And when the rounds run out with nobody looking, the app says so.** A turn
 that ends `TurnEnd.error` while the app is hidden (the `appHiddenProvider`,

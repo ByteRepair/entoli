@@ -997,6 +997,55 @@ void main() {
       expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo, contains("not found"));
     });
 
+    test("read on a binary file is a failed result, not a thrown one", () async {
+      final client = FakeLlmClient([
+        [readCall("image.png")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      File(p.join(agent.workspace, "image.png")).writeAsBytesSync(onePixelPng);
+
+      final events = await agent.run(userMessage("read it")).toList();
+
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("binary"));
+      expect(result.exceptionInfo, contains("image.png"));
+    });
+
+    test("a write that throws is a failed result, not a thrown one", () async {
+      final client = FakeLlmClient([
+        [writeCall("blocked/hello.txt", "hi")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      File(p.join(agent.workspace, "blocked")).writeAsStringSync("a file");
+
+      final events = await agent.run(userMessage("write it")).toList();
+
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, isNotEmpty);
+    });
+
+    test("an edit that throws is a failed result, not a thrown one", () async {
+      final client = FakeLlmClient([
+        [editCall("image.png", "a", "b")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      File(p.join(agent.workspace, "image.png")).writeAsBytesSync([0x00, 0x01, 0x02]);
+
+      final events = await agent.run(userMessage("edit it")).toList();
+
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, isNotEmpty);
+    });
+
     test("file tools are always offered, even without a shell", () async {
       final client = FakeLlmClient([
         [writeCall("test.txt", "hi")],

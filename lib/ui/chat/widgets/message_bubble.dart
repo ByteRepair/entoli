@@ -151,7 +151,10 @@ class _MessageBubbleState extends State<MessageBubble> {
   Future<void> _copy() =>
       copyToClipboard(context, widget.message.plainText, said: "Message copied");
 
-  bool get _hasError => widget.message.parts.whereType<ErrorPart>().isNotEmpty;
+  /// The turn's last round failed, which is what Retry answers: within a round
+  /// nothing follows an error, so a turn that ended on one has it trailing,
+  /// and a carried-on round has appended past it.
+  bool get _hasError => widget.message.parts.lastOrNull is ErrorPart;
 
   /// The command a `!` message runs, or null where it is prose. Read off the
   /// text rather than stored: `conv.jsonl` keeps the message as typed, so the

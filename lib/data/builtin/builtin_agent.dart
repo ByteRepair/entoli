@@ -1096,7 +1096,16 @@ class BuiltinAgent {
         return ShellResult(
             returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
       }
-      final content = await file.readAsString();
+      String content;
+      try {
+        content = await file.readAsString();
+      } on FileSystemException {
+        return ShellResult(
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "Not a UTF-8 text file (binary?): ${args.path}. "
+                "Inspect binary files with a command instead of $readToolName.");
+      }
       final lines = content.split("\n");
       final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
       final limit = args.limit ?? lines.length;
@@ -1350,10 +1359,10 @@ class BuiltinAgent {
       argumentsText: parsed.title.isEmpty ? parsed.path : parsed.title,
     ));
     String? artifactId;
-    Future<ShellResult> run() async {
-      artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
-      return const ShellResult(returnCode: 0, output: "");
-    }
+    Future<ShellResult> run() => _guarded(() async {
+          artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
+          return const ShellResult(returnCode: 0, output: "");
+        });
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
       yield* _runGated(call, call.argumentsJson, artifactToolName, run,
           argumentsText: path);
@@ -1398,23 +1407,23 @@ class BuiltinAgent {
     ));
     String? installId;
     String? skillName;
-    Future<ShellResult> run() async {
-      final skillDir = fs.directory(path);
-      if (!await skillDir.exists()) {
-        return ShellResult.failed(
-            "The directory '$path' does not exist. Write the skill there first "
-            "with write/edit, then call create_skill.");
-      }
-      final skillMdPath = fs.path.join(path, "SKILL.md");
-      if (!await fs.file(skillMdPath).exists()) {
-        return ShellResult.failed(
-            "The directory '$path' has no SKILL.md. A skill needs one.");
-      }
-      final result = await packageSkill!(args.path, args.name);
-      installId = result.installId;
-      skillName = result.name;
-      return const ShellResult(returnCode: 0, output: "");
-    }
+    Future<ShellResult> run() => _guarded(() async {
+          final skillDir = fs.directory(path);
+          if (!await skillDir.exists()) {
+            return ShellResult.failed(
+                "The directory '$path' does not exist. Write the skill there first "
+                "with write/edit, then call $createSkillToolName.");
+          }
+          final skillMdPath = fs.path.join(path, "SKILL.md");
+          if (!await fs.file(skillMdPath).exists()) {
+            return ShellResult.failed(
+                "The directory '$path' has no SKILL.md. A skill needs one.");
+          }
+          final result = await packageSkill!(args.path, args.name);
+          installId = result.installId;
+          skillName = result.name;
+          return const ShellResult(returnCode: 0, output: "");
+        });
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
       yield* _runGated(call, call.argumentsJson, createSkillToolName, run,
           argumentsText: path);
@@ -1472,6 +1481,11 @@ class BuiltinAgent {
   /// three file tools share this tail — read, write and edit — differing only
   /// in their `run`; the artifact tool has its own, since it emits a second
   /// event on success.
+  ///
+  /// A throw inside [run] is the tool failing, not the turn: it is answered as
+  /// a failed result the model reads, in the same shape every other tool
+  /// failure takes, rather than escaping the stream as an error the turn dies
+  /// on — a decode failure on a binary file used to end the turn.
   Stream<AgentEvent> _runFileTool(
     LlmToolCall call,
     String path,
@@ -1479,12 +1493,23 @@ class BuiltinAgent {
     Future<ShellResult> Function() run,
   ) async* {
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
-      yield* _runGated(call, call.argumentsJson, toolName, run,
-          argumentsText: path);
+      yield* _runGated(call, call.argumentsJson, toolName,
+          () => _guarded(run), argumentsText: path);
     } else {
-      _commandResult = await run();
+      _commandResult = await _guarded(run);
     }
     yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// Answer what [run] throws as a failed result, so an unexpected failure —
+  /// a decode, a full disk, a write that could not land — is one the model
+  /// reads and works around rather than one that ends the turn.
+  Future<ShellResult> _guarded(Future<ShellResult> Function() run) async {
+    try {
+      return await run();
+    } catch (e) {
+      return ShellResult.failed("$e");
+    }
   }
 
   /// Emit the approval banner, wait for the user, and run [run] if allowed.
@@ -1534,8 +1559,8 @@ class BuiltinAgent {
       case PermissionDecision.deny:
         _consecutiveAsks = 0;
         _commandResult = const ShellResult.failed(
-            "Denied by auto mode. The classifier flagged this as dangerous. "
-            "Ask the user what to do instead.");
+            "Denied by auto mode as dangerous. Do not retry this command; "
+            "tell the user what you were trying to do and let them decide.");
       case PermissionDecision.ask:
         _consecutiveAsks++;
         _totalAsks++;
