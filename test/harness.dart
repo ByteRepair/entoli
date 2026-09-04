@@ -694,6 +694,10 @@ Future<void> pumpAppearance(WidgetTester tester, TestApp app) async {
 Future<void> openCategory(WidgetTester tester, SettingsCategory category) async {
   if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
     await pressBack(tester);
+    // The list keeps the scroll position it had, which can have the category
+    // above the viewport when the one left was far down it.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 400));
+    await tester.pumpAndSettle();
   }
   final tile = find.widgetWithText(ListTile, category.label);
   // Only when it is off the bottom: [scrollTo] aligns what it reveals with the

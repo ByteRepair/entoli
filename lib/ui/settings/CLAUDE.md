@@ -34,7 +34,17 @@ edited from its settings page, and a name set there wins over one set in
 rewrite themselves under the new name on the next save.
 
 The settings page is eleven categories, picked from a panel beside it or, below
-`navBreakpoint`, from a page of their own. **General** is the app itself:
+`navBreakpoint`, from a page of their own. **Welcome** leads the list and is the
+tour rather than a list of sections — `welcome_page.dart`, not this file — so
+both layouts branch on it instead of filing sections: the pane renders
+`WelcomeTour` whole, since it is a pager with its own bar and cannot scroll in a
+`ListView`. It is the first-run screen too: the app shell pushes `WelcomePage`
+over itself while `welcomeSeen` in `settings.json` is still false, and the
+tour's Done writes the flag through the notifier. Its second and third pages
+embed `DefaultsSection`, `InstructionsSection` and `AutoMemorySection` — the
+same widgets this page draws, which is why the three are public rather than
+private to it; a row added to one is on the tour the moment it is here.
+**General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the
