@@ -70,12 +70,19 @@ abstract class ChatStore {
   /// Copy a workspace directory (or a single file's parent) into a new
   /// `artifacts/<id>/` and return the generated id. The [sourceDir] is an
   /// absolute path already resolved by the caller — the backend resolves
-  /// `project:` prefixes and workspace paths before reaching here.
-  Future<String> createArtifact(String chatId, String sourceDir, {String? project});
+  /// `project:` prefixes and workspace paths before reaching here. The base
+  /// stylesheet is injected into [entryFile] in the copy at publish time, so
+  /// every reader of the artifact sees the styled page and the desktop
+  /// opener can open the file itself.
+  Future<String> createArtifact(
+      String chatId, String sourceDir, String entryFile,
+      {String? project});
 
   /// Replace the contents of an existing `artifacts/<id>/` with the files at
   /// [sourceDir]. Used when the model re-publishes with an `artifact_id`.
-  Future<void> updateArtifact(String chatId, String artifactId, String sourceDir, {String? project});
+  Future<void> updateArtifact(
+      String chatId, String artifactId, String sourceDir, String entryFile,
+      {String? project});
 
   /// Read a file out of an artifact's directory. Null once the file is gone.
   Future<Uint8List?> readArtifactFile(

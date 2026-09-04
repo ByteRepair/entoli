@@ -3,12 +3,10 @@ import "package:flutter/material.dart";
 import "package:url_launcher/url_launcher.dart";
 import "package:webview_flutter/webview_flutter.dart";
 
+import "../core/log.dart";
 import "../core/platform/io/artifact_server_factory.dart"
     if (dart.library.js_interop) "../core/platform/web/artifact_server_factory.dart"
     show startArtifactServer;
-import "../core/platform/io/desktop_artifact_opener.dart"
-    if (dart.library.js_interop) "../core/platform/web/desktop_artifact_opener.dart"
-    show writeArtifactTemp;
 import "../core/platform/io/web_artifact_opener.dart"
     if (dart.library.js_interop) "../core/platform/web/web_artifact_opener.dart"
     show WebArtifactOpenerImpl;
@@ -64,7 +62,7 @@ class PlatformLinkOpener implements LinkOpener {
     }
     final dir = await _store.artifactPath(chatId, artifactId);
     if (!_isAndroid) {
-      await _openDesktopArtifact(dir, entryFile);
+      await _openDesktopArtifact(chatId, artifactId, dir, entryFile);
       return;
     }
     if (!context.mounted) return;
@@ -75,16 +73,22 @@ class PlatformLinkOpener implements LinkOpener {
     );
   }
 
-  /// Desktop opens the entry HTML in the system browser. The base stylesheet
-  /// is injected into a temp copy of the entry file (built by the conditional
-  /// `writeArtifactTemp`, which carries `dart:io` only on native), so desktop
-  /// artifacts get the same look the Android webview and the web blob path do,
-  /// without mutating the artifact dir the model's `read` tool sees.
-  Future<void> _openDesktopArtifact(String dir, String entryFile) async {
-    final tempPath = await writeArtifactTemp(dir, entryFile);
-    if (tempPath == null) return;
-    final url = Uri.file(tempPath);
-    await launchUrl(url, mode: LaunchMode.externalApplication);
+  /// Desktop opens the artifact's entry file itself: the store injects the
+  /// base stylesheet into it at publish time, so the file on disk is the
+  /// whole page and `file://` resolves its relative references — images,
+  /// scripts — against the artifact directory they sit in. Nothing is copied
+  /// to a temp location, because the copy would break exactly those paths.
+  /// The existence check goes through the store rather than `dart:io`, which
+  /// must stay off this file's web build.
+  Future<void> _openDesktopArtifact(
+      String chatId, String artifactId, String dir, String entryFile) async {
+    final bytes = await _store.readArtifactFile(chatId, artifactId, entryFile);
+    if (bytes == null) {
+      logFailure("open", "Artifact entry file missing: $dir/$entryFile");
+      return;
+    }
+    await launchUrl(Uri.file("$dir/$entryFile"),
+        mode: LaunchMode.externalApplication);
   }
 }
 

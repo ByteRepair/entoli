@@ -481,7 +481,10 @@ class BuiltinAgent {
   /// headless with no viewer surface, so the tool is dropped for them the way
   /// `ask_user` is. The closure resolves the path (with `project:` prefix
   /// support) and copies the dir; the agent just passes the args through.
-  final Future<String> Function(String path, {String? artifactId})? saveArtifact;
+  /// [entryFile] is the file inside the copied dir the viewer opens, which
+  /// the store styles at publish time.
+  final Future<String> Function(String path, String entryFile,
+      {String? artifactId})? saveArtifact;
 
   /// Packages a skill drafted in the workspace and stages the `.skill` for the
   /// user to install. Null where the agent is a sub-agent: a worker does not
@@ -1360,7 +1363,9 @@ class BuiltinAgent {
     ));
     String? artifactId;
     Future<ShellResult> run() => _guarded(() async {
-          artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
+          artifactId = await saveArtifact!(
+              parsed.path, parsed.entryFile,
+              artifactId: parsed.artifactId);
           return const ShellResult(returnCode: 0, output: "");
         });
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {

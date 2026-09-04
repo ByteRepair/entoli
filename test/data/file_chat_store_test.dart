@@ -370,12 +370,17 @@ void main() {
       await Directory(p.join(src, "css")).create();
       await File(p.join(src, "css", "style.css")).writeAsString("body{color:red}");
 
-      final id = await store.createArtifact("a1", src);
+      final id = await store.createArtifact("a1", src, "index.html");
       expect(id, isNotEmpty);
       final dir = Directory(config.artifactDir("a1", id));
       expect(dir.existsSync(), isTrue);
-      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), "<h1>hi</h1>");
+      // The base stylesheet is injected into the entry file at publish time.
+      final entry = File(p.join(dir.path, "index.html")).readAsStringSync();
+      expect(entry, contains("<h1>hi</h1>"));
+      expect(entry, contains("entoli-base-css"));
       expect(File(p.join(dir.path, "css", "style.css")).readAsStringSync(), "body{color:red}");
+      // The workspace copy the model reads is untouched.
+      expect(File(p.join(src, "index.html")).readAsStringSync(), "<h1>hi</h1>");
     });
 
     test("createArtifact accepts a single file (copies parent dir)", () async {
@@ -385,9 +390,9 @@ void main() {
       final filePath = p.join(ws, "page", "index.html");
       await File(filePath).writeAsString("<p>page</p>");
 
-      final id = await store.createArtifact("a1", filePath);
+      final id = await store.createArtifact("a1", filePath, "index.html");
       final dir = Directory(config.artifactDir("a1", id));
-      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), "<p>page</p>");
+      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), contains("<p>page</p>"));
     });
 
     test("updateArtifact replaces the contents", () async {
@@ -398,7 +403,7 @@ void main() {
       await File(p.join(src1, "index.html")).writeAsString("v1");
       await File(p.join(src1, "old.txt")).writeAsString("old");
 
-      final id = await store.createArtifact("a1", src1);
+      final id = await store.createArtifact("a1", src1, "index.html");
       final dir = Directory(config.artifactDir("a1", id));
       expect(File(p.join(dir.path, "old.txt")).existsSync(), isTrue);
 
@@ -408,8 +413,9 @@ void main() {
       await File(p.join(src2, "index.html")).writeAsString("v2");
       await File(p.join(src2, "new.txt")).writeAsString("new");
 
-      await store.updateArtifact("a1", id, src2);
-      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), "v2");
+      await store.updateArtifact("a1", id, src2, "index.html");
+      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), contains("v2"));
+      expect(File(p.join(dir.path, "index.html")).readAsStringSync(), contains("entoli-base-css"));
       expect(File(p.join(dir.path, "new.txt")).readAsStringSync(), "new");
       expect(File(p.join(dir.path, "old.txt")).existsSync(), isFalse);
     });
@@ -424,7 +430,7 @@ void main() {
       await File(p.join(src, "assets", "logo.png")).writeAsBytes(png);
       await File(p.join(src, "index.html")).writeAsString("<p>");
 
-      final id = await store.createArtifact("a1", src);
+      final id = await store.createArtifact("a1", src, "index.html");
       expect(await store.readArtifactFile("a1", id, "assets/logo.png"), png);
       expect(await store.readArtifactFile("a1", id, "missing.txt"), isNull);
     });

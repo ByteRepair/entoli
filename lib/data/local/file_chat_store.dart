@@ -5,11 +5,13 @@ import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
+import "../../core/log.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/documents.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/models.dart";
+import "../../domain/artifact_style.dart";
 import "../../domain/project.dart";
 import "../../domain/workspace.dart";
 
@@ -241,18 +243,22 @@ class FileChatStore implements ChatStore {
   }
 
   @override
-  Future<String> createArtifact(String chatId, String sourceDir, {String? project}) async {
+  Future<String> createArtifact(
+      String chatId, String sourceDir, String entryFile,
+      {String? project}) async {
     project = project ?? await _projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
     final artifactId = const Uuid().v4();
     final target = config.artifactDir(chatId, artifactId, project: project);
     await _copyDir(_fs, sourceDir, target);
+    await _injectEntryStyles(target, entryFile);
     return artifactId;
   }
 
   @override
-  Future<void> updateArtifact(
-      String chatId, String artifactId, String sourceDir, {String? project}) async {
+  Future<void> updateArtifact(String chatId, String artifactId,
+      String sourceDir, String entryFile,
+      {String? project}) async {
     project = project ?? await _projectOf(chatId);
     final target = config.artifactDir(chatId, artifactId, project: project);
     // Clear the old contents, then copy the new. `_copyDir` recreates the
@@ -260,6 +266,21 @@ class FileChatStore implements ChatStore {
     final dir = _fs.directory(target);
     if (await dir.exists()) await dir.delete(recursive: true);
     await _copyDir(_fs, sourceDir, target);
+    await _injectEntryStyles(target, entryFile);
+  }
+
+  /// The base stylesheet is written into the artifact's entry file at publish
+  /// time rather than at open time; see "Artifacts" in the root notes. A
+  /// missing entry file is a line, not silence: nothing downstream would
+  /// otherwise say why an artifact opened unstyled.
+  Future<void> _injectEntryStyles(String dir, String entryFile) async {
+    final file = _fs.file(_fs.path.join(dir, entryFile));
+    if (!await file.exists()) {
+      logFailure("artifact", "Entry file missing from published artifact: "
+          "$dir/$entryFile");
+      return;
+    }
+    await file.writeAsString(injectBaseStyles(await file.readAsString()));
   }
 
   @override
