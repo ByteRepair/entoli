@@ -223,7 +223,9 @@ offered. What is special about it is what a *turn* in it may not have, and that
  one, a note that stands in for the instruction files. `anonymous` turns all
  of the first four off and is the one that ships a note: no profile, no
  memory, a workspace it does not share, and its own account of what an
- anonymous chat is, in code rather than in a file the user could edit away —
+ anonymous chat is, embedded at build time from
+ `assets/prompts/projects/<project>/system/` (`tool/gen_prompts.dart`) rather
+ than anything on the user's disk —
  so the context and tools that would reach another conversation are simply not
  there. A turn never meets a built-in project itself:
  `ChatRepository._turnSettings` resolves the spec into a profile, a memory, a

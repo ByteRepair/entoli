@@ -1,12 +1,24 @@
 import "dart:convert";
 
 import "../../domain/ask.dart";
+import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
 import "../../domain/builtin_project.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
 import "task_tool.dart";
+
+/// The prompt prose this file assembles, embedded at build time from
+/// `assets/prompts/projects/default/system/` (`tool/gen_prompts.dart`). The
+/// conditional assembly — what a capability turns on, the tool fragments, the
+/// `<system_information>` block — stays in Dart; only the static prose moved.
+String? _systemProse(String name) {
+  for (final file in bundledSystemPrompts) {
+    if (file.project == "default" && file.name == name) return file.content;
+  }
+  return null;
+}
 
 /// What a turn is offered, resolved from what this device can run minus what
 /// the turn is not offered. One value because the tool list and the system
@@ -207,11 +219,7 @@ String _withoutShell({
     if (skillsText.isNotEmpty) skillsText,
   ].join("\n");
   return "You are a helpful assistant.\n\n"
-      "You are running in a browser, so you have no shell: you cannot run "
-      "commands.\n"
-      "You do have a filesystem in your workspace — use `read`, `write`, "
-      "and `edit`\nto work with files there$artifact. Prefix a path with "
-      "`project:` to reach the project workspace.\n\n"
+      "${_systemProse("browser")!.replaceFirst("{{artifact}}", artifact)}\n\n"
       "$sections\n"
       "${profileSection(profile)}";
 }
@@ -243,45 +251,17 @@ carries its instructions and the base directory its files are in.""";
 /// can do with or without a machine under it. Deliberately only what the tool's
 /// own description does not already carry — it is resent on every model call of
 /// every turn, and the schema says when to reach for it and how.
-const _asking = """
-## Asking the user
-
-Call the `$askToolName` tool when the answer is the user's to give and guessing
-it would waste the turn. Ask only where the answer changes what you do next, and
-never for something you could find out yourself.""";
+final String _asking =
+    _systemProse("asking")!.replaceFirst("{{ask_tool}}", askToolName);
 
 /// The one thing both prompts say about files, because the file tools are the
 /// one cross-platform way to reach the workspace — they work on every platform,
 /// unlike `bash`.
-const _files = """
-
-## Files
-
-Read, write, and edit files in your workspace with `read`, `write`, and `edit`.
-Paths are relative to your workspace. Prefix a path with `project:` to reach the
-project workspace instead. An absolute path reaches the machine directly,
-outside both workspaces, and is offered to the user for approval before it
-runs. Use `write` to create or overwrite a file, `edit` for targeted changes,
-and `read` to look at what is there. The files survive between turns.""";
+final String _files = "\n${_systemProse("files")}";
 
 /// The one thing both prompts say about artifacts, because the viewer is
 /// available with or without a shell — a browser can still open a page.
-const _artifacts = """
-
-## Artifacts
-
-Write the HTML and supporting files to your workspace with `write`/`edit`, then
-call `artifact` with the path to the entry point HTML file to publish it as a
-page the user can view. A base stylesheet is provided — a warm newsprint look,
-cream surface and near-black ink with one deep-red accent, Playfair Display
-headings on light weights over a Source Serif 4 body — that styles the semantic
-elements (`<main>`, `<h1>`–`<h3>`, `<p>`, `<a>`, lists, `<hr>`, `<table>`,
-`<blockquote>`, `<code>`/`<pre>`, `.btn`) already. Write semantic HTML that uses
-them and add a `<style>` block only for what is specific to your page. The viewer
-has no network, so inline or include everything the page needs in the files, and
-keep the look working on the serif fallbacks the base stylesheet uses offline.
-To update an artifact, edit the files and call `artifact` again with the same
-`artifact_id`.""";
+final String _artifacts = "\n${_systemProse("artifacts")}";
 
 /// The step-2 sentence's list of what a call is for, one fragment per tool
 /// the turn is offered, in the order the sentence reads them.
@@ -301,21 +281,41 @@ String _toolFragments(AgentCapabilities caps) {
 
 /// The shell contract the chat's own shell keeps: one per workspace, and what
 /// one command does to it stands for the next.
-const _persistentShell = """
-The commands run in one shell that keeps its state between calls: a `cd` or an
-export made by one command is still in force for the next, and a plain `cd`
-moves the shell. Where you are is yours to keep track of — a `cd` you ran is
-still in force — and where in doubt, `pwd` says. If the state looks wrong, run
-a command with `"restart": true` to start the shell back in your workspace.""";
+final String _persistentShell = _systemProse("shell-persistent")!;
 
 /// The contract a sub-agent's commands run under instead: a fresh subshell
 /// each, since a fan-out of workers wants concurrency rather than a shell to
 /// race over.
-const _oneShotShell = """
-Every command runs in a new subshell, so a `cd` or an export does not carry
-over to the next one. Prefix instead: `MY_VAR=value cd some/dir && ...`, or
-write what you need to a file and read it back.""";
+final String _oneShotShell = _systemProse("shell-oneshot")!;
 
+/// The sections the shell prompt is assembled from, each conditional on the
+/// capability that offers what it names. The prose bodies are the embedded
+/// files; the `\n` padding around each is the spacing the assembled prompt
+/// carries, read off the golden and asserted by `templates_test.dart`.
+String _shellSections({
+  required AgentCapabilities caps,
+  required String platform,
+  required String skillsText,
+}) {
+  final task = caps.task
+      ? _systemProse("task")!.replaceAll("{{task_tool}}", taskToolName)
+      : null;
+  final webSearch = caps.webSearch ? _systemProse("websearch") : null;
+  final artifacts = caps.artifact ? "\n${_systemProse("artifacts")}" : null;
+  final ask =
+      caps.ask ? _systemProse("asking")!.replaceFirst("{{ask_tool}}", askToolName) : null;
+  return [
+    ?task,
+    ?webSearch,
+    if (skillsText.isNotEmpty) skillsText,
+    _files,
+    ?artifacts,
+    _systemProse("finish")!,
+    ?ask,
+    "<system_information>\n$platform\n</system_information>",
+    _systemProse("examples")!,
+  ].join("\n\n");
+}
 String _withShell({
   required String platform,
   Profile? profile,
@@ -324,67 +324,18 @@ String _withShell({
   bool oneShot = false,
 }) {
   final skillsText = skillsSection(skills);
-  final sections = <String>[
-    if (caps.task)
-      "## Delegating to sub-agents\n\n"
-          "The `$taskToolName` tool spawns a sub-agent with its own "
-          "conversation and\nreturns its final output when it finishes. Use "
-          "it to fan out work that would\notherwise crowd this conversation "
-          "— a search, an extraction, a verification —\nand to run "
-          "independent pieces in parallel. Several `$taskToolName` calls in\n"
-          "one message run concurrently, so a fan-out of N is one step, not "
-          "N.",
-    if (caps.webSearch)
-      "## Searching the web\n\n"
-          "`websearch` queries DuckDuckGo and returns titles, URLs, and "
-          "snippets.\n`webfetch` retrieves a URL and returns its text "
-          "content with markup stripped.\nUse them together: `websearch` to "
-           "find sources, then `webfetch` to read the\nones that look "
-           "relevant. Both are read-only, so they run without asking.",
-    if (skillsText.isNotEmpty) skillsText,
-    _files,
-    if (caps.artifact) _artifacts,
-    "## Finishing a turn\n\n"
-        "When you have the answer, reply with it as text and do not call any "
-        "tool —\nthat ends the turn and hands your reply to the user. A "
-        "plain text reply is a\nfinished answer, not a mistake.\n\nFinish "
-        "the moment you have the answer. Do not keep running commands to "
-        "look\nbusy, and do not go looking for more to say. If the question "
-        "needs no commands\nat all, say your answer and finish immediately.",
-    if (caps.ask) _asking,
-    "<system_information>\n$platform\n</system_information>",
-    "## Useful command examples\n\n"
-        "Create a file:\n\n"
-        "```bash\n"
-        "cat <<'EOF' > newfile.py\n"
-        'print("hello")\n'
-        "EOF\n"
-        "```\n\n"
-        "Edit a file in place:\n\n"
-        "```bash\n"
-        "sed -i 's/old_string/new_string/g' filename.py\n"
-        "```\n\n"
-        "Read part of a file with line numbers:\n\n"
-        "```bash\n"
-        "nl -ba filename.py | sed -n '10,20p'\n"
-        "```",
-   ];
-  return "You are a helpful assistant that can interact with a computer to "
-      "answer the\nuser's questions and carry out their tasks.\n\n"
-      "## How you act\n\n"
-      "1. You write reasoning text saying what you are doing and why.\n"
-      "2. You call a tool when you need to: ${_toolFragments(caps)}.\n"
-      "3. The system runs the command and shows you the result.\n"
-      "4. You continue, or you finish the turn.\n\n"
-      "A command only runs when you call the `bash` tool with it. Writing "
-      "a command\nas text, in a code block or otherwise, does nothing at "
-      "all.\n\n"
-      "${oneShot ? _oneShotShell : _persistentShell}\n\n"
-      "Your reasoning text is what the user reads as your reply, so write "
-      "it for\nthem: say what you found and what you did, not just what "
-      "you are about to run.\n\n"
-      "${sections.join("\n\n")}\n"
-      "${profileSection(profile)}";
+  final sections = _shellSections(
+    caps: caps,
+    platform: platform,
+    skillsText: skillsText,
+  );
+  final prose = _systemProse("shell")!;
+  return prose
+      .replaceFirst("{{tools}}", _toolFragments(caps))
+      .replaceFirst(
+          "{{shell}}", oneShot ? _oneShotShell : _persistentShell)
+      .replaceFirst("{{sections}}", sections) +
+      profileSection(profile);
 }
 
 /// The current moment, put at the top of a user turn so the model can date its

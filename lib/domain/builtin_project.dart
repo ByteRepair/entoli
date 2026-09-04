@@ -1,5 +1,6 @@
 import "package:flutter/material.dart" show Icons, IconData;
 
+import "bundled_project_prompts.dart" show bundledSystemPromptOf;
 import "profile.dart";
 import "temp_chat_ttl.dart";
 
@@ -71,7 +72,13 @@ class BuiltinProject {
   /// the turn's instructions in full: no AGENTS.md file is read, and none is
   /// offered to write, so there is no file to delete or edit away from under
   /// the turn.
-  String? get bundledInstructions => null;
+  ///
+  /// Read from the embedded prompt files —
+  /// `assets/prompts/projects/<dir>/system/`, written into code by
+  /// `tool/gen_prompts.dart` — so the prose is authored in markdown and
+  /// nothing on the user's disk can edit it.
+  String? get bundledInstructions =>
+      bundledSystemPromptOf(dir, "instructions");
 
   /// Where a built-in ships a note ([bundledInstructions] non-null), whether
   /// the user's instruction files are also read on top of it. False (the
@@ -142,8 +149,9 @@ const byteRepairProjectLabel = "Byte-Repair";
 /// A chat with no profile, no project memory, and no workspace it shares
 /// with another chat: the tools and the context that would reach them are
 /// simply not there. Its instructions are the app's own note about what it is,
-/// in code rather than in a file — the only AGENTS.md it has is one nobody
-/// could delete or edit away from under a turn.
+/// embedded at build time (`assets/prompts/projects/anonymous/system/`) —
+/// the only AGENTS.md it has is one nobody could delete or edit away from
+/// under a turn.
 class AnonymousProject extends BuiltinProject {
   const AnonymousProject()
       : super(
@@ -154,14 +162,6 @@ class AnonymousProject extends BuiltinProject {
           memory: MemoryPolicy.off,
           sharedWorkspace: false,
         );
-
-  @override
-  String get bundledInstructions =>
-      "This is an anonymous chat. Its workspace is scratch for this chat "
-      "alone: nothing in it is shared with any other conversation, and "
-      "nothing about it is remembered. There is no profile of the user and no "
-      "memory of earlier chats, and this note stands in for the instruction "
-      "files the other projects read.";
 
   /// Anonymous chats are scratch: they live a day by default, not forever.
   @override
@@ -197,63 +197,6 @@ class ByteRepairProject extends BuiltinProject {
   /// Temporary chats.
   @override
   bool get hasSettingsPage => true;
-
-  @override
-  String get bundledInstructions =>
-      "This is a Byte Repair project: you are a coding agent with ESBMC, a "
-      "formal verifier for C and C++ that proves memory safety and functional "
-      "properties by bounded model checking. The goal is not just code that "
-      "runs, but code you can prove correct.\n"
-      "\n"
-      "Prefer C; use C++ only where the task demands it, and avoid templates "
-      "and exceptions in verified code — ESBMC's C++ support is limited there.\n"
-      "\n"
-      "Follow the user's instructions above all. Verification is the default, "
-      "not a compulsion — if the user asks to stop verifying and show results, "
-      "do that.\n"
-      "\n"
-      "Design functions small and atomic: a single responsibility and "
-      "single-digit cyclomatic complexity each. ESBMC roughly doubles the "
-      "state space per branch, so high complexity blows the verification "
-      "budget. Not all code can or should be verified — design the core "
-      "verifiable parts with low complexity, and accept that functions with "
-      "nested loops or irreducible complexity will be skipped at "
-      "verification time. A function whose contract you cannot state is too "
-      "big — split it.\n"
-      "\n"
-      "Workflow:\n"
-      "1. Write the code. Do not compile-check after each file — nothing "
-      "runs until verification.\n"
-      "2. Delegate verification to the @esbmc-verifier agent via the task "
-      "tool. It writes the harnesses and Makefile, runs `make verify`, and "
-      "reports which functions pass, fail, or are skipped.\n"
-      "3. Read the report, fix failures in the implementation, and "
-      "re-delegate if needed.\n"
-      "4. Summarize the results for the user.\n"
-      "\n"
-      "Layout: create a task-named subdirectory (kebab-case, e.g. "
-      "`ini-parser/`) in the workspace root first, and put everything inside "
-      "it:\n"
-      "- src/ — the implementation files.\n"
-      "- harness/ — the @esbmc-verifier agent writes harnesses here.\n"
-      "- Makefile — the @esbmc-verifier agent writes this.\n"
-      "\n"
-      "Write contracts inside the function body as statements (not on the "
-      "signature) so the verifier can check them. The @esbmc-verifier agent "
-      "has the ESBMC contract syntax, harness patterns, and invocation forms "
-      "— delegate to it when it is time to verify rather than running ESBMC "
-      "yourself.\n"
-      "\n"
-      "The environment has ESBMC and `make`; `gcc` may be absent (ESBMC has "
-      "its own front end). You may probe for environment setup (`which gcc "
-      "make`, `esbmc --version`) but do not probe or web-search for ESBMC "
-      "contract syntax — that is the verifier agent's job.\n"
-      "\n"
-      "Files containing __ESBMC_* constructs are written with the write tool, "
-      "not heredocs in bash — the contract text trips the command safety "
-      "classifier.\n"
-      "\n"
-      "This note stands in for the instruction files the other projects read.";
 
   @override
   String? get emptyChatQuestion => "What would you like to verify?";
