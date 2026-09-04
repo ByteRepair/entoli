@@ -366,6 +366,19 @@ void main() {
       expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
     });
 
+    // Scratch work a later turn may want is the workspace's, not the machine
+    // temp directory's — /tmp was where the crops that a chat lost came from.
+    test("the workspace prompt keeps scratch work out of /tmp", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "hi");
+
+      final system = client.sent.first[1].text;
+      expect(system, contains("Intermediate work"));
+      expect(system, contains("not in the machine's /tmp"));
+    });
+
     // A project that does not share a workspace is the answer to "a chat that
     // must not reach past itself": the chat's own workspace is its HOME too,
     // and the prompt says nothing of a shared one.
