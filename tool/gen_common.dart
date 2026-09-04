@@ -4,19 +4,8 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:agent_chat/domain/bundled_prompt_file.dart";
 import "package:crypto/crypto.dart" as crypto;
-
-/// One embedded prompt file, tagged with the project it belongs to.
-class PromptEntry {
-  PromptEntry(this.project, this.name, this.relativePath, this.content);
-
-  final String project;
-  final String name;
-  final String relativePath;
-  final String content;
-
-  String get sha256 => crypto.sha256.convert(utf8.encode(content)).toString();
-}
 
 /// The project directories under `assets/prompts/projects/`, sorted. `default`
 /// is one of them, the way every project is one directory under `projects/`.
@@ -41,7 +30,10 @@ List<String> allFiles(Directory dir) {
   return files;
 }
 
-void sortByProject(List<PromptEntry> entries) {
+String sha256Of(String content) =>
+    crypto.sha256.convert(utf8.encode(content)).toString();
+
+void sortByProject(List<BundledPromptFile> entries) {
   entries.sort((a, b) {
     final c = a.project.compareTo(b.project);
     if (c != 0) return c;
@@ -53,13 +45,13 @@ void sortByProject(List<PromptEntry> entries) {
 
 void writeGenerated(String path, StringBuffer buf) {
   File(path).writeAsStringSync(buf.toString());
-  stdout.writeln("Wrote $path (${buf.length} characters).");
+  stdout.writeln("Wrote $path");
 }
 
 /// Emits `const $varName = <BundledPromptFile>[ ... ]` from [entries],
 /// each as `BundledPromptFile(project, name, relativePath, sha256, content)`.
 void emitPromptFileList(StringBuffer buf, String varName,
-    List<PromptEntry> entries) {
+    List<BundledPromptFile> entries) {
   buf.writeln("const $varName = <BundledPromptFile>[");
   for (final e in entries) {
     buf.writeln("  BundledPromptFile(");

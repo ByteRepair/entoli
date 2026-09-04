@@ -17,3 +17,20 @@ class BundledPromptFile {
   final String sha256;
   final String content;
 }
+
+/// The entry of [files] tagged [name] for [project], `default`'s standing in
+/// where the project ships none of its own — the inheritance rule the
+/// generators tag their lists for. Null where neither has one.
+BundledPromptFile? bundledPromptFileOf(
+    List<BundledPromptFile> files, String? project, String name) {
+  final tags = [
+    if (project != null && project != "default") project,
+    "default",
+  ];
+  for (final tag in tags) {
+    for (final file in files) {
+      if (file.project == tag && file.name == name) return file;
+    }
+  }
+  return null;
+}

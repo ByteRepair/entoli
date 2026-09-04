@@ -7,22 +7,25 @@
 // and nothing on the user's disk can edit what the model reads. The prose is
 // authored in markdown; this collects it, tagged with the project it belongs
 // to. `default` is the base set every project inherits; another project's
-// files override a same-named default one for that project alone.
+// files override a same-named default one for that project alone. The lookup
+// with that fallback is `bundledPromptFileOf` (lib/domain/bundled_prompt_file.dart).
 import "dart:io";
+
+import "package:agent_chat/domain/bundled_prompt_file.dart";
 
 import "gen_common.dart";
 
 void main() {
-  final entries = <PromptEntry>[];
+  final entries = <BundledPromptFile>[];
   for (final projectDir in promptProjects()) {
     final project = basename(projectDir.path);
     final systemRoot = Directory("${projectDir.path}/system");
     if (!systemRoot.existsSync()) continue;
     for (final file in allFiles(systemRoot)) {
       if (!file.endsWith(".md")) continue;
-      final name = _promptName(systemRoot, file);
+      final name = promptName(systemRoot, file);
       final content = File(file).readAsStringSync();
-      entries.add(PromptEntry(project, name, "", content));
+      entries.add(BundledPromptFile(project, name, "", "", content));
     }
   }
   sortByProject(entries);
@@ -37,19 +40,6 @@ void main() {
 
   emitPromptFileList(buf, "bundledSystemPrompts", entries);
 
-  buf.writeln("""
-/// The system prompt file [name] as shipped for [project], `default`'s standing
-/// in where the project ships none of its own. Null where neither has one.
-String? bundledSystemPromptOf(String? project, String name) {
-  for (final tag in [project ?? "default", "default"]) {
-    for (final file in bundledSystemPrompts) {
-      if (file.project == tag && file.name == name) return file.content;
-    }
-  }
-  return null;
-}
-""");
-
   writeGenerated("lib/domain/bundled_project_prompts.dart", buf);
   stdout.writeln("(${entries.length} prompt files).");
 }
@@ -57,8 +47,7 @@ String? bundledSystemPromptOf(String? project, String name) {
 /// The prompt's name: its filename past the `system/` root, extension
 /// dropped — `instructions.md` is `instructions`, and a subdirectory nests
 /// into the name.
-String _promptName(Directory systemRoot, String file) {
+String promptName(Directory systemRoot, String file) {
   final relative = file.substring(systemRoot.path.length + 1);
-  final withoutExtension = relative.substring(0, relative.length - ".md".length);
-  return withoutExtension.split("/").join("/");
+  return relative.substring(0, relative.length - ".md".length);
 }

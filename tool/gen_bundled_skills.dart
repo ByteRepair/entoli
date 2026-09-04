@@ -13,11 +13,13 @@
 // lib/domain/CLAUDE.md.
 import "dart:io";
 
+import "package:agent_chat/domain/bundled_prompt_file.dart";
+
 import "gen_common.dart";
 
 void main() {
-  final skills = <PromptEntry>[];
-  final agents = <PromptEntry>[];
+  final skills = <BundledPromptFile>[];
+  final agents = <BundledPromptFile>[];
   for (final projectDir in promptProjects()) {
     final project = basename(projectDir.path);
     final skillsRoot = Directory("${projectDir.path}/skills");
@@ -62,14 +64,16 @@ void main() {
 /// Walks the `skills/` directory of a project and collects every file under
 /// each skill folder. [name] is the skill folder, [relativePath] is the path
 /// within it.
-List<PromptEntry> _collectSkills(Directory skillsRoot, String project) {
-  final entries = <PromptEntry>[];
+List<BundledPromptFile> _collectSkills(Directory skillsRoot, String project) {
+  final entries = <BundledPromptFile>[];
   for (final skillDir in skillsRoot.listSync().whereType<Directory>()) {
     final skillName = basename(skillDir.path);
     for (final file in allFiles(skillDir)) {
       final content = File(file).readAsStringSync();
       final relative = file.substring(skillDir.path.length + 1);
-      entries.add(PromptEntry(project, skillName, relative, content));
+      entries.add(
+          BundledPromptFile(project, skillName, relative, sha256Of(content),
+              content));
     }
   }
   return entries;
@@ -77,13 +81,14 @@ List<PromptEntry> _collectSkills(Directory skillsRoot, String project) {
 
 /// Walks the `agents/` directory of a project: one `.md` file per agent, named
 /// by the filename without extension. [relativePath] is empty.
-List<PromptEntry> _collectAgents(Directory agentsRoot, String project) {
-  final entries = <PromptEntry>[];
+List<BundledPromptFile> _collectAgents(Directory agentsRoot, String project) {
+  final entries = <BundledPromptFile>[];
   for (final entity in agentsRoot.listSync()) {
     if (entity is! File || !entity.path.endsWith(".md")) continue;
     final name = basename(entity.path).replaceAll(".md", "");
     final content = entity.readAsStringSync();
-    entries.add(PromptEntry(project, name, "", content));
+    entries.add(BundledPromptFile(project, name, "", sha256Of(content),
+        content));
   }
   return entries;
 }

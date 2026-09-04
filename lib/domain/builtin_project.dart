@@ -1,6 +1,7 @@
 import "package:flutter/material.dart" show Icons, IconData;
 
-import "bundled_project_prompts.dart" show bundledSystemPromptOf;
+import "bundled_prompt_file.dart" show bundledPromptFileOf;
+import "bundled_project_prompts.dart" show bundledSystemPrompts;
 import "profile.dart";
 import "temp_chat_ttl.dart";
 
@@ -78,7 +79,7 @@ class BuiltinProject {
   /// `tool/gen_prompts.dart` — so the prose is authored in markdown and
   /// nothing on the user's disk can edit it.
   String? get bundledInstructions =>
-      bundledSystemPromptOf(dir, "instructions");
+      bundledPromptFileOf(bundledSystemPrompts, dir, "instructions")?.content;
 
   /// Where a built-in ships a note ([bundledInstructions] non-null), whether
   /// the user's instruction files are also read on top of it. False (the

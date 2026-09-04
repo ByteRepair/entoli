@@ -1,6 +1,7 @@
 import "dart:convert";
 
 import "../../domain/ask.dart";
+import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
 import "../../domain/builtin_project.dart";
 import "../../domain/file_tools.dart";
@@ -13,11 +14,23 @@ import "task_tool.dart";
 /// `assets/prompts/projects/default/system/` (`tool/gen_prompts.dart`). The
 /// conditional assembly — what a capability turns on, the tool fragments, the
 /// `<system_information>` block — stays in Dart; only the static prose moved.
-String? _systemProse(String name) {
-  for (final file in bundledSystemPrompts) {
-    if (file.project == "default" && file.name == name) return file.content;
+String? _systemProse(String name) =>
+    bundledPromptFileOf(bundledSystemPrompts, "default", name)?.content;
+
+/// Substitutes [values] into [content]'s `{{name}}` slots. Every placeholder
+/// in the markdown must be named here: one left over ships the literal
+/// `{{name}}` to the model, so an unknown name is a broken build, not a
+/// prompt.
+String _substitute(String content, Map<String, String> values) {
+  var result = content;
+  values.forEach((name, value) {
+    result = result.replaceAll("{{$name}}", value);
+  });
+  if (result.contains("{{")) {
+    throw StateError("unsubstituted placeholder in prompt prose: "
+        "${RegExp(r"\{\{[^}]+\}\}").firstMatch(result)!.group(0)}");
   }
-  return null;
+  return result;
 }
 
 /// What a turn is offered, resolved from what this device can run minus what
@@ -219,7 +232,7 @@ String _withoutShell({
     if (skillsText.isNotEmpty) skillsText,
   ].join("\n");
   return "You are a helpful assistant.\n\n"
-      "${_systemProse("browser")!.replaceFirst("{{artifact}}", artifact)}\n\n"
+      "${_substitute(_systemProse("browser")!, {"artifact": artifact})}\n\n"
       "$sections\n"
       "${profileSection(profile)}";
 }
@@ -252,7 +265,7 @@ carries its instructions and the base directory its files are in.""";
 /// own description does not already carry — it is resent on every model call of
 /// every turn, and the schema says when to reach for it and how.
 final String _asking =
-    _systemProse("asking")!.replaceFirst("{{ask_tool}}", askToolName);
+    _substitute(_systemProse("asking")!, {"ask_tool": askToolName});
 
 /// The one thing both prompts say about files, because the file tools are the
 /// one cross-platform way to reach the workspace — they work on every platform,
@@ -290,20 +303,20 @@ final String _oneShotShell = _systemProse("shell-oneshot")!;
 
 /// The sections the shell prompt is assembled from, each conditional on the
 /// capability that offers what it names. The prose bodies are the embedded
-/// files; the `\n` padding around each is the spacing the assembled prompt
-/// carries, read off the golden and asserted by `templates_test.dart`.
+/// files, bare of the spacing around them: the `\n` padding lives in the Dart
+/// that wraps each, and the assembled spacing it produces is the one the
+/// prompt has always carried.
 String _shellSections({
   required AgentCapabilities caps,
   required String platform,
   required String skillsText,
 }) {
   final task = caps.task
-      ? _systemProse("task")!.replaceAll("{{task_tool}}", taskToolName)
+      ? _substitute(_systemProse("task")!, {"task_tool": taskToolName})
       : null;
   final webSearch = caps.webSearch ? _systemProse("websearch") : null;
-  final artifacts = caps.artifact ? "\n${_systemProse("artifacts")}" : null;
-  final ask =
-      caps.ask ? _systemProse("asking")!.replaceFirst("{{ask_tool}}", askToolName) : null;
+  final artifacts = caps.artifact ? _artifacts : null;
+  final ask = caps.ask ? _asking : null;
   return [
     ?task,
     ?webSearch,
@@ -330,11 +343,11 @@ String _withShell({
     skillsText: skillsText,
   );
   final prose = _systemProse("shell")!;
-  return prose
-      .replaceFirst("{{tools}}", _toolFragments(caps))
-      .replaceFirst(
-          "{{shell}}", oneShot ? _oneShotShell : _persistentShell)
-      .replaceFirst("{{sections}}", sections) +
+  return _substitute(prose, {
+    "tools": _toolFragments(caps),
+    "shell": oneShot ? _oneShotShell : _persistentShell,
+    "sections": sections,
+  }) +
       profileSection(profile);
 }
 
