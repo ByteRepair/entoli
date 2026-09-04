@@ -10,6 +10,7 @@ import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/temp_chat_ttl.dart";
+import "../../domain/app_settings.dart";
 import "../../providers.dart";
 import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
@@ -663,7 +664,55 @@ class _AgentSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
           ),
         ),
+        const _RetryTurnsField(),
       ],
+    );
+  }
+}
+
+/// How many times a turn that failed on a retryable error is carried on
+/// automatically before it is left failed. Off is the switch; the slider is
+/// the count, the shape the cores slider keeps.
+class _RetryTurnsField extends ConsumerWidget {
+  const _RetryTurnsField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final retries = ref.watch(
+        appSettingsProvider.select((s) => s.turnRetries));
+    final on = retries > 0;
+    return LabelledField(
+      label: "Retry failed turns",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: on,
+            onChanged: (value) => ref
+                .read(appSettingsProvider.notifier)
+                .setTurnRetries(value ? AppSettings.defaultTurnRetries : 0),
+          ),
+          if (on) ...[
+            Slider(
+              value: retries.toDouble(),
+              min: 1,
+              max: AppSettings.maxTurnRetries.toDouble(),
+              divisions: AppSettings.maxTurnRetries - 1,
+              label: "$retries",
+              onChanged: (value) => ref
+                  .read(appSettingsProvider.notifier)
+                  .setTurnRetries(value.round()),
+            ),
+            Text(
+              "Carried on automatically up to $retries time${retries == 1 ? "" : "s"} "
+              "when a connection drops or the provider fails. Off, a failed turn "
+              "waits for you to press Continue.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

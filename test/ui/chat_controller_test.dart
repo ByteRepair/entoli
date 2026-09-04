@@ -6,6 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
@@ -21,10 +22,12 @@ void main() {
   tearDown(() => app.dispose());
 
   /// send() returns once the prompt is dispatched; the turn ends later, on the
-  /// stream's DoneEvent.
-  Future<void> waitIdle(String id) => waitFor(
-      () => !app.container.read(chatControllerProvider(id)).isRunning,
-      what: "the turn");
+  /// stream's DoneEvent. Retry rounds wait out real backoff between them, so a
+  /// caller expecting rounds names a limit that covers the waits.
+  Future<void> waitIdle(String id,
+          {Duration limit = const Duration(seconds: 2)}) =>
+      waitFor(() => !app.container.read(chatControllerProvider(id)).isRunning,
+          what: "the turn", limit: limit);
 
   /// A chat with a turn under way. Nothing waits for the controller to have
   /// read the chat back: `send` waits on that itself, which is what lets the
@@ -992,6 +995,173 @@ void main() {
       await interruptLiveTurns(app.container);
 
       expect(app.container.exists(chatControllerProvider(chat.state.id)), isFalse);
+    });
+  });
+
+  group("automatic retry rounds", () {
+    /// A turn that fails retryably on every round: the send and every resume
+    /// the controller makes get the same script, the last entry repeating.
+    /// [turnRetries] is what the test seeds, since the setting decides how
+    /// many rounds run at all.
+    Future<(String, ChatController)> failingTurn(
+        {int turnRetries = 0,
+        bool retryable = true,
+        String message = "connection lost"}) async {
+      await app.seedSettings(AppSettings(turnRetries: turnRetries));
+      app.backend.scriptedEvents = [
+        ErrorEvent(message, retryable: retryable),
+        DoneEvent(),
+      ];
+      final (id, controller) = await startTurn("hello");
+      // A round per retry plus the send, each waiting out its own backoff.
+      await waitIdle(id,
+          limit: Duration(seconds: 2 + turnRetries * 4));
+      return (id, controller);
+    }
+
+    test("carries a retryable failure on and finishes with the second round",
+        () async {
+      app.backend.scriptedRounds = [
+        [ErrorEvent("connection lost", retryable: true), DoneEvent()],
+        [TextDelta("now it worked"), DoneEvent()],
+      ];
+      final (id, controller) = await startTurn("hello");
+      final reason = await controller.turnDone;
+
+      expect(reason, TurnEnd.done);
+      expect(app.backend.resumes, hasLength(1));
+      expect(textOf(messagesOf(id).last), "now it worked");
+      expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
+    });
+
+    test("shows the retry row while waiting between rounds", () async {
+      app.backend.scriptedRounds = [
+        [ErrorEvent("connection lost", retryable: true), DoneEvent()],
+        [DoneEvent()],
+      ];
+      final (id, _) = await startTurn("hello");
+      await waitFor(
+          () =>
+              app.container.read(chatControllerProvider(id)).retry != null,
+          what: "the retry row");
+
+      expect(app.container.read(chatControllerProvider(id)).retry,
+          contains("Retrying (1/5)"));
+      expect(app.container.read(chatControllerProvider(id)).isRunning, isTrue);
+      await waitIdle(id);
+    });
+
+    test("gives up after the setting's count and ends in error", () async {
+      final (id, controller) = await failingTurn(turnRetries: 2);
+
+      // The send plus the two rounds the setting allows.
+      expect(app.backend.resumes, hasLength(2));
+      expect(
+          messagesOf(id).last.parts.whereType<ErrorPart>().single.message,
+          contains("connection lost"));
+      expect(controller.turnDone, isNull, reason: "already completed");
+      expect(app.container.read(chatControllerProvider(id)).chat!.unfinished,
+          isTrue);
+    });
+
+    test("stacks one error part across rounds, not one per round", () async {
+      final (id, _) = await failingTurn(turnRetries: 2);
+
+      expect(messagesOf(id).last.parts.whereType<ErrorPart>(), hasLength(1));
+      // And what the log holds agrees with what the screen shows: the
+      // superseding write is the only trace of the rounds after the first.
+      final stored = await app.repo.openChat(id);
+      expect(stored.messages.last.parts.whereType<ErrorPart>(), hasLength(1));
+    });
+
+    test("off leaves the turn failed with no resume", () async {
+      final (id, _) = await failingTurn(turnRetries: 0);
+
+      expect(app.backend.resumes, isEmpty);
+      expect(
+          messagesOf(id).last.parts.whereType<ErrorPart>().single.message,
+          contains("connection lost"));
+    });
+
+    test("does not retry a failure nothing can carry on from", () async {
+      final (id, _) = await failingTurn(
+          retryable: false, message: "No model is selected.");
+
+      expect(app.backend.resumes, isEmpty);
+      expect(messagesOf(id).last.parts.whereType<ErrorPart>(), hasLength(1));
+    });
+
+    test("a failed turn is offered to be carried on, a recovered one is not",
+        () async {
+      final (id, _) = await failingTurn(turnRetries: 0);
+
+      expect(chatOf(id).unfinished, isTrue);
+    });
+
+    test("stop during the backoff ends the turn without a resume", () async {
+      await app.seedSettings(AppSettings(turnRetries: 3));
+      app.backend.scriptedRounds = [
+        [ErrorEvent("connection lost", retryable: true), DoneEvent()],
+        [DoneEvent()],
+      ];
+      final (id, controller) = await startTurn("hello");
+      await waitFor(
+          () =>
+              app.container.read(chatControllerProvider(id)).retry != null,
+          what: "the retry row");
+
+      await controller.interrupt();
+
+      expect(app.backend.resumes, isEmpty);
+      expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
+    });
+
+    test("notifies the failure when the app is hidden", () async {
+      app.appHidden = true;
+      final (id, _) = await failingTurn(
+          retryable: false, message: "provider down");
+
+      expect(app.reminderAlarms.posted, hasLength(1));
+      expect(app.reminderAlarms.posted.single.chatId, id);
+      expect(app.reminderAlarms.posted.single.channel, "turns");
+      expect(app.reminderAlarms.posted.single.title, "New chat");
+      expect(app.reminderAlarms.posted.single.body, contains("provider down"));
+    });
+
+    test("does not notify while the app is on screen", () async {
+      final (_, _) = await failingTurn(retryable: false, message: "provider down");
+
+      expect(app.reminderAlarms.posted, isEmpty);
+    });
+
+    test("does not notify a headless chat — the scheduler owns those",
+        () async {
+      app.appHidden = true;
+      app.backend.scriptedEvents = const [
+        ErrorEvent("provider down", retryable: false),
+        DoneEvent(),
+      ];
+      final chat = await app.repo.createChat(meta: ChatMeta(headless: true));
+      final controller =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await controller.send("hello");
+      await waitIdle(chat.state.id);
+
+      expect(app.reminderAlarms.posted, isEmpty);
+    });
+
+    test("a reminder awaiting turnDone gets one completion, at the true end",
+        () async {
+      app.backend.scriptedRounds = [
+        [ErrorEvent("connection lost", retryable: true), DoneEvent()],
+        [TextDelta("recovered"), DoneEvent()],
+      ];
+      final (id, controller) = await startTurn("hello");
+      final reason = await controller.turnDone;
+
+      expect(reason, TurnEnd.done);
+      expect(textOf(messagesOf(id).last), "recovered");
+      expect(app.backend.resumes, hasLength(1));
     });
   });
 }

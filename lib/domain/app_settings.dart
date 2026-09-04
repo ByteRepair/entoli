@@ -60,6 +60,7 @@ class AppSettings {
     this.turnUrl,
     this.turnUsername,
     this.turnPassword,
+    this.turnRetries = defaultTurnRetries,
   });
 
   String? defaultModelId;
@@ -259,6 +260,20 @@ class AppSettings {
   String? turnUsername;
   String? turnPassword;
 
+  /// How many times a turn that died on a retryable error — a connection that
+  /// dropped, a provider hiccup — is carried on automatically before it is
+  /// left failed. `0` is off: the turn stops where it failed and the Continue
+  /// bar is the only way on. App-level, like the model default it sits beside.
+  int turnRetries;
+
+  /// The default when nothing is set: five carry-ons per failure. A named
+  /// constant so the settings page's switch — which turns the feature on at
+  /// the default — and the load and save answers are one number.
+  static const defaultTurnRetries = 5;
+
+  /// The most the setting may say, and the slider's top.
+  static const maxTurnRetries = 10;
+
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
   /// number.
@@ -329,6 +344,8 @@ class AppSettings {
         turnUrl: _orNull(json["turnUrl"] as String?),
         turnUsername: _orNull(json["turnUsername"] as String?),
         turnPassword: _orNull(json["turnPassword"] as String?),
+        turnRetries:
+            (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(0, maxTurnRetries),
       );
     } catch (_) {
       return AppSettings();
@@ -410,6 +427,7 @@ class AppSettings {
         turnUrl: turnUrl,
         turnUsername: turnUsername,
         turnPassword: turnPassword,
+        turnRetries: turnRetries,
       );
 
   Future<void> save(AppConfig config) async {
@@ -465,6 +483,9 @@ class AppSettings {
       if (turnUrl != null) "turnUrl": turnUrl,
       if (turnUsername != null) "turnUsername": turnUsername,
       if (turnPassword != null) "turnPassword": turnPassword,
+      // Written only when not the default, for the same reason the memory
+      // gates are: a file that predates it says nothing and gets the default.
+      if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
     }));
   }
 }

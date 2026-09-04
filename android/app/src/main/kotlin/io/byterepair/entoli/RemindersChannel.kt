@@ -171,15 +171,20 @@ object RemindersChannel {
 
     private fun postNotification(context: Context, call: MethodCall) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        // Two channels, one port: the reminder completions and a turn failure
+        // post through the same method and the same tap route, but a user who
+        // wants one half quiet silences a channel, not the other feature.
+        val channelId = call.argument<String>("channel") ?: CHANNEL_ID
+        val channelName = if (channelId == "turns") "Turn failures" else "Finished reminders"
         manager.createNotificationChannel(
             NotificationChannel(
-                CHANNEL_ID,
-                "Finished reminders",
+                channelId,
+                channelName,
                 NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )
         val chatId = call.argument<String>("chatId")
-        val builder = Notification.Builder(context, CHANNEL_ID)
+        val builder = Notification.Builder(context, channelId)
             .setContentTitle(call.argument<String>("title") ?: "Reminder")
             .setContentText(call.argument<String>("body") ?: "")
             .setStyle(Notification.BigTextStyle().bigText(call.argument<String>("body") ?: ""))

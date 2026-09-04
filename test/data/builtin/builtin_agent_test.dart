@@ -551,6 +551,39 @@ void main() {
       expect(events.whereType<RetryEvent>(), hasLength(2));
       expect(events.whereType<ErrorEvent>().single.message, contains("busy"));
     });
+
+    test("the parent's options spend one attempt: the controller retries",
+        () async {
+      final client = FakeLlmClient([[], []]);
+      client.failures[0] = const LlmException("busy", statusCode: 503, retryable: true);
+      final events = await agentOver(client,
+              options: const BuiltinOptions().parent)
+          .run(userMessage("hi"))
+          .toList();
+
+      expect(client.sent, hasLength(1));
+      expect(events.whereType<RetryEvent>(), isEmpty);
+      final error = events.whereType<ErrorEvent>().single;
+      expect(error.message, contains("busy"));
+      expect(error.retryable, isTrue);
+    });
+
+    test("the error carries whether the failure was retryable", () async {
+      final retryable = FakeLlmClient([[], []])
+        ..failures[0] = const LlmException("stream died mid-reply", retryable: true)
+        ..failures[1] = const LlmException("stream died mid-reply", retryable: true);
+      final events = await agentOver(retryable,
+              options: const BuiltinOptions(maxAttempts: 2, retryBackoff: Duration.zero))
+          .run(userMessage("hi"))
+          .toList();
+      expect(events.whereType<ErrorEvent>().single.retryable, isTrue);
+
+      final rejected = FakeLlmClient([[]])
+        ..failures[0] = const LlmException("bad key", statusCode: 401);
+      final rejectedEvents =
+          await agentOver(rejected).run(userMessage("hi")).toList();
+      expect(rejectedEvents.whereType<ErrorEvent>().single.retryable, isFalse);
+    });
   });
 
   group("every call is answered", () {

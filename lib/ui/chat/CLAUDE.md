@@ -14,6 +14,54 @@ note stream carries a line for the chat — "Kept N memories." — and a note fo
 any other chat does not reach this one, since the extraction ran for it. The
 page subscribes for the chat's life and cancels the subscription on dispose.
 
+## Automatic retry rounds
+
+**A retryable failure is a blip the turn is carried on from, not an outcome.**
+`ErrorEvent` says whether it was one — a connection that dropped, a provider
+that hiccuped — and `_finishTurn` answers by re-entering `resume()`, the same
+mechanism the Continue bar drives, up to the `turnRetries` setting (Off, or
+1–10, default 5) with exponential backoff, 1s doubling to a 30s cap. The turn
+stays `isRunning` across the rounds, the composer never flickers, and the
+"Retrying (2/5) — connection lost" row is the existing `retry` view state doing
+its job. When the rounds run out — or the failure was never retryable, a
+rejected key or no model selected — the turn ends `TurnEnd.error` as it always
+did, and the Continue bar is the way on.
+
+The round is `_startResume()`, which is `resume()` without the guards: there is
+one carry-on mechanism, and a retry that built a second one would drift from
+it the way every second copy here has drifted. `_turnDone` stays open across
+the rounds — a reminder awaiting it, or a voice handover, gets one completion,
+at the true end, not one per attempt. A `_retryGen` bumped by `abort` and
+`interrupt` is what keeps a round waiting out its backoff from firing after
+the user pressed stop: the wait holds nothing, and the generation is how it
+notices the turn was ended behind it.
+
+Each failed round writes a `turnEnd error` record the next round's supersedes
+— last wins, the same bargain parts make — and the recorder replaces a
+*trailing* `ErrorPart` rather than adding another, so five rounds leave one
+error block in the bubble, not five. Nothing follows an error in a round's
+stream (it closes after the event), so trailing-only is the safe shape of that
+supersede. The recovery case keeps the failed round's error part: resuming
+appends to the reply, and the log has no deletion — the same shape a
+user-pressed Continue has always left.
+
+**And when the rounds run out with nobody looking, the app says so.** A turn
+that ends `TurnEnd.error` while the app is hidden (the `appHiddenProvider`,
+written by the app root's lifecycle listener) posts a notification on the
+"turns" Android channel through `ReminderAlarms.notify` — the same tap
+machinery the reminder completions use, chat id on the content intent, so the
+tap opens the chat through the existing `IncomingReminderOpen` path. Gated on
+`headless` being false, since a reminder's chat is already notified by the
+scheduler that ran it — a second notice would be a double. Not gated on
+anything per-chat: the user said the failure is visible enough when they are
+*in the app*, even on another chat. On every platform without a notification
+route the port is the no-op it always was, and the failure waits visibly in
+the chat.
+
+Reminder turns auto-retry too — they drive the same controller — which is the
+point: a transient blip no longer fails a scheduled task. `MirrorChatController`
+is out of this entirely; it runs no turns locally.
+
 ## Thinking and tool runs
 
 A turn is not just a reply: the model thinks, runs tools, thinks again. Each of
