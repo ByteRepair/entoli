@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:math" as math;
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
@@ -108,6 +109,12 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// where a turn opens, beside the recorder's own `outcome`, so it cannot
   /// reach the next one.
   bool _interrupted = false;
+
+  /// Bumped by [abort] and [interrupt] so a pending automatic retry cannot
+  /// fire after the user pressed stop: the round waits out its backoff
+  /// holding nothing, and the generation is what tells it the turn it was
+  /// carrying on was ended behind it.
+  int _retryGen = 0;
 
   /// Completes with the turn's [TurnEnd] (or null if interrupted) when the
   /// current turn finishes. A caller that starts a turn through [send] or
@@ -263,6 +270,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // comes back carries the TTL anchor the save resolved, and is kept.
     applyState(await repo.saveState(updated.state));
     _interrupted = false;
+    _retryable = false;
+    _errorLine = "";
+    _round = 0;
     _turnDone = Completer<TurnEnd?>();
     _recorder.open(opening.last.id);
     await _recorder.write(recordsOf(opening,
@@ -291,13 +301,25 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   @override
   Future<void> resume() async {
     await _ready;
+    if (state.isRunning) return;
     final chat = state.chat;
-    if (chat == null || state.isRunning || !chat.unfinished) return;
-    final reply = chat.messages.last;
+    if (chat == null || !chat.unfinished) return;
+    await _startResume();
+  }
+
+  /// The body of [resume] without its guards, so the automatic retry rounds
+  /// take the same path the user's Continue button does. The chat is checked
+  /// where the caller can still read its answer; the reply is re-read here
+  /// because a round sees a chat the previous round just wrote to.
+  Future<void> _startResume() async {
+    final chat = state.chat;
+    final reply = chat!.messages.last;
 
     state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
     _interrupted = false;
-    _turnDone = Completer<TurnEnd?>();
+    // Kept open across the round: a caller awaiting [turnDone] gets one
+    // completion, at the true end, not one per attempt.
+    _turnDone ??= Completer<TurnEnd?>();
     _recorder.open(reply.id, existing: reply.parts);
 
     _listen(ref.read(chatRepositoryProvider)
@@ -409,7 +431,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case ShellRunEvent():
       case ArtifactEvent():
       case SkillInstallEvent():
-      case ErrorEvent():
+        break;
+      case ErrorEvent(:final message, :final retryable):
+        // Whether the round can carry the turn on from this, and the first
+        // line for the retry row and the failure notification. Both are
+        // turn-scoped view state: the error part is what the conversation
+        // keeps, and neither field outlives the turn.
+        _retryable = retryable;
+        final lineAt = message.indexOf("\n");
+        _errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+        break;
       case StepLimitEvent():
       case InfoEvent():
         break;
@@ -458,6 +489,32 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     } else {
       reason = await _recorder.close();
     }
+    // A retryable failure is a blip the turn is carried on from, not an
+    // outcome to report: the round waits out its backoff and re-enters the
+    // same resume the user's Continue button takes. The wait holds nothing —
+    // the user pressing stop has to reach it first, which is what the
+    // generation is for. The turn's completer stays open across rounds, so a
+    // caller awaiting [turnDone] — the reminder runner, voice — gets one
+    // completion, at the true end.
+    if (reason == TurnEnd.error && _retryable && _roundsLeft > 0) {
+      final gen = _retryGen;
+      final round = _round;
+      _round++;
+      final wait = Duration(seconds: math.pow(2, round).clamp(1, 30).toInt());
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        retry: "Retrying ($_round/$_roundsTotal) — $_errorLine",
+        approvals: const [],
+        questions: const [],
+        runningSubAgents: const [],
+      );
+      await Future<void>.delayed(wait);
+      if (_retryGen != gen || !ref.mounted) return;
+      // A stopped turn has no chat to carry on; a deleted one the same.
+      if (state.chat == null || _interrupted) return;
+      await _startResume();
+      return;
+    }
     if (!ref.mounted) return;
     final done = _turnDone;
     _turnDone = null;
@@ -479,9 +536,45 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
           : null,
     );
     done?.complete(reason);
+    await _notifyFailure(reason);
+  }
+
+  /// The failure the turn last reported, for the retry row and the
+  /// notification — turn-scoped like every other view state, never persisted.
+  bool _retryable = false;
+  String _errorLine = "";
+  int _round = 0;
+
+  /// What this turn is allowed: the setting, resolved at the round the same
+  /// way the approve mode is, so an edit reaches the next failure rather than
+  /// the next launch.
+  int get _roundsTotal => ref.read(appSettingsProvider).turnRetries;
+  int get _roundsLeft => math.max(0, _roundsTotal - _round);
+
+  /// The notification. A failure the user cannot see is a failure the app has
+  /// to say — the turn is over, the chat is on disk, and the tap opens it.
+  /// Posted only where all three hold: the app is not visible (the user is
+  /// somewhere else entirely, not on another chat), the chat is not headless
+  /// (reminder completions are the scheduler's, and a second would be a
+  /// double), and the platform can post at all (a no-op elsewhere, so the
+  /// check is really about not promising what nothing delivers).
+  Future<void> _notifyFailure(TurnEnd? reason) async {
+    if (reason != TurnEnd.error) return;
+    if (!ref.read(appHiddenProvider)) return;
+    final repo = ref.read(chatRepositoryProvider);
+    if ((await repo.loadMeta(chatId)).headless == true) return;
+    final alarms = ref.read(reminderAlarmsProvider);
+    final title = state.chat?.state.title ?? "Chat failed";
+    await alarms.notify(
+      title: title,
+      body: _errorLine.isEmpty ? "The turn failed." : _errorLine,
+      chatId: chatId,
+      channel: "turns",
+    );
   }
 
   void _onError(Object e) {
+    _retryable = false;
     _recorder.handle(ErrorEvent(e.toString()));
     _finishTurn();
   }
@@ -492,6 +585,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// the turn as having finished.
   @override
   Future<void> abort() async {
+    _retryGen++;
     _recorder.outcome = TurnEnd.aborted;
     await ref.read(chatRepositoryProvider).abort(chatId);
     await _finishTurn();
@@ -507,6 +601,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// whichever gets there first.
   Future<void> interrupt() async {
     if (!state.isRunning) return;
+    _retryGen++;
     _interrupted = true;
     await ref.read(chatRepositoryProvider).abort(chatId);
     await _finishTurn();

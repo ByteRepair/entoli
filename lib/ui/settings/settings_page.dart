@@ -663,7 +663,55 @@ class _AgentSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
           ),
         ),
+        const RetryTurnsField(),
       ],
+    );
+  }
+}
+
+/// How many times a turn that failed on a retryable error is carried on
+/// automatically before it is left failed. Off is the switch; the slider is
+/// the count, the shape the cores slider keeps.
+class RetryTurnsField extends ConsumerWidget {
+  const RetryTurnsField({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final retries = ref.watch(
+        appSettingsProvider.select((s) => s.turnRetries));
+    final on = retries > 0;
+    return LabelledField(
+      label: "Retry failed turns",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: on,
+            onChanged: (value) => ref
+                .read(appSettingsProvider.notifier)
+                .setTurnRetries(value ? 5 : 0),
+          ),
+          if (on) ...[
+            Slider(
+              value: retries.toDouble(),
+              min: 1,
+              max: 10,
+              divisions: 9,
+              label: "$retries",
+              onChanged: (value) => ref
+                  .read(appSettingsProvider.notifier)
+                  .setTurnRetries(value.round()),
+            ),
+            Text(
+              "Carried on automatically up to $retries time${retries == 1 ? "" : "s"} "
+              "when a connection drops or the provider fails. Off, a failed turn "
+              "waits for you to press Continue.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

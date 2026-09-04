@@ -293,7 +293,19 @@ class TurnRecorder {
     if (_messageId == null) return;
     outcome ??= TurnEnd.error;
     flushDeltas();
-    _publish([..._parts, MessagePart.error(message: message)]);
+    final parts = List<MessagePart>.from(_parts);
+    final last = parts.lastOrNull;
+    // A retry round replaces the failed one's error rather than stacking
+    // beside it: the controller re-enters a turn that ended on an error, and
+    // the only thing that can follow one is the next round's — the stream
+    // closes after the event. Superseding writes the same index, which is how
+    // every part that changes is written.
+    if (last is ErrorPart) {
+      parts[parts.length - 1] = MessagePart.error(message: message);
+    } else {
+      parts.add(MessagePart.error(message: message));
+    }
+    _publish(parts);
     checkpoint();
   }
 

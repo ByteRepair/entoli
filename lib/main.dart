@@ -364,6 +364,12 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
         await widget.onExit();
         return AppExitResponse.exit;
       },
+      // What a turn failure notification is gated on, written where the state
+      // is known for the app's whole life rather than asked per chat.
+      onStateChange: (state) => ref.read(appHiddenProvider.notifier).set(
+            state == AppLifecycleState.hidden ||
+                state == AppLifecycleState.detached,
+          ),
     );
   }
 

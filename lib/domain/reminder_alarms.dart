@@ -44,9 +44,17 @@ abstract interface class ReminderAlarms {
   /// otherwise hold the process open for good.
   Future<void> doneFiring();
 
-  /// Post the completion notification. [chatId] rides on its content intent:
-  /// tapping it comes back through [takeOpenChat].
-  Future<void> notify({required String title, required String body, String? chatId});
+  /// Post a notification. [chatId] rides on its content intent: tapping it
+  /// comes back through [takeOpenChat]. [channel] picks the Android channel —
+  /// "reminders" is the reminder completions, the one this port was built for;
+  /// a turn failure posts on "turns" so the user can quiet one half without
+  /// the other.
+  Future<void> notify({
+    required String title,
+    required String body,
+    String? chatId,
+    String channel = "reminders",
+  });
 
   Future<List<String>> takeFired();
 
@@ -93,7 +101,12 @@ class UnavailableReminderAlarms implements ReminderAlarms {
   Future<void> doneFiring() async {}
 
   @override
-  Future<void> notify({required String title, required String body, String? chatId}) async {}
+  Future<void> notify({
+    required String title,
+    required String body,
+    String? chatId,
+    String channel = "reminders",
+  }) async {}
 
   @override
   Future<List<String>> takeFired() async => const [];

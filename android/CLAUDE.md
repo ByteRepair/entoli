@@ -435,3 +435,10 @@ runtime `packageName`, not the namespace — the debug-suffix lesson from
 `IncomingReminderOpen` (`lib/ui/reminders/incoming_open.dart`) drains it on the
 first frame and on each nudge, validates the chat still exists (a temporary
 reminder chat can have been swept), and calls `openChat`.
+
+**A turn failure posts on the same port, its own channel.** `RemindersChannel`
+posts whatever its `channel` argument names — `reminders` for the reminder
+completions, `turns` for a turn that gave up on its retries with nobody
+watching (see `lib/ui/chat/CLAUDE.md`, "Automatic retry rounds"). One port and
+one tap route, two channels, so silencing one half of the app's bad news is a
+channel toggle rather than the feature's off switch.

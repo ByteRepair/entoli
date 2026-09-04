@@ -436,6 +436,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setApproveMode(ApproveMode value) =>
       _update((s) => s.approveMode = value);
 
+  /// How many times a retryable turn failure is carried on automatically.
+  Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
+
   /// What classifies commands when auto mode is on, or nothing at all.
   Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
     ..classifierProviderId = choice.providerId
@@ -723,6 +726,20 @@ final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
 
 final reminderAlarmsProvider =
     Provider<ReminderAlarms>((ref) => const UnavailableReminderAlarms());
+
+/// Whether the app is somewhere the user can see it, in the [ValueNotifier]
+/// shape a turn's tail reads from outside the widget tree. An
+/// `AppLifecycleListener` writes it from the app root; tests override it the
+/// way they override every platform half.
+final appHiddenProvider =
+    NotifierProvider<AppHidden, bool>(AppHidden.new);
+
+class AppHidden extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool hidden) => state = hidden;
+}
 
 /// The app's clock, read as "now" by whatever needs a swappable time. The
 /// system clock in production; tests override it with [Clock.fixed] so a

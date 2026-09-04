@@ -147,16 +147,17 @@ class TestApp {
     Set<String> linuxes = const {},
     bool proot = false,
     Set<String> localModels = const {},
-    FakeLocalLlm? localLlm,
-    bool prefill = false,
-    String? abi,
-    int? systemAccent,
-    List<RemoteChatEntry> remotes = const [],
-    Map<String, ChatViewState> mirrors = const {},
-    Map<String, String> drivenBy = const {},
-    MirrorControl control = const MirrorControl(),
-    SyncHub? hub,
-    Clock? clock,
+  FakeLocalLlm? localLlm,
+  bool prefill = false,
+  String? abi,
+  int? systemAccent,
+  List<RemoteChatEntry> remotes = const [],
+  Map<String, ChatViewState> mirrors = const {},
+  Map<String, String> drivenBy = const {},
+  MirrorControl control = const MirrorControl(),
+  SyncHub? hub,
+  Clock? clock,
+  bool appHidden = false,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -223,6 +224,7 @@ class TestApp {
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
+          appHiddenProvider.overrideWith(() => _AppHidden(appHidden)),
           remindersProvider.overrideWith(() => Reminders(reminders)),
           reminderTurnDriverProvider.overrideWithValue(FakeReminderTurnDriver()),
           clockProvider.overrideWithValue(testClock),
@@ -286,6 +288,14 @@ class TestApp {
   final FakeRootfsStore rootfs;
   final FakeLocalModelStore localModels;
   final FakeLocalLlm localLlm;
+
+  /// What the lifecycle listener would have reported. Overridden before the
+  /// container is built; a test that flips it mid-test does it through the
+  /// notifier.
+  bool get appHidden => container.read(appHiddenProvider);
+
+  set appHidden(bool hidden) =>
+      container.read(appHiddenProvider.notifier).set(hidden);
 
   /// The warm-up, where a test asked for one — null otherwise, which is the
   /// platform most of the suite is pretending to be.
@@ -753,4 +763,14 @@ AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
     tmp.deleteSync(recursive: true);
   });
   return config;
+}
+
+/// The lifecycle as a test wants it: whatever [appHidden] was created saying,
+/// changeable mid-test through [TestApp.appHidden].
+class _AppHidden extends AppHidden {
+  _AppHidden(this.initial);
+  final bool initial;
+
+  @override
+  bool build() => initial;
 }

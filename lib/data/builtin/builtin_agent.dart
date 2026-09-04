@@ -131,10 +131,13 @@ class BuiltinOptions {
 
   /// How many times a failed request is tried again before the turn gives up,
   /// and the first wait between two — it doubles after that, so the defaults
-  /// spend 7s waiting in total. Deliberately short: the UI cannot show what it
-  /// has not been told, so trouble is reported long before its patience runs
-  /// out. Applies to retryables other than 429; a 429 is governed by the
-  /// shared [RateLimitGate] and [rateLimitRetryBudget].
+  /// spend 7s waiting in total. Deliberately short for the parent: the
+  /// controller carries a failed turn on itself, and one attempt here plus its
+  /// retry rounds there is the same patience without a second mechanism.
+  /// Sub-agents keep the default, a failed worker being a tool result the
+  /// parent can redo rather than a turn to give up on. Applies to retryables
+  /// other than 429; a 429 is governed by the shared [RateLimitGate] and
+  /// [rateLimitRetryBudget].
   final int maxAttempts;
   final Duration retryBackoff;
 
@@ -155,6 +158,22 @@ class BuiltinOptions {
   /// agent gives up. Other retryables (503, connection drops) keep
   /// [maxAttempts].
   final Duration rateLimitRetryBudget;
+
+  /// What the parent agent runs with: one attempt per request, since the
+  /// controller retries a failed turn itself. Everything else unchanged — the
+  /// [stepLimit], the timeouts, the concurrency caps.
+  BuiltinOptions get parent => withMaxAttempts(1);
+
+  /// A copy with [maxAttempts] replaced.
+  BuiltinOptions withMaxAttempts(int attempts) => BuiltinOptions(
+        stepLimit: stepLimit,
+        commandTimeout: commandTimeout,
+        maxAttempts: attempts,
+        retryBackoff: retryBackoff,
+        maxConcurrentSubAgents: maxConcurrentSubAgents,
+        maxConcurrentLlmRequests: maxConcurrentLlmRequests,
+        rateLimitRetryBudget: rateLimitRetryBudget,
+      );
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a
@@ -613,7 +632,8 @@ class BuiltinAgent {
       yield* _query();
       if (_cancelled) break;
       if (_queryError != null) {
-        yield ErrorEvent("$_queryError");
+        yield ErrorEvent("$_queryError",
+            retryable: _queryError is LlmException && (_queryError as LlmException).retryable);
         break;
       }
       final completion = _completion;
