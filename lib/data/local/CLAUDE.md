@@ -91,6 +91,32 @@ us, so a CVE in a bundled tool is a version bump in `versions.sh` and a release
 every user has to install. That is the cost that took git out of this list, and
 it is worth weighing before anything is added back to it.
 
+## Byte Repair's environment, in two variables
+
+`byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
+install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest, the
+app's own `<cacheDir>/byte-repair/bin` on the host — and the script exits
+rather than guess a destination. What installs packages is the driver's
+`ENV_PACKAGE_MANAGER` — `apk` in a guest, from the same `Rootfs.packageManager`
+the system prompt names, and nothing on the host, whose package manager is not
+ours to touch. Unset does not mean unavailable: a skipped install is a note and
+the run carries on, so a host with make already on it pays nothing and one
+without it sees the honest "Not installed" row. A named manager that fails is
+a failure, so a guest install that did not happen never reads as done.
+
+On the host the fetched tools reach their turns through the driver: `platformDriver`
+prefixes the bin directory onto `PATH` for rootfs-isolated projects alone, the
+way the project's rootfs copy is its own. A user-set `PATH` in the command
+environment still wins over it. The chat page's setup gate asks after the
+binary itself on the host, since `<cacheDir>` can be emptied between setups —
+the marker alone said a thing the cache may have since taken away. Two
+consequences worth knowing: the script's in-script fetches (`releases/latest`
+for gh and ESBMC) are the one deliberate exception to the checksum pinning
+everywhere else in this app, because "Run Setup" is a button the user pressed
+rather than a download the app decided on; and `ensureRootfs` is a no-op off
+Android, where there is no guest for a per-project rootfs copy to serve — so a
+`rootfsId` left over from another device does not pay for a copy nothing reads.
+
 ## A whole Linux under proot
 
 A bundled binary is one binary. What a coding agent actually wants is a package

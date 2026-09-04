@@ -7,10 +7,18 @@ import "../../domain/rootfs_store.dart";
 import "../../domain/shell.dart";
 
 /// Installs and queries the Byte Repair tooling — make, github-cli and ESBMC —
-/// into the per-project rootfs, so they are on PATH for every agent turn in the
-/// project. The install runs through the configured terminal env (proot rootfs
-/// on Android, host shell on desktop) with [project], so it reaches the
-/// project's own rootfs instance and the package manager inside it.
+/// so they are on PATH for every agent turn in the project. The install runs
+/// through the configured terminal env (proot rootfs on Android, host shell on
+/// desktop) with [project], so it reaches the project's own rootfs instance or
+/// the injected bin directory.
+///
+/// The script's environment is declared by the caller, never probed by the
+/// script: [installDir] is where tools land (`/usr/local/bin` inside a guest,
+/// `<cacheDir>/byte-repair/bin` on the host), sent as `ENV_INSTALL_DIR`; the
+/// driver's environment carries `ENV_PACKAGE_MANAGER` (`apk` in a guest,
+/// nothing on the host, where the machine's package manager is not ours to
+/// touch and static binaries are fetched instead). A binary already on PATH
+/// is never re-fetched — the script skips it.
 ///
 /// "Run Setup" owns the full lifecycle: it copies the base rootfs from cache
 /// into the project's data directory (for a project that opts into rootfs
@@ -28,6 +36,8 @@ abstract class ByteRepairStore {
     required this.config,
     required this.project,
     required this.workspace,
+    this.installDir = guestEsbmcInstallDir,
+    this.installTimeout = _guestInstallTimeout,
     this.rootfsStore,
   });
 
@@ -35,12 +45,24 @@ abstract class ByteRepairStore {
   final String project;
   final String workspace;
 
+  /// Where the install script puts the tools it fetches: the rootfs's own
+  /// `/usr/local/bin` inside a guest, the app's bin directory on the host.
+  /// Always set — the script refuses to guess a destination itself.
+  final String installDir;
+
+  /// How long the install script may run. Thirty minutes on the host, where
+  /// ESBMC is a 240 MB release zip over the network; ten inside a guest,
+  /// where apk is a local package manager. Chosen by the platform factory
+  /// beside [installDir], which is where the guest/host fact lives.
+  final Duration installTimeout;
+
   /// The base rootfs a copy is made from. Null on the web platform.
   final RootfsStore? rootfsStore;
 
   static const tools = {"ESBMC": "esbmc", "make": "make", "gh": "gh"};
 
-  Future<ShellResult> _run(Shell shell, String script, Duration timeout) async {
+  Future<ShellResult> _run(Shell shell, String script, Duration timeout,
+      {Map<String, String>? environment}) async {
     try {
       final run = shell.start(
         script,
@@ -49,6 +71,7 @@ abstract class ByteRepairStore {
         timeout: timeout,
         oneShot: true,
         project: project,
+        environment: environment,
       );
       return await run.result;
     } catch (e) {
@@ -69,20 +92,23 @@ abstract class ByteRepairStore {
 
   /// Runs the bundled install script through [shell]'s configured terminal
   /// env: [ensureRootfs] first, then the script — which puts `make`,
-  /// `github-cli` and ESBMC on PATH inside the rootfs — then the marker.
+  /// `github-cli` and ESBMC where [installDir] names — then the marker. The
+  /// script answers to what it is told, never to what it can probe, and a
+  /// user-set ENV_INSTALL_DIR in settings cannot override the store (command
+  /// environment wins over the app's own; see `composeEnvironment`).
   Future<ShellResult> install(Shell shell) async {
     final err = await ensureRootfs();
     if (err != null) return ShellResult.failed(err);
     final body = await rootBundle.loadString("assets/scripts/byte-repair-setup.sh");
-    final result = await _run(shell, body, const Duration(minutes: 10));
+    final result = await _run(shell, body, installTimeout,
+        environment: {"ENV_INSTALL_DIR": installDir});
     if (result.returnCode == 0) await markSetupComplete();
     return result;
   }
 
-  /// Copies a user-picked ESBMC binary into the per-project rootfs at
-  /// `/usr/local/bin/esbmc`, making it executable. The rootfs must already
-  /// exist — run [install] first. Null on success, an error message on
-  /// failure.
+  /// Copies a user-picked ESBMC binary next to the tools the setup fetched,
+  /// making it executable. The rootfs must already exist — run [install]
+  /// first. Null on success, an error message on failure.
   Future<String?> importEsbmc(XFile file);
 
   /// Deletes the Byte Repair environment: the per-project rootfs (the Alpine
@@ -106,7 +132,8 @@ abstract class ByteRepairStore {
 
   /// Checks all three tools the setup installs — ESBMC, make and gh — and
   /// returns a map of tool name to its version string (or null where not
-  /// installed). All three are on PATH inside the per-project rootfs.
+  /// installed). All three are on PATH inside the per-project rootfs, or in
+  /// the injected bin directory on the host.
   Future<Map<String, String?>> runToolVersions(Shell shell) async {
     final entries = await Future.wait(
       tools.entries.map((e) async => MapEntry(e.key, await runToolVersion(shell, e.value))),
@@ -114,6 +141,13 @@ abstract class ByteRepairStore {
     return Map.fromEntries(entries);
   }
 }
+
+const _guestInstallTimeout = Duration(minutes: 10);
+
+/// Where a guest's install script lands its tools: the rootfs's own
+/// `/usr/local/bin`, now declared rather than implied. The host's answer is
+/// composed per platform beside the cache directory.
+const guestEsbmcInstallDir = "/usr/local/bin";
 
 /// The web's store: no filesystem to copy a rootfs onto and no shell to run
 /// the install script in, so every io-side operation answers with an error

@@ -141,6 +141,11 @@ void main() {
     expect(driver.environment.containsKey("HOME"), isFalse);
   });
 
+  test("the guest declares its own package manager, since the catalog knows it",
+      () {
+    expect(build().environment["ENV_PACKAGE_MANAGER"], "apk");
+  });
+
   test("the parent's environment does not leak into the guest", () {
     expect(build().includeParentEnvironment, isFalse);
   });

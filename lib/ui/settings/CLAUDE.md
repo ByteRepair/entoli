@@ -93,7 +93,15 @@ versions found afterwards. "Run Setup" owns the full lifecycle — it copies
 the base rootfs from cache, runs the install script, and writes a
 `.setup-complete` marker — so the turn path no longer creates the rootfs
 lazily. The chat page gates the composer on that marker, showing a "setup
-required" bar until it is there. On
+required" bar until it is there; on the host the marker is not enough either,
+since the fetched tools live in a cache directory that can be emptied between
+setups, so the binary is asked after too. Where the tools land follows the env:
+inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go
+to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
+so Byte Repair works on the host env with no root and nothing installed into
+the machine, and a tool already on the machine is used rather than fetched.
+See "Byte Repair's environment, in two variables" in `lib/data/local/CLAUDE.md`.
+On
 Android the "Host" terminal env has no package manager, so the category says
 so and hides the rest until a rootfs is picked from Terminal; on every other
 platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
