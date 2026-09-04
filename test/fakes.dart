@@ -329,7 +329,7 @@ class FakeReminderAlarms implements ReminderAlarms {
     required String title,
     required String body,
     String? chatId,
-    String channel = "reminders",
+    String channel = ReminderAlarms.defaultChannel,
   }) async {
     posted.add((title: title, body: body, chatId: chatId, channel: channel));
   }
@@ -482,19 +482,15 @@ class FakeBackend implements AgentBackend {
   /// What the next turn streams back. Defaults to an immediate, empty reply.
   List<AgentEvent> scriptedEvents = const [DoneEvent()];
 
-  /// What each of the next turns streams back, one entry per call and the
-  /// last repeating: a retry round takes a different reply from the send that
-  /// started it, and this is how a test scripts the whole sequence.
-  /// [scriptedEvents] is still read first, so a test setting either gets what
-  /// it set.
+  /// What each of the next turns streams back, one entry per call: a retry
+  /// round takes a different reply from the send that started it, and this is
+  /// how a test scripts the whole sequence. [scriptedEvents] is still read
+  /// first, so a test setting either gets what it set.
   List<List<AgentEvent>> scriptedRounds = const [];
 
-  List<AgentEvent> _next() {
-    if (scriptedRounds.isEmpty) return scriptedEvents;
-    return scriptedRounds.length == 1
-        ? scriptedRounds[0]
-        : scriptedRounds.removeAt(0);
-  }
+  List<AgentEvent> _next() => scriptedRounds.isEmpty
+      ? scriptedEvents
+      : scriptedRounds.removeAt(0);
 
   /// When set, the turn stays open after the scripted events, the way a real
   /// one does while the backend is still working.

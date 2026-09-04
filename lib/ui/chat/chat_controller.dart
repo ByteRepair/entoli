@@ -1,5 +1,4 @@
 import "dart:async";
-import "dart:math" as math;
 
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
@@ -9,6 +8,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_log.dart";
 import "../../domain/chat_repository.dart";
+import "../../domain/reminder_alarms.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
 import "../../providers.dart";
@@ -189,7 +189,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// own, and the turn it belongs to is already under way.
   Future<void> _maybeNameChat(String prompt) async {
     final repo = ref.read(chatRepositoryProvider);
-    if ((await repo.loadMeta(chatId)).headless == true) return;
+    if (await _isHeadless()) return;
     final title = await repo.suggestTitle(prompt);
     final chat = state.chat;
     if (title == null || chat == null || !ref.mounted) return;
@@ -304,6 +304,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (state.isRunning) return;
     final chat = state.chat;
     if (chat == null || !chat.unfinished) return;
+    // The user re-engaging is a new patience: their budget starts over, the
+    // way a fresh send's would.
+    _round = 0;
     await _startResume();
   }
 
@@ -496,11 +499,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // generation is for. The turn's completer stays open across rounds, so a
     // caller awaiting [turnDone] — the reminder runner, voice — gets one
     // completion, at the true end.
-    if (reason == TurnEnd.error && _retryable && _roundsLeft > 0) {
+    if (reason == TurnEnd.error && _retryable && _round < _roundsTotal) {
       final gen = _retryGen;
       final round = _round;
       _round++;
-      final wait = Duration(seconds: math.pow(2, round).clamp(1, 30).toInt());
+      final wait = Duration(seconds: (1 << round).clamp(1, 30));
       if (!ref.mounted) return;
       state = state.copyWith(
         retry: "Retrying ($_round/$_roundsTotal) — $_errorLine",
@@ -510,8 +513,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       );
       await Future<void>.delayed(wait);
       if (_retryGen != gen || !ref.mounted) return;
-      // A stopped turn has no chat to carry on; a deleted one the same.
-      if (state.chat == null || _interrupted) return;
+      // A deleted chat has nothing to carry on.
+      if (state.chat == null) return;
       await _startResume();
       return;
     }
@@ -549,33 +552,36 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// way the approve mode is, so an edit reaches the next failure rather than
   /// the next launch.
   int get _roundsTotal => ref.read(appSettingsProvider).turnRetries;
-  int get _roundsLeft => math.max(0, _roundsTotal - _round);
 
   /// The notification. A failure the user cannot see is a failure the app has
   /// to say — the turn is over, the chat is on disk, and the tap opens it.
-  /// Posted only where all three hold: the app is not visible (the user is
-  /// somewhere else entirely, not on another chat), the chat is not headless
-  /// (reminder completions are the scheduler's, and a second would be a
-  /// double), and the platform can post at all (a no-op elsewhere, so the
-  /// check is really about not promising what nothing delivers).
+  /// Gated on the app being hidden and the chat not headless: a reminder's
+  /// completion is the scheduler's, and a second would be a double. Where the
+  /// platform has no notification route the port is the no-op it always was.
   Future<void> _notifyFailure(TurnEnd? reason) async {
     if (reason != TurnEnd.error) return;
     if (!ref.read(appHiddenProvider)) return;
-    final repo = ref.read(chatRepositoryProvider);
-    if ((await repo.loadMeta(chatId)).headless == true) return;
+    if (await _isHeadless()) return;
     final alarms = ref.read(reminderAlarmsProvider);
     final title = state.chat?.state.title ?? "Chat failed";
     await alarms.notify(
       title: title,
       body: _errorLine.isEmpty ? "The turn failed." : _errorLine,
       chatId: chatId,
-      channel: "turns",
+      channel: ReminderAlarms.turnFailureChannel,
     );
   }
 
+  /// A chat nobody watches — a reminder's — is the scheduler's to notify.
+  Future<bool> _isHeadless() async =>
+      (await ref.read(chatRepositoryProvider).loadMeta(chatId)).headless == true;
+
   void _onError(Object e) {
     _retryable = false;
-    _recorder.handle(ErrorEvent(e.toString()));
+    final message = e.toString();
+    final lineAt = message.indexOf("\n");
+    _errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+    _recorder.handle(ErrorEvent(message));
     _finishTurn();
   }
 

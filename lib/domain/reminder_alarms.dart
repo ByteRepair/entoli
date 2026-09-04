@@ -8,6 +8,13 @@
 /// [takeFired] drains them, and [fired] is only a nudge for an isolate that
 /// was already up.
 abstract interface class ReminderAlarms {
+  /// The Android channels notifications post on. Kotlin spells its half of
+  /// the ids itself — a method channel's strings are literals on both sides —
+  /// but the Dart call sites name them here, so a rename or a third channel
+  /// is one grep, not three spellings.
+  static const defaultChannel = "reminders";
+  static const turnFailureChannel = "turns";
+
   bool get available;
 
   /// Whether exact alarms are permitted right now. False is common on
@@ -46,14 +53,14 @@ abstract interface class ReminderAlarms {
 
   /// Post a notification. [chatId] rides on its content intent: tapping it
   /// comes back through [takeOpenChat]. [channel] picks the Android channel —
-  /// "reminders" is the reminder completions, the one this port was built for;
-  /// a turn failure posts on "turns" so the user can quiet one half without
-  /// the other.
+  /// [defaultChannel] is the reminder completions, the one this port was
+  /// built for; a turn failure posts on [turnFailureChannel] so the user can
+  /// quiet one half without the other.
   Future<void> notify({
     required String title,
     required String body,
     String? chatId,
-    String channel = "reminders",
+    String channel = ReminderAlarms.defaultChannel,
   });
 
   Future<List<String>> takeFired();
@@ -105,7 +112,7 @@ class UnavailableReminderAlarms implements ReminderAlarms {
     required String title,
     required String body,
     String? chatId,
-    String channel = "reminders",
+    String channel = ReminderAlarms.defaultChannel,
   }) async {}
 
   @override

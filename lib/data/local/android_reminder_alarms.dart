@@ -79,7 +79,7 @@ class AndroidReminderAlarms implements ReminderAlarms {
     required String title,
     required String body,
     String? chatId,
-    String channel = "reminders",
+    String channel = ReminderAlarms.defaultChannel,
   }) =>
       _channel.invokeMethod("notify", {
         "title": title,

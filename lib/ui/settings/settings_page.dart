@@ -10,6 +10,7 @@ import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/temp_chat_ttl.dart";
+import "../../domain/app_settings.dart";
 import "../../providers.dart";
 import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
@@ -663,7 +664,7 @@ class _AgentSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
           ),
         ),
-        const RetryTurnsField(),
+        const _RetryTurnsField(),
       ],
     );
   }
@@ -672,8 +673,8 @@ class _AgentSection extends ConsumerWidget {
 /// How many times a turn that failed on a retryable error is carried on
 /// automatically before it is left failed. Off is the switch; the slider is
 /// the count, the shape the cores slider keeps.
-class RetryTurnsField extends ConsumerWidget {
-  const RetryTurnsField({super.key});
+class _RetryTurnsField extends ConsumerWidget {
+  const _RetryTurnsField();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -690,14 +691,14 @@ class RetryTurnsField extends ConsumerWidget {
             value: on,
             onChanged: (value) => ref
                 .read(appSettingsProvider.notifier)
-                .setTurnRetries(value ? 5 : 0),
+                .setTurnRetries(value ? AppSettings.defaultTurnRetries : 0),
           ),
           if (on) ...[
             Slider(
               value: retries.toDouble(),
               min: 1,
-              max: 10,
-              divisions: 9,
+              max: AppSettings.maxTurnRetries.toDouble(),
+              divisions: AppSettings.maxTurnRetries - 1,
               label: "$retries",
               onChanged: (value) => ref
                   .read(appSettingsProvider.notifier)

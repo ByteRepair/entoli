@@ -162,13 +162,10 @@ class BuiltinOptions {
   /// What the parent agent runs with: one attempt per request, since the
   /// controller retries a failed turn itself. Everything else unchanged — the
   /// [stepLimit], the timeouts, the concurrency caps.
-  BuiltinOptions get parent => withMaxAttempts(1);
-
-  /// A copy with [maxAttempts] replaced.
-  BuiltinOptions withMaxAttempts(int attempts) => BuiltinOptions(
+  BuiltinOptions get parent => BuiltinOptions(
         stepLimit: stepLimit,
         commandTimeout: commandTimeout,
-        maxAttempts: attempts,
+        maxAttempts: 1,
         retryBackoff: retryBackoff,
         maxConcurrentSubAgents: maxConcurrentSubAgents,
         maxConcurrentLlmRequests: maxConcurrentLlmRequests,
