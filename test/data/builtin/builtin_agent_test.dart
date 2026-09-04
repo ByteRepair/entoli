@@ -37,7 +37,7 @@ void main() {
     BuiltinOptions options = const BuiltinOptions(),
     ApproveMode approveMode = ApproveMode.never,
     bool canRunCommands = true,
-    Future<String> Function(String path, {String? artifactId})? saveArtifact,
+    Future<String> Function(String path, String entryFile, {String? artifactId})? saveArtifact,
     MemorySettings memory = MemorySettings.off,
     List<InstructionFile> instructions = const [],
     MemoryStore? memoryStore,
@@ -775,16 +775,17 @@ void main() {
 
   group("artifacts", () {
     /// A [saveArtifact] that records what it was given and returns a fake id.
-    Future<String> Function(String, {String? artifactId}) saveAndRecord(
-      List<({String path, String? artifactId})> saved,
+    Future<String> Function(String, String, {String? artifactId})
+        saveAndRecord(
+      List<({String path, String? entryFile, String? artifactId})> saved,
     ) =>
-        (path, {artifactId}) async {
-          saved.add((path: path, artifactId: artifactId));
+        (path, entryFile, {artifactId}) async {
+          saved.add((path: path, entryFile: entryFile, artifactId: artifactId));
           return "art-${saved.length}";
         };
 
     test("publishes a workspace path and yields an ArtifactEvent", () async {
-      final saved = <({String path, String? artifactId})>[];
+      final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
         [artifactCall("report/index.html", title: "Demo")],
         [finish],
@@ -795,6 +796,7 @@ void main() {
 
       expect(saved, hasLength(1));
       expect(saved.first.path, "report/index.html");
+      expect(saved.first.entryFile, "index.html");
 
       final artifactEvent = events.whereType<ArtifactEvent>().single;
       expect(artifactEvent.title, "Demo");
@@ -812,7 +814,7 @@ void main() {
     });
 
     test("updates in place when artifact_id is passed", () async {
-      final saved = <({String path, String? artifactId})>[];
+      final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
         [artifactCall("report/index.html", artifactId: "existing-id")],
         [finish],
@@ -822,11 +824,11 @@ void main() {
           .toList();
 
       expect(saved.first.artifactId, "existing-id");
-      expect(saved.first.artifactId, isNotNull);
+      expect(saved.first.entryFile, "index.html");
     });
 
     test("rejects a call with no path argument", () async {
-      final saved = <({String path, String? artifactId})>[];
+      final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
         [LlmCompletion(
           message: LlmMessage(
