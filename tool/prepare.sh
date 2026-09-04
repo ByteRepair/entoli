@@ -5,6 +5,7 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 
 flutter pub get
 dart run tool/gen_bundled_skills.dart
+dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart
 dart run build_runner build
 

@@ -4,6 +4,7 @@ import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
 import "../../core/log.dart";
+import "../../domain/bundled_prompt_file.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
 import "../../domain/prompt_library.dart";

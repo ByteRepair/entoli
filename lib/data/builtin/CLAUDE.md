@@ -628,10 +628,11 @@ would be read — the patterns are globs, anchored, `**` spanning directories,
 and a pattern with no slash matching the file's name alone.
 
 A built-in project that ships a note of its own reads no file at all: the
-note, in code, is the turn's instructions in full, and the nested walk on a
+note, embedded at build time from `assets/prompts/projects/<project>/system/`,
+is the turn's instructions in full, and the nested walk on a
 file read is off beside it, since there is no file anywhere to pull in.
 `anonymous` is the one today — the app's short account of what an anonymous
-chat is, which a file on the user's disk could delete or edit away from under
+chat is, which nothing on the user's disk can delete or edit away from under
 a turn.
 
 An `@path` line in the project's file imports the file it names, depth-first
