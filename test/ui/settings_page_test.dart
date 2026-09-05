@@ -51,6 +51,51 @@ void main() {
       expect(find.text("Appearance"), findsNothing);
     });
 
+    // Opened for a category, narrow as well as wide: the category is the page
+    // itself, nothing behind it, so back leaves settings rather than a list
+    // the link skipped.
+    testWidgets("initialCategory opens the category directly on a narrow window",
+        (tester) async {
+      await app.pump(
+          tester, const SettingsPage(initialCategory: SettingsCategory.providers));
+      await settleIo(tester);
+
+      expect(find.text("Add provider"), findsOneWidget);
+      expect(find.widgetWithText(AppBar, "Settings"), findsNothing);
+    });
+
+    // The same focus mode on a wide window: the tour's rows and the Byte
+    // Repair bar push settings for one category, and the panel has nothing to
+    // do with how they got there.
+    testWidgets("focus opens the category alone on a wide window", (tester) async {
+      useWindow(tester, const Size(1200, 800));
+      await app.pump(
+          tester,
+          const SettingsPage(
+              initialCategory: SettingsCategory.providers, focus: true));
+      await settleIo(tester);
+
+      expect(find.text("Add provider"), findsOneWidget);
+      expect(find.widgetWithText(AppBar, "Settings"), findsNothing);
+      // The panel is not beside what it was not used to pick.
+      expect(find.text("Appearance"), findsNothing);
+    });
+
+    // A deep-link in without focus is a selection, not a replacement: the
+    // panel stays, and the named category is what is showing beside it.
+    testWidgets("initialCategory without focus keeps the panel on a wide window",
+        (tester) async {
+      useWindow(tester, const Size(1200, 800));
+      await app.pump(
+          tester, const SettingsPage(initialCategory: SettingsCategory.providers));
+      await settleIo(tester);
+
+      expect(find.text("Add provider"), findsOneWidget);
+      expect(find.widgetWithText(AppBar, "Settings"), findsOneWidget);
+      expect(tile("General"), findsOneWidget);
+      expect(tile("Providers"), findsOneWidget);
+    });
+
     testWidgets("a category is then a page over it, left by the back key", (tester) async {
       final handlesBack = frameworkHandlesBack(tester);
       await app.pump(tester, const SettingsPage());
@@ -156,6 +201,113 @@ void main() {
     expect(find.text("Provider"), findsNothing);
   });
 
+  group("the recommended provider", () {
+    testWidgets("stands on an empty page, with both links working", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+
+      expect(
+          find.textContaining("We recommend Ollama Cloud"), findsOneWidget);
+      await tester.tap(find.text("Sign up"));
+      await settleIo(tester);
+      expect(
+          app.linkOpener.opened,
+          contains(Uri.parse("https://signin.ollama.com/sign-up")));
+
+      await tester.tap(find.text("Ollama Cloud privacy policy"));
+      await settleIo(tester);
+      expect(app.linkOpener.opened,
+          contains(Uri.parse("https://ollama.com/privacy")));
+    });
+
+    // The key box is the thing that actually configures the app: signing up
+    // does not, which is why the two steps sit side by side.
+    testWidgets("adds Ollama Cloud from a pasted key", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+
+      final add = find.widgetWithText(FilledButton, "Add Ollama Cloud");
+      expect(tester.widget<FilledButton>(add).onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), "ollama-key-123");
+      await tester.pump();
+      expect(tester.widget<FilledButton>(add).onPressed, isNotNull);
+
+      await tester.tap(add);
+      await settleIo(tester, least: 8);
+
+      final providers = app.container.read(appSettingsProvider).llmProviders;
+      expect(providers.map((p) => p.id), contains("ollama-cloud"));
+      expect(
+          providers.firstWhere((p) => p.id == "ollama-cloud").apiKey,
+          "ollama-key-123");
+      expect(find.textContaining("We recommend Ollama Cloud"), findsNothing);
+
+      // The first provider becomes what every role resolves to, until the
+      // user picks something themselves. Adding the card unmounts it on the
+      // next frame — the adoption has to survive that, or the pickers stay
+      // on None/Off.
+      final settings = app.container.read(appSettingsProvider);
+      expect(settings.defaultProviderId, "ollama-cloud");
+      expect(settings.defaultModelId, isNull);
+      expect(settings.titleProviderId, "ollama-cloud");
+      expect(settings.titleModelId, isNull);
+      expect(settings.memoryProviderId, "ollama-cloud");
+      expect(settings.classifierProviderId, "ollama-cloud");
+    });
+
+    testWidgets("and is gone once a provider is configured", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await tester.tap(find.text("Add provider"));
+      await settleIo(tester);
+      await tester.tap(find.text("Anthropic"));
+      await settleIo(tester);
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 3);
+
+      expect(find.textContaining("We recommend Ollama Cloud"), findsNothing);
+    });
+
+    // A preset added through the dialog keeps the defaults the preset names:
+    // the dialog is a form over the endpoint, not a second place to decide
+    // them, and losing them left the picker an initialValue nothing renders.
+    testWidgets("a preset added through the dialog keeps its defaults", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await tester.tap(find.text("Add provider"));
+      await settleIo(tester);
+      await tester.tap(find.text("Anthropic"));
+      await settleIo(tester);
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 3);
+
+      final provider = app.container
+          .read(appSettingsProvider)
+          .llmProviders
+          .firstWhere((p) => p.id == "anthropic");
+      expect(provider.defaultModelId, "claude-sonnet-5");
+      expect(provider.defaultLightModelId, "claude-haiku-4-5");
+    });
+
+    // The first provider added becomes what everything resolves to: the LLM
+    // and Title LLM fields read as its Default entry, not as None/Off with a
+    // dead reset button.
+    testWidgets("the first provider added becomes every field's Default", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await tester.tap(find.text("Add provider"));
+      await settleIo(tester);
+      await tester.tap(find.text("Anthropic"));
+      await settleIo(tester);
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 3);
+
+      final settings = app.container.read(appSettingsProvider);
+      expect(settings.defaultProviderId, "anthropic");
+      expect(settings.defaultModelId, isNull);
+      expect(settings.titleProviderId, "anthropic");
+      expect(settings.titleModelId, isNull);
+      expect(settings.memoryProviderId, "anthropic");
+      expect(settings.classifierProviderId, "anthropic");
+    });
+  });
+
   testWidgets("selecting a model persists it with its provider", (tester) async {
     await pumpSettings(tester, app, SettingsCategory.llms);
 
@@ -184,7 +336,7 @@ void main() {
     await pumpSettings(tester, app, SettingsCategory.llms);
 
     expect(tester.takeException(), isNull);
-    expect(find.text(defaultOptionLabel), findsOneWidget);
+    expect(find.text(noneOptionLabel), findsOneWidget);
   });
 
   group("the title model", () {
@@ -195,7 +347,7 @@ void main() {
       await scrollTo(tester, label);
       final field = find.descendant(
         of: find.ancestor(of: label, matching: find.byType(LabelledField)),
-        matching: find.byType(DropdownButtonFormField<ModelOption?>),
+        matching: find.byType(DropdownButtonFormField<ModelChoice>),
       );
       await tester.tap(field);
       await settleIo(tester);
@@ -305,9 +457,12 @@ void main() {
     await pumpSettings(tester, app, SettingsCategory.llms);
     expect(find.text("Qwen 2.5"), findsOneWidget);
 
-    await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").last);
+    // No provider is configured in this fixture, so no Default entry exists
+    // to name and reset lands on None.
+    await tester.tap(find.byTooltip("Reset to $noneOptionLabel").last);
     await settleIo(tester);
 
+    expect(app.container.read(appSettingsProvider).defaultProviderId, isNull);
     expect(app.container.read(appSettingsProvider).defaultModelId, isNull);
     expect(find.text("Qwen 2.5"), findsNothing);
   });

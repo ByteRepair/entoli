@@ -71,9 +71,16 @@ enum SettingsCategory {
 }
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, this.initialCategory});
+  const SettingsPage({super.key, this.initialCategory, this.focus = false});
 
   final SettingsCategory? initialCategory;
+
+  /// Pushed for one category — the welcome tour's setup rows, the Byte Repair
+  /// bar — rather than arrived at through the settings list. That category is
+  /// the whole page on a wide window too, with nothing behind it: back leaves
+  /// settings rather than a list it skipped, and the panel is not drawn
+  /// beside what it was not used to pick.
+  final bool focus;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -97,6 +104,16 @@ class _SettingsPageState extends State<SettingsPage> {
     // The page is the whole window, so its width is the window's — no
     // `LayoutBuilder`, which would run the Scaffold's build during layout.
     final wide = MediaQuery.sizeOf(context).width >= navBreakpoint;
+    final focus = widget.focus && widget.initialCategory != null;
+    // Narrow has no panel for a preselected category to sit beside: whatever
+    // opened settings for one category, focused or not, opens it as the page.
+    if (focus || (!wide && widget.initialCategory != null)) {
+      final category = widget.initialCategory!;
+      return Scaffold(
+        appBar: AppBar(title: Text(category.label)),
+        body: _categoryBody(category),
+      );
+    }
     final categories = _Categories(
       // Nothing is selected where the list is the whole page: a category there
       // is somewhere to go rather than what is showing beside it.
@@ -105,7 +122,9 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     final bar = AppBar(title: const Text("Settings"));
 
-    if (!wide) return Scaffold(appBar: bar, body: categories);
+    if (!wide) {
+      return Scaffold(appBar: bar, body: categories);
+    }
     return Scaffold(
       appBar: bar,
       body: Row(
@@ -621,10 +640,11 @@ class _AgentSection extends ConsumerWidget {
         ),
         LabelledField(
           label: "Classifier LLM",
-          child: OptionalModelPicker(
-            offLabel: "Off",
-            helperText: "Classifies commands as safe, dangerous, or uncertain. "
-                "Off, auto mode asks for every command.",
+          child: ModelPicker(
+            nullLabel: "Off",
+            defaultOf: (config) => config.defaultLightModelId,
+            helperOffText: "Classifies commands as safe, dangerous, or "
+                "uncertain. Off, auto mode asks for every command.",
             choice: (
               providerId: settings.classifierProviderId,
               modelId: settings.classifierModelId,
@@ -721,25 +741,124 @@ class _TempChatSection extends ConsumerWidget {
   }
 }
 
+/// The nudge an empty Providers page stands in for: a recommended provider,
+/// the reason for it, and the two ways to act on it — signing up, or pasting
+/// a key already in hand. Gone the moment a provider of any kind is configured.
+class _RecommendedProvider extends ConsumerStatefulWidget {
+  const _RecommendedProvider();
+
+  @override
+  ConsumerState<_RecommendedProvider> createState() =>
+      _RecommendedProviderState();
+}
+
+class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
+  static final _signUp = Uri.parse("https://signin.ollama.com/sign-up");
+  static final _privacy = Uri.parse("https://ollama.com/privacy");
+
+  static final _ollamaCloud =
+      llmProviderPresets.firstWhere((p) => p.id == "ollama-cloud");
+
+  final _apiKey = TextEditingController();
+
+  @override
+  void dispose() {
+    _apiKey.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addWithKey() async {
+    final key = _apiKey.text.trim();
+    if (key.isEmpty) return;
+    // Notifier first: adding the provider unmounts this card on the next
+    // frame, and the adoption must outlive it rather than resume on a
+    // defunct ref.
+    final notifier = ref.read(appSettingsProvider.notifier);
+    final settings = ref.read(appSettingsProvider);
+    await notifier.setProviders([
+      ...settings.llmProviders.where((p) => p.id != _ollamaCloud.id),
+      _ollamaCloud.copyWith(apiKey: key),
+    ]);
+    await notifier.adoptFirstProvider(_ollamaCloud.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasKey = _apiKey.text.trim().isNotEmpty;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Entoli works with both privacy-respecting and other providers. "
+              "We recommend Ollama Cloud: it does not keep or train on your "
+              "prompts and outputs.",
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () =>
+                  ref.read(linkOpenerProvider).open(context, _signUp),
+              child: const Text("Sign up"),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () =>
+                  ref.read(linkOpenerProvider).open(context, _privacy),
+              child: const Text("Ollama Cloud privacy policy"),
+            ),
+            const Divider(height: 32),
+            const Text("Already have a key?"),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _apiKey,
+              obscureText: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: "Ollama API key"),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: hasKey ? _addWithKey : null,
+              child: const Text("Add Ollama Cloud"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProvidersEditor extends ConsumerWidget {
   const _ProvidersEditor();
 
   /// One upsert for both routes in: editing an entry and adding one that turns
   /// out to share an id mean the same thing, and two entries under one name
   /// would show the same models twice.
+  ///
+  /// Adding a provider also takes its defaults where the app has none: the
+  /// chat LLM, the title model and the rest all ride on a provider being
+  /// picked, and a first provider picked with nothing to answer by is a
+  /// welcome screen stuck on a dead Next.
   Future<void> _upsert(
     BuildContext context,
     WidgetRef ref, {
     LlmProviderConfig? initial,
     String title = "Add provider",
   }) async {
+    // Read off the widget's ref before the dialog: this page can go away
+    // while it is open, and the notifier is what survives it.
+    final notifier = ref.read(appSettingsProvider.notifier);
+    final settings = ref.read(appSettingsProvider);
     final saved = await promptForProvider(context, initial: initial, title: title);
     if (saved == null) return;
-    final providers = [
-      ...ref.read(appSettingsProvider).llmProviders.where((p) => p.id != saved.id),
+    final isNew = settings.llmProviders.every((p) => p.id != saved.id);
+    await notifier.setProviders([
+      ...settings.llmProviders.where((p) => p.id != saved.id),
       saved,
-    ];
-    await ref.read(appSettingsProvider.notifier).setProviders(providers);
+    ]);
+    if (isNew) await notifier.adoptFirstProvider(saved.id);
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
@@ -756,6 +875,7 @@ class _ProvidersEditor extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (providers.isEmpty) const _RecommendedProvider(),
         SectionHeader(
           "Providers",
           description: providers.isEmpty

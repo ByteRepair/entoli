@@ -7,7 +7,10 @@ import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 
 /// What a new chat gets. A live reference, not a snapshot: retargeting it
-/// retargets every chat that pinned nothing.
+/// retargets every chat that pinned nothing. The LLM field's Default is the
+/// provider's own recommended model, resolved at turn time; the Title LLM
+/// names chats and defaults to the provider's light model, with Off as an
+/// explicit opt-out.
 class DefaultsSection extends ConsumerWidget {
   const DefaultsSection({super.key});
 
@@ -18,11 +21,10 @@ class DefaultsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader("New chats"),
-        // Nothing above the app level to inherit from: Default means whatever
-        // the backend picks.
         LabelledField(
           label: "LLM",
           child: ModelPicker(
+            nullLabel: noneOptionLabel,
             choice: (
               providerId: settings.defaultProviderId,
               modelId: settings.defaultModelId,
@@ -33,10 +35,11 @@ class DefaultsSection extends ConsumerWidget {
         ),
         LabelledField(
           label: "Title LLM",
-          child: OptionalModelPicker(
-            offLabel: "Off",
-            helperText: "Names a chat from its first message. Off, chats stay "
-                "\"New chat\" until you rename them.",
+          child: ModelPicker(
+            nullLabel: "Off",
+            defaultOf: (config) => config.defaultLightModelId,
+            helperOffText: "Names a chat from its first message. Off, chats "
+                "stay \"New chat\" until you rename them.",
             choice: (
               providerId: settings.titleProviderId,
               modelId: settings.titleModelId,

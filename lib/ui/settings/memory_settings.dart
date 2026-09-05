@@ -137,9 +137,10 @@ class AutoMemorySection extends ConsumerWidget {
         if (on)
           LabelledField(
             label: "Memory LLM",
-            child: OptionalModelPicker(
-              offLabel: "Off",
-              helperText: "What writes memories in the background. Off, "
+            child: ModelPicker(
+              nullLabel: "Off",
+              defaultOf: (config) => config.defaultLightModelId,
+              helperOffText: "What writes memories in the background. Off, "
                   "extraction is inert and the store only ever holds what the "
                   "agent or you saved.",
               choice: (
