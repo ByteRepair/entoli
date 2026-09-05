@@ -306,6 +306,11 @@ object VoiceChannel {
     // than as a room with nobody in it — see [onError].
     private const val FAST_REFUSAL_MS = 1500L
 
+    // How long a refused session's tear-down is waited out before the next
+    // `startListening`: one inside that window is answered with a session
+    // that opens and then reports nothing at all — see [askDifferently].
+    private const val TEARDOWN_MS = 200L
+
     // --- Ending the utterance ---
     //
     // **A session that never ends is a turn that is never sent**, and it is the
@@ -446,7 +451,8 @@ object VoiceChannel {
         if (next != null) {
             Log.i(TAG, "asking again as $next")
             ask = next
-            restart()
+            rebind()
+            restart(after = TEARDOWN_MS)
         } else {
             nextService(
                 "This device has no speech recognition for ${asked().displayLanguage}.")
@@ -560,9 +566,11 @@ object VoiceChannel {
             // real cycle, not a rung refusing to listen — see [onError].
             fastRefusals = 0
             lastPartial = ""
-            // Armed here rather than on the first partial: a service that
-            // reports none at all still has to end its utterance somewhere.
-            armEndpoint()
+            // Not armed here: a service that streams no partials — Google's on
+            // the network rung streams none — gives the transcription nothing
+            // to judge, and an endpoint armed at the start of speech fires
+            // QUIET_MS in, mid-sentence. The only clock such a service has is
+            // its own detector, so it ends the utterance itself.
         }
 
         override fun onRmsChanged(rmsdB: Float) {
@@ -572,8 +580,8 @@ object VoiceChannel {
         override fun onBufferReceived(buffer: ByteArray?) {}
 
         // The service thinks the utterance is over, which is not the same as
-        // having said what was in it. Results normally follow within a moment;
-        // where they do not, the endpoint above is what asks.
+        // having said what was in it. Results normally follow; where they do
+        // not, the endpoint armed here is what asks.
         override fun onEndOfSpeech() {
             armEndpoint()
         }
@@ -616,7 +624,7 @@ object VoiceChannel {
                 // kind, and is not going to clear.
                 SpeechRecognizer.ERROR_CLIENT -> if (sessionOpened) {
                     sessionOpened = false
-                    restart(after = 200)
+                    restart(after = TEARDOWN_MS)
                 } else {
                     nextService("Speech recognition could not start.")
                 }
@@ -654,10 +662,23 @@ object VoiceChannel {
         }
 
         override fun onResults(results: Bundle?) {
+            // Read before [disarmEndpoint] clears it: whether the partial held
+            // the transcript an empty final dropped is the arm nothing draws —
+            // never the words themselves.
+            val partialHeld = lastPartial.isNotEmpty()
             disarmEndpoint()
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val text = matches?.firstOrNull()?.trim()
-            if (!text.isNullOrEmpty()) send("heard", text)
+            if (!text.isNullOrEmpty()) {
+                send("heard", text)
+            } else {
+                // The arm nothing draws for a turn that never happens.
+                Log.w(
+                    TAG,
+                    "empty final result (matches=${matches?.size ?: 0}, " +
+                        "partial=${if (partialHeld) "held" else "empty"})",
+                )
+            }
             restart()
         }
 
