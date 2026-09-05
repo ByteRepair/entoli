@@ -110,6 +110,9 @@ Future<String> platformCacheDir() async => "/agent-chat-cache";
 /// Nothing to register: the Silero asset is not in this build.
 void platformRegisterVoiceLicences() {}
 
+/// No recorder of the platform's own: voice mode runs nothing here.
+void platformRegisterRecorder() {}
+
 VoiceModelStore platformVoiceModelStore(String cacheDir) =>
     const UnavailableVoiceModelStore();
 

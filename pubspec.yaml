@@ -62,9 +62,12 @@ dependencies:
   # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
   # activity detection from one dependency: `record` opens the microphone and
   # `audioplayers` says the reply back. See "Voice mode" in CLAUDE.md, and
-  # issue #58 for why a browser gets none of this.
+  # issue #58 for why a browser gets none of this. The interface and Linux
+  # packages are reached directly by the pw-record fallback, `LinuxRecorder`.
   sherpa_onnx: ^1.13.6
   record: ^7.1.1
+  record_platform_interface: ^2.1.0
+  record_linux: ^2.1.1
   audioplayers: ^6.8.1
 
   # Misc
