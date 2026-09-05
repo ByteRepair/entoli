@@ -289,6 +289,7 @@ class _LlmField extends ConsumerWidget {
     return LabelledField(
       label: "LLM",
       child: ModelPicker(
+        nullLabel: defaultOptionLabel,
         choice: (providerId: meta.provider, modelId: meta.model),
         inherited: (
           providerId: defaults.defaultProviderId,

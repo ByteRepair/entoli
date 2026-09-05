@@ -437,6 +437,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..titleProviderId = choice.providerId
     ..titleModelId = choice.modelId);
 
+  /// What classifies commands when auto mode is on, or nothing at all.
+  Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
+    ..classifierProviderId = choice.providerId
+    ..classifierModelId = choice.modelId);
+
   /// Read when a command runs, so an edit reaches the next one.
   Future<void> setEnvironment(Map<String, String> env) =>
       _update((s) => s.environment = Map.unmodifiable(env));
@@ -446,11 +451,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   /// How many times a retryable turn failure is carried on automatically.
   Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
-
-  /// What classifies commands when auto mode is on, or nothing at all.
-  Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
-    ..classifierProviderId = choice.providerId
-    ..classifierModelId = choice.modelId);
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
@@ -613,12 +613,39 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(chatListProvider);
   }
 
-  /// The endpoints the agent can call. The model list is rebuilt from them, so
-  /// it is invalidated here rather than left showing the old one.
+  /// The endpoints the agent can call, replacing any entry that shares an id.
+  /// The model list is rebuilt from them, so it is invalidated here rather
+  /// than left showing the old one.
+  ///
+  /// The first provider ever configured becomes what every still-unset role
+  /// resolves to — the same `_update` as the save, so it cannot land half
+  /// done — until the user picks something themselves. A role the user has
+  /// already picked is left where it is; importing a backup and other bulk
+  /// writes stay on [setProviders], which adopts nothing.
+  Future<void> upsertProvider(LlmProviderConfig provider) async {
+    final existing = state.llmProviders;
+    final isNew = existing.every((p) => p.id != provider.id);
+    await _update((s) => s
+      ..llmProviders = List.unmodifiable(
+          [...existing.where((p) => p.id != provider.id), provider])
+      ..defaultProviderId = s.defaultProviderId ?? (isNew ? provider.id : null)
+      ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
+      ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
+      ..classifierProviderId =
+          s.classifierProviderId ?? (isNew ? provider.id : null));
+    ref.invalidate(availableModelsProvider);
+  }
+
+  /// The endpoints the agent can call, written as given. The model list is
+  /// rebuilt from them, so it is invalidated here rather than left showing
+  /// the old one. Bulk and removal writes: no adoption.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
     await _update((s) => s.llmProviders = List.unmodifiable(providers));
     ref.invalidate(availableModelsProvider);
   }
+
+  /// Whether the welcome tour has been finished, written by its Done.
+  Future<void> setWelcomeSeen(bool seen) => _update((s) => s.welcomeSeen = seen);
 
   /// Change a copy and publish it: the notifier compares by identity, so
   /// editing in place would save the file and update nothing on screen.

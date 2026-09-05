@@ -75,6 +75,26 @@ const testModels = [
   ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
 ];
 
+/// The models [testProvider] is answered with, labelled the way the real
+/// registry labels them: `<provider display name> · <model id>`.
+const testProviderModelIds = ["qwen-2.5", "claude-sonnet-4", "llama-3", "claude-haiku-3"];
+final testProviderModels = [
+  for (final id in testProviderModelIds)
+    ModelOption(providerId: testProviderId, modelId: id, label: "Test · $id"),
+];
+
+/// The provider the model-picker tests configure: one entry with both defaults
+/// named, so the injected "Default" entry has something to point at.
+const testProviderId = "test";
+const testProvider = LlmProviderConfig(
+  id: testProviderId,
+  label: "Test",
+  api: LlmApi.openai,
+  baseUrl: "https://test.example/v1",
+  defaultModelId: "glm-5.3-flash",
+  defaultLightModelId: "nemotron-3-nano:30b",
+);
+
 /// A library whose skills include two names sharing a prefix, so tests can
 /// assert the menu filters, and whose entries are deliberately out of order.
 PromptLibrary testLibrary() => PromptLibrary([
@@ -461,14 +481,14 @@ class FakeBackend implements AgentBackend {
     );
   }
 
-  final List<({String prompt, String model, String provider})> questions = [];
+  final List<({String prompt, String? model, String? provider})> questions = [];
 
   /// What `ask` answers. Null is a model that could not answer.
   String? scriptedAnswer;
 
   @override
   Future<String?> ask(String prompt,
-      {required String model, required String provider}) async {
+      {required String? model, required String? provider}) async {
     questions.add((prompt: prompt, model: model, provider: provider));
     return scriptedAnswer;
   }
