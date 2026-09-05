@@ -2,9 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/providers.dart";
-import "package:agent_chat/ui/app_shell.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/settings/welcome_page.dart";
+import "package:agent_chat/ui/welcome_gate.dart";
 
 import "../harness.dart";
 
@@ -17,6 +17,13 @@ void main() {
   Finder button(String label) => find.widgetWithText(FilledButton, label);
 
   Finder previous() => find.widgetWithText(OutlinedButton, "Previous");
+
+  Future<void> walkToLast(WidgetTester tester) async {
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(button("Next"));
+      await tester.pumpAndSettle();
+    }
+  }
 
   testWidgets("walks forward and back through four pages", (tester) async {
     await app.pump(tester, const WelcomePage());
@@ -54,12 +61,9 @@ void main() {
     expect(button("Next"), findsNothing);
   });
 
-  testWidgets("Done marks the tour seen", (tester) async {
+  testWidgets("Done marks the tour seen and leaves the page", (tester) async {
     await app.pump(tester, const WelcomePage());
-    for (var i = 0; i < 3; i++) {
-      await tester.tap(button("Next"));
-      await tester.pumpAndSettle();
-    }
+    await walkToLast(tester);
     await tester.tap(button("Done"));
     await settleIo(tester, least: 3);
 
@@ -68,8 +72,6 @@ void main() {
   });
 
   group("in settings", () {
-    Finder tile(String label) => find.widgetWithText(ListTile, label);
-
     testWidgets("Welcome is the first item in the list", (tester) async {
       await app.pump(tester, const SettingsPage());
 
@@ -85,43 +87,39 @@ void main() {
 
     testWidgets("picked wide, the tour fills the pane", (tester) async {
       useWindow(tester, const Size(1200, 800));
-      await app.pump(tester, const SettingsPage());
-
-      await tester.tap(tile("Welcome"));
-      await settleIo(tester);
+      await pumpSettings(tester, app, SettingsCategory.welcome);
 
       expect(find.byType(WelcomeTour), findsOneWidget);
       expect(find.text("A model to answer"), findsNothing);
     });
 
-    testWidgets("and narrow, it is a page over the list", (tester) async {
-      await app.pump(tester, const SettingsPage());
-
-      await tester.tap(tile("Welcome"));
-      await settleIo(tester);
+    // Done in a settings pane has nothing of its own to leave, so it must not
+    // pop the page holding it.
+    testWidgets("Done there writes the flag and keeps the page", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.welcome);
+      await walkToLast(tester);
+      await tester.tap(button("Done"));
+      await settleIo(tester, least: 3);
 
       expect(find.byType(WelcomeTour), findsOneWidget);
-      expect(find.widgetWithText(AppBar, "Welcome"), findsOneWidget);
+      expect(app.container.read(appSettingsProvider).welcomeSeen, isTrue);
     });
   });
 
   testWidgets("an unseen tour opens over the shell; a seen one does not",
       (tester) async {
-    await app.pump(tester, const AppShell());
+    await app.pump(tester, const WelcomeGate(child: SizedBox.shrink()));
     await tester.pump();
     expect(find.byType(WelcomePage), findsOneWidget);
 
     // Walk it out; the flag lands through the notifier.
-    for (var i = 0; i < 3; i++) {
-      await tester.tap(button("Next"));
-      await tester.pumpAndSettle();
-    }
+    await walkToLast(tester);
     await tester.tap(button("Done"));
     await settleIo(tester, least: 3);
     expect(find.byType(WelcomePage), findsNothing);
 
-    // A shell built again over settings now marked seen stays bare.
-    await app.pump(tester, const AppShell());
+    // Built again over settings now marked seen, the gate stays bare.
+    await app.pump(tester, const WelcomeGate(child: SizedBox.shrink()));
     await tester.pump();
     expect(find.byType(WelcomePage), findsNothing);
   });

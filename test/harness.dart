@@ -694,15 +694,18 @@ Future<void> pumpAppearance(WidgetTester tester, TestApp app) async {
 Future<void> openCategory(WidgetTester tester, SettingsCategory category) async {
   if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
     await pressBack(tester);
-    // The list keeps the scroll position it had, which can have the category
-    // above the viewport when the one left was far down it.
+  }
+  final tile = find.widgetWithText(ListTile, category.label);
+  // Coming back from a far-down category, the one wanted can be above the
+  // viewport, off the top of the list's extent. A drag down finds the top,
+  // where [scrollTo]'s drag-up cannot.
+  if (tile.evaluate().isEmpty) {
     await tester.drag(find.byType(Scrollable).first, const Offset(0, 400));
     await tester.pumpAndSettle();
   }
-  final tile = find.widgetWithText(ListTile, category.label);
-  // Only when it is off the bottom: [scrollTo] aligns what it reveals with the
-  // top of the list, which would push the categories above it out of the tree
-  // and leave the next call with nothing to tap.
+  // Only when it is still off the bottom: [scrollTo] aligns what it reveals
+  // with the top of the list, which would push the categories above it out of
+  // the tree and leave the next call with nothing to tap.
   if (tile.evaluate().isEmpty) await scrollTo(tester, tile);
   await tester.tap(tile);
   await settleIo(tester);

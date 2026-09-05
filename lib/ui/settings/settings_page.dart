@@ -31,7 +31,9 @@ import "../widgets/section_header.dart";
 import "agents_settings.dart";
 import "assistant_settings.dart";
 import "byte_repair_settings.dart";
+import "llm_settings.dart";
 import "local_model_settings.dart";
+import "memory_settings.dart";
 import "privacy_policy_page.dart";
 import "reminders.dart";
 import "skills_settings.dart";
@@ -110,16 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           SizedBox(width: navPanelWidth, child: categories),
           const VerticalDivider(width: 1),
-          // The tour sizes itself to the pane rather than scrolling in one,
-          // so it is rendered whole where the other categories are lists.
-          Expanded(
-            child: _category == SettingsCategory.welcome
-                ? const KeyedSubtree(
-                    key: ValueKey(SettingsCategory.welcome),
-                    child: WelcomeTour(),
-                  )
-                : ListView(key: ValueKey(_category), children: _sectionsOf(_category)),
-          ),
+          Expanded(child: _categoryBody(_category, key: ValueKey(_category))),
         ],
       ),
     );
@@ -147,19 +140,22 @@ class _CategoryPage extends StatelessWidget {
     }
     return Scaffold(
       appBar: AppBar(title: Text(category.label)),
-      body: category == SettingsCategory.welcome
-          ? const WelcomeTour()
-          : ListView(children: _sectionsOf(category)),
+      body: _categoryBody(category),
     );
   }
 }
 
+/// What a category draws in either layout. Welcome is the tour, a pager with
+/// its own bar that cannot scroll in a list; everything else is its sections.
+Widget _categoryBody(SettingsCategory category, {Key? key}) =>
+    category == SettingsCategory.welcome
+        ? const WelcomeTour()
+        : ListView(key: key, children: _sectionsOf(category));
+
 /// What is filed under a category, whether it is drawn beside the list or on a
-/// page of its own.
+/// page of its own. [SettingsCategory.welcome] is not filed anywhere: the tour
+/// is a body of its own, which [_categoryBody] renders whole.
 List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
-      // The tour is a pager with its own bar rather than a list of sections,
-      // so the two layouts branch on it instead of filing anything here.
-      SettingsCategory.welcome => const [],
       // The agent's own settings are here rather than under LLMs: the mode is a
       // behaviour, and the classifier picker travels with it because auto mode
       // is unusable without one.
@@ -222,6 +218,9 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
         ],
       SettingsCategory.data => const [_BackupSection()],
       SettingsCategory.about => const [_AboutSection()],
+      // Rendered by [_categoryBody] rather than filed here: the tour is a
+      // pager with its own bar, not a list of sections.
+      SettingsCategory.welcome => const [],
     };
 
 /// The categories as a list: beside the page where there is room for one, and
@@ -579,50 +578,6 @@ class _IconChoice extends StatelessWidget {
       );
 }
 
-/// What a new chat gets. A live reference, not a snapshot: retargeting it
-/// retargets every chat that pinned nothing.
-class DefaultsSection extends ConsumerWidget {
-  const DefaultsSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader("New chats"),
-        // Nothing above the app level to inherit from: Default means whatever
-        // the backend picks.
-        LabelledField(
-          label: "LLM",
-          child: ModelPicker(
-            choice: (
-              providerId: settings.defaultProviderId,
-              modelId: settings.defaultModelId,
-            ),
-            onChanged: (choice) =>
-                ref.read(appSettingsProvider.notifier).setDefault(choice),
-          ),
-        ),
-        LabelledField(
-          label: "Title LLM",
-          child: OptionalModelPicker(
-            offLabel: "Off",
-            helperText: "Names a chat from its first message. Off, chats stay "
-                "\"New chat\" until you rename them.",
-            choice: (
-              providerId: settings.titleProviderId,
-              modelId: settings.titleModelId,
-            ),
-            onChanged: (choice) =>
-                ref.read(appSettingsProvider.notifier).setTitleModel(choice),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// The endpoints the agent calls and how it gates commands.
 class _AgentSection extends ConsumerWidget {
   const _AgentSection();
@@ -727,153 +682,6 @@ class _RetryTurnsField extends ConsumerWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-/// Whether the agent reads AGENTS.md at all, and the sub-gates of a file it
-/// does read: the imports it follows, the nested ones a read pulls in, and
-/// the patterns that keep a file out.
-class InstructionsSection extends ConsumerWidget {
-  const InstructionsSection({super.key});
-
-  Future<void> _editExcludes(BuildContext context, WidgetRef ref) async {
-    final text = await promptForText(
-      context,
-      title: "Excluded files",
-      initial: ref.read(appSettingsProvider).instructionExcludes.join("\n"),
-      confirmLabel: "Save",
-      hint: "One glob per line. ** spans directories, * and ? do not; a "
-          "pattern without a / matches a file name.",
-      maxLines: 5,
-    );
-    if (text == null) return;
-    final patterns = [
-      for (final line in text.split("\n"))
-        if (line.trim().isNotEmpty) line.trim(),
-    ];
-    await ref
-        .read(appSettingsProvider.notifier)
-        .setInstructionExcludes(patterns);
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final excludes = settings.instructionExcludes;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          "Instructions",
-          description: "The AGENTS.md files are read into every turn: yours, "
-              "at the root of your data directory, and the project's, in its "
-              "workspace: rules the user wrote down once. The rows below reach "
-              "further than those two, or keep one of them out.",
-        ),
-        SwitchListTile(
-          title: const Text("Follow @file imports"),
-          subtitle: const Text(
-              "An @path inside an AGENTS.md pulls in the file it names."),
-          value: settings.instructionImports,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setInstructionImports(value),
-        ),
-        SwitchListTile(
-          title: const Text("Nested AGENTS.md"),
-          subtitle: const Text(
-              "Reading a file pulls in a subdirectory's own AGENTS.md."),
-          value: settings.nestedInstructions,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setNestedInstructions(value),
-        ),
-        EditableRow(
-          title: "Excluded files",
-          subtitle: excludes.isEmpty ? "None" : excludes.join("\n"),
-          removeLabel: "Clear exclusions",
-          onTap: () => _editExcludes(context, ref),
-          onRemove: () => ref
-              .read(appSettingsProvider.notifier)
-              .setInstructionExcludes(const []),
-        ),
-      ],
-    );
-  }
-}
-
-/// Whether the auto-memory subsystem runs: the master gate, its three sub-gates
-/// and the background model that writes memories.
-class AutoMemorySection extends ConsumerWidget {
-  const AutoMemorySection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final on = settings.autoMemory;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          "Auto memory",
-          description: "A per-project store of short facts the agent reads into "
-              "relevant turns and writes from finished ones.",
-        ),
-        SwitchListTile(
-          title: const Text("Keep memories"),
-          subtitle: const Text(
-              "Off, the agent keeps no memories and recalls none."),
-          value: on,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setAutoMemory(value),
-        ),
-        SwitchListTile(
-          title: const Text("Recall relevant memories"),
-          subtitle: const Text(
-              "Each turn is offered the memories its prompt is about."),
-          value: on && settings.memoryRecall,
-          onChanged: on
-              ? (value) => ref.read(appSettingsProvider.notifier).setMemoryRecall(value)
-              : null,
-        ),
-        SwitchListTile(
-          title: const Text("Write memories after a turn"),
-          subtitle: const Text(
-              "A background model keeps the facts a finished turn leaves "
-              "behind. Needs a model below."),
-          value: on && settings.memoryExtraction,
-          onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryExtraction(value)
-              : null,
-        ),
-        SwitchListTile(
-          title: const Text("Memory tools"),
-          subtitle: const Text(
-              "The agent can save a memory it judges worth keeping, and "
-              "search the store while a turn runs."),
-          value: on && settings.memoryAgentTool,
-          onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryAgentTool(value)
-              : null,
-        ),
-        if (on)
-          LabelledField(
-            label: "Memory LLM",
-            child: OptionalModelPicker(
-              offLabel: "Off",
-              helperText: "What writes memories in the background. Off, "
-                  "extraction is inert and the store only ever holds what the "
-                  "agent or you saved.",
-              choice: (
-                providerId: settings.memoryProviderId,
-                modelId: settings.memoryModelId,
-              ),
-              onChanged: (choice) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryModel(choice),
-            ),
-          ),
-      ],
     );
   }
 }
