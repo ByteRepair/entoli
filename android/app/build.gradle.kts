@@ -32,17 +32,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // sherpa-onnx is desktop-only. Android's voice mode is the system's own
-    // `TextToSpeech` and `SpeechRecognizer`, so nothing here ever loads these —
-    // and they are 75 MB across the three ABIs, more than the rest of the APK
-    // put together.
-    //
-    // Excluded at packaging rather than removed from the dependency graph,
-    // because they are not ours to remove: `sherpa_onnx` declares all ten of
-    // its per-platform packages itself, and pub resolves what a package asks
-    // for. `dependency_overrides` is the only other lever, and it replaces a
-    // package on *every* platform — see the `sherpa_onnx_web` stub, which is
-    // worth that risk only because it is one package rather than four.
     packaging {
         jniLibs {
             // Extracted rather than mapped from inside the APK: the bundled
@@ -52,12 +41,6 @@ android {
             // compressed and unpacked at install too. See "Bundled tools" in
             // CLAUDE.md.
             useLegacyPackaging = true
-
-            excludes += setOf(
-                "**/libonnxruntime.so",
-                "**/libsherpa-onnx-c-api.so",
-                "**/libsherpa-onnx-cxx-api.so",
-            )
         }
     }
 

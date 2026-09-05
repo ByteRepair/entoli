@@ -348,11 +348,10 @@ VoiceModelStore platformVoiceModelStore(String cacheDir) =>
     FileVoiceModelStore(p.join(cacheDir, "models"));
 
 /// The desktops run sherpa-onnx, which is the only engine they have. Android
-/// runs its own, and ships none of sherpa's native code at all — the `.so`
-/// files are excluded at packaging in `android/app/build.gradle.kts`, so
-/// constructing a [SherpaVoice] there would fail at the first FFI call.
+/// runs its own where their sentinel is picked and sherpa where a downloaded
+/// model is, so it wants the store either way — see [AndroidVoice].
 Voice platformVoice(VoiceModelStore store, String cacheDir) =>
-    Platform.isAndroid ? const AndroidVoice() : SherpaVoice(store, cacheDir);
+    Platform.isAndroid ? AndroidVoice(store, cacheDir) : SherpaVoice(store, cacheDir);
 
 /// Nothing to ask for: a directory on this machine is already as durable as
 /// the app is.

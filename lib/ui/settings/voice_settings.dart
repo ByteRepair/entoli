@@ -56,7 +56,7 @@ class VoiceSection extends ConsumerWidget {
         _SpeakerField(settings: settings),
         _LanguageField(settings: settings),
         if (canListen) const _TouchToSpeak(),
-        if (!voice.downloadsModels) _MissingEngines(installed: installed),
+        if (voice.hasSystemEngines) _MissingEngines(installed: installed),
       ],
     );
   }
@@ -201,16 +201,20 @@ class _Action extends ConsumerWidget {
       );
 }
 
-/// What to do when the device has no engine for one half of voice mode. Only
-/// drawn where there is no catalog to fall back on — on Android, where the
-/// system's engines are the only ones there are, an empty picker is otherwise a
-/// dead end with nothing saying it is one install away from working.
+/// What to do when the device has no engine for one half of voice mode. Drawn
+/// wherever the platform has system engines to be missing — Android, catalog
+/// beside it — because an empty picker is otherwise a dead end with nothing
+/// saying it is one install away from working.
 ///
-/// Both named engines are ordinary apps that register with the platform, so
-/// installing either is the whole of the fix and nothing here has to be told
-/// about it: the next launch asks the device again. Each is named for the half
-/// it answers, since a phone is much more likely to be missing recognition
-/// than synthesis.
+/// Recognition's half is about a *setting* as often as about an install: the
+/// framework gives a recognizer the microphone only where it is the one set as
+/// the system's voice-input service, so a downloaded-but-unset recognizer is
+/// indistinguishable from a missing one from here — and named as the same
+/// thing to do about it. Both named engines are ordinary apps that register
+/// with the platform, so installing either is the whole of the fix and
+/// nothing here has to be told about it: the next launch asks the device
+/// again. Each is named for the half it answers, since a phone is much more
+/// likely to be missing recognition than synthesis.
 class _MissingEngines extends StatelessWidget {
   const _MissingEngines({required this.installed});
 
@@ -227,7 +231,8 @@ class _MissingEngines extends StatelessWidget {
     final speaks = installed.contains(nativeSpeech.id);
     if (hears && speaks) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final missing = [if (!hears) "hear", if (!speaks) "speak"].join(" or ");
+    final style = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     return Padding(
       // The inset every other block on this page keeps: `SectionHeader` above
       // and `LabelledField` between are both 16, and a paragraph flush to the
@@ -236,14 +241,23 @@ class _MissingEngines extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "This device has nothing to $missing with. Voice mode uses the "
-            "engines Android provides, and a phone without Google's apps may "
-            "have none installed. Either of these adds one, and works for "
-            "every app rather than only this one:",
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
+          if (!hears)
+            Text(
+              "This device has nothing to hear with. Android gives a "
+              "recognizer the microphone only where it is the one set as the "
+              "system's voice-input service — set one there "
+              "(Settings → Apps → Default apps → Digital assistant app → "
+              "Voice input), or pick a downloaded model below.",
+              style: style,
+            ),
+          if (!speaks)
+            Text(
+              "This device has nothing to speak with. Voice mode uses the "
+              "engines the platform provides, and one without the usual "
+              "speech apps may have none installed. Either of these adds one, "
+              "and works for every app rather than only this one:",
+              style: style,
+            ),
           const SizedBox(height: 8),
           if (!speaks)
             _EngineLink(label: "RHVoice — speech synthesis", url: _rhVoice),

@@ -96,6 +96,9 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
 
   /// The sentinels this device can honour. Held rather than folded into the
   /// seed, because a re-scan reads the store and would otherwise drop them.
+  /// What a device with no engines answers is an empty set — see
+  /// [Voice.hasSystemEngines] for the platform question the missing-engine
+  /// block is drawn from instead.
   final Set<String> system;
 
   @override
@@ -404,7 +407,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     // The device's own engines are the default where it has them — voice mode
     // works the moment the app is installed, with nothing to download. Each
     // side is defaulted on its own, so a phone with a synthesiser and no
-    // recognition service gets the half it can do and leaves the other
+    // recognition pick gets the half it can do and leaves the other
     // unpicked, rather than a pick that fails when it is pressed.
     //
     // A settings file that already names a model, sherpa or native, is left as
