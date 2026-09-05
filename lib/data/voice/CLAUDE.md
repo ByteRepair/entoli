@@ -145,15 +145,18 @@ is not the system default, and the session hears silence. No probe from the
 app can make the framework trust the service, so the honest answer is the
 other engine: pick a downloaded model and listen through sherpa, the same way
 the desktops do. See "Android ships the libraries and downloads the models"
-above for what that costs the APK.
+above for what that costs the APK. The same fact is why the probe reports the
+system's pick rather than any installed service — see "The probe's answer"
+below.
 
-**What that costs on a phone with neither system engine** is now a choice the
+**What that costs on a phone with neither system engine** is a choice the
 page offers either way: an install — RHVoice or eSpeak NG for speaking, FUTO
 Voice Input for hearing — or a downloaded model from the catalog, which every
-platform sherpa runs on now draws. `_MissingEngines` in `voice_settings.dart`
-is the install half said on the page, with the links, where there is no
-catalog behind it. Nothing has to be told when one arrives: the next launch
-asks the device again.
+platform sherpa runs on draws beside the engines.
+`_MissingEngines` in `voice_settings.dart` is the engines' half said on the
+page, with the links, drawn from whether the device has them — and, for the
+recognizer, from whether the system's pick has been made. Nothing has to be
+told when one arrives: the next launch asks the device again.
 
 **They are catalog entries rather than a mode.** `android-recognition` and
 `android-speech` are a `RecognitionModel` and a `SpeechModel` with no downloads,
@@ -172,7 +175,7 @@ recognition pick builds `AndroidSpeechRecognizer`, a downloaded one builds the
 same `SherpaListener` the desktops use (`SherpaVoice.sherpaListener`), and the
 speech half answers the same way — so the four pairings all work, including a
 system recognizer with a downloaded voice or the reverse.
-`Voice.downloadsModels` is the other half: true now on Android as everywhere
+`Voice.downloadsModels` is the other half: true on Android as everywhere
 sherpa runs, which is what draws the catalog on the settings page; its one
 reader is unchanged.
 
@@ -224,10 +227,21 @@ package declares a `RecognitionService`, while the one-argument
 `ERROR_CLIENT` the moment the session opens, which is voice mode saying
 "Recognition failed (error 5)" before it has heard a word. A phone with a
 recognizer installed and no assistant chosen is the ordinary way to be there.
-So `recognitionServices` picks the components and both the probe and `listen`
-go through it, and an empty list takes the sentinel off the settings page the
-way a missing engine already does. There is no public API for the setting, so it
+So `recognitionServices` picks the components, `listen` binds from it, and the
+probe reads the same key through `chosenRecognizer` — one place owns what the
+setting says. There is no public API for the setting, so it
 is read as a key — the constant itself is hidden.
+
+**The probe's answer is the system's pick, and that is what decides whether
+the sentinel is offered at all.** The framework gives a bound recognizer the
+microphone only where it is the one set as `VOICE_RECOGNITION_SERVICE` — so a
+service that is merely installed, however well it works for the keyboard,
+opens a session and hears nothing, and no probe of the app's can tell that
+silence from a broken microphone. The offer follows the setting: a sentinel
+reaches the picker only where the user has made the system-wide pick, and an
+unset one is the missing-engine block's to explain — named as the setting it
+is, with the system path to set it and the catalog below as the other way
+out.
 
 **It answers with a list where there is no pick, and with the pick alone where
 there is one.** A service cannot be asked anything before it is bound, and a

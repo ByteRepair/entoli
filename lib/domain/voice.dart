@@ -97,10 +97,12 @@ class VoiceLanguage {
 
 /// Which of the device's own engines are actually there, which is what the
 /// Android-system sentinels resolve to. Asked of the platform rather than
-/// inferred from it: `SpeechRecognizer` needs a recognition service installed
-/// and `TextToSpeech` needs an engine, and a phone with no Google apps on it
-/// may have neither. This is what used to be asked as "is this Android" — the
-/// real question was always this one, and off Android it answers itself.
+/// inferred from it: `TextToSpeech` needs an engine, and a phone with no
+/// Google apps on it may have none. Recognition is the system's own
+/// voice-input pick, made and installed — the only configuration the
+/// framework gives a recognizer the microphone in. This is what used to be
+/// asked as "is this Android" — the real question was always this one, and
+/// off Android it answers itself.
 class NativeVoiceEngines {
   const NativeVoiceEngines({required this.recognition, required this.speech});
 
