@@ -233,6 +233,15 @@ the next turn of the looper, since a tear-down is what is being waited for, and
 the second falls to the next service. A count with a threshold was the other
 answer and it spends four failed binds arriving where the flag already is.
 
+The same hazard is why **stepping down the request ladder rebinds rather than
+re-listens**. The rung just refused can leave its session tearing down for tens
+of milliseconds after; a `startListening` for the next rung on the same
+recognizer inside that window goes out beside it, and a service that takes
+both answers the second with a session that opens and then reports nothing at
+all — no partials, no results, no error. Stepping down destroys the recognizer
+and starts the next rung on a fresh one, 200 ms out, which is the shape the
+service walk and the busy error already used.
+
 Reporting an error destroys the recognizer, and that is `fail` rather than a
 line in each branch. Voice mode is in its failed state from that moment — the
 Dart side has no way back short of leaving the screen — so a recognizer left
@@ -369,6 +378,15 @@ Partial results stop changing while the room goes on making noise, so a partial
 that has not moved for `QUIET_MS` — or `MAX_UTTERANCE_MS` of anything at all —
 is answered with `stopListening`, which is the same call the Talk button's
 release makes and asks the service for what it has.
+
+The timer is armed only once there is a transcription to judge — on a partial
+that moved, and on `onEndOfSpeech`. Never at the start of speech: a service
+that streams no partials at all is a real one (Google's on the network rung
+streams none on some devices), and an endpoint armed there fires `QUIET_MS`
+into the sentence, asking for results before any have a chance to exist. On
+such a service the only clock is the recognizer's own detector, and it ends
+the utterance itself — which is what it did before any of this, and is the
+honest fallback below.
 
 **One timer and one call, and it is worth knowing what a second and a third
 cost.** The first version also capped the utterance's length and escalated to

@@ -446,7 +446,10 @@ object VoiceChannel {
         if (next != null) {
             Log.i(TAG, "asking again as $next")
             ask = next
-            restart()
+            // The refused rung's session may still be tearing down — restart
+            // on a fresh binding, the way moving to the next service does.
+            rebind()
+            restart(after = 200)
         } else {
             nextService(
                 "This device has no speech recognition for ${asked().displayLanguage}.")
@@ -560,9 +563,11 @@ object VoiceChannel {
             // real cycle, not a rung refusing to listen — see [onError].
             fastRefusals = 0
             lastPartial = ""
-            // Armed here rather than on the first partial: a service that
-            // reports none at all still has to end its utterance somewhere.
-            armEndpoint()
+            // Not armed here: a service that streams no partials — Google's on
+            // the network rung streams none — gives the transcription nothing
+            // to judge, and an endpoint armed at the start of speech fires
+            // QUIET_MS in, mid-sentence. The only clock such a service has is
+            // its own detector, so it ends the utterance itself.
         }
 
         override fun onRmsChanged(rmsdB: Float) {
@@ -654,10 +659,25 @@ object VoiceChannel {
         }
 
         override fun onResults(results: Bundle?) {
+            // Read before [disarmEndpoint] clears it: whether the partial held
+            // the transcript an empty final dropped is the arm nothing draws —
+            // never the words themselves.
+            val partialHeld = lastPartial.isNotEmpty()
             disarmEndpoint()
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val text = matches?.firstOrNull()?.trim()
-            if (!text.isNullOrEmpty()) send("heard", text)
+            if (!text.isNullOrEmpty()) {
+                send("heard", text)
+            } else {
+                // An utterance ended and the final bundle carried nothing. A
+                // turn that silently does not happen, and indistinguishable
+                // from a dead microphone on the other end — so it is said.
+                Log.w(
+                    TAG,
+                    "empty final result (matches=${matches?.size ?: 0}, " +
+                        "partial=${if (partialHeld) "held" else "empty"})",
+                )
+            }
             restart()
         }
 
