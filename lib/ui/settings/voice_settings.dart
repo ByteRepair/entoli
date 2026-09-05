@@ -234,7 +234,9 @@ class _MissingEngines extends StatelessWidget {
     final speaks = installed.contains(nativeSpeech.id);
     if (hears && speaks) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final missing = [if (!hears) "hear", if (!speaks) "speak"].join(" or ");
+    final missing = !hears ? "hear" : "speak";
+    final style = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     return Padding(
       // The inset every other block on this page keeps: `SectionHeader` above
       // and `LabelledField` between are both 16, and a paragraph flush to the
@@ -250,8 +252,7 @@ class _MissingEngines extends StatelessWidget {
               "system's voice-input service — set one there "
               "(Settings → Apps → Default apps → Digital assistant app → "
               "Voice input), or pick a downloaded model below.",
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: style,
             ),
           if (!speaks)
             Text(
@@ -259,8 +260,7 @@ class _MissingEngines extends StatelessWidget {
               "engines the platform provides, and one without the usual "
               "speech apps may have none installed. Either of these adds one, "
               "and works for every app rather than only this one:",
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: style,
             ),
           const SizedBox(height: 8),
           if (!speaks)

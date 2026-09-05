@@ -227,9 +227,9 @@ package declares a `RecognitionService`, while the one-argument
 `ERROR_CLIENT` the moment the session opens, which is voice mode saying
 "Recognition failed (error 5)" before it has heard a word. A phone with a
 recognizer installed and no assistant chosen is the ordinary way to be there.
-So `recognitionServices` picks the components and both the probe and `listen`
-go through it, and an empty list takes the sentinel off the settings page the
-way a missing engine already does. There is no public API for the setting, so it
+So `recognitionServices` picks the components, `listen` binds from it, and the
+probe reads the same key through `chosenRecognizer` — one place owns what the
+setting says. There is no public API for the setting, so it
 is read as a key — the constant itself is hidden.
 
 **The probe's answer is the system's pick, and that is what decides whether

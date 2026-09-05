@@ -180,7 +180,7 @@ void main() {
     /// [speaks] as which of them the device has. `nativeVoice` is what the
     /// harness seeds the usable set and the engines' presence from — the same
     /// answer `main` builds the provider with.
-    Future<TestApp> pumpAndroid(
+    Future<void> pumpAndroid(
       WidgetTester tester, {
       bool hears = true,
       bool speaks = true,
@@ -190,7 +190,6 @@ void main() {
         nativeVoice: NativeVoiceEngines(recognition: hears, speech: speaks),
       );
       await pumpVoice(tester);
-      return app;
     }
 
     testWidgets("the catalog draws beside the system engines", (tester) async {

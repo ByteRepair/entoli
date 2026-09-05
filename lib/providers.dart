@@ -90,8 +90,7 @@ final voiceModelStoreProvider =
 /// reads rather than watches, would be wrong on the first press however long
 /// the app had been open.
 class InstalledVoiceModels extends Notifier<Set<String>> {
-  InstalledVoiceModels.seeded(this._seed,
-      {this.system = const {}, this.hasSystemEngines = false});
+  InstalledVoiceModels(this._seed, {this.system = const {}});
 
   final Set<String> _seed;
 
@@ -99,11 +98,12 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
   /// seed, because a re-scan reads the store and would otherwise drop them.
   final Set<String> system;
 
-  /// Whether this platform has system engines at all — Android's answer, and
-  /// nothing else's. What the settings page's missing-engine block is drawn
-  /// from beside the catalog: on a platform without them there is nothing to
-  /// be missing, and the block would be a lie.
-  final bool hasSystemEngines;
+  /// Whether this platform has system engines at all — the sentinels in
+  /// [system] are what a device with them answers, and a device without
+  /// answers an empty set. What the settings page's missing-engine block is
+  /// drawn from beside the catalog: on a platform without them there is
+  /// nothing to be missing, and the block would be a lie.
+  bool get hasSystemEngines => system.isNotEmpty;
 
   @override
   Set<String> build() => _seed;
@@ -118,7 +118,7 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
 
 final installedVoiceModelsProvider =
     NotifierProvider<InstalledVoiceModels, Set<String>>(
-        () => InstalledVoiceModels.seeded(const {}));
+        () => InstalledVoiceModels(const {}));
 
 final rootfsStoreProvider = Provider<RootfsStore>((ref) => throw UnimplementedError());
 
@@ -411,7 +411,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     // The device's own engines are the default where it has them — voice mode
     // works the moment the app is installed, with nothing to download. Each
     // side is defaulted on its own, so a phone with a synthesiser and no
-    // recognition service gets the half it can do and leaves the other
+    // recognition pick gets the half it can do and leaves the other
     // unpicked, rather than a pick that fails when it is pressed.
     //
     // A settings file that already names a model, sherpa or native, is left as

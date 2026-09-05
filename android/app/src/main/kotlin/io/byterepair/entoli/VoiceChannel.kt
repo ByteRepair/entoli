@@ -132,19 +132,14 @@ object VoiceChannel {
 
     // Whether this device has either engine at all. A phone with no Google
     // apps on it may have neither, and the sentinels are only worth offering —
-    // or defaulting to — where the thing behind them exists.
+    // or defaulting to — where the thing behind them exists. Recognition
+    // follows the system's pick rather than mere installation — see
+    // "The probe's answer" in CLAUDE.md.
     //
-    // Recognition is the system's own pick rather than any installed service:
-    // the framework gives a bound recognizer the microphone only where it is
-    // the one set as `Settings.Secure.VOICE_RECOGNITION_SERVICE`, so a service
-    // that is merely installed — downloaded, even, and working for the
-    // keyboard — opens a session and hears nothing at all. Offered where the
-    // user has made the pick; where they have not, the missing-engine block
-    // on the settings page is what says so. Both answers need the `<queries>`
-    // block in the manifest: from Android 11 an app sees only the packages it
-    // declares an interest in, and without it both of these report nothing on
-    // every modern phone rather than only on the ones that genuinely have
-    // nothing.
+    // Both answers need the `<queries>` block in the manifest: from Android 11
+    // an app sees only the packages it declares an interest in, and without it
+    // both of these report nothing on every modern phone rather than only on
+    // the ones that genuinely have nothing.
     private fun engines(context: Context): Map<String, Boolean> {
         val speech = context.packageManager
             .queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0)
@@ -156,16 +151,9 @@ object VoiceChannel {
     }
 
     // Whether the system's voice-input service is set, and to something
-    // installed. No public API for the constant — the key is the same one
-    // [recognitionServices] reads a session's binding from.
-    private fun hasDefaultRecognizer(context: Context): Boolean {
-        val chosen = Settings.Secure
-            .getString(context.contentResolver, "voice_recognition_service")
-            ?.let { ComponentName.unflattenFromString(it) } ?: return false
-        return context.packageManager
-            .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
-            .any { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) == chosen }
-    }
+    // installed — which is what [chosenRecognizer] answers.
+    private fun hasDefaultRecognizer(context: Context): Boolean =
+        chosenRecognizer(context) != null
 
     // What the settings page offers as a language, and the device's own where
     // it offers nothing. The synthesiser is the one engine that will simply
@@ -211,17 +199,27 @@ object VoiceChannel {
         val installed = context.packageManager
             .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
             .map { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
-        // No public API for the user's pick: the constant is hidden, the key is
-        // not. One that is not installed is stale.
-        val chosen = Settings.Secure
-            .getString(context.contentResolver, "voice_recognition_service")
-            ?.let { ComponentName.unflattenFromString(it) }
         // Their pick and nothing else where they made one — walking past it
         // would hand the microphone to another vendor without saying so. Where
         // they made none, every installed service is a candidate, since the
-        // platform has not been told which either.
+        // platform has not been told which either. One that is not installed
+        // is stale.
+        val chosen = chosenRecognizer(context)
         return installed.firstOrNull { it == chosen }?.let { listOf(it) } ?: installed
     }
+
+    // The system's pick of recognizer, as a component, and null where none is
+    // set or the one set is not installed. No public API for the constant —
+    // the key is read as a string.
+    private fun chosenRecognizer(context: Context): ComponentName? =
+        Settings.Secure
+            .getString(context.contentResolver, "voice_recognition_service")
+            ?.let { ComponentName.unflattenFromString(it) }
+            ?.takeIf { component ->
+                context.packageManager
+                    .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+                    .any { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) == component }
+            }
 
     // --- Speech synthesis ---
 
