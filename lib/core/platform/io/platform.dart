@@ -350,16 +350,18 @@ void platformRegisterVoiceLicences() {
 VoiceModelStore platformVoiceModelStore(String cacheDir) =>
     FileVoiceModelStore(p.join(cacheDir, "models"));
 
+/// record's own Linux implementation is parecord-only; the recorder here
+/// falls back to pw-record. Once, before any recorder exists.
+void platformRegisterRecorder() {
+  if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
+}
+
 /// The desktops run sherpa-onnx, which is the only engine they have. Android
 /// runs its own, and ships none of sherpa's native code at all — the `.so`
 /// files are excluded at packaging in `android/app/build.gradle.kts`, so
 /// constructing a [SherpaVoice] there would fail at the first FFI call.
-Voice platformVoice(VoiceModelStore store, String cacheDir) {
-  // record's own Linux implementation is parecord-only; the recorder here
-  // falls back to pw-record. Once at startup, before any recorder exists.
-  if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
-  return Platform.isAndroid ? const AndroidVoice() : SherpaVoice(store, cacheDir);
-}
+Voice platformVoice(VoiceModelStore store, String cacheDir) =>
+    Platform.isAndroid ? const AndroidVoice() : SherpaVoice(store, cacheDir);
 
 /// Nothing to ask for: a directory on this machine is already as durable as
 /// the app is.

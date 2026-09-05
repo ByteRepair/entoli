@@ -46,7 +46,7 @@ void main() {
     );
   });
 
-  group("findCapture", () {
+  group("locate", () {
     late Directory bin;
 
     setUp(() => bin = Directory.systemTemp.createTempSync("recorder-bin"));
@@ -55,49 +55,30 @@ void main() {
     void put(String name) =>
         File("${bin.path}/$name").writeAsStringSync("#!/bin/sh\n");
 
-    test("parecord preferred where both are there", () {
+    test("the first directory holding the binary wins", () {
       put("parecord");
       put("pw-record");
       expect(
-        LinuxRecorder.findCapture({"PATH": "/nowhere:${bin.path}"}),
+        LinuxRecorder.locate("parecord", {"PATH": "/nowhere:${bin.path}"}),
         "${bin.path}/parecord",
       );
+      expect(LinuxRecorder.locate("pw-record", {"PATH": bin.path}),
+          "${bin.path}/pw-record");
     });
 
-    test("pw-record stands in where parecord is missing", () {
-      put("pw-record");
-      expect(
-        LinuxRecorder.findCapture({"PATH": bin.path}),
-        "${bin.path}/pw-record",
-      );
-    });
-
-    test("neither is a message naming both packages, not a ProcessException",
-        () {
-      expect(
-        () => LinuxRecorder.findCapture({"PATH": bin.path}),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            "message",
-            contains("pw-record (pipewire-utils)"),
-          ),
-        ),
-      );
-      expect(
-        () => LinuxRecorder.findCapture(const {}),
-        throwsA(isA<StateError>()),
-      );
+    test("nothing found is null, an empty PATH included", () {
+      expect(LinuxRecorder.locate("parecord", {"PATH": bin.path}), isNull);
+      expect(LinuxRecorder.locate("pw-record", const {}), isNull);
     });
   });
 
   test("a session streams what pw-record writes and stops it", () async {
     final bin = Directory.systemTemp.createTempSync("recorder-bin");
     addTearDown(() => bin.deleteSync(recursive: true));
-    // A stand-in that writes a header, then some bytes, then keeps the pipe
-    // open — the shape of a capture nobody has spoken into yet.
+    // A stand-in that writes a few bytes, then keeps the pipe open — the
+    // shape of a capture nobody has spoken into yet.
     File("${bin.path}/pw-record").writeAsStringSync(
-      "#!/bin/sh\ncat /dev/null; printf '\\x01\\x02\\x03\\x04'; sleep 30\n",
+      "#!/bin/sh\nprintf '\\x01\\x02\\x03\\x04'; sleep 30\n",
     );
     Process.runSync("chmod", ["+x", "${bin.path}/pw-record"]);
 
@@ -111,6 +92,19 @@ void main() {
     // Stopping closes the stream and the process with it, which is what
     // the session's shut-microphone path relies on.
     await recorder.stop("test");
-    expect(recorder.environment["PATH"], bin.path);
+  });
+
+  test("with neither binary, starting says which packages to install", () async {
+    final recorder = LinuxRecorder()..environment = const {};
+    await expectLater(
+      recorder.startStream("test", config()),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          "message",
+          contains("pw-record (pipewire-utils)"),
+        ),
+      ),
+    );
   });
 }
