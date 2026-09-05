@@ -42,10 +42,18 @@ abstract class Voice {
   bool get available => true;
 
   /// Whether listening and speaking here are done with models the user
-  /// downloads. True on the desktops, where sherpa-onnx is the only engine
-  /// there is; false on Android, which uses the system's own and so has no
-  /// catalog to draw, nothing to fetch and nothing taking up space.
+  /// downloads. True on the desktops and on Android, which composes the same
+  /// sherpa halves beside its system engines. What draws the catalog, wherever
+  /// it is drawn at all.
   bool get downloadsModels => true;
+
+  /// Whether this platform has device engines for the system sentinels to
+  /// stand for, which is what the settings page's missing-engine block is
+  /// drawn from: on a platform without them there is nothing to be missing,
+  /// and the block would be a lie. Asked of the platform rather than of the
+  /// probe — the block is about a phone the probe's own answer may say
+  /// nothing for.
+  bool get hasSystemEngines => false;
 
   /// Which of the device's own engines are there, for the platforms that have
   /// any. Asked once at startup, where the answer joins the installed models —
@@ -97,10 +105,12 @@ class VoiceLanguage {
 
 /// Which of the device's own engines are actually there, which is what the
 /// Android-system sentinels resolve to. Asked of the platform rather than
-/// inferred from it: `SpeechRecognizer` needs a recognition service installed
-/// and `TextToSpeech` needs an engine, and a phone with no Google apps on it
-/// may have neither. This is what used to be asked as "is this Android" — the
-/// real question was always this one, and off Android it answers itself.
+/// inferred from it: `TextToSpeech` needs an engine, and a phone with no
+/// Google apps on it may have none. Recognition is the system's own
+/// voice-input pick, made and installed — the only configuration the
+/// framework gives a recognizer the microphone in. This is what used to be
+/// asked as "is this Android" — the real question was always this one, and
+/// off Android it answers itself.
 class NativeVoiceEngines {
   const NativeVoiceEngines({required this.recognition, required this.speech});
 

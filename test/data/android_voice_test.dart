@@ -4,6 +4,8 @@ import "package:flutter_test/flutter_test.dart";
 import "package:agent_chat/data/voice/android_voice.dart";
 import "package:agent_chat/data/voice/voice_strategies.dart" show SpeechFailed, SpeechSignal, SpeechSilent;
 import "package:agent_chat/domain/voice.dart";
+import "package:agent_chat/domain/voice_model.dart" show nativeSpeech, recognitionModels, speechModels;
+import "../fakes.dart";
 
 // The system engines behind a mock `agent_chat/voice`: what Dart asks for and
 // what it does with what Kotlin says back. The real channel has no
@@ -313,5 +315,33 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
 
     expect(signals.whereType<SpeechFailed>(), isNotEmpty);
+  });
+
+  // The routing over what was picked: a downloaded model runs sherpa, a
+  // sentinel runs the system engines. Pinned through the store, which the
+  // sherpa path consults before anything else and refuses a model it has no
+  // directory for — a refusal the native path cannot produce, since it never
+  // asks the store anything. (The sentinel's own dispatch is not testable
+  // here: its first act is the microphone grant, and `record`'s plugin has no
+  // implementation on a test host to answer it.)
+  final sherpaRecognition = recognitionModels.first;
+  final sherpaSpeech = speechModels.first;
+
+  testWidgets("a recognition pick is the sherpa path, and asks the store",
+      (tester) async {
+    final voice = AndroidVoice(FakeVoiceModelStore(), "/cache");
+    await expectLater(
+        voice.start(recognition: sherpaRecognition, speech: nativeSpeech),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, "message", contains("not downloaded"))));
+  });
+
+  testWidgets("a speech pick is the same store's to answer",
+      (tester) async {
+    final voice = AndroidVoice(FakeVoiceModelStore(), "/cache");
+    await expectLater(
+        voice.start(recognition: null, speech: sherpaSpeech),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, "message", contains("not downloaded"))));
   });
 }

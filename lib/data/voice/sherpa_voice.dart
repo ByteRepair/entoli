@@ -17,12 +17,11 @@ import "pcm.dart";
 import "voice_strategies.dart";
 import "wav.dart";
 
-/// Listening and speaking through sherpa-onnx, which is the desktops' answer
-/// and only theirs — Android ships none of its native code and uses the system
-/// engines instead, so nothing constructs this there. `start` builds a
-/// [SherpaListener] and a [SherpaSpeaker] and hands them to a
-/// [ComposedVoiceSession], which forwards both halves' events. See "Hearing and
-/// speaking" in CLAUDE.md for the two-worker design.
+/// Listening and speaking through sherpa-onnx: the desktops' answer, and the
+/// fallback on an Android whose system recognizer cannot be used — see
+/// `AndroidVoice`. `start` builds a [SherpaListener] and a [SherpaSpeaker] and
+/// hands them to a [ComposedVoiceSession], which forwards both halves' events.
+/// See "Hearing and speaking" in CLAUDE.md for the two-worker design.
 class SherpaVoice extends Voice {
   SherpaVoice(this._store, this._cacheDir);
 
@@ -41,25 +40,36 @@ class SherpaVoice extends Voice {
     int speaker = 0,
     String? language,
   }) async {
-    Listener? listener;
-    if (recognition != null) {
-      final listenDir = await _store.directoryOf(recognition);
-      if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
-      // Everything that can refuse, before the worker is spawned: a spawn
-      // returns as soon as the isolate has sent its port back, which is
-      // before it has loaded its model, so a refusal after this point is a
-      // hundred megabytes read off a disk and freed again.
-      final recorder = await openMicrophone();
-      final vad = await _vadPath();
-      final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
-      listener = SherpaListener(recorder, worker);
-    }
+    final listener =
+        recognition == null ? null : await sherpaListener(recognition);
+    return ComposedVoiceSession(
+        listener, await sherpaSpeaker(speech, speaker));
+  }
 
+  /// The sherpa listening half for one recognition model. Shared with
+  /// `AndroidVoice`, which holds a [SherpaVoice] and composes one when a
+  /// downloaded model rather than the system recognizer is what was picked.
+  ///
+  /// Everything that can refuse, before the worker is spawned: a spawn
+  /// returns as soon as the isolate has sent its port back, which is
+  /// before it has loaded its model, so a refusal after this point is a
+  /// hundred megabytes read off a disk and freed again.
+  Future<SherpaListener> sherpaListener(RecognitionModel recognition) async {
+    final listenDir = await _store.directoryOf(recognition);
+    if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
+    final recorder = await openMicrophone();
+    final vad = await _vadPath();
+    final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
+    return SherpaListener(recorder, worker);
+  }
+
+  /// The sherpa speaking half for one speech model, for the same reason as
+  /// [sherpaListener].
+  Future<SherpaSpeaker> sherpaSpeaker(SpeechModel speech, int speaker) async {
     final speakDir = await _store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
     final worker = await Worker.spawn(_speakWorker, (speech, speakDir, speaker));
-
-    return ComposedVoiceSession(listener, SherpaSpeaker(worker));
+    return SherpaSpeaker(worker);
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
