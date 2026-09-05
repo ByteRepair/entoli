@@ -642,10 +642,15 @@ sample after it. Audio out is `audioplayers` over a WAV written per
 sentence, into the system's temporary directory rather than the model one —
 which on Android is deliberately the directory that is *not* evicted, and is
 the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
-would be lower latency and has no Linux or Windows. **On Linux the microphone is `parecord`**, which `record` shells out
-to — `pulseaudio-utils`, which a PipeWire system has as well — so a machine
-without it gets a voice session that fails to start rather than one that hears
-nothing.
+would be lower latency and has no Linux or Windows. **On Linux the microphone
+is `parecord`**, which `record` shells out to — `pulseaudio-utils`, which a
+PipeWire system *does not* have; it ships `pw-record` beside its own daemon
+instead. So `LinuxRecorder` (`core/platform/io/`) sits under `record`'s
+platform interface, asks `PATH` for `parecord` first and `pw-record` where it
+is missing — the stock implementation verbatim where the first is found, the
+argv translated where it is not — and says which packages to install where
+there is neither, rather than the bare `ProcessException` the missing binary
+used to arrive as.
 
 **Only text parts are spoken**, and sentence by sentence as they stream, so the
 first sentence is being read while the rest of the reply is still being written.

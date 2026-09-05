@@ -332,8 +332,9 @@ is `logDetail`, which is debug-only.
 - Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
   Nothing runs the app in a browser here, so a web-only regression in the UI is
   caught by reloading the page.
-- Voice mode on Linux needs `parecord` on `PATH` (`pulseaudio-utils`); without
-  it a session fails to start rather than hearing nothing.
+- Voice mode on Linux needs `parecord` (`pulseaudio-utils`) or `pw-record`
+  (`pipewire-utils`) on `PATH`; with neither, a session fails to start with a
+  message saying so rather than hearing nothing.
 - Package the Linux build:
   `tool/linux/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.

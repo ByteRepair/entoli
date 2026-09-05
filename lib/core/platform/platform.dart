@@ -286,6 +286,10 @@ Future<String> cacheDir() => platformCacheDir();
 /// Silero's detector where there is one and nothing in a browser.
 void registerVoiceLicences() => platformRegisterVoiceLicences();
 
+/// The recorder voice mode's microphone runs on, where the platform has one
+/// of its own to register.
+void registerRecorder() => platformRegisterRecorder();
+
 /// The downloaded voice models, and what runs them. Two rather than one because
 /// settings manages models with nothing listening, and a session needs the
 /// store to find what it has been told to load.
