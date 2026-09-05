@@ -17,6 +17,13 @@ abstract interface class ReminderAlarms {
 
   bool get available;
 
+  /// Whether the system clock fires a reminder with the process dead —
+  /// AlarmManager on Android, nothing yet on any other platform. Where it is
+  /// false the reminders page says so rather than promising a fire the app's
+  /// own timer cannot make: a desktop still notifies what a reminder did,
+  /// but only one that fired while it was running.
+  bool get schedules;
+
   /// Whether exact alarms are permitted right now. False is common on
   /// Android 14+, where the permission is denied by default; the scheduler's
   /// answer is inexact alarms, which can fire minutes late under Doze.
@@ -82,6 +89,9 @@ class UnavailableReminderAlarms implements ReminderAlarms {
 
   @override
   bool get available => false;
+
+  @override
+  bool get schedules => false;
 
   @override
   Future<bool> exactAllowed() async => false;

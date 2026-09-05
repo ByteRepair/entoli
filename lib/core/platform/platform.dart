@@ -327,9 +327,9 @@ BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
 /// handler inert.
 AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 
-/// The system clock a reminder is set against: AlarmManager on Android,
-/// nothing anywhere else yet.
-ReminderAlarms createReminderAlarms() => platformReminderAlarms();
+/// The system clock a reminder is set against: AlarmManager on Android, the
+/// session bus's notifications on Linux, nothing anywhere else yet.
+Future<ReminderAlarms> createReminderAlarms() => platformReminderAlarms();
 
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now. The bundled

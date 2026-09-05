@@ -59,8 +59,10 @@ than a category of its own: what the gesture opens is voice mode, so it is the
 same feature approached from the other end, and its two questions were a
 category with two lines in it. It keeps a file of its own all the same, since
 every other file here is one subject; see "Being the assistant". **Reminders**
-is Android's only — a reminder runs a prompt in a new chat at a time you pick,
-even when the app is closed — and where the port is unavailable the page says so
+is drawn where the port is available — Android fires with the app closed,
+Linux notifies what a reminder did but cannot wake the process, and the page's
+description says which (`ReminderAlarms.schedules` is the question) — and where
+the port is unavailable it says so
 and offers nothing,
 the way a row for a missing device would. The permission rows re-read on the way
 back to the app, since their answers can only change while it is behind in the

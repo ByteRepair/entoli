@@ -252,10 +252,17 @@ class FakeAssistantLaunch implements AssistantLaunch {
 /// to control. [fire] and [tap] are the two things Android does on its own:
 /// an alarm going off, and a notification being tapped.
 class FakeReminderAlarms implements ReminderAlarms {
-  FakeReminderAlarms({this.available = true});
+  FakeReminderAlarms({this.available = true, this.schedulesOverride});
 
   @override
   final bool available;
+
+  /// Set where a test wants the "fires with the app closed" answer rather
+  /// than the default one [available] gives, which is Android's.
+  final bool? schedulesOverride;
+
+  @override
+  bool get schedules => schedulesOverride ?? available;
 
   var exact = true;
   var notifications = true;

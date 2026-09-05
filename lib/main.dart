@@ -142,6 +142,9 @@ class AppSession {
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
     final reminders = await FileReminderStore(config).load();
+    // Started alongside the scans and awaited below: on Linux a session-bus
+    // connect, which nothing between depends on.
+    final alarms = platform.createReminderAlarms();
     // Sync: identity from the keyring (or file fallback), registry on disk.
     // The hub reads settings from the container; the closure below defers
     // that read until after the container exists — the same pattern the
@@ -181,7 +184,7 @@ class AppSession {
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
-        reminderAlarmsProvider.overrideWithValue(platform.createReminderAlarms()),
+        reminderAlarmsProvider.overrideWithValue(await alarms),
         remindersProvider.overrideWith(() => Reminders(reminders)),
         reminderTurnDriverProvider
             .overrideWith((ref) => ChatControllerReminderTurnDriver(ref)),
