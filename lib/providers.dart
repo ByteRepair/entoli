@@ -90,13 +90,20 @@ final voiceModelStoreProvider =
 /// reads rather than watches, would be wrong on the first press however long
 /// the app had been open.
 class InstalledVoiceModels extends Notifier<Set<String>> {
-  InstalledVoiceModels(this._seed, {this.system = const {}});
+  InstalledVoiceModels.seeded(this._seed,
+      {this.system = const {}, this.hasSystemEngines = false});
 
   final Set<String> _seed;
 
   /// The sentinels this device can honour. Held rather than folded into the
   /// seed, because a re-scan reads the store and would otherwise drop them.
   final Set<String> system;
+
+  /// Whether this platform has system engines at all — Android's answer, and
+  /// nothing else's. What the settings page's missing-engine block is drawn
+  /// from beside the catalog: on a platform without them there is nothing to
+  /// be missing, and the block would be a lie.
+  final bool hasSystemEngines;
 
   @override
   Set<String> build() => _seed;
@@ -111,7 +118,7 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
 
 final installedVoiceModelsProvider =
     NotifierProvider<InstalledVoiceModels, Set<String>>(
-        () => InstalledVoiceModels(const {}));
+        () => InstalledVoiceModels.seeded(const {}));
 
 final rootfsStoreProvider = Provider<RootfsStore>((ref) => throw UnimplementedError());
 

@@ -234,10 +234,13 @@ class TestApp {
           voiceProvider.overrideWithValue(speech),
           voiceModelStoreProvider.overrideWithValue(models),
           // Seeded the way the app seeds it, before the first frame: see
-          // [InstalledVoiceModels].
+          // [InstalledVoiceModels]. The engines' presence is what a platform
+          // with neither answers `none` to — the fakes' default.
           installedVoiceModelsProvider.overrideWith(
-              () => InstalledVoiceModels({...voiceModels, ...system},
-                  system: system)),
+              () => InstalledVoiceModels.seeded({...voiceModels, ...system},
+                  system: system,
+                  hasSystemEngines:
+                      system.isNotEmpty)),
           rootfsStoreProvider.overrideWithValue(linux),
           byteRepairStoreProvider.overrideWithValue(FileByteRepairStore(
               config: config,

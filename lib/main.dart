@@ -190,8 +190,11 @@ class AppSession {
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
         voiceProvider.overrideWithValue(voice),
-        installedVoiceModelsProvider
-            .overrideWith(() => InstalledVoiceModels(installed, system: system)),
+        installedVoiceModelsProvider.overrideWith(() => InstalledVoiceModels
+            .seeded(installed,
+                system: system,
+                hasSystemEngines:
+                    engines.recognition || engines.speech)),
         rootfsStoreProvider.overrideWithValue(rootfs),
         byteRepairStoreProvider.overrideWithValue(
             platform.createByteRepairStore(config, cache, rootfs)),

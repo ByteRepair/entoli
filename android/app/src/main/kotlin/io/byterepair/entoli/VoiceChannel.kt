@@ -134,18 +134,37 @@ object VoiceChannel {
     // apps on it may have neither, and the sentinels are only worth offering —
     // or defaulting to — where the thing behind them exists.
     //
-    // Both answers need the `<queries>` block in the manifest: from Android 11
-    // an app sees only the packages it declares an interest in, and without it
-    // both of these report nothing on every modern phone rather than only on
-    // the ones that genuinely have nothing.
+    // Recognition is the system's own pick rather than any installed service:
+    // the framework gives a bound recognizer the microphone only where it is
+    // the one set as `Settings.Secure.VOICE_RECOGNITION_SERVICE`, so a service
+    // that is merely installed — downloaded, even, and working for the
+    // keyboard — opens a session and hears nothing at all. Offered where the
+    // user has made the pick; where they have not, the missing-engine block
+    // on the settings page is what says so. Both answers need the `<queries>`
+    // block in the manifest: from Android 11 an app sees only the packages it
+    // declares an interest in, and without it both of these report nothing on
+    // every modern phone rather than only on the ones that genuinely have
+    // nothing.
     private fun engines(context: Context): Map<String, Boolean> {
         val speech = context.packageManager
             .queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0)
             .isNotEmpty()
         return mapOf(
-            "recognition" to recognitionServices(context).isNotEmpty(),
+            "recognition" to hasDefaultRecognizer(context),
             "speech" to speech,
         )
+    }
+
+    // Whether the system's voice-input service is set, and to something
+    // installed. No public API for the constant — the key is the same one
+    // [recognitionServices] reads a session's binding from.
+    private fun hasDefaultRecognizer(context: Context): Boolean {
+        val chosen = Settings.Secure
+            .getString(context.contentResolver, "voice_recognition_service")
+            ?.let { ComponentName.unflattenFromString(it) } ?: return false
+        return context.packageManager
+            .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+            .any { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) == chosen }
     }
 
     // What the settings page offers as a language, and the device's own where
