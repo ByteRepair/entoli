@@ -1,17 +1,18 @@
 # Releasing
 
 Publishing a release starts two workflows that share nothing but the event:
-`release.yml` attaches the binaries, and `pages.yml` deploys the web app from
-the same tag. Either can fail without the other, and only the first checks the
-tag against pubspec — a version disagreement stops the binaries and deploys the
-site anyway.
+`release.yml` attaches the binaries and uploads the App Bundle to Google Play,
+and `pages.yml` deploys the web app from the same tag. Either can fail without
+the other, and only the first checks the tag against pubspec — a version
+disagreement stops the binaries and deploys the site anyway.
 
-Four files are attached, each with a provenance attestation beside it: a signed
+Five files are attached, each with a provenance attestation beside it: a signed
 `entoli-<version>-<abi>.apk` for each of `armeabi-v7a`, `arm64-v8a` and
-`x86_64`, and a `entoli-<version>-x86_64.AppImage`. There is no Play channel
-and so no App Bundle: the file on the release is the file that gets installed.
-They carry the app's name rather than the package's, since a person is what
-downloads them.
+`x86_64`, a signed `entoli-<version>.aab` for Google Play, and a
+`entoli-<version>-x86_64.AppImage`. The APKs and AppImage are the file that
+gets installed; the bundle is an input to Play, which resigns it into
+per-device APKs of its own. They carry the app's name rather than the
+package's, since a person is what downloads them.
 
 **The APK is split per ABI, so a release page offers a choice rather than one
 file.** A universal APK carried three copies of every native library and a
@@ -41,28 +42,29 @@ Linux builds then share is one composite action,
 `.github/actions/linux-appimage`; they differ in the mode they pass it and in
 what they do with what comes back, which is a bundle and an AppImage either
 way. The four signing secrets are named at the call site rather than
-`inherit`ed, since only one of the two jobs signs anything.
+`inherit`ed, since only the Android jobs sign anything.
 
-**The Android build is two jobs, not one.** The native tools build fetches the
-Hexagon SDK and cross-compiles proot and llama.cpp — several gigabytes of
-intermediates a single runner did not have room for beside the Gradle APK
-build. `android-tools` builds only, uploads the stripped `dist/` as an
-artifact, and the runner is recycled with all its build directories. `android`
-downloads that artifact onto a fresh runner, stages it, and builds the APK.
-The `bundled-tools` composite action takes a `stage` input for this: false on
-the tools job, true (the default) where a caller wants both in one step.
-`debug-build.yml` splits the same way, for the same reason. The tools job does
-not touch Dart and needs no Flutter SDK.
+**The Android build is three jobs, not one.** The native tools build fetches
+the Hexagon SDK and cross-compiles proot and llama.cpp — several gigabytes of
+intermediates a single runner did not have room for beside the Gradle build.
+`android-tools` builds only, uploads the stripped `dist/` as an artifact, and
+the runner is recycled with all its build directories. `android` and `aab`
+each download that artifact onto a fresh runner, stage it, and build — split
+APKs and an App Bundle respectively, in parallel. `debug-build.yml` splits the
+same way, for the same reason. The tools job does not touch Dart.
+
+The setup those three build jobs share — keystore decode (release only), Java
+17, Flutter, the tools download and staging — is one composite,
+`.github/actions/android-build-setup`, gated by a `release` boolean: debug
+passes `false` and skips the keystore; the release jobs pass it the four
+secrets. The keystore decode runs first, before the SDK installs, so a missing
+one fails in seconds rather than after a toolchain download.
 
 **Every job that touches Dart starts with `.github/actions/flutter-setup`** —
-the SDK pin, the packages and codegen in one step, `linux-appimage`'s own job
-included, so no workflow spells a Flutter version out. The generated sources
-are not committed, so build_runner runs on every job; the action caches its
-asset graph, since the minute it takes is mostly compiling its own entrypoint
-rather than producing the four files. It also means the release workflows now
-need `tool/prepare.sh` to exist *in the tagged tree*, where before they needed
-only `flutter pub get`: rebuilding an older release breaks if the script is
-renamed.
+the SDK pin, packages and codegen in one step. The generated sources are not
+committed, so build_runner runs on every job; the action caches its asset
+graph. The release workflows therefore need `tool/prepare.sh` in the tagged
+tree: rebuilding an older release breaks if the script is renamed.
 
 **The version is `pubspec.yaml`'s `version:` and nothing else**, resolved in a
 job of its own before either build. Every file name is composed there, because
@@ -95,25 +97,23 @@ against these. They carry their own name and icon too: see
 **Signing material never enters the repository.** Four secrets —
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
 `ANDROID_KEY_PASSWORD` — are decoded into the runner's temp directory, never
-into the workspace an artifact is uploaded from.
-`android/app/build.gradle.kts` reads the environment first and
-`android/key.properties` second, which is deliberate twice over: a stray
-properties file in a workspace cannot then change what CI signs with, and a
-password survives the environment unaltered, where `java.util.Properties`
-reads a backslash in a value as an escape and would corrupt one.
+into the workspace. `build.gradle.kts` reads the environment first and
+`android/key.properties` second, so a stray properties file in a workspace
+cannot change what CI signs with, and a password survives the environment
+unaltered (where `java.util.Properties` would read a backslash as an escape).
+A fifth secret, `PLAY_SERVICE_ACCOUNT_JSON`, is the Play service-account key;
+see "Google Play".
 
 **Where nothing is configured the release build falls back to the debug key,
-and that fallback is what the checks are built around.** It keeps
-`flutter run --release` working on a machine with no keystore, and Gradle
-generates a debug keystore on any runner that lacks one — so a build with the
-secrets missing still *succeeds*, and ships an APK that nothing installs over
-at the next release. So the run fails before it builds if any of the four
-secrets is empty, and asserts on the signer certificate afterwards;
-`CN=Android Debug` in `apksigner verify --print-certs` fails it. Gradle applies
-the same rule to its own inputs — all four settings or none, since a
-half-filled `key.properties` would otherwise reach AGP as a signing config with
-null members. The signer's SHA-256 goes in the run summary, because a change in
-it is the one thing a user cannot recover from.
+and that fallback is what the checks are built around.** Gradle generates a
+debug keystore on any runner that lacks one, so a build with the secrets
+missing still succeeds and ships an APK nothing installs over at the next
+release. The run fails before it builds if any secret is empty, and asserts on
+the signer afterwards: `CN=Android Debug` in `apksigner verify --print-certs`
+fails the APK job, and the same string in `keytool -printcert -jarfile` fails
+the AAB job (a bundle is a signed jar, so `apksigner` does not apply). The
+signer's SHA-256 goes in the run summary, because a change in it is the one
+thing a user cannot recover from.
 
 **The keystore is the maintainer's and nothing here can regenerate it.**
 Android identifies an app by its signing key, so losing it ends the ability to
@@ -140,8 +140,9 @@ gh attestation verify entoli-1.0.0-arm64-v8a.apk --repo Yiannis128/agent-chat
 ```
 
 The matrix is `fail-fast: false`, since each entry attests and uploads a
-different file: one that fails should leave the other three attached, and
-`--clobber` is what makes re-running it against them safe.
+different file: one that fails should leave the other four attached, and
+`--clobber` is what makes re-running it against them safe. The App Bundle
+attests the `.aab` that Play receives, so the same check covers both channels.
 
 Keeping the publisher out of the build also means a failed upload re-runs
 against the artifacts that were already built and checked rather than a rebuild
@@ -153,3 +154,108 @@ runner, so the publisher names the repository explicitly.
 `workflow_dispatch` takes a tag and rebuilds an existing release for the same
 reason: recreating a release to retry a publish changes its timestamp and
 notifies every watcher a second time.
+
+## Google Play
+
+`publish-play.yml` uploads the App Bundle to Google Play, which resigns it into
+per-device APKs of its own — the whole difference between the two channels: the
+file on the GitHub release is installed as it is, and the file sent to Play is
+an input to something Google builds. `release.yml` calls it after the build, in
+parallel with the publish matrix that attaches binaries to the GitHub release.
+
+**Play App Signing uses the project's own keystore rather than a
+Google-generated key, and that is what keeps the two channels interchangeable.**
+Android identifies an app by its signature, so had Google generated a key, a
+Play-delivered update would carry a different signature than every APK released
+so far and would refuse to install over one — an Obtainium user moving to Play
+would have to uninstall and lose their chats, settings and workspace first, and
+so would anyone going the other way. Uploading the existing key instead means
+both channels deliver the same signature and a user can switch either way as an
+ordinary update. **This was a one-time, irreversible choice made when the app
+was created**; there is no changing it afterwards.
+
+**The first upload cannot come from here.** The Play Developer API refuses to
+create an app's first release — a bundle has to go up through the Console by
+hand once, after which this workflow owns every release. This is not something
+the workflow can detect and explain; it surfaces as an API error on a run that
+otherwise looks correct.
+
+Four things have to exist before the job works at all, and none of them lives
+in this repository:
+
+- A **service account** in a Google Cloud project, with a JSON key. Google no
+  longer wants the developer account linked to that project as a separate step
+  — the link is made by the permission grant below. If an upload comes back
+  saying the API is not enabled, enable **Google Play Android Developer API**
+  on that project.
+- That service account invited under the Play Console's **Users and
+  permissions**, granted **Release apps to testing tracks** and, once
+  production unlocks, **Release to production, exclude devices, and use Play
+  App Signing**. Both are **app-level**, so they are granted on Entoli rather
+  than across the account. It is created with no permissions at all; the
+  Console is where they are given. **Manage store presence** is not needed —
+  release notes ride with the release.
+- The JSON key stored as the repository secret **`PLAY_SERVICE_ACCOUNT_JSON`**,
+  beside the four `ANDROID_*` ones. The job fails on an empty secret before it
+  downloads anything, for the same reason the keystore check does.
+
+**That key is the one credential here that is cheap to lose.** Unlike the
+upload keystore, it can be deleted in the Cloud console and a new one issued in
+a minute, so rotate it freely and on any doubt.
+
+**Release notes are the GitHub release body, or nothing.** Play caps them at
+500 characters and rejects the upload rather than truncating, so a body over
+the cap is dropped with a warning instead of cut: a listing ending mid-sentence
+is worse than one written in the Console, where the maintainer already is. Only
+`whatsnew-en-US` is written, since the release body is English; a Greek listing
+keeps whatever the Console holds rather than being handed English text under a
+Greek locale.
+
+**What Play requires that no workflow can supply.** A rejected upload is
+usually none of the above. The data safety form, the content rating
+questionnaire, a reachable privacy policy, the target API level Play currently
+demands and the declarations tied to specific permissions are all Console
+state, they expire or tighten on Google's schedule rather than on a release,
+and any of them will fail an upload that was built perfectly.
+
+### Production is locked, so releases go to Alpha
+
+A personal developer account opened after 13 November 2023 cannot publish to
+production until it has run a **closed** test with at least twelve testers
+opted in for fourteen *continuous* days, after which production access is
+applied for and reviewed in seven days or less. Internal and open testing do
+not count, and a tester who opts out and back in resets to zero — the clock is
+per tester, counted backwards from the day you apply, so everyone has to be in
+on the same day.
+
+`publish-play.yml` therefore names `alpha`, the closed track Play creates with
+the app, and **`TRACK` and `STATUS` move together**. A draft reaches nobody,
+which on a closed track means no tester ever installs anything and the fourteen
+days never begin, so the caution that leaves a production release for a person
+to send is wrong here — that caution is about a release that cannot be recalled
+from strangers' phones, and twelve people who opted in deliberately are not
+that. Both go back to `production` and `${{ inputs.publish && 'completed' ||
+'draft' }}` in one edit when Play unlocks it, and `publish` is inert until
+they do.
+
+### The application id cannot be a job output
+
+`release-build.yml`'s AAB job parses it out of Gradle and writes
+`dist/package.txt` into the `aab` artifact, and `publish-play.yml` reads it
+back from there. That looks like the long way round, and it is there because
+**GitHub drops a job output whose value contains a registered secret's value**
+— the signing key alias is a substring of `io.byterepair.entoli`, so the output
+would arrive at the publisher empty and Play would reject an upload naming no
+package, which reads as a Play misconfiguration rather than as a value lost in
+transit. The only sign is one annotation on the build job, `Skip output
+'package' since it may contain secret`.
+
+The check applies to outputs crossing a job boundary, not to files, and not to
+a step output inside a job where the secret is not in scope. So the id survives
+the artifact and survives being read back in the publisher, which references
+none of the `ANDROID_*` secrets. Parsing stays in the job that checks out and
+builds, so the id uploaded under still cannot drift from the id built with.
+
+Nothing leaked, and the masking was working: the alias is simply a poor secret,
+being a substring of an application id that is public in Gradle, in the Play
+URL and in every release.

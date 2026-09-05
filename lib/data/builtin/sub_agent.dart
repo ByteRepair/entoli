@@ -44,6 +44,7 @@ class SubAgentRunner {
     this.log = const NoSubAgentLog(),
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
+    this.project,
   });
 
   final LlmClient client;
@@ -68,6 +69,10 @@ class SubAgentRunner {
   /// nothing of one where it is not — the parent's [projectWorkspace] is the
   /// chat's own there, and claiming it is shared would be a lie.
   final bool sharedWorkspace;
+
+  /// The project this sub-agent's turn is in, inherited from the parent so the
+  /// shell driver resolves the same rootfs instance.
+  final String? project;
 
   /// Shared with the parent agent and every sibling sub-agent, so the fan-out
   /// bounds in-flight requests and coordinates 429 backoff as one. Null where
@@ -147,6 +152,7 @@ class SubAgentRunner {
       answer: (_) async => const [],
       caps: caps.unattended,
       sharedWorkspace: sharedWorkspace,
+      project: project,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
     );
@@ -177,6 +183,7 @@ class SubAgentRunner {
           case SubAgentEndEvent():
           case RetryEvent():
           case StatusEvent():
+          case StepLimitEvent():
           case InfoEvent():
           case DoneEvent():
             break;

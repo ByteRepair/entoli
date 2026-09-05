@@ -1,10 +1,12 @@
 import "dart:async";
 
+import "package:clock/clock.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../core/config.dart";
-import "../core/platform/platform.dart" show createPromptSources;
+import "../core/platform/platform.dart"
+    show createPromptSources, setupComplete;
 import "data/builtin/builtin_backend.dart";
 import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
@@ -17,6 +19,7 @@ import "domain/assistant_view.dart";
 import "domain/attachment_picker.dart";
 import "domain/backup_handoff.dart";
 import "domain/background_work.dart";
+import "domain/builtin_project.dart";
 import "domain/chat_repository.dart";
 import "domain/corner_radius.dart";
 import "domain/chat_store.dart";
@@ -24,6 +27,7 @@ import "domain/file_handoff.dart";
 import "domain/link_opener.dart";
 import "domain/llm_provider.dart";
 import "data/builtin/llm/local_prefill.dart";
+import "data/local/byte_repair_store.dart";
 import "domain/local_llm.dart";
 import "domain/local_model.dart";
 import "domain/local_model_store.dart";
@@ -31,6 +35,7 @@ import "domain/models.dart";
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
+import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
@@ -130,6 +135,48 @@ class InstalledRootfs extends Notifier<Set<String>> {
 
 final installedRootfsProvider =
     NotifierProvider<InstalledRootfs, Set<String>>(() => InstalledRootfs(const {}));
+
+/// The Byte Repair tooling store, overridden in `main` with one that knows the
+/// cache directory. Throws until then, the way `rootfsStoreProvider` does.
+final byteRepairStoreProvider =
+    Provider<ByteRepairStore>((ref) => throw UnimplementedError());
+
+/// The version of each tool the setup installs (ESBMC, make, gh), or null
+/// where one is not installed. Refreshed by the settings page after a setup run.
+final byteRepairToolVersionsProvider =
+    FutureProvider<Map<String, String?>>((ref) async {
+  final store = ref.watch(byteRepairStoreProvider);
+  final shell = ref.watch(shellProvider);
+  return store.runToolVersions(shell);
+});
+
+/// Whether a project requiring setup has been set up. True for projects that
+/// don't require setup (the common case); for one that does, asks the platform
+/// about the `.setup-complete` marker in the project's directory. Invalidated
+/// by the settings page after Run Setup or Delete.
+///
+/// A setup marker alone is not enough on Android: Byte Repair needs a rootfs
+/// with a package manager, and the "Host" env has none. The marker may still
+/// be on disk from an earlier setup run under a rootfs, so the env is checked
+/// alongside it — the same `incompatible` check the settings page makes. On
+/// the host the platform asks after the binary itself as well, since the
+/// cache it lives in can be cleared between setups.
+final setupCompleteProvider =
+    Provider.family<bool, String?>((ref, project) {
+  final spec = builtinProjectOf(project);
+  if (spec?.requiresSetup != true) return true;
+  if (defaultTargetPlatform == TargetPlatform.android &&
+      ref.watch(appSettingsProvider.select((s) => s.rootfsId)) == null) {
+    return false;
+  }
+  return setupComplete(ref.watch(appConfigProvider), project,
+      ref.watch(byteRepairBinDirProvider));
+});
+
+/// Where Byte Repair's fetched tools land on the host — the directory both
+/// the turns' driver injects on PATH and `setupComplete` asks after. Resolved
+/// once in `main` beside the cache directory; null where there is none.
+final byteRepairBinDirProvider = Provider<String?>((ref) => null);
 
 final localModelStoreProvider =
     Provider<LocalModelStore>((ref) => const UnavailableLocalModelStore());
@@ -292,32 +339,60 @@ final systemVoiceLanguagesProvider =
 
 /// Loaded once, before the app is built, because assets are read
 /// asynchronously and nothing downstream should have to wait on that.
-/// The prompt library, built once at startup and rebuilt only where something
-/// on screen says the disk changed — the Skills page, importing or deleting
-/// one. See "Skills and agents" in `lib/domain/CLAUDE.md` for why it is
-/// otherwise read once: nothing downstream waits on it, and a file added
+/// The prompt library, per project: the default's is the base set every other
+/// project inherits, and a project's own overrides a same-named default entry
+/// for that project alone. Built once at startup and rebuilt only where
+/// something on screen says the disk changed — the Skills page, importing or
+/// deleting one. See "Skills and agents" in `lib/domain/CLAUDE.md` for why it
+/// is otherwise read once: nothing downstream waits on it, and a file added
 /// behind the app's back reaches the next launch.
+///
+/// `null` is the default project, the way it is everywhere a project is named.
+/// A project not yet seeded (one created after launch) falls back to the
+/// default's library, which is exactly what it should resolve to until it has
+/// overrides of its own — and the first `reload` builds its real one.
 class PromptLibraryNotifier extends Notifier<PromptLibrary> {
-  PromptLibraryNotifier([PromptLibrary? initial]) : _initial = initial;
+  PromptLibraryNotifier(this.project, [this._initial]);
 
+  final String? project;
   final PromptLibrary? _initial;
 
   @override
-  PromptLibrary build() => _initial ?? PromptLibrary.empty;
+  PromptLibrary build() {
+    final seeded = _initial;
+    if (seeded != null) return seeded;
+    if (project == null) return PromptLibrary.empty;
+    // An unseeded project inherits the default's set, which is what it
+    // resolves to until it has overrides of its own.
+    return ref.read(promptLibraryProvider(null));
+  }
 
   /// Read the sources again, and hand the backend its copy: the agent holds
   /// one of its own for the `task` tool and the skills it offers a turn.
   Future<void> reload() async {
-    final next =
-        await PromptLibrary.from(createPromptSources(ref.read(appConfigProvider)));
+    final next = await PromptLibrary.from(
+        createPromptSources(ref.read(appConfigProvider), project: project));
     state = next;
     final backend = ref.read(agentBackendProvider);
-    if (backend is BuiltinBackend) backend.library = next;
+    if (backend is BuiltinBackend) backend.setLibrary(project, next);
   }
 }
 
-final promptLibraryProvider = NotifierProvider<PromptLibraryNotifier, PromptLibrary>(
-    PromptLibraryNotifier.new);
+final promptLibraryProvider =
+    NotifierProvider.family<PromptLibraryNotifier, PromptLibrary, String?>(
+        (project) => PromptLibraryNotifier(project));
+
+/// Reload every project's library at once. The Skills page and a skill install
+/// touch the default's directory (and possibly a project's), so a change has to
+/// land everywhere rather than in the one the page happens to be looking at.
+/// The project list comes from the cached [projectListProvider] rather than a
+/// fresh directory walk, and the per-project reloads overlap since each reads
+/// its own dir.
+Future<void> reloadAllPromptLibraries(WidgetRef ref) async {
+  final named = await ref.read(projectListProvider.future);
+  await Future.wait(everyProject(named).map((project) =>
+      ref.read(promptLibraryProvider(project).notifier).reload()));
+}
 
 class AppSettingsNotifier extends Notifier<AppSettings> {
   late final AppConfig _config;
@@ -368,6 +443,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setApproveMode(ApproveMode value) =>
       _update((s) => s.approveMode = value);
+
+  /// How many times a retryable turn failure is carried on automatically.
+  Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
 
   /// What classifies commands when auto mode is on, or nothing at all.
   Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
@@ -657,6 +735,26 @@ final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
 final reminderAlarmsProvider =
     Provider<ReminderAlarms>((ref) => const UnavailableReminderAlarms());
 
+/// Whether the app is somewhere the user can see it, in the [ValueNotifier]
+/// shape a turn's tail reads from outside the widget tree. An
+/// `AppLifecycleListener` writes it from the app root; tests override it the
+/// way they override every platform half.
+final appHiddenProvider =
+    NotifierProvider<AppHidden, bool>(AppHidden.new);
+
+class AppHidden extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool hidden) => state = hidden;
+}
+
+/// The app's clock, read as "now" by whatever needs a swappable time. The
+/// system clock in production; tests override it with [Clock.fixed] so a
+/// feature that judges dates against "now" — the reminder feature today — is
+/// not judged against the wall clock the suite happens to run on.
+final clockProvider = Provider<Clock>((ref) => const Clock());
+
 /// The user's reminders, seeded from disk before the container exists and
 /// written through on every change — the same bargain [InstalledRootfs] makes.
 class Reminders extends Notifier<List<Reminder>> implements ReminderList {
@@ -699,7 +797,7 @@ class Reminders extends Notifier<List<Reminder>> implements ReminderList {
     final at = state.indexWhere((r) => r.id == id);
     if (at < 0) return;
     final reminder = state[at];
-    final next = enabled ? reminder.nextOccurrence(DateTime.now()) : null;
+    final next = enabled ? reminder.nextOccurrence(ref.read(clockProvider).now()) : null;
     // Disabling disarms it; re-enabling re-aims at the next occurrence.
     await replace(reminder.copyWith(enabled: enabled, clearNextFireAt: true)
         .copyWith(nextFireAt: next));
@@ -709,12 +807,17 @@ class Reminders extends Notifier<List<Reminder>> implements ReminderList {
 final remindersProvider =
     NotifierProvider<Reminders, List<Reminder>>(() => Reminders(const []));
 
+final reminderTurnDriverProvider =
+    Provider<ReminderTurnDriver>((ref) => throw UnimplementedError());
+
 final reminderRunnerProvider = Provider<ReminderRunner>((ref) {
   return ReminderRunner(
     repo: ref.watch(chatRepositoryProvider),
+    driver: ref.watch(reminderTurnDriverProvider),
     onListChanged: (_) => ref.invalidate(chatListProvider),
     onReminderFired: (reminder) =>
         ref.read(remindersProvider.notifier).replace(reminder),
+    clock: ref.watch(clockProvider),
   );
 });
 
@@ -727,6 +830,7 @@ final reminderSchedulerProvider = Provider<ReminderScheduler>((ref) {
     runner: ref.watch(reminderRunnerProvider),
     list: ref.watch(remindersProvider.notifier),
     projects: () => ref.read(chatRepositoryProvider).listProjects(),
+    clock: ref.watch(clockProvider),
   );
   ref.onDispose(scheduler.dispose);
   ref.listen(remindersProvider, (_, _) {
@@ -744,7 +848,11 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
     ref.watch(agentBackendProvider),
     () => ref.read(appSettingsProvider),
     ref.watch(appConfigProvider),
-    library: ref.watch(promptLibraryProvider),
+    // The library is resolved per project at compose time: the message is
+    // composed against the project's library, not an app-wide one — see
+    // "Skills and agents" in `lib/domain/CLAUDE.md`. Read fresh each time
+    // rather than captured, so a reload reaches the next message.
+    libraryFor: (project) => ref.read(promptLibraryProvider(project)),
   );
 });
 
@@ -803,10 +911,15 @@ final attachmentBytesProvider =
   return ref.watch(chatRepositoryProvider).readResource(key.chatId, key.resource);
 });
 
-/// The composer's `/` and `@` menus, read straight off the library: Entoli
-/// owns its commands and agents, so nothing has to be asked what it knows.
-final completionsProvider = Provider.family<List<CompletionOption>, CompletionKind>(
-    (ref, kind) => ref.watch(promptLibraryProvider).options(kind));
+/// The composer's `/` and `@` menus, read straight off the project's library:
+/// Entoli owns its commands and agents, so nothing has to be asked what it
+/// knows. The library is per project — `null` is the default, the way it is
+/// everywhere a project is named — so a menu offers what the project it is in
+/// offers, including an override the project ships.
+final completionsProvider =
+    Provider.family<List<CompletionOption>, ({String? project, CompletionKind kind})>(
+        (ref, spec) =>
+            ref.watch(promptLibraryProvider(spec.project)).options(spec.kind));
 
 /// A project's own settings, loaded off `project.json`. Null is the default
 /// project, which lives in the data directory. The project name is the

@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:clock/clock.dart";
 import "package:flutter/material.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -150,9 +151,10 @@ class _ReminderTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final named = ref.watch(projectListProvider).value ?? const <String>[];
     final project = projectOrDefault(reminder.project, named);
+    final clock = ref.watch(clockProvider);
     final summary = [
       if (reminder.enabled && reminder.nextFireAt != null)
-        "${exact ? "" : "approx. "}${describeFire(reminder.nextFireAt!)}",
+        "${exact ? "" : "approx. "}${describeFire(reminder.nextFireAt!, clock.now())}",
       if (reminder.repeat != ReminderRepeat.off) reminder.repeat.label,
       if (project != null) projectLabel(project),
     ].join(" · ");
@@ -198,11 +200,13 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
   late ReminderRepeat _repeat;
   late String? _project;
   late TempChatTtl? _tempChatTtl;
+  late final Clock _clock;
 
   @override
   void initState() {
     super.initState();
     final reminder = widget.reminder;
+    _clock = ref.read(clockProvider);
     _name = TextEditingController(text: reminder?.name ?? "");
     _prompt = reminder?.prompt ?? "";
     _at = reminder?.at ?? _defaultAt();
@@ -219,8 +223,8 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
 
   /// A new reminder defaults to the next whole hour, so picking a time is one
   /// spin rather than starting from now-and-a-few-minutes.
-  static DateTime _defaultAt() {
-    final now = DateTime.now();
+  DateTime _defaultAt() {
+    final now = _clock.now();
     return DateTime(now.year, now.month, now.day, now.hour + 1);
   }
 
@@ -315,18 +319,20 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
 
   Future<void> _editPrompt() async {
     final edited = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => ReminderPromptPage(prompt: _prompt)),
+      MaterialPageRoute(
+          builder: (_) => ReminderPromptPage(prompt: _prompt, project: _project)),
     );
     if (edited == null || !mounted) return;
     setState(() => _prompt = edited);
   }
 
   Future<void> _pickDate() async {
+    final now = _clock.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: _at,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365 * 5)),
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -354,7 +360,7 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
     // A one-shot set in the past would be born already fired; a repeating one
     // in the past is fine, since it has occurrences ahead of it.
     final isNew = widget.reminder == null;
-    if (isNew && !_at.isAfter(DateTime.now()) && _repeat == ReminderRepeat.off) {
+    if (isNew && !_at.isAfter(_clock.now()) && _repeat == ReminderRepeat.off) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(const SnackBar(content: Text("Pick a time in the future.")));
@@ -374,7 +380,7 @@ class _ReminderEditorPageState extends ConsumerState<ReminderEditorPage> {
           enabled: true,
           clearNextFireAt: true,
         )
-        .copyWith(nextFireAt: Reminder.occurrenceAfter(_repeat, _at, DateTime.now()));
+        .copyWith(nextFireAt: Reminder.occurrenceAfter(_repeat, _at, _clock.now()));
     final notifier = ref.read(remindersProvider.notifier);
     if (isNew) {
       await notifier.add(reminder);
@@ -473,9 +479,14 @@ class _PromptPreview extends StatelessWidget {
 ///
 /// Pops the new prompt, or nothing where it was discarded.
 class ReminderPromptPage extends StatefulWidget {
-  const ReminderPromptPage({super.key, required this.prompt});
+  const ReminderPromptPage({super.key, required this.prompt, this.project});
 
   final String prompt;
+
+  /// The project whose library the `/` and `@` menus offer, so a reminder's
+  /// prompt is composed against the same set the chat it makes will be. Null is
+  /// the default project, the way it is everywhere a project is named.
+  final String? project;
 
   @override
   State<ReminderPromptPage> createState() => _ReminderPromptPageState();
@@ -542,6 +553,7 @@ class _ReminderPromptPageState extends State<ReminderPromptPage> {
           child: CompletionField(
             key: _field,
             controller: _controller,
+            project: widget.project,
             expands: true,
             maxLines: null,
             autofocus: true,
@@ -572,8 +584,7 @@ class _ReminderPromptPageState extends State<ReminderPromptPage> {
 
 /// When the next fire is, in as few words as say it: today and tomorrow by
 /// name, then weekday and date.
-String describeFire(DateTime at) {
-  final now = DateTime.now();
+String describeFire(DateTime at, DateTime now) {
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(at.year, at.month, at.day);
   final difference = day.difference(today).inDays;

@@ -34,6 +34,7 @@ class Composer extends ConsumerStatefulWidget {
     required this.isRunning,
     required this.onSend,
     required this.onAbort,
+    this.project,
     this.onVoice,
     this.workspace,
   });
@@ -42,6 +43,10 @@ class Composer extends ConsumerStatefulWidget {
   final bool isRunning;
   final SendCallback onSend;
   final VoidCallback onAbort;
+
+  /// The project the composer is in, so the `/` and `@` menus offer what it
+  /// offers. Null is the default, the way it is everywhere a project is named.
+  final String? project;
 
   /// Opens voice mode. Null where the platform cannot listen at all, which is
   /// the web — the same rule that takes `bash` off the agent there.
@@ -138,6 +143,7 @@ class _ComposerState extends ConsumerState<Composer> {
         child: CompletionField(
           key: _field,
           controller: widget.controller,
+          project: widget.project,
           minLines: 1,
           maxLines: 6,
           // The command in the face a command is read in, so what is about to

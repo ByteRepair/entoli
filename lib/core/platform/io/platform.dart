@@ -4,7 +4,7 @@ import "dart:isolate";
 import "package:ffi/ffi.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
-import "package:fs_shim/fs.dart";
+import "package:fs_shim/fs.dart" hide File, Directory;
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
@@ -15,6 +15,8 @@ import "../../../data/local/android_device_name.dart";
 import "../../../data/local/android_file_handoff.dart";
 import "../../../data/local/android_reminder_alarms.dart";
 import "../../../data/local/bundled_tools.dart";
+import "../../../data/local/byte_repair_store.dart";
+import "../../../data/local/file_byte_repair_store.dart";
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
 import "../../../data/local/file_kv_cache.dart";
@@ -25,6 +27,7 @@ import "../../../data/local/ish_shell.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
 import "../../../data/local/shared_backup.dart";
+import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
@@ -33,6 +36,7 @@ import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/sherpa_voice.dart";
 import "../../../domain/assistant_launch.dart";
 import "../../../domain/backup_handoff.dart";
+import "../../../domain/builtin_project.dart";
 import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
@@ -51,7 +55,7 @@ import "signaling_server.dart";
 
 Shell platformShell({
   required Map<String, String> Function() environment,
-  required ShellDriver? Function() driver,
+  required ShellDriver? Function({String? project}) driver,
   String? dataDir,
   RootfsStore? rootfsStore,
   String? rootfsId,
@@ -84,27 +88,69 @@ Shell platformShell({
 /// where it is installed, or the machine itself where there is no pick, or
 /// the pick's files have gone, or this build carries no proot. Answered
 /// synchronously because it is asked before every command.
+///
+/// On the machine itself, a rootfs-isolated built-in project's bin directory
+/// rides in as a `PATH` prefix: the tools its setup fetched are its
+/// environment, not every project's, the way its rootfs copy is. A user-set
+/// `PATH` in the command environment still wins over it.
 ShellDriver? platformDriver({
-  required String dataDir,
+  required String defaultSkillsBundledDir,
+  required String defaultUserSkillsDir,
+  String? projectSkillsBundledDir,
+  String? projectUserSkillsDir,
   Toolset? tools,
   Proot? proot,
   RootfsStore? store,
   String? rootfsId,
   String? abi,
+  String? project,
+  AppConfig? config,
+  String? byteRepairBinDir,
 }) {
   final rootfs = rootfsById(rootfsId);
-  final dir =
+  final baseDir =
       rootfs != null && store != null ? store.directoryOfSync(rootfs.id) : null;
-  if (rootfs != null && proot != null && dir != null) {
+  // The isolation fact both branches ask: a rootfs-isolated built-in gets its
+  // own environment, the guest copy inside a proot and the bin directory on
+  // the host's PATH, rather than everything every project runs under.
+  final isolated =
+      project != null && builtinProjectOf(project)?.rootfsIsolation == true;
+  if (rootfs != null && proot != null && baseDir != null) {
+    // An isolated built-in project gets its own rootfs instance under its data
+    // directory, so packages installed inside the guest do not leak between
+    // projects. The base download in cache is the template; the project's copy
+    // is its living filesystem.
+    final dir = (isolated && config != null)
+        ? _projectRootfsDir(config, project, rootfs.id) ?? baseDir
+        : baseDir;
     return prootDriver(
       proot: proot,
       rootfs: rootfs,
       rootfsDir: dir,
-      dataDir: dataDir,
+      defaultSkillsBundledDir: defaultSkillsBundledDir,
+      defaultUserSkillsDir: defaultUserSkillsDir,
+      projectSkillsBundledDir: projectSkillsBundledDir,
+      projectUserSkillsDir: projectUserSkillsDir,
       abi: abi,
     );
   }
-  return LocalShell.hostDriver(tools: tools);
+  return LocalShell.hostDriver(
+      tools: tools,
+      projectHome: Platform.isAndroid,
+      environment: isolated && byteRepairBinDir != null
+          ? {
+              "PATH":
+                  "$byteRepairBinDir:${Platform.environment["PATH"] ?? ""}"
+            }
+          : null);
+}
+
+/// The per-project rootfs directory, or null where the copy has not been
+/// created yet. Lives under the project's data directory, beside its workspace
+/// and memory, so a backup carries it and a cache clear does not lose it.
+String? _projectRootfsDir(AppConfig config, String project, String rootfsId) {
+  final dir = config.projectRootfsDir(project: project, rootfsId: rootfsId);
+  return File(p.join(dir, ".complete")).existsSync() ? dir : null;
 }
 
 /// Which architecture this install is for, which decides the rootfs a download
@@ -113,10 +159,11 @@ ShellDriver? platformDriver({
 Future<String?> platformAbi() =>
     Platform.isIOS ? Future.value("ios") : BundledTools.abi();
 
-/// Here `version.json` is inside `flutter_assets`, so the bundle has it.
+/// `assets/version.json` is a declared asset; the `assets/` prefix is part of
+/// the key, not just the on-disk path.
 Future<String?> platformVersionJson() async {
   try {
-    return await rootBundle.loadString("version.json");
+    return await rootBundle.loadString("assets/version.json");
   } catch (_) {
     return null;
   }
@@ -129,6 +176,63 @@ RootfsStore platformRootfsStore(String cacheDir) =>
     Platform.isIOS
         ? FileRootfsStore(p.join(cacheDir, "rootfs"), tar: _ishFakefsify)
         : FileRootfsStore(p.join(cacheDir, "rootfs"));
+
+/// The Byte Repair store, which installs the tooling — into the project's
+/// rootfs copy on Android, the app's own bin directory on the desktop —
+/// and reports on it. [project] and [workspace] are named by the caller so
+/// both sides of the conditional import agree on what the store is for.
+///
+/// Where the fetched tools land follows the shell they will run under: a
+/// guest's `/usr/local/bin` where a rootfs can run (Android), the bin
+/// directory [platformByteRepairBinDir] names elsewhere — Linux being the
+/// desktop this app targets, and the only one whose host shell runs setup.
+ByteRepairStore platformByteRepairStore(
+  AppConfig config,
+  String project,
+  String workspace,
+  String cacheDir,
+  RootfsStore? rootfs,
+) =>
+    FileByteRepairStore(
+      config: config,
+      project: project,
+      workspace: workspace,
+      installDir:
+          Platform.isAndroid ? guestEsbmcInstallDir : platformByteRepairBinDir(cacheDir)!,
+      // A guest's apk is a local package manager; the host fetches a 240 MB
+      // ESBMC release zip over the network.
+      installTimeout: Platform.isAndroid
+          ? const Duration(minutes: 10)
+          : const Duration(minutes: 30),
+      rootfsStore: rootfs,
+    );
+
+/// The bin directory a rootfs-isolated project's turns find the fetched tools
+/// on, or null where there is nothing to inject — a guest reaches its own
+/// `/usr/local/bin` without help, and every platform but Linux has no host
+/// install to point at. The one composition of the path: the store's
+/// `installDir` is derived from this, so the store that fills the directory
+/// and the driver that injects it cannot disagree.
+String? platformByteRepairBinDir(String cacheDir) =>
+    Platform.isLinux ? p.join(cacheDir, "byte-repair", "bin") : null;
+
+/// Whether a project's `.setup-complete` marker is there. Synchronous because
+/// the chat page asks it in a build.
+///
+/// On the host the marker alone is not enough: the tools live in a cache
+/// directory the OS may empty, so the binary the gate stands for has to be
+/// there too. A cache clear between setups then leaves the chat page gated —
+/// honestly, since nothing is on PATH — and Run Setup repairs it. Inside a
+/// guest the marker is enough, since the rootfs copy it was written after is
+/// under the data directory a backup carries.
+bool platformSetupComplete(AppConfig config, String? project,
+    {String? byteRepairBinDir}) {
+  if (!File(config.setupCompleteFile(project: project)).existsSync()) {
+    return false;
+  }
+  if (byteRepairBinDir == null) return true;
+  return File(p.join(byteRepairBinDir, "esbmc")).existsSync();
+}
 
 /// Lay out whatever this build ships for the device's ABI, under [cacheDir]
 /// rather than the data directory: it is rebuilt from the APK on demand, so a
@@ -381,4 +485,18 @@ Future<T> platformWithWritableDir<T>(
       } catch (_) {}
     }
   }
+}
+
+/// Deletes a tree that may contain proot's mode-0000 bind stubs, which a plain
+/// `Directory.delete(recursive: true)` cannot list and so dies on. Delegates to
+/// `removeTree` (`tree_ops.dart`), the one place that knows about the stubs —
+/// the same function the rootfs stores use to delete their own. Called by the
+/// restore clear for every top-level directory in the data dir, because the
+/// stubs sit deep inside `projects/<project>/rootfs/...` and a recursive delete
+/// of the `projects/` entry dies on one. `dart:io`-only on purpose: the web has
+/// no rootfs under the data directory and no stubs, so its side is a plain
+/// recursive delete.
+Future<void> platformDeleteTree(String path) async {
+  final err = await removeTree(path);
+  if (err != null) throw Exception("could not delete $path: $err");
 }

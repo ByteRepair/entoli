@@ -11,11 +11,13 @@ import "../../data/builtin/llm/local_kv_cache.dart";
 import "../../data/builtin/llm/local_pool_client.dart";
 import "../../data/builtin/llm/local_prefill.dart";
 import "../../data/local/file_chat_store.dart";
+import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/background_work.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
+import "../../domain/builtin_project.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_handoff.dart";
 import "../../domain/local_llm.dart";
@@ -42,35 +44,45 @@ import "io/platform.dart" if (dart.library.js_interop) "web/platform.dart";
 /// prompt sources below are built once rather than per platform.
 
 /// The agent, wired to what this platform can reach and to whatever the
-/// settings page last wrote. [library] is Entoli's commands and agents, which
-/// the agent expands itself. [store] is the chat store, which the agent needs
-/// to write artifacts to the chat's `artifacts/` dir.
+/// settings page last wrote. [libraries] is Entoli's commands and agents per
+/// project — the default's is the base set every other project inherits. The
+/// agent expands references itself, against the project's library. [store] is
+/// the chat store, which the agent needs to write artifacts to the chat's
+/// `artifacts/` dir.
 BuiltinBackend createBackend(
   AppConfig config,
-  PromptLibrary library,
+  Map<String?, PromptLibrary> libraries,
   ChatStore store, {
   Toolset? tools,
   RootfsStore? rootfs,
   String? abi,
   required LocalLlm localLlm,
   LocalKvCache? kvCache,
+  String? byteRepairBinDir,
 }) {
   AppSettings settings() => AppSettings.load(config);
-  return BuiltinBackend(
+  final backend = BuiltinBackend(
     config: config,
-    library: library,
     shell: platformShell(
       environment: () => settings().environment,
       // Resolved per command rather than once: a Linux installed from the
       // settings page reaches the next command, and one deleted stops being
       // where commands run without the app having to be restarted.
-      driver: () => platformDriver(
-        dataDir: config.dataDir,
+      driver: ({String? project}) => platformDriver(
+        defaultSkillsBundledDir: config.bundledSkillsDir(),
+        defaultUserSkillsDir: config.promptsDir(CompletionKind.skill),
+        projectSkillsBundledDir:
+            project == null ? null : config.bundledSkillsDir(project: project),
+        projectUserSkillsDir:
+            project == null ? null : config.promptsDir(CompletionKind.skill, project: project),
         tools: tools,
         proot: tools?.proot,
         store: rootfs,
         rootfsId: settings().rootfsId,
         abi: abi,
+        project: project,
+        config: config,
+        byteRepairBinDir: byteRepairBinDir,
       ),
       // iOS resolves its own shell (IshShell, not LocalShell) from these —
       // the driver callback above is exec-based and iOS denies a child process.
@@ -87,6 +99,10 @@ BuiltinBackend createBackend(
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
     ),
   );
+  for (final entry in libraries.entries) {
+    backend.setLibrary(entry.key, entry.value);
+  }
+  return backend;
 }
 
 /// The on-device prompt warm-up, built where the shell that words the system
@@ -135,13 +151,13 @@ LocalPrefill? createLocalPrefill(
              // The same skills a turn's prompt lists, off the same library the
              // backend holds — a warm-up built without them caches a prefix no
              // chat ever sends.
-             skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+             skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
            ),
           const LlmMessage(role: LlmRole.user, text: "Hello"),
         ],
          tools: agentTools(
             caps: caps,
-            skills: backend.library?.entries(CompletionKind.skill) ?? const [],
+            skills: backend.libraryFor(null)?.entries(CompletionKind.skill) ?? const [],
             // A default turn has auto-memory off, so the warmed prefix carries
            // no memory tools; a turn with them misses the cache rather than
            // the cache serving a list no turn sends.
@@ -195,12 +211,40 @@ Future<Toolset?> installBundledTools(String cacheDir) =>
 /// have.
 RootfsStore createRootfsStore(String cacheDir) => platformRootfsStore(cacheDir);
 
+/// The Byte Repair tooling store, over that rootfs store. Which project it is
+/// for and where its fetched tools land are decided here rather than in each
+/// side of the conditional import, so the two cannot disagree — and so the
+/// store the turns' driver injects on PATH and the store that fills it are
+/// built from the one directory. [cacheDir] is the resolved cache directory;
+/// where the install goes is the platform side's to answer.
+ByteRepairStore createByteRepairStore(
+        AppConfig config, String cacheDir, RootfsStore? rootfs) =>
+    platformByteRepairStore(
+      config,
+      ByteRepairProject().dir,
+      config.projectWorkspaceDir(project: ByteRepairProject().dir),
+      cacheDir,
+      rootfs,
+    );
+
+/// The bin directory the host side injects on PATH for rootfs-isolated
+/// projects, or null where there is none. Resolved from the same cache
+/// directory the store was, so the two cannot disagree.
+String? byteRepairBinDir(String cacheDir) => platformByteRepairBinDir(cacheDir);
+
+/// Whether a project that requires setup has its `.setup-complete` marker.
+/// Synchronous because the chat page asks it in a build; true on the web,
+/// where nothing could write the marker and nothing is gated by it.
+bool setupComplete(AppConfig config, String? project, String? binDir) =>
+    platformSetupComplete(config, project, byteRepairBinDir: binDir);
+
 Future<String?> deviceAbi() => platformAbi();
 
-/// The version this build was made from, out of the `version.json` Flutter
-/// writes into every bundle. Reading it is the platform's, since where it lands
-/// varies; the build number after the `+` is the build's own, and pubspec
-/// carries none — see "What the app is".
+/// The version this build was made from, out of the `version.json` asset.
+/// `tool/prepare.sh` writes it from pubspec's `version:`, and it is declared
+/// in pubspec so every platform's bundle carries it — Flutter only writes its
+/// own for Linux and Web, which overrides ours where one exists. The build
+/// number is the build's own and not reported — see "What the app is".
 ///
 /// Null if it could not be read, which About leaves the line out for rather
 /// than a startup failing over a string nothing depends on.
@@ -208,11 +252,7 @@ Future<String?> appVersion() async {
   final source = await platformVersionJson();
   if (source == null) return null;
   try {
-    final json = jsonDecode(source) as Map<String, dynamic>;
-    final version = json["version"] as String?;
-    final build = json["build_number"] as String?;
-    if (version == null) return null;
-    return build == null || build.isEmpty ? version : "$version+$build";
+    return (jsonDecode(source) as Map<String, dynamic>)["version"] as String?;
   } catch (_) {
     return null;
   }
@@ -297,12 +337,14 @@ AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 ReminderAlarms createReminderAlarms() => platformReminderAlarms();
 
 /// The presets, and the user's own beside them. Their directory is on the
-/// config's filesystem, so it exists on every platform now. The bundled skills
-/// are extracted to the config's filesystem first — `installBundledSkills`,
-/// called before the library is built in `main`.
-List<PromptSource> createPromptSources(AppConfig config) => [
-      BundledPrompts(config: config),
-      DirectoryPrompts(config),
+/// config's filesystem, so it exists on every platform now. The bundled
+/// skills are extracted to the config's filesystem first — `installBundledSkills`,
+/// called before the library is built in `main`. [project] is the project
+/// whose overrides are layered on top of the default set; `null` is the
+/// default project, the way it is everywhere else a project is named.
+List<PromptSource> createPromptSources(AppConfig config, {String? project}) => [
+      BundledPrompts(config: config, project: project),
+      DirectoryPrompts(config, project: project),
     ];
 
 /// What this machine calls itself, where it has a name. The sync device name
@@ -323,3 +365,13 @@ Future<void> chmodReadOnly(List<String> paths) => platformChmodReadOnly(paths);
 Future<T> withWritableDir<T>(
         String path, Future<T> Function() action) =>
     platformWithWritableDir(path, action);
+
+/// Deletes a tree that may contain proot's mode-0000 bind stubs. The io side
+/// delegates to `removeTree` (`tree_ops.dart`); the web side has no rootfs and
+/// no stubs, so it is a plain recursive delete. Called by `restoreBackup` for
+/// every top-level directory in the data dir — the stubs live deep inside a
+/// `projects/<project>/rootfs/` tree, so the whole `projects/` entry has to go
+/// through it. This is the same `removeTree` the rootfs stores use, so the one
+/// function that knows how to clear a stub-bearing tree is the one the restore
+/// reuses.
+Future<void> deleteTree(String path) => platformDeleteTree(path);

@@ -8,7 +8,7 @@ output="${2:?usage: make-appimage.sh <bundle-dir> <output.AppImage>}"
 
 here="$(dirname "$(readlink -f "$0")")"
 root="$(cd "$here/../.." && pwd)"
-desktop="$here/io.github.yiannis128.agentchat.desktop"
+desktop="$here/io.byterepair.entoli.desktop"
 # The name the icon has to take, read from the entry that decides it.
 icon="$(sed -n 's/^Icon=//p' "$desktop")"
 

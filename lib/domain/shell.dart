@@ -99,24 +99,28 @@ class Proot {
 ///
 /// The machine's own shell is a driver too, which is what lets a guest, an
 /// emulator or a container arrive as a new value the shell does not have to
-/// learn about: the session machinery runs whatever [command] ends in, and the
-/// resolver in `core/platform/` picks one per command.
+/// learn about: the session machinery runs whatever [commandFor] ends in, and
+/// the resolver in `core/platform/` picks one per command.
 class ShellDriver {
   const ShellDriver({
-    required this.command,
+    required this.commandFor,
     required this.environment,
     required this.projectHome,
     required this.description,
+    this.guestRoot,
+    this.hostToGuestPaths = const {},
+    this.includeParentEnvironment = true,
   });
 
-  /// The executable and its arguments, ending in the shell a command runs in.
-  /// The script goes on the end as `-c`, exactly as it does on the machine's
-  /// own shell.
-  final List<String> command;
+  /// The executable and its arguments, ending in the shell a command runs in,
+  /// built for the chat's own [cwd] and [home]. A guest driver binds the
+  /// workspace at a clean path and sets `-w` to the guest path; a host driver
+  /// returns the same list regardless.
+  final List<String> Function(String cwd, String home) commandFor;
 
   /// The environment the shell starts with, below the app's and the project's
-  /// variables, which still win over it. A guest's, where [command] reaches a
-  /// guest: the host toolset's paths are the host's, and a command inside the
+  /// variables, which still win over it. A guest's, where [commandFor] reaches
+  /// a guest: the host toolset's paths are the host's, and a command inside the
   /// guest should find none of them.
   final Map<String, String> environment;
 
@@ -126,10 +130,26 @@ class ShellDriver {
   /// itself [Shell.start]'s `sharedHome` answers for it instead.
   final bool projectHome;
 
+  /// Where the project workspace appears inside the guest (`/root` for proot),
+  /// or null on the machine itself. The file tools translate paths under it
+  /// back to the host's, and the system prompt uses `~` in its place.
+  final String? guestRoot;
+
+  /// Host path prefixes mapped to their guest equivalents, for translating
+  /// paths the model is told (skill base directories) into the guest's
+  /// vocabulary. Empty on the machine itself.
+  final Map<String, String> hostToGuestPaths;
+
   /// What the model is told it is operating on, e.g. `Alpine Linux 3.24
   /// (aarch64)`, or the machine's own shell where the command runs on the
   /// machine itself. The agent's system prompt carries it.
   final String description;
+
+  /// Whether the process's own environment is merged under [environment]. A
+  /// host driver inherits the machine's `PATH`, `DISPLAY` and the rest; a guest
+  /// driver does not, since the parent's values are host paths the guest cannot
+  /// see and [environment] names every var the guest needs.
+  final bool includeParentEnvironment;
 }
 
 /// A command already running. Separate from its result so an aborted turn can
@@ -171,7 +191,8 @@ abstract class Shell {
       Map<String, String>? environment,
       bool sharedHome = true,
       bool oneShot = false,
-      bool restart = false});
+      bool restart = false,
+      String? project});
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -190,6 +211,15 @@ abstract class Shell {
   /// directory every project would share. A shell on the machine itself is
   /// false, where [start]'s `sharedHome` answers for it instead.
   bool get projectHome => false;
+
+  /// Where the project workspace appears inside the guest (`/root` for proot),
+  /// or null on the machine itself. The file tools translate paths under it
+  /// back to the host's, and the system prompt uses `~` in its place.
+  String? get guestRoot => null;
+
+  /// Host path prefixes mapped to their guest equivalents, for translating
+  /// paths the model is told into the guest's vocabulary. Empty on the machine.
+  Map<String, String> get hostToGuestPaths => const {};
 
   /// Where [cwd]'s persistent shell is standing, live: the directory a `cd`
   /// in it leaves it in. Null where this shell runs nothing persistent or has
@@ -224,7 +254,8 @@ class UnavailableShell extends Shell {
           Map<String, String>? environment,
           bool sharedHome = true,
           bool oneShot = false,
-          bool restart = false}) =>
+          bool restart = false,
+          String? project}) =>
       const _Unavailable();
 }
 

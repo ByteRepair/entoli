@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Entoli
+Comment=Client-side ChatGPT-style chat UI with a built-in coding agent
+Exec=agent_chat
+<<<<<<<< HEAD:tool/linux/io.github.yiannis128.agentchat.desktop
+StartupWMClass=io.github.yiannis128.agentchat
+Icon=io.github.yiannis128.agentchat
+========
+StartupWMClass=io.byterepair.entoli
+Icon=io.byterepair.entoli
+>>>>>>>> origin/master:tool/linux/io.byterepair.entoli.desktop
+Categories=Development;
+Terminal=false

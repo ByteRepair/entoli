@@ -58,9 +58,8 @@ void main() {
   }) {
     client = FakeLlmClient(turns);
     shell = FakeShell(respond ?? okEmpty);
-    return BuiltinBackend(
+    final backend = BuiltinBackend(
       config: config,
-      library: library,
       shell: shell,
       webSearch: FakeWebSearch(),
       store: FileChatStore(config),
@@ -71,6 +70,8 @@ void main() {
         lookupEnv: (_) => null,
       ),
     );
+    if (library != null) backend.setLibrary(null, library);
+    return backend;
   }
 
   /// Most of these are not about approvals, so the default here is the chat
@@ -94,6 +95,7 @@ void main() {
     DateTime? at,
     MemorySettings memory = MemorySettings.off,
     String? bundledInstructions,
+    bool includesUserInstructions = false,
   }) =>
       backend
           .sendPrompt(
@@ -109,7 +111,8 @@ void main() {
                   memory: memory,
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,
-                  bundledInstructions: bundledInstructions))
+                  bundledInstructions: bundledInstructions,
+                  includesUserInstructions: includesUserInstructions))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -215,12 +218,42 @@ void main() {
       await send(backend, "hi",
           project: "anonymous",
           sharedWorkspace: false,
-          bundledInstructions: "This is an anonymous chat.");
+          bundledInstructions: "This is an anonymous chat.",
+          includesUserInstructions: false);
 
       final system = client.sent.first[1].text;
       expect(system, contains("This is an anonymous chat."));
       expect(system, isNot(contains("project rules")));
       expect(system, isNot(contains("global rules")));
+    });
+
+    test("a bundled note that includes the user's instructions reads the "
+        "files after it, so the user's rules win on conflict", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      Directory(config.projectWorkspaceDir(project: "byte-repair"))
+          .createSync(recursive: true);
+      File(p.join(config.projectWorkspaceDir(project: "byte-repair"),
+          "AGENTS.md"))
+          .writeAsStringSync("project rules");
+      File(config.globalInstructionsFile).writeAsStringSync("global rules");
+
+      await send(backend, "hi",
+          project: "byte-repair",
+          bundledInstructions: "This is a Byte Repair project.",
+          includesUserInstructions: true);
+
+      final system = client.sent.first[1].text;
+      // The bundled note is the base.
+      expect(system, contains("This is a Byte Repair project."));
+      // The user's files are read on top of it, global then project.
+      expect(system, contains("global rules"));
+      expect(system, contains("project rules"));
+      // The note renders before the files — the project file wins on conflict
+      // because it is rendered last, the way it is for a user's project.
+      expect(system.indexOf("This is a Byte Repair project."),
+          lessThan(system.indexOf("project rules")));
     });
 
     test("relevant memories are recalled into the turn", () async {
@@ -331,6 +364,19 @@ void main() {
       expect(system, contains(config.workspaceDir(chatId, project: "work")));
       expect(system, contains(config.projectWorkspaceDir(project: "work")));
       expect(Directory(config.projectWorkspaceDir(project: "work")).existsSync(), isTrue);
+    });
+
+    // Scratch work a later turn may want is the workspace's, not the machine
+    // temp directory's — /tmp was where the crops that a chat lost came from.
+    test("the workspace prompt keeps scratch work out of /tmp", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+      await send(backend, "hi");
+
+      final system = client.sent.first[1].text;
+      expect(system, contains("Intermediate work"));
+      expect(system, contains("not in the machine's /tmp"));
     });
 
     // A project that does not share a workspace is the answer to "a chat that

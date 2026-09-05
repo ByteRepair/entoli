@@ -29,6 +29,7 @@ import "package:agent_chat/domain/local_model_store.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/reminder_alarms.dart";
+import "package:agent_chat/domain/reminder_runner.dart";
 import "package:agent_chat/domain/voice.dart";
 import "package:agent_chat/domain/voice_model.dart";
 import "package:agent_chat/domain/download.dart";
@@ -267,7 +268,8 @@ class FakeReminderAlarms implements ReminderAlarms {
 
   final scheduled = <int, DateTime>{};
   final cancelled = <int>[];
-  final posted = <({String title, String body, String? chatId})>[];
+  final posted =
+      <({String title, String body, String? chatId, String channel})>[];
 
   List<String> pendingFired = [];
   String? pendingOpen;
@@ -323,8 +325,13 @@ class FakeReminderAlarms implements ReminderAlarms {
   }
 
   @override
-  Future<void> notify({required String title, required String body, String? chatId}) async {
-    posted.add((title: title, body: body, chatId: chatId));
+  Future<void> notify({
+    required String title,
+    required String body,
+    String? chatId,
+    String channel = ReminderAlarms.defaultChannel,
+  }) async {
+    posted.add((title: title, body: body, chatId: chatId, channel: channel));
   }
 
   @override
@@ -475,6 +482,16 @@ class FakeBackend implements AgentBackend {
   /// What the next turn streams back. Defaults to an immediate, empty reply.
   List<AgentEvent> scriptedEvents = const [DoneEvent()];
 
+  /// What each of the next turns streams back, one entry per call: a retry
+  /// round takes a different reply from the send that started it, and this is
+  /// how a test scripts the whole sequence. [scriptedEvents] is still read
+  /// first, so a test setting either gets what it set.
+  List<List<AgentEvent>> scriptedRounds = const [];
+
+  List<AgentEvent> _next() => scriptedRounds.isEmpty
+      ? scriptedEvents
+      : scriptedRounds.removeAt(0);
+
   /// When set, the turn stays open after the scripted events, the way a real
   /// one does while the backend is still working.
   Completer<void>? hold;
@@ -484,7 +501,7 @@ class FakeBackend implements AgentBackend {
       {List<Message> history = const [],
       TurnSettings settings = const TurnSettings()}) async* {
     prompts.add((prompt: prompt, history: history, settings: settings));
-    yield* Stream.fromIterable(scriptedEvents);
+    yield* Stream.fromIterable(_next());
     if (hold != null) await hold!.future;
   }
 
@@ -496,7 +513,7 @@ class FakeBackend implements AgentBackend {
       {List<Message> history = const [],
       TurnSettings settings = const TurnSettings()}) async* {
     resumes.add((history: history, settings: settings));
-    yield* Stream.fromIterable(scriptedEvents);
+    yield* Stream.fromIterable(_next());
     if (hold != null) await hold!.future;
   }
 
@@ -649,14 +666,20 @@ class FakeChatStore implements ChatStore {
       _resources[chatId]?[resource];
 
   @override
-  Future<String> createArtifact(String chatId, String sourceDir, {String? project}) async {
+  Future<String> createArtifact(
+      String chatId, String sourceDir, String entryFile,
+      {String? project}) async {
     final artifactId = const Uuid().v4();
-    _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {"index.html": Uint8List.fromList(utf8.encode("<p>"))};
+    _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {
+      entryFile: Uint8List.fromList(utf8.encode("<p>")),
+    };
     return artifactId;
   }
 
   @override
-  Future<void> updateArtifact(String chatId, String artifactId, String sourceDir, {String? project}) async {
+  Future<void> updateArtifact(String chatId, String artifactId,
+      String sourceDir, String entryFile,
+      {String? project}) async {
     // Record that an update happened; the fake doesn't actually copy.
     _artifacts.putIfAbsent(chatId, () => {}).putIfAbsent(artifactId, () => {});
   }
@@ -1233,5 +1256,22 @@ class LoopbackChannel implements ByteChannel {
     // channel is something the other side is told about. Closing only this
     // one left the peer waiting out its timeouts for a channel already gone.
     await other?.close();
+  }
+}
+
+/// A [ReminderTurnDriver] that records what it was asked and returns a canned
+/// result. The runner's unit tests care about the orchestration — chat
+/// creation, stamping, the sidebar — not the turn itself, which is
+/// [ChatController]'s job and tested through it.
+class FakeReminderTurnDriver implements ReminderTurnDriver {
+  final List<({String chatId, String prompt})> calls = [];
+  ReminderOutcome outcome = ReminderOutcome.done;
+  String snippet = "";
+
+  @override
+  Future<({ReminderOutcome outcome, String snippet})> send(
+      String chatId, String prompt) async {
+    calls.add((chatId: chatId, prompt: prompt));
+    return (outcome: outcome, snippet: snippet);
   }
 }

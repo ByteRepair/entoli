@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:io";
 
+import "package:clock/clock.dart";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -10,13 +11,16 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/llm/local_prefill.dart";
+import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/data/local/file_chat_store.dart";
+import "package:agent_chat/data/local/file_byte_repair_store.dart";
 import "package:agent_chat/data/sync/sync_hub.dart" show RemoteChatEntry, SyncHub;
 import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -42,6 +46,23 @@ import "package:agent_chat/ui/widgets/model_picker.dart";
 
 import "fakes.dart";
 
+/// The shell a test gets by default: a real host shell where the test pretends
+/// to be Android — [proot] or [abi] set — and `UnavailableShell` otherwise,
+/// which is the web default. The terminal settings page gates on
+/// `canRunCommands`, so a test pretending to be Android has to answer true the
+/// way the real one would. A test pretending to be a native desktop that the
+/// two knobs cannot distinguish passes [shell] explicitly.
+Shell _defaultShell(bool proot, String? abi) =>
+    proot || abi != null
+        ? LocalShell(environment: () => const {})
+        : const UnavailableShell();
+
+/// The fixed "now" every test runs under, so a reminder's fire time is judged
+/// against this rather than the wall clock. Picked before every reminder fire
+/// date the suite uses, so a reminder due "today" stays due and one set for
+/// later is not yet due.
+final _testNow = DateTime(2026, 7, 1, 12);
+
 /// The app over a throwaway data directory, with the backend faked. Create one
 /// per test and [dispose] it in `tearDown`.
 class TestApp {
@@ -64,8 +85,11 @@ class TestApp {
     required this.localLlm,
     required this.prefill,
     required this.work,
+    required this.clock,
     required this.container,
   });
+
+  final Clock clock;
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
@@ -132,6 +156,8 @@ class TestApp {
     Map<String, String> drivenBy = const {},
     MirrorControl control = const MirrorControl(),
     SyncHub? hub,
+    Clock? clock,
+    bool appHidden = false,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -140,6 +166,10 @@ class TestApp {
     final files = handoff ?? FakeFileHandoff();
     final assist = FakeAssistantLaunch();
     final alarms = reminderAlarms ?? FakeReminderAlarms(available: false);
+    // Pinned so a reminder's fire time is not judged against the wall clock
+    // the suite happens to run on. A test that needs a different now passes
+    // its own [Clock.fixed].
+    final testClock = clock ?? Clock.fixed(_testNow);
     final backups = FakeBackupHandoff();
     final restart = FakeAppRestart();
     final chats = store ?? FileChatStore(config);
@@ -178,21 +208,26 @@ class TestApp {
       localLlm: server,
       prefill: warmUp,
       work: work,
+      clock: testClock,
       container: ProviderContainer(
         overrides: [
           chatStoreProvider.overrideWithValue(chats),
           agentBackendProvider.overrideWithValue(backend),
-          shellProvider.overrideWithValue(shell ?? const UnavailableShell()),
+          shellProvider.overrideWithValue(
+              shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
           attachmentPickerProvider.overrideWithValue(picker),
-          promptLibraryProvider
-              .overrideWith(() => PromptLibraryNotifier(library ?? testLibrary())),
+          promptLibraryProvider.overrideWith2(
+              (project) => PromptLibraryNotifier(project, library ?? testLibrary())),
           launcherIconsProvider.overrideWithValue(launcher),
           systemAccentProvider.overrideWithValue(systemAccent),
           fileHandoffProvider.overrideWithValue(files),
           assistantLaunchProvider.overrideWithValue(assist),
           reminderAlarmsProvider.overrideWithValue(alarms),
+          appHiddenProvider.overrideWith(() => _AppHidden(appHidden)),
           remindersProvider.overrideWith(() => Reminders(reminders)),
+          reminderTurnDriverProvider.overrideWithValue(FakeReminderTurnDriver()),
+          clockProvider.overrideWithValue(testClock),
           backupHandoffProvider.overrideWithValue(backups),
           appRestartProvider.overrideWithValue(restart),
           linkOpenerProvider.overrideWithValue(linkOpener),
@@ -204,6 +239,11 @@ class TestApp {
               () => InstalledVoiceModels({...voiceModels, ...system},
                   system: system)),
           rootfsStoreProvider.overrideWithValue(linux),
+          byteRepairStoreProvider.overrideWithValue(FileByteRepairStore(
+              config: config,
+              project: ByteRepairProject().dir,
+              workspace: config.projectWorkspaceDir(project: ByteRepairProject().dir),
+              rootfsStore: linux)),
           installedRootfsProvider.overrideWith(() => InstalledRootfs(linuxes)),
           localModelStoreProvider.overrideWithValue(onDevice),
           localLlmProvider.overrideWithValue(server),
@@ -248,6 +288,14 @@ class TestApp {
   final FakeRootfsStore rootfs;
   final FakeLocalModelStore localModels;
   final FakeLocalLlm localLlm;
+
+  /// What the lifecycle listener would have reported. Overridden before the
+  /// container is built; a test that flips it mid-test does it through the
+  /// notifier.
+  bool get appHidden => container.read(appHiddenProvider);
+
+  set appHidden(bool hidden) =>
+      container.read(appHiddenProvider.notifier).set(hidden);
 
   /// The warm-up, where a test asked for one — null otherwise, which is the
   /// platform most of the suite is pretending to be.
@@ -562,9 +610,9 @@ const voiceModelPair = (recognition: "whisper-tiny", speech: "piper-en_US-amy");
 final voiceModelIds = {voiceModelPair.recognition, voiceModelPair.speech};
 
 /// What About reads. Nothing serves `version.json` under `flutter test`, so a
-/// test that asserts on the version asserts on this. Carries a build number,
-/// which is the shape a built app reports — see `appVersion` in `core/platform/`.
-const testAppVersion = "1.2.3+4";
+/// test that asserts on the version asserts on this — see `appVersion` in
+/// `core/platform/`.
+const testAppVersion = "1.2.3";
 
 /// Whether [button] would do anything if it were pressed. A dead one is still
 /// drawn and still hit by a tap, so its callback is the only thing that says so.
@@ -715,4 +763,14 @@ AppConfig tempConfig([String prefix = "agent_chat_test_"]) {
     tmp.deleteSync(recursive: true);
   });
   return config;
+}
+
+/// The lifecycle as a test wants it: whatever [appHidden] was created saying,
+/// changeable mid-test through [TestApp.appHidden].
+class _AppHidden extends AppHidden {
+  _AppHidden(this.initial);
+  final bool initial;
+
+  @override
+  bool build() => initial;
 }

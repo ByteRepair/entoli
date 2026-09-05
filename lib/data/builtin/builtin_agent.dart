@@ -67,8 +67,9 @@ const _bashCommonArgs = {
   "timeout": {
     "type": "integer",
     "description":
-        "How long the command may run, in milliseconds. Defaults to 60000 "
-        "and cannot exceed it.",
+        "How long the command may run, in milliseconds. Set this to give a "
+        "command a different deadline than the default 60000; values above "
+        "180000 (3 minutes) are capped to it.",
   },
 };
 
@@ -114,7 +115,7 @@ const bashToolOneShot = LlmTool(
 class BuiltinOptions {
   const BuiltinOptions({
     this.stepLimit = 40,
-    this.commandTimeout = const Duration(seconds: 60),
+    this.commandTimeout = const Duration(minutes: 3),
     this.maxAttempts = 4,
     this.retryBackoff = const Duration(seconds: 1),
     this.maxConcurrentSubAgents = 8,
@@ -130,10 +131,13 @@ class BuiltinOptions {
 
   /// How many times a failed request is tried again before the turn gives up,
   /// and the first wait between two — it doubles after that, so the defaults
-  /// spend 7s waiting in total. Deliberately short: the UI cannot show what it
-  /// has not been told, so trouble is reported long before its patience runs
-  /// out. Applies to retryables other than 429; a 429 is governed by the
-  /// shared [RateLimitGate] and [rateLimitRetryBudget].
+  /// spend 7s waiting in total. Deliberately short for the parent: the
+  /// controller carries a failed turn on itself, and one attempt here plus its
+  /// retry rounds there is the same patience without a second mechanism.
+  /// Sub-agents keep the default, a failed worker being a tool result the
+  /// parent can redo rather than a turn to give up on. Applies to retryables
+  /// other than 429; a 429 is governed by the shared [RateLimitGate] and
+  /// [rateLimitRetryBudget].
   final int maxAttempts;
   final Duration retryBackoff;
 
@@ -154,6 +158,19 @@ class BuiltinOptions {
   /// agent gives up. Other retryables (503, connection drops) keep
   /// [maxAttempts].
   final Duration rateLimitRetryBudget;
+
+  /// What the parent agent runs with: one attempt per request, since the
+  /// controller retries a failed turn itself. Everything else unchanged — the
+  /// [stepLimit], the timeouts, the concurrency caps.
+  BuiltinOptions get parent => BuiltinOptions(
+        stepLimit: stepLimit,
+        commandTimeout: commandTimeout,
+        maxAttempts: 1,
+        retryBackoff: retryBackoff,
+        maxConcurrentSubAgents: maxConcurrentSubAgents,
+        maxConcurrentLlmRequests: maxConcurrentLlmRequests,
+        rateLimitRetryBudget: rateLimitRetryBudget,
+      );
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a
@@ -295,6 +312,7 @@ class BuiltinAgent {
     this.rateLimitGate,
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
+    this.project,
     this.skills = const [],
     this.webSearch,
     this.profile,
@@ -437,6 +455,11 @@ class BuiltinAgent {
   /// of a shared one.
   final bool sharedWorkspace;
 
+  /// The project this agent's turn is in, so the shell driver can resolve a
+  /// per-project rootfs instance for an isolated built-in. Null for the
+  /// default project and user projects.
+  final String? project;
+
   /// The whole skill library, both invocation halves of it. The system prompt
   /// lists the model-invocable ones, the `skill` tool refuses the rest, and a
   /// sub-agent gets the same list — a skill's workflow is as much a worker's
@@ -458,7 +481,10 @@ class BuiltinAgent {
   /// headless with no viewer surface, so the tool is dropped for them the way
   /// `ask_user` is. The closure resolves the path (with `project:` prefix
   /// support) and copies the dir; the agent just passes the args through.
-  final Future<String> Function(String path, {String? artifactId})? saveArtifact;
+  /// [entryFile] is the file inside the copied dir the viewer opens, which
+  /// the store styles at publish time.
+  final Future<String> Function(String path, String entryFile,
+      {String? artifactId})? saveArtifact;
 
   /// Packages a skill drafted in the workspace and stages the `.skill` for the
   /// user to install. Null where the agent is a sub-agent: a worker does not
@@ -606,7 +632,8 @@ class BuiltinAgent {
       yield* _query();
       if (_cancelled) break;
       if (_queryError != null) {
-        yield ErrorEvent("$_queryError");
+        yield ErrorEvent("$_queryError",
+            retryable: _queryError is LlmException && (_queryError as LlmException).retryable);
         break;
       }
       final completion = _completion;
@@ -621,8 +648,7 @@ class BuiltinAgent {
       if (_cancelled) break;
 
       if (step == options.stepLimit - 1) {
-        yield ErrorEvent("Stopped after ${options.stepLimit} steps without finishing. "
-            "Ask again to carry on.");
+        yield StepLimitEvent(options.stepLimit);
       }
     }
 
@@ -659,6 +685,7 @@ class BuiltinAgent {
       canRunCommands: caps.commands,
       sharedWorkspace: sharedWorkspace,
       projectHome: shell.projectHome,
+      guestRoot: shell.guestRoot,
     );
     final head = [
       agentSystemMessage(
@@ -989,7 +1016,18 @@ class BuiltinAgent {
       return;
     }
     yield ToolResultEvent(
-        ToolResult(callId: call.id, returnCode: 0, output: skillPrompt(document, arguments)));
+        ToolResult(callId: call.id, returnCode: 0, output: _skillOutput(document, arguments)));
+  }
+
+  /// The skill body with its base directory translated to the guest's paths,
+  /// where the shell runs inside one, so the model can `cd` to it and run
+  /// its scripts.
+  String _skillOutput(PromptDocument document, String arguments) {
+    var body = skillPrompt(document, arguments);
+    for (final MapEntry(:key, :value) in shell.hostToGuestPaths.entries) {
+      body = body.replaceAll(key, value);
+    }
+    return body;
   }
 
   /// Search the web. Read-only, so no approval — the result is worded the same
@@ -1032,6 +1070,12 @@ class BuiltinAgent {
     yield ToolResultEvent(_ran(call, result));
   }
 
+  /// Resolve a file-tool path through the workspaces and the guest root, so
+  /// every call site carries the guest translation without spelling it out.
+  String _resolvePath(String path) =>
+      resolveWorkspacePath(fs, path, workspace, projectWorkspace,
+          guestRoot: shell.guestRoot);
+
   /// Read a file. A path the workspaces hold runs without asking, the way
   /// `bash` reads in `never` mode; one that reaches past them is offered to
   /// the user first, on the same terms a command is.
@@ -1042,7 +1086,7 @@ class BuiltinAgent {
           'The $readToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1055,7 +1099,16 @@ class BuiltinAgent {
         return ShellResult(
             returnCode: -1, output: "", exceptionInfo: "File not found: ${args.path}");
       }
-      final content = await file.readAsString();
+      String content;
+      try {
+        content = await file.readAsString();
+      } on FileSystemException {
+        return ShellResult(
+            returnCode: -1,
+            output: "",
+            exceptionInfo: "Not a UTF-8 text file (binary?): ${args.path}. "
+                "Inspect binary files with a command instead of $readToolName.");
+      }
       final lines = content.split("\n");
       final offset = (args.offset ?? 1).clamp(1, lines.length + 1);
       final limit = args.limit ?? lines.length;
@@ -1092,7 +1145,7 @@ class BuiltinAgent {
           "those arguments were missing.");
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1117,7 +1170,7 @@ class BuiltinAgent {
           '"new_string": "..."}; those arguments were missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1301,7 +1354,7 @@ class BuiltinAgent {
           'The $artifactToolName tool takes {"path": "..."}; that argument was missing.');
       return;
     }
-    final path = resolveWorkspacePath(fs, parsed.path, workspace, projectWorkspace);
+    final path = _resolvePath(parsed.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1309,10 +1362,12 @@ class BuiltinAgent {
       argumentsText: parsed.title.isEmpty ? parsed.path : parsed.title,
     ));
     String? artifactId;
-    Future<ShellResult> run() async {
-      artifactId = await saveArtifact!(parsed.path, artifactId: parsed.artifactId);
-      return const ShellResult(returnCode: 0, output: "");
-    }
+    Future<ShellResult> run() => _guarded(() async {
+          artifactId = await saveArtifact!(
+              parsed.path, parsed.entryFile,
+              artifactId: parsed.artifactId);
+          return const ShellResult(returnCode: 0, output: "");
+        });
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
       yield* _runGated(call, call.argumentsJson, artifactToolName, run,
           argumentsText: path);
@@ -1348,7 +1403,7 @@ class BuiltinAgent {
       yield* _reject(call, createSkillFormatError);
       return;
     }
-    final path = resolveWorkspacePath(fs, args.path, workspace, projectWorkspace);
+    final path = _resolvePath(args.path);
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
@@ -1357,23 +1412,23 @@ class BuiltinAgent {
     ));
     String? installId;
     String? skillName;
-    Future<ShellResult> run() async {
-      final skillDir = fs.directory(path);
-      if (!await skillDir.exists()) {
-        return ShellResult.failed(
-            "The directory '$path' does not exist. Write the skill there first "
-            "with write/edit, then call create_skill.");
-      }
-      final skillMdPath = fs.path.join(path, "SKILL.md");
-      if (!await fs.file(skillMdPath).exists()) {
-        return ShellResult.failed(
-            "The directory '$path' has no SKILL.md. A skill needs one.");
-      }
-      final result = await packageSkill!(args.path, args.name);
-      installId = result.installId;
-      skillName = result.name;
-      return const ShellResult(returnCode: 0, output: "");
-    }
+    Future<ShellResult> run() => _guarded(() async {
+          final skillDir = fs.directory(path);
+          if (!await skillDir.exists()) {
+            return ShellResult.failed(
+                "The directory '$path' does not exist. Write the skill there first "
+                "with write/edit, then call $createSkillToolName.");
+          }
+          final skillMdPath = fs.path.join(path, "SKILL.md");
+          if (!await fs.file(skillMdPath).exists()) {
+            return ShellResult.failed(
+                "The directory '$path' has no SKILL.md. A skill needs one.");
+          }
+          final result = await packageSkill!(args.path, args.name);
+          installId = result.installId;
+          skillName = result.name;
+          return const ShellResult(returnCode: 0, output: "");
+        });
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
       yield* _runGated(call, call.argumentsJson, createSkillToolName, run,
           argumentsText: path);
@@ -1431,6 +1486,11 @@ class BuiltinAgent {
   /// three file tools share this tail — read, write and edit — differing only
   /// in their `run`; the artifact tool has its own, since it emits a second
   /// event on success.
+  ///
+  /// A throw inside [run] is the tool failing, not the turn: it is answered as
+  /// a failed result the model reads, in the same shape every other tool
+  /// failure takes, rather than escaping the stream as an error the turn dies
+  /// on — a decode failure on a binary file used to end the turn.
   Stream<AgentEvent> _runFileTool(
     LlmToolCall call,
     String path,
@@ -1438,12 +1498,23 @@ class BuiltinAgent {
     Future<ShellResult> Function() run,
   ) async* {
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
-      yield* _runGated(call, call.argumentsJson, toolName, run,
-          argumentsText: path);
+      yield* _runGated(call, call.argumentsJson, toolName,
+          () => _guarded(run), argumentsText: path);
     } else {
-      _commandResult = await run();
+      _commandResult = await _guarded(run);
     }
     yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// Answer what [run] throws as a failed result, so an unexpected failure —
+  /// a decode, a full disk, a write that could not land — is one the model
+  /// reads and works around rather than one that ends the turn.
+  Future<ShellResult> _guarded(Future<ShellResult> Function() run) async {
+    try {
+      return await run();
+    } catch (e) {
+      return ShellResult.failed("$e");
+    }
   }
 
   /// Emit the approval banner, wait for the user, and run [run] if allowed.
@@ -1493,8 +1564,8 @@ class BuiltinAgent {
       case PermissionDecision.deny:
         _consecutiveAsks = 0;
         _commandResult = const ShellResult.failed(
-            "Denied by auto mode. The classifier flagged this as dangerous. "
-            "Ask the user what to do instead.");
+            "Denied by auto mode as dangerous. Do not retry this command; "
+            "tell the user what you were trying to do and let them decide.");
       case PermissionDecision.ask:
         _consecutiveAsks++;
         _totalAsks++;
@@ -1528,7 +1599,8 @@ class BuiltinAgent {
         timeout: timeout,
         environment: environment,
         oneShot: oneShot,
-        restart: args?["restart"] == true);
+        restart: args?["restart"] == true,
+        project: project);
     _running = run;
     try {
       return await run.result;

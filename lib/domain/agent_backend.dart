@@ -157,8 +157,24 @@ class RetryEvent extends AgentEvent {
 }
 
 class ErrorEvent extends AgentEvent {
-  const ErrorEvent(this.message);
+  const ErrorEvent(this.message, {this.retryable = false});
   final String message;
+
+  /// Whether carrying the turn on could plausibly succeed — a connection that
+  /// dropped, a provider that hiccuped — as opposed to one nothing retries
+  /// out of: a rejected key, a bad request, no model selected. What the
+  /// controller's automatic retry rounds ask before re-entering [resume].
+  final bool retryable;
+}
+
+/// The agent ran out of steps without finishing. Not an [ErrorEvent]: the turn
+/// gave up because it hit the step limit, not because something broke, so no
+/// [ErrorPart] is added to the message. The turn still ends as
+/// [TurnEnd.stepLimit], which is resumable — the Continue bar offers to carry
+/// on.
+class StepLimitEvent extends AgentEvent {
+  const StepLimitEvent(this.limit);
+  final int limit;
 }
 
 /// A non-error notice the turn wants the UI to show — auto mode pausing, for
@@ -294,6 +310,13 @@ class TurnSettings {
   /// AGENTS.md file is read, and the nested walk on a file read is off.
   final String? bundledInstructions;
 
+  /// Where [bundledInstructions] is set, whether the user's instruction files
+  /// are also read on top of the bundled note. False keeps the note as the
+  /// whole instructions; true reads the global and project AGENTS.md after it,
+  /// so the user's rules win on conflict. Has no effect where there is no
+  /// bundled note — a user's project reads its files regardless.
+  final bool includesUserInstructions;
+
   /// The project's own command variables, layered over the app-level ones by
   /// the shell. Empty where the project sets none; the app-level ones are the
   /// shell's to read on each command, for the reason they are settings.
@@ -311,6 +334,7 @@ class TurnSettings {
     this.sharedWorkspace = true,
     this.disabled = const {},
     this.bundledInstructions,
+    this.includesUserInstructions = false,
     this.environment = const {},
   });
 }

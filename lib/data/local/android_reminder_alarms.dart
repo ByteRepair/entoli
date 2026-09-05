@@ -75,11 +75,17 @@ class AndroidReminderAlarms implements ReminderAlarms {
   Future<void> doneFiring() => _channel.invokeMethod("doneFiring");
 
   @override
-  Future<void> notify({required String title, required String body, String? chatId}) =>
+  Future<void> notify({
+    required String title,
+    required String body,
+    String? chatId,
+    String channel = ReminderAlarms.defaultChannel,
+  }) =>
       _channel.invokeMethod("notify", {
         "title": title,
         "body": body,
         "chatId": ?chatId,
+        "channel": channel,
       });
 
   @override

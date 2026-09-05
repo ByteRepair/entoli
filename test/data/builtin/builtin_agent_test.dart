@@ -37,7 +37,7 @@ void main() {
     BuiltinOptions options = const BuiltinOptions(),
     ApproveMode approveMode = ApproveMode.never,
     bool canRunCommands = true,
-    Future<String> Function(String path, {String? artifactId})? saveArtifact,
+    Future<String> Function(String path, String entryFile, {String? artifactId})? saveArtifact,
     MemorySettings memory = MemorySettings.off,
     List<InstructionFile> instructions = const [],
     MemoryStore? memoryStore,
@@ -510,7 +510,7 @@ void main() {
           .toList();
 
       expect(client.sent, hasLength(3));
-      expect(events.whereType<ErrorEvent>().single.message, contains("3 steps"));
+      expect(events.whereType<StepLimitEvent>().single.limit, 3);
     });
 
     test("a retryable failure is announced and then tried again", () async {
@@ -550,6 +550,39 @@ void main() {
       expect(client.sent, hasLength(3));
       expect(events.whereType<RetryEvent>(), hasLength(2));
       expect(events.whereType<ErrorEvent>().single.message, contains("busy"));
+    });
+
+    test("the parent's options spend one attempt: the controller retries",
+        () async {
+      final client = FakeLlmClient([[], []]);
+      client.failures[0] = const LlmException("busy", statusCode: 503, retryable: true);
+      final events = await agentOver(client,
+              options: const BuiltinOptions().parent)
+          .run(userMessage("hi"))
+          .toList();
+
+      expect(client.sent, hasLength(1));
+      expect(events.whereType<RetryEvent>(), isEmpty);
+      final error = events.whereType<ErrorEvent>().single;
+      expect(error.message, contains("busy"));
+      expect(error.retryable, isTrue);
+    });
+
+    test("the error carries whether the failure was retryable", () async {
+      final retryable = FakeLlmClient([[], []])
+        ..failures[0] = const LlmException("stream died mid-reply", retryable: true)
+        ..failures[1] = const LlmException("stream died mid-reply", retryable: true);
+      final events = await agentOver(retryable,
+              options: const BuiltinOptions(maxAttempts: 2, retryBackoff: Duration.zero))
+          .run(userMessage("hi"))
+          .toList();
+      expect(events.whereType<ErrorEvent>().single.retryable, isTrue);
+
+      final rejected = FakeLlmClient([[]])
+        ..failures[0] = const LlmException("bad key", statusCode: 401);
+      final rejectedEvents =
+          await agentOver(rejected).run(userMessage("hi")).toList();
+      expect(rejectedEvents.whereType<ErrorEvent>().single.retryable, isFalse);
     });
   });
 
@@ -742,16 +775,17 @@ void main() {
 
   group("artifacts", () {
     /// A [saveArtifact] that records what it was given and returns a fake id.
-    Future<String> Function(String, {String? artifactId}) saveAndRecord(
-      List<({String path, String? artifactId})> saved,
+    Future<String> Function(String, String, {String? artifactId})
+        saveAndRecord(
+      List<({String path, String? entryFile, String? artifactId})> saved,
     ) =>
-        (path, {artifactId}) async {
-          saved.add((path: path, artifactId: artifactId));
+        (path, entryFile, {artifactId}) async {
+          saved.add((path: path, entryFile: entryFile, artifactId: artifactId));
           return "art-${saved.length}";
         };
 
     test("publishes a workspace path and yields an ArtifactEvent", () async {
-      final saved = <({String path, String? artifactId})>[];
+      final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
         [artifactCall("report/index.html", title: "Demo")],
         [finish],
@@ -762,6 +796,7 @@ void main() {
 
       expect(saved, hasLength(1));
       expect(saved.first.path, "report/index.html");
+      expect(saved.first.entryFile, "index.html");
 
       final artifactEvent = events.whereType<ArtifactEvent>().single;
       expect(artifactEvent.title, "Demo");
@@ -779,7 +814,7 @@ void main() {
     });
 
     test("updates in place when artifact_id is passed", () async {
-      final saved = <({String path, String? artifactId})>[];
+      final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
         [artifactCall("report/index.html", artifactId: "existing-id")],
         [finish],
@@ -789,11 +824,11 @@ void main() {
           .toList();
 
       expect(saved.first.artifactId, "existing-id");
-      expect(saved.first.artifactId, isNotNull);
+      expect(saved.first.entryFile, "index.html");
     });
 
     test("rejects a call with no path argument", () async {
-      final saved = <({String path, String? artifactId})>[];
+      final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
         [LlmCompletion(
           message: LlmMessage(
@@ -962,6 +997,55 @@ void main() {
 
       expect(events.whereType<ToolResultEvent>().single.result.returnCode, -1);
       expect(events.whereType<ToolResultEvent>().single.result.exceptionInfo, contains("not found"));
+    });
+
+    test("read on a binary file is a failed result, not a thrown one", () async {
+      final client = FakeLlmClient([
+        [readCall("image.png")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      File(p.join(agent.workspace, "image.png")).writeAsBytesSync(onePixelPng);
+
+      final events = await agent.run(userMessage("read it")).toList();
+
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("binary"));
+      expect(result.exceptionInfo, contains("image.png"));
+    });
+
+    test("a write that throws is a failed result, not a thrown one", () async {
+      final client = FakeLlmClient([
+        [writeCall("blocked/hello.txt", "hi")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      File(p.join(agent.workspace, "blocked")).writeAsStringSync("a file");
+
+      final events = await agent.run(userMessage("write it")).toList();
+
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, isNotEmpty);
+    });
+
+    test("an edit that throws is a failed result, not a thrown one", () async {
+      final client = FakeLlmClient([
+        [editCall("image.png", "a", "b")],
+        [finish],
+      ]);
+      final agent = agentOver(client);
+      File(p.join(agent.workspace, "image.png")).writeAsBytesSync([0x00, 0x01, 0x02]);
+
+      final events = await agent.run(userMessage("edit it")).toList();
+
+      expect(events.whereType<ErrorEvent>(), isEmpty);
+      final result = events.whereType<ToolResultEvent>().single.result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, isNotEmpty);
     });
 
     test("file tools are always offered, even without a shell", () async {

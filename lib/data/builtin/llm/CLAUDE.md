@@ -55,14 +55,26 @@ built against a raw client (tests), where the per-agent retry path governs.
 
 Failures are reported as they happen: a rejected key or a bad request reaches
 `ErrorEvent` on the first attempt, and a retryable one (429, 5xx, a connection
-that never opened) emits `RetryEvent` the instant it fails. Four attempts with
-1s/2s/4s backoff means a persistent 5xx or connection error is reported after
-~7s. A 429 takes a different path: a `RateLimitGate` shared across the parent
+that never opened) emits `RetryEvent` the instant it fails. `ErrorEvent` carries
+whether the failure was retryable — read off the exception the query died on —
+and that flag is what the controller's automatic retry rounds ask before
+re-entering `resume` (see `lib/ui/chat/CLAUDE.md`, "Automatic retry rounds");
+`_fail`, for a failure the turn never reached a model through, leaves it false.
+A request that died mid-stream is retryable too, and safe to resume, because
+resuming appends to the same reply rather than starting another.
+
+**The parent agent spends one attempt per request**, `options.parent`: the
+controller owns the patience, and the two retrying would be the same patience
+twice. Sub-agents keep the four-attempt default, a failed worker being a tool
+result the parent can redo rather than a turn to give up on. Four attempts with
+1s/2s/4s backoff remains what a sub-agent's request gets before it reports
+failure upward. A 429 takes a different path: a `RateLimitGate` shared across the parent
 and every sub-agent coordinates backoff so a fan-out pauses as one rather than
 each-retry-into the same limit (see "Reaching a provider"). 429 retries
 continue for `BuiltinOptions.rateLimitRetryBudget` (5 min default) with
-exponential backoff capped at 60s; other retryables keep the per-agent
-`maxAttempts` budget. Where no gate is present (tests against a raw
+exponential backoff capped at 60s, and never spend the parent's single attempt
+— so a rate-limited turn is still governed here, not by the controller's
+setting. Where no gate is present (tests against a raw
 `FakeLlmClient`), 429s fall back to the per-agent path.
 
 Because nothing is hidden, silence only ever means work, and the UI never

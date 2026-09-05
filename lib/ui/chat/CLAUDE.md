@@ -14,6 +14,58 @@ note stream carries a line for the chat — "Kept N memories." — and a note fo
 any other chat does not reach this one, since the extraction ran for it. The
 page subscribes for the chat's life and cancels the subscription on dispose.
 
+## Automatic retry rounds
+
+**A retryable failure is a blip the turn is carried on from, not an outcome.**
+`ErrorEvent` says whether it was one — a connection that dropped, a provider
+that hiccuped — and `_finishTurn` answers by re-entering `resume()`, the same
+mechanism the Continue bar drives, up to the `turnRetries` setting (Off, or
+1–10, default 5) with exponential backoff, 1s doubling to a 30s cap. The turn
+stays `isRunning` across the rounds, the composer never flickers, and the
+"Retrying (2/5) — connection lost" row is the existing `retry` view state doing
+its job. When the rounds run out — or the failure was never retryable, a
+rejected key or no model selected — the turn ends `TurnEnd.error` as it always
+did, and the Continue bar is the way on.
+
+The round is `_startResume()`, which is `resume()` without the guards: there is
+one carry-on mechanism, and a retry that built a second one would drift from
+it the way every second copy here has drifted. `_turnDone` stays open across
+the rounds — a reminder awaiting it, or a voice handover, gets one completion,
+at the true end, not one per attempt. A `_retryGen` bumped by `abort` and
+`interrupt` is what keeps a round waiting out its backoff from firing after
+the user pressed stop: the wait holds nothing, and the generation is how it
+notices the turn was ended behind it.
+
+Each failed round writes a `turnEnd error` record the next round's supersedes
+— last wins, the same bargain parts make — and the recorder replaces a
+*trailing* `ErrorPart` rather than adding another, so five rounds leave one
+error block in the bubble, not five. Nothing follows an error in a round's
+stream (it closes after the event), so trailing-only is the safe shape of that
+supersede. The recovery case keeps the failed round's error part: resuming
+appends to the reply, and the log has no deletion — the same shape a
+user-pressed Continue has always left. The Retry button under a reply reads
+the same shape from the other side: it shows when an `ErrorPart` is
+*trailing*, since that is "the last round failed"; asking "is any error part
+in the reply" showed the button under every turn a round had been carried on
+from, whose stale errors stay in the parts.
+
+**And when the rounds run out with nobody looking, the app says so.** A turn
+that ends `TurnEnd.error` while the app is hidden (the `appHiddenProvider`,
+written by the app root's lifecycle listener) posts a notification on the
+"turns" Android channel through `ReminderAlarms.notify` — the same tap
+machinery the reminder completions use, chat id on the content intent, so the
+tap opens the chat through the existing `IncomingReminderOpen` path. Gated on
+`headless` being false, since a reminder's chat is already notified by the
+scheduler that ran it — a second notice would be a double. Not gated on
+anything per-chat: the user said the failure is visible enough when they are
+*in the app*, even on another chat. On every platform without a notification
+route the port is the no-op it always was, and the failure waits visibly in
+the chat.
+
+Reminder turns auto-retry too — they drive the same controller — which is the
+point: a transient blip no longer fails a scheduled task. `MirrorChatController`
+is out of this entirely; it runs no turns locally.
+
 ## Thinking and tool runs
 
 A turn is not just a reply: the model thinks, runs tools, thinks again. Each of
@@ -58,6 +110,13 @@ many. It goes on the last text part
 under it stopped arriving before the call started, so a caret left there points
 at nothing while the label below is what is actually busy. It is a `WidgetSpan`
 so that it sits after the last word rather than under the paragraph.
+
+**A running tool label carries its own spinner** where the message has already
+said something, since the spinner below the message is gated on `!hasText` and
+a turn that says "Let me check that" before calling `bash` has text. The
+`ToolLabel` gets `running: true` only for the live label of a waiting turn that
+has text, so the two spinners never double up: the message-level spinner handles
+the no-text-yet case, the label-level spinner handles the has-text case.
 
 **Never both**, and that is one decision in `_rows` rather than two that happen
 to agree. Asked separately they did not: the spinner's question was
@@ -347,6 +406,14 @@ floats over the conversation, and `bottom` is a composer or a bar saying why
 there is none. Written out twice, the mirrored copy had already lost the jump
 button, the empty-chat starter and the running-turn spinner.
 
+**A project that requires setup hides the composer until setup is run.**
+`BuiltinProject.requiresSetup` is a general flag; `setupCompleteProvider`
+checks a `.setup-complete` marker in the project's directory. Where it is
+false, `_NewChat` and `_local` swap the composer for a `NeedsSetupBar` —
+the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
+button that opens Settings at the project's category. The turn path no
+longer creates the rootfs lazily; "Run Setup" owns the full lifecycle.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
@@ -477,8 +544,10 @@ toggles rather than a set with one always down.
 The built-in projects have badges, and they are always on offer: `everyProject`
 leads with them after the default, so a user who has never made a project sees
 the built-ins alone rather than nothing. What the row names for one is its
-label, not its directory — `🕶️ Anon`, not `anonymous` — the same rule the
-menus and the title bar keep.
+label, not its directory — `Anon`, not `anonymous` — the same rule the
+menus and the title bar keep. A built-in's badge carries its icon as the chip's
+avatar, and the sidebar's project menu shows the same icon beside the label; a
+user project has neither, since only a built-in ships one.
 
 Tapping one types it into the composer through `insertCompletion`, which is the
 field's own insertion lifted out of its `State` so both callers reach it — it

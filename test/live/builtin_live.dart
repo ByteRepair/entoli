@@ -54,22 +54,20 @@ void main() {
     final config = tempConfig("live_builtin_");
     _copyPresetsInto(config);
     final library = await PromptLibrary.from([DirectoryPrompts(config)]);
-    return (
-      BuiltinBackend(
-        config: config,
-        library: library,
-        shell: LocalShell(environment: () => const {}),
-        webSearch: DuckDuckGoSearch(),
-        store: FileChatStore(config),
-        // Live means live: it runs what the model asks for.
-        options: const BuiltinOptions(stepLimit: 12),
-        registry: LlmRegistry(
-          endpoints: () => [LlmEndpoint(provider)],
+    final backend = BuiltinBackend(
+      config: config,
+      shell: LocalShell(environment: () => const {}),
+      webSearch: DuckDuckGoSearch(),
+      store: FileChatStore(config),
+      // Live means live: it runs what the model asks for.
+      options: const BuiltinOptions(stepLimit: 12),
+      registry: LlmRegistry(
+        endpoints: () => [LlmEndpoint(provider)],
           lookupEnv: (name) => Platform.environment[name],
         ),
-      ),
-      config,
     );
+    backend.setLibrary(null, library);
+    return (backend, config);
   }
 
   test("what the endpoint says it can run", () async {
@@ -159,6 +157,8 @@ void main() {
           log("sub-agent $id ${failed ? "failed" : "finished"}");
         case InfoEvent(:final message):
           log("info: $message");
+        case StepLimitEvent(:final limit):
+          log("step limit: $limit");
         case DoneEvent():
           log("done");
       }

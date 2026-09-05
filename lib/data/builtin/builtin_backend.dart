@@ -45,7 +45,6 @@ class BuiltinBackend implements AgentBackend {
     required this.shell,
     required this.webSearch,
     required this.store,
-    this.library,
     this.options = const BuiltinOptions(),
   });
 
@@ -57,13 +56,22 @@ class BuiltinBackend implements AgentBackend {
   /// than passed per-turn: the store resolves which project a chat is in.
   final ChatStore store;
 
-  /// Entoli's own skills and agents. A turn's own references travel on the
-  /// message, resolved where it was composed, so this is left for the `task`
-  /// tool — which names an `@agent` the user never wrote — and for the skills
-  /// offered to the model. Mutable because the Skills page can change what is
-  /// on disk and reload the library; a turn already running keeps what it
-  /// started with, the way a running command keeps its environment.
-  PromptLibrary? library;
+  /// Entoli's own skills and agents, per project. A turn's own references
+  /// travel on the message, resolved where it was composed against the
+  /// project's library, so this is left for the `task` tool — which names an
+  /// `@agent` the user never wrote — and for the skills offered to the model.
+  /// Mutable because the Skills page can change what is on disk and reload the
+  /// library; a turn already running keeps what it started with, the way a
+  /// running command keeps its environment.
+  ///
+  /// Keyed by project, `null` the default the way it is everywhere a project is
+  /// named. A project inherits the default's set and overrides same-named
+  /// entries of its own.
+  final Map<String?, PromptLibrary> _libraries = {};
+  void setLibrary(String? project, PromptLibrary library) =>
+      _libraries[project] = library;
+  PromptLibrary? libraryFor(String? project) =>
+      _libraries[project] ?? _libraries[null];
 
   /// Web search and fetch, chosen by the platform like [shell] is:
   /// `DuckDuckGoSearch` on desktop and Android, `UnavailableWebSearch` in a
@@ -192,6 +200,9 @@ class BuiltinBackend implements AgentBackend {
           workspace: workspace,
           project: project,
           sharedWorkspace: settings.sharedWorkspace);
+      String resolvePath(String path) => resolveWorkspacePath(
+          config.fs, path, workspace, projectWorkspace,
+          guestRoot: shell.guestRoot);
       // What this turn is offered: the device's facts minus a headless turn's
       // takes and the project's. One value, so the prompt and the tool list
       // cannot disagree.
@@ -217,13 +228,14 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
         model: target.modelId,
-        library: library,
+        library: libraryFor(project),
         options: options,
         webSearch: webSearch,
         rateLimitGate: rateLimitGate,
         log: subAgentLog,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        project: project,
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
@@ -232,24 +244,22 @@ class BuiltinBackend implements AgentBackend {
       // excludes answers are the only halves a turn may withhold. Where the
       // turn's project ships a note of its own it stands in for the whole
       // block: no file is read, and nothing a file read would pull in can
-      // either. Started before the recall reads below, which it is
-      // independent of: a turn's two file loads are not a queue.
+      // either. Where it ships a note *and* asks for the user's instructions
+      // (`includesUserInstructions`), the files are read after the note, so
+      // the user's rules reach the turn and win on conflict. Started before
+      // the recall reads below, which it is independent of: a turn's two file
+      // loads are not a queue.
       final bundled = settings.bundledInstructions;
-      final instructionsF = bundled != null
-          ? Future.value([
-              InstructionFile(
-                path: settings.project ?? "the built-in project",
-                kind: InstructionKind.bundled,
-                content: bundled,
-              ),
-            ])
-          : loadInstructions(
+      final readFiles = bundled == null || settings.includesUserInstructions;
+      final instructionsF = readFiles
+          ? loadInstructions(
               config.fs,
               projectWorkspace: projectWorkspace,
               global: config.globalInstructionsFile,
               imports: settings.memory.imports,
               excludes: settings.memory.excludes,
-            );
+            )
+          : Future.value(const <InstructionFile>[]);
       // The project's memory store, when the subsystem runs at all. Which
       // project's is on the settings; the dir is never built twice for a
       // turn, so recall and the agent's tools share one.
@@ -281,7 +291,17 @@ class BuiltinBackend implements AgentBackend {
           logFailure("memory", "recall failed: $e");
         }
       }
-      final instructions = await instructionsF;
+      final loaded = await instructionsF;
+      final instructions = bundled == null
+          ? loaded
+          : [
+              InstructionFile(
+                path: settings.project ?? "the built-in project",
+                kind: InstructionKind.bundled,
+                content: bundled,
+              ),
+              if (settings.includesUserInstructions) ...loaded,
+            ];
       // Before the session is built, so the revived results are in the history
       // it is projected from rather than patched in afterwards.
       if (prompt == null) {
@@ -298,8 +318,11 @@ class BuiltinBackend implements AgentBackend {
         projectWorkspace: projectWorkspace,
         environment: settings.environment,
         model: target.modelId,
-        options: options,
-        skills: library?.entries(CompletionKind.skill) ?? const [],
+        // One attempt per request: the controller retries a failed turn itself,
+        // and the two retrying would be the same patience twice. Sub-agents
+        // keep the default — see the parent runner below.
+        options: options.parent,
+        skills: libraryFor(settings.project)?.entries(CompletionKind.skill) ?? const [],
         approveMode: settings.approveMode,
         classifier: classifier,
         approve: _awaitApproval,
@@ -321,16 +344,18 @@ class BuiltinBackend implements AgentBackend {
         memoryChat: settings.memory.agentTool ? chatId : null,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
-        saveArtifact: (path, {artifactId}) async {
-          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+        project: project,
+        saveArtifact: (path, entryFile, {artifactId}) async {
+          final resolved = resolvePath(path);
           if (artifactId != null) {
-            await store.updateArtifact(chatId, artifactId, resolved, project: project);
+            await store.updateArtifact(chatId, artifactId, resolved, entryFile,
+                project: project);
             return artifactId;
           }
-          return store.createArtifact(chatId, resolved, project: project);
+          return store.createArtifact(chatId, resolved, entryFile, project: project);
         },
         packageSkill: (path, name) async {
-          final resolved = resolveWorkspacePath(config.fs, path, workspace, projectWorkspace);
+          final resolved = resolvePath(path);
           final pkg = await packageSkillDirectory(config.fs, resolved, name);
           final bytes = packageSkillBytes(pkg);
           final installId = const Uuid().v4();
@@ -439,7 +464,8 @@ class BuiltinBackend implements AgentBackend {
             sharedWorkspace: sharedWorkspace),
         sharedHome: sharedWorkspace,
         timeout: options.commandTimeout,
-        environment: environment);
+        environment: environment,
+        project: project);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
     _running.add(chatId, run.kill);

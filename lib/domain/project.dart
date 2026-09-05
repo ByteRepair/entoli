@@ -1,3 +1,4 @@
+import "package:flutter/material.dart" show IconData;
 import "package:path/path.dart" as p;
 
 import "builtin_project.dart";
@@ -21,6 +22,11 @@ const defaultProjectDir = "default";
 
 String projectLabel(String? project) =>
     project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
+
+/// The icon a project's badge or menu row shows beside its label, or null where
+/// the project is a user's or the default — only a built-in ships one. Mirrors
+/// [projectLabel] in resolving a built-in's shipped value.
+IconData? projectIcon(String? project) => builtinProjectOf(project)?.icon;
 
 /// The empty-chat screen's question when no built-in ships its own. A const
 /// the way [defaultProjectLabel] is, so the screen and its tests name one
@@ -67,6 +73,17 @@ bool isProjectName(String name) =>
     isProjectDirName(name) &&
     name.toLowerCase() != defaultProjectDir &&
     !isBuiltinProject(name);
+
+/// Whether [project] has a project settings page worth opening. The default
+/// project (`null`) has none; a built-in answers from its spec; a user's
+/// project always does. The one answer the sidebar's settings gear reads,
+/// regardless of project kind.
+bool projectHasSettingsPage(String? project) {
+  if (project == null) return false;
+  final spec = builtinProjectOf(project);
+  if (spec != null) return spec.hasSettingsPage;
+  return isProjectName(project);
+}
 
 /// The directory name for what the user typed, or null if nothing usable is
 /// left of it. Deliberately strict: this ends up as a `cd` target in commands

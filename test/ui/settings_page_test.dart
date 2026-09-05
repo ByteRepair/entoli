@@ -71,6 +71,7 @@ void main() {
       useWindow(tester, const Size(800, 600));
       await app.pump(tester, const SettingsPage());
 
+      await scrollTo(tester, tile("LLMs"));
       await tester.tap(tile("LLMs"));
       await settleIo(tester);
       expect(tile("LLMs"), findsNothing);
@@ -84,8 +85,8 @@ void main() {
 
     testWidgets(
         "are offered General, Terminal, On-device, Voice, Reminders, Skills, "
-        "Sync, Providers, LLMs, Memory, Data, About, in that order",
-        (tester) async {
+        "Agents, Byte Repair, Sync, Providers, LLMs, Memory, Data, About, in "
+        "that order", (tester) async {
       useWindow(tester, const Size(1200, 800));
       await app.pump(tester, const SettingsPage());
 
@@ -102,6 +103,8 @@ void main() {
           "Voice",
           "Reminders",
           "Skills",
+          "Agents",
+          "Byte Repair",
           "Sync",
           "Providers",
           "LLMs",

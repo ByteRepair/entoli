@@ -17,6 +17,7 @@ import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
 import "domain/models.dart" show CompletionKind;
+import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/sync/identity.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
@@ -24,6 +25,7 @@ import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
 import "ui/chat/chat_controller.dart";
+import "ui/chat/reminder_turn_driver.dart";
 import "ui/assistant/incoming_assistant.dart";
 import "ui/focus_follows_keyboard.dart";
 import "ui/fonts.dart";
@@ -73,14 +75,27 @@ class AppSession {
     // Before the library is built: the bundled skills are written from
     // embedded code to a real directory for bash access, and self-healed.
     await installBundledSkills(config);
+    final projects = everyProject(await config.projectNames());
     // Read-only so a model running bash cannot unintentionally write to a
     // skill directory. The install/delete paths toggle this where they need to.
+    // Per project: each project's skills dirs are read-only the way the
+    // default's are, since a `bash` command reaches any of them.
     await platform.chmodReadOnly([
-      config.bundledSkillsDir,
-      config.promptsDir(CompletionKind.skill),
+      for (final project in projects) ...[
+        config.bundledSkillsDir(project: project),
+        config.promptsDir(CompletionKind.skill, project: project),
+      ],
     ]);
     final store = platform.createChatStore(config);
-    final library = await PromptLibrary.from(platform.createPromptSources(config));
+    // One library per project: the default's is the base set every other
+    // project inherits, and a project's own overrides same-named default
+    // entries for that project alone. Built once at startup so nothing
+    // downstream waits on disk; see "Skills and agents" in
+    // `lib/domain/CLAUDE.md`. The builds read independent project dirs, so
+    // they overlap rather than serialise.
+    final libraries = Map.fromEntries(await Future.wait(projects.map((project) async =>
+        MapEntry(project,
+            await PromptLibrary.from(platform.createPromptSources(config, project: project))))));
     final handoff = platform.createFileHandoff(config);
     final cache = await cacheDir;
     final rootfs = platform.createRootfsStore(cache);
@@ -95,8 +110,13 @@ class AppSession {
     final server = await localLlm;
     // Beside the pool, so the two agree on where the server's slot dumps go.
     final kvCache = platform.createLocalKvCache(cache, server);
-    final backend = platform.createBackend(config, library, store,
-        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache);
+    // Where Byte Repair's fetched tools land on the host, and the one
+    // directory both the store that fills it and the turns' driver that
+    // injects it on PATH are built from.
+    final byteRepairBin = platform.byteRepairBinDir(cache);
+    final backend = platform.createBackend(config, libraries, store,
+        tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
+        byteRepairBinDir: byteRepairBin);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -151,7 +171,10 @@ class AppSession {
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
-        promptLibraryProvider.overrideWith(() => PromptLibraryNotifier(library)),
+        // Seed every project's library at startup: each family member gets its
+        // own seeded library, so nothing downstream waits on disk.
+        promptLibraryProvider.overrideWith2(
+            (project) => PromptLibraryNotifier(project, libraries[project])),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         systemAccentProvider.overrideWithValue(await accent),
         linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
@@ -160,6 +183,8 @@ class AppSession {
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
         reminderAlarmsProvider.overrideWithValue(platform.createReminderAlarms()),
         remindersProvider.overrideWith(() => Reminders(reminders)),
+        reminderTurnDriverProvider
+            .overrideWith((ref) => ChatControllerReminderTurnDriver(ref)),
         backupHandoffProvider
             .overrideWithValue(platform.createBackupHandoff(config, handoff)),
         appRestartProvider.overrideWithValue(relaunch),
@@ -168,6 +193,9 @@ class AppSession {
         installedVoiceModelsProvider
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
         rootfsStoreProvider.overrideWithValue(rootfs),
+        byteRepairStoreProvider.overrideWithValue(
+            platform.createByteRepairStore(config, cache, rootfs)),
+        byteRepairBinDirProvider.overrideWithValue(byteRepairBin),
         installedRootfsProvider.overrideWith(() => InstalledRootfs(scans.first)),
         deviceAbiProvider.overrideWithValue(await abi),
         appVersionProvider.overrideWithValue(await version),
@@ -342,6 +370,12 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
         await widget.onExit();
         return AppExitResponse.exit;
       },
+      // What a turn failure notification is gated on, written where the state
+      // is known for the app's whole life rather than asked per chat.
+      onStateChange: (state) => ref.read(appHiddenProvider.notifier).set(
+            state == AppLifecycleState.hidden ||
+                state == AppLifecycleState.detached,
+          ),
     );
   }
 

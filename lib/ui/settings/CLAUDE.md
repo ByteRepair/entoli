@@ -33,7 +33,7 @@ edited from its settings page, and a name set there wins over one set in
 `settings.json`. Old files with the former `opencodeEnv` key still load, and
 rewrite themselves under the new name on the next save.
 
-The settings page is ten categories, picked from a panel beside it or, below
+The settings page is eleven categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
@@ -74,7 +74,37 @@ not deletable and a user's is; import and delete are the two things that change
 it, and they reload the library the moment they are done, the one way a change
 to it lands without a restart, where a skill dropped into the directory by hand
 still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
-**Sync** is paired devices — this device's identity and
+**Agents** is the list of what a message can address by name — the bundled
+ones, which ship with the app and are read-only, and the user's own, written
+in-app and editable or removable. An agent is one flat `.md` file (a system
+prompt with `description` frontmatter), so it is written through an editor
+page rather than imported the way a skill's directory is; the name is the file
+name and is fixed once the agent exists, since renaming it would orphan every
+`@name` mention already written into a conversation. Add, edit and delete
+reload the library the moment they are done, the same one way a change to it
+lands without a restart. See "Skills and agents" in `lib/domain/CLAUDE.md`.
+**Byte Repair** is the tooling for the built-in project of the same name: a
+banner saying whether the configured terminal env can run it, a button that
+runs a bundled install script through that env to create the project's own
+rootfs instance and put `make`, `github-cli` and ESBMC into it, a button to
+import a local ESBMC binary into the rootfs, a button to delete the whole
+environment (rootfs, workspace, and all chats in the project), and the
+versions found afterwards. "Run Setup" owns the full lifecycle — it copies
+the base rootfs from cache, runs the install script, and writes a
+`.setup-complete` marker — so the turn path no longer creates the rootfs
+lazily. The chat page gates the composer on that marker, showing a "setup
+required" bar until it is there; on the host the marker is not enough either,
+since the fetched tools live in a cache directory that can be emptied between
+setups, so the binary is asked after too. Where the tools land follows the env:
+inside a rootfs they go to the guest's own `/usr/local/bin`; on Linux they go
+to `<cacheDir>/byte-repair/bin`, which the project's turns are given on PATH —
+so Byte Repair works on the host env with no root and nothing installed into
+the machine, and a tool already on the machine is used rather than fetched.
+See "Byte Repair's environment, in two variables" in `lib/data/local/CLAUDE.md`.
+On
+Android the "Host" terminal env has no package manager, so the category says
+so and hides the rest until a rootfs is picked from Terminal; on every other
+platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
 handshake. **Providers** is the endpoints.
@@ -130,19 +160,23 @@ who made it, a link to the repository, and the libraries. Private in
 it are the ones with logic.
 
 The version is read out of the bundle rather than written into Dart, so
-pubspec's number stays the only one. `platform.appVersion` is where that lands,
-since a web build puts `version.json` beside `index.html` rather than in the
-assets — reading the file is the platform's half, and composing the string is
-shared. It is awaited into the container in `main` beside the ABI, so nothing in
-the UI waits on a future for a string; where it could not be read the line is
-simply not drawn, since a version nothing depends on is not worth failing a
-startup over.
+pubspec's number stays the only one. `tool/prepare.sh` writes `version.json`
+from pubspec's `version:` and it is declared as an asset, so every platform's
+bundle carries it; Flutter writes its own `version.json` for Linux and Web,
+which overrides ours where one exists, and on every other platform ours is the
+only copy. `platform.appVersion` reads it, since where it lands varies — the
+assets on one, a file beside `index.html` on the other — and composing the
+string is shared. It is awaited into the container in `main` beside the ABI,
+so nothing in the UI waits on a future for a string; where it could not be
+read the line is simply not drawn, since a version nothing depends on is not
+worth failing a startup over.
 
-The build number is the `+42` after it, and it comes from the build rather than
-from pubspec — which deliberately carries none, since the Android version code
-is derived from the three numbers and a second one to bump is a second one to
-forget. So CI passes `--build-number` to every build it makes, the APKs and the
-AppImage alike, and a build made by hand says only which version it is.
+The build number is not reported. It comes from the build rather than from
+pubspec — which deliberately carries none, since the Android version code is
+derived from the three numbers and a second one to bump is a second one to
+forget. CI passes `--build-number` to every build it makes, the APKs and the
+AppImage alike, and it stays in the version code and the attestation rather
+than on the About page.
 
 `package_info_plus` answers the same question and was the first version of this.
 It drags `win32` into the build graph of every platform, forks `stat` on Linux
@@ -189,6 +223,18 @@ hundred megabytes of bytes that can be fetched again would be in every export,
 and a restore would drag them between machines and delete whatever was already
 downloaded. Keeping them outside is what makes both false, rather than an
 exception in here that someone has to remember — see "Where the models live".
+
+A per-project `rootfs/` is the one re-fetchable tree that *does* live under the
+data directory, because a built-in with rootfs isolation keeps its living
+filesystem there beside the chats. `writeBackup`'s `skipDir` leaves it out for
+the same reason the voice models are outside it, and for a second one: proot's
+mode-0000 bind stubs (see `tree_ops.dart`) sit inside it, and `dart:io` cannot
+list a mode-0000 directory, so a walker that reached one would throw. The
+restore clear routes every top-level directory through `removeTree` rather than
+a plain recursive delete, so the stubs a skipped `rootfs/` leaves behind are
+cleared on the way in too — the same `removeTree` the rootfs stores use, so the
+one function that knows how to delete a stub-bearing tree is the one the
+restore reuses.
 
 It was one JSON document holding every file first, and that is worse on every
 count that matters. Text in JSON is escaped inside a string inside an array,

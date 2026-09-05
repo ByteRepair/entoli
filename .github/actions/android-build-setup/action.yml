@@ -1,0 +1,64 @@
+name: Android build setup
+description: >
+  The setup every Android build shares: the release keystore (gated on
+  `release`), Java 17, Flutter, the bundled-tools artifact and staging. One
+  composite so the debug and release APK and AAB jobs do not copy it. The
+  keystore decode runs before the SDK installs so a missing keystore fails in
+  seconds rather than after a toolchain download.
+
+inputs:
+  release:
+    description: Decode the release keystore and skip the Gradle cache; false for debug.
+    required: true
+  keystore-base64:
+    description: Base64 of the release keystore. Required when release is true.
+    required: false
+  keystore-password:
+    description: Keystore password. Required when release is true.
+    required: false
+  key-alias:
+    description: Key alias. Required when release is true.
+    required: false
+  key-password:
+    description: Key password. Required when release is true.
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Decode the release keystore
+      if: inputs.release == 'true'
+      env:
+        KEYSTORE_BASE64: ${{ inputs.keystore-base64 }}
+        KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        KEY_ALIAS: ${{ inputs.key-alias }}
+        KEY_PASSWORD: ${{ inputs.key-password }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          if [ -z "${!name}" ]; then
+            echo "::error::Secret ANDROID_$name is not available to this repository"
+            exit 1
+          fi
+        done
+        echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+    # Java 17 to match android/app/build.gradle.kts. No `cache: gradle` on a
+    # tag build: it can only ever write a scope no later run can read.
+    - uses: actions/setup-java@v5.7.0
+      with:
+        distribution: temurin
+        java-version: "17"
+        cache: ${{ inputs.release != 'true' && 'gradle' || '' }}
+
+    - uses: ./.github/actions/flutter-setup
+
+    - uses: actions/download-artifact@v8.0.1
+      with:
+        name: bundled-tools
+        path: tool/android/dist
+
+    - name: Stage the tools into the native libraries
+      shell: bash
+      run: tool/android/stage.sh

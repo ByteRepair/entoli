@@ -1,5 +1,7 @@
 import "dart:async";
 
+import "package:clock/clock.dart";
+
 import "reminder.dart";
 import "reminder_alarms.dart";
 import "reminder_runner.dart";
@@ -34,12 +36,14 @@ class ReminderScheduler {
     required this.runner,
     required this.list,
     required this.projects,
+    this.clock = const Clock(),
   });
 
   final ReminderAlarms alarms;
   final ReminderRuns runner;
   final ReminderList list;
   final Future<List<String>> Function() projects;
+  final Clock clock;
 
   Timer? _timer;
   StreamSubscription<void>? _nudges;
@@ -111,7 +115,7 @@ class ReminderScheduler {
   /// Run every reminder due by now — overdue included, which is how a fire
   /// missed while the process was dead is caught up at launch.
   Future<void> catchUp({Set<String>? only}) async {
-    final now = DateTime.now();
+    final now = clock.now();
     final due = [
       for (final r in list.reminders)
         if ((only == null || only.contains(r.id)) &&
@@ -174,10 +178,11 @@ class ReminderScheduler {
         },
         chatId: result.chatId,
       );
+      final now = clock.now();
       final next = reminder.repeat == ReminderRepeat.off
           ? null
-          : reminder.nextOccurrence(DateTime.now());
-      final fired = reminder.copyWith(lastFiredAt: DateTime.now(), clearNextFireAt: true);
+          : reminder.nextOccurrence(now);
+      final fired = reminder.copyWith(lastFiredAt: now, clearNextFireAt: true);
       await list.replace(next == null ? fired : fired.copyWith(nextFireAt: next));
       await sync();
       _arm();
@@ -217,7 +222,7 @@ class ReminderScheduler {
       if (at != null && (next == null || at.isBefore(next))) next = at;
     }
     if (next == null) return;
-    final wait = next.difference(DateTime.now());
+    final wait = next.difference(clock.now());
     _timer = Timer(wait.isNegative ? Duration.zero : wait, _tick);
   }
 }

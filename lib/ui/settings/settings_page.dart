@@ -6,9 +6,11 @@ import "../../domain/app_theme.dart";
 import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
+import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/temp_chat_ttl.dart";
+import "../../domain/app_settings.dart";
 import "../../providers.dart";
 import "../chat/widgets/activity_label.dart";
 import "../sidebar/sidebar.dart";
@@ -26,8 +28,11 @@ import "../widgets/provider_dialog.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
+import "agents_settings.dart";
 import "assistant_settings.dart";
+import "byte_repair_settings.dart";
 import "local_model_settings.dart";
+import "privacy_policy_page.dart";
 import "reminders.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
@@ -46,6 +51,8 @@ enum SettingsCategory {
   voice("Voice", Icons.graphic_eq),
   reminders("Reminders", Icons.alarm),
   skills("Skills", Icons.extension),
+  agents("Agents", Icons.person_outline),
+  byteRepair("Byte Repair", Icons.verified_user),
   sync("Sync", Icons.sync),
   providers("Providers", Icons.cloud_outlined),
   llms("LLMs", Icons.auto_awesome_outlined),
@@ -60,14 +67,16 @@ enum SettingsCategory {
 }
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.initialCategory});
+
+  final SettingsCategory? initialCategory;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  SettingsCategory _category = SettingsCategory.general;
+  late SettingsCategory _category = widget.initialCategory ?? SettingsCategory.general;
 
   /// The state is kept where the category is a page of its own too, so that a
   /// window widened while one is open lands on it rather than on General.
@@ -185,6 +194,8 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // see the section itself.
       SettingsCategory.reminders => const [RemindersSection()],
       SettingsCategory.skills => const [SkillsSection()],
+      SettingsCategory.agents => const [AgentsSection()],
+      SettingsCategory.byteRepair => const [ByteRepairSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
       SettingsCategory.llms => const [_DefaultsSection()],
@@ -497,6 +508,14 @@ class _AboutSection extends ConsumerWidget {
           onTap: () => ref.read(linkOpenerProvider).open(context, _repository),
         ),
         ListTile(
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text("Privacy policy"),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
+          ),
+        ),
+        ListTile(
           leading: const Icon(Icons.balance_outlined),
           title: const Text("Open source libraries"),
           subtitle: const Text("Everything Entoli is built on, and its licence."),
@@ -645,7 +664,55 @@ class _AgentSection extends ConsumerWidget {
                 ref.read(appSettingsProvider.notifier).setClassifierModel(choice),
           ),
         ),
+        const _RetryTurnsField(),
       ],
+    );
+  }
+}
+
+/// How many times a turn that failed on a retryable error is carried on
+/// automatically before it is left failed. Off is the switch; the slider is
+/// the count, the shape the cores slider keeps.
+class _RetryTurnsField extends ConsumerWidget {
+  const _RetryTurnsField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final retries = ref.watch(
+        appSettingsProvider.select((s) => s.turnRetries));
+    final on = retries > 0;
+    return LabelledField(
+      label: "Retry failed turns",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: on,
+            onChanged: (value) => ref
+                .read(appSettingsProvider.notifier)
+                .setTurnRetries(value ? AppSettings.defaultTurnRetries : 0),
+          ),
+          if (on) ...[
+            Slider(
+              value: retries.toDouble(),
+              min: 1,
+              max: AppSettings.maxTurnRetries.toDouble(),
+              divisions: AppSettings.maxTurnRetries - 1,
+              label: "$retries",
+              onChanged: (value) => ref
+                  .read(appSettingsProvider.notifier)
+                  .setTurnRetries(value.round()),
+            ),
+            Text(
+              "Carried on automatically up to $retries time${retries == 1 ? "" : "s"} "
+              "when a connection drops or the provider fails. Off, a failed turn "
+              "waits for you to press Continue.",
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1042,7 +1109,15 @@ class _BackupSectionState extends ConsumerState<_BackupSection> {
     // against one writer could only approximate.
     final config = ref.read(appConfigProvider);
     await _guard(() => ref.read(appRestartProvider).restart(
-          whileStopped: () => restoreBackup(config, backup),
+          // `deleteTree` is the io side's `removeTree`-backed clear, which
+          // `chmod`s past proot's mode-0000 bind stubs deep inside a
+          // `projects/<project>/rootfs/` tree the restore is about to replace.
+          // See `restoreBackup` for why every top-level dir goes through it.
+          whileStopped: () => restoreBackup(
+            config,
+            backup,
+            deleteTree: platform.deleteTree,
+          ),
         ));
   }
 

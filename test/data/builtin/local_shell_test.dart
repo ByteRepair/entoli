@@ -6,6 +6,8 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/data/builtin/local_shell.dart";
 import "package:agent_chat/domain/shell.dart";
 
+List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
+
 void main() {
   /// The project workspace and, inside it, the chat's own — what the two
   /// arguments to `start` are on a real run.
@@ -91,15 +93,16 @@ void main() {
   test("what the command spawned is killed with it", () async {
     final marker = p.join(workspace.path, "survivor");
     final result = await run(
-      "(sleep 4; touch $marker) & echo started; sleep 30",
+      "(trap '' INT; sleep 4; touch $marker) & echo started; sleep 30",
       timeout: const Duration(milliseconds: 300),
     );
 
     expect(result.exceptionInfo, contains("timed out"));
-    // The background child outlives its shell unless the whole group goes.
-    // The kill lands the moment the command's own sentinel comes, so the
-    // child's sleep is far past it: a runner that schedules late still kills
-    // it first.
+    // The background child ignores the group's SIGINT, so only the SIGKILL a
+    // timeout escalates to can reach it — which is the whole point: the group
+    // kill is what the test is about, and an interruptible child races the
+    // kill to the touch and flakes. Ignoring INT leaves the sleep alive past
+    // the interrupt and dead the moment the kill lands.
     await Future<void>.delayed(const Duration(seconds: 5));
     expect(File(marker).existsSync(), isFalse);
   });
@@ -258,15 +261,61 @@ void main() {
     });
   });
 
+  // The cwd is a directory the app lays out, and it may not be there when a
+  // command is first asked to stand in it: a project workspace before any chat
+  // exists (a built-in project's setup runs in one) or one deleted from the
+  // Files app. The shell makes it rather than failing with an ENOENT that
+  // names neither the directory nor the reason.
+  group("a spawn cwd that is not there yet", () {
+    test("a one-shot run creates it and runs", () async {
+      final fresh = p.join(home.path, "not_yet");
+      expect(Directory(fresh).existsSync(), isFalse);
+
+      final result = await LocalShell().start("echo hi",
+              cwd: fresh, home: home.path, timeout: const Duration(seconds: 5),
+              oneShot: true)
+          .result;
+
+      expect(result.returnCode, 0);
+      expect(result.output, "hi\n");
+      expect(Directory(fresh).existsSync(), isTrue);
+    });
+
+    test("a persistent session recreates a deleted cwd on respawn", () async {
+      final shell = LocalShell();
+      final cwd = p.join(home.path, "session");
+      Directory(cwd).createSync();
+      await shell
+          .start("echo first",
+              cwd: cwd, home: home.path, timeout: const Duration(seconds: 5))
+          .result;
+
+      Directory(cwd).deleteSync(recursive: true);
+      expect(Directory(cwd).existsSync(), isFalse);
+
+      // `restart` forces a respawn, which has to put the directory back
+      // before standing in it again.
+      final result = await shell
+          .start("echo second",
+              cwd: cwd, home: home.path, timeout: const Duration(seconds: 5),
+              restart: true)
+          .result;
+
+      expect(result.returnCode, 0);
+      expect(result.output, "second\n");
+      expect(Directory(cwd).existsSync(), isTrue);
+    });
+  });
+
   test("what the model is told names the shell, and the tools beside it", () {
     expect(
         LocalShell(
-                driver:
-                    () => LocalShell.hostDriver(shell: () => "/system/bin/sh"))
+                driver: ({String? project}) =>
+                    LocalShell.hostDriver(shell: () => "/system/bin/sh"))
             .platformDescription,
         contains("/system/bin/sh"));
     expect(
-        LocalShell(driver: () => LocalShell.hostDriver(
+        LocalShell(driver: ({String? project}) => LocalShell.hostDriver(
               shell: () => "/system/bin/sh",
               tools: const Toolset(environment: {}, names: "git"),
             )).platformDescription,
@@ -277,7 +326,7 @@ void main() {
       "there is no shell", () {
     final driver = LocalShell.hostDriver(shell: () => "/bin/sh");
 
-    expect(driver!.command, ["/bin/sh"]);
+    expect(driver!.commandFor("", ""), ["/bin/sh"]);
     expect(driver.projectHome, isFalse);
     expect(LocalShell.hostDriver(shell: () => null), isNull);
   });
@@ -287,7 +336,7 @@ void main() {
     /// these tests has: a prefix that really runs, ending in a shell.
     ShellDriver guest({Map<String, String> environment = const {}}) =>
         ShellDriver(
-          command: ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
+          commandFor: (_, _) => ["/usr/bin/env", "IN_GUEST=yes", "/bin/sh"],
           environment: environment,
           projectHome: true,
           description: "Alpine Linux 3.24.1 (x86_64), in which apk installs "
@@ -302,7 +351,7 @@ void main() {
     }) =>
         LocalShell(
           environment: () => settings,
-          driver: () => driver ?? guest(),
+          driver: ({String? project}) => driver ?? guest(),
         )
             .start(command,
                 cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 10))
@@ -347,7 +396,7 @@ void main() {
     });
 
     test("what the model is told is the guest, not the machine it is on", () {
-      final shell = LocalShell(driver: guest);
+      final shell = LocalShell(driver: ({String? project}) => guest());
 
       expect(shell.platformDescription, contains("Alpine Linux 3.24.1"));
       expect(shell.platformDescription, contains("proot"));
@@ -355,14 +404,30 @@ void main() {
 
     test("brings its own shell, so a machine that has none can still run commands",
         () {
-      expect(LocalShell(driver: guest).canRunCommands, isTrue);
-      expect(LocalShell(driver: () => null).canRunCommands, isFalse);
+      expect(LocalShell(driver: ({String? project}) => guest()).canRunCommands, isTrue);
+      expect(LocalShell(driver: ({String? project}) => null).canRunCommands, isFalse);
+    });
+
+    test("an environment named beside the driver is the shell's base, so a "
+        "host driver can point at a directory its tools sit in", () {
+      final driver = LocalShell.hostDriver(
+          shell: () => "/bin/sh",
+          environment: const {"PATH": "/cache/byte-repair/bin:/usr/bin"});
+
+      expect(driver!.environment["PATH"], "/cache/byte-repair/bin:/usr/bin");
+      // The toolset's own vars are still laid under it.
+      final withTools = LocalShell.hostDriver(
+          shell: () => "/bin/sh",
+          environment: const {"PATH": "/cache/byte-repair/bin"},
+          tools: const Toolset(environment: {"TMPDIR": "/tmp/app"}));
+      expect(withTools!.environment,
+          {"PATH": "/cache/byte-repair/bin", "TMPDIR": "/tmp/app"});
     });
   });
 
   group("what a command runs under", () {
     const host = ShellDriver(
-      command: ["/bin/sh"],
+      commandFor: _hostCommand,
       environment: {"PAGER": "less", "GIT_EXEC_PATH": "/data/tools/libexec"},
       projectHome: false,
       description: "host",
@@ -399,7 +464,7 @@ void main() {
     test("HOME is the workspace where the driver reaches a guest, and where "
         "the home is not shared", () {
       final guest = ShellDriver(
-        command: ["/bin/sh"],
+        commandFor: _hostCommand,
         environment: const {},
         projectHome: true,
         description: "guest",
@@ -433,6 +498,22 @@ void main() {
               app: const {})["HOME"],
           "/workspace");
     });
+
+    test("a variable the store puts in the command environment survives the "
+        "layering, and one a user set in settings cannot override it", () {
+      // The store passes ENV_INSTALL_DIR as the command's own environment,
+      // which is the project layer — the last one, over the app's settings.
+      final env = LocalShell.composeEnvironment(
+        defaults: const {},
+        driver: host,
+        home: "/home",
+        sharedHome: true,
+        app: const {"ENV_INSTALL_DIR": "/somewhere/else"},
+        project: const {"ENV_INSTALL_DIR": "/cache/byte-repair/bin"},
+      );
+
+      expect(env["ENV_INSTALL_DIR"], "/cache/byte-repair/bin");
+    });
   });
 
   group("resolving the shell", () {
@@ -458,11 +539,11 @@ void main() {
 
     test("a machine with nothing to run commands in says so", () {
       expect(resolve("/usr/bin", const {}), isNull);
-      expect(LocalShell(driver: () => null).canRunCommands, isFalse);
+      expect(LocalShell(driver: ({String? project}) => null).canRunCommands, isFalse);
     });
 
     test("and a command sent to it anyway fails rather than throwing", () async {
-      final result = await LocalShell(driver: () => null)
+      final result = await LocalShell(driver: ({String? project}) => null)
           .start("echo hi",
               cwd: workspace.path, home: home.path, timeout: const Duration(seconds: 1))
           .result;

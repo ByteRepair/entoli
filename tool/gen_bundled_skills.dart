@@ -6,15 +6,40 @@
 // disk copy under skills-bundled/ is a self-healed cache for bash access.
 // Agents are code-only — never written to disk — since nothing reads them
 // by path.
-import "dart:convert";
+//
+// Each entry is tagged with the project it belongs to. `default` is the base
+// set every project inherits; another project's entries override a
+// same-named default one for that project alone. See "Skills and agents" in
+// lib/domain/CLAUDE.md.
 import "dart:io";
 
-import "package:crypto/crypto.dart";
+import "package:agent_chat/domain/bundled_prompt_file.dart";
+
+import "gen_common.dart";
 
 void main() {
-  final skills = _collect("assets/prompts/skills");
-  final agents = _collect("assets/prompts/agents");
-  final licence = File("assets/prompts/skills/skill-creator/LICENSE.txt")
+  final skills = <BundledPromptFile>[];
+  final agents = <BundledPromptFile>[];
+  for (final projectDir in promptProjects()) {
+    final project = basename(projectDir.path);
+    final skillsRoot = Directory("${projectDir.path}/skills");
+    if (skillsRoot.existsSync()) {
+      for (final e in _collectSkills(skillsRoot, project)) {
+        skills.add(e);
+      }
+    }
+    final agentsRoot = Directory("${projectDir.path}/agents");
+    if (agentsRoot.existsSync()) {
+      for (final e in _collectAgents(agentsRoot, project)) {
+        agents.add(e);
+      }
+    }
+  }
+  sortByProject(skills);
+  sortByProject(agents);
+
+  final licence = File(
+          "assets/prompts/projects/default/skills/skill-creator/LICENSE.txt")
       .readAsStringSync();
 
   final buf = StringBuffer();
@@ -22,108 +47,48 @@ void main() {
   buf.writeln("// The bundled skills and agents, embedded so the app is the");
   buf.writeln("// source of truth for presets. Regenerate with prepare.sh.");
   buf.writeln();
-  buf.writeln("class BundledPromptFile {");
-  buf.writeln("  const BundledPromptFile(");
-  buf.writeln("      this.name, this.relativePath, this.sha256, this.content);");
-  buf.writeln("  final String name;");
-  buf.writeln("  final String relativePath;");
-  buf.writeln("  final String sha256;");
-  buf.writeln("  final String content;");
-  buf.writeln("}");
+  buf.writeln('import "../../domain/bundled_prompt_file.dart" '
+      'show BundledPromptFile;');
   buf.writeln();
 
-  _emitList(buf, "bundledSkillFiles", skills);
-  _emitList(buf, "bundledAgentFiles", agents);
+  emitPromptFileList(buf, "bundledSkillFiles", skills);
+  emitPromptFileList(buf, "bundledAgentFiles", agents);
 
-  buf.writeln("const bundledSkillLicence = ${_stringLiteral(licence)};");
+  buf.writeln("const bundledSkillLicence = ${stringLiteral(licence)};");
   buf.writeln();
 
-  File("lib/data/prompts/bundled_skill_data.dart")
-      .writeAsStringSync(buf.toString());
-  stdout.writeln("Wrote lib/data/prompts/bundled_skill_data.dart "
-      "(${skills.length} skill files, ${agents.length} agent files).");
+  writeGenerated("lib/data/prompts/bundled_skill_data.dart", buf);
+  stdout.writeln("(${skills.length} skill files, ${agents.length} agent files).");
 }
 
-class _Entry {
-  _Entry(this.name, this.relativePath, this.sha256, this.content);
-  final String name;
-  final String relativePath;
-  final String sha256;
-  final String content;
-}
-
-/// Walks [dir] and collects every file under it. For skills, [name] is the
-/// top-level folder and [relativePath] is the path within it. For agents,
-/// [name] is the filename without extension and [relativePath] is empty.
-List<_Entry> _collect(String dir) {
-  final root = Directory(dir);
-  if (!root.existsSync()) return [];
-  final entries = <_Entry>[];
-
-  if (dir.endsWith("agents")) {
-    for (final entity in root.listSync()) {
-      if (entity is! File || !entity.path.endsWith(".md")) continue;
-      final name = entity.path.split("/").last.replaceAll(".md", "");
-      final content = entity.readAsStringSync();
-      entries.add(_Entry(name, "", _hash(content), content));
-    }
-  } else {
-    for (final skillDir in root.listSync().whereType<Directory>()) {
-      final skillName = skillDir.path.split("/").last;
-      for (final file
-          in _allFiles(skillDir, skillDir.path, skillDir.path)) {
-        final content = File(file).readAsStringSync();
-        final relative = file.substring(skillDir.path.length + 1);
-        entries.add(_Entry(skillName, relative, _hash(content), content));
-      }
+/// Walks the `skills/` directory of a project and collects every file under
+/// each skill folder. [name] is the skill folder, [relativePath] is the path
+/// within it.
+List<BundledPromptFile> _collectSkills(Directory skillsRoot, String project) {
+  final entries = <BundledPromptFile>[];
+  for (final skillDir in skillsRoot.listSync().whereType<Directory>()) {
+    final skillName = basename(skillDir.path);
+    for (final file in allFiles(skillDir)) {
+      final content = File(file).readAsStringSync();
+      final relative = file.substring(skillDir.path.length + 1);
+      entries.add(
+          BundledPromptFile(project, skillName, relative, sha256Of(content),
+              content));
     }
   }
-
-  entries.sort((a, b) {
-    final c = a.name.compareTo(b.name);
-    return c != 0 ? c : a.relativePath.compareTo(b.relativePath);
-  });
   return entries;
 }
 
-List<String> _allFiles(Directory dir, String root, String fullRoot) {
-  final files = <String>[];
-  for (final entity in dir.listSync()) {
-    if (entity is Directory) {
-      files.addAll(_allFiles(entity, root, fullRoot));
-    } else if (entity is File) {
-      files.add(entity.path);
-    }
+/// Walks the `agents/` directory of a project: one `.md` file per agent, named
+/// by the filename without extension. [relativePath] is empty.
+List<BundledPromptFile> _collectAgents(Directory agentsRoot, String project) {
+  final entries = <BundledPromptFile>[];
+  for (final entity in agentsRoot.listSync()) {
+    if (entity is! File || !entity.path.endsWith(".md")) continue;
+    final name = basename(entity.path).replaceAll(".md", "");
+    final content = entity.readAsStringSync();
+    entries.add(BundledPromptFile(project, name, "", sha256Of(content),
+        content));
   }
-  return files;
-}
-
-void _emitList(StringBuffer buf, String varName, List<_Entry> entries) {
-  buf.writeln("const $varName = <BundledPromptFile>[");
-  for (final e in entries) {
-    buf.writeln("  BundledPromptFile(");
-    buf.writeln("      ${_stringLiteral(e.name)},");
-    buf.writeln("      ${_stringLiteral(e.relativePath)},");
-    buf.writeln("      ${_stringLiteral(e.sha256)},");
-    buf.writeln("      ${_stringLiteral(e.content)}),");
-  }
-  buf.writeln("];");
-  buf.writeln();
-}
-
-String _hash(String content) =>
-    sha256.convert(utf8.encode(content)).toString();
-
-/// A Dart string literal, escaped and wrapped in double quotes. Triple-quote
-/// is avoided: the content may contain both " and ', and a raw string cannot
-/// escape. Every line is a separate concatenation so the diff stays readable.
-/// `$` is escaped to `\$` so JavaScript template literals (`${item}`) in the
-/// embedded content are not read as Dart interpolations.
-String _stringLiteral(String s) {
-  final escaped = s
-      .replaceAll("\\", "\\\\")
-      .replaceAll('"', '\\"')
-      .replaceAll("\$", r"\$")
-      .replaceAll("\n", '\\n"\n      "');
-  return '"$escaped"';
+  return entries;
 }

@@ -9,15 +9,10 @@ The data directory is still `~/.config/agent-chat`, the env var is still
 of those would leave the chats already written where nothing reads them, for a
 string nobody sees.
 
-The one identifier that did move is the application id, from the placeholder
-`com.agentchat.agent_chat` to `io.github.yiannis128.agentchat` — the first was
-a reverse-DNS name for a domain nobody here owns. The last segment carries no
-separator: Android's `applicationId`/`namespace`, GTK's `APPLICATION_ID` and
-iOS's `CFBundleIdentifier` all accept the same string this way, where each
-refused a different separator of the two (`agent_chat`, `agent-chat`), and a
-per-platform split was one more thing to keep in step. It is the same string on
-every platform now. Changing it makes this a different app to Android, which is
-only free before a release; it is why the Kotlin package moved with it.
+The application id is `io.byterepair.entoli` — the Android `applicationId` and
+`namespace` and the Linux `APPLICATION_ID`, all one string. Changing it makes
+this a different app to Android, which is only free before a release; it is why
+the Kotlin package moved with it.
 
 ## Where the rest of this is
 
@@ -97,18 +92,25 @@ chats run under, and whether it keeps an auto-memory store of its own. A chat is
 and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
 Every project is a directory under `projects/`, the default one included.
-`<dataDir>/skills/<name>/` is a skill — a directory with a `SKILL.md` and the
-files it runs with, not a single file — and `<dataDir>/agents/*.md` are the
-user's agents, beside `settings.json`. The bundled skills and agents live in
-the binary: `tool/gen_bundled_skills.dart` writes them, build-time, from
-`assets/prompts/` into `lib/data/prompts/bundled_skill_data.dart`, so the
-library the model reads cannot be poisoned from the skills directory.
-`<dataDir>/skills-bundled/` is a read-only copy of those on disk, there only so
-`bash` can reach a skill's scripts (which want a real base directory); it is
-self-healed from the embedded data at startup — a file that drifted is
-re-written by checksum, and a stray the embedded data does not name is deleted.
-It is beside `skills/` rather than in it, so deleting one's own skill does not
-reach the presets. `settings.json` holds the app-level model default, the
+`<dataDir>/projects/<project>/skills/<name>/` is a skill — a directory with a
+`SKILL.md` and the files it runs with, not a single file — and
+`<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
+default project's skills and agents are the base set every other project
+inherits; another project's own replace a same-named default entry for that
+project alone. The bundled skills and agents live in the binary:
+`tool/gen_bundled_skills.dart` writes them, build-time, from
+`assets/prompts/projects/<project>/` into
+`lib/data/prompts/bundled_skill_data.dart`, tagged with the project they
+belong to, so the library the model reads cannot be poisoned from the skills
+directory and a project sees only what it is meant to (esbmc-verifier is
+byte-repair's alone).
+`<dataDir>/projects/<project>/skills-bundled/` is a read-only copy of that
+project's bundled skills on disk, there only so `bash` can reach a skill's
+scripts (which want a real base directory); it is self-healed from the
+embedded data at startup — a file that drifted is re-written by checksum, and
+a stray the embedded data does not name is deleted. It is beside `skills/`
+rather than in it, so deleting one's own skill does not reach the presets.
+`settings.json` holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
  `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's
@@ -199,6 +201,20 @@ since 1.0.0, and neither is in the chain: the user's `commands/` became
 `commands/` left on disk is not read rather than migrated — and `memory/`, a
 directory created on first use rather than moved. The chain stays empty.
 
+### Artifacts
+
+`chats/<id>/artifacts/<artifact-id>/` holds the files the model published,
+copied from its workspace at the moment it called the `artifact` tool, with the
+base stylesheet (`lib/domain/artifact_style.dart`) injected into the entry file
+**at publish time**. That timing is the one load-bearing fact: the desktop
+opener serves the directory itself over `file://`, so the entry file on disk
+must already be the whole page — the model's `read` tool and every future
+reader see the same styled file, and a temp copy at open time would break every
+relative reference to the files beside it. Android and the web still layer
+their runtime paths (an HTTP server, blob URLs) over the same injected copy,
+where the marker makes the second injection a no-op. Artifacts published before
+the injection moved open unstyled on desktop until the model re-publishes them.
+
 ### Projects
 
 A project is a directory holding its own chats, one workspace they share, and
@@ -210,18 +226,22 @@ nothing means the default. `isProjectName` refuses `default` for the same
 reason: a second way to name it would be a second entry for it in every list.
 
 A **built-in project** is a directory the app ships rather than the user makes,
-declared in `builtin_project.dart` (`builtinProjects`, today just `anonymous`).
+declared in `builtin_project.dart` (`builtinProjects`, today `anonymous` and `byte-repair`).
 It is a project in every respect that matters to the store — same layout, same
 movement, a chat can be in one — but its name is refused by `isProjectName`, so
 it cannot be created, renamed or deleted, and `everyProject` is where it is
 offered. What is special about it is what a *turn* in it may not have, and that
  is a `BuiltinProject` spec: which profile it runs under (`ProfilePolicy`),
  whether project memory runs (`MemoryPolicy`), whether its workspace is shared
- between its chats, which capabilities it takes away, and, where it ships
+ between its chats, which capabilities it takes away, whether it opts into
+ rootfs isolation, whether it requires a setup step before turns can be sent,
+ and, where it ships
  one, a note that stands in for the instruction files. `anonymous` turns all
  of the first four off and is the one that ships a note: no profile, no
  memory, a workspace it does not share, and its own account of what an
- anonymous chat is, in code rather than in a file the user could edit away —
+ anonymous chat is, embedded at build time from
+ `assets/prompts/projects/<project>/system/` (`tool/gen_prompts.dart`) rather
+ than anything on the user's disk —
  so the context and tools that would reach another conversation are simply not
  there. A turn never meets a built-in project itself:
  `ChatRepository._turnSettings` resolves the spec into a profile, a memory, a

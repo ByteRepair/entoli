@@ -5,7 +5,7 @@ publish_to: "none"
 # No `+build` suffix: release-build.yml derives the Android version code from
 # these three numbers, and a second number to bump is a second number to
 # forget.
-version: 1.1.0
+version: 2.1.0
 
 environment:
   sdk: ^3.12.2
@@ -73,6 +73,9 @@ dependencies:
   # Misc
   uuid: ^4.6.0
   collection: ^1.19.1
+  # A swappable clock so tests pin "now" rather than rotting against the
+  # calendar. The reminder feature reads it; see "Reminders" in CLAUDE.md.
+  clock: ^1.1.2
   # navigator.storage.persist(), so what the browser stored is not evicted.
   web: ^1.1.1
   flutter_webrtc: ^1.6.0
@@ -111,6 +114,10 @@ flutter:
     # Bundled skills and agents are embedded in code by
     # tool/gen_bundled_skills.dart, not shipped as Flutter assets.
     - assets/icons/
+    # The version About shows, generated from pubspec by tool/prepare.sh.
+    # Flutter writes its own version.json for Linux and Web, which overrides
+    # this where one exists; on every other platform this is the only copy.
+    - assets/version.json
     # The font's licence, read into `LicenseRegistry` at startup. An asset
     # rather than only a file in the repo, since the OFL asks for it to travel
     # with the font.
@@ -123,6 +130,11 @@ flutter:
     - path: assets/models/silero_vad.onnx
       platforms: [android, ios, linux, macos, windows]
     - path: assets/models/silero-vad-LICENSE.txt
+      platforms: [android, ios, linux, macos, windows]
+    # Byte Repair's install script, run through the configured terminal env to
+    # install make, github-cli and ESBMC. Platform-gated to keep it off the web
+    # build, which has no shell to run it.
+    - path: assets/scripts/byte-repair-setup.sh
       platforms: [android, ios, linux, macos, windows]
 
   # Code is set in this rather than in `monospace`, which is a different face on

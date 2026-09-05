@@ -91,6 +91,32 @@ us, so a CVE in a bundled tool is a version bump in `versions.sh` and a release
 every user has to install. That is the cost that took git out of this list, and
 it is worth weighing before anything is added back to it.
 
+## Byte Repair's environment, in two variables
+
+`byte-repair-setup.sh` answers to what it is told and probes nothing. Where to
+install is the store's `ENV_INSTALL_DIR` — `/usr/local/bin` inside a guest, the
+app's own `<cacheDir>/byte-repair/bin` on the host — and the script exits
+rather than guess a destination. What installs packages is the driver's
+`ENV_PACKAGE_MANAGER` — `apk` in a guest, from the same `Rootfs.packageManager`
+the system prompt names, and nothing on the host, whose package manager is not
+ours to touch. Unset does not mean unavailable: a skipped install is a note and
+the run carries on, so a host with make already on it pays nothing and one
+without it sees the honest "Not installed" row. A named manager that fails is
+a failure, so a guest install that did not happen never reads as done.
+
+On the host the fetched tools reach their turns through the driver: `platformDriver`
+prefixes the bin directory onto `PATH` for rootfs-isolated projects alone, the
+way the project's rootfs copy is its own. A user-set `PATH` in the command
+environment still wins over it. The chat page's setup gate asks after the
+binary itself on the host, since `<cacheDir>` can be emptied between setups —
+the marker alone said a thing the cache may have since taken away. Two
+consequences worth knowing: the script's in-script fetches (`releases/latest`
+for gh and ESBMC) are the one deliberate exception to the checksum pinning
+everywhere else in this app, because "Run Setup" is a button the user pressed
+rather than a download the app decided on; and `ensureRootfs` is a no-op off
+Android, where there is no guest for a per-project rootfs copy to serve — so a
+`rootfsId` left over from another device does not pay for a copy nothing reads.
+
 ## A whole Linux under proot
 
 A bundled binary is one binary. What a coding agent actually wants is a package
@@ -138,13 +164,33 @@ reason the voice models are: `backup.dart` zips that directory whole, and a
 restore *replaces* it. A `.complete` marker written last is the whole of what
 "installed" means.
 
-**The data directory is bound into the guest at its own path.** Not a tidier
-`/workspace`: every path the app has ever handed the model — the chat's
-workspace, the project's, an artifact — then means the same thing inside the
-guest as outside it, the host `cwd` and proot's `-w` are the same string, and
-nothing else in the app has to learn that commands are running somewhere else.
-The workspace explorer, the `DocumentsProvider` and a resend of an old turn all
-keep working with no knowledge of any of this.
+**The project workspace is bound into the guest at `/root`, not the data
+directory at its own Android path.** The model sees `~` for the project
+workspace and `~/chats/<id>` for the chat's own, not the full
+`/data/user/0/...` path. The rest of the device is not there. Skills are bound
+at `/opt/skills-bundled` and `/opt/skills` so their scripts are reachable. The
+file tools translate `~` and guest paths back to the host's, since they use the
+host filesystem. `ShellDriver.commandFor` builds the proot invocation per chat,
+because the bind mounts and `-w` need the chat's own `cwd` and `home`. The
+`-w` flag takes the guest path of the chat workspace (e.g. `/root/chats/<id>`),
+not `.` — proot stores `-w` as the guest cwd, and `.` resolves against the
+guest root, not the host's working directory.
+
+**proot creates mode-0000 stubs at its bind targets, and they are why
+`tree_ops.dart` exists.** Where a bind's guest path does not exist in the
+rootfs — `/opt/skills`, `/opt/skills-bundled`, `/etc/resolv.conf` are the three
+this app's binds produce, since the Alpine tarball has none of them — proot
+creates an inaccessible placeholder to mount over. In the guest the stub is
+invisible; on the host it is poison, because `dart:io` cannot list a mode-0000
+directory, so a recursive delete over a rootfs that hosted a session dies on
+one and a `cp` that has to read one does too — both were live on a device. So
+the per-project rootfs copy (`FileByteRepairStore.ensureRootfs`) is a tar round
+trip through `copyTree`, which excludes the stub paths (nothing there is
+reachable in the guest anyway) and starts by clearing whatever an earlier
+attempt left; and every rootfs deletion — the project's environment, and the
+Terminal page's — goes through `removeTree`, which `chmod -R u+rwX`es first
+because a guest `chmod` is a real one on the host and may have closed
+directories that have to be reopened to be deleted.
 
 **`HOME` inside the guest is the project's workspace, not `/root`.** The rootfs
 is one directory shared by every project and outside what a backup carries, so a

@@ -1,6 +1,7 @@
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/data/local/proot.dart";
+import "package:agent_chat/domain/file_tools.dart";
 import "package:agent_chat/domain/rootfs.dart";
 import "package:agent_chat/domain/shell.dart";
 
@@ -14,12 +15,25 @@ void main() {
     resolvConf: "/data/user/0/pkg/cache/tools/etc/resolv.conf",
   );
   const dataDir = "/data/user/0/pkg/app_flutter/agent-chat";
+  const defaultSkillsBundled = "$dataDir/projects/default/skills-bundled";
+  const defaultUserSkills = "$dataDir/projects/default/skills";
+  const home = "$dataDir/projects/default/workspace";
+  const cwd = "$home/chats/abc-123";
 
-  ShellDriver build({Proot from = proot, String? abi = "x86_64"}) => prootDriver(
+  ShellDriver build({
+    Proot from = proot,
+    String? abi = "x86_64",
+    String? projectSkillsBundled,
+    String? projectUserSkills,
+  }) =>
+      prootDriver(
         proot: from,
         rootfs: alpine,
         rootfsDir: "/data/user/0/pkg/cache/rootfs/alpine",
-        dataDir: dataDir,
+        defaultSkillsBundledDir: defaultSkillsBundled,
+        defaultUserSkillsDir: defaultUserSkills,
+        projectSkillsBundledDir: projectSkillsBundled,
+        projectUserSkillsDir: projectUserSkills,
         abi: abi,
       );
 
@@ -35,8 +49,6 @@ void main() {
     final driver = build();
 
     expect(driver.environment["PROOT_LOADER"], proot.loader);
-    // Nothing to name, so nothing is said: proot would otherwise be handed an
-    // empty path for an architecture that has no 32-bit guests.
     expect(driver.environment.containsKey("PROOT_LOADER_32"), isFalse);
   });
 
@@ -53,37 +65,72 @@ void main() {
     expect(driver.environment["PROOT_LOADER_32"], "/lib/libproot-loader32.so");
   });
 
-  test("the data directory is bound at its own path, so every path the app has "
-      "handed the model still means what it meant", () {
-    final driver = build();
+  test("the project workspace is bound at /root, not the data dir at its own path",
+      () {
+    final command = build().commandFor(cwd, home);
 
-    expect(valuesOf(driver.command, "-b"), contains("$dataDir:$dataDir"));
+    expect(valuesOf(command, "-b"), contains("$home:/root"));
+    expect(valuesOf(command, "-b"), isNot(contains("$dataDir:$dataDir")));
+  });
+
+  test("skills are bound at clean guest paths", () {
+    final command = build().commandFor(cwd, home);
+
+    expect(valuesOf(command, "-b"), contains("$defaultSkillsBundled:/opt/skills-bundled"));
+    expect(valuesOf(command, "-b"), contains("$defaultUserSkills:/opt/skills"));
+  });
+
+  test("a project's own skills dirs are bound beside the default's", () {
+    const projectSkillsBundled = "$dataDir/projects/byte-repair/skills-bundled";
+    const projectUserSkills = "$dataDir/projects/byte-repair/skills";
+    final driver = build(
+        projectSkillsBundled: projectSkillsBundled,
+        projectUserSkills: projectUserSkills);
+    final command = driver.commandFor(cwd, home);
+
+    expect(valuesOf(command, "-b"),
+        contains("$projectSkillsBundled:/opt/skills-bundled-project"));
+    expect(valuesOf(command, "-b"),
+        contains("$projectUserSkills:/opt/skills-project"));
+    expect(driver.hostToGuestPaths[projectSkillsBundled],
+        "/opt/skills-bundled-project");
+    expect(driver.hostToGuestPaths[projectUserSkills], "/opt/skills-project");
   });
 
   test("the guest is given a resolver, since Android keeps no such file", () {
-    final driver = build();
+    final command = build().commandFor(cwd, home);
 
-    expect(valuesOf(driver.command, "-b"),
+    expect(valuesOf(command, "-b"),
         contains("${proot.resolvConf}:/etc/resolv.conf"));
   });
 
   test("it runs proot, ends in the guest's shell, and chroots into the rootfs",
       () {
-    final driver = build();
+    final command = build().commandFor(cwd, home);
 
-    expect(driver.command.first, proot.binary);
-    expect(driver.command.last, "/bin/sh");
-    expect(valuesOf(driver.command, "-r"),
+    expect(command.first, proot.binary);
+    expect(command.last, "/bin/sh");
+    expect(valuesOf(command, "-r"),
         ["/data/user/0/pkg/cache/rootfs/alpine"]);
   });
 
   test("the tracees are killed with the tracer, and hard links are survivable",
       () {
-    final driver = build();
+    final command = build().commandFor(cwd, home);
 
-    expect(driver.command, contains("--kill-on-exit"));
-    expect(driver.command, contains("--link2symlink"));
-    expect(driver.command, contains("-0"));
+    expect(command, contains("--kill-on-exit"));
+    expect(command, contains("--link2symlink"));
+    expect(command, contains("-0"));
+  });
+
+  test("the working directory is the guest path of the chat workspace, not /", () {
+    final command = build().commandFor(cwd, home);
+
+    final w = valuesOf(command, "-w");
+    expect(w, isNotEmpty);
+    expect(w.first, isNot(contains(".")));
+    expect(w.first, startsWith("/root"));
+    expect(w.first, contains("chats/abc-123"));
   });
 
   test("the guest's own PATH, not the host's, and no HOME", () {
@@ -94,19 +141,43 @@ void main() {
     expect(driver.environment.containsKey("HOME"), isFalse);
   });
 
+  test("the guest declares its own package manager, since the catalog knows it",
+      () {
+    expect(build().environment["ENV_PACKAGE_MANAGER"], "apk");
+  });
+
+  test("the parent's environment does not leak into the guest", () {
+    expect(build().includeParentEnvironment, isFalse);
+  });
+
   test("a guest's HOME is the project's workspace, so the shell sets it", () {
     expect(build().projectHome, isTrue);
+  });
+
+  test("the guest root is /root", () {
+    expect(build().guestRoot, "/root");
+  });
+
+  test("host-to-guest path mappings include skills", () {
+    final mappings = build().hostToGuestPaths;
+    expect(mappings[defaultSkillsBundled], "/opt/skills-bundled");
+    expect(mappings[defaultUserSkills], "/opt/skills");
   });
 
   test("what the model is told is the distribution, the architecture it is "
       "running as, and how to install anything else", () {
     expect(build().description, contains("Alpine Linux 3.24.1 (x86_64)"));
     expect(build().description, contains("apk"));
-    expect(build().description, contains("same paths"));
+    expect(build().description, contains("home directory"));
   });
 
   test("an unknown architecture is named as the distribution alone, rather "
       "than guessed at", () {
     expect(build(abi: null).description, startsWith("Alpine Linux 3.24.1,"));
+  });
+
+  test("guestWorkspacePath computes the guest path from home and cwd", () {
+    expect(guestWorkspacePath("/root", home, cwd), "/root/chats/abc-123");
+    expect(guestWorkspacePath("/root", home, home), "/root");
   });
 }

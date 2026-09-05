@@ -41,7 +41,7 @@ class ThinkingLabel extends StatelessWidget {
 }
 
 class ToolLabel extends StatelessWidget {
-  const ToolLabel({super.key, this.call, this.result})
+  const ToolLabel({super.key, this.call, this.result, this.running = false})
       : assert(call != null || result != null);
 
   final ToolCall? call;
@@ -49,17 +49,37 @@ class ToolLabel extends StatelessWidget {
   /// Null while the tool is still running.
   final ToolResult? result;
 
+  /// Whether this label is for the tool the turn is currently running. Only
+  /// true for the live label of a waiting turn that has already said something
+  /// — the spinner below the message handles the no-text-yet case.
+  final bool running;
+
   bool get _failed => (result?.returnCode ?? 0) != 0;
 
   @override
   Widget build(BuildContext context) {
     final name = call?.name;
+    final showSpinner = running && result == null;
     final verb = result == null ? "Using tool" : "Used tool";
     final arguments = call?.argumentsText ?? call?.argumentsJson;
     return _Label(
       icon: _failed ? Icons.error_outline : Icons.terminal,
       text: name == null ? verb : "$verb: $name",
       isError: _failed,
+      // A running tool gets a spinner instead of a static icon, so the turn
+      // shows it is busy even after the model has said something. The spinner
+      // below the message handles the no-text-yet case, so this only shows
+      // where that one doesn't.
+      iconWidget: showSpinner
+          ? SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            )
+          : null,
       onTap: () => showActivitySheet(
         context,
         title: name ?? "Tool",
@@ -505,12 +525,17 @@ class _Label extends StatelessWidget {
     required this.text,
     required this.onTap,
     this.isError = false,
+    this.iconWidget,
   });
 
   final IconData icon;
   final String text;
   final VoidCallback onTap;
   final bool isError;
+
+  /// Overrides [icon] where the caller has a widget rather than an icon — a
+  /// running tool's spinner, for instance.
+  final Widget? iconWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -520,7 +545,7 @@ class _Label extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
         onPressed: onTap,
-        icon: Icon(icon, size: 15),
+        icon: iconWidget ?? Icon(icon, size: 15),
         label: Text(text),
         style: TextButton.styleFrom(
           foregroundColor: color,

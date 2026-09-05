@@ -18,7 +18,8 @@ void main() {
     final config = tempConfig();
     await installBundledSkills(config);
 
-    final skills = await BundledPrompts(config: config).load(CompletionKind.skill);
+    final skills =
+        await BundledPrompts(config: config).load(CompletionKind.skill);
     final agents = await const BundledPrompts().load(CompletionKind.agent);
 
     expect(skills, isNotEmpty);
@@ -32,7 +33,7 @@ void main() {
       expect(
         skill.body,
         startsWith(
-            "Base directory for this skill: ${p.join(config.bundledSkillsDir, skill.name)}"),
+            "Base directory for this skill: ${p.join(config.bundledSkillsDir(), skill.name)}"),
         reason: "${skill.name} does not name where its files are",
       );
     }
@@ -41,7 +42,8 @@ void main() {
   test("self-heal repairs a file that was edited on disk", () async {
     final config = tempConfig();
     await installBundledSkills(config);
-    final marker = p.join(config.bundledSkillsDir, "artifact", "SKILL.md");
+    final marker =
+        p.join(config.bundledSkillsDir(), "artifact", "SKILL.md");
     File(marker).writeAsStringSync("the user's edit");
 
     await installBundledSkills(config);
@@ -56,20 +58,22 @@ void main() {
   test("self-heal deletes a file the embedded data does not name", () async {
     final config = tempConfig();
     await installBundledSkills(config);
-    final stray = p.join(config.bundledSkillsDir, "fake-skill", "SKILL.md");
+    final stray =
+        p.join(config.bundledSkillsDir(), "fake-skill", "SKILL.md");
     File(stray).createSync(recursive: true);
     File(stray).writeAsStringSync("---\ndescription: fake\n---\n\nPoison.");
 
     await installBundledSkills(config);
 
     expect(File(stray).existsSync(), isFalse);
-    expect(Directory(p.join(config.bundledSkillsDir, "fake-skill")).existsSync(),
+    expect(
+        Directory(p.join(config.bundledSkillsDir(), "fake-skill")).existsSync(),
         isFalse);
   });
 
   test("every skill dir in the source tree has entries in the embedded data",
       () async {
-    final onDisk = Directory("assets/prompts/skills")
+    final onDisk = Directory("assets/prompts/projects/default/skills")
         .listSync()
         .whereType<Directory>()
         .map((d) => p.basename(d.path))
@@ -82,7 +86,7 @@ void main() {
   });
 
   test("every agent in the source tree has an entry in the embedded data", () {
-    final onDisk = Directory("assets/prompts/agents")
+    final onDisk = Directory("assets/prompts/projects/default/agents")
         .listSync()
         .whereType<File>()
         .where((f) => f.path.endsWith(".md"))
@@ -95,7 +99,7 @@ void main() {
     }
   });
 
-  test("the user's own come from \$AGENT_CHAT_CONFIG/skills", () async {
+  test("the user's own come from the default project's skills dir", () async {
     final config = tempConfig();
     await config.ensureDirs();
     Directory(p.join(config.promptsDir(CompletionKind.skill), "ship"))
@@ -135,7 +139,8 @@ void main() {
   test("BundledPrompts returns skills from embedded data even with no disk", () async {
     final config = tempConfig();
 
-    final skills = await BundledPrompts(config: config).load(CompletionKind.skill);
+    final skills =
+        await BundledPrompts(config: config).load(CompletionKind.skill);
     expect(skills, isNotEmpty);
   });
 
@@ -169,8 +174,8 @@ void main() {
 
   test("the embedded checksums match the source files", () async {
     for (final file in bundledSkillFiles) {
-      final source = File(
-          p.join("assets/prompts/skills", file.name, file.relativePath));
+      final source = File(p.join(
+          "assets/prompts/projects", file.project, "skills", file.name, file.relativePath));
       if (!source.existsSync()) continue;
       final content = source.readAsStringSync();
       final hash = sha256.convert(utf8.encode(content)).toString();
@@ -178,13 +183,128 @@ void main() {
           reason: "${file.name}/${file.relativePath} checksum mismatch");
     }
     for (final file in bundledAgentFiles) {
-      final source =
-          File(p.join("assets/prompts/agents", "${file.name}.md"));
+      final source = File(
+          p.join("assets/prompts/projects", file.project, "agents", "${file.name}.md"));
       if (!source.existsSync()) continue;
       final content = source.readAsStringSync();
       final hash = sha256.convert(utf8.encode(content)).toString();
-      expect(hash, file.sha256,
-          reason: "${file.name} checksum mismatch");
+      expect(hash, file.sha256, reason: "${file.name} checksum mismatch");
     }
+  });
+
+  group("project scoping", () {
+    test("the default project offers its own skills and agents, no others", () async {
+      final skills =
+          await BundledPrompts(config: tempConfig()).load(CompletionKind.skill);
+      final agents = await const BundledPrompts().load(CompletionKind.agent);
+
+      expect(skills.map((s) => s.name).toSet(),
+          {"artifact", "deep-research", "skill-creator"});
+      expect(agents.map((a) => a.name).toSet(), {"explore", "general"});
+    });
+
+    test("byte-repair inherits the default's agents and adds esbmc-verifier, "
+        "and ships no skills of its own", () async {
+      final config = tempConfig();
+      await installBundledSkills(config);
+      final skills = await BundledPrompts(config: config, project: "byte-repair")
+          .load(CompletionKind.skill);
+      final agents = await const BundledPrompts(project: "byte-repair")
+          .load(CompletionKind.agent);
+
+      expect(skills.map((s) => s.name).toSet(),
+          {"artifact", "deep-research", "skill-creator"});
+      expect(agents.map((a) => a.name).toSet(),
+          {"explore", "general", "esbmc-verifier"});
+    });
+
+    test("esbmc-verifier is byte-repair's alone", () async {
+      final defaultAgents =
+          await const BundledPrompts().load(CompletionKind.agent);
+      final byteRepairAgents =
+          await const BundledPrompts(project: "byte-repair")
+              .load(CompletionKind.agent);
+
+      expect(defaultAgents.any((a) => a.name == "esbmc-verifier"), isFalse,
+          reason: "esbmc-verifier must not be visible to the default project");
+      expect(byteRepairAgents.any((a) => a.name == "esbmc-verifier"), isTrue,
+          reason: "esbmc-verifier must be visible to byte-repair");
+    });
+
+    test("a project's own agent overrides a same-named default one", () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      // A user-written agent in the default project's dir overrides the bundled
+      // explore for the default project.
+      File(p.join(config.promptsDir(CompletionKind.agent), "explore.md"))
+          .writeAsStringSync("---\ndescription: mine\n---\n\nMy explore.\n");
+
+      final library = await PromptLibrary.from([
+        const BundledPrompts(),
+        DirectoryPrompts(config),
+      ]);
+
+      expect(library.find(CompletionKind.agent, "explore")!.description, "mine");
+    });
+
+    test("a non-default project inherits the default's user skills", () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      Directory(p.join(config.promptsDir(CompletionKind.skill), "ship"))
+          .createSync(recursive: true);
+      File(p.join(config.promptsDir(CompletionKind.skill), "ship", "SKILL.md"))
+          .writeAsStringSync(
+              "---\ndescription: ship it\n---\n\nShip \$ARGUMENTS.\n");
+
+      // A project with no skills of its own sees the default's user skill.
+      final library = await PromptLibrary.from([
+        const BundledPrompts(project: "my-project"),
+        DirectoryPrompts(config, project: "my-project"),
+      ]);
+
+      expect(library.find(CompletionKind.skill, "ship"), isNotNull);
+    });
+
+    test("a project's own skill overrides the default's same-named one", () async {
+      final config = tempConfig();
+      await config.ensureDirs();
+      // Default's user skill.
+      Directory(p.join(config.promptsDir(CompletionKind.skill), "shared"))
+          .createSync(recursive: true);
+      File(p.join(config.promptsDir(CompletionKind.skill), "shared", "SKILL.md"))
+          .writeAsStringSync("---\ndescription: default's\n---\n\nDefault.\n");
+      // The project's override of the same name.
+      Directory(p.join(
+              config.promptsDir(CompletionKind.skill, project: "my-project"),
+              "shared"))
+          .createSync(recursive: true);
+      File(p.join(config.promptsDir(CompletionKind.skill, project: "my-project"),
+              "shared", "SKILL.md"))
+          .writeAsStringSync("---\ndescription: project's\n---\n\nProject.\n");
+
+      final library = await PromptLibrary.from([
+        const BundledPrompts(project: "my-project"),
+        DirectoryPrompts(config, project: "my-project"),
+      ]);
+
+      expect(library.find(CompletionKind.skill, "shared")!.description,
+          "project's");
+    });
+
+    test("self-heal writes a project's bundled skills to its own dir",
+        () async {
+      final config = tempConfig();
+      await installBundledSkills(config);
+
+      // byte-repair ships esbmc-verifier as a bundled *agent*, which is
+      // code-only — never written to disk. So byte-repair's skills-bundled dir
+      // exists (created by ensureProjectDirs) but holds no skills, since
+      // byte-repair ships none. The default's holds the base set.
+      final defaultDir =
+          Directory(config.bundledSkillsDir());
+      expect(await defaultDir.exists(), isTrue);
+      expect(defaultDir.listSync().whereType<Directory>().map((d) => p.basename(d.path)),
+          contains("artifact"));
+    });
   });
 }

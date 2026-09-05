@@ -25,7 +25,7 @@ void main() {
 
   ChatRepository repoWith(AppSettings settings, {PromptLibrary? library}) =>
       ChatRepository(FileChatStore(config), backend, () => settings, config,
-          library: library);
+          libraryFor: library == null ? null : (_) => library);
 
 
 
@@ -195,6 +195,32 @@ void main() {
       // async, so its refusal is a future error.
       expect(() => repo.createProject("anonymous"), throwsArgumentError);
       await expectLater(repo.deleteProject("anonymous"), throwsArgumentError);
+      expect(() => repo.createProject("byte-repair"), throwsArgumentError);
+      await expectLater(repo.deleteProject("byte-repair"), throwsArgumentError);
+    });
+
+    test("a turn in Byte Repair keeps the profile, memory and shared workspace",
+        () async {
+      final repo = repoWith(AppSettings(
+        profile: const Profile(name: "Tea Fan"),
+        autoMemory: true,
+      ));
+      final chat = await repo.createChat(project: "byte-repair");
+      await writeChatVia(repo, chat);
+
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, "byte-repair");
+      // Byte Repair inherits the app's profile and memory, unlike Anonymous.
+      expect(settings.profile, isNotNull);
+      expect(settings.memory.autoMemory, isTrue);
+      expect(settings.sharedWorkspace, isTrue);
+      expect(settings.disabled, isEmpty);
+      // It ships its own note about secure coding and ESBMC, and reads the
+      // user's instruction files on top of it.
+      expect(settings.bundledInstructions, contains("ESBMC"));
+      expect(settings.includesUserInstructions, isTrue);
     });
 
     test("a turn in a built-in project drops the profile and memory", () async {
@@ -219,6 +245,7 @@ void main() {
       expect(settings.disabled, isEmpty);
       // The built-in ships its own note; the user's files are not read.
       expect(settings.bundledInstructions, contains("anonymous chat"));
+      expect(settings.includesUserInstructions, isFalse);
     });
 
     // A draft is not on disk, so it answers for its own project: the same
@@ -254,6 +281,7 @@ void main() {
       expect(settings.sharedWorkspace, isTrue);
       // A user's project reads its files; nothing ships in their place.
       expect(settings.bundledInstructions, isNull);
+      expect(settings.includesUserInstructions, isFalse);
     });
 
     test("a move ends the shell the chat stood in, and only that one", () async {

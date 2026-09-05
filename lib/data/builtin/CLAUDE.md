@@ -117,6 +117,14 @@ in `data/local/` — and `platformDriver` picks between the two per command.
 `LocalShell` runs whichever it is handed, since to it both are a command that
 ends in a shell, and that is the whole of what a new driver owes it.
 
+**The shell creates the directory it is told to stand in if it is not there.**
+A spawn `workingDirectory` that does not exist fails with an ENOENT that names
+neither the directory nor the reason, and the cwds the app hands the shell are
+its own laid-out paths that may legitimately be missing: a project workspace
+before its first chat — a built-in project's setup runs in one — or one a user
+deleted from the Files app. So `_spawnInGroup` makes it before `Process.start`,
+in the one place both the one-shot and the persistent paths spawn through.
+
 **The commands run in one shell per chat, and its state is machine state the
 conversation builds on.** A fresh subshell per command made a `cd` or an
 `export` a private joke: the model moved the shell in one command, and the next
@@ -239,7 +247,13 @@ the banner), `auto` (a classifier model decides allow/ask/deny per command),
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
-message, `ask` escalates to the same banner `ask` mode uses. A circuit
+message that says not to retry it, `ask` escalates to the same banner `ask`
+mode uses. The classifier's rubric is workspace-anchored: reads of anything
+and writes inside the workspace allow, anything modifying state past it (the
+machine's `/tmp` included) asks, and deny is reserved for irreversible
+destruction rather than being a stronger ask — a write the model is unsure
+about is an ask, which is what keeps a scratch script from being refused five
+times over. A circuit
 breaker pauses auto mode after 3 consecutive or 20 total escalations in one
 turn, falling back to `ask` for the rest — emitted as an `InfoEvent` so the
 UI can say "auto mode paused." `NoClassifier` always asks, which is why the
@@ -620,10 +634,11 @@ would be read — the patterns are globs, anchored, `**` spanning directories,
 and a pattern with no slash matching the file's name alone.
 
 A built-in project that ships a note of its own reads no file at all: the
-note, in code, is the turn's instructions in full, and the nested walk on a
+note, embedded at build time from `assets/prompts/projects/<project>/system/`,
+is the turn's instructions in full, and the nested walk on a
 file read is off beside it, since there is no file anywhere to pull in.
 `anonymous` is the one today — the app's short account of what an anonymous
-chat is, which a file on the user's disk could delete or edit away from under
+chat is, which nothing on the user's disk can delete or edit away from under
 a turn.
 
 An `@path` line in the project's file imports the file it names, depth-first

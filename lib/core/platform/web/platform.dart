@@ -8,6 +8,8 @@ import "package:web/web.dart" as web;
 
 import "../../../data/backup_handoff.dart";
 import "../../../data/builtin/llm/local_kv_cache.dart";
+import "../../../data/local/byte_repair_store.dart"
+    show ByteRepairStore, UnavailableByteRepairStore;
 import "../../../data/local/file_secret_store.dart";
 import "../../../data/web/web_file_handoff.dart";
 import "../../../domain/assistant_launch.dart";
@@ -38,14 +40,22 @@ Shell platformShell({
 Future<Toolset?> platformInstallTools(String cacheDir) async => null;
 
 /// A browser cannot run a command at all, so there is nothing for a Linux to
-/// be run under.
+/// be run under. The [project], [config] and [byteRepairBinDir] parameters
+/// are unused here: the io side resolves a per-project rootfs instance and a
+/// per-project bin directory from them.
 ShellDriver? platformDriver({
-  required String dataDir,
+  required String defaultSkillsBundledDir,
+  required String defaultUserSkillsDir,
+  String? projectSkillsBundledDir,
+  String? projectUserSkillsDir,
   Toolset? tools,
   Proot? proot,
   RootfsStore? store,
   String? rootfsId,
   String? abi,
+  String? project,
+  AppConfig? config,
+  String? byteRepairBinDir,
 }) =>
     null;
 
@@ -62,6 +72,27 @@ Future<String?> platformVersionJson() async {
 }
 
 RootfsStore platformRootfsStore(String cacheDir) => const UnavailableRootfsStore();
+
+/// Nothing to copy a rootfs onto and no shell to run an install script in:
+/// every operation answers with an error from the store itself.
+ByteRepairStore platformByteRepairStore(
+  AppConfig config,
+  String project,
+  String workspace,
+  String cacheDir,
+  RootfsStore? rootfs,
+) =>
+    UnavailableByteRepairStore(
+        config: config, project: project, workspace: workspace);
+
+/// No bin directory: there is no shell to inject one into.
+String? platformByteRepairBinDir(String cacheDir) => null;
+
+/// True: there is no marker to read and nothing that could write one, so a
+/// project that requires setup never gates a chat here.
+bool platformSetupComplete(AppConfig config, String? project,
+        {String? byteRepairBinDir}) =>
+    true;
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
 
@@ -153,3 +184,14 @@ Future<void> platformChmodReadOnly(List<String> paths) async {}
 Future<T> platformWithWritableDir<T>(
         String path, Future<T> Function() action) async =>
     await action();
+
+/// The web has no rootfs under the data directory (the Byte Repair store is
+/// `Unavailable`), so there are no proot mode-0000 stubs to `chmod` past — a
+/// plain recursive delete is all the restore clear needs here. The signature
+/// matches the io side so `restoreBackup` calls one seam.
+Future<void> platformDeleteTree(String path) async {
+  final fs = fileSystemWeb;
+  if (await fs.isDirectory(path)) {
+    await fs.directory(path).delete(recursive: true);
+  }
+}

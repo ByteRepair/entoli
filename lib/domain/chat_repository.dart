@@ -65,9 +65,13 @@ class Moved extends RepoEvent {
 /// on, and owns which thread of a conversation is being read. The turn itself
 /// is accumulated and saved by `ChatController` as events arrive.
 class ChatRepository {
-  ChatRepository(this._store, this._backend, this._settings, this._config,
-      {PromptLibrary? library})
-      : _library = library ?? PromptLibrary.empty;
+  ChatRepository(
+    this._store,
+    this._backend,
+    this._settings,
+    this._config, {
+    PromptLibrary Function(String? project)? libraryFor,
+  }) : _libraryFor = libraryFor ?? ((_) => PromptLibrary.empty);
 
   final ChatStore _store;
   final AgentBackend _backend;
@@ -78,9 +82,9 @@ class ChatRepository {
   /// Where project settings live. Read on use, like [_settings].
   final AppConfig _config;
 
-  /// The commands and agents a message's references are resolved against, once,
-  /// as it is composed — see [composeUserPrompt].
-  final PromptLibrary _library;
+  /// Resolves the library a message's references are composed against, by
+  /// project. See [composeUserPrompt].
+  final PromptLibrary Function(String? project) _libraryFor;
 
   final _changes = StreamController<RepoEvent>.broadcast();
 
@@ -266,12 +270,11 @@ class ChatRepository {
   /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
-      bool replaces = false,
-      bool headless = false}) async* {
+      bool replaces = false}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, prompt,
         history: history,
-        settings: await _turnSettings(chatId, headless: headless));
+        settings: await _turnSettings(chatId));
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
@@ -293,15 +296,15 @@ class ChatRepository {
   /// whatever the app ships it with, whatever the settings say. A chat's own
   /// `memoryOff` is one of those takes: it turns the subsystem off for this
   /// chat alone, and where the project already took it away it cannot be given
-  /// back from here.
-  Future<TurnSettings> _turnSettings(String chatId, {bool headless = false}) async {
+  /// it back from here. `headless` is the other: a chat nobody watches (a
+  /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
+  Future<TurnSettings> _turnSettings(String chatId) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
     final builtIn = builtinProjectOf(project);
     final disabled = {...builtIn?.disabled ?? const <AgentCapability>{}};
-    if (headless) {
-      // A turn nobody watches must not be able to park on an answer.
+    if (meta.headless == true) {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
     final projectSettings = await projectSettingsOf(project);
@@ -319,6 +322,7 @@ class ChatRepository {
       sharedWorkspace: builtIn?.sharedWorkspace ?? true,
       disabled: disabled,
       bundledInstructions: builtIn?.bundledInstructions,
+      includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
     );
@@ -387,14 +391,15 @@ class ChatRepository {
   /// [files] are already under the chat's `resources/`: the composer saves what
   /// it is holding with [saveAttachments] first, and a resend passes on the
   /// parts the message it branches from already had.
-  Message composeUserPrompt(String text, {List<MessagePart> files = const []}) =>
+  Message composeUserPrompt(String text,
+      {String? project, List<MessagePart> files = const []}) =>
       Message(
         id: const Uuid().v4(),
         role: MessageRole.user,
         createdAt: DateTime.now(),
         // Files first, the order they are sent in and a resend rebuilds.
         parts: [...files, MessagePart.text(text: text)],
-        documents: promptDocuments(text, _library),
+        documents: promptDocuments(text, _libraryFor(project)),
       );
 
   /// Save what the user attached and describe it as the parts that outlive the
