@@ -442,3 +442,16 @@ completions, `turns` for a turn that gave up on its retries with nobody
 watching (see `lib/ui/chat/CLAUDE.md`, "Automatic retry rounds"). One port and
 one tap route, two channels, so silencing one half of the app's bad news is a
 channel toggle rather than the feature's off switch.
+
+## Remote control
+
+`RemoteControlService` is an `AccessibilityService` that sees and drives the
+screen: `takeScreenshot` (API 30+) captures it, `dispatchGesture` injects taps,
+and `performGlobalAction` sends keys. It is a system component the user enables
+in system settings — the app cannot start it, only link there, which is what
+`RemoteControlChannel.openSettings` does. `RemoteControlChannel` is the bridge:
+it relays a screenshot or an input event to the service and reports whether it
+is connected, which is what gates `RemoteControl.available` on the Dart side.
+The service is registered in the manifest behind `BIND_ACCESSIBILITY_SERVICE`,
+with `canRetrieveWindowContent` and `canPerformGestures` in its config XML.
+

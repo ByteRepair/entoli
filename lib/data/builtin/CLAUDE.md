@@ -454,6 +454,30 @@ search page is HTML, not JSON, so results are parsed out of the table it
 renders. Both return a `ShellResult`, so the agent words a search's outcome
 the same way it words a command's — the model reads one shape, whatever ran.
 
+## Remote control (the `screenshot` / `click` / `key` tools)
+
+`screenshot` captures the screen, `click` clicks at a point, `key` sends
+keyboard input. All three reach the machine the user is looking at, so all
+three go through `_runGated` — the same approval path `bash` and `webfetch`
+take — and none is read-only. The feature is off by default: the app-level
+`remoteControl` setting folds `AgentCapability.remoteControl` out of the turn
+in `ChatRepository._turnSettings`, and a sub-agent never gets it (`unattended`
+zeroes it, a fan-out of workers clicking and typing is a footgun).
+
+`RemoteControl` is the interface, like `Shell` and `WebSearch`: the XDG
+desktop portals on Linux, the accessibility service on Android, and
+`UnavailableRemoteControl` on the web. `RemoteControl.available` gates the
+tools the way `WebSearch.available` gates search.
+
+The screenshot is the one result that is not text. The PNG is saved under the
+chat's `resources/` and the `ToolResult` carries a `resource` naming it, so
+`conv.jsonl` stays small — bytes on disk, a name in the log, the same bargain
+`FilePart` and `ArtifactPart` make. The projection reads the bytes back and
+attaches them to the `LlmRole.tool` message answering the call, the same path
+a user's image attachment takes; the live turn fills the bytes from what it
+just captured (`BuiltinAgent._screenshots`) and a reload reads them off disk,
+so the two word the same image.
+
 ## Skills (the `skill` tool)
 
 `skill` is the one tool that answers from the library rather than the machine:

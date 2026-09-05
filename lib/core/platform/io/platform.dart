@@ -27,6 +27,8 @@ import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
+import "../../../data/local/android_remote_control.dart";
+import "../../../data/local/linux_remote_control.dart";
 import "../../../data/voice/android_voice.dart";
 import "../../../data/voice/file_voice_model_store.dart";
 import "../../../data/voice/sherpa_voice.dart";
@@ -37,6 +39,7 @@ import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
 import "../../../domain/reminder_alarms.dart";
+import "../../../domain/remote_control.dart";
 import "../../../domain/rootfs.dart";
 import "../../../domain/rootfs_store.dart";
 import "../../../domain/secret_store.dart";
@@ -215,6 +218,11 @@ Future<Toolset?> platformInstallTools(String cacheDir) async {
 }
 
 WebSearch platformWebSearch() => DuckDuckGoSearch();
+
+/// Seeing and driving the screen: the XDG portal on Linux, the accessibility
+/// service on Android. Chosen once, so neither implementation carries a branch.
+RemoteControl platformRemoteControl() =>
+    Platform.isAndroid ? AndroidRemoteControl() : LinuxRemoteControl();
 
 /// Where a downloaded model is kept: beside the voice models and a downloaded
 /// Linux, outside the data directory, and for the same reasons — see

@@ -46,6 +46,7 @@ class AgentCapabilities {
     required this.task,
     required this.artifact,
     required this.createSkill,
+    required this.remoteControl,
   });
 
   /// The full set, before the platform's facts or a project's takes away any
@@ -57,6 +58,7 @@ class AgentCapabilities {
     task: true,
     artifact: true,
     createSkill: true,
+    remoteControl: true,
   );
 
   /// Whether a command can run at all: the platform's fact, which a project
@@ -67,12 +69,14 @@ class AgentCapabilities {
   final bool task;
   final bool artifact;
   final bool createSkill;
+  final bool remoteControl;
 
   /// What this device can offer, minus what [disabled] takes away — the
   /// project's takes, and a headless turn's.
   AgentCapabilities.forTurn({
     required bool commands,
     required bool webSearch,
+    required bool remoteControl,
     required Set<AgentCapability> disabled,
   }) : this(
           commands: commands,
@@ -81,10 +85,14 @@ class AgentCapabilities {
           task: !disabled.contains(AgentCapability.task),
           artifact: !disabled.contains(AgentCapability.artifact),
           createSkill: !disabled.contains(AgentCapability.createSkill),
+          remoteControl:
+              remoteControl && !disabled.contains(AgentCapability.remoteControl),
         );
 
   /// What a sub-agent runs under: unattended, so it asks nothing, fans out
   /// nothing, and publishes nothing — there is no viewer to open what it made.
+  /// It also never drives the screen: a fan-out of workers clicking and typing
+  /// is a footgun, and the parent's own turn is the one the user is watching.
   AgentCapabilities get unattended => AgentCapabilities(
         commands: commands,
         webSearch: webSearch,
@@ -92,6 +100,7 @@ class AgentCapabilities {
         task: false,
         artifact: false,
         createSkill: false,
+        remoteControl: false,
       );
 }
 
@@ -289,6 +298,8 @@ String _toolFragments(AgentCapabilities caps) {
     if (caps.ask) "`$askToolName` to put a question to the\n   user",
     if (caps.webSearch) "`websearch` to search the web, `webfetch` to read a page",
     if (caps.artifact) "`artifact`\n   to publish an HTML page the user can view",
+    if (caps.remoteControl)
+      "`screenshot`/`click`/`key`\n   to see and drive the screen",
   ];
   if (acts.length == 1) return acts.single;
   final head = acts.sublist(0, acts.length - 1).join(", ");
@@ -320,12 +331,14 @@ String _shellSections({
   final webSearch = caps.webSearch ? _systemProse("websearch") : null;
   final artifacts = caps.artifact ? _artifacts : null;
   final ask = caps.ask ? _asking : null;
+  final remoteControl = caps.remoteControl ? _systemProse("remote-control") : null;
   return [
     ?task,
     ?webSearch,
     if (skillsText.isNotEmpty) skillsText,
     _files,
     ?artifacts,
+    ?remoteControl,
     _systemProse("finish")!,
     ?ask,
     "<system_information>\n$platform\n</system_information>",

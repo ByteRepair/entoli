@@ -297,6 +297,36 @@ void main() {
     expect(projected.single.attachments, isEmpty);
   });
 
+  test("a screenshot result is read back and attached to its tool message", () async {
+    final projected = await projectionOf([
+      asked("see the screen"),
+      said(MessageRole.assistant, [
+        call("s1", "screenshot", "{}", response: "r1"),
+        MessagePart.toolResult(
+            result: ToolResult(callId: "s1", returnCode: 0, output: "", resource: "shot-1")),
+      ]),
+    ], load: (resource) async => Uint8List.fromList([9, 8, 7]));
+
+    final tool = projected.singleWhere((m) => m.role == LlmRole.tool);
+    expect(tool.toolCallId, "s1");
+    expect(tool.attachments.single.mimeType, "image/png");
+    expect(tool.attachments.single.bytes, [9, 8, 7]);
+  });
+
+  test("a screenshot whose resource has gone is left without an image", () async {
+    final projected = await project([
+      asked("see the screen"),
+      said(MessageRole.assistant, [
+        call("s1", "screenshot", "{}", response: "r1"),
+        MessagePart.toolResult(
+            result: ToolResult(callId: "s1", returnCode: 0, output: "", resource: "shot-1")),
+      ]),
+    ]);
+
+    final tool = projected.singleWhere((m) => m.role == LlmRole.tool);
+    expect(tool.attachments, isEmpty);
+  });
+
   test("an error is the turn's own report, so it is not put back", () async {
     final projected = await project([
       asked("go"),

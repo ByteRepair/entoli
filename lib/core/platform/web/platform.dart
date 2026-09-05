@@ -18,6 +18,7 @@ import "../../../domain/file_handoff.dart";
 import "../../../domain/local_llm.dart";
 import "../../../domain/local_model_store.dart";
 import "../../../domain/reminder_alarms.dart";
+import "../../../domain/remote_control.dart";
 import "../../../domain/rootfs_store.dart";
 import "../../../domain/secret_store.dart";
 import "../../../domain/shell.dart";
@@ -92,6 +93,9 @@ bool platformSetupComplete(AppConfig config, String? project,
     true;
 
 WebSearch platformWebSearch() => const UnavailableWebSearch();
+
+/// A browser cannot see or drive the screen.
+RemoteControl platformRemoteControl() => const UnavailableRemoteControl();
 
 /// Nowhere to put a gigabyte of weights, and nothing that could run them.
 LocalModelStore platformLocalModelStore(String cacheDir) =>

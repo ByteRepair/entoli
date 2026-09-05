@@ -19,6 +19,7 @@ import "domain/app_restart.dart";
 import "domain/models.dart" show CompletionKind;
 import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
+import "domain/remote_control.dart";
 import "domain/sync/identity.dart";
 import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
@@ -116,7 +117,8 @@ class AppSession {
     final byteRepairBin = platform.byteRepairBinDir(cache);
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        byteRepairBinDir: byteRepairBin);
+        byteRepairBinDir: byteRepairBin,
+        remoteControl: platform.createRemoteControl());
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -190,6 +192,8 @@ class AppSession {
         appRestartProvider.overrideWithValue(relaunch),
         voiceModelStoreProvider.overrideWithValue(voiceModels),
         voiceProvider.overrideWithValue(voice),
+        remoteControlProvider.overrideWithValue(backend.remoteControl ??
+            const UnavailableRemoteControl()),
         installedVoiceModelsProvider
             .overrideWith(() => InstalledVoiceModels(installed, system: system)),
         rootfsStoreProvider.overrideWithValue(rootfs),

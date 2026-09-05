@@ -1,10 +1,12 @@
 import "dart:async";
 import "dart:convert";
+import "dart:typed_data";
 
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/permission.dart";
+import "package:agent_chat/domain/remote_control.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/web_search.dart";
 
@@ -309,6 +311,51 @@ LlmCompletion fetchCall(String url, {String id = "fetch-1", String text = ""}) =
       ),
     );
 
+/// One assistant turn that calls `screenshot`.
+LlmCompletion screenshotCall({String id = "shot-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(id: id, name: "screenshot", argumentsJson: "{}"),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `click`.
+LlmCompletion clickCall(int x, int y, int button,
+        {String id = "click-1", String text = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: text,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "click",
+            argumentsJson: jsonEncode({"x": x, "y": y, "button": button}),
+          ),
+        ],
+      ),
+    );
+
+/// One assistant turn that calls `key`.
+LlmCompletion keyCall(String text, {String id = "key-1", String reply = ""}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        text: reply,
+        toolCalls: [
+          LlmToolCall(
+            id: id,
+            name: "key",
+            argumentsJson: jsonEncode({"text": text}),
+          ),
+        ],
+      ),
+    );
+
 /// One assistant turn that calls `artifact`.
 LlmCompletion artifactCall(String path, {String? title, String? artifactId, String id = "art-1", String text = ""}) =>
     LlmCompletion(
@@ -430,6 +477,39 @@ class FakeWebSearch extends WebSearch {
 
 ShellResult ok(String output, {String? cwd}) =>
     ShellResult(returnCode: 0, output: output, cwd: cwd);
+
+/// A remote control that records what it was asked to do and answers from a
+/// table, instead of reaching the screen.
+class FakeRemoteControl extends RemoteControl {
+  FakeRemoteControl({this.available = true});
+
+  @override
+  final bool available;
+
+  /// What `screenshot` returns. Defaults to a one-byte PNG.
+  Uint8List Function()? screenshotResult;
+
+  final List<Uint8List> screenshots = [];
+  final List<({int x, int y, int button})> clicks = [];
+  final List<String> keys = [];
+
+  @override
+  Future<Uint8List> screenshot() async {
+    final bytes = screenshotResult?.call() ?? Uint8List.fromList([0x89]);
+    screenshots.add(bytes);
+    return bytes;
+  }
+
+  @override
+  Future<void> click(int x, int y, {required int button}) async {
+    clicks.add((x: x, y: y, button: button));
+  }
+
+  @override
+  Future<void> key(String text) async {
+    keys.add(text);
+  }
+}
 
 /// A classifier that answers from a table instead of reaching a model.
 class FakeClassifier implements PermissionClassifier {

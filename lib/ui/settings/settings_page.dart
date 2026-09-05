@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter/foundation.dart" show defaultTargetPlatform, TargetPlatform;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_icon.dart";
@@ -7,6 +8,7 @@ import "../../domain/corner_radius.dart";
 import "../../domain/theme_colour.dart";
 import "../../data/backup.dart";
 import "../../core/platform/platform.dart" as platform;
+import "../../data/local/android_remote_control.dart";
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/temp_chat_ttl.dart";
@@ -153,6 +155,8 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           _AppearanceSection(),
           Divider(),
           _AgentSection(),
+          Divider(),
+          _RemoteControlSection(),
           Divider(),
           _TempChatSection(),
           Divider(),
@@ -864,6 +868,51 @@ class _AutoMemorySection extends ConsumerWidget {
   }
 }
 
+/// Whether the agent is offered the screen tools, and on Android the
+/// accessibility permission they need. Off by default: it reaches the machine
+/// the user is looking at.
+class _RemoteControlSection extends ConsumerWidget {
+  const _RemoteControlSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          "Remote control",
+          description: "Let the agent see and drive the screen: a screenshot, "
+              "a click, a key. It reaches the machine you are looking at, so "
+              "every action still asks for your permission.",
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text("Offer the screen tools"),
+          subtitle: const Text(
+              "Offer the agent the screenshot, click and key tools."),
+          value: settings.remoteControl,
+          onChanged: (value) => ref
+              .read(appSettingsProvider.notifier)
+              .setRemoteControl(value),
+        ),
+        if (isAndroid && settings.remoteControl)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.accessibility),
+            title: const Text("Accessibility permission"),
+            subtitle: const Text(
+                "Android needs the accessibility service to see and control "
+                "the screen. Enable Entoli in the system settings."),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => AndroidRemoteControl().openSettings(),
+          ),
+      ],
+    );
+  }
+}
+
 class _TempChatSection extends ConsumerWidget {
   const _TempChatSection();
 
@@ -883,7 +932,8 @@ class _TempChatSection extends ConsumerWidget {
           label: "Delete chats after",
           child: DropdownButtonFormField<TempChatTtl>(
             initialValue: settings.tempChatTtl,
-            isExpanded: true,            items: [
+            isExpanded: true,
+            items: [
               for (final entry in tempChatTtlLabels.entries)
                 DropdownMenuItem(value: entry.key, child: Text(entry.value)),
             ],

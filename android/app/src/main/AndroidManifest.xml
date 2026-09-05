@@ -166,6 +166,22 @@
             android:exported="false"
             android:foregroundServiceType="microphone"/>
 
+        <!-- Remote Control: the accessibility service that sees and drives the
+             screen. A system component the user enables in system settings; the
+             app only links there. The config XML describes what it can do. -->
+        <service
+            android:name=".RemoteControlService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/remote_control_service"/>
+        </service>
+
         <!-- Reminders. Both are system-only entry points and hold no state of
              their own: the alarm receiver hands the id to Dart and holds the
              process, the boot receiver re-arms what reminders.json lists. Not

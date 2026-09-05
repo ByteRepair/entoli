@@ -25,6 +25,7 @@ import "../../domain/local_model_store.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/reminder_alarms.dart";
+import "../../domain/remote_control.dart";
 import "../../domain/rootfs_store.dart";
 import "../../domain/secret_store.dart";
 import "../../domain/shell.dart";
@@ -59,6 +60,7 @@ BuiltinBackend createBackend(
   required LocalLlm localLlm,
   LocalKvCache? kvCache,
   String? byteRepairBinDir,
+  RemoteControl? remoteControl,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -86,6 +88,7 @@ BuiltinBackend createBackend(
       ),
     ),
     webSearch: platformWebSearch(),
+    remoteControl: remoteControl ?? platformRemoteControl(),
     store: store,
     registry: LlmRegistry(
       endpoints: () => llmEndpoints(settings, localLlm, kvCache),
@@ -134,6 +137,7 @@ LocalPrefill? createLocalPrefill(
       final caps = AgentCapabilities.forTurn(
         commands: shell.canRunCommands,
         webSearch: backend.webSearch.available,
+        remoteControl: false,
         disabled: const {},
       );
       return (
@@ -326,6 +330,11 @@ BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
 /// intent; everywhere else nothing fires, which is what leaves the launch
 /// handler inert.
 AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
+
+/// Seeing and driving the machine's screen, where the platform can. The agent's
+/// `screenshot`, `click` and `key` tools reach it; the feature is off until the
+/// user turns it on in settings.
+RemoteControl createRemoteControl() => platformRemoteControl();
 
 /// The system clock a reminder is set against: AlarmManager on Android,
 /// nothing anywhere else yet.

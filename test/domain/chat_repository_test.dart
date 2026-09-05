@@ -204,6 +204,7 @@ void main() {
       final repo = repoWith(AppSettings(
         profile: const Profile(name: "Tea Fan"),
         autoMemory: true,
+        remoteControl: true,
       ));
       final chat = await repo.createChat(project: "byte-repair");
       await writeChatVia(repo, chat);
@@ -227,6 +228,7 @@ void main() {
       final repo = repoWith(AppSettings(
         profile: const Profile(name: "Tea Fan"),
         autoMemory: true,
+        remoteControl: true,
       ));
       final chat = await repo.createChat(project: "anonymous");
       await writeChatVia(repo, chat);

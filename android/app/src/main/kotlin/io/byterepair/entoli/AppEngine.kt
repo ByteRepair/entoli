@@ -48,6 +48,7 @@ object AppEngine {
         VoiceChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         ToolsChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         RemindersChannel.register(appContext, engine.dartExecutor.binaryMessenger)
+        RemoteControlChannel.register(appContext, engine.dartExecutor.binaryMessenger)
         // Before anything executes: main's first awaited calls hit plugins and
         // channels immediately, and a MissingPluginException at startup is the
         // symptom of getting this order wrong.

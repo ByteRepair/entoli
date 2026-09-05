@@ -41,6 +41,7 @@ import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
 import "domain/reminder_runner.dart";
 import "domain/reminder_scheduler.dart";
+import "domain/remote_control.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
 import "data/sync/sync_hub.dart";
@@ -75,6 +76,12 @@ final assistantLaunchProvider =
     Provider<AssistantLaunch>((ref) => throw UnimplementedError());
 final voiceModelStoreProvider =
     Provider<VoiceModelStore>((ref) => throw UnimplementedError());
+
+/// Seeing and driving the machine's screen, overridden in `main` with what the
+/// platform can reach. The feature is off until the user turns it on in
+/// settings.
+final remoteControlProvider =
+    Provider<RemoteControl>((ref) => const UnavailableRemoteControl());
 
 /// Which models a pick can name and get something that works: what is on disk,
 /// plus the system-engine sentinels on a device that has those engines. One set
@@ -446,6 +453,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   /// How many times a retryable turn failure is carried on automatically.
   Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
+
+  /// Whether the agent is offered the screen tools.
+  Future<void> setRemoteControl(bool value) =>
+      _update((s) => s.remoteControl = value);
 
   /// What classifies commands when auto mode is on, or nothing at all.
   Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s

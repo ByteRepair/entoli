@@ -14,6 +14,7 @@ import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/remote_control.dart";
 import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
 import "../../domain/tool_arg.dart";
@@ -45,12 +46,17 @@ class BuiltinBackend implements AgentBackend {
     required this.shell,
     required this.webSearch,
     required this.store,
+    this.remoteControl,
     this.options = const BuiltinOptions(),
   });
 
   final AppConfig config;
   final LlmRegistry registry;
   final Shell shell;
+
+  /// Seeing and driving the screen, or null where the feature is off or the
+  /// platform has nothing behind it.
+  final RemoteControl? remoteControl;
 
   /// The chat store, which the agent writes artifacts to. Held here rather
   /// than passed per-turn: the store resolves which project a chat is in.
@@ -209,6 +215,7 @@ class BuiltinBackend implements AgentBackend {
       final caps = AgentCapabilities.forTurn(
         commands: shell.canRunCommands,
         webSearch: webSearch.available,
+        remoteControl: remoteControl?.available ?? false,
         disabled: settings.disabled,
       );
       // One gate per turn, shared by the parent and every sub-agent it spawns:
@@ -329,6 +336,7 @@ class BuiltinBackend implements AgentBackend {
         answer: _awaitAnswers,
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
+        remoteControl: remoteControl,
         profile: settings.profile,
         rateLimitGate: rateLimitGate,
         // A bundled turn's note is its whole instruction half, so the nested
@@ -366,6 +374,8 @@ class BuiltinBackend implements AgentBackend {
               .writeAsBytes(bytes);
           return (installId: installId, name: pkg.name);
         },
+        saveResource: (filename, bytes) =>
+            store.saveResource(chatId, filename, bytes),
       );
       _running.add(chatId, agent.cancel);
 

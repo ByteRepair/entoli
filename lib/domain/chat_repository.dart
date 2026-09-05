@@ -307,6 +307,11 @@ class ChatRepository {
     if (meta.headless == true) {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
+    // The screen tools are the user's to turn on: off, they are not offered
+    // whatever the platform can do.
+    if (!settings.remoteControl) {
+      disabled.add(AgentCapability.remoteControl);
+    }
     final projectSettings = await projectSettingsOf(project);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,

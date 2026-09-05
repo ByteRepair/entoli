@@ -26,12 +26,14 @@ class ShellResult {
     required this.output,
     this.exceptionInfo,
     this.cwd,
+    this.resource,
   });
 
   const ShellResult.failed(this.exceptionInfo,
       {this.output = ""}) :
     returnCode = -1,
-    cwd = null;
+    cwd = null,
+    resource = null;
 
   final int returnCode;
   final String output;
@@ -42,6 +44,10 @@ class ShellResult {
   /// no such state to report: a one-shot subshell is gone with the command,
   /// and a command that was killed or never ran left no directory to read.
   final String? cwd;
+
+  /// A resource under the chat's `resources/` this result produced — a
+  /// screenshot's PNG. Null for every result that produces no image.
+  final String? resource;
 }
 
 /// What this build ships beside the machine's own commands: the environment a

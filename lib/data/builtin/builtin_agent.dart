@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:typed_data";
 
 import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
@@ -11,6 +12,7 @@ import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
+import "../../domain/remote_control.dart";
 import "../../domain/shell.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
@@ -29,6 +31,7 @@ import "templates.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "memory_tools.dart";
+import "remote_control_tool.dart";
 import "websearch_tool.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -53,6 +56,7 @@ String? runningTool(String name) => switch (name) {
       webfetchToolName => "Fetching a page",
       taskToolName => "Working on a sub-task",
       artifactToolName => "Publishing the artifact",
+      screenshotToolName => "Capturing the screen",
       _ => null,
     };
 
@@ -273,6 +277,7 @@ List<LlmTool> agentTools({
       if (caps.ask) askTool,
       if (caps.task) taskTool,
       if (caps.webSearch) ...[websearchTool, webfetchTool],
+      if (caps.remoteControl) ...[screenshotTool, clickTool, keyTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
       if (caps.artifact) artifactTool,
       if (caps.createSkill) createSkillTool,
@@ -315,9 +320,11 @@ class BuiltinAgent {
     this.project,
     this.skills = const [],
     this.webSearch,
+    this.remoteControl,
     this.profile,
     this.saveArtifact,
     this.packageSkill,
+    this.saveResource,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -471,6 +478,10 @@ class BuiltinAgent {
   /// there is no shell.
   final WebSearch? webSearch;
 
+  /// Seeing and driving the screen. Null where it is not reachable — a browser,
+  /// or the feature off — and the tools are dropped the way `bash` is.
+  final RemoteControl? remoteControl;
+
   /// The user's profile, appended to the system prompt as "About the user".
   /// Null means nothing is added. Rewritten every turn with the rest of the
   /// system prompt.
@@ -492,6 +503,11 @@ class BuiltinAgent {
   final Future<({String installId, String name})> Function(
       String path, String? name)? packageSkill;
 
+  /// Saves a screenshot's bytes under the chat's `resources/` and returns the
+  /// name they were stored under. Null where the agent is a sub-agent, which
+  /// never drives the screen.
+  final Future<String> Function(String filename, Uint8List bytes)? saveResource;
+
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
   /// sub-agent's missing [subAgentRunner] or [saveArtifact] withholds `task`
@@ -503,6 +519,7 @@ class BuiltinAgent {
         task: caps.task && subAgentRunner != null,
         artifact: caps.artifact && saveArtifact != null,
         createSkill: caps.createSkill && packageSkill != null,
+        remoteControl: caps.remoteControl && (remoteControl?.available ?? false),
       );
 
   /// What the model may call, and what the system prompt says. One value for
@@ -519,6 +536,12 @@ class BuiltinAgent {
 
   bool _cancelled = false;
   ShellRun? _running;
+
+  /// The screenshots this turn captured, keyed by resource name, so the live
+  /// session can attach the bytes it just took rather than reading them back
+  /// off disk. A reload reads them off disk instead — the same image either
+  /// way.
+  final Map<String, Uint8List> _screenshots = {};
 
   /// Circuit breaker for auto mode: too many escalations means the classifier
   /// is not confident enough to be useful, so the turn falls back to asking.
@@ -591,7 +614,8 @@ class BuiltinAgent {
         final from = session.messages.length;
         void sayWhatWasSaid() {
           said.flushDeltas();
-          session.replaceTurn(from, assistantMessages(said.parts));
+          session.replaceTurn(
+              from, assistantMessages(said.parts, resources: _screenshots));
         }
 
         _sayWhatWasSaid = sayWhatWasSaid;
@@ -806,6 +830,21 @@ class BuiltinAgent {
         continue;
       }
 
+      if (call.name == screenshotToolName && remoteControl != null) {
+        yield* _screenshot(call);
+        continue;
+      }
+
+      if (call.name == clickToolName && remoteControl != null) {
+        yield* _click(call);
+        continue;
+      }
+
+      if (call.name == keyToolName && remoteControl != null) {
+        yield* _key(call);
+        continue;
+      }
+
       if (call.name != "bash") {
         yield* _reject(call, unknownTool(call.name, _tools.map((t) => t.name)));
         continue;
@@ -955,6 +994,7 @@ class BuiltinAgent {
         output: result.output,
         exceptionInfo: result.exceptionInfo,
         cwd: result.cwd,
+        resource: result.resource,
       );
 
   /// The model asking the user something. The call and its answers are a pair
@@ -1456,6 +1496,71 @@ class BuiltinAgent {
     yield ToolCallEvent(
         ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
     yield ToolResultEvent(ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: problem));
+  }
+
+  /// Capture the screen and hand it to the model as an image. The PNG is saved
+  /// under the chat's `resources/` and the result names it, so the projection
+  /// reads the bytes back and attaches them to the tool message. Gated like a
+  /// command: it reaches the machine the user is looking at.
+  Stream<AgentEvent> _screenshot(LlmToolCall call) async* {
+    yield ToolCallEvent(
+        ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    Future<ShellResult> run() => _guarded(() async {
+          final bytes = await remoteControl!.screenshot();
+          final resource = await saveResource!("screenshot.png", bytes);
+          _screenshots[resource] = bytes;
+          return ShellResult(returnCode: 0, output: "", resource: resource);
+        });
+    yield* _runGated(call, call.argumentsJson, screenshotToolName, run,
+        argumentsText: "capture the screen");
+    yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// Click at a point. Gated like a command.
+  Stream<AgentEvent> _click(LlmToolCall call) async* {
+    final x = intArg(call.argumentsJson, "x");
+    final y = intArg(call.argumentsJson, "y");
+    final button = intArg(call.argumentsJson, "button");
+    if (x == null || y == null || button == null) {
+      yield* _reject(call,
+          'The $clickToolName tool takes {"x": ..., "y": ..., "button": ...}.');
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: "click button $button at ($x, $y)",
+    ));
+    Future<ShellResult> run() => _guarded(() async {
+          await remoteControl!.click(x, y, button: button);
+          return const ShellResult(returnCode: 0, output: "");
+        });
+    yield* _runGated(call, call.argumentsJson, clickToolName, run,
+        argumentsText: "click button $button at ($x, $y)");
+    yield ToolResultEvent(_ran(call, _commandResult!));
+  }
+
+  /// Send keyboard input. Gated like a command.
+  Stream<AgentEvent> _key(LlmToolCall call) async* {
+    final text = stringArg(call.argumentsJson, "text");
+    if (text == null) {
+      yield* _reject(call, 'The $keyToolName tool takes {"text": "..."}.');
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: text,
+    ));
+    Future<ShellResult> run() => _guarded(() async {
+          await remoteControl!.key(text);
+          return const ShellResult(returnCode: 0, output: "");
+        });
+    yield* _runGated(call, call.argumentsJson, keyToolName, run,
+        argumentsText: text);
+    yield ToolResultEvent(_ran(call, _commandResult!));
   }
 
   /// Run [run] gated by [approveMode]: ask the user, classify then maybe ask,

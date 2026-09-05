@@ -21,6 +21,7 @@ import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/remote_control.dart";
 import "package:agent_chat/domain/shell.dart";
 
 import "../../fakes.dart";
@@ -55,6 +56,7 @@ void main() {
     ShellResult Function(String)? respond,
     PromptLibrary? library,
     BuiltinOptions options = const BuiltinOptions(),
+    RemoteControl? remoteControl,
   }) {
     client = FakeLlmClient(turns);
     shell = FakeShell(respond ?? okEmpty);
@@ -62,6 +64,7 @@ void main() {
       config: config,
       shell: shell,
       webSearch: FakeWebSearch(),
+      remoteControl: remoteControl,
       store: FileChatStore(config),
       options: options,
       registry: LlmRegistry(

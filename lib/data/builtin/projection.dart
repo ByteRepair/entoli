@@ -43,6 +43,10 @@ Future<List<LlmMessage>> projectionOf(
   // otherwise be one round trip after another.
   final files = await Future.wait(messages.map((m) =>
       m.role == MessageRole.user ? _attachments(m, load) : _noFiles));
+  // The screenshots a turn's results name, read up front the same way: a
+  // screenshot is an image the model has to see, and its bytes are on disk
+  // under the name the result carries.
+  final screenshots = await _screenshotResources(messages, load);
   final projected = <LlmMessage>[];
   for (final (index, message) in messages.indexed) {
     switch (message.role) {
@@ -57,7 +61,7 @@ Future<List<LlmMessage>> projectionOf(
           ));
         }
       case MessageRole.assistant:
-        projected.addAll(_assistant(message));
+        projected.addAll(_assistant(message, resources: screenshots));
       case MessageRole.system:
       case MessageRole.tool:
         // The system prompt is rewritten every turn, and a result is a part of
@@ -113,14 +117,25 @@ Future<List<LlmAttachment>> _attachments(Message message, ResourceLoader load) a
 /// followed by the results answering its calls. What a running turn puts in
 /// front of the model, and what a reload rebuilds — the same function, so there
 /// is nothing to keep level. See "One accumulation" in `lib/domain/CLAUDE.md`.
-Iterable<LlmMessage> assistantMessages(List<MessagePart> parts) =>
-    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts));
+///
+/// [resources] is the screenshots a turn's results name, keyed by resource
+/// name: the live turn hands the bytes it just captured, a reload hands what it
+/// read off disk. Both word the same image, so the two cannot diverge.
+Iterable<LlmMessage> assistantMessages(
+  List<MessagePart> parts, {
+  Map<String, Uint8List> resources = const {},
+}) =>
+    _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts),
+        resources: resources);
 
 /// A reply's date is not read by anything that words one, so a turn being
 /// assembled has none to give.
 final _noDate = DateTime.fromMillisecondsSinceEpoch(0);
 
-Iterable<LlmMessage> _assistant(Message message) sync* {
+Iterable<LlmMessage> _assistant(
+  Message message, {
+  Map<String, Uint8List> resources = const {},
+}) sync* {
   // Over the whole message rather than per response: a result is paired to its
   // call by id, and one that landed in a later response than the call it
   // answers must not be read as missing.
@@ -199,12 +214,16 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
     // provider that sees a tool call with no result rejects the next turn.
     for (final call in calls) {
       final result = results[call.id];
+      final image = result == null
+          ? null
+          : _screenshotAttachment(result, resources);
       yield LlmMessage(
         role: LlmRole.tool,
         toolCallId: call.id,
         text: result == null
             ? _interruptedText(call.name)
             : noted(_toolResultText(call.name, result), result.cwd),
+        attachments: image == null ? const [] : [image],
       );
     }
   }
@@ -243,6 +262,36 @@ String? _responseIdOf(MessagePart part) => switch (part) {
       ErrorPart() =>
         null,
     };
+
+/// A result's screenshot as an image attachment, or null where the result
+/// names no resource or the bytes are gone. The bytes come from [resources],
+/// which the live turn fills with what it just captured and a reload fills
+/// with what it read off disk.
+LlmAttachment? _screenshotAttachment(
+    ToolResult result, Map<String, Uint8List> resources) {
+  final resource = result.resource;
+  if (resource == null) return null;
+  final bytes = resources[resource];
+  if (bytes == null) return null;
+  return LlmAttachment(
+      filename: "screenshot.png", mimeType: "image/png", bytes: bytes);
+}
+
+/// The screenshots a turn's results name, read up front so the projection can
+/// attach them to the tool messages. Keyed by resource name.
+Future<Map<String, Uint8List>> _screenshotResources(
+    List<Message> messages, ResourceLoader load) async {
+  final names = <String>{
+    for (final message in messages)
+      for (final result in message.toolResults.values)
+        if (result.resource != null) result.resource!,
+  };
+  final loaded = await Future.wait(names.map((name) async {
+    final bytes = await load(name);
+    return bytes == null ? null : MapEntry(name, bytes);
+  }));
+  return {for (final entry in loaded.nonNulls) entry.key: entry.value};
+}
 
 /// **How a tool's outcome is worded for a model, and the only place it is.**
 /// A turn reports its results and nothing else: the model is answered with this,

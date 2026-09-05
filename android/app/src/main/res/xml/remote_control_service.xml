@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the Remote Control accessibility service can do: see the screen and
+     inject gestures and keys. canRetrieveWindowContent is what lets it capture
+     the screen; canPerformGestures and canRequestFilterKeyEvents are what let
+     it drive it. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="true"
+    android:canRequestFilterKeyEvents="true"
+    android:description="@string/app_name"
+    android:notificationTimeout="100" />

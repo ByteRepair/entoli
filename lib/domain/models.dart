@@ -277,6 +277,12 @@ abstract class ToolResult with _$ToolResult {
     required String output,
     String? exceptionInfo,
     String? cwd,
+
+    /// A resource under the chat's `resources/` this result produced — a
+    /// screenshot's PNG. The projection reads the bytes back and attaches them
+    /// to the tool message, the way a user's image attachment is. Null for
+    /// every result that produces no image.
+    String? resource,
   }) = _ToolResult;
 
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);

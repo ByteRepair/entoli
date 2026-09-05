@@ -123,6 +123,7 @@ void main() {
     // exactly one widget — reaching each section is the assertion.
     await scrollTo(tester, find.text("Appearance"));
     await scrollTo(tester, find.text("Agent"));
+    await scrollTo(tester, find.text("Remote control"));
     await scrollTo(tester, find.text("Environment"));
     await scrollTo(tester, find.text("Delete all chats"));
 
@@ -139,6 +140,22 @@ void main() {
     await pumpSettings(tester, app, SettingsCategory.llms);
 
     expect(find.text("Provider"), findsNothing);
+  });
+
+  testWidgets("remote control is off by default and toggles on", (tester) async {
+    await pumpSettings(tester, app, SettingsCategory.general);
+    await scrollTo(tester, find.text("Remote control"));
+
+    expect(app.container.read(appSettingsProvider).remoteControl, isFalse);
+
+    await tester.tap(find.text("Offer the screen tools"));
+    await settleIo(tester);
+
+    expect(app.container.read(appSettingsProvider).remoteControl, isTrue);
+    expect(
+      File(app.config.settingsFile).readAsStringSync(),
+      contains("remoteControl"),
+    );
   });
 
   testWidgets("selecting a model persists it with its provider", (tester) async {
