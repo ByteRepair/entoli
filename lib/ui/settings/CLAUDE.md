@@ -33,18 +33,21 @@ edited from its settings page, and a name set there wins over one set in
 `settings.json`. Old files with the former `opencodeEnv` key still load, and
 rewrite themselves under the new name on the next save.
 
-The settings page is eleven categories, picked from a panel beside it or, below
+The settings page is fifteen categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. **Welcome** leads the list and is the
 tour rather than a list of sections — `welcome_page.dart`, not this file — so
-both layouts branch on it instead of filing sections: the pane renders
-`WelcomeTour` whole, since it is a pager with its own bar and cannot scroll in a
-`ListView`. It is the first-run screen too: the app shell pushes `WelcomePage`
-over itself while `welcomeSeen` in `settings.json` is still false, and the
-tour's Done writes the flag through the notifier. Its second and third pages
-embed `DefaultsSection`, `InstructionsSection` and `AutoMemorySection` — the
-same widgets this page draws, which is why the three are public rather than
-private to it; a row added to one is on the tour the moment it is here.
-**General** is the app itself:
+`_categoryBody` renders it whole where every other category is
+`ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
+only. It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
+(around the shell, under the `Incoming*` wrappers, so what they open stays above
+the tour) pushes `WelcomePage` while `welcomeSeen` in `settings.json` is still
+false, and the tour's Done writes the flag through the notifier — the pop
+belongs to `WelcomePage`, not the tour, which also runs embedded here and has
+nothing of its own to leave. Its second and third pages embed
+`DefaultsSection`, `InstructionsSection` and `AutoMemorySection`, which live in
+`llm_settings.dart` and `memory_settings.dart` because two hosts share them —
+the same one-subject-per-file rule the other categories follow. A row added to
+one is on the tour the moment it is here. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the

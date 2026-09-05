@@ -1,27 +1,46 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../providers.dart";
+import "llm_settings.dart";
+import "memory_settings.dart";
 import "settings_page.dart";
 
-/// The welcome tour: what the app is, then the settings a first run needs.
-/// Four pages walked horizontally; reached first-launch from the app shell and
-/// again from Settings, which is the first item in its list.
+/// The welcome tour as a page of its own, which is what first launch pushes.
+/// The route is this wrapper's to leave: the tour it wraps also runs embedded
+/// in Settings, where a pop would close the page behind it.
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
+
+  Future<void> _done(WidgetRef ref, VoidCallback leave) async {
+    await ref.read(appSettingsProvider.notifier).setWelcomeSeen(true);
+    leave();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text("Welcome")),
-        body: SafeArea(child: WelcomeTour()),
+        body: SafeArea(
+          child: Consumer(
+            builder: (context, ref, _) => WelcomeTour(
+              onDone: () => _done(ref, () => Navigator.of(context).pop()),
+            ),
+          ),
+        ),
       );
 }
 
 /// The tour itself, without the page around it — what the settings page embeds
 /// where the route wraps it in a bar. Walking is a [PageView] (a swipe does
-/// what the buttons do) and the buttons animate between pages.
+/// what the buttons do) and the buttons animate between pages. [onDone] runs
+/// when Done is pressed on the last page; the flag is written here and what
+/// leaving looks like is the host's.
 class WelcomeTour extends ConsumerStatefulWidget {
-  const WelcomeTour({super.key});
+  const WelcomeTour({super.key, this.onDone});
+
+  final Future<void> Function()? onDone;
 
   @override
   ConsumerState<WelcomeTour> createState() => _WelcomeTourState();
@@ -31,7 +50,12 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   final _controller = PageController();
   int _page = 0;
 
-  static const _pages = 4;
+  static const _pageWidgets = [
+    _WelcomeIntroPage(),
+    _SetupModelPage(),
+    _MemoryPage(),
+    _ExtrasPage(),
+  ];
 
   @override
   void dispose() {
@@ -40,14 +64,14 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
   }
 
   void _go(int page) => _controller.animateToPage(
-        page.clamp(0, _pages - 1),
+        page,
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeInOutCubic,
       );
 
   Future<void> _done() async {
     await ref.read(appSettingsProvider.notifier).setWelcomeSeen(true);
-    if (mounted) Navigator.of(context).pop();
+    await widget.onDone?.call();
   }
 
   @override
@@ -58,17 +82,12 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
           child: PageView(
             controller: _controller,
             onPageChanged: (page) => setState(() => _page = page),
-            children: const [
-              _WelcomeIntroPage(),
-              _SetupModelPage(),
-              _MemoryPage(),
-              _ExtrasPage(),
-            ],
+            children: _pageWidgets,
           ),
         ),
         _TourBar(
           page: _page,
-          pages: _pages,
+          pages: _pageWidgets.length,
           onPrevious: () => _go(_page - 1),
           onNext: () => _go(_page + 1),
           onDone: _done,
@@ -216,7 +235,6 @@ class _SetupModelPage extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         _SetupRow(
-          icon: Icons.memory,
           title: "Use a local LLM",
           detail:
               "Download a model from the catalog and run it on this device. "
@@ -224,7 +242,6 @@ class _SetupModelPage extends StatelessWidget {
           category: SettingsCategory.onDevice,
         ),
         _SetupRow(
-          icon: Icons.cloud_outlined,
           title: "Pick a provider",
           detail:
               "Add an endpoint — Anthropic, OpenAI, OpenRouter and more — "
@@ -239,15 +256,14 @@ class _SetupModelPage extends StatelessWidget {
 }
 
 /// One of page 2's two choices, which push the settings category they set up.
+/// The icon is the category's own — one place an icon is named per category.
 class _SetupRow extends StatelessWidget {
   const _SetupRow({
-    required this.icon,
     required this.title,
     required this.detail,
     required this.category,
   });
 
-  final IconData icon;
   final String title;
   final String detail;
   final SettingsCategory category;
@@ -257,7 +273,7 @@ class _SetupRow extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
-        leading: Icon(icon),
+        leading: Icon(category.icon),
         title: Text(title),
         subtitle: Text(detail),
         trailing: const Icon(Icons.chevron_right),
@@ -279,19 +295,19 @@ class _MemoryPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(24),
-      children: const [
+      children: [
         Text("What the agent carries between chats",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w500)),
-        SizedBox(height: 8),
-        Text(
+            style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 8),
+        const Text(
           "The AGENTS.md instructions every turn is read from, and the "
           "memories the agent keeps for itself. Everything here can be "
           "changed later under Settings > Memory.",
         ),
-        SizedBox(height: 16),
-        InstructionsSection(),
-        Divider(),
-        AutoMemorySection(),
+        const SizedBox(height: 16),
+        const InstructionsSection(),
+        const Divider(),
+        const AutoMemorySection(),
       ],
     );
   }
@@ -314,7 +330,6 @@ class _ExtrasPage extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         _SetupRow(
-          icon: Icons.alarm,
           title: "Reminders",
           detail:
               "A prompt sent to a new chat at a time you pick, even when the "
@@ -322,7 +337,6 @@ class _ExtrasPage extends StatelessWidget {
           category: SettingsCategory.reminders,
         ),
         _SetupRow(
-          icon: Icons.graphic_eq,
           title: "Voice",
           detail:
               "Talk to the agent and be answered out loud, with a model that "
@@ -330,7 +344,6 @@ class _ExtrasPage extends StatelessWidget {
           category: SettingsCategory.voice,
         ),
         _SetupRow(
-          icon: Icons.terminal,
           title: "Terminal",
           detail:
               "Where the agent's commands run: this machine, or a Linux "
