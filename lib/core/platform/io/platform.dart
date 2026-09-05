@@ -2,6 +2,8 @@ import "dart:io";
 
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
+import "package:record_platform_interface/record_platform_interface.dart"
+    show RecordPlatform;
 import "package:fs_shim/fs.dart" hide File, Directory;
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
@@ -47,6 +49,7 @@ import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 import "../../config.dart";
 import "keyring_secret_store.dart";
+import "linux_recorder.dart";
 import "signaling_server.dart";
 
 Shell platformShell({
@@ -351,8 +354,12 @@ VoiceModelStore platformVoiceModelStore(String cacheDir) =>
 /// runs its own, and ships none of sherpa's native code at all — the `.so`
 /// files are excluded at packaging in `android/app/build.gradle.kts`, so
 /// constructing a [SherpaVoice] there would fail at the first FFI call.
-Voice platformVoice(VoiceModelStore store, String cacheDir) =>
-    Platform.isAndroid ? const AndroidVoice() : SherpaVoice(store, cacheDir);
+Voice platformVoice(VoiceModelStore store, String cacheDir) {
+  // record's own Linux implementation is parecord-only; the recorder here
+  // falls back to pw-record. Once at startup, before any recorder exists.
+  if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
+  return Platform.isAndroid ? const AndroidVoice() : SherpaVoice(store, cacheDir);
+}
 
 /// Nothing to ask for: a directory on this machine is already as durable as
 /// the app is.
