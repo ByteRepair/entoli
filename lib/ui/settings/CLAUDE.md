@@ -40,10 +40,12 @@ tour rather than a list of sections — `welcome_page.dart`, not this file — s
 `ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
 only. It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
 (around the shell, under the `Incoming*` wrappers, so what they open stays above
-the tour) pushes `WelcomePage` while `welcomeSeen` in `settings.json` is still
-false, and the tour's Done writes the flag through the notifier — the pop
-belongs to `WelcomePage`, not the tour, which also runs embedded here and has
-nothing of its own to leave. Its second and third pages embed
+the tour) shows `WelcomePage` instead of the shell while `welcomeSeen` in
+`settings.json` is still false, and the tour's Done writes the flag through the
+notifier, which swaps the shell in. The tour is the home content, not a route
+over it, so the back key cannot skip it and there is no back arrow; the tour
+also runs embedded here and has nothing of its own to leave. Its second and
+third pages embed
 `DefaultsSection`, `InstructionsSection` and `AutoMemorySection`, which live in
 `llm_settings.dart` and `memory_settings.dart` because two hosts share them —
 the same one-subject-per-file rule the other categories follow. A row added to

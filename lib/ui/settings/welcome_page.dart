@@ -4,43 +4,33 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../providers.dart";
+import "../widgets/app_mark.dart";
 import "llm_settings.dart";
 import "memory_settings.dart";
 import "settings_page.dart";
 
-/// The welcome tour as a page of its own, which is what first launch pushes.
-/// The route is this wrapper's to leave: the tour it wraps also runs embedded
-/// in Settings, where a pop would close the page behind it.
+/// The welcome tour as the home content on first launch. It is the root route,
+/// not a pushed one, so there is no back arrow; Done writes the flag and the
+/// gate swaps the shell in.
 class WelcomePage extends StatelessWidget {
   const WelcomePage({super.key});
 
-  Future<void> _done(WidgetRef ref, VoidCallback leave) async {
-    await ref.read(appSettingsProvider.notifier).setWelcomeSeen(true);
-    leave();
-  }
-
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text("Welcome")),
-        body: SafeArea(
-          child: Consumer(
-            builder: (context, ref, _) => WelcomeTour(
-              onDone: () => _done(ref, () => Navigator.of(context).pop()),
-            ),
-          ),
+        appBar: AppBar(
+          title: const Text("Welcome"),
+          automaticallyImplyLeading: false,
         ),
+        body: const SafeArea(child: WelcomeTour()),
       );
 }
 
 /// The tour itself, without the page around it — what the settings page embeds
 /// where the route wraps it in a bar. Walking is a [PageView] (a swipe does
-/// what the buttons do) and the buttons animate between pages. [onDone] runs
-/// when Done is pressed on the last page; the flag is written here and what
-/// leaving looks like is the host's.
+/// what the buttons do) and the buttons animate between pages. Done writes the
+/// flag; the host reacts to it.
 class WelcomeTour extends ConsumerStatefulWidget {
-  const WelcomeTour({super.key, this.onDone});
-
-  final Future<void> Function()? onDone;
+  const WelcomeTour({super.key});
 
   @override
   ConsumerState<WelcomeTour> createState() => _WelcomeTourState();
@@ -55,6 +45,7 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     _SetupModelPage(),
     _MemoryPage(),
     _ExtrasPage(),
+    _ClosingPage(),
   ];
 
   @override
@@ -71,16 +62,23 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
 
   Future<void> _done() async {
     await ref.read(appSettingsProvider.notifier).setWelcomeSeen(true);
-    await widget.onDone?.call();
   }
 
   @override
   Widget build(BuildContext context) {
+    // The setup page asks for a model before the tour moves on: Next is dead
+    // there until a provider is picked (its Default then answers), and the
+    // swipe cannot go around the button.
+    final chosen = ref.watch(
+      appSettingsProvider.select((s) => s.defaultProviderId != null),
+    );
+    final gate = _page == 1 && !chosen;
     return Column(
       children: [
         Expanded(
           child: PageView(
             controller: _controller,
+            physics: gate ? const NeverScrollableScrollPhysics() : null,
             onPageChanged: (page) => setState(() => _page = page),
             children: _pageWidgets,
           ),
@@ -91,6 +89,7 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
           onPrevious: () => _go(_page - 1),
           onNext: () => _go(_page + 1),
           onDone: _done,
+          nextEnabled: !gate,
         ),
       ],
     );
@@ -105,6 +104,7 @@ class _TourBar extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onDone,
+    this.nextEnabled = true,
   });
 
   final int page;
@@ -112,6 +112,10 @@ class _TourBar extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final Future<void> Function() onDone;
+
+  /// False is the setup page's gate, which holds the tour until a model is
+  /// picked; every other page moves on freely.
+  final bool nextEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +144,10 @@ class _TourBar extends StatelessWidget {
           const SizedBox(width: 12),
           last
               ? FilledButton(onPressed: onDone, child: const Text("Done"))
-              : FilledButton(onPressed: onNext, child: const Text("Next")),
+              : FilledButton(
+                  onPressed: nextEnabled ? onNext : null,
+                  child: const Text("Next"),
+                ),
         ],
       ),
     );
@@ -158,6 +165,8 @@ class _WelcomeIntroPage extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       children: [
         const SizedBox(height: 16),
+        const Center(child: AppMark(size: 72)),
+        const SizedBox(height: 16),
         Center(
           child: Text(
             "Welcome to Entoli",
@@ -166,21 +175,22 @@ class _WelcomeIntroPage extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         const Text(
-          "Entoli is a coding agent that runs on your machine. Where a hosted "
-          "assistant like ChatGPT or Claude answers through someone else's "
-          "account and a shared interface, here you bring your own model and "
-          "everything happens locally.",
+          "Entoli is an assistant that runs on your machine. Where other "
+          "assistants run on someone else's servers, here you bring your own "
+          "model and everything happens locally. You use private LLMs, so "
+          "your conversations stay private.",
         ),
         const SizedBox(height: 16),
         const _FeatureList([
-          (Icons.key, "Your endpoints, your keys — OpenAI, Anthropic, "
-              "OpenRouter or your own server, or a model running on the device."),
+          (Icons.key, "Choose a private LLM provider (OpenAI, Anthropic, "
+              "OpenRouter or your own server), or host a model locally on "
+              "your device."),
           (Icons.terminal, "The agent runs commands in a workspace on this "
               "machine, with your approval."),
-          (Icons.psychology, "Skills, agents and per-project memories, read "
-              "from your own files."),
-          (Icons.alarm, "Reminders that run a prompt even when the app is "
-              "closed, and voice mode for talking to it."),
+          (Icons.psychology, "Skills, agents and per-project memories, all "
+              "read from your own files."),
+          (Icons.alarm, "Schedule the assistant to work at a time you pick, "
+              "or let it wake itself to run a task with your approval."),
           (Icons.sync, "Pair your devices and carry a conversation between "
               "them."),
         ]),
@@ -226,12 +236,11 @@ class _SetupModelPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text("A model to answer", style: Theme.of(context).textTheme.headlineSmall),
+        Text("Provider and Model Setup", style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
         const Text(
           "Pick where the model runs: locally on this device, or at a "
-          "provider over the network. Either way the model appears in the "
-          "pickers below once it is set up.",
+          "provider over the network.",
         ),
         const SizedBox(height: 16),
         _SetupRow(
@@ -244,7 +253,7 @@ class _SetupModelPage extends StatelessWidget {
         _SetupRow(
           title: "Pick a provider",
           detail:
-              "Add an endpoint — Anthropic, OpenAI, OpenRouter and more — "
+              "Add an endpoint (Anthropic, OpenAI, OpenRouter and more) "
               "with your own API key.",
           category: SettingsCategory.providers,
         ),
@@ -279,7 +288,8 @@ class _SetupRow extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => SettingsPage(initialCategory: category),
+            builder: (_) =>
+                SettingsPage(initialCategory: category, focus: true),
           ),
         ),
       ),
@@ -296,17 +306,14 @@ class _MemoryPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text("What the agent carries between chats",
-            style: Theme.of(context).textTheme.headlineSmall),
+        Text("Agent Memory", style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
         const Text(
-          "The AGENTS.md instructions every turn is read from, and the "
-          "memories the agent keeps for itself. Everything here can be "
-          "changed later under Settings > Memory.",
+          "The agent can keep what it learns between chats, so it knows you "
+          "a little better each time. Everything here can be changed later "
+          "under Settings > Memory.",
         ),
         const SizedBox(height: 16),
-        const InstructionsSection(),
-        const Divider(),
         const AutoMemorySection(),
       ],
     );
@@ -330,6 +337,15 @@ class _ExtrasPage extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         _SetupRow(
+          title: "Byte Repair",
+          detail:
+              "Formally verified coding: the code it writes is checked "
+              "against a mathematical model, so it is guaranteed correct "
+              "rather than merely plausible. Ordinary assistants cannot do "
+              "this.",
+          category: SettingsCategory.byteRepair,
+        ),
+        _SetupRow(
           title: "Reminders",
           detail:
               "A prompt sent to a new chat at a time you pick, even when the "
@@ -350,6 +366,43 @@ class _ExtrasPage extends StatelessWidget {
               "downloaded and isolated from the rest of it. Environment "
               "variables for commands live under General.",
           category: SettingsCategory.terminal,
+        ),
+      ],
+    );
+  }
+}
+
+/// Page 5: what the app is for, and the one argument for it — an assistant
+/// that answers to you rather than to someone else's service.
+class _ClosingPage extends StatelessWidget {
+  const _ClosingPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text("What you can do with Entoli",
+            style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 16),
+        const Text(
+          "Summarize the day's news while you drink your coffee, draft the "
+          "email you have been putting off, write and run code that compiles "
+          "and tests clean, build a page and publish it as an artifact — "
+          "anything you would ask of an assistant that works on your machine "
+          "and answers to you.",
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          "Because the model is yours, nothing you say leaves it without your "
+          "say-so: your conversations are not training data, and no service "
+          "stamps its own watermark into what Entoli writes for you. What "
+          "your assistant produces is yours alone — the same words, with "
+          "nobody else's fingerprint on them.",
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          "Done below, and the app is yours.",
         ),
       ],
     );
