@@ -14,11 +14,11 @@ import "../../domain/shell.dart";
 // called, so the symbol is never looked up and the build carries no iSH.
 
 // The opaque pointer Dart holds for a session.
-typedef ish_session_ptr = Pointer<Void>;
+typedef IshSessionPtr = Pointer<Void>;
 
 // The result struct the bridge writes into. Matches ish_bridge.h's ish_result.
 @Packed(4)
-final class ish_result extends Struct {
+final class IshResult extends Struct {
   @Int32()
   external int returnCode;
 
@@ -40,7 +40,7 @@ final class ish_result extends Struct {
 }
 
 // Function pointer types for the four bridge entry points.
-typedef _init_c = Pointer<Void> Function(
+typedef IshInitC = Pointer<Void> Function(
     Pointer<Utf8> rootfsDir,
     Pointer<Utf8> dataDir,
     Pointer<Utf8> home,
@@ -49,7 +49,7 @@ typedef _init_c = Pointer<Void> Function(
     Pointer<Pointer<Utf8>> env,
     Int32 envCount,
     Pointer<Pointer<Utf8>> error);
-typedef _init_dart = ish_session_ptr Function(
+typedef IshInitDart = IshSessionPtr Function(
     Pointer<Utf8> rootfsDir,
     Pointer<Utf8> dataDir,
     Pointer<Utf8> home,
@@ -59,32 +59,32 @@ typedef _init_dart = ish_session_ptr Function(
     int envCount,
     Pointer<Pointer<Utf8>> error);
 
-typedef _run_c = Void Function(
-    ish_session_ptr session,
+typedef IshRunC = Void Function(
+    IshSessionPtr session,
     Pointer<Utf8> scriptB64,
     Int32 timeoutMs,
-    Pointer<ish_result> out);
-typedef _run_dart = void Function(
-    ish_session_ptr session,
+    Pointer<IshResult> out);
+typedef IshRunDart = void Function(
+    IshSessionPtr session,
     Pointer<Utf8> scriptB64,
     int timeoutMs,
-    Pointer<ish_result> out);
+    Pointer<IshResult> out);
 
-typedef _interrupt_c = Void Function(ish_session_ptr session);
-typedef _interrupt_dart = void Function(ish_session_ptr session);
+typedef IshInterruptC = Void Function(IshSessionPtr session);
+typedef IshInterruptDart = void Function(IshSessionPtr session);
 
-typedef _destroy_c = Void Function(ish_session_ptr session);
-typedef _destroy_dart = void Function(ish_session_ptr session);
+typedef IshDestroyC = Void Function(IshSessionPtr session);
+typedef IshDestroyDart = void Function(IshSessionPtr session);
 
-typedef _fakefsify_c = Int32 Function(Pointer<Utf8> archive, Pointer<Utf8> into);
-typedef _fakefsify_dart = int Function(Pointer<Utf8> archive, Pointer<Utf8> into);
+typedef IshFakefsifyC = Int32 Function(Pointer<Utf8> archive, Pointer<Utf8> into);
+typedef IshFakefsifyDart = int Function(Pointer<Utf8> archive, Pointer<Utf8> into);
 
 // The lazy lookups. Null until first use, and only ever resolved on iOS.
-_init_dart? _initFn;
-_run_dart? _runFn;
-_interrupt_dart? _interruptFn;
-_destroy_dart? _destroyFn;
-_fakefsify_dart? _fakefsifyFn;
+IshInitDart? _initFn;
+IshRunDart? _runFn;
+IshInterruptDart? _interruptFn;
+IshDestroyDart? _destroyFn;
+IshFakefsifyDart? _fakefsifyFn;
 
 bool _resolved = false;
 
@@ -93,14 +93,14 @@ void _resolve() {
   _resolved = true;
   if (!ishLinked) return;
   final lib = DynamicLibrary.process();
-  _initFn = lib.lookupFunction<_init_c, _init_dart>("ish_session_init");
-  _runFn = lib.lookupFunction<_run_c, _run_dart>("ish_session_run");
+  _initFn = lib.lookupFunction<IshInitC, IshInitDart>("ish_session_init");
+  _runFn = lib.lookupFunction<IshRunC, IshRunDart>("ish_session_run");
   _interruptFn =
-      lib.lookupFunction<_interrupt_c, _interrupt_dart>("ish_session_interrupt");
+      lib.lookupFunction<IshInterruptC, IshInterruptDart>("ish_session_interrupt");
   _destroyFn =
-      lib.lookupFunction<_destroy_c, _destroy_dart>("ish_session_destroy");
+      lib.lookupFunction<IshDestroyC, IshDestroyDart>("ish_session_destroy");
   _fakefsifyFn =
-      lib.lookupFunction<_fakefsify_c, _fakefsify_dart>("ish_fakefsify");
+      lib.lookupFunction<IshFakefsifyC, IshFakefsifyDart>("ish_fakefsify");
 }
 
 /// Whether the iSH bridge is linked into this build. Only iOS, where the
@@ -110,32 +110,32 @@ bool get ishLinked => Platform.isIOS;
 
 /// The resolved init function, or null where iSH is not linked. Called from the
 /// background isolate.
-_init_dart? get ishInitFn {
+IshInitDart? get ishInitFn {
   _resolve();
   return _initFn;
 }
 
 /// The resolved run function, or null.
-_run_dart? get ishRunFn {
+IshRunDart? get ishRunFn {
   _resolve();
   return _runFn;
 }
 
 /// The resolved interrupt function, or null.
-_interrupt_dart? get ishInterruptFn {
+IshInterruptDart? get ishInterruptFn {
   _resolve();
   return _interruptFn;
 }
 
 /// The resolved destroy function, or null.
-_destroy_dart? get ishDestroyFn {
+IshDestroyDart? get ishDestroyFn {
   _resolve();
   return _destroyFn;
 }
 
 /// The resolved fakefsify function, or null. Called to unpack a rootfs tarball
 /// into iSH's fakefs layout in-process — the iOS analog of `tar -xzf`.
-_fakefsify_dart? get ishFakefsifyFn {
+IshFakefsifyDart? get ishFakefsifyFn {
   _resolve();
   return _fakefsifyFn;
 }

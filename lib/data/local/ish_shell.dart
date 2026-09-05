@@ -32,17 +32,17 @@ class IshShell extends Shell {
   IshShell({
     required this.rootfsDir,
     required this.dataDir,
-    required Map<String, String> Function() environment,
+    required this.environment,
     required this.platformDescription,
-  }) : _environment = environment;
+  });
 
   final String rootfsDir;
   final String dataDir;
 
+  final Map<String, String> Function() environment;
+
   @override
   final String platformDescription;
-
-  final Map<String, String> Function() _environment;
 
   final Map<String, _IshSession> _sessions = {};
   final Map<String, ValueNotifier<String?>> _cwds = {};
@@ -94,7 +94,7 @@ class IshShell extends Shell {
       {
         ...defaultShellEnvironment,
         "HOME": home,
-        ..._environment(),
+        ...environment(),
         ...?environment,
       };
 }
@@ -386,7 +386,7 @@ class _IshIsolate {
   static void _entry(SendPort main) {
     final receive = ReceivePort();
     main.send(receive.sendPort);
-    final sessions = <int, ish_session_ptr>{};
+    final sessions = <int, IshSessionPtr>{};
 
     receive.listen((msg) {
       if (msg is! List) return;
@@ -447,7 +447,7 @@ class _IshIsolate {
             return;
           }
           final scriptPtr = scriptB64.toNativeUtf8();
-          final result = calloc<ish_result>();
+          final result = calloc<IshResult>();
           runFn(handle, scriptPtr, timeoutMs, result);
           final shellResult = result.ref.toShellResult();
           if (result.ref.output.address != 0) {
