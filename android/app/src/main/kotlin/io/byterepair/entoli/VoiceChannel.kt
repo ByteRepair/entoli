@@ -306,6 +306,11 @@ object VoiceChannel {
     // than as a room with nobody in it — see [onError].
     private const val FAST_REFUSAL_MS = 1500L
 
+    // How long a refused session's tear-down is waited out before the next
+    // `startListening`: one inside that window is answered with a session
+    // that opens and then reports nothing at all — see [askDifferently].
+    private const val TEARDOWN_MS = 200L
+
     // --- Ending the utterance ---
     //
     // **A session that never ends is a turn that is never sent**, and it is the
@@ -446,10 +451,8 @@ object VoiceChannel {
         if (next != null) {
             Log.i(TAG, "asking again as $next")
             ask = next
-            // The refused rung's session may still be tearing down — restart
-            // on a fresh binding, the way moving to the next service does.
             rebind()
-            restart(after = 200)
+            restart(after = TEARDOWN_MS)
         } else {
             nextService(
                 "This device has no speech recognition for ${asked().displayLanguage}.")
@@ -577,8 +580,8 @@ object VoiceChannel {
         override fun onBufferReceived(buffer: ByteArray?) {}
 
         // The service thinks the utterance is over, which is not the same as
-        // having said what was in it. Results normally follow within a moment;
-        // where they do not, the endpoint above is what asks.
+        // having said what was in it. Results normally follow; where they do
+        // not, the endpoint armed here is what asks.
         override fun onEndOfSpeech() {
             armEndpoint()
         }
@@ -621,7 +624,7 @@ object VoiceChannel {
                 // kind, and is not going to clear.
                 SpeechRecognizer.ERROR_CLIENT -> if (sessionOpened) {
                     sessionOpened = false
-                    restart(after = 200)
+                    restart(after = TEARDOWN_MS)
                 } else {
                     nextService("Speech recognition could not start.")
                 }
@@ -669,9 +672,7 @@ object VoiceChannel {
             if (!text.isNullOrEmpty()) {
                 send("heard", text)
             } else {
-                // An utterance ended and the final bundle carried nothing. A
-                // turn that silently does not happen, and indistinguishable
-                // from a dead microphone on the other end — so it is said.
+                // The arm nothing draws for a turn that never happens.
                 Log.w(
                     TAG,
                     "empty final result (matches=${matches?.size ?: 0}, " +

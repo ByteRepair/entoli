@@ -375,9 +375,9 @@ The intent asks for a silence length, and that is a hint every one of those
 extras is documented to be. What actually ends it is in `VoiceChannel.kt`:
 **what says the person has stopped is the transcription, not the sound.**
 Partial results stop changing while the room goes on making noise, so a partial
-that has not moved for `QUIET_MS` — or `MAX_UTTERANCE_MS` of anything at all —
-is answered with `stopListening`, which is the same call the Talk button's
-release makes and asks the service for what it has.
+that has not moved for `QUIET_MS` is answered with `stopListening`, which is
+the same call the Talk button's release makes and asks the service for what it
+has.
 
 The timer is armed only once there is a transcription to judge — on a partial
 that moved, and on `onEndOfSpeech`. Never at the start of speech: a service
