@@ -232,6 +232,15 @@ void main() {
       expect(app.linkOpener.opened.single.host, "f-droid.org");
     });
 
+    testWidgets("with neither engine both halves are named", (tester) async {
+      await pumpAndroid(tester, hears: false, speaks: false);
+
+      expect(find.textContaining("nothing to hear with"), findsOneWidget);
+      expect(find.textContaining("nothing to speak with"), findsOneWidget);
+      expect(find.textContaining("RHVoice"), findsOneWidget);
+      expect(find.textContaining("FUTO Voice Input"), findsOneWidget);
+    });
+
     /// An Android with both engines, its sentinels picked, and [speaks] as what
     /// the synthesiser says it can speak.
     Future<void> pumpNative(

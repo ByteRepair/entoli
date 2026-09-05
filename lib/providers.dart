@@ -96,14 +96,10 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
 
   /// The sentinels this device can honour. Held rather than folded into the
   /// seed, because a re-scan reads the store and would otherwise drop them.
+  /// What a device with no engines answers is an empty set — see
+  /// [Voice.hasSystemEngines] for the platform question the missing-engine
+  /// block is drawn from instead.
   final Set<String> system;
-
-  /// Whether this platform has system engines at all — the sentinels in
-  /// [system] are what a device with them answers, and a device without
-  /// answers an empty set. What the settings page's missing-engine block is
-  /// drawn from beside the catalog: on a platform without them there is
-  /// nothing to be missing, and the block would be a lie.
-  bool get hasSystemEngines => system.isNotEmpty;
 
   @override
   Set<String> build() => _seed;

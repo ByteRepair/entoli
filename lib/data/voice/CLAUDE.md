@@ -172,9 +172,10 @@ of those had to consult, and the one that forgot would be wrong silently.
 field that already decides what runs a model, rather than a second id constant
 beside it. `AndroidVoice.start` routes on it **per half**: a sentinel
 recognition pick builds `AndroidSpeechRecognizer`, a downloaded one builds the
-same `SherpaListener` the desktops use (`SherpaVoice.sherpaListener`), and the
-speech half answers the same way — so the four pairings all work, including a
-system recognizer with a downloaded voice or the reverse.
+same `SherpaListener` the desktops use (the `SherpaVoice` it holds, whose
+`sherpaListener`/`sherpaSpeaker` are what both platforms compose their halves
+through), and the speech half answers the same way — so the four pairings all
+work, including a system recognizer with a downloaded voice or the reverse.
 `Voice.downloadsModels` is the other half: true on Android as everywhere
 sherpa runs, which is what draws the catalog on the settings page; its one
 reader is unchanged.

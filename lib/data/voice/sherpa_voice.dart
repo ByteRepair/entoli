@@ -40,35 +40,33 @@ class SherpaVoice extends Voice {
     int speaker = 0,
     String? language,
   }) async {
-    // Everything that can refuse, before the worker is spawned: a spawn
-    // returns as soon as the isolate has sent its port back, which is
-    // before it has loaded its model, so a refusal after this point is a
-    // hundred megabytes read off a disk and freed again.
     final listener =
-        recognition == null ? null : await sherpaListener(_store, _cacheDir, recognition);
+        recognition == null ? null : await sherpaListener(recognition);
     return ComposedVoiceSession(
-        listener, await sherpaSpeaker(_store, speech, speaker));
+        listener, await sherpaSpeaker(speech, speaker));
   }
 
-  /// The sherpa listening half for one recognition model, on any platform
-  /// sherpa runs on: the worker, the microphone and the VAD copied out of the
-  /// bundle. Shared with `AndroidVoice`, which composes one when a downloaded
-  /// model rather than the system recognizer is what was picked.
-  static Future<SherpaListener> sherpaListener(
-      VoiceModelStore store, String cacheDir, RecognitionModel recognition) async {
-    final listenDir = await store.directoryOf(recognition);
+  /// The sherpa listening half for one recognition model. Shared with
+  /// `AndroidVoice`, which holds a [SherpaVoice] and composes one when a
+  /// downloaded model rather than the system recognizer is what was picked.
+  ///
+  /// Everything that can refuse, before the worker is spawned: a spawn
+  /// returns as soon as the isolate has sent its port back, which is
+  /// before it has loaded its model, so a refusal after this point is a
+  /// hundred megabytes read off a disk and freed again.
+  Future<SherpaListener> sherpaListener(RecognitionModel recognition) async {
+    final listenDir = await _store.directoryOf(recognition);
     if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
     final recorder = await openMicrophone();
-    final vad = await _vadPath(cacheDir);
+    final vad = await _vadPath();
     final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
     return SherpaListener(recorder, worker);
   }
 
-  /// The sherpa speaking half for one speech model. Shared with
-  /// `AndroidVoice` for the same reason as [sherpaListener].
-  static Future<SherpaSpeaker> sherpaSpeaker(
-      VoiceModelStore store, SpeechModel speech, int speaker) async {
-    final speakDir = await store.directoryOf(speech);
+  /// The sherpa speaking half for one speech model, for the same reason as
+  /// [sherpaListener].
+  Future<SherpaSpeaker> sherpaSpeaker(SpeechModel speech, int speaker) async {
+    final speakDir = await _store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
     final worker = await Worker.spawn(_speakWorker, (speech, speakDir, speaker));
     return SherpaSpeaker(worker);
@@ -76,8 +74,8 @@ class SherpaVoice extends Voice {
 
   /// The Silero model on disk, copied out of the bundle the first time: every
   /// model sherpa takes, it takes as a path.
-  static Future<String> _vadPath(String cacheDir) async {
-    final path = p.join(cacheDir, "silero_vad.onnx");
+  Future<String> _vadPath() async {
+    final path = p.join(_cacheDir, "silero_vad.onnx");
     final file = File(path);
     if (!await file.exists()) {
       final data = await rootBundle.load(_vadAsset);

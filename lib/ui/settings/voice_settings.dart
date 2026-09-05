@@ -56,10 +56,7 @@ class VoiceSection extends ConsumerWidget {
         _SpeakerField(settings: settings),
         _LanguageField(settings: settings),
         if (canListen) const _TouchToSpeak(),
-        if (ref
-            .watch(installedVoiceModelsProvider.notifier)
-            .hasSystemEngines)
-          _MissingEngines(installed: installed),
+        if (voice.hasSystemEngines) _MissingEngines(installed: installed),
       ],
     );
   }
@@ -205,9 +202,9 @@ class _Action extends ConsumerWidget {
 }
 
 /// What to do when the device has no engine for one half of voice mode. Drawn
-/// wherever there are system engines to be missing — Android, catalog beside
-/// it — because an empty picker is otherwise a dead end with nothing saying it
-/// is one install away from working.
+/// wherever the platform has system engines to be missing — Android, catalog
+/// beside it — because an empty picker is otherwise a dead end with nothing
+/// saying it is one install away from working.
 ///
 /// Recognition's half is about a *setting* as often as about an install: the
 /// framework gives a recognizer the microphone only where it is the one set as
@@ -234,7 +231,6 @@ class _MissingEngines extends StatelessWidget {
     final speaks = installed.contains(nativeSpeech.id);
     if (hears && speaks) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final missing = !hears ? "hear" : "speak";
     final style = theme.textTheme.bodySmall
         ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     return Padding(
@@ -247,7 +243,7 @@ class _MissingEngines extends StatelessWidget {
         children: [
           if (!hears)
             Text(
-              "This device has nothing to $missing with. Android gives a "
+              "This device has nothing to hear with. Android gives a "
               "recognizer the microphone only where it is the one set as the "
               "system's voice-input service — set one there "
               "(Settings → Apps → Default apps → Digital assistant app → "
@@ -256,7 +252,7 @@ class _MissingEngines extends StatelessWidget {
             ),
           if (!speaks)
             Text(
-              "This device has nothing to $missing with. Voice mode uses the "
+              "This device has nothing to speak with. Voice mode uses the "
               "engines the platform provides, and one without the usual "
               "speech apps may have none installed. Either of these adds one, "
               "and works for every app rather than only this one:",

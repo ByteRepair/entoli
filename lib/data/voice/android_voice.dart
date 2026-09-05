@@ -11,8 +11,9 @@ import "voice_strategies.dart";
 
 /// Voice mode on Android: the device's own `TextToSpeech` and
 /// `SpeechRecognizer` where their sentinel is what was picked, and sherpa-onnx
-/// where a downloaded model was — the same halves the desktops use, since
-/// sherpa's native code ships in the APK.
+/// where a downloaded model was — the same halves the desktops use, composed
+/// through a [SherpaVoice] this holds, since sherpa's native code ships in the
+/// APK.
 ///
 /// The system engines stay the default where they exist: nothing to download,
 /// and they run on whatever silicon the phone has. The fallback exists because
@@ -26,13 +27,18 @@ import "voice_strategies.dart";
 /// listening and speaking, a downloaded recognizer over the system's voice,
 /// and the reverse.
 class AndroidVoice extends Voice {
-  const AndroidVoice(this._store, this._cacheDir);
+  AndroidVoice(VoiceModelStore store, String cacheDir)
+      : _sherpa = SherpaVoice(store, cacheDir);
 
-  final VoiceModelStore _store;
-  final String _cacheDir;
+  /// The sherpa halves, composed where a pick names a downloaded model rather
+  /// than a system engine.
+  final SherpaVoice _sherpa;
 
   @override
   bool get downloadsModels => true;
+
+  @override
+  bool get hasSystemEngines => true;
 
   @override
   Future<NativeVoiceEngines> systemEngines() async {
@@ -91,7 +97,7 @@ class AndroidVoice extends Voice {
         (await openMicrophone()).dispose();
         listener = AndroidSpeechRecognizer(language: language);
       } else {
-        listener = await SherpaVoice.sherpaListener(_store, _cacheDir, recognition);
+        listener = await _sherpa.sherpaListener(recognition);
       }
     }
     // `speaker` is the sherpa catalog's idea of which voice in a model file to
@@ -102,7 +108,7 @@ class AndroidVoice extends Voice {
     // model speaks the language it was trained on.
     final voice = speech.isNative
         ? AndroidTextToSpeech(language: language)
-        : await SherpaVoice.sherpaSpeaker(_store, speech, speaker);
+        : await _sherpa.sherpaSpeaker(speech, speaker);
     return ComposedVoiceSession(listener, voice);
   }
 }

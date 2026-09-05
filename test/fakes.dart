@@ -722,6 +722,11 @@ class FakeVoice extends Voice {
   @override
   final bool downloadsModels;
 
+  /// False is a browser: no engines to be missing, so no missing-engine block.
+  /// True is Android, where the catalog draws beside them.
+  @override
+  bool hasSystemEngines = true;
+
   /// Set to make [start] throw, which is a model that will not load or a
   /// microphone the user said no to.
   String? refusal;

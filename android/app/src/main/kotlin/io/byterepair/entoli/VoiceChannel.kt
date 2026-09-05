@@ -144,16 +144,16 @@ object VoiceChannel {
         val speech = context.packageManager
             .queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0)
             .isNotEmpty()
+        // Set, and to something installed — a stale pick is no pick, the same
+        // rule [recognitionServices] applies to its own list.
+        val chosen = chosenRecognizer(context)
+        val recognition =
+            chosen != null && installedRecognitionServices(context).any { it == chosen }
         return mapOf(
-            "recognition" to hasDefaultRecognizer(context),
+            "recognition" to recognition,
             "speech" to speech,
         )
     }
-
-    // Whether the system's voice-input service is set, and to something
-    // installed — which is what [chosenRecognizer] answers.
-    private fun hasDefaultRecognizer(context: Context): Boolean =
-        chosenRecognizer(context) != null
 
     // What the settings page offers as a language, and the device's own where
     // it offers nothing. The synthesiser is the one engine that will simply
@@ -196,9 +196,7 @@ object VoiceChannel {
     // with ERROR_CLIENT as the session opens. See "The Android system engines"
     // in CLAUDE.md.
     private fun recognitionServices(context: Context): List<ComponentName> {
-        val installed = context.packageManager
-            .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
-            .map { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
+        val installed = installedRecognitionServices(context)
         // Their pick and nothing else where they made one — walking past it
         // would hand the microphone to another vendor without saying so. Where
         // they made none, every installed service is a candidate, since the
@@ -208,18 +206,22 @@ object VoiceChannel {
         return installed.firstOrNull { it == chosen }?.let { listOf(it) } ?: installed
     }
 
+    // The services answering the recognition intent, as components. One query,
+    // two readers: [recognitionServices] binds from the list and [engines]
+    // checks the system's pick against it.
+    private fun installedRecognitionServices(context: Context): List<ComponentName> =
+        context.packageManager
+            .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+            .map { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) }
+
     // The system's pick of recognizer, as a component, and null where none is
-    // set or the one set is not installed. No public API for the constant —
-    // the key is read as a string.
+    // set — stale or not: what is set and what is installed are checked by the
+    // readers, against the list [installedRecognitionServices] answers. No
+    // public API for the constant — the key is read as a string.
     private fun chosenRecognizer(context: Context): ComponentName? =
         Settings.Secure
             .getString(context.contentResolver, "voice_recognition_service")
             ?.let { ComponentName.unflattenFromString(it) }
-            ?.takeIf { component ->
-                context.packageManager
-                    .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
-                    .any { ComponentName(it.serviceInfo.packageName, it.serviceInfo.name) == component }
-            }
 
     // --- Speech synthesis ---
 
