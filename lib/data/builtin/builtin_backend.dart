@@ -597,7 +597,7 @@ class BuiltinBackend implements AgentBackend {
     final target = _resolveModel(
       model,
       provider,
-      defaultOf: (config) => config.defaultLightModelId,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
     );
     if (target == null) return null;
     try {
@@ -627,7 +627,7 @@ class BuiltinBackend implements AgentBackend {
     final target = _resolveModel(
       settings.memory.bgModel,
       settings.memory.bgProvider,
-      defaultOf: (config) => config.defaultLightModelId,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
     );
     if (target == null) return;
     final said = (prompt ??
@@ -701,7 +701,7 @@ class BuiltinBackend implements AgentBackend {
       final target = _resolveModel(
         settings.memory.bgModel,
         settings.memory.bgProvider,
-        defaultOf: (config) => config.defaultLightModelId,
+        defaultOf: LlmProviderConfig.lightDefaultOf,
       );
       if (target == null) return;
       final all = await store.entries();
@@ -854,7 +854,7 @@ class BuiltinBackend implements AgentBackend {
   ({LlmClient client, String modelId})? _resolveModel(
     String? model,
     String? provider, {
-    String? Function(LlmProviderConfig) defaultOf = _chatDefaultOf,
+    String? Function(LlmProviderConfig) defaultOf = LlmProviderConfig.chatDefaultOf,
   }) {
     if (provider == null) return null;
     final endpoint = registry.endpointFor(provider);
@@ -865,17 +865,14 @@ class BuiltinBackend implements AgentBackend {
     return (client: registry.clientOf(endpoint), modelId: modelId);
   }
 
-  static String? _chatDefaultOf(LlmProviderConfig config) => config.defaultModelId;
-
   /// The classifier model, resolved the same way the main model is. Null when
   /// no classifier provider is named — auto mode falls back to asking. A
   /// provider named without a model resolves to its light default.
   PermissionClassifier? _resolveClassifier(String? provider, String? model) {
-    if (provider == null) return null;
     final target = _resolveModel(
       model,
       provider,
-      defaultOf: (config) => config.defaultLightModelId,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
     );
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);

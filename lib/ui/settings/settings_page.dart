@@ -104,15 +104,14 @@ class _SettingsPageState extends State<SettingsPage> {
     // The page is the whole window, so its width is the window's — no
     // `LayoutBuilder`, which would run the Scaffold's build during layout.
     final wide = MediaQuery.sizeOf(context).width >= navBreakpoint;
-    final focus = widget.focus && widget.initialCategory != null;
-    // Narrow has no panel for a preselected category to sit beside: whatever
-    // opened settings for one category, focused or not, opens it as the page.
-    if (focus || (!wide && widget.initialCategory != null)) {
-      final category = widget.initialCategory!;
-      return Scaffold(
-        appBar: AppBar(title: Text(category.label)),
-        body: _categoryBody(category),
-      );
+    // One rule, not two: a named category is the whole page unless the window
+    // is wide enough for the panel and nobody asked to focus. Narrow has no
+    // panel for a preselected category to sit beside, so there it is the page
+    // whatever the caller asked for.
+    final fullPage =
+        widget.initialCategory != null && (widget.focus || !wide);
+    if (fullPage) {
+      return _categoryScaffold(widget.initialCategory!);
     }
     final categories = _Categories(
       // Nothing is selected where the list is the whole page: a category there
@@ -138,6 +137,13 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
+/// A category as the whole page: the bar holds nothing but its name, and
+/// leaving it is the back gesture.
+Scaffold _categoryScaffold(SettingsCategory category) => Scaffold(
+      appBar: AppBar(title: Text(category.label)),
+      body: _categoryBody(category),
+    );
+
 /// One category as a page over the list, which is what a narrow window gets in
 /// place of the panel. Leaving it is the back gesture, so the bar holds nothing
 /// but the name of what is on it.
@@ -157,10 +163,7 @@ class _CategoryPage extends StatelessWidget {
         }
       });
     }
-    return Scaffold(
-      appBar: AppBar(title: Text(category.label)),
-      body: _categoryBody(category),
-    );
+    return _categoryScaffold(category);
   }
 }
 
@@ -642,7 +645,7 @@ class _AgentSection extends ConsumerWidget {
           label: "Classifier LLM",
           child: ModelPicker(
             nullLabel: "Off",
-            defaultOf: (config) => config.defaultLightModelId,
+            defaultOf: LlmProviderConfig.lightDefaultOf,
             helperOffText: "Classifies commands as safe, dangerous, or "
                 "uncertain. Off, auto mode asks for every command.",
             choice: (
@@ -771,15 +774,10 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
     final key = _apiKey.text.trim();
     if (key.isEmpty) return;
     // Notifier first: adding the provider unmounts this card on the next
-    // frame, and the adoption must outlive it rather than resume on a
-    // defunct ref.
+    // frame, and the save must outlive it rather than resume on a defunct
+    // ref.
     final notifier = ref.read(appSettingsProvider.notifier);
-    final settings = ref.read(appSettingsProvider);
-    await notifier.setProviders([
-      ...settings.llmProviders.where((p) => p.id != _ollamaCloud.id),
-      _ollamaCloud.copyWith(apiKey: key),
-    ]);
-    await notifier.adoptFirstProvider(_ollamaCloud.id);
+    await notifier.upsertProvider(_ollamaCloud.copyWith(apiKey: key));
   }
 
   @override
@@ -836,29 +834,18 @@ class _ProvidersEditor extends ConsumerWidget {
   /// One upsert for both routes in: editing an entry and adding one that turns
   /// out to share an id mean the same thing, and two entries under one name
   /// would show the same models twice.
-  ///
-  /// Adding a provider also takes its defaults where the app has none: the
-  /// chat LLM, the title model and the rest all ride on a provider being
-  /// picked, and a first provider picked with nothing to answer by is a
-  /// welcome screen stuck on a dead Next.
   Future<void> _upsert(
     BuildContext context,
     WidgetRef ref, {
     LlmProviderConfig? initial,
     String title = "Add provider",
   }) async {
-    // Read off the widget's ref before the dialog: this page can go away
-    // while it is open, and the notifier is what survives it.
+    // Notifier first: this page can go away while the dialog is open, and the
+    // save must outlive it rather than resume on a defunct ref.
     final notifier = ref.read(appSettingsProvider.notifier);
-    final settings = ref.read(appSettingsProvider);
     final saved = await promptForProvider(context, initial: initial, title: title);
     if (saved == null) return;
-    final isNew = settings.llmProviders.every((p) => p.id != saved.id);
-    await notifier.setProviders([
-      ...settings.llmProviders.where((p) => p.id != saved.id),
-      saved,
-    ]);
-    if (isNew) await notifier.adoptFirstProvider(saved.id);
+    await notifier.upsertProvider(saved);
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {

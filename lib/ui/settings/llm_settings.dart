@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 import "../widgets/model_picker.dart";
 import "../widgets/resettable_field.dart";
@@ -37,7 +38,7 @@ class DefaultsSection extends ConsumerWidget {
           label: "Title LLM",
           child: ModelPicker(
             nullLabel: "Off",
-            defaultOf: (config) => config.defaultLightModelId,
+            defaultOf: LlmProviderConfig.lightDefaultOf,
             helperOffText: "Names a chat from its first message. Off, chats "
                 "stay \"New chat\" until you rename them.",
             choice: (

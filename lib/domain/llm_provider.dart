@@ -61,6 +61,15 @@ class LlmProviderConfig {
   String? resolveKey(Map<String, String> environment) =>
       resolveKeyWith((name) => environment[name]);
 
+  /// Which field a role's `Default` entry resolves to: the chat default for
+  /// the LLM field, the light one for title, memory and classifier. Named
+  /// here so every picker, and the backend's null-model resolution, read the
+  /// same two rules rather than spelling them as lambdas at each site.
+  static String? chatDefaultOf(LlmProviderConfig config) => config.defaultModelId;
+
+  static String? lightDefaultOf(LlmProviderConfig config) =>
+      config.defaultLightModelId;
+
   LlmProviderConfig copyWith({
     String? id,
     LlmApi? api,

@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/llm_provider.dart";
 import "../../providers.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/model_picker.dart";
@@ -139,7 +140,7 @@ class AutoMemorySection extends ConsumerWidget {
             label: "Memory LLM",
             child: ModelPicker(
               nullLabel: "Off",
-              defaultOf: (config) => config.defaultLightModelId,
+              defaultOf: LlmProviderConfig.lightDefaultOf,
               helperOffText: "What writes memories in the background. Off, "
                   "extraction is inert and the store only ever holds what the "
                   "agent or you saved.",

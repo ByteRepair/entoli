@@ -254,14 +254,20 @@ void main() {
       expect(settings.classifierProviderId, "ollama-cloud");
     });
 
-    testWidgets("and is gone once a provider is configured", (tester) async {
-      await pumpSettings(tester, app, SettingsCategory.providers);
+    // The recommended provider group drives one dialog flow three times:
+    // menu, Anthropic, Save.
+    Future<void> addAnthropic(WidgetTester tester) async {
       await tester.tap(find.text("Add provider"));
       await settleIo(tester);
       await tester.tap(find.text("Anthropic"));
       await settleIo(tester);
       await tester.tap(find.text("Save"));
       await settleIo(tester, least: 3);
+    }
+
+    testWidgets("and is gone once a provider is configured", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addAnthropic(tester);
 
       expect(find.textContaining("We recommend Ollama Cloud"), findsNothing);
     });
@@ -271,12 +277,7 @@ void main() {
     // them, and losing them left the picker an initialValue nothing renders.
     testWidgets("a preset added through the dialog keeps its defaults", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await tester.tap(find.text("Add provider"));
-      await settleIo(tester);
-      await tester.tap(find.text("Anthropic"));
-      await settleIo(tester);
-      await tester.tap(find.text("Save"));
-      await settleIo(tester, least: 3);
+      await addAnthropic(tester);
 
       final provider = app.container
           .read(appSettingsProvider)
@@ -291,12 +292,7 @@ void main() {
     // dead reset button.
     testWidgets("the first provider added becomes every field's Default", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
-      await tester.tap(find.text("Add provider"));
-      await settleIo(tester);
-      await tester.tap(find.text("Anthropic"));
-      await settleIo(tester);
-      await tester.tap(find.text("Save"));
-      await settleIo(tester, least: 3);
+      await addAnthropic(tester);
 
       final settings = app.container.read(appSettingsProvider);
       expect(settings.defaultProviderId, "anthropic");

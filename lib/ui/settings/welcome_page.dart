@@ -72,7 +72,9 @@ class _WelcomeTourState extends ConsumerState<WelcomeTour> {
     final chosen = ref.watch(
       appSettingsProvider.select((s) => s.defaultProviderId != null),
     );
-    final gate = _page == 1 && !chosen;
+    // Named off the page list, so reordering or inserting a page cannot move
+    // the gate to the wrong one.
+    final gate = _pageWidgets[_page] is _SetupModelPage && !chosen;
     return Column(
       children: [
         Expanded(

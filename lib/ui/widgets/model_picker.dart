@@ -30,7 +30,7 @@ class ModelPicker extends StatelessWidget {
     required this.choice,
     required this.onChanged,
     required this.nullLabel,
-    this.defaultOf = _chatDefault,
+    this.defaultOf = LlmProviderConfig.chatDefaultOf,
     this.inherited,
     this.helperOffText,
   });
@@ -53,7 +53,6 @@ class ModelPicker extends StatelessWidget {
   /// pickers' "Off, ..." lines.
   final String? helperOffText;
 
-  static String? _chatDefault(LlmProviderConfig config) => config.defaultModelId;
 
   @override
   Widget build(BuildContext context) {
@@ -76,28 +75,43 @@ class ModelPicker extends StatelessWidget {
     });
   }
 
-  String _inheritedName(List<ModelOption> models) {
-    final option = models.firstWhereOrNull((m) =>
-        m.modelId == inherited?.modelId &&
-        (inherited?.providerId == null || m.providerId == inherited?.providerId));
-    return option != null
-        ? (option.label ?? option.modelId)
-        : inherited?.modelId ?? "the app default";
-  }
-
   String? _inheritedHelper(List<ModelOption> models) =>
-      inherited == null ? null : "Using ${_inheritedName(models)}";
+      inherited == null ? null : "Using ${_inheritedName(models, inherited)}";
 
-  /// Where reset lands: the first provider's default entry, or the null entry
-  /// when there is nothing to have a default.
-  ModelChoice _resetTarget(List<LlmProviderConfig> providers) =>
-      providers.isEmpty ? (providerId: null, modelId: null) : (providerId: providers.first.id, modelId: null);
+  /// Where reset lands: the first Default entry the dropdown shows — the
+  /// first provider that names one — or the null entry when there is nothing
+  /// to have a default.
+  ModelChoice _resetTarget(List<LlmProviderConfig> providers) {
+    final provider = _defaultEntry(providers);
+    return provider == null
+        ? (providerId: null, modelId: null)
+        : (providerId: provider.id, modelId: null);
+  }
 
   String _defaultLabel(List<LlmProviderConfig> providers) {
-    final first = providers.first;
-    return "${first.displayName} - Default (${defaultOf(first) ?? "?"})";
+    final provider = _defaultEntry(providers);
+    if (provider == null) return nullLabel;
+    return "${provider.displayName} - Default (${defaultOf(provider)})";
   }
 }
+
+/// What the null entry resolves to at the level above, named for the helper
+/// line and the popup's `Default (…)` entry: the matched model's label, the
+/// stored model id, or "the app default" when nothing is known.
+String _inheritedName(List<ModelOption> models, ModelChoice? inherited) {
+  final option = models.firstWhereOrNull((m) =>
+      m.modelId == inherited?.modelId &&
+      (inherited?.providerId == null || m.providerId == inherited?.providerId));
+  return option != null
+      ? (option.label ?? option.modelId)
+      : inherited?.modelId ?? "the app default";
+}
+
+/// The first provider whose Default entry the dropdown shows, or null when
+/// none of them names one. Reset anchors here rather than on the first
+/// provider, since only providers naming one have an entry to land on.
+LlmProviderConfig? _defaultEntry(List<LlmProviderConfig> providers) =>
+    providers.firstWhereOrNull((p) => p.defaultModelId != null);
 
 /// What a picker's dropdown shows, built over the configured providers and the
 /// models they offer. The two things arrive together: a provider with no models
@@ -139,15 +153,9 @@ DropdownButtonFormField<ModelChoice> _dropdown({
   required ModelChoice? inherited,
   required String? helperText,
 }) {
-  String inheritedName() {
-    final option = models.firstWhereOrNull((m) =>
-        m.modelId == inherited?.modelId &&
-        (inherited?.providerId == null || m.providerId == inherited?.providerId));
-    return option != null ? (option.label ?? option.modelId) : inherited?.modelId ?? "the app default";
-  }
-
-  final nullEntry =
-      inherited == null ? nullLabel : "$nullLabel (${inheritedName()})";
+  final nullEntry = inherited == null
+      ? nullLabel
+      : "$nullLabel (${_inheritedName(models, inherited)})";
   return DropdownButtonFormField<ModelChoice>(
     initialValue: _match(providers, models, choice, defaultOf),
     isExpanded: true,
@@ -196,6 +204,15 @@ ModelChoice? _match(
   ModelChoice choice,
   String? Function(LlmProviderConfig) defaultOf,
 ) {
+  // The Default entry a named provider resolves to, or nothing when it is
+  // gone or names no default.
+  ModelChoice? defaultChoiceOf(String? providerId) {
+    final provider = providers.firstWhereOrNull((p) => p.id == providerId);
+    return provider != null && defaultOf(provider) != null
+        ? (providerId: provider.id, modelId: null)
+        : null;
+  }
+
   if (choice.providerId == null && choice.modelId == null) {
     return (providerId: null, modelId: null);
   }
@@ -204,12 +221,7 @@ ModelChoice? _match(
     // still there and names a default. One without — a custom provider, or
     // one whose preset names nothing — has nothing to resolve to, so it reads
     // as the null entry rather than as an item nothing renders.
-    final provider =
-        providers.firstWhereOrNull((p) => p.id == choice.providerId);
-    if (provider == null || defaultOf(provider) == null) {
-      return (providerId: null, modelId: null);
-    }
-    return (providerId: provider.id, modelId: null);
+    return defaultChoiceOf(choice.providerId) ?? (providerId: null, modelId: null);
   }
   // A specific model is matched by its own pair: the provider it rides with
   // is the one the backend offered it under, not one from settings. One the
@@ -222,9 +234,5 @@ ModelChoice? _match(
   if (found != null) {
     return (providerId: found.providerId, modelId: found.modelId);
   }
-  final provider =
-      providers.firstWhereOrNull((p) => p.id == choice.providerId);
-  return provider != null && defaultOf(provider) != null
-      ? (providerId: provider.id, modelId: null)
-      : (providerId: null, modelId: null);
+  return defaultChoiceOf(choice.providerId) ?? (providerId: null, modelId: null);
 }

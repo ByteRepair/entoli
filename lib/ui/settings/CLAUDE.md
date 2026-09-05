@@ -18,7 +18,7 @@ whatever the global default currently is, and retargeting the global retargets
 every such chat. `ModelPicker` names what it resolves to under the field.
 
 The title model differs in one thing: nothing inherits from it, so it is a pair
-or it is off, and `OptionalModelPicker` leads the same list with `Off` and has
+or it is off, and its `ModelPicker` leads the same list with `Off` and has
 nothing to reset to. The classifier model is the same pattern: a separate
 optional pair, used only by auto mode, and off by default.
 

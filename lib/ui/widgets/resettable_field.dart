@@ -9,11 +9,11 @@ const defaultOptionLabel = "Default";
 /// Distinct from [defaultOptionLabel], which resolves to something.
 const noneOptionLabel = "None";
 
-/// A field paired with a button that puts it back on [defaultOptionLabel].
-/// The button is always live: pressed where the field already sits on the
-/// reset target it rewrites the same value, which is nothing worth a disabled
-/// state — and where a stored pair reads as nothing (a provider removed under
-/// it), it is the cleanup.
+/// A field paired with a button that puts it back on [resetLabel]. The button
+/// is always live: pressed where the field already sits on the reset target
+/// it rewrites the same value, which is nothing worth a disabled state — and
+/// where a stored pair reads as nothing (a provider removed under it), it is
+/// the cleanup.
 class ResettableField extends StatelessWidget {
   const ResettableField({
     super.key,
