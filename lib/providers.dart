@@ -437,6 +437,16 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..titleProviderId = choice.providerId
     ..titleModelId = choice.modelId);
 
+  /// First-provider adoption: every role still unset points at [providerId],
+  /// in one update and one save so the adoption cannot land half done. Each
+  /// field is read before its own write, so a role the user has already
+  /// picked is left where it is.
+  Future<void> adoptFirstProvider(String providerId) => _update((s) => s
+    ..defaultProviderId = s.defaultProviderId ?? providerId
+    ..titleProviderId = s.titleProviderId ?? providerId
+    ..memoryProviderId = s.memoryProviderId ?? providerId
+    ..classifierProviderId = s.classifierProviderId ?? providerId);
+
   /// Read when a command runs, so an edit reaches the next one.
   Future<void> setEnvironment(Map<String, String> env) =>
       _update((s) => s.environment = Map.unmodifiable(env));
