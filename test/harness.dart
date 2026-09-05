@@ -25,7 +25,9 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
+import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/reminder.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -42,7 +44,6 @@ import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/ui/widgets/model_picker.dart";
 
 import "fakes.dart";
 
@@ -313,6 +314,10 @@ class TestApp {
   /// The app-level default, written the way the app writes it.
   Future<void> seedGlobalDefault({String? providerId, String? modelId}) =>
       seedSettings(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
+
+  /// The configured providers, written the way the app writes them.
+  Future<void> seedProviders(List<LlmProviderConfig> providers) =>
+      seedSettings(AppSettings(llmProviders: providers));
 
   /// Pick both of [voiceModelPair], which is what makes voice mode ready. From
   /// a `testWidgets` body this wants a real clock: `io(tester, app.pickVoiceModels)`.
@@ -696,20 +701,32 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
     await pressBack(tester);
   }
   final tile = find.widgetWithText(ListTile, category.label);
-  // Only when it is off the bottom: [scrollTo] aligns what it reveals with the
-  // top of the list, which would push the categories above it out of the tree
-  // and leave the next call with nothing to tap.
+  // Coming back from a far-down category, the one wanted can be above the
+  // viewport, off the top of the list's extent. A drag down finds the top,
+  // where [scrollTo]'s drag-up cannot.
+  if (tile.evaluate().isEmpty) {
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 400));
+    await tester.pumpAndSettle();
+  }
+  // Only when it is still off the bottom: [scrollTo] aligns what it reveals
+  // with the top of the list, which would push the categories above it out of
+  // the tree and leave the next call with nothing to tap.
   if (tile.evaluate().isEmpty) await scrollTo(tester, tile);
   await tester.tap(tile);
   await settleIo(tester);
 }
 
-/// Open the model dropdown. Scoped to [ModelPicker]: the optional pickers on
-/// the same page are dropdowns of the same type.
-Future<void> openDropdown(WidgetTester tester) async {
+/// Open the model dropdown. Scoped to the field labelled [label] — the LLMs
+/// page has two pickers of the same type, and the chat settings page three —
+/// defaulting to the one under "LLM".
+Future<void> openDropdown(WidgetTester tester, {String label = "LLM"}) async {
+  final labelField = find.ancestor(
+    of: find.text(label),
+    matching: find.byType(LabelledField),
+  );
   await tester.tap(find.descendant(
-    of: find.byType(ModelPicker),
-    matching: find.byType(DropdownButtonFormField<ModelOption?>),
+    of: labelField,
+    matching: find.byType(DropdownButtonFormField<ModelChoice>),
   ));
   await tester.pumpAndSettle();
 }

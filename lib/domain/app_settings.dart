@@ -61,6 +61,7 @@ class AppSettings {
     this.turnUsername,
     this.turnPassword,
     this.turnRetries = defaultTurnRetries,
+    this.welcomeSeen = false,
   });
 
   String? defaultModelId;
@@ -266,6 +267,10 @@ class AppSettings {
   /// bar is the only way on. App-level, like the model default it sits beside.
   int turnRetries;
 
+  /// Whether the welcome tour has been finished. It is what first launch reads
+  /// to decide whether to push the tour, and what its Done writes.
+  bool welcomeSeen;
+
   /// The default when nothing is set: five carry-ons per failure. A named
   /// constant so the settings page's switch — which turns the feature on at
   /// the default — and the load and save answers are one number.
@@ -346,6 +351,7 @@ class AppSettings {
         turnPassword: _orNull(json["turnPassword"] as String?),
         turnRetries:
             (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(0, maxTurnRetries),
+        welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
       return AppSettings();
@@ -428,6 +434,7 @@ class AppSettings {
         turnUsername: turnUsername,
         turnPassword: turnPassword,
         turnRetries: turnRetries,
+        welcomeSeen: welcomeSeen,
       );
 
   Future<void> save(AppConfig config) async {
@@ -486,6 +493,7 @@ class AppSettings {
       // Written only when not the default, for the same reason the memory
       // gates are: a file that predates it says nothing and gets the default.
       if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
+      if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }
 }

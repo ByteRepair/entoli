@@ -188,7 +188,6 @@ class _ThreadsSliderState extends ConsumerState<_ThreadsSlider> {
     return LabelledField(
       label: "CPU cores",
       child: ResettableField(
-        isDefault: chosen == null,
         onReset: () => ref.read(appSettingsProvider.notifier).setLocalThreads(null),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
