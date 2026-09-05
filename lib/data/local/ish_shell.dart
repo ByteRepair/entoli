@@ -61,7 +61,10 @@ class IshShell extends Shell {
       Map<String, String>? environment,
       bool sharedHome = true,
       bool oneShot = false,
-      bool restart = false}) {
+      bool restart = false,
+      String? project}) {
+    // `project` exists so a shell can resolve a per-project driver; the
+    // emulator is its own environment and has no driver to pick.
     if (oneShot) {
       return _IshOneShotRun(
         rootfsDir: rootfsDir,
@@ -69,7 +72,7 @@ class IshShell extends Shell {
         home: home,
         script: command,
         timeout: timeout,
-        environment: _compose(home: home, environment: environment),
+        environment: _compose(home: home, extra: environment),
       );
     }
     return _sessions
@@ -89,13 +92,13 @@ class IshShell extends Shell {
 
   Map<String, String> _compose({
     required String home,
-    Map<String, String>? environment,
+    Map<String, String>? extra,
   }) =>
       {
         ...defaultShellEnvironment,
         "HOME": home,
         ...environment(),
-        ...?environment,
+        ...?extra,
       };
 }
 
@@ -131,7 +134,7 @@ class _IshSession {
           rootfsDir: _shell.rootfsDir,
           dataDir: _shell.dataDir,
           home: _home,
-          env: _shell._compose(home: _home, environment: environment),
+          env: _shell._compose(home: _home, extra: environment),
         );
         _shell._cwds[_cwdPath]?.value = _cwdPath;
       } catch (e) {
