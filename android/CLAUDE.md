@@ -239,7 +239,14 @@ checked in rather than built: `assets/icons/*.svg` is what the app draws,
 `ic_icon_background` are the Android adaptive layers named by
 `mipmap-anydpi-v26/ic_<name>.xml`, and `web/icons/` is the PWA set. Android
 reads no SVG, so its copies are the same path data as a vector drawable, and
-editing one means editing all of them — there is no generator.
+editing one means editing all of them — there is no generator. The cookie's
+launcher layers are the exception: `drawable-*/dpi/ic_cookie_{bg,fg}.png` are
+`cookie.svg` rendered by `resvg` (`bg` is the gradient and sheen alone, `fg`
+the blob and glyphs with their drop shadows, at the five adaptive sizes), so
+an artwork edit means re-rendering them the same way — the SVG filters a
+vector drawable cannot carry is why they are rasters. The monochrome layer
+stays a flat silhouette, a themed icon being a tinted one; the debug build
+keeps its black vectors through its own `mipmap-anydpi-v26/ic_cookie.xml`.
 
 The PWA set is the default icon's SVG rendered at each size, and only the
 default's — a browser cannot be told to switch, so the other icon has no copy
