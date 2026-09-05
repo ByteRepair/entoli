@@ -20,9 +20,12 @@ abstract class RemoteControl {
   /// method covers both a key and a string.
   Future<void> key(String text);
 
-  /// Whether there is anything to reach at all. False on the web, and on
-  /// Android while the accessibility service is not connected — the tools are
-  /// dropped the way `bash` is when there is no shell.
+  /// Whether there is anything to reach at all. False on the web, where a
+  /// browser cannot see or drive the screen — the tools are dropped the way
+  /// `bash` is when there is no shell. A platform fact, like
+  /// `WebSearch.available`, not a runtime check: on Android the tools are
+  /// offered even while the accessibility service is not connected, and a call
+  /// then fails with a clear error rather than being dropped.
   bool get available => true;
 
   /// Release any resources. The default is a no-op.

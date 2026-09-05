@@ -3,10 +3,9 @@ import "package:flutter/services.dart";
 import "../../domain/remote_control.dart";
 
 /// Seeing and driving the screen through the accessibility service. The service
-/// is a system component the user enables in system settings; until it is
-/// connected, `available` is false and the tools are dropped. The channel
-/// reaches the service, which captures the screen and injects gestures and
-/// keys.
+/// is a system component the user enables in system settings; the channel
+/// reaches it, which captures the screen and injects gestures and keys. A call
+/// while the service is not connected fails with a clear error.
 class AndroidRemoteControl extends RemoteControl {
   AndroidRemoteControl();
 
@@ -15,14 +14,10 @@ class AndroidRemoteControl extends RemoteControl {
   @override
   bool get available => true;
 
-  /// Whether the accessibility service is connected, for the settings page to
-  /// show. The tools themselves fail with a clear error while it is not.
-  Future<bool> isConnected() async =>
-      await _channel.invokeMethod<bool>("available") ?? false;
-
   /// Open the system's accessibility settings, where the user enables the
-  /// service. The app cannot enable it itself.
-  Future<void> openSettings() async {
+  /// service. The app cannot enable it itself. Static: it reaches the channel
+  /// and needs no instance.
+  static Future<void> openSettings() async {
     await _channel.invokeMethod("openSettings");
   }
 

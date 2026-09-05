@@ -906,7 +906,7 @@ class _RemoteControlSection extends ConsumerWidget {
                 "Android needs the accessibility service to see and control "
                 "the screen. Enable Entoli in the system settings."),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => AndroidRemoteControl().openSettings(),
+            onTap: AndroidRemoteControl.openSettings,
           ),
       ],
     );

@@ -8,16 +8,14 @@ import io.flutter.plugin.common.MethodChannel
 
 // The bridge between Dart and the accessibility service. The service is a
 // system component, so this channel only relays: it asks [RemoteControlService]
-// for a screenshot or an input event, and reports whether the service is
-// connected. Registered against the application context, like every other
-// channel here.
+// for a screenshot or an input event. Registered against the application
+// context, like every other channel here.
 object RemoteControlChannel {
     fun register(context: Context, messenger: BinaryMessenger) {
         val appContext = context.applicationContext
         MethodChannel(messenger, "agent_chat/remote_control").setMethodCallHandler { call, result ->
             val service = RemoteControlService.instance
             when (call.method) {
-                "available" -> result.success(service != null)
                 "openSettings" -> {
                     appContext.startActivity(
                         Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)

@@ -994,7 +994,6 @@ class BuiltinAgent {
         output: result.output,
         exceptionInfo: result.exceptionInfo,
         cwd: result.cwd,
-        resource: result.resource,
       );
 
   /// The model asking the user something. The call and its answers are a pair
@@ -1505,15 +1504,24 @@ class BuiltinAgent {
   Stream<AgentEvent> _screenshot(LlmToolCall call) async* {
     yield ToolCallEvent(
         ToolCall(id: call.id, name: call.name, argumentsJson: call.argumentsJson));
+    String? resource;
     Future<ShellResult> run() => _guarded(() async {
           final bytes = await remoteControl!.screenshot();
-          final resource = await saveResource!("screenshot.png", bytes);
-          _screenshots[resource] = bytes;
-          return ShellResult(returnCode: 0, output: "", resource: resource);
+          final name = await saveResource!("screenshot.png", bytes);
+          resource = name;
+          _screenshots[name] = bytes;
+          return const ShellResult(returnCode: 0, output: "");
         });
     yield* _runGated(call, call.argumentsJson, screenshotToolName, run,
         argumentsText: "capture the screen");
-    yield ToolResultEvent(_ran(call, _commandResult!));
+    final result = _commandResult!;
+    yield ToolResultEvent(ToolResult(
+      callId: call.id,
+      returnCode: result.returnCode,
+      output: result.output,
+      exceptionInfo: result.exceptionInfo,
+      resource: resource,
+    ));
   }
 
   /// Click at a point. Gated like a command.
@@ -1526,19 +1534,9 @@ class BuiltinAgent {
           'The $clickToolName tool takes {"x": ..., "y": ..., "button": ...}.');
       return;
     }
-    yield ToolCallEvent(ToolCall(
-      id: call.id,
-      name: call.name,
-      argumentsJson: call.argumentsJson,
-      argumentsText: "click button $button at ($x, $y)",
-    ));
-    Future<ShellResult> run() => _guarded(() async {
-          await remoteControl!.click(x, y, button: button);
-          return const ShellResult(returnCode: 0, output: "");
-        });
-    yield* _runGated(call, call.argumentsJson, clickToolName, run,
-        argumentsText: "click button $button at ($x, $y)");
-    yield ToolResultEvent(_ran(call, _commandResult!));
+    final text = "click button $button at ($x, $y)";
+    yield* _gatedTool(call, clickToolName, text,
+        () => remoteControl!.click(x, y, button: button));
   }
 
   /// Send keyboard input. Gated like a command.
@@ -1548,18 +1546,31 @@ class BuiltinAgent {
       yield* _reject(call, 'The $keyToolName tool takes {"text": "..."}.');
       return;
     }
+    yield* _gatedTool(call, keyToolName, text, () => remoteControl!.key(text));
+  }
+
+  /// The shared tail of a tool that runs a side effect behind the approval
+  /// gate: report the call, run it gated, report the result. [run] is the
+  /// effect itself; a throw is answered as a failed result rather than ending
+  /// the turn.
+  Stream<AgentEvent> _gatedTool(
+    LlmToolCall call,
+    String toolName,
+    String argumentsText,
+    Future<void> Function() run,
+  ) async* {
     yield ToolCallEvent(ToolCall(
       id: call.id,
       name: call.name,
       argumentsJson: call.argumentsJson,
-      argumentsText: text,
+      argumentsText: argumentsText,
     ));
-    Future<ShellResult> run() => _guarded(() async {
-          await remoteControl!.key(text);
-          return const ShellResult(returnCode: 0, output: "");
-        });
-    yield* _runGated(call, call.argumentsJson, keyToolName, run,
-        argumentsText: text);
+    yield* _runGated(call, call.argumentsJson, toolName,
+        () => _guarded(() async {
+              await run();
+              return const ShellResult(returnCode: 0, output: "");
+            }),
+        argumentsText: argumentsText);
     yield ToolResultEvent(_ran(call, _commandResult!));
   }
 

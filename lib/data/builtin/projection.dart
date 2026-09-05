@@ -40,13 +40,13 @@ Future<List<LlmMessage>> projectionOf(
 }) async {
   // Every resource at once rather than a message at a time: on the web each
   // read is its own IndexedDB transaction, and a long conversation's would
-  // otherwise be one round trip after another.
-  final files = await Future.wait(messages.map((m) =>
+  // otherwise be one round trip after another. The two sets — user attachments
+  // and screenshot results — are disjoint, so they are read concurrently.
+  final filesF = Future.wait(messages.map((m) =>
       m.role == MessageRole.user ? _attachments(m, load) : _noFiles));
-  // The screenshots a turn's results name, read up front the same way: a
-  // screenshot is an image the model has to see, and its bytes are on disk
-  // under the name the result carries.
-  final screenshots = await _screenshotResources(messages, load);
+  final screenshotsF = _screenshotResources(messages, load);
+  final files = await filesF;
+  final screenshots = await screenshotsF;
   final projected = <LlmMessage>[];
   for (final (index, message) in messages.indexed) {
     switch (message.role) {
