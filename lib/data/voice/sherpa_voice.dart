@@ -17,12 +17,11 @@ import "pcm.dart";
 import "voice_strategies.dart";
 import "wav.dart";
 
-/// Listening and speaking through sherpa-onnx, which is the desktops' answer
-/// and only theirs — Android ships none of its native code and uses the system
-/// engines instead, so nothing constructs this there. `start` builds a
-/// [SherpaListener] and a [SherpaSpeaker] and hands them to a
-/// [ComposedVoiceSession], which forwards both halves' events. See "Hearing and
-/// speaking" in CLAUDE.md for the two-worker design.
+/// Listening and speaking through sherpa-onnx: the desktops' answer, and the
+/// fallback on an Android whose system recognizer cannot be used — see
+/// `AndroidVoice`. `start` builds a [SherpaListener] and a [SherpaSpeaker] and
+/// hands them to a [ComposedVoiceSession], which forwards both halves' events.
+/// See "Hearing and speaking" in CLAUDE.md for the two-worker design.
 class SherpaVoice extends Voice {
   SherpaVoice(this._store, this._cacheDir);
 
@@ -41,31 +40,44 @@ class SherpaVoice extends Voice {
     int speaker = 0,
     String? language,
   }) async {
-    Listener? listener;
-    if (recognition != null) {
-      final listenDir = await _store.directoryOf(recognition);
-      if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
-      // Everything that can refuse, before the worker is spawned: a spawn
-      // returns as soon as the isolate has sent its port back, which is
-      // before it has loaded its model, so a refusal after this point is a
-      // hundred megabytes read off a disk and freed again.
-      final recorder = await openMicrophone();
-      final vad = await _vadPath();
-      final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
-      listener = SherpaListener(recorder, worker);
-    }
+    // Everything that can refuse, before the worker is spawned: a spawn
+    // returns as soon as the isolate has sent its port back, which is
+    // before it has loaded its model, so a refusal after this point is a
+    // hundred megabytes read off a disk and freed again.
+    final listener =
+        recognition == null ? null : await sherpaListener(_store, _cacheDir, recognition);
+    return ComposedVoiceSession(
+        listener, await sherpaSpeaker(_store, speech, speaker));
+  }
 
-    final speakDir = await _store.directoryOf(speech);
+  /// The sherpa listening half for one recognition model, on any platform
+  /// sherpa runs on: the worker, the microphone and the VAD copied out of the
+  /// bundle. Shared with `AndroidVoice`, which composes one when a downloaded
+  /// model rather than the system recognizer is what was picked.
+  static Future<SherpaListener> sherpaListener(
+      VoiceModelStore store, String cacheDir, RecognitionModel recognition) async {
+    final listenDir = await store.directoryOf(recognition);
+    if (listenDir == null) throw StateError("${recognition.name} is not downloaded.");
+    final recorder = await openMicrophone();
+    final vad = await _vadPath(cacheDir);
+    final worker = await Worker.spawn(_listenWorker, (vad, recognition, listenDir));
+    return SherpaListener(recorder, worker);
+  }
+
+  /// The sherpa speaking half for one speech model. Shared with
+  /// `AndroidVoice` for the same reason as [sherpaListener].
+  static Future<SherpaSpeaker> sherpaSpeaker(
+      VoiceModelStore store, SpeechModel speech, int speaker) async {
+    final speakDir = await store.directoryOf(speech);
     if (speakDir == null) throw StateError("${speech.name} is not downloaded.");
     final worker = await Worker.spawn(_speakWorker, (speech, speakDir, speaker));
-
-    return ComposedVoiceSession(listener, SherpaSpeaker(worker));
+    return SherpaSpeaker(worker);
   }
 
   /// The Silero model on disk, copied out of the bundle the first time: every
   /// model sherpa takes, it takes as a path.
-  Future<String> _vadPath() async {
-    final path = p.join(_cacheDir, "silero_vad.onnx");
+  static Future<String> _vadPath(String cacheDir) async {
+    final path = p.join(cacheDir, "silero_vad.onnx");
     final file = File(path);
     if (!await file.exists()) {
       final data = await rootBundle.load(_vadAsset);

@@ -202,9 +202,10 @@ class _Action extends ConsumerWidget {
 }
 
 /// What to do when the device has no engine for one half of voice mode. Only
-/// drawn where there is no catalog to fall back on — on Android, where the
-/// system's engines are the only ones there are, an empty picker is otherwise a
-/// dead end with nothing saying it is one install away from working.
+/// drawn where there is no catalog to fall back on — `downloadsModels` false,
+/// which is now a browser's shape rather than Android's, since the catalog
+/// reaches Android too. An empty picker is otherwise a dead end with nothing
+/// saying it is one install away from working.
 ///
 /// Both named engines are ordinary apps that register with the platform, so
 /// installing either is the whole of the fix and nothing here has to be told
@@ -238,9 +239,9 @@ class _MissingEngines extends StatelessWidget {
         children: [
           Text(
             "This device has nothing to $missing with. Voice mode uses the "
-            "engines Android provides, and a phone without Google's apps may "
-            "have none installed. Either of these adds one, and works for "
-            "every app rather than only this one:",
+            "engines the platform provides, and one without the usual "
+            "speech apps may have none installed. Either of these adds one, "
+            "and works for every app rather than only this one:",
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
