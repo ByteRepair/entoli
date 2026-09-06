@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -293,6 +294,41 @@ void main() {
 
       expect(backend.closedShells, [(chat.state.id, null)]);
       expect(backend.disposed, isEmpty);
+    });
+
+    // A chat moved out of Byte Repair runs its next turn under the project it
+    // went to: the note is resolved per turn from where the chat now is, so
+    // nothing of the built-in travels with the chat.
+    test("a moved chat's next turn leaves the built-in's note behind", () async {
+      final repo = repoWith(AppSettings(profile: const Profile(name: "Tea Fan")));
+      final chat = await repo.createChat(project: "byte-repair");
+      await writeChatVia(repo, chat);
+
+      await repo.moveChat(chat.state.id, "work");
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, "work");
+      expect(settings.bundledInstructions, isNull);
+    });
+
+    // A turn still running holds the directories that are about to move; the
+    // next command it ran would quietly remake them under the project it left.
+    test("a move ends a running turn before it moves anything", () async {
+      final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
+      final chat = await repo.createChat();
+      await writeChatVia(repo, chat);
+      backend.hold = Completer<void>();
+      final turn = repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await pumpEventQueue();
+
+      await repo.moveChat(chat.state.id, "work");
+      backend.hold!.complete();
+      await turn;
+
+      expect(backend.aborted, [chat.state.id]);
+      expect(backend.closedShells, [(chat.state.id, null)]);
+      expect(backend.runningTurns.value, isEmpty);
     });
   });
 

@@ -10,6 +10,7 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:agent_chat/providers.dart" show promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
 import "../fakes.dart";
@@ -23,10 +24,15 @@ void main() {
 
   /// send() returns once the prompt is dispatched; the turn ends later, on the
   /// stream's DoneEvent. Retry rounds wait out real backoff between them, so a
-  /// caller expecting rounds names a limit that covers the waits.
+  /// caller expecting rounds names a limit that covers the waits. [target] is
+  /// the app whose container to read — a test may hold more than one.
   Future<void> waitIdle(String id,
-          {Duration limit = const Duration(seconds: 2)}) =>
-      waitFor(() => !app.container.read(chatControllerProvider(id)).isRunning,
+          {Duration limit = const Duration(seconds: 2), TestApp? target}) =>
+      waitFor(
+          () => !(target ?? app)
+              .container
+              .read(chatControllerProvider(id))
+              .isRunning,
           what: "the turn", limit: limit);
 
   /// A chat with a turn under way. Nothing waits for the controller to have
@@ -1162,6 +1168,84 @@ void main() {
       expect(reason, TurnEnd.done);
       expect(textOf(messagesOf(id).last), "recovered");
       expect(app.backend.resumes, hasLength(1));
+    });
+  });
+
+  group("moving the chat to another project", () {
+    // esbmc-verifier is byte-repair's alone, so the project's own library —
+    // read from its real sources by the reload — is what decides whether a
+    // mention of it resolves. `testLibrary` has none.
+    Future<TestApp> appWithByteRepairLibrary() async {
+      final app = TestApp.create();
+      await app.container
+          .read(promptLibraryProvider("byte-repair").notifier)
+          .reload();
+      return app;
+    }
+
+    /// The sidebar's move, driven at the container: invalidate, then wait for
+    /// the reload. The predicate asks for the chat as well as the project —
+    /// a building controller has neither, and null equals null.
+    Future<void> moveAndReload(TestApp app, String chatId, String? project) async {
+      await app.repo.moveChat(chatId, project);
+      app.container.invalidate(chatControllerProvider(chatId));
+      await waitFor(() async {
+        final chat =
+            app.container.read(chatControllerProvider(chatId)).chat;
+        return chat != null && chat.state.project == project;
+      }, what: "the reloaded chat");
+    }
+
+    test("a mention resolved in byte-repair is not in the reloaded chat",
+        () async {
+      final app = await appWithByteRepairLibrary();
+      addTearDown(app.dispose);
+      final chat = await app.repo.createChat(project: "byte-repair");
+      final controller =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await controller.send("@esbmc-verifier verify src.c");
+      await waitIdle(chat.state.id, target: app);
+      expect(
+        app.backend.prompts.single.prompt.documents.keys,
+        contains("@esbmc-verifier"),
+      );
+
+      await moveAndReload(app, chat.state.id, null);
+
+      expect(
+        app.container.read(chatControllerProvider(chat.state.id)).chat!.state.project,
+        isNull,
+      );
+    });
+
+    test("the reloaded controller composes the next message against the new project",
+        () async {
+      final app = await appWithByteRepairLibrary();
+      addTearDown(app.dispose);
+      final chat = await app.repo.createChat(project: "byte-repair");
+      final controller =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await controller.send("@esbmc-verifier verify src.c");
+      await waitIdle(chat.state.id, target: app);
+
+      await moveAndReload(app, chat.state.id, null);
+      final reloaded =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await reloaded.send("@esbmc-verifier verify src.c");
+      await waitIdle(chat.state.id, target: app);
+
+      expect(app.backend.prompts.last.prompt.documents, isEmpty);
+    });
+
+    test("a chat whose controller was never built does not build one",
+        () async {
+      final chat = await app.repo.createChat(project: "work");
+      await app.repo.moveChat(chat.state.id, null);
+
+      expect(
+        app.container.exists(chatControllerProvider(chat.state.id)),
+        isFalse,
+      );
     });
   });
 }
