@@ -225,7 +225,12 @@ class _ProjectBadges extends ConsumerWidget {
                       padding: const EdgeInsets.only(right: 6),
                       child: Icon(icon, size: 18),
                     ),
-                  Text(projectLabel(project)),
+                   Text(
+                     projectLabel(project),
+                     style: omadaOn(project, ref.read(appConfigProvider))
+                         ? const TextStyle(fontStyle: FontStyle.italic)
+                         : null,
+                   ),
                 ],
               ),
               selected: project == selected,

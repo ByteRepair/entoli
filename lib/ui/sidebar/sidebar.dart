@@ -727,18 +727,72 @@ class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final typed = await promptForText(
-      context,
-      title: "New project",
-      initial: "",
-      hint: "Project name",
-      confirmLabel: "Create",
-    );
-    final name = typed == null ? null : projectNameFrom(typed);
+    final name = await _promptNewProject(context);
     if (name == null) return;
-    await ref.read(chatRepositoryProvider).createProject(name);
+    await ref.read(chatRepositoryProvider).createProject(name.name);
+    if (name.omada) {
+      await ref
+          .read(projectSettingsProvider(name.name).notifier)
+          .setOmada(true);
+    }
     ref.invalidate(projectListProvider);
-    selectProject(ref, name);
+    selectProject(ref, name.name);
+  }
+
+  /// The new-project dialog: a name and, off by default, the Omada switch.
+  /// `promptForText` stays for callers that want a bare field; creation is
+  /// the one flow that asks the feature's question up front.
+  Future<({String name, bool omada})?> _promptNewProject(
+      BuildContext context) async {
+    final controller = TextEditingController();
+    var omada = false;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text("New project"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: "Project name",
+                ),
+                onSubmitted: (text) {
+                  final name = projectNameFrom(text);
+                  if (name != null) Navigator.of(context).pop(name);
+                },
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text("Team chats (Omada)"),
+                subtitle: const Text(
+                    "Several named agents take part in this project's chats."),
+                value: omada,
+                onChanged: (value) => setState(() => omada = value),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                final name = projectNameFrom(controller.text);
+                if (name != null) Navigator.of(context).pop(name);
+              },
+              child: const Text("Create"),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (name == null) return null;
+    return (name: name, omada: omada);
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref, String project) =>
@@ -769,7 +823,14 @@ class _ProjectMenu extends ConsumerWidget {
           label: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              fontStyle:
+                  remote == null && omadaOn(project, ref.read(appConfigProvider))
+                      ? FontStyle.italic
+                      : FontStyle.normal,
+            ),
           ),
           onPressed: () => _open(context, ref, projects),
         ),
@@ -782,6 +843,7 @@ class _ProjectMenu extends ConsumerWidget {
   PopupMenuItem<VoidCallback> _row(
           {required bool checked,
           required String label,
+          required bool omada,
           IconData? icon,
           required VoidCallback pick}) =>
       PopupMenuItem(
@@ -798,7 +860,15 @@ class _ProjectMenu extends ConsumerWidget {
             else
               const SizedBox(width: 18),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                // Omada is a fact about the project the menu says once, in
+                // the style rather than in new geometry.
+                style: omada ? const TextStyle(fontStyle: FontStyle.italic) : null,
+              ),
+            ),
           ],
         ),
       );
@@ -813,6 +883,7 @@ class _ProjectMenu extends ConsumerWidget {
         _row(
           checked: remote == null && project == selected,
           label: projectLabel(project),
+          omada: omadaOn(project, ref.read(appConfigProvider)),
           icon: projectIcon(project),
           pick: () => selectProject(ref, project),
         ),
@@ -821,6 +892,7 @@ class _ProjectMenu extends ConsumerWidget {
         _row(
           checked: entry.scope == remote,
           label: entry.label,
+          omada: false,
           pick: () => selectRemote(ref, entry.scope),
         ),
       const PopupMenuDivider(),

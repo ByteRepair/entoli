@@ -3,6 +3,19 @@ import "dart:convert";
 import "../core/config.dart";
 import "temp_chat_ttl.dart";
 
+/// How the agents of a project's rounds run. The project's Omada section
+/// names the default for its chats; a chat's own override, where Phase 2
+/// adds one, wins over it.
+enum OmadaOrdering { sequential, parallel }
+
+extension OmadaOrderingName on OmadaOrdering {
+  static OmadaOrdering? fromNameNullable(String? name) => name == null
+      ? null
+      : OmadaOrdering.values
+          .cast<OmadaOrdering?>()
+          .firstWhere((o) => o!.name == name, orElse: () => null);
+}
+
 /// Project-scoped overrides. A project can override the app-level
 /// [TempChatTtl] with one of its own, keep an auto-memory store of its own,
 /// and set command environment variables of its own beside the app-level
@@ -11,7 +24,11 @@ import "temp_chat_ttl.dart";
 /// the instructions.
 class ProjectSettings {
   ProjectSettings(
-      {this.tempChatTtl, this.environment, this.useProjectMemory = false});
+      {this.tempChatTtl,
+      this.environment,
+      this.useProjectMemory = false,
+      this.omada = false,
+      this.omadaOrdering});
 
   /// How long a temporary chat in this project lives. Null means inherit the
   /// app default.
@@ -25,6 +42,15 @@ class ProjectSettings {
   /// sharing the default project's. Meaningless for the default project
   /// itself, which is the one every other falls back to.
   bool useProjectMemory;
+
+  /// Whether this project's chats can carry several agents in one round. A
+  /// user project's toggle; a built-in's answer is its spec, in code, and
+  /// never read from here. Absent from `project.json` loads as false, so
+  /// existing files need no migration.
+  bool omada;
+
+  /// The project's default for how its rounds run. Null is sequential.
+  OmadaOrdering? omadaOrdering;
 
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(config.projectSettingsFile(project: project));
@@ -41,6 +67,9 @@ class ProjectSettings {
         tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?),
         environment: environment,
         useProjectMemory: json["useProjectMemory"] as bool? ?? false,
+        omada: json["omada"] as bool? ?? false,
+        omadaOrdering: OmadaOrderingName.fromNameNullable(
+            json["omadaOrdering"] as String?),
       );
     } catch (_) {
       return ProjectSettings();
@@ -52,6 +81,8 @@ class ProjectSettings {
       if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
       if (environment != null && environment!.isNotEmpty) "environment": environment,
       if (useProjectMemory) "useProjectMemory": useProjectMemory,
+      if (omada) "omada": omada,
+      if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
     }));
   }
 
@@ -59,5 +90,7 @@ class ProjectSettings {
         tempChatTtl: tempChatTtl,
         environment: environment,
         useProjectMemory: useProjectMemory,
+        omada: omada,
+        omadaOrdering: omadaOrdering,
       );
 }
