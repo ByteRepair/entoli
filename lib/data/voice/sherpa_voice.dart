@@ -42,15 +42,7 @@ class SherpaVoice extends Voice {
   }) async {
     final listener =
         recognition == null ? null : await sherpaListener(recognition);
-    // A refusal on the speaking half must not orphan the listening one: it
-    // holds a recorder and an isolate that only its dispose frees.
-    try {
-      return ComposedVoiceSession(
-          listener, await sherpaSpeaker(speech, speaker));
-    } catch (_) {
-      await listener?.dispose();
-      rethrow;
-    }
+    return composeSession(listener, sherpaSpeaker(speech, speaker));
   }
 
   /// The sherpa listening half for one recognition model. Shared with

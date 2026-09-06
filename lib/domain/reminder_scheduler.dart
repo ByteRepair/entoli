@@ -194,8 +194,11 @@ class ReminderScheduler {
   /// Re-register every armed reminder with the system, cancelling whatever the
   /// list no longer asks for. Idempotent, and cheap enough to run after every
   /// mutation rather than tracking who changed what.
+  ///
+  /// Nothing to ask where the platform keeps no clock — the whole diff below
+  /// would be round trips into no-ops.
   Future<void> sync() async {
-    if (!alarms.available) return;
+    if (!alarms.available || !alarms.schedules) return;
     final wanted = <int, DateTime>{
       for (final r in list.reminders)
         if (r.enabled && r.nextFireAt != null && r.requestCode != null)

@@ -176,9 +176,8 @@ same `SherpaListener` the desktops use (the `SherpaVoice` it holds, whose
 `sherpaListener`/`sherpaSpeaker` are what both platforms compose their halves
 through), and the speech half answers the same way — so the four pairings all
 work, including a system recognizer with a downloaded voice or the reverse.
-`Voice.downloadsModels` is the other half: true on Android as everywhere
-sherpa runs, which is what draws the catalog on the settings page; its one
-reader is unchanged.
+The catalog is the other half: it draws wherever sherpa runs, which is every
+platform but the web.
 
 **What decides is whether the engine is there, not whether this is Android**,
 and the answer goes into the set that already existed for the question.

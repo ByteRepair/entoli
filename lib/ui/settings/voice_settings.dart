@@ -88,17 +88,14 @@ class _TouchToSpeak extends ConsumerWidget {
   }
 }
 
-/// Both catalogs, or neither. Where the pick is the system's engines the
-/// catalog draws beside them, so there is always a list where this runs — and
-/// the dividers belong here rather than around this at the call site, or a
-/// platform with no catalog would draw a line under the last thing on the
-/// page and stop.
-class VoiceCatalogSections extends ConsumerWidget {
+/// Both catalogs. The dividers belong here rather than around this at the
+/// call site, so a caller that draws nothing under one is not left a line
+/// across the bottom of the page.
+class VoiceCatalogSections extends StatelessWidget {
   const VoiceCatalogSections({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(voiceProvider).downloadsModels) return const SizedBox.shrink();
+  Widget build(BuildContext context) {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

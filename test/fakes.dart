@@ -719,19 +719,10 @@ class FakeChatStore implements ChatStore {
 /// and [spoken] is what the reply came out as, which is the pair every voice
 /// test is written against.
 class FakeVoice extends Voice {
-  FakeVoice({
-    this.available = true,
-    this.downloadsModels = true,
-    this.hasSystemEngines = true,
-  });
+  FakeVoice({this.available = true, this.hasSystemEngines = true});
 
   @override
   final bool available;
-
-  /// False is where no catalog draws — nowhere in production now that Android
-  /// composes the sherpa halves beside the system engines.
-  @override
-  final bool downloadsModels;
 
   /// False is a browser: no engines to be missing, so no missing-engine block.
   /// True is Android, where the catalog draws beside them.

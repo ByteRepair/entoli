@@ -275,9 +275,9 @@ AssistantLaunch platformAssistantLaunch() => Platform.isAndroid
 
 /// AlarmManager on Android; the session bus on Linux, whose notifications are
 /// what a reminder's completion and a turn failure post through. Scheduling
-/// still rides the in-process timer alone — no clock to hand over yet, so a
-/// reminder missed while the app is closed is caught up at the next launch.
-/// macOS and Windows have neither, and a browser's timers die with its tab.
+/// rides the app's own timer where there is no clock to hand over — a reminder
+/// missed while the app is closed is caught up at the next launch. macOS and
+/// Windows have neither, and a browser's timers die with its tab.
 Future<ReminderAlarms> platformReminderAlarms() async =>
     Platform.isAndroid
         ? AndroidReminderAlarms()

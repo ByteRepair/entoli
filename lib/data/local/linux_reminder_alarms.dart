@@ -88,16 +88,15 @@ Future<ReminderAlarms> connectLinuxReminderAlarms() async {
   }
 }
 
-/// Linux's reminders, phase one: notifications over the session bus, with the
-/// tap routed back as a chat id — the halves the Android channel splits into
+/// Linux's reminders: notifications over the session bus, with the tap routed
+/// back as a chat id — the halves the Android channel splits into
 /// [ReminderAlarms.takeOpenChat] and [ReminderAlarms.openChat], held and
 /// pushed the same way.
 ///
-/// Nothing here schedules: no clock to hand over yet, so every reminder still
-/// rides the in-process timer alone, and one missed while the app is closed
-/// is caught up at the next launch. The answers that Android asks of a
-/// platform are yeses here — no Doze, no foreground service, no
-/// exact-alarm permission.
+/// Nothing here schedules: the app's own timer is the scheduler on this
+/// platform, and one missed while the app is closed is caught up at the next
+/// launch. The answers that Android asks of a platform are yeses here — no
+/// Doze, no foreground service, no exact-alarm permission.
 class LinuxReminderAlarms implements ReminderAlarms {
   LinuxReminderAlarms({required NotificationsBus bus}) : _bus = bus {
     // A signal a daemon sends in another shape, or a bus that dies, must not

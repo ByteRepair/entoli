@@ -214,6 +214,10 @@ class SpeechFailures {
 /// microphone that has been shut is still allowed to say. Each `Voice` picks
 /// its own pair in `start`, which is what makes `AndroidVoice` a dozen lines
 /// and gives read-aloud a speak-only session for free.
+///
+/// [composeSession] is how every `Voice.start` finishes: a half that refuses
+/// once the other is built must not orphan it, since a listener holds a
+/// recorder, an isolate or a bridge subscription only its dispose frees.
 class ComposedVoiceSession implements VoiceSession {
   ComposedVoiceSession(this._listener, this._speaker) {
     _listener?.events.listen(_onListener);
@@ -304,5 +308,18 @@ class ComposedVoiceSession implements VoiceSession {
     await _speaker.dispose();
     await _events.close();
     _levelOf.dispose();
+  }
+}
+
+/// Builds the session, disposing the built listener if the speaker half
+/// refuses — the same all-or-nothing `start` was before halves could be
+/// composed from two different engines.
+Future<VoiceSession> composeSession(
+    Listener? listener, Future<Speaker> speaker) async {
+  try {
+    return ComposedVoiceSession(listener, await speaker);
+  } catch (_) {
+    await listener?.dispose();
+    rethrow;
   }
 }

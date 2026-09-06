@@ -736,9 +736,9 @@ caught up at the next launch — which is what the reminders page says instead
 of promising a fire. A no-bus session (headless, minimal window manager, the
 dev toolbox) probes once at launch and falls back to
 `UnavailableReminderAlarms`, the way `KeyringSecretStore` falls back to the
-file; a daemon that appears later is next launch's business. Phase two, the
-system clock that fires with the app closed, is systemd user timers and is
-still to do.
+file; a daemon that appears later is next launch's business. What fires a
+reminder with the app closed is future work in the same shape — the app
+running collapsed in the background — not a system scheduler.
 
 **The runner drives the turn through `ChatController`, not beside it.**
 `ReminderRunner` creates the chat and stamps the reminder, then hands the turn
