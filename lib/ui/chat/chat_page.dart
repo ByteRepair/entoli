@@ -365,7 +365,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   static const _slack = 200.0;
 
   final TextEditingController _controller = TextEditingController();
-  final ScrollController _scroll = ScrollController();
+  late final ScrollController _scroll = ScrollController();
+  late final ScrollFollow _follow = ScrollFollow(_scroll);
 
   /// A notifier rather than a field: only the jump button reads it, and a
   /// `setState` mid-drag would rebuild every visible bubble to swap it.
@@ -425,9 +426,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   /// Streaming fires this every frame, so it jumps rather than starting a new
   /// 100ms animation each time.
-  void _scrollToBottom() => _afterLayout((position) {
-        if (position.nearBottom(_slack)) _scroll.jumpTo(position.maxScrollExtent);
-      });
+  void _scrollToBottom() => _follow.jumpIfFollowing();
 
   /// Land at the end, and keep landing until the end stops moving. A builder
   /// lays out only what shows, so the extent any one frame reports is an
@@ -441,6 +440,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         _scroll.jumpTo(position.maxScrollExtent);
         if (tries > 0) _settleAtBottom(tries - 1);
       });
+
+  /// What the list does on the way past, and what [ScrollFollow] answers for:
+  /// a gesture away from the end stops the turn following the reader down, and
+  /// arriving at the end starts it again.
+  bool _onScroll(ScrollNotification n) => _follow.onNotification(n);
 
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
@@ -714,39 +718,42 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     if (chat.messages.isEmpty) return whenEmpty;
     return Stack(
       children: [
-        ListView.builder(
-          controller: _scroll,
-          itemCount: chat.messages.length,
-          itemBuilder: (context, i) {
-            final m = chat.messages[i];
-            // A mirror has no editing controller: the log belongs to the home
-            // device, so the whole row of things to do to a message is out.
-            final mutable = editing != null && !view.isRunning;
-            return MessageBubble(
-              chatId: widget.chatId,
-              message: m,
-              isWaiting: view.isRunning && i == chat.messages.length - 1,
-              waitingNotice: view.retry,
-              waitingStatus: view.status,
-              onTapLink: (href) {
-                final uri = Uri.tryParse(href);
-                if (uri != null) {
-                  ref.read(linkOpenerProvider).open(context, uri);
-                }
-              },
-              threads: editing == null ? null : chat.branches[m.id],
-              onThreadStep: mutable ? (step) => editing.stepThread(m.id, step) : null,
-              onDelete: mutable ? () => editing.deleteThread(m.id) : null,
-              onEdit: mutable && m.role == MessageRole.user
-                  ? (text) => editing.editAndResend(m.id, text)
-                  : null,
-              onRegenerate: mutable ? () => editing.regenerate(m.id) : null,
-              onSpeak: speechReady && m.hasText
-                  ? () => readAloud(context, ref, m.id, m.plainText)
-                  : null,
-              isSpeaking: reading == m.id,
-            );
-          },
+        NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: ListView.builder(
+            controller: _scroll,
+            itemCount: chat.messages.length,
+            itemBuilder: (context, i) {
+              final m = chat.messages[i];
+              // A mirror has no editing controller: the log belongs to the home
+              // device, so the whole row of things to do to a message is out.
+              final mutable = editing != null && !view.isRunning;
+              return MessageBubble(
+                chatId: widget.chatId,
+                message: m,
+                isWaiting: view.isRunning && i == chat.messages.length - 1,
+                waitingNotice: view.retry,
+                waitingStatus: view.status,
+                onTapLink: (href) {
+                  final uri = Uri.tryParse(href);
+                  if (uri != null) {
+                    ref.read(linkOpenerProvider).open(context, uri);
+                  }
+                },
+                threads: editing == null ? null : chat.branches[m.id],
+                onThreadStep: mutable ? (step) => editing.stepThread(m.id, step) : null,
+                onDelete: mutable ? () => editing.deleteThread(m.id) : null,
+                onEdit: mutable && m.role == MessageRole.user
+                    ? (text) => editing.editAndResend(m.id, text)
+                    : null,
+                onRegenerate: mutable ? () => editing.regenerate(m.id) : null,
+                onSpeak: speechReady && m.hasText
+                    ? () => readAloud(context, ref, m.id, m.plainText)
+                    : null,
+                isSpeaking: reading == m.id,
+              );
+            },
+          ),
         ),
         // Only once the reader has left the end: up there a turn no longer
         // follows itself, and this is the way back.

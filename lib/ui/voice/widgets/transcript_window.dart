@@ -25,11 +25,8 @@ class TranscriptWindow extends StatefulWidget {
 }
 
 class _TranscriptWindowState extends State<TranscriptWindow> {
-  final _scroll = ScrollController();
-
-  /// How far off the end still counts as reading the latest. One line: this is
-  /// five lines tall, so the chat page's 200 pixels would be the whole thing.
-  static const _slack = TranscriptWindow.lineHeight;
+  late final ScrollController _scroll = ScrollController();
+  late final ScrollFollow _follow = ScrollFollow(_scroll);
 
   @override
   void dispose() {
@@ -40,14 +37,12 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
   @override
   void didUpdateWidget(TranscriptWindow old) {
     super.didUpdateWidget(old);
-    if (widget.lines.length != old.lines.length) _follow();
+    if (widget.lines.length != old.lines.length) _keepUp();
   }
 
-  void _follow() => WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scroll.hasClients) return;
-        final position = _scroll.position;
-        if (position.nearBottom(_slack)) _scroll.jumpTo(position.maxScrollExtent);
-      });
+  /// A line the user has scrolled away from does not pull them back; see
+  /// [ScrollFollow] for what detaches and what attaches again.
+  void _keepUp() => _follow.jumpIfFollowing();
 
   @override
   Widget build(BuildContext context) {
@@ -58,33 +53,36 @@ class _TranscriptWindowState extends State<TranscriptWindow> {
       child: ShaderMask(
         shaderCallback: _fadeShader,
         blendMode: BlendMode.dstIn,
-        child: ListView.builder(
-          controller: _scroll,
-          padding: EdgeInsets.zero,
-          itemCount: widget.lines.length,
-          itemBuilder: (context, i) {
-            final line = widget.lines[i];
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Text(
-                line.text,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: switch (line.kind) {
-                    // What the user said sits back; what was said to them is the
-                    // page. The issue asks for grey and white, taken through the
-                    // scheme so light mode works too.
-                    VoiceLineKind.said => theme.colorScheme.onSurfaceVariant,
-                    VoiceLineKind.replied => theme.colorScheme.onSurface,
-                    VoiceLineKind.activity => theme.colorScheme.outline,
-                  },
-                  fontStyle: line.kind == VoiceLineKind.activity
-                      ? FontStyle.italic
-                      : null,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _follow.onNotification,
+          child: ListView.builder(
+            controller: _scroll,
+            padding: EdgeInsets.zero,
+            itemCount: widget.lines.length,
+            itemBuilder: (context, i) {
+              final line = widget.lines[i];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  line.text,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: switch (line.kind) {
+                      // What the user said sits back; what was said to them is
+                      // the page. The issue asks for grey and white, taken
+                      // through the scheme so light mode works too.
+                      VoiceLineKind.said => theme.colorScheme.onSurfaceVariant,
+                      VoiceLineKind.replied => theme.colorScheme.onSurface,
+                      VoiceLineKind.activity => theme.colorScheme.outline,
+                    },
+                    fontStyle: line.kind == VoiceLineKind.activity
+                        ? FontStyle.italic
+                        : null,
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

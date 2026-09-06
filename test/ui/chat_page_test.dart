@@ -659,6 +659,53 @@ void main() {
       expect(position(tester).pixels, held);
       expect(find.byTooltip("Jump to latest"), findsOneWidget);
     });
+
+    // The drag that detaches is often inside the follow slack, where the old
+    // position test kept handing the view back to the end and the reader
+    // could not get away. A gesture is the whole of what counts now.
+    testWidgets("a small drag away stays put while a reply arrives", (tester) async {
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+      final end = position(tester).maxScrollExtent;
+      final held = end - 300;
+      await tester.drag(find.byType(ListView), Offset(0, end - held));
+      await tester.pumpAndSettle();
+
+      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
+      await io(
+        tester,
+        () => app.container.read(chatControllerProvider(chat.state.id).notifier).send("more"),
+      );
+      await settleIo(tester);
+
+      expect(position(tester).pixels, held);
+      expect(find.byTooltip("Jump to latest"), findsOneWidget);
+    });
+
+    testWidgets("dragging back down re-attaches the follow", (tester) async {
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+      await tester.drag(find.byType(ListView), const Offset(0, 600));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip("Jump to latest"), findsOneWidget);
+
+      // A fling rather than a drag: a drag lands wherever the finger stops,
+      // and the extent it lands short of is still an estimate. A fling's
+      // ballistic settle runs to the actual end, which is the gesture that
+      // says "take me back".
+      await tester.fling(find.byType(ListView), const Offset(0, -800), 4000);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip("Jump to latest"), findsNothing);
+
+      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
+      await io(
+        tester,
+        () => app.container.read(chatControllerProvider(chat.state.id).notifier).send("more"),
+      );
+      await settleIo(tester);
+
+      expect(position(tester).pixels, position(tester).maxScrollExtent);
+    });
   });
 
   group("a turn that never finished", () {

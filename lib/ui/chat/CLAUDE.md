@@ -608,10 +608,15 @@ depended on how tall the messages happened to be. Not
 reversed viewport the offsets of older messages shift as the newest one grows,
 so a reader scrolled up during a turn would watch the text move.
 
-A turn follows itself only while the reader is already within `_slack` of the
-end. Outside it the list is left alone — the offsets of earlier messages do not
-move as the last one grows, so reading back through a turn is undisturbed — and
-a button appears to go back down. The same slack decides both, so the button
-turns up exactly when the view stops keeping up. Both edges are
-`ValueNotifier`s, since a `setState` mid-drag would rebuild every visible bubble
-to swap a title or a button.
+A turn follows itself only while the reader has not scrolled away from it —
+`ScrollFollow` (see `lib/ui/widgets/CLAUDE.md`), not a position test. The old
+test was per tick: every delta arriving while the reader dragged back through
+a turn pulled the view down again, so a scroll up inside `_slack` snapped
+back more often than it stayed. Now any gesture toward the older messages
+detaches — however small, however near the end it stops — and reaching the
+end again by any means attaches. Outside the follow the list is left alone —
+the offsets of earlier messages do not move as the last one grows, so reading
+back through a turn is undisturbed — and a button appears to go back down.
+Its own `_slack` decides only the button: it turns up once the view is past
+200px off the end. Both edges are `ValueNotifier`s, since a `setState`
+mid-drag would rebuild every visible bubble to swap a title or a button.
