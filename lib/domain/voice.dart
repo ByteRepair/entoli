@@ -49,14 +49,6 @@ abstract class Voice {
   /// nothing for.
   bool get hasSystemEngines => false;
 
-  /// Whether this platform has device engines for the system sentinels to
-  /// stand for, which is what the settings page's missing-engine block is
-  /// drawn from: on a platform without them there is nothing to be missing,
-  /// and the block would be a lie. Asked of the platform rather than of the
-  /// probe — the block is about a phone the probe's own answer may say
-  /// nothing for.
-  bool get hasSystemEngines => false;
-
   /// Which of the device's own engines are there, for the platforms that have
   /// any. Asked once at startup, where the answer joins the installed models —
   /// a sentinel pick is usable on exactly the same terms as a downloaded one,
