@@ -22,10 +22,38 @@ inputs:
   key-password:
     description: Key password. Required when release is true.
     required: false
+  gradle-cache:
+    description: >
+      `restore` reads the Gradle caches, `save` reads them and reports the
+      hit so the caller can save what it fills; nothing is cached by default,
+      which is what the debug workflow runs with.
+    required: false
+    default: ''
+  gradle-cache-key:
+    description: The cache key. Required when gradle-cache is not empty.
+    required: false
+    default: ''
+
+outputs:
+  gradle-cache-hit:
+    description: Whether the restore found the exact key. Empty when gradle-cache is not `save`.
+    value: ${{ steps.gradle-cache.outputs.cache-hit }}
 
 runs:
   using: composite
   steps:
+    # The 8G heap and 4G metaspace are a workstation's figures. A hosted
+    # runner has 16 GB and its own processes beside the daemon, and a build
+    # that pushes the JVM past what is left does not fail — the runner is
+    # lost mid-build instead, and every step it was running with it.
+    - name: Fit the Gradle heap to the runner
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed -i -e 's/-Xmx[0-9]*[GgMm]/-Xmx4G/' \
+               -e 's/-XX:MaxMetaspaceSize=[0-9]*[GgMm]/-XX:MaxMetaspaceSize=1G/' \
+               android/gradle.properties
+
     - name: Decode the release keystore
       if: inputs.release == 'true'
       env:
@@ -45,7 +73,9 @@ runs:
         echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
     # Java 17 to match android/app/build.gradle.kts. No `cache: gradle` on a
-    # tag build: it can only ever write a scope no later run can read.
+    # tag build: it can only ever write a scope no later run can read. The
+    # caches below are the same idea done manually, so the caller decides
+    # where a save may happen.
     - uses: actions/setup-java@v5.7.0
       with:
         distribution: temurin
@@ -62,3 +92,17 @@ runs:
     - name: Stage the tools into the native libraries
       shell: bash
       run: tool/android/stage.sh
+
+    # Restored before the first Gradle run of this runner, so `save` mode
+    # (build-common) fills on top of what is here and the build jobs start
+    # theirs warm. The save is the caller's: it happens after the builds that
+    # fill these directories, which no step of this action is.
+    - id: gradle-cache
+      if: inputs.gradle-cache != ''
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          android/.gradle
+        key: ${{ inputs.gradle-cache-key }}

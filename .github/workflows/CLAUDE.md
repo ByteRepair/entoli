@@ -44,21 +44,38 @@ what they do with what comes back, which is a bundle and an AppImage either
 way. The four signing secrets are named at the call site rather than
 `inherit`ed, since only the Android jobs sign anything.
 
-**The Android build is three jobs, not one.** The native tools build fetches
+**The Android build is four jobs, not one.** The native tools build fetches
 the Hexagon SDK and cross-compiles proot and llama.cpp — several gigabytes of
 intermediates a single runner did not have room for beside the Gradle build.
 `android-tools` builds only, uploads the stripped `dist/` as an artifact, and
-the runner is recycled with all its build directories. `android` and `aab`
-each download that artifact onto a fresh runner, stage it, and build — split
-APKs and an App Bundle respectively, in parallel. `debug-build.yml` splits the
-same way, for the same reason. The tools job does not touch Dart.
+the runner is recycled with all its build directories. `build-common` primes
+Gradle on a fresh runner — wrapper, plugins, dependencies, the generated
+files `flutter build` writes — with `--config-only`, which builds no
+artifacts, and saves the Gradle caches under a key derived from the Gradle
+files. `android` and `aab` each download the tools artifact and restore those
+caches onto a fresh runner, then build — split APKs and an App Bundle
+respectively, in parallel. `debug-build.yml` splits the same way, for the
+same reason; it does not pass `gradle-cache`, so it pays its own Gradle setup
+as it always did. The tools job does not touch Dart.
 
-The setup those three build jobs share — keystore decode (release only), Java
+**The Gradle cache has one writer.** `build-common` saves it; the build jobs
+restore read-only (`cache/restore`), so two jobs never upload the same
+multi-gigabyte entry and a restore cannot race a save mid-run — a dependent
+job starts only after the job it needs has finished saving. The key is the
+hash of the Gradle files, so a build input change is a new key, filled by
+that run and read back by the next; the 7-day eviction handles the old one.
+
+The setup those four build jobs share — keystore decode (release only), Java
 17, Flutter, the tools download and staging — is one composite,
 `.github/actions/android-build-setup`, gated by a `release` boolean: debug
 passes `false` and skips the keystore; the release jobs pass it the four
-secrets. The keystore decode runs first, before the SDK installs, so a missing
-one fails in seconds rather than after a toolchain download.
+secrets. It also rewrites `android/gradle.properties`' `-Xmx8G`
+/-`MaxMetaspaceSize=4G` down to 4G/1G on every runner: those are workstation
+figures, and a JVM that grows past what a hosted runner has left does not
+fail the build — it loses the runner mid-build, which is how the v2.2.0 App
+Bundle job died at 58 minutes with no logs. The keystore decode runs first,
+before the SDK installs, so a missing one fails in seconds rather than after
+a toolchain download.
 
 **Every job that touches Dart starts with `.github/actions/flutter-setup`** —
 the SDK pin, packages and codegen in one step. The generated sources are not
