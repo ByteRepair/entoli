@@ -35,7 +35,7 @@ import "domain/models.dart";
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
-import "domain/project.dart" show everyProject;
+import "domain/project.dart";
 import "domain/prompt_library.dart";
 import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
@@ -974,6 +974,20 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// sharing the default project's.
   Future<void> setUseProjectMemory(bool value) async {
     final next = state.copy()..useProjectMemory = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Whether this project's chats can carry several agents in one round.
+  Future<void> setOmada(bool value) async {
+    final next = state.copy()..omada = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The project's default for how its rounds run. Null is sequential.
+  Future<void> setOmadaOrdering(OmadaOrdering? value) async {
+    final next = state.copy()..omadaOrdering = value;
     state = next;
     await next.save(_config, project: project);
   }

@@ -25,6 +25,7 @@ class BuiltinProject {
     this.disabled = const {},
     this.rootfsIsolation = false,
     this.requiresSetup = false,
+    this.omada = false,
   });
 
   /// The directory name under `projects/`, in the case it is created in.
@@ -68,6 +69,12 @@ class BuiltinProject {
   /// `.setup-complete` marker appears in the project's directory. The store
   /// that runs setup writes the marker; a delete removes it.
   final bool requiresSetup;
+
+  /// Whether the project runs Omada. A built-in declares its answer here
+  /// rather than reading a settings file: what a turn in it may have is the
+  /// spec's to say, and a user project's toggle never reaches one. False on
+  /// both shipped built-ins.
+  final bool omada;
 
   /// The instruction text the app ships for a turn in it. Where non-null it is
   /// the turn's instructions in full: no AGENTS.md file is read, and none is
