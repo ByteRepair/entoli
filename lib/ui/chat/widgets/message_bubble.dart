@@ -446,7 +446,8 @@ class _MessageBubbleState extends State<MessageBubble> {
             "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
             "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
             "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
-            _ => ToolLabel(call: toolCall, result: results[toolCall.id]),
+            _ => DiffTextLabel.forRun(toolCall, results[toolCall.id]) ??
+                ToolLabel(call: toolCall, result: results[toolCall.id]),
           }));
         case ToolResultPart(:final result):
           // Already drawn by the call it answers, unless the call is gone. An
