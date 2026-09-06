@@ -18,7 +18,7 @@ whatever the global default currently is, and retargeting the global retargets
 every such chat. `ModelPicker` names what it resolves to under the field.
 
 The title model differs in one thing: nothing inherits from it, so it is a pair
-or it is off, and `OptionalModelPicker` leads the same list with `Off` and has
+or it is off, and its `ModelPicker` leads the same list with `Off` and has
 nothing to reset to. The classifier model is the same pattern: a separate
 optional pair, used only by auto mode, and off by default.
 
@@ -33,8 +33,23 @@ edited from its settings page, and a name set there wins over one set in
 `settings.json`. Old files with the former `opencodeEnv` key still load, and
 rewrite themselves under the new name on the next save.
 
-The settings page is eleven categories, picked from a panel beside it or, below
-`navBreakpoint`, from a page of their own. **General** is the app itself:
+The settings page is fifteen categories, picked from a panel beside it or, below
+`navBreakpoint`, from a page of their own. **Welcome** leads the list and is the
+tour rather than a list of sections — `welcome_page.dart`, not this file — so
+`_categoryBody` renders it whole where every other category is
+`ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
+only. It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
+(around the shell, under the `Incoming*` wrappers, so what they open stays above
+the tour) shows `WelcomePage` instead of the shell while `welcomeSeen` in
+`settings.json` is still false, and the tour's Done writes the flag through the
+notifier, which swaps the shell in. The tour is the home content, not a route
+over it, so the back key cannot skip it and there is no back arrow; the tour
+also runs embedded here and has nothing of its own to leave. Its second and
+third pages embed
+`DefaultsSection`, `InstructionsSection` and `AutoMemorySection`, which live in
+`llm_settings.dart` and `memory_settings.dart` because two hosts share them —
+the same one-subject-per-file rule the other categories follow. A row added to
+one is on the tour the moment it is here. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the

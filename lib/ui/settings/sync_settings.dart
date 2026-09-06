@@ -38,7 +38,6 @@ class SyncSection extends ConsumerWidget {
         LabelledField(
           label: "Device name",
           child: ResettableField(
-            isDefault: settings.deviceName == null,
             onReset: () =>
                 ref.read(appSettingsProvider.notifier).setDeviceName(null),
             child: TextFormField(

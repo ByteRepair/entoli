@@ -2,6 +2,8 @@ import "dart:io";
 
 import "package:flutter/foundation.dart";
 import "package:flutter/services.dart" show rootBundle;
+import "package:record_platform_interface/record_platform_interface.dart"
+    show RecordPlatform;
 import "package:fs_shim/fs.dart" hide File, Directory;
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
@@ -48,6 +50,7 @@ import "../../../domain/voice_model_store.dart";
 import "../../../domain/web_search.dart";
 import "../../config.dart";
 import "keyring_secret_store.dart";
+import "linux_recorder.dart";
 import "signaling_server.dart";
 
 Shell platformShell({
@@ -336,12 +339,12 @@ Future<String> platformCacheDir() async {
 }
 
 /// Silero's detector ships inside the app, so its MIT licence ships with it —
-/// the bargain `registerBundledFontLicences` makes for Roboto Mono, and read
-/// lazily for the same reason. Here rather than in `main` because the asset is
-/// `platforms:`-filtered out of the web build, where reading it would throw and
-/// take Flutter's licence page down with it. The models the catalog downloads
-/// are not here: they arrive at runtime carrying their own LICENSE files, and
-/// are nothing the app distributes.
+/// the bargain `registerBundledFontLicences` makes for the bundled fonts, and
+/// read lazily for the same reason. Here rather than in `main` because the
+/// asset is `platforms:`-filtered out of the web build, where reading it would
+/// throw and take Flutter's licence page down with it. The models the catalog
+/// downloads are not here: they arrive at runtime carrying their own LICENSE
+/// files, and are nothing the app distributes.
 void platformRegisterVoiceLicences() {
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(
@@ -353,6 +356,12 @@ void platformRegisterVoiceLicences() {
 
 VoiceModelStore platformVoiceModelStore(String cacheDir) =>
     FileVoiceModelStore(p.join(cacheDir, "models"));
+
+/// record's own Linux implementation is parecord-only; the recorder here
+/// falls back to pw-record. Once, before any recorder exists.
+void platformRegisterRecorder() {
+  if (Platform.isLinux) RecordPlatform.instance = LinuxRecorder();
+}
 
 /// The desktops run sherpa-onnx, which is the only engine they have. Android
 /// runs its own where their sentinel is picked and sherpa where a downloaded

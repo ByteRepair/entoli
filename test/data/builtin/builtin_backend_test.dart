@@ -46,6 +46,7 @@ void main() {
         api: LlmApi.openai,
         baseUrl: "https://example.test/v1",
         models: ["fake-model"],
+        defaultModelId: "fake-model",
       ),
     ];
   });
@@ -149,7 +150,7 @@ void main() {
       expect(events.whereType<ErrorEvent>().single.message, contains("'ghost' is not configured"));
     });
 
-    test("a provider with one model does not need it pinned as well", () async {
+    test("a provider that names a default does not need it pinned", () async {
       final backend = backendOver([
         [finish],
       ]);
@@ -158,9 +159,13 @@ void main() {
       expect(client.calls.single.model, "fake-model");
     });
 
-    test("a provider with no models and nothing pinned cannot be guessed at", () async {
+    test("a provider whose models are listed but default unnamed cannot be guessed at", () async {
       providers = const [
-        LlmProviderConfig(id: "fake", api: LlmApi.openai, baseUrl: "https://example.test/v1"),
+        LlmProviderConfig(
+            id: "fake",
+            api: LlmApi.openai,
+            baseUrl: "https://example.test/v1",
+            models: ["fake-model"]),
       ];
       final backend = backendOver([]);
       final events = await send(backend, "hi", model: null);

@@ -5,13 +5,29 @@ import "package:flutter/material.dart";
 /// app. Always the first entry in a list of options.
 const defaultOptionLabel = "Default";
 
-/// A field paired with a button that puts it back on [defaultOptionLabel].
+/// Label of the option that stores nothing at all: no provider, no model.
+/// Distinct from [defaultOptionLabel], which resolves to something.
+const noneOptionLabel = "None";
+
+/// A field paired with a button that puts it back on [resetLabel]. The button
+/// is always live: pressed where the field already sits on the reset target
+/// it rewrites the same value, which is nothing worth a disabled state — and
+/// where a stored pair reads as nothing (a provider removed under it), it is
+/// the cleanup.
 class ResettableField extends StatelessWidget {
-  const ResettableField({super.key, required this.child, required this.onReset, this.isDefault = false});
+  const ResettableField({
+    super.key,
+    required this.child,
+    required this.onReset,
+    this.resetLabel = defaultOptionLabel,
+  });
 
   final Widget child;
   final VoidCallback onReset;
-  final bool isDefault;
+
+  /// What the reset puts the field back on, named in the tooltip. The
+  /// provider-default pickers reset to that rather than to [defaultOptionLabel].
+  final String resetLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -24,8 +40,8 @@ class ResettableField extends StatelessWidget {
           padding: const EdgeInsets.only(top: 4),
           child: IconButton(
             icon: const Icon(Icons.settings_backup_restore),
-            tooltip: "Reset to $defaultOptionLabel",
-            onPressed: isDefault ? null : onReset,
+            tooltip: "Reset to $resetLabel",
+            onPressed: onReset,
           ),
         ),
       ],
@@ -86,7 +102,6 @@ class InheritableDropdown<T> extends StatelessWidget {
     return LabelledField(
       label: label,
       child: ResettableField(
-        isDefault: value == null,
         onReset: () => onChanged(null),
         child: DropdownButtonFormField<T?>(
           initialValue: value,

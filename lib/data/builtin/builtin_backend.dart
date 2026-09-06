@@ -11,6 +11,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
+import "../../domain/llm_provider.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
@@ -402,7 +403,7 @@ class BuiltinBackend implements AgentBackend {
       if (endedDone &&
           settings.memory.extract &&
           memoryStore != null &&
-          settings.memory.bgModel != null) {
+          settings.memory.bgProvider != null) {
         // Unwatched on purpose: the turn is over, and the background memory
         // work must neither slow anything down nor be able to fail. The
         // consolidation rides behind the extraction rather than beside it —
@@ -592,8 +593,12 @@ class BuiltinBackend implements AgentBackend {
   /// read to nobody.
   @override
   Future<String?> ask(String prompt,
-      {required String model, required String provider}) async {
-    final target = _resolveModel(model, provider);
+      {required String? model, required String? provider}) async {
+    final target = _resolveModel(
+      model,
+      provider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
     if (target == null) return null;
     try {
       final chunks = await target.client
@@ -619,8 +624,11 @@ class BuiltinBackend implements AgentBackend {
     required String reply,
     required TurnSettings settings,
   }) async {
-    final target =
-        _resolveModel(settings.memory.bgModel, settings.memory.bgProvider);
+    final target = _resolveModel(
+      settings.memory.bgModel,
+      settings.memory.bgProvider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
     if (target == null) return;
     final said = (prompt ??
             history.lastWhereOrNull((m) => m.role == MessageRole.user))
@@ -690,8 +698,11 @@ class BuiltinBackend implements AgentBackend {
     if (_consolidating) return;
     _consolidating = true;
     try {
-      final target =
-          _resolveModel(settings.memory.bgModel, settings.memory.bgProvider);
+      final target = _resolveModel(
+        settings.memory.bgModel,
+        settings.memory.bgProvider,
+        defaultOf: LlmProviderConfig.lightDefaultOf,
+      );
       if (target == null) return;
       final all = await store.entries();
       // Pinned memories are the user's standing orders rather than store
@@ -835,23 +846,34 @@ class BuiltinBackend implements AgentBackend {
 
   /// The config is read once and reused: going back through the registry by id
   /// would re-read and re-parse `settings.json` for each question asked of it.
-  ({LlmClient client, String modelId})? _resolveModel(String? model, String? provider) {
+  ///
+  /// [defaultOf] says which provider field a null model resolves to — the chat
+  /// default for a turn, the light one for the title, memory and classifier
+  /// roles. None is None: a provider without that field leaves nothing to
+  /// answer with, which is the caller's error, not a guess from a model list.
+  ({LlmClient client, String modelId})? _resolveModel(
+    String? model,
+    String? provider, {
+    String? Function(LlmProviderConfig) defaultOf = LlmProviderConfig.chatDefaultOf,
+  }) {
     if (provider == null) return null;
     final endpoint = registry.endpointFor(provider);
     if (endpoint == null) return null;
     final config = endpoint.config;
-    // A provider with one model listed does not need it pinned as well; with
-    // none, there is nothing to guess from.
-    final modelId = model ?? config.models.firstOrNull;
+    final modelId = model ?? defaultOf(config);
     if (modelId == null || modelId.isEmpty) return null;
     return (client: registry.clientOf(endpoint), modelId: modelId);
   }
 
   /// The classifier model, resolved the same way the main model is. Null when
-  /// no classifier model is named — auto mode falls back to asking.
+  /// no classifier provider is named — auto mode falls back to asking. A
+  /// provider named without a model resolves to its light default.
   PermissionClassifier? _resolveClassifier(String? provider, String? model) {
-    if (provider == null || model == null) return null;
-    final target = _resolveModel(model, provider);
+    final target = _resolveModel(
+      model,
+      provider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);
   }

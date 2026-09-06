@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../fonts.dart";
 import "../../skills/skill_install_preview.dart";
 import "../../../domain/ask.dart";
+import "../../../domain/file_tools.dart";
 import "../../../domain/models.dart";
 import "../../../domain/tool_arg.dart";
 import "../../../providers.dart";
@@ -61,7 +62,6 @@ class ToolLabel extends StatelessWidget {
     final name = call?.name;
     final showSpinner = running && result == null;
     final verb = result == null ? "Using tool" : "Used tool";
-    final arguments = call?.argumentsText ?? call?.argumentsJson;
     return _Label(
       icon: _failed ? Icons.error_outline : Icons.terminal,
       text: name == null ? verb : "$verb: $name",
@@ -84,14 +84,149 @@ class ToolLabel extends StatelessWidget {
         context,
         title: name ?? "Tool",
         mono: true,
-        sections: [
-          (label: "Arguments", body: arguments, isError: false),
-          (label: "Output", body: result?.output, isError: false),
-          (label: "Error", body: result?.exceptionInfo, isError: true),
-        ],
+        sections: _runSections(call!, result),
       ),
     );
   }
+}
+
+/// The drawer a tool run opens, whether it was drawn as a label or as a diff.
+List<ActivitySection> _runSections(ToolCall call, ToolResult? result) => [
+      (label: "Arguments", body: call.argumentsText ?? call.argumentsJson, isError: false),
+      (label: "Output", body: result?.output, isError: false),
+      (label: "Error", body: result?.exceptionInfo, isError: true),
+    ];
+
+/// A file write or edit drawn as red/green diff lines rather than a label,
+/// where the change is small enough to read at a glance. The before/after
+/// comes from the call alone — the arguments carry it — so this draws from
+/// what conv.jsonl already holds and nothing is captured at execution time.
+/// Past the budget it declines (null), leaving the ordinary [ToolLabel].
+class DiffTextLabel extends StatelessWidget {
+  static const budget = 20;
+
+  const DiffTextLabel({
+    super.key,
+    required this.call,
+    required this.result,
+    required this.removed,
+    required this.added,
+  });
+
+  final ToolCall call;
+  final ToolResult result;
+  final List<String> removed;
+  final List<String> added;
+
+  static DiffTextLabel? forRun(ToolCall call, ToolResult? result) {
+    if (result == null || result.returnCode != 0) return null;
+    if (call.argumentsJson != null && call.argumentsJson!.length > maxArgsLength) return null;
+    final beforeAfter = _beforeAfter(call);
+    if (beforeAfter == null) return null;
+    final (before, after) = beforeAfter;
+    final (removed, added) = _diff(before, after);
+    if (removed.isEmpty && added.isEmpty) return null;
+    if (removed.length + added.length > budget) return null;
+    return DiffTextLabel(call: call, result: result, removed: removed, added: added);
+  }
+
+  static const maxArgsLength = 20000;
+
+  /// The before and after a file tool's call names, or null where the call is
+  /// another tool's or its arguments are not the shape the tool takes.
+  static (String, String)? _beforeAfter(ToolCall call) {
+    if (call.name == writeToolName) {
+      final args = writeArgsFrom(call.argumentsJson);
+      return args == null ? null : ("", args.content);
+    }
+    if (call.name == editToolName) {
+      final args = editArgsFrom(call.argumentsJson);
+      return args == null ? null : (args.oldString, args.newString);
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final red = theme.colorScheme.error;
+    final green = theme.brightness == Brightness.dark
+        ? const Color(0xFF3FB950)
+        : const Color(0xFF1A7F37);
+    final verb = call.name == writeToolName ? "Wrote" : "Edited";
+    final title = "$verb ${call.argumentsText ?? ""}".trim();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+        onPressed: () => showActivitySheet(
+          context,
+          title: title,
+          mono: true,
+          sections: _runSections(call, result),
+        ),
+        style: TextButton.styleFrom(
+          foregroundColor: theme.colorScheme.onSurfaceVariant,
+          textStyle: theme.textTheme.labelMedium,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.description_outlined, size: 15, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(title),
+              ]),
+              for (final line in removed)
+                Text("- $line", style: TextStyle(fontFamily: monoFamily, color: red)),
+              for (final line in added)
+                Text("+ $line", style: TextStyle(fontFamily: monoFamily, color: green)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lines the two texts do not share, found by trimming what they do: the
+/// common head, then the common tail. Whatever is left of [before] is
+/// removed; of [after], added. Interior structure is not looked for, so a
+/// reordering reads as remove-and-add — and the budget answers for the worst
+/// of it, which is why the same lines can come back in either order.
+///
+/// The empty text splits to one empty line, which is no line anyone wrote —
+/// dropped when it is all the trimming left, kept where it is a real blank
+/// line beside others.
+(List<String>, List<String>) _diff(String before, String after) {
+  final oldLines = before.split("\n");
+  final newLines = after.split("\n");
+  var start = 0;
+  while (start < oldLines.length && start < newLines.length && oldLines[start] == newLines[start]) {
+    start++;
+  }
+  var endOld = oldLines.length;
+  var endNew = newLines.length;
+  while (endOld > start && endNew > start && oldLines[endOld - 1] == newLines[endNew - 1]) {
+    endOld--;
+    endNew--;
+  }
+  final removed = oldLines.sublist(start, endOld);
+  final added = newLines.sublist(start, endNew);
+  if (removed.singleEmpty) removed.clear();
+  if (added.singleEmpty) added.clear();
+  return (removed, added);
+}
+
+extension on List<String> {
+  /// Just the one empty line — the whole of a split empty string, or a middle
+  /// the trim left with nothing else in it.
+  bool get singleEmpty => length == 1 && this[0].isEmpty;
 }
 
 /// A question the model put to the user, once it is history. The panel that

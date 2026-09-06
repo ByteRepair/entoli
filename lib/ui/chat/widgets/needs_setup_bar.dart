@@ -52,7 +52,9 @@ class NeedsSetupBar extends StatelessWidget {
 Future<void> openSetupSettings(BuildContext context) =>
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            const SettingsPage(initialCategory: SettingsCategory.byteRepair),
+        builder: (_) => const SettingsPage(
+          initialCategory: SettingsCategory.byteRepair,
+          focus: true,
+        ),
       ),
     );

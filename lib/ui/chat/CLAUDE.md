@@ -414,6 +414,17 @@ the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
 button that opens Settings at the project's category. The turn path no
 longer creates the rootfs lazily; "Run Setup" owns the full lifecycle.
 
+**A chat moved to another project reloads the controller, and the move
+aborts a running turn first.** The controller is a cache of what it read
+off disk — project included — so the sidebar disposes it on a move rather
+than patching it: the next read comes back from the new project, and the
+composer composes against the new project's library from the next message.
+`ChatRepository.moveChat` aborts a running turn before closing the shell
+and moving, since a turn still standing in the old directories would remake
+them under the project it left. Messages already composed keep what their
+`/skill` and `@agent` references meant when they were sent — the records are
+on the message, not looked up per turn.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
@@ -608,10 +619,15 @@ depended on how tall the messages happened to be. Not
 reversed viewport the offsets of older messages shift as the newest one grows,
 so a reader scrolled up during a turn would watch the text move.
 
-A turn follows itself only while the reader is already within `_slack` of the
-end. Outside it the list is left alone — the offsets of earlier messages do not
-move as the last one grows, so reading back through a turn is undisturbed — and
-a button appears to go back down. The same slack decides both, so the button
-turns up exactly when the view stops keeping up. Both edges are
-`ValueNotifier`s, since a `setState` mid-drag would rebuild every visible bubble
-to swap a title or a button.
+A turn follows itself only while the reader has not scrolled away from it —
+`ScrollFollow` (see `lib/ui/widgets/CLAUDE.md`), not a position test. The old
+test was per tick: every delta arriving while the reader dragged back through
+a turn pulled the view down again, so a scroll up inside `_slack` snapped
+back more often than it stayed. Now any gesture toward the older messages
+detaches — however small, however near the end it stops — and reaching the
+end again by any means attaches. Outside the follow the list is left alone —
+the offsets of earlier messages do not move as the last one grows, so reading
+back through a turn is undisturbed — and a button appears to go back down.
+Its own `_slack` decides only the button: it turns up once the view is past
+200px off the end. Both edges are `ValueNotifier`s, since a `setState`
+mid-drag would rebuild every visible bubble to swap a title or a button.

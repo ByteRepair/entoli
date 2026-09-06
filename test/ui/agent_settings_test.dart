@@ -29,6 +29,11 @@ void main() {
     await settleIo(tester);
   }
 
+  /// A field of the open dialog by its label. Indexed finds would be wrong
+  /// whenever something with a TextField sits behind the dialog — the
+  /// recommended-provider card's key box does.
+  Finder dialogField(String label) => find.widgetWithText(TextField, label);
+
   List<LlmProviderConfig> saved() => app.container.read(appSettingsProvider).llmProviders;
 
   group("providers", () {
@@ -45,7 +50,7 @@ void main() {
       expect(find.text("ollama-cloud"), findsOneWidget);
       expect(find.text("https://ollama.com/v1"), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField).at(2), "sk-ollama");
+      await tester.enterText(dialogField("API key"), "sk-ollama");
       await saveDialog(tester);
 
       expect(saved().single.id, "ollama-cloud");
@@ -58,9 +63,9 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
 
-      await tester.enterText(find.byType(TextField).at(0), "vllm");
-      await tester.enterText(find.byType(TextField).at(1), "http://gpu.local:8000/v1");
-      await tester.enterText(find.byType(TextField).at(3), "qwen3, llama4");
+      await tester.enterText(dialogField("Name"), "vllm");
+      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await tester.enterText(dialogField("Models"), "qwen3, llama4");
       await saveDialog(tester);
 
       expect(saved().single.id, "vllm");
@@ -73,7 +78,7 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
 
-      await tester.enterText(find.byType(TextField).at(0), "nameless");
+      await tester.enterText(dialogField("Name"), "nameless");
       await saveDialog(tester);
 
       expect(saved(), isEmpty);
@@ -82,7 +87,7 @@ void main() {
     testWidgets("the key is never shown back on the page", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Anthropic");
-      await tester.enterText(find.byType(TextField).at(2), "sk-ant-secret");
+      await tester.enterText(dialogField("API key"), "sk-ant-secret");
       await saveDialog(tester);
 
       expect(find.text("sk-ant-secret"), findsNothing);
@@ -117,7 +122,7 @@ void main() {
 
       await tester.tap(find.text("OpenAI"));
       await settleIo(tester);
-      await tester.enterText(find.byType(TextField).at(1), "https://proxy.local/v1");
+      await tester.enterText(dialogField("Base URL"), "https://proxy.local/v1");
       await saveDialog(tester);
 
       expect(saved(), hasLength(1));

@@ -143,13 +143,17 @@ class ChatRepository {
   }
 
   /// File a chat under another project. Its own workspace travels with it; the
-  /// shared one it can reach is the new project's from the next turn on. The
-  /// shell it stood in ends with the move, for the project it left: it is
-  /// standing in the directory that is about to move out from under it, and
-  /// the next turn starts one in the new one.
+  /// shared one it can reach is the new project's from the next turn on. A
+  /// turn still running is ended first — it holds the directories that are
+  /// about to move, and the next command it ran would quietly remake them
+  /// under the project it left. The shell it stood in ends with the move, for
+  /// the project it left: the next turn starts one in the new one.
   Future<void> moveChat(String chatId, String? project) async {
     final from = await _store.projectOf(chatId);
-    if (from != project) _backend.closeChatShell(chatId, project: from);
+    if (from != project) {
+      await abort(chatId);
+      _backend.closeChatShell(chatId, project: from);
+    }
     await _store.moveChat(chatId, project);
     _changes.add(Moved(chatId, project));
   }
@@ -227,8 +231,9 @@ class ChatRepository {
   }
 
   /// A name for a new chat, from the first thing said in it. Null when no
-  /// title model is configured: naming chats is off, and this one keeps the
-  /// name it was created with.
+  /// title provider is configured: naming chats is off, and this one keeps the
+  /// name it was created with. A provider named without a model resolves to
+  /// its light default in the backend.
   ///
   /// A `!` message names nothing either. It is not a thing said, and it is the
   /// one turn the user routed away from a model — in a chat that may have no
@@ -237,7 +242,7 @@ class ChatRepository {
     final settings = _settings();
     final provider = settings.titleProviderId;
     final model = settings.titleModelId;
-    if (provider == null || model == null || text.trim().isEmpty) return null;
+    if (provider == null || text.trim().isEmpty) return null;
     if (shellBypassCommand(text) != null) return null;
     final answer = await _backend.ask(titlePrompt(text), model: model, provider: provider);
     return answer == null ? null : cleanTitle(answer);

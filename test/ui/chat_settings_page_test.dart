@@ -136,7 +136,7 @@ void main() {
     await openPage(tester);
 
     await openDropdown(tester);
-    await tester.tap(find.text(defaultOptionLabel).last);
+    await tester.tap(find.textContaining(defaultOptionLabel).last);
     await settleIo(tester);
 
     await save(tester);

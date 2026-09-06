@@ -24,6 +24,7 @@ import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
+import "ui/welcome_gate.dart";
 import "ui/chat/chat_controller.dart";
 import "ui/chat/reminder_turn_driver.dart";
 import "ui/assistant/incoming_assistant.dart";
@@ -401,14 +402,17 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       theme: entoliTheme(Brightness.light, look),
       darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
-      // All three wrapped rather than folded into the shell: what another app
+      // All four wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a
-      // Navigator that only exists below here; and the keyboard is the app's to
-      // answer for, over whichever field had it.
+      // Navigator that only exists below here; the first run is met with the
+      // welcome tour over the same, under whatever those two arrive with; and
+      // the keyboard is the app's to answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
-          child: IncomingShares(child: IncomingReminderOpen(child: AppShell())),
+          child: IncomingShares(
+            child: IncomingReminderOpen(child: WelcomeGate(child: AppShell())),
+          ),
         ),
       ),
     );

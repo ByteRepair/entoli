@@ -360,11 +360,12 @@ abstract class AgentBackend {
   /// one, and a page that is not interested never listens.
   Stream<MemoryNote> get memoryNotes;
 
-  /// One question, answered in one call to [model]: no tools, no session,
-  /// nothing kept. Null when the provider is not configured or says nothing —
-  /// the caller wants a convenience, and there is no turn to report a failure
-  /// on.
-  Future<String?> ask(String prompt, {required String model, required String provider});
+  /// One question, answered in one call: no tools, no session, nothing kept.
+  /// A model of null resolves to the provider's light default — the title
+  /// model is set as a provider without naming one. Null when the provider is
+  /// not configured or says nothing — the caller wants a convenience, and
+  /// there is no turn to report a failure on.
+  Future<String?> ask(String prompt, {required String? model, required String? provider});
 
   /// Send a user prompt; stream events until the turn completes.
   ///
