@@ -9,9 +9,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
-import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
-import "package:agent_chat/data/prompts/prompt_sources.dart";
 import "package:agent_chat/providers.dart" show promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
@@ -26,9 +24,8 @@ void main() {
 
   /// send() returns once the prompt is dispatched; the turn ends later, on the
   /// stream's DoneEvent. Retry rounds wait out real backoff between them, so a
-  /// caller expecting rounds names a limit that covers the waits. [target]
-  /// names the app whose container to read, since a test may hold more than
-  /// one — the setUp app and one built inside the test body.
+  /// caller expecting rounds names a limit that covers the waits. [target] is
+  /// the app whose container to read — a test may hold more than one.
   Future<void> waitIdle(String id,
           {Duration limit = const Duration(seconds: 2), TestApp? target}) =>
       waitFor(
@@ -1175,26 +1172,20 @@ void main() {
   });
 
   group("moving the chat to another project", () {
-    // esbmc-verifier is byte-repair's alone, so the project-tagged library is
-    // what decides whether a mention of it resolves — `testLibrary` has none.
-    // `library:` seeds every family member with one library, so the default
-    // project's is reloaded from its real sources afterwards, where the
-    // byte-repair tag is filtered out.
+    // esbmc-verifier is byte-repair's alone, so the project's own library —
+    // read from its real sources by the reload — is what decides whether a
+    // mention of it resolves. `testLibrary` has none.
     Future<TestApp> appWithByteRepairLibrary() async {
-      final app = TestApp.create(
-        library: await PromptLibrary.from(
-            [const BundledPrompts(project: "byte-repair")]),
-      );
+      final app = TestApp.create();
       await app.container
-          .read(promptLibraryProvider(null).notifier)
+          .read(promptLibraryProvider("byte-repair").notifier)
           .reload();
       return app;
     }
 
-    /// The mover's own duty, lifted out of the sidebar: invalidate the open
-    /// controller once the move has landed, and wait for the reload. The
-    /// predicate asks for the chat as well as the project — a building
-    /// controller has neither, and null equals null.
+    /// The sidebar's move, driven at the container: invalidate, then wait for
+    /// the reload. The predicate asks for the chat as well as the project —
+    /// a building controller has neither, and null equals null.
     Future<void> moveAndReload(TestApp app, String chatId, String? project) async {
       await app.repo.moveChat(chatId, project);
       app.container.invalidate(chatControllerProvider(chatId));

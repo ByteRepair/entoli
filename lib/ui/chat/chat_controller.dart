@@ -103,8 +103,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// Everything that turns this turn's events into the reply's parts and the
   /// records that persist them. Shared with `SubAgentRunner`, which keeps one
   /// per `task` call — see [TurnRecorder]. Assigned in [build], which
-  /// invalidation re-runs: a chat moved to another project reloads this way,
-  /// so this cannot be `late final`.
+  /// invalidation re-runs, so this cannot be `late final`.
   late TurnRecorder _recorder;
 
   /// This turn is being stopped rather than ended — see [interrupt]. Cleared
@@ -188,18 +187,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   /// Name the chat after what started it, unless it is headless — a reminder's
   /// chat is already named. Nothing waits on this: it is a model call of its
-  /// own, and the turn it belongs to is already under way. Reads the
-  /// repository once and guards after every await: an invalidated controller
-  /// (a chat moved while a turn was starting) keeps its in-flight futures,
-  /// and the repository behind them is the disposed one.
+  /// own, and the turn it belongs to is already under way.
+  ///
+  /// Guards after each await, before any read of [state]: an invalidated
+  /// controller (a chat moved while a turn was starting) keeps its in-flight
+  /// futures, and a read through the disposed notifier throws.
   Future<void> _maybeNameChat(String prompt) async {
-    final repo = ref.read(chatRepositoryProvider);
     if (!ref.mounted) return;
+    final repo = ref.read(chatRepositoryProvider);
     if (await _isHeadless()) return;
     final title = await repo.suggestTitle(prompt);
-    // The invalidation check comes before any read of [state]: a controller
-    // invalidated mid-await (a chat moved while a turn was starting) keeps
-    // its futures, and reading state through the disposed notifier throws.
     if (!ref.mounted) return;
     final chat = state.chat;
     if (title == null || chat == null) return;
@@ -294,13 +291,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // chat off disk to draw the row it already has.
     if (isFirst) unawaited(_maybeNameChat(prompt.plainText));
 
-    // Invalidated mid-turn — a chat moved while one was starting — keeps its
-    // futures and its listener; the repository behind them is the disposed
-    // one. The turn ends here rather than writing beside a move.
-    if (!ref.mounted) {
-      await repo.abort(chatId);
-      return;
-    }
+    // Invalidated mid-turn — a chat moved while one was starting. The move
+    // aborted whatever was running, so this turn never starts; there is
+    // nothing to abort here and nothing to write beside the move.
+    if (!ref.mounted) return;
     _listen(repo.sendPrompt(chatId, prompt,
         history: history, replaces: replacing != null));
   }
