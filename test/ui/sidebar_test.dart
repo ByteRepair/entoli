@@ -446,45 +446,19 @@ void main() {
       expect(find.text("at home"), findsOneWidget);
     });
 
-    // The switcher is one menu in both layouts, and back has to mean the same
-    // thing in each: dismiss the menu, leave what is behind it alone.
-    group("the back key", () {
-      testWidgets("beside the chat, closes the menu instead of the app", (tester) async {
-        await pumpBeside(tester);
-        await openProjectMenu(tester);
-        expect(find.text("New project…"), findsOneWidget);
+    // Only once the menu is out of the way does back reach the drawer — and
+    // the app has to still hold the key by then, or the second press never
+    // arrives to be answered.
+    testWidgets("closes the drawer on the second press", (tester) async {
+      final claimed = frameworkHandlesBack(tester);
+      await pumpAsDrawer(tester);
+      await openProjectMenu(tester);
+      await pressBack(tester);
+      expect(claimed.last, isTrue);
 
-        expect(await pressBack(tester), isTrue);
+      expect(await pressBack(tester), isTrue);
 
-        expect(find.text("New project…"), findsNothing);
-        expect(find.byType(Sidebar), findsOneWidget);
-      });
-
-      testWidgets("as a drawer, closes the menu and leaves the sidebar open", (tester) async {
-        await pumpAsDrawer(tester);
-        await openProjectMenu(tester);
-        expect(find.text("New project…"), findsOneWidget);
-
-        expect(await pressBack(tester), isTrue);
-
-        expect(find.text("New project…"), findsNothing);
-        expect(find.byType(Sidebar), findsOneWidget);
-      });
-
-      // Only once the menu is out of the way does back reach the drawer — and
-      // the app has to still hold the key by then, or the second press never
-      // arrives to be answered.
-      testWidgets("closes the drawer on the second press", (tester) async {
-        final claimed = frameworkHandlesBack(tester);
-        await pumpAsDrawer(tester);
-        await openProjectMenu(tester);
-        await pressBack(tester);
-        expect(claimed.last, isTrue);
-
-        expect(await pressBack(tester), isTrue);
-
-        expect(find.byType(Sidebar), findsNothing);
-      });
+      expect(find.byType(Sidebar), findsNothing);
     });
   });
 

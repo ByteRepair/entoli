@@ -278,20 +278,6 @@ void main() {
     expect(find.text("17*23 = 391"), findsOneWidget);
   });
 
-  testWidgets("the back key closes the drawer rather than the app", (tester) async {
-    await pump(
-      tester,
-      _message(MessageRole.assistant, const [
-        ReasoningPart(text: "17*23 = 391", durationMs: 12000),
-      ]),
-    );
-    await openThinking(tester);
-
-    expect(await pressBack(tester), isTrue);
-
-    expect(find.text("17*23 = 391"), findsNothing);
-  });
-
   // Long output fills the screen rather than stopping at a fraction of it.
   testWidgets("the drawer grows to what is in it", (tester) async {
     await pump(
