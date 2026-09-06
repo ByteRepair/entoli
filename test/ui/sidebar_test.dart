@@ -7,6 +7,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/project.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -388,6 +389,118 @@ void main() {
 
       expect(app.container.read(selectedProjectProvider), "My-Side-Project");
       expect(Directory(app.config.projectWorkspaceDir(project: "My-Side-Project")).existsSync(), isTrue);
+    });
+
+    testWidgets("creating one with the switch on writes the Omada flag", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text("New project…"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField), "Team");
+      await tester.tap(find.byType(SwitchListTile));
+      await settleIo(tester);
+      await tester.tap(find.text("Create"));
+      await settleIo(tester, least: 20);
+
+      await io(tester, () async {});
+      expect(
+        ProjectSettings.load(app.config, project: "Team").omada,
+        isTrue,
+      );
+    });
+
+    testWidgets("creating one with the switch off leaves Omada off", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text("New project…"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField), "Plain");
+      await tester.tap(find.text("Create"));
+      await settleIo(tester, least: 20);
+
+      expect(ProjectSettings.load(app.config, project: "Plain").omada, isFalse);
+    });
+
+    testWidgets("an Omada project's name is italic in the menu, a plain one is not", (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await io(tester, () async {
+        await app.repo.createProject("team");
+        await app.container
+            .read(projectSettingsProvider("team").notifier)
+            .setOmada(true);
+      });
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      // The menu rows live below `find.byType(PopupMenuItem)`'s reach once
+      // `settleIo` has run — read the text widget itself.
+      expect(tester.widget<Text>(find.text("team")).style?.fontStyle,
+          FontStyle.italic);
+      expect(tester.widget<Text>(find.text("work")).style?.fontStyle, isNull);
+    });
+
+    testWidgets("the selected button's label is italic for an Omada project", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("team");
+        await app.container
+            .read(projectSettingsProvider("team").notifier)
+            .setOmada(true);
+      });
+      await pumpBeside(tester);
+      await switchTo(tester, "team");
+
+      final label = find
+          .descendant(
+            of: find.byType(TextButton),
+            matching: find.text("team"),
+          )
+          .first;
+      expect(tester.widget<Text>(label).style?.fontStyle, FontStyle.italic);
+    });
+
+    testWidgets("the settings page's toggle reveals the ordering section", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await app.pump(tester, ProjectSettingsPage(project: "research"));
+
+      expect(find.text("Round order"), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text("Omada"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
+      await tester.tap(find.text("Omada"));
+      await settleIo(tester, least: 10);
+
+      expect(find.text("Round order"), findsOneWidget);
+      await tester.tap(find.text("Round order"));
+      await settleIo(tester);
+      await tester.tap(find.text("Parallel"));
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      final settings = ProjectSettings.load(app.config, project: "research");
+      expect(settings.omada, isTrue);
+      expect(settings.omadaOrdering, OmadaOrdering.parallel);
+    });
+
+    testWidgets("the ordering section is absent while the toggle is off", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+
+      expect(find.text("Omada"), findsOneWidget);
+      expect(find.text("Round order"), findsNothing);
+    });
+
+    testWidgets("a built-in's settings page has no Omada row", (tester) async {
+      await app.pump(
+        tester,
+        ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
+      );
+
+      expect(find.text("Omada"), findsNothing);
     });
 
     testWidgets("deleting one takes its chats and goes back to the default", (tester) async {

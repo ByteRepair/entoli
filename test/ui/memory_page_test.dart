@@ -278,10 +278,12 @@ void main() {
 
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
       await settleIo(tester);
+      await scrollTo(tester, find.text("Instructions"));
       expect(find.widgetWithText(ListTile, "Instructions"), findsOneWidget);
 
       await app.pump(tester, const ProjectSettingsPage(project: "anonymous"));
       await settleIo(tester);
+      await scrollTo(tester, find.text("Temporary chats"));
       expect(find.widgetWithText(ListTile, "Instructions"), findsNothing);
     });
 
@@ -293,6 +295,7 @@ void main() {
         "chats, and no project memory or delete", (tester) async {
       await app.pump(tester, const ProjectSettingsPage(project: "byte-repair"));
       await settleIo(tester);
+      await scrollTo(tester, find.text("Environment"));
 
       expect(find.widgetWithText(ListTile, "Instructions"), findsOneWidget);
       expect(find.text("Temporary chats"), findsOneWidget);
