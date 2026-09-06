@@ -150,12 +150,78 @@ jobs:
           if-no-files-found: error
           # Already stripped .so files; recompressing buys little and costs time.
           compression-level: 0
-          # Only the android and aab jobs below read it, and they run right
-          # after.
+          # Read by build-common right after, then again by the android and aab
+          # jobs behind it.
           retention-days: 1
 
-  android:
+  # The Gradle work none of the builds should repeat: wrapper download, plugin
+  # and dependency resolution, the Android SDK components Gradle fetches, and
+  # the generated files `flutter build` writes into android/. Primed with
+  # --config-only, which builds no artifacts, and left in the cache for the
+  # android and aab jobs to restore. One job runs with signing material
+  # present so priming cannot differ from what the builds sign with.
+  build-common:
     needs: [version, android-tools]
+    runs-on: ubuntu-latest
+    outputs:
+      # The hash, bare: the cache steps on both sides add the `gradle-`
+      # prefix, so the restore and the save cannot drift by way of one of
+      # them spelling the key differently.
+      key: ${{ steps.keys.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+
+      # Keyed on the Gradle files themselves: any of them changing the build
+      # is a new key, and the old cache is left for the 7-day eviction. A new
+      # key is filled by this run and read back by the next one.
+      - id: keys
+        run: |
+          set -euo pipefail
+          echo "hash=${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'pubspec.yaml') }}" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/android-build-setup
+        id: setup
+        with:
+          release: true
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          gradle-cache: save
+          gradle-cache-key: gradle-${{ steps.keys.outputs.key }}
+
+      - name: Prime Gradle for the APK build
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release --split-per-abi --config-only
+
+      - name: Prime Gradle for the bundle build
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build appbundle --release --config-only
+
+      # Saved from the job that had everything warm, so the android and aab
+      # jobs restore read-only and two jobs never upload the same
+      # multi-gigabyte entry.
+      - if: steps.setup.outputs.gradle-cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            android/.gradle
+          key: gradle-${{ steps.keys.outputs.key }}
+
+  android:
+    needs: [version, android-tools, build-common]
     runs-on: ubuntu-latest
     env:
       APKS: ${{ needs.version.outputs.apks }}
@@ -172,6 +238,8 @@ jobs:
           keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          gradle-cache: restore
+          gradle-cache-key: gradle-${{ needs.build-common.outputs.key }}
 
       # Scoped to this step rather than the whole job. Without the environment
       # build.gradle.kts falls back to the debug key, which the next step
@@ -334,7 +402,7 @@ jobs:
   # same flutter-setup, different `flutter build` target and different checks.
   # See "Releasing" in CLAUDE.md for why a bundle exists beside split APKs.
   aab:
-    needs: [version, android-tools]
+    needs: [version, android-tools, build-common]
     runs-on: ubuntu-latest
     env:
       AAB: ${{ needs.version.outputs.aab }}
@@ -351,6 +419,8 @@ jobs:
           keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          gradle-cache: restore
+          gradle-cache-key: gradle-${{ needs.build-common.outputs.key }}
 
       # From Gradle, so the id uploaded under cannot drift from the id the app
       # is built with. A file rather than a job output: GitHub drops an output
