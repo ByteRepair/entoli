@@ -102,17 +102,18 @@ void main() {
   // The OFL asks for the licence to travel with the font. It is registered off
   // an asset and read lazily, so a file left undeclared in pubspec would say
   // nothing at all until someone opened a licence page.
-  testWidgets("the bundled font's licence is registered and readable",
+  testWidgets("the bundled fonts' licences are registered and readable",
       (tester) async {
     registerBundledFontLicences();
 
-    final ours = await LicenseRegistry.licenses
-        .where((l) => l.packages.contains(monoFamily))
-        .toList();
+    for (final family in [monoFamily, displayFamily, bodyFamily]) {
+      final ours = await LicenseRegistry.licenses
+          .where((l) => l.packages.contains(family))
+          .toList();
 
-    expect(ours, hasLength(1));
-    final text = ours.single.paragraphs.map((p) => p.text).join("\n");
-    expect(text, contains("Roboto Mono"));
-    expect(text, contains("SIL OPEN FONT LICENSE"));
+      expect(ours, hasLength(1), reason: family);
+      final text = ours.single.paragraphs.map((p) => p.text).join("\n");
+      expect(text, contains("SIL OPEN FONT LICENSE"), reason: family);
+    }
   });
 }

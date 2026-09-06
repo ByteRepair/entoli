@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../domain/app_theme.dart";
 import "../domain/theme_colour.dart";
+import "fonts.dart";
 import "../providers.dart";
 
 /// The indigo the icon sits on, which is `ThemeColour.indigo` as a `Color`. The
@@ -54,6 +55,11 @@ const entoliLook = (primary: entoliIndigo, secondary: null, radius: 12.0);
 /// The app's palette, in the brightness asked for. A null `secondary` derives
 /// it from the primary seed, which is what Material does with one seed.
 ///
+/// The text theme is set in the faces the artifact stylesheet names — Playfair
+/// Display above the body tiers, Source Serif 4 everywhere else, including
+/// `titleSmall` and below so buttons and labels stay out of a display face.
+/// Both are bundled; see "The theme".
+///
 /// Every field and dropdown is outlined, so the border is here rather than at
 /// each of them — see "The theme". A field passing its own still wins. The
 /// radius reaches the same set: fields, dialogs, menus, sheets and buttons.
@@ -61,8 +67,12 @@ ThemeData entoliTheme(Brightness brightness, [AppLook look = entoliLook]) {
   final corners = BorderRadius.circular(look.radius);
   final shape = RoundedRectangleBorder(borderRadius: corners);
   final buttons = ButtonStyle(shape: WidgetStatePropertyAll(shape));
+  final scheme = _scheme(brightness, look.primary, look.secondary);
+  final text = _faceTextTheme(brightness, scheme);
   return ThemeData(
-    colorScheme: _scheme(brightness, look.primary, look.secondary),
+    colorScheme: scheme,
+    textTheme: text,
+    primaryTextTheme: text,
     inputDecorationTheme:
         InputDecorationTheme(border: OutlineInputBorder(borderRadius: corners)),
     dialogTheme: DialogThemeData(shape: shape),
@@ -78,6 +88,28 @@ ThemeData entoliTheme(Brightness brightness, [AppLook look = entoliLook]) {
     outlinedButtonTheme: OutlinedButtonThemeData(style: buttons),
     textButtonTheme: TextButtonThemeData(style: buttons),
   );
+}
+
+/// The default text theme with the bundled faces on it: Source Serif 4 on
+/// every tier, then the display tiers — where a serif at 22pt reads as a
+/// heading rather than as prose — on Playfair Display. The base is the same
+/// `material2021` theme `ThemeData` builds for the scheme, so the geometry
+/// (sizes, weights, letter-spacing) stays Material's and only the face moves.
+TextTheme _faceTextTheme(Brightness brightness, ColorScheme scheme) {
+  final base = Typography.material2021(colorScheme: scheme);
+  final text = brightness == Brightness.dark ? base.white : base.black;
+  return text
+      .apply(fontFamily: bodyFamily)
+      .copyWith(
+        displayLarge: text.displayLarge?.copyWith(fontFamily: displayFamily),
+        displayMedium: text.displayMedium?.copyWith(fontFamily: displayFamily),
+        displaySmall: text.displaySmall?.copyWith(fontFamily: displayFamily),
+        headlineLarge: text.headlineLarge?.copyWith(fontFamily: displayFamily),
+        headlineMedium: text.headlineMedium?.copyWith(fontFamily: displayFamily),
+        headlineSmall: text.headlineSmall?.copyWith(fontFamily: displayFamily),
+        titleLarge: text.titleLarge?.copyWith(fontFamily: displayFamily),
+        titleMedium: text.titleMedium?.copyWith(fontFamily: displayFamily),
+      );
 }
 
 /// The secondary is grafted from a scheme seeded with it rather than passed to
