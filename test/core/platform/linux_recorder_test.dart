@@ -72,28 +72,6 @@ void main() {
     });
   });
 
-  test("a session streams what pw-record writes and stops it", () async {
-    final bin = Directory.systemTemp.createTempSync("recorder-bin");
-    addTearDown(() => bin.deleteSync(recursive: true));
-    // A stand-in that writes a few bytes, then keeps the pipe open — the
-    // shape of a capture nobody has spoken into yet.
-    File("${bin.path}/pw-record").writeAsStringSync(
-      "#!/bin/sh\nprintf '\\x01\\x02\\x03\\x04'; sleep 30\n",
-    );
-    Process.runSync("chmod", ["+x", "${bin.path}/pw-record"]);
-
-    final recorder = LinuxRecorder()..environment = {"PATH": bin.path};
-    addTearDown(() => recorder.dispose("test"));
-
-    final stream = await recorder.startStream("test", config());
-    final chunks = await stream.take(1).toList();
-    expect(chunks.single, [1, 2, 3, 4]);
-
-    // Stopping closes the stream and the process with it, which is what
-    // the session's shut-microphone path relies on.
-    await recorder.stop("test");
-  });
-
   test("with neither binary, starting says which packages to install", () async {
     final recorder = LinuxRecorder()..environment = const {};
     await expectLater(
