@@ -41,11 +41,13 @@ below `titleMedium`: at 14pt a serif reads as prose, and putting the buttons
 and timestamps of a UI in a display face is a poster rather than a screen.
 Both are bundled in `ui/fonts.dart` beside Roboto Mono, as static instances of
 the Google Fonts variable fonts — the engine reads no `opsz` axis, and a
-variable `wght` makes every weight request synthetise or clamp. The base is
-`Typography.material2021(colorScheme:)`, the same theme `ThemeData` builds, so
-only the face moves and the geometry stays Material's; `Theme.of` re-merges the
-englishLike geometry over whatever the theme carries, which is why `.apply`
-after the fact would be silently discarded.
+variable `wght` makes every weight request synthetise or clamp. They reach the
+theme through `entoliTheme`'s `fontFamily: bodyFamily` plus a partial
+`textTheme:` of the display tiers: `ThemeData` applies the `fontFamily` to the
+default theme it builds and merges the passed tiers over it. The family has to
+sit on the theme's side of that merge — `Theme.of` re-merges the englishLike
+geometry *under* whatever the theme carries, so a family on the geometry side
+(`englishLike`) would lose to the default's own `Roboto`.
 
 ## What the settings page can change about it
 

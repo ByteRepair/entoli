@@ -101,18 +101,23 @@ void main() {
 
   // The OFL asks for the licence to travel with the font. It is registered off
   // an asset and read lazily, so a file left undeclared in pubspec would say
-  // nothing at all until someone opened a licence page.
+  // nothing at all until someone opened a licence page. The name in the text
+  // is asserted so a pair swapped in fonts.dart cannot pass.
   testWidgets("the bundled fonts' licences are registered and readable",
       (tester) async {
     registerBundledFontLicences();
 
-    for (final family in [monoFamily, displayFamily, bodyFamily]) {
-      final ours = await LicenseRegistry.licenses
-          .where((l) => l.packages.contains(family))
-          .toList();
+    final all = await LicenseRegistry.licenses.toList();
+    for (final (family, name) in const [
+      (monoFamily, "Roboto Mono"),
+      (displayFamily, "Playfair Display"),
+      (bodyFamily, "Source Serif 4"),
+    ]) {
+      final ours = all.where((l) => l.packages.contains(family)).toList();
 
       expect(ours, hasLength(1), reason: family);
       final text = ours.single.paragraphs.map((p) => p.text).join("\n");
+      expect(text, contains(name), reason: family);
       expect(text, contains("SIL OPEN FONT LICENSE"), reason: family);
     }
   });
