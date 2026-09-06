@@ -27,6 +27,7 @@ import "../../../data/local/proot.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
+import "../../../data/local/linux_reminder_alarms.dart";
 import "../../../data/builtin/duckduckgo_search.dart";
 import "../../../data/builtin/local_shell.dart";
 import "../../../data/voice/android_voice.dart";
@@ -275,11 +276,17 @@ AssistantLaunch platformAssistantLaunch() => Platform.isAndroid
     ? AndroidAssistantLaunch()
     : const UnavailableAssistantLaunch();
 
-/// AlarmManager on Android, nothing anywhere else — the desktops have no
-/// scheduler to hand over, and a browser's timers die with its tab.
-ReminderAlarms platformReminderAlarms() => Platform.isAndroid
-    ? AndroidReminderAlarms()
-    : const UnavailableReminderAlarms();
+/// AlarmManager on Android; the session bus on Linux, whose notifications are
+/// what a reminder's completion and a turn failure post through. Scheduling
+/// rides the app's own timer where there is no clock to hand over — a reminder
+/// missed while the app is closed is caught up at the next launch. macOS and
+/// Windows have neither, and a browser's timers die with its tab.
+Future<ReminderAlarms> platformReminderAlarms() async =>
+    Platform.isAndroid
+        ? AndroidReminderAlarms()
+        : Platform.isLinux
+            ? await connectLinuxReminderAlarms()
+            : const UnavailableReminderAlarms();
 
 FileSystem platformFileSystem() => fileSystemIo;
 

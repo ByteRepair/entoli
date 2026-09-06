@@ -27,6 +27,13 @@ lets any such copy claim the window.
 plugins and links against the system's GTK 3, exactly as the bundle already
 did.
 
+**The session bus is a runtime dependency.** The reminders feature posts its
+notifications over `org.freedesktop.Notifications` on it
+(`lib/data/local/linux_reminder_alarms.dart`), and the sync keyring reaches
+the Secret Service through the same bus. A session without a bus — headless, a
+minimal window manager, the dev toolbox — leaves reminders saying so in the
+settings page and the keyring on its file fallback; nothing crashes over it.
+
 `appimagetool` is pinned to a release rather than tracking `continuous`, and to
 a SHA-256 beside it: it builds the file the release is attested by, and a
 release tag can be moved. It is run with `APPIMAGE_EXTRACT_AND_RUN=1` because

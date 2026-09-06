@@ -42,8 +42,7 @@ class SherpaVoice extends Voice {
   }) async {
     final listener =
         recognition == null ? null : await sherpaListener(recognition);
-    return ComposedVoiceSession(
-        listener, await sherpaSpeaker(speech, speaker));
+    return composeSession(listener, sherpaSpeaker(speech, speaker));
   }
 
   /// The sherpa listening half for one recognition model. Shared with

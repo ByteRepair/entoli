@@ -35,9 +35,6 @@ class AndroidVoice extends Voice {
   final SherpaVoice _sherpa;
 
   @override
-  bool get downloadsModels => true;
-
-  @override
   bool get hasSystemEngines => true;
 
   @override
@@ -106,10 +103,12 @@ class AndroidVoice extends Voice {
     // native half and nothing is passed on. The language is the picker it
     // draws instead — and is likewise the native synthesiser's: a downloaded
     // model speaks the language it was trained on.
-    final voice = speech.isNative
-        ? AndroidTextToSpeech(language: language)
-        : await _sherpa.sherpaSpeaker(speech, speaker);
-    return ComposedVoiceSession(listener, voice);
+    return composeSession(
+      listener,
+      speech.isNative
+          ? Future.value(AndroidTextToSpeech(language: language))
+          : _sherpa.sherpaSpeaker(speech, speaker),
+    );
   }
 }
 
