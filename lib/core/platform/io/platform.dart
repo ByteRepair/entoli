@@ -332,12 +332,12 @@ Future<String> platformCacheDir() async {
 }
 
 /// Silero's detector ships inside the app, so its MIT licence ships with it —
-/// the bargain `registerBundledFontLicences` makes for Roboto Mono, and read
-/// lazily for the same reason. Here rather than in `main` because the asset is
-/// `platforms:`-filtered out of the web build, where reading it would throw and
-/// take Flutter's licence page down with it. The models the catalog downloads
-/// are not here: they arrive at runtime carrying their own LICENSE files, and
-/// are nothing the app distributes.
+/// the bargain `registerBundledFontLicences` makes for the bundled fonts, and
+/// read lazily for the same reason. Here rather than in `main` because the
+/// asset is `platforms:`-filtered out of the web build, where reading it would
+/// throw and take Flutter's licence page down with it. The models the catalog
+/// downloads are not here: they arrive at runtime carrying their own LICENSE
+/// files, and are nothing the app distributes.
 void platformRegisterVoiceLicences() {
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(

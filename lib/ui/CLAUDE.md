@@ -33,6 +33,22 @@ app with it without anything being told. `AppTheme` — `system`, `light`, `dark
 — says which, and is app-level with no per-chat override for the same reason the
 icon is.
 
+**The faces are the artifact stylesheet's.** Source Serif 4 on every tier of
+the text theme, and Playfair Display on the display and headline tiers plus
+`titleLarge` and `titleMedium` — the same two faces the stylesheet names, and
+the reason the artifacts are the best-looking thing in the app. The cut sits
+below `titleMedium`: at 14pt a serif reads as prose, and putting the buttons
+and timestamps of a UI in a display face is a poster rather than a screen.
+Both are bundled in `ui/fonts.dart` beside Roboto Mono, as static instances of
+the Google Fonts variable fonts — the engine reads no `opsz` axis, and a
+variable `wght` makes every weight request synthetise or clamp. They reach the
+theme through `entoliTheme`'s `fontFamily: bodyFamily` plus a partial
+`textTheme:` of the display tiers: `ThemeData` applies the `fontFamily` to the
+default theme it builds and merges the passed tiers over it. The family has to
+sit on the theme's side of that merge — `Theme.of` re-merges the englishLike
+geometry *under* whatever the theme carries, so a family on the geometry side
+(`englishLike`) would lose to the default's own `Roboto`.
+
 ## What the settings page can change about it
 
 Three things, all app-level like the theme itself: a primary colour, a secondary

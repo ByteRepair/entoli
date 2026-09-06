@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../domain/app_theme.dart";
 import "../domain/theme_colour.dart";
+import "fonts.dart";
 import "../providers.dart";
 
 /// The indigo the icon sits on, which is `ThemeColour.indigo` as a `Color`. The
@@ -63,6 +64,8 @@ ThemeData entoliTheme(Brightness brightness, [AppLook look = entoliLook]) {
   final buttons = ButtonStyle(shape: WidgetStatePropertyAll(shape));
   return ThemeData(
     colorScheme: _scheme(brightness, look.primary, look.secondary),
+    fontFamily: bodyFamily,
+    textTheme: _displayTiers,
     inputDecorationTheme:
         InputDecorationTheme(border: OutlineInputBorder(borderRadius: corners)),
     dialogTheme: DialogThemeData(shape: shape),
@@ -79,6 +82,24 @@ ThemeData entoliTheme(Brightness brightness, [AppLook look = entoliLook]) {
     textButtonTheme: TextButtonThemeData(style: buttons),
   );
 }
+
+/// The tiers that leave the body face for Playfair Display. Passed as a
+/// partial `textTheme:`, it merges over what `ThemeData` built with
+/// `fontFamily: bodyFamily` — only the family moves, and the geometry (sizes,
+/// weights, letter-spacing) stays whatever the constructor resolved for the
+/// platform and scheme. `titleMedium` (16pt) is the lowest tier on the
+/// display face; `titleSmall` (14pt) and below stay on the body face, where
+/// buttons and timestamps of a UI read as prose rather than as a poster.
+const _displayTiers = TextTheme(
+  displayLarge: TextStyle(fontFamily: displayFamily),
+  displayMedium: TextStyle(fontFamily: displayFamily),
+  displaySmall: TextStyle(fontFamily: displayFamily),
+  headlineLarge: TextStyle(fontFamily: displayFamily),
+  headlineMedium: TextStyle(fontFamily: displayFamily),
+  headlineSmall: TextStyle(fontFamily: displayFamily),
+  titleLarge: TextStyle(fontFamily: displayFamily),
+  titleMedium: TextStyle(fontFamily: displayFamily),
+);
 
 /// The secondary is grafted from a scheme seeded with it rather than passed to
 /// `fromSeed` flat: that names one role, leaving `secondaryContainer` a tone of
