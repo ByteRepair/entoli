@@ -35,7 +35,7 @@ import "domain/models.dart";
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
-import "domain/project.dart";
+import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
 import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
@@ -957,6 +957,17 @@ final completionsProvider =
 final projectSettingsProvider =
     NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
         ProjectSettingsNotifier.new);
+
+/// Whether Omada runs in [project]: a built-in's answer is its spec, a user
+/// project's is the toggle in its `project.json`, and the default project's
+/// is false — it has no settings page for one. The read every surface makes,
+/// so a toggle landing re-renders each of them.
+final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
+  final spec = builtinProjectOf(project);
+  if (spec != null) return spec.omada;
+  if (project == null) return false;
+  return ref.watch(projectSettingsProvider(project).select((s) => s.omada));
+});
 
 class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   ProjectSettingsNotifier(this.project);

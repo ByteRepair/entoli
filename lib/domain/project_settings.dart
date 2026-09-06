@@ -6,15 +6,20 @@ import "temp_chat_ttl.dart";
 /// How the agents of a project's rounds run. The project's Omada section
 /// names the default for its chats; a chat's own override, where Phase 2
 /// adds one, wins over it.
-enum OmadaOrdering { sequential, parallel }
+enum OmadaOrdering {
+  sequential,
+  parallel;
 
-extension OmadaOrderingName on OmadaOrdering {
-  static OmadaOrdering? fromNameNullable(String? name) => name == null
-      ? null
-      : OmadaOrdering.values
-          .cast<OmadaOrdering?>()
-          .firstWhere((o) => o!.name == name, orElse: () => null);
+  static OmadaOrdering? fromNameNullable(String? name) =>
+      name == null ? null : OmadaOrdering.values.asNameMap()[name];
 }
+
+/// Human-readable labels, shared by the project settings page so the
+/// dropdown and the section's inherited entry name the same thing.
+const omadaOrderingLabels = {
+  OmadaOrdering.sequential: "Sequential",
+  OmadaOrdering.parallel: "Parallel",
+};
 
 /// Project-scoped overrides. A project can override the app-level
 /// [TempChatTtl] with one of its own, keep an auto-memory store of its own,
@@ -68,7 +73,7 @@ class ProjectSettings {
         environment: environment,
         useProjectMemory: json["useProjectMemory"] as bool? ?? false,
         omada: json["omada"] as bool? ?? false,
-        omadaOrdering: OmadaOrderingName.fromNameNullable(
+        omadaOrdering: OmadaOrdering.fromNameNullable(
             json["omadaOrdering"] as String?),
       );
     } catch (_) {
