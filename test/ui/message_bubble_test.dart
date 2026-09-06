@@ -75,6 +75,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Finder findTextStarting(String prefix) => find.textContaining(prefix);
+
   testWidgets("an error part renders in the theme's error colour", (tester) async {
     await pump(tester, _message(MessageRole.assistant, [const ErrorPart(message: "usage limit reached")]));
 
@@ -553,6 +555,104 @@ void main() {
     expect(find.text("Used tool: bash"), findsOneWidget);
     expect(find.text("Expand activities"), findsOneWidget);
     expect(find.text("Thought for 1 second"), findsOneWidget);
+  });
+
+  group("file-tool diffs", () {
+    testWidgets("an edit shows red and green lines", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "edit",
+              argumentsJson: jsonEncode({
+                "path": "notes.txt",
+                "old_string": "old line",
+                "new_string": "new line",
+              }),
+              argumentsText: "notes.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "Edited notes.txt: replaced 1 occurrence(s).")),
+        ]),
+      );
+
+      expect(find.text("Edited notes.txt"), findsOneWidget);
+      expect(find.text("- old line"), findsOneWidget);
+      expect(find.text("+ new line"), findsOneWidget);
+      expect(find.text("Used tool: edit"), findsNothing);
+    });
+
+    testWidgets("a write shows its content as additions", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "write",
+              argumentsJson: jsonEncode({"path": "new.txt", "content": "first\nsecond"}),
+              argumentsText: "new.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "Wrote 12 bytes to new.txt")),
+        ]),
+      );
+
+      expect(find.text("Wrote new.txt"), findsOneWidget);
+      expect(find.text("+ first"), findsOneWidget);
+      expect(find.text("+ second"), findsOneWidget);
+      expect(findTextStarting("- "), findsNothing);
+    });
+
+    testWidgets("a change past the budget falls back to the ordinary label", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "edit",
+              argumentsJson: jsonEncode({
+                "path": "big.txt",
+                "old_string": [for (var i = 0; i < 21; i++) "gone $i"].join("\n"),
+                "new_string": "here",
+              }),
+              argumentsText: "big.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "Edited big.txt: replaced 1 occurrence(s).")),
+        ]),
+      );
+
+      expect(find.text("Used tool: edit"), findsOneWidget);
+      expect(findTextStarting("- "), findsNothing);
+    });
+
+    testWidgets("a failed edit keeps the error label", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "edit",
+              argumentsJson: jsonEncode({
+                "path": "notes.txt",
+                "old_string": "old line",
+                "new_string": "new line",
+              }),
+              argumentsText: "notes.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 1, output: "", exceptionInfo: "old_string not found in notes.txt")),
+        ]),
+      );
+
+      expect(find.text("Used tool: edit"), findsOneWidget);
+      expect(find.text("- old line"), findsNothing);
+    });
   });
 
   testWidgets("an ask_user question inside a sequence stays visible", (tester) async {
