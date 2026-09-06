@@ -45,16 +45,22 @@ class _DBusNotifications implements NotificationsBus {
   @override
   Future<int> notify(String title, String body, List<String> actions,
       {int replacesId = 0}) async {
-    final response = await _object.callMethod(null, "Notify", [
-      const DBusString("Entoli"),
-      DBusUint32(replacesId),
-      const DBusString(""),
-      DBusString(title),
-      DBusString(body),
-      DBusArray.string(actions),
-      DBusDict.stringVariant(const {}),
-      const DBusInt32(-1),
-    ]);
+    // The interface must be named: a call without it carries no INTERFACE
+    // header, and GJS — GNOME's daemon — dispatches on it.
+    final response = await _object.callMethod(
+      "org.freedesktop.Notifications",
+      "Notify",
+      [
+        const DBusString("Entoli"),
+        DBusUint32(replacesId),
+        const DBusString(""),
+        DBusString(title),
+        DBusString(body),
+        DBusArray.string(actions),
+        DBusDict.stringVariant(const {}),
+        const DBusInt32(-1),
+      ],
+    );
     return response.returnValues.first.asUint32();
   }
 
