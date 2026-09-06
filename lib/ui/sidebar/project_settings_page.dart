@@ -109,10 +109,12 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: const Text("Chats"),
             trailing: Text("$count"),
           ),
-          const Divider(),
-          _OmadaRow(project: project),
-          if (ref.watch(projectSettingsProvider(project).select((s) => s.omada)))
-            _OmadaOrderingRow(project: project),
+          if (builtIn == null) ...[
+            const Divider(),
+            _OmadaRow(project: project),
+            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada)))
+              _OmadaOrderingRow(project: project),
+          ],
           // A built-in that ships its own note reads no file, so there is no
           // instructions to edit for one — unless it asks for the user's files
           // on top of the note, in which case the project AGENTS.md is the
@@ -240,8 +242,7 @@ class _UseProjectMemoryRow extends ConsumerWidget {
 }
 
 /// Whether this project's chats can carry several agents in one round. A
-/// user project's toggle: a built-in runs what its spec says and is not
-/// offered the switch.
+/// user project's toggle; the page gates it off for a built-in.
 class _OmadaRow extends ConsumerWidget {
   const _OmadaRow({required this.project});
 
@@ -249,7 +250,6 @@ class _OmadaRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (builtinProjectOf(project) != null) return const SizedBox.shrink();
     final on = ref.watch(projectSettingsProvider(project).select((s) => s.omada));
     return SwitchListTile(
       title: const Text("Omada"),
@@ -264,7 +264,8 @@ class _OmadaRow extends ConsumerWidget {
 }
 
 /// The project's default for how its rounds run, shown only while the
-/// project's Omada toggle is on.
+/// project's Omada toggle is on. Null is sequential, the same answer the
+/// section's labels name.
 class _OmadaOrderingRow extends ConsumerWidget {
   const _OmadaOrderingRow({required this.project});
 
@@ -272,53 +273,14 @@ class _OmadaOrderingRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final ordering =
-        ref.watch(projectSettingsProvider(project).select((s) => s.omadaOrdering));
-    return ListTile(
-      title: const Text("Round order"),
-      subtitle: Text(ordering == OmadaOrdering.parallel
-          ? "Parallel"
-          : "Sequential (inherited)"),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => _OmadaOrderingPage(project: project),
-        ),
-      ),
-    );
-  }
-}
-
-class _OmadaOrderingPage extends ConsumerWidget {
-  const _OmadaOrderingPage({required this.project});
-
-  final String project;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(projectSettingsProvider(project));
-    return Scaffold(
-      appBar: AppBar(title: const Text("Round order")),
-      body: RadioGroup<OmadaOrdering>(
-        groupValue: settings.omadaOrdering ?? OmadaOrdering.sequential,
-        onChanged: (ordering) => ref
-            .read(projectSettingsProvider(project).notifier)
-            .setOmadaOrdering(ordering),
-        child: const Column(
-          children: [
-            RadioListTile<OmadaOrdering>(
-              value: OmadaOrdering.sequential,
-              title: Text("Sequential"),
-              subtitle: Text("Each agent sees the ones before it."),
-            ),
-            RadioListTile<OmadaOrdering>(
-              value: OmadaOrdering.parallel,
-              title: Text("Parallel"),
-              subtitle: Text("Agents answer together, as they finish."),
-            ),
-          ],
-        ),
-      ),
+    return InheritableDropdown<OmadaOrdering>(
+      label: "Round order",
+      value: ref
+          .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering)),
+      inherited: omadaOrderingLabels[OmadaOrdering.sequential],
+      options: omadaOrderingLabels,
+      onChanged: (v) =>
+          ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
     );
   }
 }

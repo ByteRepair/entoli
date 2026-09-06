@@ -1,9 +1,7 @@
-import "package:flutter/material.dart" show IconData;
+import "package:flutter/material.dart" show FontStyle, IconData, TextStyle;
 import "package:path/path.dart" as p;
 
-import "../core/config.dart";
 import "builtin_project.dart";
-import "project_settings.dart";
 
 /// A project is a directory holding its own chats and a workspace they share.
 /// It is named by that directory, so the name is what the agent sees in a path
@@ -24,6 +22,11 @@ const defaultProjectDir = "default";
 
 String projectLabel(String? project) =>
     project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
+
+/// The style an Omada project's label is drawn in, wherever a project name is
+/// shown. Null is the label's own style.
+TextStyle? projectLabelStyle(bool omada) =>
+    omada ? const TextStyle(fontStyle: FontStyle.italic) : null;
 
 /// The icon a project's badge or menu row shows beside its label, or null where
 /// the project is a user's or the default — only a built-in ships one. Mirrors
@@ -85,18 +88,6 @@ bool projectHasSettingsPage(String? project) {
   final spec = builtinProjectOf(project);
   if (spec != null) return spec.hasSettingsPage;
   return isProjectName(project);
-}
-
-/// Whether Omada runs in [project]: a built-in's answer is its spec, a user
-/// project's is the toggle in its `project.json`, and the default project's
-/// is false — it has no settings page for one. Read through `Documents`'
-/// in-memory copy, so a call is cheap enough for a menu row and a toggle
-/// landing updates every surface that asked.
-bool omadaOn(String? project, AppConfig config) {
-  final spec = builtinProjectOf(project);
-  if (spec != null) return spec.omada;
-  if (project == null) return false;
-  return ProjectSettings.load(config, project: project).omada;
 }
 
 /// The directory name for what the user typed, or null if nothing usable is
