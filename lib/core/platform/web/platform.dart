@@ -130,8 +130,10 @@ BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
 /// launch handler is inert — the same answer the desktop stub gives.
 AssistantLaunch platformAssistantLaunch() => const UnavailableAssistantLaunch();
 
-/// A browser cannot be woken, so nothing is ever due by the system's say-so.
-ReminderAlarms platformReminderAlarms() => const UnavailableReminderAlarms();
+/// A browser cannot be woken, so nothing is ever due by the system's say-so,
+/// and it has no session bus to post what a reminder did through either.
+Future<ReminderAlarms> platformReminderAlarms() async =>
+    const UnavailableReminderAlarms();
 
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.

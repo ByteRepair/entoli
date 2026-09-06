@@ -142,8 +142,9 @@ class AppSession {
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
     final reminders = await FileReminderStore(config).load();
-    // Started alongside the scans and awaited below: on Linux a session-bus
-    // connect, which nothing between depends on.
+    // Started before the identity load and awaited below, so the session-bus
+    // connect on Linux overlaps it rather than serialising behind it; nothing
+    // between depends on the answer.
     final alarms = platform.createReminderAlarms();
     // Sync: identity from the keyring (or file fallback), registry on disk.
     // The hub reads settings from the container; the closure below defers

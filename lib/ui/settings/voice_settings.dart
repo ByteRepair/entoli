@@ -88,10 +88,11 @@ class _TouchToSpeak extends ConsumerWidget {
   }
 }
 
-/// Both catalogs, or neither. Android's voice mode is the system's own engines,
-/// so there is nothing to fetch and no list to draw — and the dividers belong
-/// here rather than around this at the call site, or a platform with no catalog
-/// would draw a line under the last thing on the page and stop.
+/// Both catalogs, or neither. Where the pick is the system's engines the
+/// catalog draws beside them, so there is always a list where this runs — and
+/// the dividers belong here rather than around this at the call site, or a
+/// platform with no catalog would draw a line under the last thing on the
+/// page and stop.
 class VoiceCatalogSections extends ConsumerWidget {
   const VoiceCatalogSections({super.key});
 

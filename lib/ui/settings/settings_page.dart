@@ -185,9 +185,8 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           VoiceSection(),
           Divider(),
           AssistantSection(),
-          // Draws its own dividers, since on Android there is no catalog and a
-          // divider with nothing under it is a line across the bottom of the
-          // page.
+          // Draws its own dividers, so a platform drawing no catalog is not
+          // left a line across the bottom of the page.
           VoiceCatalogSections(),
         ],
       // Says so and offers nothing where there is no clock to schedule with —

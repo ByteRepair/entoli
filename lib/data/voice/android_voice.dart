@@ -106,10 +106,19 @@ class AndroidVoice extends Voice {
     // native half and nothing is passed on. The language is the picker it
     // draws instead — and is likewise the native synthesiser's: a downloaded
     // model speaks the language it was trained on.
-    final voice = speech.isNative
-        ? AndroidTextToSpeech(language: language)
-        : await _sherpa.sherpaSpeaker(speech, speaker);
-    return ComposedVoiceSession(listener, voice);
+    //
+    // A refusal on the speaking half must not orphan the listening one: the
+    // recognizer holds a bridge subscription, the sherpa path a recorder and
+    // an isolate, and only their dispose frees those.
+    try {
+      final voice = speech.isNative
+          ? AndroidTextToSpeech(language: language)
+          : await _sherpa.sherpaSpeaker(speech, speaker);
+      return ComposedVoiceSession(listener, voice);
+    } catch (_) {
+      await listener?.dispose();
+      rethrow;
+    }
   }
 }
 
