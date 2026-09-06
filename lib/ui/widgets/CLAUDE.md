@@ -14,6 +14,18 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `CompletionField`,
 `text_input.dart` — the sections below — and `catalog.dart`.
 
+`scrolling.dart` is the shared scroll rule, and it is two things. `nearBottom`
+asks whether the view is close enough to the end to count as reading the
+latest — the slack is the caller's, since a conversation and a five-line
+transcript disagree about how close that is. `ScrollFollow` is whether a list
+keeps itself at the end while new content lands on it, and the answer is the
+user's, not the position's: a gesture toward the older messages detaches,
+reaching the end again by any means attaches, and the caller's
+`NotificationListener` is what tells it which happened. The chat page and the
+voice transcript window both run one; the chat page's jump button and the
+`_settleAtBottom` that lands a chat at its end are its callers' halves, not
+parts of the class.
+
 `CompletionField` is the field a prompt is written in: the menu of `/skills`
 and `@agents` that matches what has been typed, the arrows and tab and return
 that take one, and escape. It was the composer's, and it is here because the
