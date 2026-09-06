@@ -446,6 +446,38 @@ void main() {
       expect(find.text("at home"), findsOneWidget);
     });
 
+    // The open controller held the chat as it was when it read it — project
+    // included — so a move disposes it and the page reloads from where the
+    // chat now is. The title bar names the new project from the next read.
+    testWidgets("moving the open chat reloads its page in the new project",
+        (tester) async {
+      await io(tester, () async {
+        final chat = await app.seedChat(title: "at home");
+        app.container
+            .read(selectedChatIdProvider.notifier)
+            .select(chat.state.id);
+        return chat;
+      });
+      await io(tester, () => app.repo.createProject("work"));
+      await pumpBeside(
+        tester,
+        beside: SizedBox(width: 300, child: ChatPage(withDrawer: false)),
+      );
+      await settleIo(tester);
+      expect(find.text("Default"), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await settleIo(tester);
+      await tester.tap(find.text("Move to project…"));
+      await settleIo(tester, least: 20);
+      await tester.tap(find.text("work").last);
+      await settleIo(tester, least: 20);
+
+      // The page was invalidated by the move; the reload draws the new project.
+      await pumpUntil(tester, find.text("work"));
+      expect(find.text("work"), findsWidgets);
+    });
+
     // Only once the menu is out of the way does back reach the drawer — and
     // the app has to still hold the key by then, or the second press never
     // arrives to be answered.

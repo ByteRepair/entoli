@@ -661,6 +661,9 @@ class _ChatTile extends ConsumerWidget {
     );
     if (picked == null || picked.project == chat.project) return;
     await repo.moveChat(chat.id, picked.project);
+    // The open controller holds the chat it read when it was built — project
+    // included — so it is disposed and re-read from where the chat now is.
+    ref.invalidate(chatControllerProvider(chat.id));
     ref.read(selectedProjectProvider.notifier).select(picked.project);
     ref.invalidate(chatListProvider);
   }

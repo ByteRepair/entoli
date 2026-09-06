@@ -414,6 +414,17 @@ the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
 button that opens Settings at the project's category. The turn path no
 longer creates the rootfs lazily; "Run Setup" owns the full lifecycle.
 
+**A chat moved to another project reloads the controller, and the move
+aborts a running turn first.** The controller is a cache of what it read
+off disk — project included — so the sidebar disposes it on a move rather
+than patching it: the next read comes back from the new project, and the
+composer composes against the new project's library from the next message.
+`ChatRepository.moveChat` aborts a running turn before closing the shell
+and moving, since a turn still standing in the old directories would remake
+them under the project it left. Messages already composed keep what their
+`/skill` and `@agent` references meant when they were sent — the records are
+on the message, not looked up per turn.
+
 ## The chat page
 
 One app bar, whichever layout it is drawn in. Narrow, the sidebar is `ChatPage`'s
