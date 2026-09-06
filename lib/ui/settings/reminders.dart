@@ -18,10 +18,11 @@ import "../widgets/resettable_field.dart";
 import "../widgets/section_header.dart";
 import "../widgets/temp_chat_ttl_field.dart";
 
-/// The Reminders category. Android's feature — the system clock is what fires
-/// a reminder with the app closed, and nothing here can wake any other
-/// platform — so where the port is unavailable the page says so and offers
-/// nothing, the way a row for a missing device would.
+/// The Reminders category. Android and Linux both have a platform half: on
+/// Android the system clock fires a reminder with the app closed, on Linux
+/// the session bus's notifications announce what one did — scheduling there
+/// still rides the app's own timer, so where the port is unavailable the page
+/// says so and offers nothing, the way a row for a missing device would.
 class RemindersSection extends ConsumerStatefulWidget {
   const RemindersSection({super.key});
 
@@ -74,10 +75,14 @@ class _RemindersSectionState extends ConsumerState<RemindersSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeader(
+        SectionHeader(
           "Reminders",
-          description: "A reminder runs its prompt in a new chat at a time you "
-              "pick, even when the app is closed.",
+          description: alarms.schedules
+              ? "A reminder runs its prompt in a new chat at a time you "
+                  "pick, even when the app is closed."
+              : "A reminder runs its prompt in a new chat at a time you pick. "
+                  "The app has to be running for one to fire; one missed "
+                  "while it was closed is caught up at the next launch.",
         ),
         if (_notificationsAllowed == false)
           ListTile(

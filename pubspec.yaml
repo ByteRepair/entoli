@@ -85,6 +85,10 @@ dependencies:
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.0
   freedesktop_secret: ^0.1.2
+  # The session bus. It was already in the tree through freedesktop_secret's
+  # keyring; direct here so Linux reminders can post over
+  # org.freedesktop.Notifications — see linux_reminder_alarms.dart.
+  dbus: ^0.7.15
 
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a

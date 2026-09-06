@@ -720,6 +720,26 @@ catch-up, `reminder_scheduler.dart`), and `ReminderAlarms` (the platform port,
 (`data/local/file_reminder_store.dart`); the port's Android impl is
 `AndroidReminderAlarms` (`data/local/android_reminder_alarms.dart`).
 
+**Linux's half is notifications, not scheduling.**
+`LinuxReminderAlarms` (`data/local/linux_reminder_alarms.dart`) posts over
+`org.freedesktop.Notifications` on the session bus — directly, not through a
+portal, since the portal's Notification interface exists for sandboxed apps and
+its action support is newer than the daemon's own. The completion notification
+carries a `default` action whose `ActionInvoked` becomes a chat id, and the
+tap reaches the app through the same held-pending split Android's channel has:
+`_pendingOpen` waits for `takeOpenChat`, the `openChat` stream is the nudge
+that makes `IncomingReminderOpen` drain it. A notification's id is the one the
+daemon answers, keyed to its chat id, so a tap on a repost cannot name the
+wrong chat. Nothing wakes the process: `schedules` is false, every reminder
+rides the in-process timer alone, and one missed while the app was closed is
+caught up at the next launch — which is what the reminders page says instead
+of promising a fire. A no-bus session (headless, minimal window manager, the
+dev toolbox) probes once at launch and falls back to
+`UnavailableReminderAlarms`, the way `KeyringSecretStore` falls back to the
+file; a daemon that appears later is next launch's business. What fires a
+reminder with the app closed is future work in the same shape — the app
+running collapsed in the background — not a system scheduler.
+
 **The runner drives the turn through `ChatController`, not beside it.**
 `ReminderRunner` creates the chat and stamps the reminder, then hands the turn
 to a `ReminderTurnDriver` whose implementation (`reminder_turn_driver.dart`,

@@ -248,7 +248,7 @@ void main() {
       List<VoiceLanguage> speaks = const [],
     }) async {
       app = TestApp.create(
-        voice: FakeVoice(downloadsModels: false)..languages = speaks,
+        voice: FakeVoice()..languages = speaks,
         nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
       );
       await pick(tester,

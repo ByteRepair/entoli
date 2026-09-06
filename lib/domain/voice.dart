@@ -41,12 +41,6 @@ abstract class Voice {
 
   bool get available => true;
 
-  /// Whether listening and speaking here are done with models the user
-  /// downloads. True on the desktops and on Android, which composes the same
-  /// sherpa halves beside its system engines. What draws the catalog, wherever
-  /// it is drawn at all.
-  bool get downloadsModels => true;
-
   /// Whether this platform has device engines for the system sentinels to
   /// stand for, which is what the settings page's missing-engine block is
   /// drawn from: on a platform without them there is nothing to be missing,

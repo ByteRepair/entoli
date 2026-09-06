@@ -272,10 +272,17 @@ class FakeAssistantLaunch implements AssistantLaunch {
 /// to control. [fire] and [tap] are the two things Android does on its own:
 /// an alarm going off, and a notification being tapped.
 class FakeReminderAlarms implements ReminderAlarms {
-  FakeReminderAlarms({this.available = true});
+  FakeReminderAlarms({this.available = true, this.schedulesOverride});
 
   @override
   final bool available;
+
+  /// Set where a test wants the "fires with the app closed" answer rather
+  /// than the default one [available] gives, which is Android's.
+  final bool? schedulesOverride;
+
+  @override
+  bool get schedules => schedulesOverride ?? available;
 
   var exact = true;
   var notifications = true;
@@ -732,20 +739,15 @@ class FakeChatStore implements ChatStore {
 /// and [spoken] is what the reply came out as, which is the pair every voice
 /// test is written against.
 class FakeVoice extends Voice {
-  FakeVoice({this.available = true, this.downloadsModels = true});
+  FakeVoice({this.available = true, this.hasSystemEngines = true});
 
   @override
   final bool available;
 
-  /// False is Android, where the engines are the system's: no catalog to draw,
-  /// and the pickers offer the sentinels or nothing.
-  @override
-  final bool downloadsModels;
-
   /// False is a browser: no engines to be missing, so no missing-engine block.
   /// True is Android, where the catalog draws beside them.
   @override
-  bool hasSystemEngines = true;
+  final bool hasSystemEngines;
 
   /// Set to make [start] throw, which is a model that will not load or a
   /// microphone the user said no to.
