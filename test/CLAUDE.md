@@ -74,6 +74,14 @@ way: its session tests run real commands through the host's real shell, so a
 `cd` that does not stick, a stop that kills the shell, or a sentinel the
 dispatcher cannot print is a test failure rather than a discovery.
 
+**A process belongs in a test where the process interaction is this repo's
+own contract** — `LocalShell`'s kill and sessions, `tree_ops`'s `chmod` and
+`rm`, the real `tar` whose execute bit is the point. Where a test would be
+standing in for the process merely to say dart:io streams stdout and `kill`
+kills, the test asserts the framework rather than the app and is left out:
+`LinuxRecorder`'s stream-and-stop is pinned nowhere for that reason, and the
+first hand-run of voice mode is where a break there would show.
+
 `TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
 page — whether this build has a server at all, and which models are downloaded.
 `FakeLocalLlm.served` is what its tests assert on — one entry per `serve`,
