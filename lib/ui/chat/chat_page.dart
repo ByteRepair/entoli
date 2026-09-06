@@ -227,9 +227,9 @@ class _ProjectBadges extends ConsumerWidget {
                     ),
                    Text(
                      projectLabel(project),
-                     style: omadaOn(project, ref.read(appConfigProvider))
-                         ? const TextStyle(fontStyle: FontStyle.italic)
-                         : null,
+                     style: projectLabelStyle(
+                       ref.watch(omadaOnProvider(project)),
+                     ),
                    ),
                 ],
               ),
