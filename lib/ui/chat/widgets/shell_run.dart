@@ -3,6 +3,32 @@ import "package:flutter/material.dart";
 import "../../../domain/models.dart";
 import "code_block.dart";
 
+/// What a command has printed so far, while it is still running: the tail in
+/// a [CodeBlock], nothing over or under it. The running indication is the
+/// spinner the turn already carries — the label's own for an agent command,
+/// the message-level one for a `!` — and two of them is one too many.
+/// Unhighlighted and mono, the way a finished run's output is drawn.
+class LiveShellOutput extends StatelessWidget {
+  const LiveShellOutput({super.key, required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: codeBlockDecoration(theme),
+      clipBehavior: Clip.antiAlias,
+      child: SingleChildScrollView(
+        reverse: true,
+        child: Text(code, style: codeBlockStyle(theme)),
+      ),
+    );
+  }
+}
+
 /// A `!` message as it reads: the command itself, in the face everything shown
 /// verbatim is set in, behind a terminal mark that says it is one. Nothing here
 /// renders markdown — a command is characters that have to line up, not prose.
