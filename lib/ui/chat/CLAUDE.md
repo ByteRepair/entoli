@@ -21,6 +21,36 @@ The room has two participants who speak, and a third shape that never does:
   as the main agent's instructions. Omada is what changes that sentence, in
   Omada-on projects only.
 
+### The contract between direct and Omada chats
+
+**A direct chat** — Omada off, the default, every chat that existed before
+there was a toggle — is **strictly 1:1 between the user and the main agent**.
+Every turn is the main agent's turn, whether the message addresses it or not;
+an `@mention` on the prompt is instruction material, stacked from
+`Message.documents`, and the reply is the main agent's, unnamed. When the
+main agent delegates, it does so through `task`: sub-agents are machinery
+inside its turn, headless and off the record, their output readable by the
+main agent alone, and the user sees only what the main agent says about it.
+Nothing stamps, nothing labels, nothing hands off. A direct chat is the
+system as it was before Omada existed, byte for byte.
+
+**An Omada chat** — Omada on for the project — adds a reply route, and
+everything Omada does hangs off it: a message addressing exactly one member
+is answered by that member as a participant, in a session of its own, with
+the author on the record; members hand off to each other by mentioning one
+member in a reply, chain-capped; a member declines with `pass`. The turn's
+scheduling is the controller's `_memberAnswering` decision, and it is gated
+on the toggle: **turning Omada off ends promotion for every turn after it**,
+whatever the prompt names. What is already on the record stays — history is
+fact — but the next send is the main agent's.
+
+**The label means a member authored the turn.** `Message.author` is stamped
+only where a member actually answered — an Omada-on turn routed by
+`_memberAnswering` — never where the main agent merely used a member's
+instructions. That is what keeps the label honest: it answers "who spoke",
+and the answer is a lie if an instruction overlay can put a name on the
+main agent's voice.
+
 **The lock is the room's rule, decided once.** While a turn runs, the user's
 send is refused — not by the composer, which only swaps Send for Stop, and
 not by peer-to-peer state between participants, but by the controller: `send`
