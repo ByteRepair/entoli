@@ -180,6 +180,7 @@ class SubAgentRunner {
           case SubAgentEndEvent():
           case RetryEvent():
           case StatusEvent():
+          case ShellOutputEvent():
           case StepLimitEvent():
           case InfoEvent():
           case DoneEvent():

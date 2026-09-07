@@ -26,6 +26,7 @@ class MessageBubble extends StatefulWidget {
     this.isWaiting = false,
     this.waitingNotice,
     this.waitingStatus,
+    this.shellOutput,
     this.threads,
     this.onThreadStep,
     this.onDelete,
@@ -56,6 +57,14 @@ class MessageBubble extends StatefulWidget {
   /// the spinner like [waitingNotice] and in the ordinary muted colour, because
   /// it is the answer to "is this alive" rather than a problem.
   final String? waitingStatus;
+
+  /// What a running command has printed so far, shown as a live block under
+  /// the tool label (an agent's `bash` call) or under the spinner (the user's
+  /// own `!` command, whose reply is still empty). Trailing state like
+  /// [waitingStatus]: it is gone the moment the call's result lands, which is
+  /// the point at which the conversation's own output takes over — the label's
+  /// drawer, or the `!` bubble.
+  final String? shellOutput;
 
   /// The threads written where this message is, oldest first and including it.
   /// Null where nothing was branched here, which shows no counter and no
@@ -369,6 +378,11 @@ class _MessageBubbleState extends State<MessageBubble> {
           notice: widget.waitingNotice,
           status: widget.waitingStatus,
         ),
+      // Trailing like the spinner above: gone the moment the call's result
+      // lands or the turn ends, since the conversation's own output is what
+      // takes over from there.
+      if (widget.isWaiting && widget.shellOutput != null)
+        LiveShellOutput(code: widget.shellOutput!),
       // A failed turn is a dead end without this; the same action is under the
       // message, but it should not have to be uncovered.
       if (_hasError && !widget.isWaiting && widget.onRegenerate != null)

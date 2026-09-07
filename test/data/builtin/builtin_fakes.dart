@@ -7,6 +7,7 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/web_search.dart";
+import "package:flutter/foundation.dart" show ValueListenable;
 
 /// A model that says whatever the test scripted, one list of chunks per call.
 class FakeLlmClient implements LlmClient {
@@ -183,6 +184,9 @@ class _FakeRun implements ShellRun {
 
   @override
   Future<ShellResult> get result => _done.future;
+
+  @override
+  ValueListenable<String?>? get output => null;
 
   @override
   Future<void> kill() async {

@@ -389,6 +389,71 @@ void main() {
     expect(stored.messages.last.parts, isEmpty);
   });
 
+  test("a running command's output is held while it runs", () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(callId: "c1", text: "line one\n"),
+      ShellOutputEvent(callId: "c1", text: "line one\nline two\n"),
+    ];
+    app.backend.hold = Completer<void>();
+    final (id, _) = await startTurn("run it");
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    // The latest replaces the last rather than accumulating.
+    expect(app.container.read(chatControllerProvider(id)).shellOutput,
+        "line one\nline two\n");
+    app.backend.hold!.complete();
+  });
+
+  test("the call's result is what takes the output away", () async {
+    app.backend.scriptedEvents = const [
+      ToolCallEvent(ToolCall(id: "c1", name: "bash", argumentsText: "ls")),
+      ShellOutputEvent(callId: "c1", text: "files\n"),
+      ToolResultEvent(ToolResult(callId: "c1", returnCode: 0, output: "files\n")),
+    ];
+    final (id, _) = await chatWithOneTurn("run it");
+
+    final view = app.container.read(chatControllerProvider(id));
+    expect(view.shellOutput, isNull);
+    // What the conversation keeps is the pair, and the pair's output.
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts.whereType<ToolCallPart>(), hasLength(1));
+    expect(
+        stored.messages.last.parts.whereType<ToolResultPart>().single.result.output,
+        "files\n");
+  });
+
+  test("the turn ending takes the output away with it", () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(text: "halfway\n"),
+      DoneEvent(aborted: true),
+    ];
+    final (id, _) = await chatWithOneTurn("run it");
+
+    expect(app.container.read(chatControllerProvider(id)).shellOutput, isNull);
+  });
+
+  test("a whitespace-only output is never held", () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(text: "   \n"),
+      DoneEvent(aborted: true),
+    ];
+    final (id, _) = await chatWithOneTurn("run it");
+
+    expect(app.container.read(chatControllerProvider(id)).shellOutput, isNull);
+  });
+
+  test("a running command's output is never written to the conversation",
+      () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(text: "progress bar\n"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts, isEmpty);
+  });
+
   test("an errored reply is persisted with the chat", () async {
     app.backend.scriptedEvents = const [ErrorEvent("APIError (HTTP 429): usage limit"), DoneEvent()];
     final (id, _) = await chatWithOneTurn("hello");

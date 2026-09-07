@@ -26,6 +26,7 @@ class ChatViewState {
     this.retry,
     this.status,
     this.unfinishedNotice,
+    this.shellOutput,
   });
   final Chat? chat;
   final bool isRunning;
@@ -55,6 +56,11 @@ class ChatViewState {
   /// a reload shows the default "Unfinished turn" text.
   final String? unfinishedNotice;
 
+  /// The tail of what a running command has printed. Transient like
+  /// [retry]: the call/result pair is what the conversation keeps, so the
+  /// block is gone the moment the pair completes.
+  final String? shellOutput;
+
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
   /// one answer" in `lib/ui/chat/CLAUDE.md` owns.
   RoomPhase get roomPhase => questions.isNotEmpty
@@ -75,6 +81,8 @@ class ChatViewState {
     bool clearStatus = false,
     String? unfinishedNotice,
     bool clearUnfinishedNotice = false,
+    String? shellOutput,
+    bool clearShellOutput = false,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -87,6 +95,8 @@ class ChatViewState {
         unfinishedNotice: clearUnfinishedNotice
             ? null
             : (unfinishedNotice ?? this.unfinishedNotice),
+        shellOutput:
+            clearShellOutput ? null : (shellOutput ?? this.shellOutput),
       );
 }
 
@@ -489,10 +499,14 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case ReasoningDelta():
       case ReasoningEnd():
       case ToolCallEvent():
-      case ToolResultEvent():
-      case ShellRunEvent():
       case ArtifactEvent():
       case SkillInstallEvent():
+        break;
+      case ToolResultEvent():
+      case ShellRunEvent():
+        // The pair completing is the live block's end: the result and the
+        // run part are what the conversation keeps of the output from here.
+        state = state.copyWith(clearShellOutput: true);
         break;
       case ErrorEvent(:final message, :final retryable):
         // Whether the round can carry the turn on from this, and the first
@@ -518,12 +532,17 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
                 state.runningSubAgents.where((s) => s.id != id).toList());
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
+      case ShellOutputEvent(:final text):
+        // The live view of a command's output, for the block under the label.
+        // Cleared where the pair completes, in the cases above.
+        state = state.copyWith(shellOutput: text);
       case StatusEvent(:final label):
         state = label == null
             ? state.copyWith(clearStatus: true)
             : state.copyWith(status: label);
       case DoneEvent(:final aborted):
         if (aborted) _recorder.outcome ??= TurnEnd.aborted;
+        state = state.copyWith(clearShellOutput: true);
         _finishTurn();
     }
   }
