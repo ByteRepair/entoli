@@ -1,5 +1,45 @@
 # The conversation on screen
 
+## The room and its participants
+
+A chat is a room, and `ChatController` owns it. Every widget here renders a
+fact about the room; none of them permits or refuses anything.
+
+The room has two participants who speak, and a third shape that never does:
+
+- **The user**, whose send verb is `TurnDriver.send` — every way a reminder or
+  a voice utterance speaks goes through the controller's `send` too, one path
+  rather than one per caller.
+- **The main agent**, behind the event stream. Every turn the controller
+  drives today is its turn; its reply is the anonymous voice at the end of
+  one. Sub-agents (a `task` call) are participants with a restricted reply
+  route — see "Sub-agents" in `lib/data/builtin/CLAUDE.md`: their only
+  channel is the tool result to their delegator, and the main agent sends
+  the message back. They never address the room, and nothing here draws
+  them as speakers.
+- **An `@mention` is not a participant.** It stacks the named agent's body
+  as the main agent's instructions. Omada is what changes that sentence, in
+  Omada-on projects only.
+
+**The lock is the room's rule, decided once.** While a turn runs, the user's
+send is refused — not by the composer, which only swaps Send for Stop, and
+not by peer-to-peer state between participants, but by the controller: `send`
+and every driving verb it guards check `isRunning` and return. Who may speak
+now is decided there and nowhere else. The renderings are consumers: the
+composer's button, the app-bar spinner, the message row's editability, all
+reading view state.
+
+**The room's phase is one answer, not a combination.** `ChatViewState.roomPhase`
+says who may speak: `open` (composer is the user's), `agentSpeaking` (the main
+agent has the floor; composer shows Stop), or `waitingOnYou` (a turn is waiting
+on answers — the composer's place is taken by the question panel). The third
+outranks the second: a turn waiting on answers is still running — the spinner
+stays up, editing stays refused — but what it wants is the user. `roomPhase`
+answers "who speaks", never "is a turn alive": surfaces about the turn itself
+(the spinner, editability, the `ResumeBar`'s `unfinished`) keep reading
+`isRunning`. Approvals are not a phase — they overlay an open composer, and
+stay their own list.
+
 ## When a turn is over
 
 `_finishTurn` drains the append queue and writes the `turnEnd` record before it
