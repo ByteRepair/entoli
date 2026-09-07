@@ -25,6 +25,7 @@ import "mirror_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
+import "widgets/omada_separator.dart";
 import "widgets/needs_setup_bar.dart";
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
@@ -257,10 +258,6 @@ class _EmptyChat extends ConsumerWidget {
   /// where a trigger lands and why it does not ask for the focus.
   final TextEditingController controller;
 
-  /// Enough to say what is on offer. Everything the user has written is a menu,
-  /// and `/` is what opens the menu.
-  static const _most = 6;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -268,7 +265,7 @@ class _EmptyChat extends ConsumerWidget {
       for (final kind in CompletionKind.values)
         for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
           (kind: kind, option: option),
-    ].take(_most).toList();
+    ];
 
     return Center(
       child: SingleChildScrollView(
@@ -362,6 +359,56 @@ class _ChatBody extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<_ChatBody> createState() => _ChatBodyState();
+}
+
+/// One row of the conversation: a message, or a line saying the room's mode
+/// changed before it. Each row owns its own alignment — the bubble aligns
+/// itself, the separator is full width — so the list renders entries and
+/// nothing wraps anything.
+sealed class ConversationEntry {
+  const ConversationEntry();
+}
+
+class MessageEntry extends ConversationEntry {
+  const MessageEntry(this.message,
+      {required this.inOmadaSection, required this.last});
+
+  final Message message;
+
+  /// The reply sits in a section of the conversation where Omada is on: an
+  /// unnamed reply is the main agent's, and names itself "Entoli".
+  final bool inOmadaSection;
+
+  /// The newest message of the thread, which is the one a running turn
+  /// appends to — the spinner and the caret live on it.
+  final bool last;
+}
+
+class SectionEntry extends ConversationEntry {
+  const SectionEntry(this.omada);
+
+  /// The mode the room entered at this boundary.
+  final bool omada;
+}
+
+/// The conversation as rows, walked off the thread in order. A turn opener
+/// carrying a mode that differs from the running one emits a [SectionEntry]
+/// first — both flips are rows, the off-flip bounding an on-section — and
+/// every message carries whether it sits in an on-section, which is what
+/// names the main agent "Entoli" there.
+List<ConversationEntry> entriesOf(Chat chat) {
+  final entries = <ConversationEntry>[];
+  var on = false;
+  for (final (index, m) in chat.messages.indexed) {
+    final opener = m.omadaOn;
+    if (opener != null && opener != on) {
+      on = opener;
+      entries.add(SectionEntry(on));
+    }
+    entries.add(MessageEntry(m,
+        inOmadaSection: on, last: index == chat.messages.length - 1));
+  }
+  return entries;
 }
 
 class _ChatBodyState extends ConsumerState<_ChatBody> {
@@ -721,43 +768,52 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
+    final entries = entriesOf(chat);
     return Stack(
       children: [
         NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
           child: ListView.builder(
             controller: _scroll,
-            itemCount: chat.messages.length,
-            itemBuilder: (context, i) {
-              final m = chat.messages[i];
-              // A mirror has no editing controller: the log belongs to the home
-              // device, so the whole row of things to do to a message is out.
-              final mutable = editing != null && !view.isRunning;
-              return MessageBubble(
-                chatId: widget.chatId,
-                message: m,
-                isWaiting: view.isRunning && i == chat.messages.length - 1,
-                waitingNotice: view.retry,
-                waitingStatus: view.status,
-                shellOutput: view.shellOutput,
-                onTapLink: (href) {
-                  final uri = Uri.tryParse(href);
-                  if (uri != null) {
-                    ref.read(linkOpenerProvider).open(context, uri);
-                  }
-                },
-                threads: editing == null ? null : chat.branches[m.id],
-                onThreadStep: mutable ? (step) => editing.stepThread(m.id, step) : null,
-                onDelete: mutable ? () => editing.deleteThread(m.id) : null,
-                onEdit: mutable && m.role == MessageRole.user
-                    ? (text) => editing.editAndResend(m.id, text)
-                    : null,
-                onRegenerate: mutable ? () => editing.regenerate(m.id) : null,
-                onSpeak: speechReady && m.hasText
-                    ? () => readAloud(context, ref, m.id, m.plainText)
-                    : null,
-                isSpeaking: reading == m.id,
-              );
+            itemCount: entries.length,
+            itemBuilder: (context, i) => switch (entries[i]) {
+              SectionEntry(:final omada) => OmadaSeparator(omada: omada),
+              MessageEntry(:final message, :final inOmadaSection, :final last) =>
+                Builder(builder: (context) {
+                  // A mirror has no editing controller: the log belongs to
+                  // the home device, so the whole row of things to do to a
+                  // message is out — and while a turn runs, the controller
+                  // refuses them all.
+                  final mutable = editing != null && !view.isRunning;
+                  return MessageBubble(
+                    chatId: widget.chatId,
+                    message: message,
+                    author: message.author,
+                    entoli: inOmadaSection,
+                    isWaiting: view.isRunning && last,
+                    waitingNotice: view.retry,
+                    waitingStatus: view.status,
+                    shellOutput: view.shellOutput,
+                    onTapLink: (href) {
+                      final uri = Uri.tryParse(href);
+                      if (uri != null) {
+                        ref.read(linkOpenerProvider).open(context, uri);
+                      }
+                    },
+                    threads: editing == null ? null : chat.branches[message.id],
+                    onThreadStep:
+                        mutable ? (step) => editing.stepThread(message.id, step) : null,
+                    onDelete: mutable ? () => editing.deleteThread(message.id) : null,
+                    onEdit: mutable && message.role == MessageRole.user
+                        ? (text) => editing.editAndResend(message.id, text)
+                        : null,
+                    onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
+                    onSpeak: speechReady && message.hasText
+                        ? () => readAloud(context, ref, message.id, message.plainText)
+                        : null,
+                    isSpeaking: reading == message.id,
+                  );
+                }),
             },
           ),
         ),

@@ -22,6 +22,8 @@ class MessageBubble extends StatefulWidget {
     super.key,
     required this.chatId,
     required this.message,
+    this.author,
+    this.entoli = false,
     this.isWaiting = false,
     this.waitingNotice,
     this.waitingStatus,
@@ -40,6 +42,15 @@ class MessageBubble extends StatefulWidget {
   final String chatId;
 
   final Message message;
+
+  /// The addressed member to name over the reply, the way a prompt shows
+  /// "You". Null draws nothing. See [Message.author].
+  final String? author;
+
+  /// The reply is in a section of the conversation where Omada is on: an
+  /// unnamed reply is the main agent's, and says so — "Entoli" — the same
+  /// slot a member's name uses. Direct chats and off-sections show nothing.
+  final bool entoli;
 
   /// This message is the one being generated right now.
   final bool isWaiting;
@@ -197,7 +208,8 @@ class _MessageBubbleState extends State<MessageBubble> {
               ? theme.colorScheme.primaryContainer
               : theme.colorScheme.surfaceContainerHighest
         ),
-      MessageRole.assistant => (null, null),
+      MessageRole.assistant =>
+        (widget.author ?? (widget.entoli ? "Entoli" : null), null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
