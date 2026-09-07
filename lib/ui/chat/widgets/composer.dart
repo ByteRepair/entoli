@@ -31,7 +31,7 @@ class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,
     required this.controller,
-    required this.isRunning,
+    required this.agentSpeaking,
     required this.onSend,
     required this.onAbort,
     this.project,
@@ -40,7 +40,10 @@ class Composer extends ConsumerStatefulWidget {
   });
 
   final TextEditingController controller;
-  final bool isRunning;
+
+  /// The main agent is speaking: Send becomes Stop and the voice button
+  /// stands down.
+  final bool agentSpeaking;
   final SendCallback onSend;
   final VoidCallback onAbort;
 
@@ -212,13 +215,13 @@ class _ComposerState extends ConsumerState<Composer> {
                     builder: (context, canSend, child) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
-                      child: widget.onVoice == null || widget.isRunning || canSend
+                      child: widget.onVoice == null || widget.agentSpeaking || canSend
                           ? const SizedBox.shrink()
                           : child,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  widget.isRunning
+                  widget.agentSpeaking
                       ? IconButton.filled(
                           onPressed: widget.onAbort,
                           icon: const Icon(Icons.stop),

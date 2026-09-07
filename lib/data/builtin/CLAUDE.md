@@ -349,6 +349,16 @@ counter leaves out, for the same reason.
 
 ## Sub-agents (the `task` tool)
 
+In the room's terms (see "The room and its participants" in `lib/ui/chat/CLAUDE.md`),
+a `task` call has the **main agent schedule delegated participant turns**: each
+sub-agent is a participant with the full per-participant shape — its own
+`BuiltinSession`, its transcript per call id, revived through `projectionOf` —
+and what makes it sub is the reply route, enforced structurally below: its
+events never reach the controller that writes `conv.jsonl`, so it cannot
+address the room. That route is the one thing Omada will change: in an
+Omada-on project the named member is promoted to address the room directly,
+and `task` goes away.
+
 `task` spawns a sub-agent with its own session under the named `@agent`'s
 prompt, runs it to completion headless, and returns its final text as the tool
 result. That text is read off the session when the run ends rather than

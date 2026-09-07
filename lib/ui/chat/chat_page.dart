@@ -148,7 +148,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
     if (ref.watch(setupCompleteProvider(project))) {
       return Composer(
         controller: _controller,
-        isRunning: false,
+        agentSpeaking: false,
         onSend: _send,
         onAbort: () {},
         project: project,
@@ -695,19 +695,19 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         mainAxisSize: MainAxisSize.min,
         children: [
           TurnSurface(view: view, notifier: driver),
-          if (view.questions.isEmpty)
-            Composer(
-              controller: _controller,
-              isRunning: view.isRunning,
-              onSend: (text, attachments) =>
-                  driver.send(text, attachments: attachments),
-              onAbort: driver.abort,
-              project: project,
-              onVoice: onVoice,
-              workspace: workspace,
-            )
-          else
-            TurnQuestions(view: view, notifier: driver),
+          switch (view.roomPhase) {
+            RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
+            _ => Composer(
+                controller: _controller,
+                agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
+                onSend: (text, attachments) =>
+                    driver.send(text, attachments: attachments),
+                onAbort: driver.abort,
+                project: project,
+                onVoice: onVoice,
+                workspace: workspace,
+              ),
+          },
         ],
       );
 

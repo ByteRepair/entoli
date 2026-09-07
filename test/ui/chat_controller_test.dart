@@ -6,6 +6,7 @@ import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -293,6 +294,10 @@ void main() {
     expect(reply.role, MessageRole.assistant);
     expect(reply.parts.whereType<ErrorPart>().single.message, contains("usage limit"));
     expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
+    // Every message is answered by the main agent, and its phase is open once
+    // the turn is over — the room's two facts, pinned at one of the seams.
+    expect(app.container.read(chatControllerProvider(id)).roomPhase,
+        RoomPhase.open);
   });
 
   test("a retry shows up as a notice while the turn is still running", () async {
@@ -402,6 +407,9 @@ void main() {
     await waitIdle(id);
 
     expect(messagesOf(id), hasLength(2));
+    // The regenerated reply is the main agent's too — the other `_newReply`
+    // call site, answered by the same `_responder`.
+    expect(messagesOf(id).last.role, MessageRole.assistant);
     expect(app.backend.prompts.map((p) => p.prompt.plainText), ["hello", "hello"]);
     // The same text *and* the same date, which is what makes it the same
     // string: a regenerate re-runs the message that is already logged, so it
@@ -430,6 +438,7 @@ void main() {
     final messages = messagesOf(id);
     expect(messages, hasLength(2));
     expect(textOf(messages.first), "hello");
+    expect(messages.last.role, MessageRole.assistant);
     expect(app.backend.prompts.map((p) => p.prompt.plainText), ["helo", "hello"]);
   });
 
@@ -1246,6 +1255,39 @@ void main() {
         app.container.exists(chatControllerProvider(chat.state.id)),
         isFalse,
       );
+    });
+  });
+
+  group("the room", () {
+    test("a turn waiting on answers is waitingOnYou, and still running",
+        () async {
+      app.backend.scriptedEvents = const [
+        QuestionRequestEvent(AskRequest(id: "q1", questions: [
+          AskQuestion(question: "Which one?", options: [
+            AskOption(label: "This one"),
+          ]),
+        ])),
+      ];
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, _) = await startTurn("hello");
+      await waitFor(
+          () =>
+              app.container.read(chatControllerProvider(id)).roomPhase ==
+              RoomPhase.waitingOnYou,
+          what: "the question");
+
+      // The phase answers who may speak, not whether a turn is alive: the
+      // spinner and the refusal to edit ride on isRunning, which is still set.
+      final view = app.container.read(chatControllerProvider(id));
+      expect(view.roomPhase, RoomPhase.waitingOnYou);
+      expect(view.isRunning, isTrue);
+      app.backend.hold!.complete();
+      await waitIdle(id);
+      expect(app.container.read(chatControllerProvider(id)).roomPhase,
+          RoomPhase.open);
+      // Let the teardown see a finished hold rather than completing twice.
+      app.backend.hold = null;
     });
   });
 }
