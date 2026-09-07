@@ -15,6 +15,7 @@ import "../sidebar/sidebar.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
+import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/nothing.dart";
@@ -192,6 +193,12 @@ class _NewChatState extends ConsumerState<_NewChat> {
 /// a built-in is always on offer, so the row is never empty. The default
 /// project is nothing selected, so it has no badge — see "The chat page" in
 /// CLAUDE.md.
+///
+/// The row is a [ChipRow], so it animates both ways a badge moves: picking
+/// one grows the check, and the `AnimatedSize` inside each entry turns that
+/// into a width change whose re-flow every other badge glides along with —
+/// one pushed onto a new line travels there rather than teleports — and a
+/// project made or deleted elsewhere grows in or shrinks out.
 class _ProjectBadges extends ConsumerWidget {
   const _ProjectBadges({required this.selected});
 
@@ -205,37 +212,41 @@ class _ProjectBadges extends ConsumerWidget {
     final projects = everyProject(named).whereType<String>().toList();
     return Padding(
       padding: const EdgeInsets.only(top: 20),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 8,
-        runSpacing: 8,
-        children: [
+      child: ChipRow(
+        entries: [
           for (final project in projects)
-            ChoiceChip(
-              // The icon rides in the label rather than the avatar slot:
-              // Material's ChoiceChip paints the selected check over the
-              // avatar, so an icon there disappears under the tick when
-              // picked. In the label it sits beside the text, and the check
-              // keeps the leading slot to itself the way it had before the
-              // icon was added.
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (projectIcon(project) case final icon?)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Icon(icon, size: 18),
-                    ),
-                   Text(
-                     projectLabel(project),
-                     style: projectLabelStyle(
-                       ref.watch(omadaOnProvider(project)),
-                     ),
-                   ),
-                ],
+            ChipRowEntry(
+              key: ValueKey(project),
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                child: ChoiceChip(
+                  // The icon rides in the label rather than the avatar slot:
+                  // Material's ChoiceChip paints the selected check over the
+                  // avatar, so an icon there disappears under the tick when
+                  // picked. In the label it sits beside the text, and the check
+                  // keeps the leading slot to itself the way it had before the
+                  // icon was added.
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (projectIcon(project) case final icon?)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(icon, size: 18),
+                        ),
+                       Text(
+                         projectLabel(project),
+                         style: projectLabelStyle(
+                           ref.watch(omadaOnProvider(project)),
+                         ),
+                       ),
+                    ],
+                  ),
+                  selected: project == selected,
+                  onSelected: (on) => selectProject(ref, on ? project : null),
+                ),
               ),
-              selected: project == selected,
-              onSelected: (on) => selectProject(ref, on ? project : null),
             ),
         ],
       ),
@@ -275,42 +286,123 @@ class _EmptyChat extends ConsumerWidget {
           children: [
             const AppMark(size: 56),
             const SizedBox(height: 20),
-            Text(
-              emptyChatQuestionFor(project),
-              textAlign: TextAlign.center,
+            _QuestionSweep(
+              text: emptyChatQuestionFor(project),
               style: theme.textTheme.titleMedium,
             ),
             _ProjectBadges(selected: project),
             const SizedBox(height: 20),
-            if (starters.isEmpty)
-              Text(
-                "Type / for commands, @ for agents.",
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              )
-            else
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final starter in starters)
-                    ActionChip(
-                      label: Text("${starter.kind.trigger}${starter.option.name}"),
-                      labelStyle:
-                          theme.textTheme.bodySmall?.copyWith(fontFamily: monoFamily),
-                      // Null rather than the empty string: `Chip` builds a
-                      // `Tooltip` for whatever it is given, and an empty one is
-                      // a blank box on a long press.
-                      tooltip: starter.option.description,
-                      onPressed: () =>
-                          insertCompletion(controller, starter.kind, starter.option.name),
-                    ),
-                ],
-              ),
+            ChipRow(
+              entries: starters.isEmpty
+                  ? [
+                      // Nothing to offer is said as an entry of the same row,
+                      // so a library emptying or filling animates it the way
+                      // any chip arrives and leaves.
+                      ChipRowEntry(
+                        key: const ValueKey("empty"),
+                        child: Text(
+                          "Type / for commands, @ for agents.",
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ]
+                  : [
+                      for (final starter in starters)
+                        ChipRowEntry(
+                          key: ValueKey(
+                              "${starter.kind.trigger}${starter.option.name}"),
+                          child: ActionChip(
+                            label: Text(
+                                "${starter.kind.trigger}${starter.option.name}"),
+                            labelStyle: theme.textTheme.bodySmall
+                                ?.copyWith(fontFamily: monoFamily),
+                            // Null rather than the empty string: `Chip` builds
+                            // a `Tooltip` for whatever it is given, and an
+                            // empty one is a blank box on a long press.
+                            tooltip: starter.option.description,
+                            onPressed: () => insertCompletion(
+                                controller, starter.kind, starter.option.name),
+                          ),
+                        ),
+                    ],
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The empty-chat screen's question, which changes with the project by
+/// sweeping rather than by snapping or fading: the new text takes over from
+/// the first character and the change front moves progressively towards the
+/// end, so the left of the line already reads the new question while the
+/// tail is still the old one. The front runs the longer string's length, so
+/// a shorter new question sees the old one's tail eaten past its own end
+/// rather than left standing behind the front.
+///
+/// The tween carries the strings, so a change mid-sweep retargets from the
+/// hybrid on screen — the framework's own interruptible path — rather than
+/// restarting. Constant speed: a fade would rush the left end and hide the
+/// sweep the motion is.
+class _QuestionSweep extends ImplicitlyAnimatedWidget {
+  const _QuestionSweep({
+    required this.text,
+    required this.style,
+  }) : super(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.linear,
+        );
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  ImplicitlyAnimatedWidgetState<_QuestionSweep> createState() =>
+      _QuestionSweepState();
+}
+
+/// The sweep as a tween: at [t] the front sits [t] of the way along the
+/// longer of the two strings, left of it the new question, right of it the
+/// old one. Larping the strings rather than animating a bare scalar is what
+/// lets the framework retarget from the hybrid mid-sweep — the alternative
+/// was bookkeeping in the builder to recover what the tween never carried.
+class _SweepTween extends Tween<String> {
+  _SweepTween({super.begin, super.end});
+
+  @override
+  String lerp(double t) {
+    final target = end ?? "";
+    final from = begin ?? "";
+    final n = math.max(target.length, from.length);
+    final k = (t * n).round().clamp(0, n);
+    return target.substring(0, math.min(k, target.length)) +
+        from.substring(math.min(k, from.length));
+  }
+}
+
+class _QuestionSweepState extends AnimatedWidgetBaseState<_QuestionSweep> {
+  late _SweepTween _tween;
+
+  @override
+  void initState() {
+    _tween = _SweepTween(begin: widget.text, end: widget.text);
+    super.initState();
+  }
+
+  @override
+  void forEachTween(TweenVisitor<dynamic> visitor) {
+    _tween = visitor(_tween, widget.text,
+        (value) => _SweepTween(begin: value as String)) as _SweepTween;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _tween.evaluate(animation),
+      textAlign: TextAlign.center,
+      style: widget.style,
     );
   }
 }
