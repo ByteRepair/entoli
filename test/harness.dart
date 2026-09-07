@@ -791,3 +791,33 @@ class _AppHidden extends AppHidden {
   @override
   bool build() => initial;
 }
+
+/// Reload a project's prompt library and settle, so what a page draws reflects
+/// what is on disk rather than the test's seeded library. The reload is real
+/// file I/O, so it goes through `runAsync`; [settle] turns the settle off for
+/// the case that wants the library swapped while the page is left pumping.
+Future<void> reloadLibrary(
+  WidgetTester tester,
+  TestApp app, {
+  String? project,
+  bool settle = true,
+}) async {
+  await tester.runAsync(
+    () =>
+        app.container.read(promptLibraryProvider(project).notifier).reload(),
+  );
+  if (settle) await settleIo(tester);
+}
+
+/// Write a skill the library will offer, the shape `loadSkillDirectories`
+/// reads: one folder, one `SKILL.md` with frontmatter.
+Future<void> writeSkill(
+  TestApp app,
+  String name, {
+  String? project,
+}) async {
+  final file = File(
+      "${app.config.promptsDir(CompletionKind.skill, project: project)}/$name/SKILL.md");
+  await file.create(recursive: true);
+  await file.writeAsString("---\ndescription: do $name\n---\n\nDo $name.\n");
+}
