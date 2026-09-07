@@ -132,6 +132,8 @@ void main() {
           log("  -> rc=${result.returnCode} ${_oneLine(result.output)}");
         case ShellRunEvent(:final run):
           log("! ${run.command} -> rc=${run.returnCode} ${_oneLine(run.output)}");
+        case ShellOutputEvent(:final text):
+          log("  … ${_oneLine(text)}");
         case ArtifactEvent(:final title, :final entryFile):
           log("artifact: $title (entry: $entryFile)");
         case SkillInstallEvent(:final title):

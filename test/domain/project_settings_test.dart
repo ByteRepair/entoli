@@ -44,7 +44,47 @@ void main() {
   });
 
   test("a copy carries everything a save would otherwise drop", () {
-    final settings = ProjectSettings()..environment = {"KEY": "value"};
-    expect(settings.copy().environment, {"KEY": "value"});
+    final settings = ProjectSettings()
+      ..environment = {"KEY": "value"}
+      ..omada = true
+      ..omadaOrdering = OmadaOrdering.parallel;
+    final copy = settings.copy();
+    expect(copy.environment, {"KEY": "value"});
+    expect(copy.omada, true);
+    expect(copy.omadaOrdering, OmadaOrdering.parallel);
+  });
+
+  test("omada off writes nothing and an absent key loads as off", () async {
+    final settings = ProjectSettings()..omada = false;
+    await settings.save(config, project: "work");
+    expect(config.documents.read(config.projectSettingsFile(project: "work")),
+        isNot(contains("omada")));
+    expect(ProjectSettings.load(config, project: "work").omada, false);
+  });
+
+  test("omada and its ordering survive a save and a load", () async {
+    await (ProjectSettings()
+          ..omada = true
+          ..omadaOrdering = OmadaOrdering.parallel)
+        .save(config, project: "work");
+    final loaded = ProjectSettings.load(config, project: "work");
+    expect(loaded.omada, true);
+    expect(loaded.omadaOrdering, OmadaOrdering.parallel);
+
+    // The ordering can also be set where the toggle is off — the section's
+    // business, but the settings' is to carry what it is handed.
+    await (ProjectSettings()..omadaOrdering = OmadaOrdering.sequential)
+        .save(config, project: "work");
+    final cleared = ProjectSettings.load(config, project: "work");
+    expect(cleared.omada, false);
+    expect(cleared.omadaOrdering, OmadaOrdering.sequential);
+  });
+
+  test("an ordering name that is not one is not an ordering", () async {
+    await config.documents.write(config.projectSettingsFile(project: "work"),
+        '{"omada": true, "omadaOrdering": "sideways"}');
+    final loaded = ProjectSettings.load(config, project: "work");
+    expect(loaded.omada, true);
+    expect(loaded.omadaOrdering, isNull);
   });
 }

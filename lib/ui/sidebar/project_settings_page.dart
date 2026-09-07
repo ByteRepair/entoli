@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/builtin_project.dart";
+import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../memory/memory_page.dart";
@@ -108,6 +109,12 @@ class ProjectSettingsPage extends ConsumerWidget {
             title: const Text("Chats"),
             trailing: Text("$count"),
           ),
+          if (builtIn == null) ...[
+            const Divider(),
+            _OmadaRow(project: project),
+            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada)))
+              _OmadaOrderingRow(project: project),
+          ],
           // A built-in that ships its own note reads no file, so there is no
           // instructions to edit for one — unless it asks for the user's files
           // on top of the note, in which case the project AGENTS.md is the
@@ -230,6 +237,50 @@ class _UseProjectMemoryRow extends ConsumerWidget {
       value: on,
       onChanged: (value) =>
           ref.read(projectSettingsProvider(project).notifier).setUseProjectMemory(value),
+    );
+  }
+}
+
+/// Whether this project's chats can carry several agents in one round. A
+/// user project's toggle; the page gates it off for a built-in.
+class _OmadaRow extends ConsumerWidget {
+  const _OmadaRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(projectSettingsProvider(project).select((s) => s.omada));
+    return SwitchListTile(
+      title: const Text("Omada"),
+      subtitle: const Text(
+          "Several named agents take part in a chat's replies, alongside the "
+          "main one."),
+      value: on,
+      onChanged: (value) =>
+          ref.read(projectSettingsProvider(project).notifier).setOmada(value),
+    );
+  }
+}
+
+/// The project's default for how its rounds run, shown only while the
+/// project's Omada toggle is on. Null is sequential, the same answer the
+/// section's labels name.
+class _OmadaOrderingRow extends ConsumerWidget {
+  const _OmadaOrderingRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return InheritableDropdown<OmadaOrdering>(
+      label: "Round order",
+      value: ref
+          .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering)),
+      inherited: omadaOrderingLabels[OmadaOrdering.sequential],
+      options: omadaOrderingLabels,
+      onChanged: (v) =>
+          ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
     );
   }
 }
