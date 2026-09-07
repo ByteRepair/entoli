@@ -398,9 +398,9 @@ void main() {
     final (id, _) = await startTurn("run it");
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    final view = app.container.read(chatControllerProvider(id));
-    expect(view.shellOutput, "line one\nline two\n");
-    expect(view.shellOutputCallId, "c1");
+    // The latest replaces the last rather than accumulating.
+    expect(app.container.read(chatControllerProvider(id)).shellOutput,
+        "line one\nline two\n");
     app.backend.hold!.complete();
   });
 
@@ -414,7 +414,6 @@ void main() {
 
     final view = app.container.read(chatControllerProvider(id));
     expect(view.shellOutput, isNull);
-    expect(view.shellOutputCallId, isNull);
     // What the conversation keeps is the pair, and the pair's output.
     final stored = await app.repo.openChat(id);
     expect(stored.messages.last.parts.whereType<ToolCallPart>(), hasLength(1));
@@ -426,6 +425,16 @@ void main() {
   test("the turn ending takes the output away with it", () async {
     app.backend.scriptedEvents = const [
       ShellOutputEvent(text: "halfway\n"),
+      DoneEvent(aborted: true),
+    ];
+    final (id, _) = await chatWithOneTurn("run it");
+
+    expect(app.container.read(chatControllerProvider(id)).shellOutput, isNull);
+  });
+
+  test("a whitespace-only output is never held", () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(text: "   \n"),
       DoneEvent(aborted: true),
     ];
     final (id, _) = await chatWithOneTurn("run it");

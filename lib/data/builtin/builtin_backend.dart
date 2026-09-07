@@ -473,7 +473,7 @@ class BuiltinBackend implements AgentBackend {
     // stream over it.
     _running.add(chatId, run.kill);
     controller.add(StatusEvent(runningTool(bashToolName)));
-    _reportOutput(controller, run, callId: null);
+    _reportOutput(controller, run);
 
     // The session does not feed the command and the command does not feed it:
     // a chat reopened after a restart fills its session from the log, and that
@@ -522,34 +522,14 @@ class BuiltinBackend implements AgentBackend {
     return session;
   }
 
-  /// Reports a running command's output as it prints, at [BuiltinAgent.watchInterval]'s
-  /// pace, until the run completes — the same shape the agent's own watch
-  /// keeps, which is why the interval is the agent's. Unsubscribed on the
-  /// result, so a command that finished inside an interval is not followed by
-  /// a report of what it printed on the way out.
-  void _reportOutput(
-      StreamController<AgentEvent> controller,
-      ShellRun run, {
-      required String? callId}) {
-    final output = run.output;
-    if (output == null) return;
-    Timer? timer;
-    void listener() {
-      timer ??= Timer(BuiltinAgent.watchInterval, () {
-        timer = null;
-        final text = output.value;
-        if (text != null && text.isNotEmpty) {
-          controller.add(ShellOutputEvent(callId: callId, text: text));
+  /// The user's own `!` command, watched through the agent's one watch shape —
+  /// no call id, there being nothing called a tool.
+  void _reportOutput(StreamController<AgentEvent> controller, ShellRun run) =>
+      BuiltinAgent.watchShellOutput(run, (text) {
+        if (!controller.isClosed) {
+          controller.add(ShellOutputEvent(callId: null, text: text));
         }
       });
-    }
-
-    output.addListener(listener);
-    unawaited(run.result.whenComplete(() {
-      timer?.cancel();
-      output.removeListener(listener);
-    }));
-  }
 
   /// Where this chat's attachment bytes come from, for the projection.
   ResourceLoader _resourcesOf(String chatId) =>

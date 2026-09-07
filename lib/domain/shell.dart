@@ -163,7 +163,10 @@ abstract class ShellRun {
   /// What the command has printed so far, as it prints it. Only the tail is
   /// promised — the live view of a command whose output is measured in
   /// megabytes is the last of it, not the whole — and it stops changing once
-  /// [result] completes. Null where nothing has printed yet.
+  /// [result] completes. Null where nothing has printed yet, and null while
+  /// nobody is watching: **asking is the watch**. A shell is free to keep
+  /// nothing at all per chunk until this is first read, which is what keeps
+  /// an unwatched run — a sub-agent's — from paying for a view nobody sees.
   ///
   /// The sentinel that ends a run never appears here: whatever is held back is
   /// only the remainder of a possible one, and [result]'s [ShellResult.output]

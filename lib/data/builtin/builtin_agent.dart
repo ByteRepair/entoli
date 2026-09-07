@@ -1619,33 +1619,43 @@ class BuiltinAgent {
     }
   }
 
-  /// Awaits [run]'s result while the callback watches its output, reporting
-  /// each change no more than [watchInterval] apart. The reporting holds the
-  /// latest value rather than queueing events behind a timer — what the block
-  /// shows is the tail as it is now, not what it was — and the timer is
-  /// cancelled with the result, so a command that finished inside an interval
-  /// is not followed by a report of what it printed on the way out.
-  static const watchInterval = Duration(milliseconds: 100);
-
-  void _runWatched(LlmToolCall call, ShellRun run) {
+  /// Reports [run]'s output as it prints, each change no more than
+  /// [watchInterval] apart. The watch holds the latest value rather than
+  /// queueing reports behind a timer — what the block shows is the tail as it
+  /// is now, not what it was — and the timer is cancelled with the result, so
+  /// a command that finished inside an interval is not followed by a report of
+  /// what it printed on the way out. Unsubscribed on the result, so the watch
+  /// spans the whole run whatever awaits it.
+  ///
+  /// The one shape of it: the agent's own commands report through
+  /// [onShellOutput], the user's `!` command through the same helper — the
+  /// backend calls this with its own sink. Reading [run.output] is what tells
+  /// the shell the run is watched; before that it pays nothing per chunk.
+  static void watchShellOutput(
+      ShellRun run, void Function(String text) report) {
     final output = run.output;
-    if (output == null || onShellOutput == null) return;
+    if (output == null) return;
     Timer? timer;
     void listener() {
       timer ??= Timer(watchInterval, () {
         timer = null;
         final text = output.value;
-        if (text != null && text.isNotEmpty) onShellOutput!(call.id, text);
+        if (text != null && text.trim().isNotEmpty) report(text);
       });
     }
 
     output.addListener(listener);
-    // Unsubscribed on the result rather than here, so the watch spans the
-    // whole run whatever awaits it.
     unawaited(run.result.whenComplete(() {
       timer?.cancel();
       output.removeListener(listener);
     }));
+  }
+
+  static const watchInterval = Duration(milliseconds: 100);
+
+  void _runWatched(LlmToolCall call, ShellRun run) {
+    if (onShellOutput == null) return;
+    watchShellOutput(run, (text) => onShellOutput!(call.id, text));
   }
 
   /// Stream one model call, turning its chunks into events and leaving what it

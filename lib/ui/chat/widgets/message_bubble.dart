@@ -376,7 +376,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       // Trailing like the spinner above: gone the moment the call's result
       // lands or the turn ends, since the conversation's own output is what
       // takes over from there.
-      if (widget.isWaiting && widget.shellOutput != null && widget.shellOutput!.trim().isNotEmpty)
+      if (widget.isWaiting && widget.shellOutput != null)
         LiveShellOutput(code: widget.shellOutput!),
       // A failed turn is a dead end without this; the same action is under the
       // message, but it should not have to be uncovered.

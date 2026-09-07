@@ -376,10 +376,22 @@ void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
 /// result already carries the whole.
 const _liveWindow = 8192;
 
+/// The live tail after [piece] lands on [prior]: newlines dropped, bounded to
+/// [_liveWindow]. What a running command's block shows; both run shapes keep
+/// one.
+String _liveTail(String prior, String piece) {
+  var out = prior + piece.replaceAll("\n", "");
+  if (out.length > _liveWindow) {
+    out = out.substring(out.length - _liveWindow);
+  }
+  return out;
+}
+
 /// The head of the sentinel that ends a run, before the token. What the live
 /// view holds back while it may still be forming — an `@@E` arriving with the
-/// rest of its line in the next chunk is held, not shown, and cut back out the
-/// moment the next chunk proves it was ordinary output after all.
+/// rest of its line in the next chunk is held, not shown, and published the
+/// moment the next chunk proves it was ordinary output after all. The
+/// sentinel proper is consumed by the parse before the watch can report it.
 const _markerPrefix = "\n@@E";
 
 /// One persistent shell: the process, its queue, and the run waiting on it.
@@ -705,9 +717,9 @@ class _RunState {
   final List<String> chunks = [];
   final Completer<ShellResult> done = Completer();
 
-  /// What the live view of this run has been told so far, and where the
-  /// sentinel might be forming. Only the tail is kept: the whole output is in
-  /// [chunks] and stays there for the final result.
+  /// What the live view of this run has been told so far, and the fragment
+  /// where the sentinel may still be forming. Only the tail is kept: the whole
+  /// output is in [chunks] and stays there for the final result.
   String _emitted = "";
   String _held = "";
 
@@ -729,35 +741,36 @@ class _RunState {
 
   String get output => chunks.join("");
 
-  /// What the live view of this run says now: the tail of the output up to the
-  /// last place the end sentinel could be forming. A sentinel that arrives
-  /// whole is consumed by [complete]'s caller before the next chunk is seen,
-  /// so what sits in [_held] between chunks is a fragment only — and is cut
-  /// back out the moment the next chunk proves it was not a sentinel after
-  /// all. A sentinel already consumed — a command that printed its own
-  /// `@@E<token>` line, which the sentinel parse swallowed — is held nowhere,
-  /// because nothing of it is in [publish]'s chunk in the first place: the
-  /// marker parse runs on the joined buffer, and what it left the live view
-  /// holding was already clean.
+  /// What the live view of this run says now: the tail of the output, with
+  /// any fragment at its end that could be the sentinel's head held back
+  /// until the next chunk settles what it was. Newlines are dropped here so
+  /// the hold-back can search for `"\n@@E"` on what may still have them — the
+  /// search runs before the strip, and the held fragment rides along to the
+  /// next chunk rather than being published.
   ///
-  /// Trimmed to [_liveWindow] from the head, so a command streaming megabytes
-  /// pays a bounded cost per chunk.
+  /// Gated on [watched]: an output nobody reads pays nothing per chunk.
+  /// Trimmed to [_liveWindow] from the head.
   void publish(String chunk, {required String marker}) {
-    _emitted = (_emitted + _held + chunk)
-        .replaceAll(marker, "")
-        .replaceAll("\n", "");
-    if (_emitted.length > _liveWindow) {
-      _emitted = _emitted.substring(_emitted.length - _liveWindow);
-    }
-    final cut = _emitted.lastIndexOf(_markerPrefix);
+    if (!watched) return;
+    final joined = _held + chunk;
+    _held = "";
+    final cut = joined.lastIndexOf(_markerPrefix);
+    String remainder;
     if (cut == -1) {
-      _held = "";
-      liveOutput.value = _emitted;
-      return;
+      remainder = joined;
+    } else {
+      _held = joined.substring(cut + 1); // the sentinel head has no newline
+      remainder = joined.substring(0, cut);
     }
-    _held = _emitted.substring(cut);
-    liveOutput.value = _emitted.substring(0, cut);
+    if (remainder.isNotEmpty) {
+      _emitted = _liveTail(_emitted, remainder.replaceAll(marker, ""));
+    }
+    liveOutput.value = _emitted.isEmpty ? null : _emitted;
   }
+
+  /// Whether anyone is reading [liveOutput]. A run nobody watches — a
+  /// sub-agent's, any run before a watch lands — keeps publishing off.
+  bool watched = false;
 
   /// Where each live update is read from. Created with the run.
   final ValueNotifier<String?> liveOutput = ValueNotifier(null);
@@ -781,7 +794,12 @@ class _SessionRun implements ShellRun {
   Future<ShellResult> get result => state.done.future;
 
   @override
-  ValueListenable<String?>? get output => state.liveOutput;
+  ValueListenable<String?>? get output {
+    // Asking is the watch: before this the session's chunks pay nothing for a
+    // view nobody reads.
+    state.watched = true;
+    return state.liveOutput;
+  }
 
   @override
   Future<void> kill() async {
@@ -818,16 +836,20 @@ class _OneShotRun implements ShellRun {
   @override
   late final Future<ShellResult> result;
 
-  /// The live tail of the output, kept by [_run]'s read loop in the same shape
-  /// the persistent shell's keeps its own.
-  final ValueNotifier<String?> outputNotifier = ValueNotifier(null);
-
-  @override
-  ValueListenable<String?>? get output => outputNotifier;
-
   Process? _process;
   bool _ownsGroup = false;
   bool _killed = false;
+
+  /// The live tail of the output, created by the first read of [output] and
+  /// kept by [_run]'s read loop only from then on — a one-shot run is a
+  /// sub-agent's command, and nobody asks for its output today.
+  ValueNotifier<String?>? _notifier;
+
+  String? _emitted;
+
+  @override
+  ValueListenable<String?>? get output =>
+      _notifier ??= ValueNotifier<String?>(null);
 
   @override
   Future<void> kill() async {
@@ -911,18 +933,12 @@ class _OneShotRun implements ShellRun {
   }
 
   /// The one-shot run has no sentinel — the subshell is gone when the command
-  /// is — so every chunk is published as it arrives, trimmed to the same tail
-  /// window the persistent shell keeps. Newlines dropped, as there, so the
-  /// block on screen stays a single growing line rather than one that jumps
-  /// about.
-  static const _liveWindow = 8192;
-  String _emitted = "";
-
+  /// is — so what reaches the live view is [_liveTail]'s answer alone. A run
+  /// nobody reads has no notifier and keeps nothing per chunk.
   void _publish(String chunk) {
-    _emitted = (_emitted + chunk).replaceAll("\n", "");
-    if (_emitted.length > _liveWindow) {
-      _emitted = _emitted.substring(_emitted.length - _liveWindow);
-    }
-    outputNotifier.value = _emitted;
+    final notifier = _notifier;
+    if (notifier == null) return;
+    _emitted = _liveTail(_emitted ?? "", chunk);
+    notifier.value = _emitted;
   }
 }
