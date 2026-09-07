@@ -282,7 +282,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
-      opening: [userMsg, _newReply(author: authorFor(userMsg))],
+      opening: [userMsg, _newReply(author: authorFor(chat, userMsg))],
       replacing: replacing,
     );
   }
@@ -303,8 +303,19 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     Message? replacing,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
+    // The room's mode at this turn, stamped on the turn's opener: the page
+    // derives sections from these stamps, a separator above an opener that
+    // flips from the last one. The implicit off a chat starts in is not a
+    // section — nothing separates the first exchange from a chat that never
+    // heard of Omada — so the first flip is the on-flip; the off-flip is
+    // what bounds an on-section for the label rule.
+    final omada = ref.read(omadaOnProvider(chat.state.project));
+    final openingWithMode = [
+      opening.first.copyWith(omadaOn: omada),
+      ...opening.sublist(1),
+    ];
     final updated = chat
-        .withTurn(opening, replacing: replacing)
+        .withTurn(openingWithMode, replacing: replacing)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
@@ -323,7 +334,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (prompt.role == MessageRole.user) _chain = 0;
     _turnDone = Completer<TurnEnd?>();
     _recorder.open(opening.last.id);
-    await _recorder.write(recordsOf(opening,
+    await _recorder.write(recordsOf(openingWithMode,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
     // Only the first message names the chat, and not a headless one — the
@@ -353,7 +364,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (!ref.read(omadaOnProvider(chat.state.project))) return null;
     final named = prompt.role == MessageRole.assistant
         ? _mentionIn(chat, prompt)
-        : _memberIfKnown(chat, nameOf(authorFor(prompt)));
+        : _memberIfKnown(chat, nameOf(authorFor(chat, prompt)));
     return named;
   }
 
@@ -369,15 +380,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         : name;
   }
 
-  /// Who a turn opened on [prompt] names as its author: the one member the
-  /// prompt addresses. A command is not addressed to anyone, whatever its
-  /// text names — `!grep @researcher` runs a command, it does not ask
-  /// researcher to speak. Decided once, here, because the stamp is written
-  /// wherever a turn opens.
-  String? authorFor(Message prompt) =>
-      shellBypassCommand(prompt.plainText) == null
-          ? authorFrom(prompt.documents)
-          : null;
+  /// Who a turn opened on [prompt] names as its author, where the project
+  /// runs Omada: the one member the prompt addresses. A command is not
+  /// addressed to anyone, whatever its text names — `!grep @researcher` runs
+  /// a command, it does not ask researcher to speak. Omada off never stamps:
+  /// the reply is the main agent's, and a label on it would claim a member
+  /// authored what is the house's voice. See "The contract between direct
+  /// and Omada chats" in `lib/ui/chat/CLAUDE.md`.
+  String? authorFor(Chat chat, Message prompt) =>
+      !ref.read(omadaOnProvider(chat.state.project)) ||
+              shellBypassCommand(prompt.plainText) != null
+          ? null
+          : authorFrom(prompt.documents);
 
   /// The turn's reply. Always role `assistant` — the role is the render
   /// class, not the author; [Message.author] is what names them.
@@ -483,7 +497,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       chat: chat,
       prompt: prompt,
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
-      opening: [_newReply(author: authorFor(prompt))],
+      opening: [_newReply(author: authorFor(chat, prompt))],
       replacing: _replyFor(chat, messageId),
     );
   }
@@ -679,7 +693,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final named = _mentionIn(chat, reply);
     if (named == null) return;
     _chain++;
-    if (_chain > _chainCap) return;
+    // The addressed member's reply is chain turn one; two handoffs follow it
+    // before the round stops. _chain reaching the cap blocks the next turn.
+    if (_chain >= _chainCap) return;
     await _turn(
       chat: chat,
       prompt: reply,

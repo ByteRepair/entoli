@@ -477,4 +477,21 @@ void main() {
         ]).single.author,
         isNull);
   });
+
+  test("a turn opener's omadaOn survives the round trip and the replay", () {
+    final opener = Message(
+        id: "m2",
+        role: MessageRole.user,
+        createdAt: at,
+        omadaOn: true);
+    final records = [
+      message("m1"),
+      ...recordsOf([opener]),
+    ];
+
+    final back = ChatRecord.fromJson(
+        jsonDecode(jsonEncode(records[1].toJson())) as Map<String, dynamic>);
+    expect((back as MessageRecord).omadaOn, isTrue);
+    expect(replay(records).map((m) => m.omadaOn), [null, true]);
+  });
 }
