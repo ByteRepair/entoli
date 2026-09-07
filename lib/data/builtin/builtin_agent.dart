@@ -318,6 +318,7 @@ class BuiltinAgent {
     this.profile,
     this.saveArtifact,
     this.packageSkill,
+    this.onShellOutput,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -491,6 +492,14 @@ class BuiltinAgent {
   /// offer skills for install. Returns the install id.
   final Future<({String installId, String name})> Function(
       String path, String? name)? packageSkill;
+
+  /// What a running command has printed, as it prints it, for the block under
+  /// its label. Null where the agent is a sub-agent — a worker's commands are
+  /// not watched — and null is the only thing that stops the reporting. The
+  /// agent holds the stream, the callback decides what showing it is; it does
+  /// not reach the session, and the pair completing is what the conversation
+  /// keeps.
+  final void Function(String? callId, String text)? onShellOutput;
 
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
@@ -1602,11 +1611,51 @@ class BuiltinAgent {
         restart: args?["restart"] == true,
         project: project);
     _running = run;
+    _runWatched(call, run);
     try {
       return await run.result;
     } finally {
       _running = null;
     }
+  }
+
+  /// Reports [run]'s output as it prints, each change no more than
+  /// [watchInterval] apart. The watch holds the latest value rather than
+  /// queueing reports behind a timer — what the block shows is the tail as it
+  /// is now, not what it was — and the timer is cancelled with the result, so
+  /// a command that finished inside an interval is not followed by a report of
+  /// what it printed on the way out. Unsubscribed on the result, so the watch
+  /// spans the whole run whatever awaits it.
+  ///
+  /// The one shape of it: the agent's own commands report through
+  /// [onShellOutput], the user's `!` command through the same helper — the
+  /// backend calls this with its own sink. Reading [run.output] is what tells
+  /// the shell the run is watched; before that it pays nothing per chunk.
+  static void watchShellOutput(
+      ShellRun run, void Function(String text) report) {
+    final output = run.output;
+    if (output == null) return;
+    Timer? timer;
+    void listener() {
+      timer ??= Timer(watchInterval, () {
+        timer = null;
+        final text = output.value;
+        if (text != null && text.trim().isNotEmpty) report(text);
+      });
+    }
+
+    output.addListener(listener);
+    unawaited(run.result.whenComplete(() {
+      timer?.cancel();
+      output.removeListener(listener);
+    }));
+  }
+
+  static const watchInterval = Duration(milliseconds: 100);
+
+  void _runWatched(LlmToolCall call, ShellRun run) {
+    if (onShellOutput == null) return;
+    watchShellOutput(run, (text) => onShellOutput!(call.id, text));
   }
 
   /// Stream one model call, turning its chunks into events and leaving what it

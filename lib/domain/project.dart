@@ -1,4 +1,4 @@
-import "package:flutter/material.dart" show IconData;
+import "package:flutter/material.dart" show FontStyle, IconData, TextStyle;
 import "package:path/path.dart" as p;
 
 import "builtin_project.dart";
@@ -22,6 +22,11 @@ const defaultProjectDir = "default";
 
 String projectLabel(String? project) =>
     project == null ? defaultProjectLabel : builtinProjectOf(project)?.label ?? project;
+
+/// The style an Omada project's label is drawn in, wherever a project name is
+/// shown. Null is the label's own style.
+TextStyle? projectLabelStyle(bool omada) =>
+    omada ? const TextStyle(fontStyle: FontStyle.italic) : null;
 
 /// The icon a project's badge or menu row shows beside its label, or null where
 /// the project is a user's or the default — only a built-in ships one. Mirrors

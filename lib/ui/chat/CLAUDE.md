@@ -184,6 +184,17 @@ A tool call and the result answering it are one label. The parts stay separate
 in `conv.jsonl` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
+**A running command's output streams under its label.** While a `bash` call
+(or the user's own `!` command) is printing, the tail of what it has printed
+is a block in the trailing state, under the spinner row — the block is only
+the output, the spinner the turn already carries being the whole of the
+running indication, two of them being one too many. It is `ShellOutputEvent`
+turn-scoped view state like the spinner: gone the moment the pair completes
+(the label's drawer is what a finished command's output is behind) or the turn
+ends, and never written to `conv.jsonl`. What a `!` bubble draws once its turn
+is over is the ordinary `ShellRunBubble`, which is why the block does not
+hand anything over — the part lands and the reply is no longer empty.
+
 A run of two or more non-important activity labels collapses behind a single
 centered "Expand activities" toggle (`ActivityGroup`), default collapsed. What
 is important and so stays visible, breaking a run: an artifact button, a failed

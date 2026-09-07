@@ -958,6 +958,17 @@ final projectSettingsProvider =
     NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
         ProjectSettingsNotifier.new);
 
+/// Whether Omada runs in [project]: a built-in's answer is its spec, a user
+/// project's is the toggle in its `project.json`, and the default project's
+/// is false — it has no settings page for one. The read every surface makes,
+/// so a toggle landing re-renders each of them.
+final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
+  final spec = builtinProjectOf(project);
+  if (spec != null) return spec.omada;
+  if (project == null) return false;
+  return ref.watch(projectSettingsProvider(project).select((s) => s.omada));
+});
+
 class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   ProjectSettingsNotifier(this.project);
 
@@ -974,6 +985,20 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// sharing the default project's.
   Future<void> setUseProjectMemory(bool value) async {
     final next = state.copy()..useProjectMemory = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Whether this project's chats can carry several agents in one round.
+  Future<void> setOmada(bool value) async {
+    final next = state.copy()..omada = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The project's default for how its rounds run. Null is sequential.
+  Future<void> setOmadaOrdering(OmadaOrdering? value) async {
+    final next = state.copy()..omadaOrdering = value;
     state = next;
     await next.save(_config, project: project);
   }

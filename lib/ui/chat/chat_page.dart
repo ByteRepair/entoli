@@ -225,7 +225,12 @@ class _ProjectBadges extends ConsumerWidget {
                       padding: const EdgeInsets.only(right: 6),
                       child: Icon(icon, size: 18),
                     ),
-                  Text(projectLabel(project)),
+                   Text(
+                     projectLabel(project),
+                     style: projectLabelStyle(
+                       ref.watch(omadaOnProvider(project)),
+                     ),
+                   ),
                 ],
               ),
               selected: project == selected,
@@ -734,6 +739,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                 isWaiting: view.isRunning && i == chat.messages.length - 1,
                 waitingNotice: view.retry,
                 waitingStatus: view.status,
+                shellOutput: view.shellOutput,
                 onTapLink: (href) {
                   final uri = Uri.tryParse(href);
                   if (uri != null) {
