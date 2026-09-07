@@ -282,7 +282,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
-      opening: [userMsg, _newReply(author: authorFor(userMsg))],
+      opening: [userMsg, _newReply(author: authorFor(chat, userMsg))],
       replacing: replacing,
     );
   }
@@ -303,9 +303,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     Message? replacing,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
+    final omada = ref.read(omadaOnProvider(chat.state.project));
+    final markerWritten = omada != _lastRecordedMode(chat.modeChanges);
+    final modeChanges = markerWritten
+        ? [...chat.modeChanges,
+           ModeChange(beforeId: opening.first.id, omada: omada)]
+        : chat.modeChanges;
     final updated = chat
         .withTurn(opening, replacing: replacing)
-        .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
+        .copyWith(
+          state: chat.state.copyWith(updatedAt: DateTime.now()),
+          modeChanges: modeChanges,
+        );
 
     final isFirst = chat.messages.isEmpty;
     state = state.copyWith(chat: updated, isRunning: true, clearRetry: true, clearStatus: true);
@@ -323,6 +332,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (prompt.role == MessageRole.user) _chain = 0;
     _turnDone = Completer<TurnEnd?>();
     _recorder.open(opening.last.id);
+    // The marker goes down before the turn's records, the order the replay
+    // binds it by — the turn this marker opens is the one now being written.
+    if (markerWritten) {
+      await _recorder.write([ChatRecord.modeChange(omada: omada)]);
+    }
     await _recorder.write(recordsOf(opening,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
@@ -353,7 +367,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (!ref.read(omadaOnProvider(chat.state.project))) return null;
     final named = prompt.role == MessageRole.assistant
         ? _mentionIn(chat, prompt)
-        : _memberIfKnown(chat, nameOf(authorFor(prompt)));
+        : _memberIfKnown(chat, nameOf(authorFor(chat, prompt)));
     return named;
   }
 
@@ -369,15 +383,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         : name;
   }
 
-  /// Who a turn opened on [prompt] names as its author: the one member the
-  /// prompt addresses. A command is not addressed to anyone, whatever its
-  /// text names — `!grep @researcher` runs a command, it does not ask
-  /// researcher to speak. Decided once, here, because the stamp is written
-  /// wherever a turn opens.
-  String? authorFor(Message prompt) =>
-      shellBypassCommand(prompt.plainText) == null
-          ? authorFrom(prompt.documents)
-          : null;
+  /// Who a turn opened on [prompt] names as its author, where the project
+  /// runs Omada: the one member the prompt addresses. A command is not
+  /// addressed to anyone, whatever its text names — `!grep @researcher` runs
+  /// a command, it does not ask researcher to speak. Omada off never stamps:
+  /// the reply is the main agent's, and a label on it would claim a member
+  /// authored what is the house's voice. See "The contract between direct
+  /// and Omada chats" in `lib/ui/chat/CLAUDE.md`.
+  String? authorFor(Chat chat, Message prompt) =>
+      !ref.read(omadaOnProvider(chat.state.project)) ||
+              shellBypassCommand(prompt.plainText) != null
+          ? null
+          : authorFrom(prompt.documents);
 
   /// The turn's reply. Always role `assistant` — the role is the render
   /// class, not the author; [Message.author] is what names them.
@@ -483,7 +500,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       chat: chat,
       prompt: prompt,
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
-      opening: [_newReply(author: authorFor(prompt))],
+      opening: [_newReply(author: authorFor(chat, prompt))],
       replacing: _replyFor(chat, messageId),
     );
   }
@@ -679,7 +696,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final named = _mentionIn(chat, reply);
     if (named == null) return;
     _chain++;
-    if (_chain > _chainCap) return;
+    // The addressed member's reply is chain turn one; two handoffs follow it
+    // before the round stops. _chain reaching the cap blocks the next turn.
+    if (_chain >= _chainCap) return;
     await _turn(
       chat: chat,
       prompt: reply,
@@ -706,6 +725,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// each other without end, not about how long a conversation may run.
   static const _chainCap = 3;
   int _chain = 0;
+
+  /// The mode the log's last mode-change marker records. Null is a chat
+  /// whose toggle never moved — the implicit off before any section exists.
+  bool? _lastRecordedMode(List<ModeChange> changes) =>
+      changes.isEmpty ? null : changes.last.omada;
 
   /// The failure the turn last reported, for the retry row and the
   /// notification — turn-scoped like every other view state, never persisted.

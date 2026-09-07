@@ -1362,7 +1362,9 @@ void main() {
 
     test("a reply is stamped with the one member the prompt addresses",
         () async {
-      final (id, _) = await chatWithOneTurn("hello @explore, find the tests");
+      await _inTeam(app);
+      final (id, _) =
+          await chatWithOneTurn("hello @explore, find the tests", project: "team");
 
       final messages = messagesOf(id);
       expect(messages.first.documents, contains("@explore"));
@@ -1371,14 +1373,27 @@ void main() {
 
     test("addressing one member and naming another still stamps the addressee",
         () async {
+      await _inTeam(app);
       final (id, _) = await chatWithOneTurn(
-          "hello @explore, find the tests, then hand it to @build to check");
+          "hello @explore, find the tests, then hand it to @build to check",
+          project: "team");
 
       final messages = messagesOf(id);
       expect(messages.first.documents.keys, ["@explore", "@build"]);
       // The first mention is the addressee; the second is the handoff the
       // reply will carry out. The label names who the turn was addressed to.
       expect(messages.last.author, "@explore");
+    });
+
+    test("a direct chat never stamps, whatever the prompt names", () async {
+      // Omada off: the reply is the main agent's, using the named agent's
+      // instructions. No stamp, no label - the label would claim a member
+      // authored the house's voice.
+      final (id, _) =
+          await chatWithOneTurn("hello @explore, find the tests");
+
+      expect(messagesOf(id).first.documents, contains("@explore"));
+      expect(messagesOf(id).last.author, isNull);
     });
 
     test("a command is not addressed to anyone it names", () async {
@@ -1398,8 +1413,10 @@ void main() {
 
     test("a regenerated reply carries the original prompt's author",
         () async {
-      final (id, controller) =
-          await chatWithOneTurn("hello @explore, find the tests");
+      await _inTeam(app);
+      final (id, controller) = await chatWithOneTurn(
+          "hello @explore, find the tests",
+          project: "team");
 
       await controller.regenerate(messagesOf(id).first.id);
       await waitIdle(id);
@@ -1408,7 +1425,9 @@ void main() {
     });
 
     test("an edited resend carries the new prompt's author", () async {
-      final (id, controller) = await chatWithOneTurn("helo");
+      await _inTeam(app);
+      final (id, controller) =
+          await chatWithOneTurn("helo", project: "team");
       final userId = messagesOf(id).first.id;
 
       await controller.editAndResend(userId, "hello @explore");
@@ -1452,13 +1471,84 @@ void main() {
           await startTurn("hello @explore", project: "team");
       await waitIdle(id, limit: const Duration(seconds: 5));
 
-      // One user turn plus the cap in handoffs: the fifth scripted round is
-      // never asked for, because the chain stopped after three.
-      expect(app.backend.prompts, hasLength(4));
+      // Three agent turns — the addressee and two handoffs — and the round
+      // stops: the fifth scripted round is never asked for.
+      expect(app.backend.prompts, hasLength(3));
       // The user speaking resets the round, so a new mention starts fresh.
       await controller.send("again @explore");
       await waitIdle(id, limit: const Duration(seconds: 5));
-      expect(app.backend.prompts.length, greaterThan(5));
+      expect(app.backend.prompts.length, greaterThan(4));
+    });
+
+    test("a round in an Omada project opens with a mode change", () async {
+      await _inTeam(app);
+      final (id, _) = await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The first turn under Omada on opens the section: one marker, bound
+      // to the message that opened it — the prompt the section starts from.
+      final chat = chatOf(id);
+      expect(chat.modeChanges, hasLength(1));
+      expect(chat.modeChanges.single.beforeId, chat.messages[0].id);
+      expect(chat.modeChanges.single.omada, isTrue);
+    });
+
+    test("a turn already in mode writes no second marker", () async {
+      await _inTeam(app);
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      final before = chatOf(id).modeChanges.length;
+
+      await controller.send("plain follow-up");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(chatOf(id).modeChanges, hasLength(before));
+    });
+
+    test("a toggle off bounds the section with an off marker", () async {
+      await _inTeam(app);
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmada(false);
+      await controller.send("plain message");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final changes = chatOf(id).modeChanges;
+      expect(changes.map((m) => m.omada), [true, false]);
+      // The off marker binds to the turn that opened the off-section — the
+      // prompt that ran under Omada off, not the reply.
+      expect(changes.last.beforeId, chatOf(id).messages[2].id);
+    });
+
+    test("flipping on again writes a second on marker", () async {
+      await _inTeam(app);
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmada(false);
+      await controller.send("plain message");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmada(true);
+      await controller.send("another message");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(chatOf(id).modeChanges.map((m) => m.omada),
+          [true, false, true]);
+      // Each marker binds to the message that opened its section.
+      final ids = messagesOf(id).map((m) => m.id).toSet();
+      for (final marker in chatOf(id).modeChanges) {
+        expect(ids.contains(marker.beforeId), isTrue,
+            reason: "marker bound to ${marker.beforeId}");
+      }
     });
 
     test("a member's pass ends the round", () async {

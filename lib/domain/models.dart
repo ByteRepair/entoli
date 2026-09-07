@@ -5,7 +5,20 @@ import "package:freezed_annotation/freezed_annotation.dart";
 part "models.freezed.dart";
 part "models.g.dart";
 
-/// Metadata for a chat, persisted to `state.json`.
+/// A mode-change marker: the room entered [omada] mode at the turn boundary
+/// before the message [beforeId] names — the first message opened after the
+/// record was written. Null names the end of the thread: the marker outlived
+/// everything written after it, which a rewind of the section it opened can
+/// leave. A marker whose [beforeId] is gone degrades to that same
+/// end-of-section position — a boundary pointing at nothing is the boundary
+/// of what remains.
+class ModeChange {
+  const ModeChange({required this.beforeId, required this.omada});
+
+  final String? beforeId;
+  final bool omada;
+}
+
 @freezed
 abstract class ChatState with _$ChatState {
   const factory ChatState({
@@ -72,6 +85,15 @@ abstract class Chat with _$Chat {
     /// offer to carry on. Derived from the log by `endsUnfinished` rather than
     /// persisted — the absence of a closing record is the whole of it.
     @Default(false) bool unfinished,
+
+    /// The Omada mode changes on the thread, oldest first, each bound to the
+    /// turn boundary it opened — see [ModeChange] in `chat_log.dart`. Derived
+    /// by `replayTree` rather than persisted, like [branches] and
+    /// [unfinished]: the markers are in the records, and a message on its own
+    /// says nothing about which section it sits in. No `fromJson` — this is
+    /// derived from the records, never read off `state.json`.
+    @JsonKey(includeFromJson: false, includeToJson: false)
+    @Default([]) List<ModeChange> modeChanges,
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);

@@ -108,6 +108,15 @@ sealed class ChatRecord with _$ChatRecord {
     required TurnEnd reason,
   }) = TurnEndRecord;
 
+  /// The room's Omada mode changed: the next turn boundary opens a section
+  /// under [omada], and member addressing, stamps and the "Entoli" label are
+  /// the new state of the conversation. Not a message and not part of one —
+  /// it is a fact about the room, the way [SelectRecord] is a fact about
+  /// which thread is being read. Both flips are written: the off-flip is
+  /// what bounds an on-section for the label rule.
+  const factory ChatRecord.modeChange({required bool omada}) =
+      ModeChangeRecord;
+
   /// Read [messageId] rather than whichever of its siblings was being read.
   /// Appended as the user cycles through the threads at a branch, so which one
   /// they were on survives a reload; the last one written wins, the way a
@@ -129,10 +138,15 @@ sealed class ChatRecord with _$ChatRecord {
 /// What a log describes: the one thread through it that is on screen, and the
 /// alternatives the messages on that thread sit among.
 class Replayed {
-  const Replayed({required this.messages, required this.branches});
+  const Replayed(
+      {required this.messages, required this.branches, this.modeChanges = const []});
 
   /// The thread being read, oldest message first.
   final List<Message> messages;
+
+  /// The mode changes on the thread, oldest first, each bound to the turn
+  /// boundary it opened — see [ModeChange].
+  final List<ModeChange> modeChanges;
 
   /// For each message in [messages] that has any, every message written as an
   /// alternative to it — oldest first, and including the one on the thread. A
@@ -151,6 +165,8 @@ Replayed replayTree(Iterable<ChatRecord> records) {
   final parent = <String, String?>{};
   final children = <String?, List<String>>{};
   final shown = <String?, String>{};
+  final pendingMarkers = <ModeChange>[];
+  final boundMarkers = <ModeChange>[];
 
   /// The child of [of] the thread runs through: the one last selected, or
   /// failing that the newest, since a thread just written is the one to read.
@@ -212,6 +228,19 @@ Replayed replayTree(Iterable<ChatRecord> records) {
             createdAt: createdAt,
             documents: documents,
             author: author);
+        // The markers written since the last message bound to this one: the
+        // turn boundary this message opened. Bound here, where the walk
+        // already knows the id, rather than by position after the fold —
+        // a rewind forgets the message and the markers pointing at it go
+        // with it, the way a part does.
+        if (pendingMarkers.isNotEmpty) {
+          final opened = [
+            for (final marker in pendingMarkers)
+              ModeChange(beforeId: id, omada: marker.omada)
+          ];
+          pendingMarkers.clear();
+          boundMarkers.addAll(opened);
+        }
         // After this one has joined them, so what it replaces is still there to
         // be found — and so that one record says the whole of where a message
         // goes, with no second line to arrive in the right order.
@@ -244,6 +273,13 @@ Replayed replayTree(Iterable<ChatRecord> records) {
         // continue. It says nothing about what the conversation holds.
         break;
 
+      case ModeChangeRecord(:final omada):
+        // Bound to the turn boundary it opened: the next message record in
+        // the log names it. Held pending here; the MessageRecord arm below
+        // adopts everything pending, and a marker with no message after it
+        // stays unbound — the fold emits it at the end of the thread.
+        pendingMarkers.add(ModeChange(beforeId: null, omada: omada));
+
       case RewindRecord(:final messageId):
         if (nodes.containsKey(messageId)) forget(messageId);
     }
@@ -257,7 +293,21 @@ Replayed replayTree(Iterable<ChatRecord> records) {
     if (kids.length > 1) branches[id] = List.unmodifiable(kids);
   }
 
-  return Replayed(messages: messages, branches: branches);
+  // A marker binds to the first message opened after it, which the thread
+  // walk only knows once the log is fully folded. Rewinds already pruned the
+  // messages they forgot; a marker naming a message that is gone degrades to
+  // the end of the section before it, which is where its boundary now sits.
+  // Markers bound to a message on the thread, in order; the unbound ones —
+  // written after the last message — name the end of the thread.
+  final modeChanges = [
+    ...boundMarkers.where((m) => m.beforeId != null && messages.any((msg) => msg.id == m.beforeId)),
+    ...pendingMarkers,
+  ];
+
+  return Replayed(
+      messages: messages,
+      branches: branches,
+      modeChanges: List.unmodifiable(modeChanges));
 }
 
 /// The thread a log describes. [replayTree] for the branches beside it.
@@ -273,6 +323,7 @@ Chat chatFrom(ChatState state, List<ChatRecord> records) {
     messages: replayed.messages,
     branches: replayed.branches,
     unfinished: endsUnfinished(replayed.messages, records),
+    modeChanges: replayed.modeChanges,
   );
 }
 

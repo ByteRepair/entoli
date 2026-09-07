@@ -477,4 +477,43 @@ void main() {
         ]).single.author,
         isNull);
   });
+
+  test("a mode change survives the round trip and binds to the next turn",
+      () {
+    final records = [
+      message("m1"),
+      const ChatRecord.modeChange(omada: true),
+      ChatRecord.message(
+          id: "m2", role: MessageRole.assistant, createdAt: at),
+      const ChatRecord.modeChange(omada: false),
+    ];
+
+    final back = ChatRecord.fromJson(
+        jsonDecode(jsonEncode(records[1].toJson())) as Map<String, dynamic>);
+    expect(back, records[1]);
+
+    final replayed = replayTree(records);
+    // The on-flip binds to the first message opened after it.
+    expect(replayed.modeChanges.first.beforeId, "m2");
+    expect(replayed.modeChanges.first.omada, isTrue);
+    // The trailing off-flip has nothing after it: the boundary is the end.
+    expect(replayed.modeChanges.last.beforeId, isNull);
+    expect(replayed.modeChanges.last.omada, isFalse);
+  });
+
+  test("a marker whose message a rewind forgot degrades to the section before it",
+      () {
+    final replayed = replayTree([
+      message("m1"),
+      const ChatRecord.modeChange(omada: true),
+      ChatRecord.message(
+          id: "m2", role: MessageRole.assistant, createdAt: at),
+      ChatRecord.rewind(messageId: "m2"),
+    ]);
+
+    expect(replayed.messages.map((m) => m.id), ["m1"]);
+    // m2 is gone; the marker's boundary is gone with it. The marker survives
+    // (the mode genuinely changed) but binds to nothing on the thread.
+    expect(replayed.modeChanges, isEmpty);
+  });
 }

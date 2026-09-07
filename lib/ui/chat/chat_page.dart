@@ -25,6 +25,7 @@ import "mirror_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
 import "widgets/message_bubble.dart";
+import "widgets/omada_separator.dart";
 import "widgets/needs_setup_bar.dart";
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
@@ -717,6 +718,28 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
+    // The section each message sits in, walked once: a mode-change marker
+    // bound to a message turns the section on from it forward. The markers
+    // are in the log, so a reload or a mirror walks the same sections. The
+    // sentinel matches a marker bound to the end of the thread — nothing was
+    // opened after it, so its section starts at the first message there is.
+    const kFirstMessage = "__first__";
+    final separatorBefore = <String>{kFirstMessage};
+    for (final change in chat.modeChanges) {
+      separatorBefore.add(change.beforeId ?? kFirstMessage);
+    }
+    // A marker's section runs from its boundary message forward. Markers are
+    // written on flips, and the walk is over the read thread in order, so a
+    // running bool is the whole of it — a marker bound to a message the
+    // rewind forgot is skipped with the message, the section continuing.
+    final sectionOn = <String>{};
+    var on = false;
+    final inOnSection = <String>{};
+    for (final m in chat.messages) {
+      if (separatorBefore.contains(m.id)) on = true;
+      if (on) inOnSection.add(m.id);
+    }
+    sectionOn.remove(kFirstMessage);
     return Stack(
       children: [
         NotificationListener<ScrollNotification>(
@@ -729,10 +752,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               // A mirror has no editing controller: the log belongs to the home
               // device, so the whole row of things to do to a message is out.
               final mutable = editing != null && !view.isRunning;
-              return MessageBubble(
+              final bubble = MessageBubble(
                 chatId: widget.chatId,
                 message: m,
                 author: m.author,
+                entoli: inOnSection.contains(m.id),
                 isWaiting: view.isRunning && i == chat.messages.length - 1,
                 waitingNotice: view.retry,
                 waitingStatus: view.status,
@@ -755,6 +779,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     : null,
                 isSpeaking: reading == m.id,
               );
+              // A section's separator sits above the message that opened it.
+              return sectionOn.contains(m.id)
+                  ? Column(children: [OmadaSeparator(omada: true), bubble])
+                  : bubble;
             },
           ),
         ),
