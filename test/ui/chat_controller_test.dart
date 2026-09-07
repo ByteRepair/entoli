@@ -4,6 +4,7 @@ import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/templates.dart" show passWord;
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/ask.dart";
@@ -11,7 +12,8 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
-import "package:agent_chat/providers.dart" show promptLibraryProvider;
+import "package:agent_chat/providers.dart"
+    show projectSettingsProvider, promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
 
 import "../fakes.dart";
@@ -42,8 +44,9 @@ void main() {
   Future<(String, ChatController)> startTurn(
     String text, {
     List<Attachment> attachments = const [],
+    String? project,
   }) async {
-    final chat = await app.repo.createChat();
+    final chat = await app.repo.createChat(project: project);
     final id = chat.state.id;
     final controller = app.container.read(chatControllerProvider(id).notifier);
     await controller.send(text, attachments: attachments);
@@ -54,8 +57,10 @@ void main() {
   Future<(String, ChatController)> chatWithOneTurn(
     String text, {
     List<Attachment> attachments = const [],
+    String? project,
   }) async {
-    final (id, controller) = await startTurn(text, attachments: attachments);
+    final (id, controller) =
+        await startTurn(text, attachments: attachments, project: project);
     await waitIdle(id);
     return (id, controller);
   }
@@ -1364,6 +1369,18 @@ void main() {
       expect(messages.last.author, "@explore");
     });
 
+    test("addressing one member and naming another still stamps the addressee",
+        () async {
+      final (id, _) = await chatWithOneTurn(
+          "hello @explore, find the tests, then hand it to @build to check");
+
+      final messages = messagesOf(id);
+      expect(messages.first.documents.keys, ["@explore", "@build"]);
+      // The first mention is the addressee; the second is the handoff the
+      // reply will carry out. The label names who the turn was addressed to.
+      expect(messages.last.author, "@explore");
+    });
+
     test("a command is not addressed to anyone it names", () async {
       final (id, _) = await chatWithOneTurn("!grep @explore src/");
 
@@ -1399,7 +1416,109 @@ void main() {
 
       expect(messagesOf(id).last.author, "@explore");
     });
+
+    test("a reply naming another member hands the next turn to them", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        // Researcher's reply hands off to explore.
+        const [TextDelta("let me get @explore to confirm"), DoneEvent()],
+        const [TextDelta("found them"), DoneEvent()],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore, look at the tests", project: "team");
+
+      await waitFor(() => app.backend.prompts.length >= 2, what: "the handoff");
+      await waitIdle(id);
+
+      final messages = messagesOf(id);
+      // The handoff's prompt is the mentioning reply itself, said again as
+      // what the next member is answering.
+      expect(app.backend.prompts[1].prompt.id, messages[1].id);
+      // And the settings carried the member to the backend.
+      expect(app.backend.prompts[1].settings.omadaMember, "explore");
+      // The round's second reply is authored by the member it was addressed
+      // to — the record's `author` is what the label reads.
+      expect(messages.last.author, "@explore");
+    });
+
+    test("the chain stops at the cap and the user resets it", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        for (var i = 0; i < 5; i++) ...[
+          const [TextDelta("see @explore"), DoneEvent()],
+        ],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // One user turn plus the cap in handoffs: the fifth scripted round is
+      // never asked for, because the chain stopped after three.
+      expect(app.backend.prompts, hasLength(4));
+      // The user speaking resets the round, so a new mention starts fresh.
+      await controller.send("again @explore");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      expect(app.backend.prompts.length, greaterThan(5));
+    });
+
+    test("a member's pass ends the round", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        const [TextDelta(passWord), DoneEvent()],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore, want this?", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The pass is on the record, and nothing followed it.
+      expect(textOf(messagesOf(id).last), passWord);
+      expect(app.backend.prompts, hasLength(1));
+    });
+
+    test("a member turn runs under the member's prompt from the library",
+        () async {
+      await _inTeam(app);
+      final (id, _) = await startTurn("hello @explore", project: "team");
+      await waitIdle(id);
+
+      expect(app.backend.prompts.single.settings.omadaMember, "explore");
+      // The mention's body rode the documents as composed, but the overlay the
+      // backend words the turn under comes from the member's file plus the
+      // room rule — the member's turn does not stack the mention again. The
+      // history the session is filled from carries the documents as ever.
+      final lastUser = app.backend.prompts.single.history;
+      expect(
+          lastUser.isEmpty || lastUser.last.documents["@explore"] != null,
+          isTrue);
+    });
+
+    test("a plain message in an Omada project is answered by the house",
+        () async {
+      await _inTeam(app);
+      final (id, _) =
+          await chatWithOneTurn("hello", project: "team");
+
+      expect(app.backend.prompts.single.settings.omadaMember, isNull);
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("a mention of a name the library does not know answers by the house",
+        () async {
+      await _inTeam(app);
+      await chatWithOneTurn("hello @nobody-knows-me", project: "team");
+
+      expect(app.backend.prompts.single.settings.omadaMember, isNull);
+    });
   });
+}
+
+/// A project with Omada on, its library the test one — the harness seeds the
+/// test library for every project, so the chat's project is all a test needs.
+Future<void> _inTeam(TestApp app) async {
+  await app.repo.createProject("team");
+  await app.container
+      .read(projectSettingsProvider("team").notifier)
+      .setOmada(true);
 }
 
 /// Settings with chat naming turned on. A getter, not a constant: settings are

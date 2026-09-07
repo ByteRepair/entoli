@@ -600,8 +600,9 @@ void main() {
       expect(find.text("Type / for commands, @ for agents."), findsOneWidget);
     });
 
-    // Everything the user has written is a menu, and `/` opens the menu.
-    testWidgets("offers a handful rather than every command there is",
+    // Everything the user has written is a menu, and `/` opens the menu. The
+    // screen scrolls, so nothing is held back to keep the page short.
+    testWidgets("offers every command there is, not a handful of them",
         (tester) async {
       app.dispose();
       app = TestApp.create(
@@ -612,7 +613,7 @@ void main() {
       );
       await openBlank(tester);
 
-      expect(find.byType(ActionChip), findsNWidgets(6));
+      expect(find.byType(ActionChip), findsNWidgets(12));
     });
   });
 
