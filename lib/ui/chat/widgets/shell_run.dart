@@ -23,6 +23,7 @@ class LiveShellOutput extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: SingleChildScrollView(
         reverse: true,
+        padding: const EdgeInsets.all(12),
         child: Text(code, style: codeBlockStyle(theme)),
       ),
     );
