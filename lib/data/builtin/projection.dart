@@ -30,6 +30,14 @@ import "templates.dart";
 /// a fragment appended to a session that already holds the rest — see
 /// `_runBypass`.
 ///
+/// [viewer] is whose session this projection words the conversation for — null
+/// for the main agent, a member's `@name` for their own. A reply authored by
+/// another participant is worded as a user-role message labeled with who wrote
+/// it, so the viewer's model never reads another agent's words as its own; the
+/// human user's messages stay exactly as they are. A reply with no author is
+/// the viewer's own — today every conversation's shape, and byte-identical
+/// to what this worded before Omada existed.
+///
 /// [load] answers with a resource's bytes. Asynchronous for that alone, which
 /// is what it costs to hand a model the image it was sent rather than the name
 /// of it.
@@ -37,6 +45,7 @@ Future<List<LlmMessage>> projectionOf(
   List<Message> messages, {
   bool first = true,
   required ResourceLoader load,
+  String? viewer,
 }) async {
   // Every resource at once rather than a message at a time: on the web each
   // read is its own IndexedDB transaction, and a long conversation's would
@@ -57,6 +66,25 @@ Future<List<LlmMessage>> projectionOf(
           ));
         }
       case MessageRole.assistant:
+        // Someone else's reply reaches this viewer labeled as theirs: an
+        // assistant message is, by provider convention, the model's own words,
+        // and a member's reply projected as one would have the viewer's model
+        // believe it wrote what it reads. Identities are compared in the
+        // library's dialect — the sigil off both sides, the unnamed reply the
+        // main agent's — which is the dialect [viewer] is carried in.
+        final theirs = nameOf(message.author) ?? mainAgentLabel;
+        if (theirs != (viewer ?? mainAgentLabel)) {
+          final said = _saidText(message);
+          if (said != null) {
+            projected.add(LlmMessage(
+              role: LlmRole.user,
+              text: peerTurnText(said, by: theirs, at: message.createdAt),
+            ));
+          }
+          // A peer reply's tool calls are its own session's business: the
+          // viewer reads what was said, not the commands behind it.
+          continue;
+        }
         projected.addAll(_assistant(message));
       case MessageRole.system:
       case MessageRole.tool:
@@ -115,6 +143,15 @@ Future<List<LlmAttachment>> _attachments(Message message, ResourceLoader load) a
 /// is nothing to keep level. See "One accumulation" in `lib/domain/CLAUDE.md`.
 Iterable<LlmMessage> assistantMessages(List<MessagePart> parts) =>
     _assistant(unloggedMessage(MessageRole.assistant, _noDate, parts));
+
+/// What another participant said in a reply, worded for a different viewer:
+/// the plain text of it, which is what one agent owes another. Thinking and
+/// tool calls are the author's own session's business; a run the reader never
+/// watches is reported by what was said about it.
+String? _saidText(Message message) {
+  final said = message.plainText.trim();
+  return said.isEmpty ? null : said;
+}
 
 /// A reply's date is not read by anything that words one, so a turn being
 /// assembled has none to give.

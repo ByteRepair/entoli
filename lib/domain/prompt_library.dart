@@ -144,9 +144,10 @@ class PromptLibrary {
 /// composer's menu — anything it can offer has to dispatch here.
 final _skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 
-/// `@name` addresses an agent, but only where a word starts, so an email
-/// address is not a mention.
-final _mention = RegExp(r"(?<=^|\s)@([\w.-]+)");
+/// `@name` addresses an agent, but only where the handle starts, so an email
+/// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown
+/// dressing around a handle — `**@murasaki**` — does not stop it being one.
+final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 
 /// What the library says [text]'s references mean, ready to be written into the
 /// message as [Message.documents] and read back by [expandedPrompt] and
@@ -205,9 +206,36 @@ String? agentPromptFrom(Map<String, String> documents) {
   return bodies.isEmpty ? null : bodies.join("\n\n");
 }
 
-/// The one agent key in [documents], as typed; null where there is none or
-/// more than one.
+/// The member [documents] shows addressed, as typed — the first agent key in
+/// write order. Null where the message names no member at all. A message that
+/// addresses one member and names another as a handoff target ("check X, then
+/// hand it to @reviewer") is still addressed to one: the first mention is the
+/// addressee, the later one the routing the reply will carry out.
 String? authorFrom(Map<String, String> documents) {
   final named = agentEntriesFrom(documents).keys.toList();
-  return named.length == 1 ? named.single : null;
+  return named.isEmpty ? null : named.first;
+}
+
+/// The member name an author stamp carries — the sigil off, the library's
+/// name for them. An unnamed stamp names nothing.
+String? nameOf(String? author) =>
+    author == null
+        ? null
+        : author.startsWith(CompletionKind.agent.trigger)
+            ? author.substring(CompletionKind.agent.trigger.length)
+            : null;
+
+/// The one member [text] mentions by handle, as the composer's own `_mention`
+/// reads one and [library] knows them. Null where it names none, or more than
+/// one — a multi-mention is a round, not a single address. A name the library
+/// does not know is prose, not an address — a member signing their own reply
+/// (`@scout reporting`) does not make the reply a mention of themselves, so
+/// the scan counts only names the library knows, then asks for exactly one.
+String? singleAgentMention(String text, PromptLibrary library) {
+  final known = _mention
+      .allMatches(text)
+      .map((m) => m.group(1)!)
+      .where((name) => library.find(CompletionKind.agent, name) != null)
+      .toSet();
+  return known.length == 1 ? known.single : null;
 }

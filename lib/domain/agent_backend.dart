@@ -338,6 +338,12 @@ class TurnSettings {
   /// shell's to read on each command, for the reason they are settings.
   final Map<String, String> environment;
 
+  /// The member this turn is answered by, where the project runs Omada and
+  /// the message addressed exactly one: the named agent runs the turn under
+  /// its own prompt and session, and its reply is the one on the record. Null
+  /// is the main agent — the house — answering as it always has.
+  final String? omadaMember;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -352,6 +358,7 @@ class TurnSettings {
     this.bundledInstructions,
     this.includesUserInstructions = false,
     this.environment = const {},
+    this.omadaMember,
   });
 }
 
