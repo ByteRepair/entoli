@@ -36,6 +36,7 @@ void main() {
     VoidCallback? onSpeak,
     bool isSpeaking = false,
     ValueChanged<String>? onTapLink,
+    String? author,
   }) =>
       app.pump(
         tester,
@@ -43,6 +44,7 @@ void main() {
           body: MessageBubble(
             chatId: chatId,
             message: message,
+            author: author,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,
             threads: threads,
@@ -91,6 +93,23 @@ void main() {
     await pump(tester, _message(MessageRole.assistant, const []), isWaiting: true);
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets("an addressed reply is named, and the main agent's is not",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+      author: "@researcher",
+    );
+    expect(find.text("@researcher"), findsOneWidget);
+
+    // The reply is the page: no name over it when nobody was addressed.
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+    );
+    expect(find.text("@researcher"), findsNothing);
   });
 
   testWidgets("the spinner gives way to the first text", (tester) async {

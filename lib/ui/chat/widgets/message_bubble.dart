@@ -22,6 +22,7 @@ class MessageBubble extends StatefulWidget {
     super.key,
     required this.chatId,
     required this.message,
+    this.author,
     this.isWaiting = false,
     this.waitingNotice,
     this.waitingStatus,
@@ -39,6 +40,10 @@ class MessageBubble extends StatefulWidget {
   final String chatId;
 
   final Message message;
+
+  /// The addressed member to name over the reply, the way a prompt shows
+  /// "You". Null draws nothing. See [Message.author].
+  final String? author;
 
   /// This message is the one being generated right now.
   final bool isWaiting;
@@ -188,7 +193,7 @@ class _MessageBubbleState extends State<MessageBubble> {
               ? theme.colorScheme.primaryContainer
               : theme.colorScheme.surfaceContainerHighest
         ),
-      MessageRole.assistant => (null, null),
+      MessageRole.assistant => (widget.author, null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };

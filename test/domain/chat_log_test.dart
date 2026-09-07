@@ -457,4 +457,24 @@ void main() {
 
     expect(replay(recordsOf(chat.messages)), chat.messages);
   });
+
+  test("an author rides the message record and comes back off the log", () {
+    final reply = Message(
+      id: "m2",
+      role: MessageRole.assistant,
+      createdAt: at,
+      author: "@researcher",
+    );
+    final records = recordsOf([reply]);
+
+    final back = ChatRecord.fromJson(
+        jsonDecode(jsonEncode(records.single.toJson())) as Map<String, dynamic>);
+    expect(back, records.single);
+    // A message written before this existed reads back unnamed.
+    expect(
+        replay([
+          ChatRecord.message(id: "m3", role: MessageRole.assistant, createdAt: at)
+        ]).single.author,
+        isNull);
+  });
 }

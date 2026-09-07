@@ -88,4 +88,21 @@ void main() {
       expect(PromptLibrary.empty.find(CompletionKind.skill, "review"), isNull);
     });
   });
+
+  group("authorFrom", () {
+    test("the one member addressed is the author, sigil and all", () {
+      expect(authorFrom({"@researcher": "body"}), "@researcher");
+      expect(authorFrom({"/review": "body", "@researcher": "body"}),
+          "@researcher");
+    });
+
+    test("no mention names nobody", () {
+      expect(authorFrom({}), isNull);
+      expect(authorFrom({"/review": "body"}), isNull);
+    });
+
+    test("more than one mention names nobody", () {
+      expect(authorFrom({"@researcher": "a", "@reviewer": "b"}), isNull);
+    });
+  });
 }

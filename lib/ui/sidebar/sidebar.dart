@@ -770,11 +770,9 @@ class _ProjectMenu extends ConsumerWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-            ).copyWith(
-              fontStyle: remote == null &&
-                      ref.watch(omadaOnProvider(project))
-                  ? FontStyle.italic
-                  : FontStyle.normal,
+            ).merge(
+              projectLabelStyle(
+                  remote == null && ref.watch(omadaOnProvider(project))),
             ),
           ),
           onPressed: () => _open(context, ref, projects),
