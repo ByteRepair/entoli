@@ -367,6 +367,8 @@ class BuiltinBackend implements AgentBackend {
               .writeAsBytes(bytes);
           return (installId: installId, name: pkg.name);
         },
+        onShellOutput: (callId, text) =>
+            controller.add(ShellOutputEvent(callId: callId, text: text)),
       );
       _running.add(chatId, agent.cancel);
 
@@ -471,6 +473,7 @@ class BuiltinBackend implements AgentBackend {
     // stream over it.
     _running.add(chatId, run.kill);
     controller.add(StatusEvent(runningTool(bashToolName)));
+    _reportOutput(controller, run);
 
     // The session does not feed the command and the command does not feed it:
     // a chat reopened after a restart fills its session from the log, and that
@@ -518,6 +521,15 @@ class BuiltinBackend implements AgentBackend {
     }
     return session;
   }
+
+  /// The user's own `!` command, watched through the agent's one watch shape —
+  /// no call id, there being nothing called a tool.
+  void _reportOutput(StreamController<AgentEvent> controller, ShellRun run) =>
+      BuiltinAgent.watchShellOutput(run, (text) {
+        if (!controller.isClosed) {
+          controller.add(ShellOutputEvent(callId: null, text: text));
+        }
+      });
 
   /// Where this chat's attachment bytes come from, for the projection.
   ResourceLoader _resourcesOf(String chatId) =>

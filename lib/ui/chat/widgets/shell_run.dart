@@ -3,6 +3,41 @@ import "package:flutter/material.dart";
 import "../../../domain/models.dart";
 import "code_block.dart";
 
+/// The container both a live output block and a finished run bubble sit in:
+/// full width, the code-block surface, clipped to its corners. One copy of the
+/// chrome, since the two are the same strip at different moments of a command.
+Widget _blockShell(BuildContext context, {required Widget child}) => Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: codeBlockDecoration(Theme.of(context)),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+
+/// What a command has printed so far, while it is still running: the tail in
+/// a block, nothing over or under it. The running indication is the
+/// spinner the turn already carries — the label's own for an agent command,
+/// the message-level one for a `!` — and two of them is one too many.
+/// Unhighlighted and mono, the way a finished run's output is drawn.
+class LiveShellOutput extends StatelessWidget {
+  const LiveShellOutput({super.key, required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _blockShell(
+      context,
+      child: SingleChildScrollView(
+        reverse: true,
+        padding: const EdgeInsets.all(12),
+        child: Text(code, style: codeBlockStyle(theme)),
+      ),
+    );
+  }
+}
+
 /// A `!` message as it reads: the command itself, in the face everything shown
 /// verbatim is set in, behind a terminal mark that says it is one. Nothing here
 /// renders markdown — a command is characters that have to line up, not prose.
@@ -48,11 +83,8 @@ class ShellRunBubble extends StatelessWidget {
     // The trailing newline every command ends on would draw as a blank line.
     final output = run.output.trimRight();
     final problem = run.exceptionInfo?.trim() ?? "";
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: codeBlockDecoration(theme),
-      clipBehavior: Clip.antiAlias,
+    return _blockShell(
+      context,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,

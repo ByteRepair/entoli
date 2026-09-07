@@ -28,6 +28,8 @@ void main() {
     String chatId = "chat-1",
     bool isWaiting = false,
     String? waitingNotice,
+    String? waitingStatus,
+    String? shellOutput,
     List<String>? threads,
     ValueChanged<int>? onThreadStep,
     VoidCallback? onDelete,
@@ -47,6 +49,8 @@ void main() {
             author: author,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,
+            waitingStatus: waitingStatus,
+            shellOutput: shellOutput,
             threads: threads,
             onThreadStep: onThreadStep,
             onDelete: onDelete,
@@ -123,6 +127,68 @@ void main() {
     // Not `find.text`: a reply still being written ends in a caret, so it is a
     // span, and the caret's placeholder is part of what that span reads as.
     expect(find.textContaining("Hel", findRichText: true), findsOneWidget);
+  });
+
+  group("a running command's output", () {
+    testWidgets("renders as a block under the spinner while the reply is empty",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const []),
+        isWaiting: true,
+        shellOutput: "one\ntwo\n",
+      );
+
+      // The spinner row is the running indication; the block is only the
+      // output under it.
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.textContaining("one", findRichText: true), findsOneWidget);
+      expect(find.textContaining("two", findRichText: true), findsOneWidget);
+    });
+
+    testWidgets("sits under the tool label once the model has spoken",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(text: "Checking that."),
+          const MessagePart.toolCall(
+              toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "ls")),
+        ]),
+        isWaiting: true,
+        shellOutput: "files here\n",
+      );
+
+      expect(find.textContaining("Using tool", findRichText: true),
+          findsOneWidget);
+      expect(find.textContaining("files here", findRichText: true),
+          findsOneWidget);
+    });
+
+    testWidgets("an empty output draws nothing", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const []),
+        isWaiting: true,
+        shellOutput: "   \n",
+      );
+
+      expect(find.textContaining("files here", findRichText: true),
+          findsNothing);
+    });
+
+    testWidgets("nothing is drawn once the turn is over", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(text: "Done."),
+        ]),
+        shellOutput: "leftover\n",
+      );
+
+      expect(find.textContaining("leftover", findRichText: true),
+          findsNothing);
+    });
   });
 
   group("the streaming caret", () {

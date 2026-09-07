@@ -185,6 +185,20 @@ shell they all `cd` around is as many races as there are of them. The flag
 reaches the shell and the prompt and the tool description together, so the
 model is not told a state it cannot keep.
 
+**The output a running command is printing is visible while it prints.** A
+`ShellRun` carries an output listener beside its result, and the agent watches
+it where a callback is handed to it, reporting each change at
+`watchInterval`'s pace — a hundred milliseconds, the last value inside an
+interval being the one sent, since what the block shows is the tail as it is
+now. What it reports is a tail of the output, never the sentinel: the
+dispatcher's marker can arrive split across chunks, so anything after the last
+place `@@E` could be forming is held out of the live view until the next
+chunk proves it was ordinary output. The final result is unchanged — the
+whole output, sentinel stripped — and the block on screen is gone the moment
+the pair completes, the conversation keeping only the pair. Nothing here is
+persisted and a sub-agent's commands are not watched, the callback being null
+where the agent is one.
+
 ### Running a command yourself
 
 A message that starts with `!` is a command, and `BuiltinBackend._runBypass`

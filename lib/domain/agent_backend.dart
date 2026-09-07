@@ -66,6 +66,22 @@ class ShellRunEvent extends AgentEvent {
   final ShellRunPart run;
 }
 
+/// What a running command has printed, as it prints it. Turn-scoped view state
+/// like [StatusEvent]: the call/result pair is what `conv.jsonl` keeps, and the
+/// final output is what that result carries — nothing here is persisted, and a
+/// reloaded chat has no trace of it. The text is the tail of what has printed,
+/// not the whole, and whitespace-only tails are not worth reporting.
+///
+/// [callId] is the `bash` call the output belongs to, null where the command
+/// is the user's own `!` turn. Nothing routes on it today — one watched run
+/// per chat, the block trailing on the waiting message — but the callback the
+/// agent is handed knows it, and a second watched run would need it.
+class ShellOutputEvent extends AgentEvent {
+  const ShellOutputEvent({this.callId, required this.text});
+  final String? callId;
+  final String text;
+}
+
 /// An HTML artifact was rendered and saved. Persisted as a [MessagePart] rather
 /// than turn-scoped view state: the artifact is durable, and a reloaded chat
 /// has to redraw the label and re-open it. The tool call/result pair that

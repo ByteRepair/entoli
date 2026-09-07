@@ -261,6 +261,98 @@ void main() {
     });
   });
 
+  group("the live view of a running command", () {
+    test("grows as the command prints", () async {
+      final shell = LocalShell();
+      final run = shell.start(
+          "echo one; sleep 1; echo two; sleep 1; echo three",
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10));
+      final output = run.output!;
+
+      // The first line has printed while the command is still running.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final early = output.value ?? "";
+      expect(early, contains("one"));
+      expect(early, isNot(contains("three")));
+
+      final result = await run.result;
+      expect((output.value ?? ""), contains("three"));
+      expect(result.output, "one\ntwo\nthree\n");
+      shell.closeSession(workspace.path);
+    });
+
+    test("never shows the sentinel, and the result is the whole output",
+        () async {
+      final result = await run("echo one; echo two");
+
+      // The result is the whole of what the command printed, sentinel
+      // stripped, as it ever was.
+      expect(result.output, "one\ntwo\n");
+    });
+
+    test("a command the shell interrupted leaves the tail where it stopped",
+        () async {
+      final run = LocalShell()
+          .start("echo started; sleep 30",
+              cwd: workspace.path,
+              home: home.path,
+              timeout: const Duration(seconds: 30));
+      final output = run.output!;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await run.kill();
+      await run.result;
+
+      expect(output.value ?? "", contains("started"));
+    });
+
+    test("holds a fragment that could be a sentinel out of the live view",
+        () async {
+      // The sentinel's head is `\n@@E`; a command printing that fragment
+      // leaves the live view holding it back until the next chunk proves it
+      // was ordinary output. What proves it here is the final result: the
+      // parse swallowed nothing, and what was published never showed a whole
+      // sentinel line.
+      final result = await run(r'echo "before"; printf "\n@@E"; echo "after"');
+
+      expect(result.output, "before\n\n@@Eafter\n");
+    });
+
+    test("the tail is bounded, and the whole is still in the result", () async {
+      final shell = LocalShell();
+      final run = shell.start(
+          "seq 1 10000",
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 30));
+      final output = run.output!;
+      final result = await run.result;
+
+      expect(output.value!.length, lessThanOrEqualTo(8192));
+      expect(result.output.length, greaterThan(40000));
+      shell.closeSession(workspace.path);
+    });
+
+    test("a one-shot run streams its output the same way", () async {
+      final shell = LocalShell();
+      final run = shell.start(
+          "echo one; sleep 1; echo two",
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10),
+          oneShot: true);
+      final output = run.output!;
+
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(output.value ?? "", contains("one"));
+
+      final result = await run.result;
+      expect((output.value ?? ""), contains("two"));
+      expect(result.output, "one\ntwo\n");
+    });
+  });
+
   // The cwd is a directory the app lays out, and it may not be there when a
   // command is first asked to stand in it: a project workspace before any chat
   // exists (a built-in project's setup runs in one) or one deleted from the
