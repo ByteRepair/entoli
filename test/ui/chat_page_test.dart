@@ -31,6 +31,16 @@ void main() {
 
   /// What is in the composer. The text rather than a finder over it: a
   /// `find.text` would match the same words drawn anywhere else on the page.
+  /// What the question headline shows mid-sweep: a hybrid, so it matches no
+  /// settled question. It is the page's only centred 16pt text — the
+  /// composer's hint is left-aligned and its labels smaller.
+  String questionShown(WidgetTester tester) =>
+      tester.widget<Text>(find.byWidgetPredicate((w) =>
+          w is Text &&
+          w.data != null &&
+          w.style?.fontSize == 16 &&
+          w.textAlign == TextAlign.center)).data!;
+
   String typed(WidgetTester tester) =>
       tester.widget<TextField>(find.byType(TextField)).controller!.text;
 
@@ -297,6 +307,55 @@ void main() {
 
       expect(find.text("What would you like to discuss anonymously?"), findsOneWidget);
       expect(find.text("What would you like to discuss?"), findsNothing);
+    });
+
+    // The question sweeps rather than swaps: the new text takes over from
+    // the first character and the change front moves towards the end.
+    testWidgets("the question sweeps to the new one progressively",
+        (tester) async {
+      await openEmpty(tester);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, anonProjectLabel));
+      await tester.pump(const Duration(milliseconds: 1));
+      // The sweep mounted on that frame; this one runs 350 of the 400ms it
+      // takes. The two questions share their first thirty characters, so the
+      // front is past where they diverge — and not yet at the end.
+      await tester.pump(const Duration(milliseconds: 350));
+      final mid = questionShown(tester);
+      expect(mid, isNot("What would you like to discuss?"));
+      expect(mid, isNot("What would you like to discuss anonymously?"));
+      // The front starts at the first character: the new question's opening
+      // is already shown.
+      expect(mid.startsWith("What would"), isTrue);
+
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss anonymously?"),
+          findsOneWidget);
+    });
+
+    // The front runs the longer string's length: a shorter new question has
+    // to see the old one's tail eaten past the new question's end, not left
+    // standing behind the front forever.
+    testWidgets("deselecting sweeps the old tail away", (tester) async {
+      await openEmpty(tester);
+
+      await pick(tester, anonProjectLabel);
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss anonymously?"),
+          findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, anonProjectLabel));
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 350));
+
+      // The front has eaten past the shorter question's end: what is shown
+      // is neither the old long question nor the new short one yet.
+      final mid = questionShown(tester);
+      expect(mid, isNot("What would you like to discuss anonymously?"));
+
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+      expect(find.textContaining("nonymously"), findsNothing);
     });
 
     // The badge says where the next chat goes, which is all it can say: there
@@ -615,6 +674,77 @@ void main() {
       await openBlank(tester);
 
       expect(find.byType(ActionChip), findsNWidgets(12));
+    });
+
+    // A change of set animates per chip: what stays keeps its slot, what
+    // arrives grows out of nothing, what leaves shrinks away before going.
+    // Driving the library rather than a different TestApp: the swap has to
+    // happen under a screen that is already open, which is the case the
+    // animation exists for.
+    group("a swap of the starter set", () {
+      testWidgets("an arriving chip grows in while its neighbours hold",
+          (tester) async {
+        await openBlank(tester);
+
+        await io(tester, () => writeSkill(app, "review"));
+        await reloadLibrary(tester, app);
+
+        // Arrived: it grows from nothing over the next frames, so it is on
+        // screen already but its slot is not full width yet.
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 90));
+        expect(find.text("/review"), findsOneWidget);
+      });
+
+      testWidgets("a leaving chip shrinks away before it goes", (tester) async {
+        await openBlank(tester);
+        await io(tester, () => writeSkill(app, "review"));
+        await reloadLibrary(tester, app);
+        expect(find.text("/review"), findsOneWidget);
+
+        await io(tester, () async {
+          await Directory(
+                  "${app.config.promptsDir(CompletionKind.skill)}/review")
+              .delete(recursive: true);
+        });
+        // Reloaded without settling, so the shrink has not been pumped
+        // through yet and the chip is still on screen for it.
+        await reloadLibrary(tester, app, settle: false);
+        await tester.pump();
+
+        // Still shrinking: the chip is held on screen for the animation, and
+        // is gone once it has run.
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text("/review"), findsNothing);
+      });
+
+      testWidgets("a project switch keeps what both share and grows in the rest",
+          (tester) async {
+        // The default's set is what a project without its own inherits, so a
+        // switch to a project with one extra skill is the both-motions case:
+        // everything shared keeps its slot, the extra grows out of nothing.
+        // Both skills are written to disk and both libraries reloaded, since
+        // a reload reads the real sources rather than the test's seed.
+        await io(tester, () async {
+          await app.repo.createProject("work");
+          await writeSkill(app, "review");
+          await writeSkill(app, "extra", project: "work");
+        });
+        await openBlank(tester);
+        await reloadLibrary(tester, app);
+        await reloadLibrary(tester, app, project: "work");
+        expect(find.text("/review"), findsOneWidget);
+
+        await tester.tap(find.widgetWithText(ChoiceChip, "work"));
+        await tester.pump();
+
+        // Arrived mid-growth beside the chips that never left.
+        expect(find.text("/extra"), findsOneWidget);
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text("/extra"), findsOneWidget);
+      });
     });
   });
 
