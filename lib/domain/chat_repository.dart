@@ -275,20 +275,22 @@ class ChatRepository {
   /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
-      bool replaces = false}) async* {
+      bool replaces = false,
+      String? omadaMember}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, prompt,
         history: history,
-        settings: await _turnSettings(chatId));
+        settings: await _turnSettings(chatId, omadaMember: omadaMember));
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
   /// runs under whatever the chat's settings are now, not whatever they were
   /// when the turn was cut off: the same rule an edit or a regenerate follows.
   Stream<AgentEvent> resumeTurn(String chatId,
-      {List<Message> history = const []}) async* {
+      {List<Message> history = const [], String? omadaMember}) async* {
     yield* _backend.resumeTurn(chatId,
-        history: history, settings: await _turnSettings(chatId));
+        history: history,
+        settings: await _turnSettings(chatId, omadaMember: omadaMember));
   }
 
   /// The chat's own choice wins, else the app default, else whatever the
@@ -303,7 +305,7 @@ class ChatRepository {
   /// chat alone, and where the project already took it away it cannot be given
   /// it back from here. `headless` is the other: a chat nobody watches (a
   /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
-  Future<TurnSettings> _turnSettings(String chatId) async {
+  Future<TurnSettings> _turnSettings(String chatId, {String? omadaMember}) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
@@ -330,6 +332,10 @@ class ChatRepository {
       includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
+
+      // The answering member is the caller's fact, not the chat's — it is
+      // about the message the turn runs, not the settings it runs under.
+      omadaMember: omadaMember,
     );
   }
 

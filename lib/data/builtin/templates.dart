@@ -5,6 +5,7 @@ import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
 import "../../domain/builtin_project.dart";
 import "../../domain/file_tools.dart";
+import "../../domain/models.dart" show CompletionKind;
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
@@ -211,6 +212,50 @@ $recall""",
 /// `lib/domain/CLAUDE.md`.
 String userTurnText(String text, {required DateTime at, required bool first}) =>
     _withNow(first ? _firstTask(text) : text, at);
+
+/// What a reply written by *another participant* reads as to this viewer's
+/// model: labeled with who wrote it, and marked as another agent's words so it
+/// cannot be mistaken for the human user speaking. A user-role message — the
+/// viewer is being told something, not speaking — but the label keeps it
+/// nobody's own.
+String peerTurnText(String text, {required String by, required DateTime at}) =>
+    _withNow(
+        "Message from $by (another agent in this conversation, not the "
+        "user):\n\n$text",
+        at);
+
+/// The member's prompt, from the library as it stands now: the file is the
+/// member. Null where the name is no longer in the library — the controller
+/// has already routed such a turn to the main agent, so this is unreachable
+/// from a member turn.
+String? memberPrompt(PromptLibrary? library, String member) =>
+    library?.find(CompletionKind.agent, member)?.body;
+
+/// What a member replies when it declines the turn it was addressed with:
+/// word for word, so a longer reply is a reply. The controller reads it off
+/// the record, and the room's round stops there.
+const passWord = "pass";
+
+/// What the conversation calls the main agent wherever a viewer is named and
+/// the reply carries no author — the label, not a member handle.
+const mainAgentLabel = "(main agent)";
+
+/// The one rule a member turn is told beyond its own instructions: the
+/// convention that makes declining possible, and the mention that makes
+/// handing off one. Appended to the member's prompt rather than the system
+/// prompt, which stays the one cacheable prefix.
+String memberTurnInstructions() => """
+## The room
+
+You are one member of a project team, answering a turn addressed to you. To
+hand work to another member, mention them by handle (for example
+@researcher) in your reply — their turn follows yours. To decline a turn
+addressed to you, reply with the single word `$passWord` and nothing else.
+Address the user plainly; the user reads what you write.
+
+Do not write your own handle in the reply — not even to sign it. A reply
+that names two members is read as addressing a group, and no one's turn
+follows a group.""";
 
 /// Where there is no shell, the model cannot run commands. But it does have a
 /// filesystem: the `read`/`write`/`edit` tools work on the workspace via the

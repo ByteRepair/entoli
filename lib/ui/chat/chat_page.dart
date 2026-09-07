@@ -257,10 +257,6 @@ class _EmptyChat extends ConsumerWidget {
   /// where a trigger lands and why it does not ask for the focus.
   final TextEditingController controller;
 
-  /// Enough to say what is on offer. Everything the user has written is a menu,
-  /// and `/` is what opens the menu.
-  static const _most = 6;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -268,7 +264,7 @@ class _EmptyChat extends ConsumerWidget {
       for (final kind in CompletionKind.values)
         for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
           (kind: kind, option: option),
-    ].take(_most).toList();
+    ];
 
     return Center(
       child: SingleChildScrollView(
@@ -720,9 +716,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       Chat chat, ChatViewState view, ChatController? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
-    // Authors are stamped whether or not the project runs Omada; the label
-    // shows only where it does.
-    final omada = ref.watch(omadaOnProvider(chat.state.project));
     if (chat.messages.isEmpty) return whenEmpty;
     return Stack(
       children: [
@@ -739,7 +732,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               return MessageBubble(
                 chatId: widget.chatId,
                 message: m,
-                author: omada ? m.author : null,
+                author: m.author,
                 isWaiting: view.isRunning && i == chat.messages.length - 1,
                 waitingNotice: view.retry,
                 waitingStatus: view.status,

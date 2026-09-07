@@ -11,8 +11,10 @@ import "../../domain/chat_repository.dart";
 import "../../domain/reminder_alarms.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
-import "../../domain/prompt_library.dart" show authorFrom;
+import "../../domain/prompt_library.dart"
+    show authorFrom, nameOf, singleAgentMention;
 import "../../domain/shell.dart" show shellBypassCommand;
+import "../../data/builtin/templates.dart" show passWord;
 import "../../providers.dart";
 
 /// Per-chat state container exposed to the UI.
@@ -262,16 +264,6 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     await _prompt(text, files: await repo.saveAttachments(chatId, attachments));
   }
 
-  /// Who answers a message said to the room. The whole of the scheduling
-  /// policy, decided here and nowhere else: today every message is answered by
-  /// the main agent, and the turn the user's send starts is its turn. Omada
-  /// replaces this body — an `@mention` in an Omada-on project answers by the
-  /// named member. The answer is not authorship: what names the author is
-  /// [Message.author], stamped where the turn opens, and a member's reply is
-  /// still role `assistant`. See "The room and its participants" in
-  /// `lib/ui/chat/CLAUDE.md`.
-  MessageRole _responder() => MessageRole.assistant;
-
   /// Say [text] and run the turn it starts. [files] are already under the
   /// chat's `resources/`. [replacing] makes it another thread beside a prompt
   /// already in the conversation — an edit — rather than the next thing said.
@@ -325,6 +317,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     _retryable = false;
     _errorLine = "";
     _round = 0;
+    // The user speaking resets the round — a fresh send, an edit, a
+    // regenerate; each is them saying the next thing, not an agent handing
+    // off. The cap is about agents handing off to each other without end.
+    if (prompt.role == MessageRole.user) _chain = 0;
     _turnDone = Completer<TurnEnd?>();
     _recorder.open(opening.last.id);
     await _recorder.write(recordsOf(opening,
@@ -341,7 +337,36 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // nothing to abort here and nothing to write beside the move.
     if (!ref.mounted) return;
     _listen(repo.sendPrompt(chatId, prompt,
-        history: history, replaces: replacing != null));
+        history: history,
+        replaces: replacing != null,
+        omadaMember: _memberAnswering(chat, prompt)));
+  }
+
+  /// The member a turn is answered by: the one the project's Omada addresses
+  /// through [prompt] — a user prompt names them in its documents, a member's
+  /// reply names the next one in its text. Decided against what the library
+  /// holds now; null is the main agent. The answer is not authorship: what
+  /// names the author is [Message.author], stamped where the turn opens, and
+  /// a member's reply is still role `assistant`. See "The room and its
+  /// participants" in `lib/ui/chat/CLAUDE.md`.
+  String? _memberAnswering(Chat chat, Message prompt) {
+    if (!ref.read(omadaOnProvider(chat.state.project))) return null;
+    final named = prompt.role == MessageRole.assistant
+        ? _mentionIn(chat, prompt)
+        : _memberIfKnown(chat, nameOf(authorFor(prompt)));
+    return named;
+  }
+
+  /// The member [name] answers for, where the library still knows them — an
+  /// unknown name is prose, not an address. Null is the main agent.
+  String? _memberIfKnown(Chat chat, String? name) {
+    if (name == null) return null;
+    return ref
+            .read(promptLibraryProvider(chat.state.project))
+            .find(CompletionKind.agent, name) ==
+        null
+        ? null
+        : name;
   }
 
   /// Who a turn opened on [prompt] names as its author: the one member the
@@ -354,11 +379,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
           ? authorFrom(prompt.documents)
           : null;
 
-  /// The turn's reply, authored by whoever `_responder` answers — the role
-  /// decided there, and the role is the render class, not the author.
+  /// The turn's reply. Always role `assistant` — the role is the render
+  /// class, not the author; [Message.author] is what names them.
   Message _newReply({String? author}) => Message(
         id: _uuid.v4(),
-        role: _responder(),
+        role: MessageRole.assistant,
         createdAt: DateTime.now(),
         parts: const [],
         author: author,
@@ -394,8 +419,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     _turnDone ??= Completer<TurnEnd?>();
     _recorder.open(reply.id, existing: reply.parts);
 
-    _listen(ref.read(chatRepositoryProvider)
-        .resumeTurn(chatId, history: chat.messages));
+    _listen(ref.read(chatRepositoryProvider).resumeTurn(chatId,
+        history: chat.messages, omadaMember: _memberResuming(chat)));
+  }
+
+  /// The member a resumed turn runs under: whoever it started as, off the
+  /// reply's own [Message.author] stamp rather than the library. A member
+  /// deleted or renamed since falls back to the main agent — the backend's
+  /// own overlay resolution answers the same way. Null is the main agent.
+  String? _memberResuming(Chat chat) {
+    final last = chat.messages.lastOrNull;
+    if (last == null || last.role != MessageRole.assistant) return null;
+    return _memberIfKnown(chat, nameOf(last.author));
   }
 
   void _listen(Stream<AgentEvent> stream) {
@@ -618,7 +653,59 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     );
     done?.complete(reason);
     await _notifyFailure(reason);
+    await _maybeHandoff(reason);
   }
+
+  /// What a finished turn may hand the baton to. A reply that addresses
+  /// exactly one member — and whose turn ended `done`, nothing a failure
+  /// leaves carrying — schedules that member's turn, the room's sequential
+  /// round, until the chain cap says the agents have had the floor long
+  /// enough. The mention is read off the reply's text against the library —
+  /// the member named *now* is the one handed to, the room's own wording —
+  /// and scheduled through the same `_turn` path every turn takes.
+  Future<void> _maybeHandoff(TurnEnd? reason) async {
+    if (reason != TurnEnd.done) return;
+    if (!ref.mounted) return;
+    final chat = state.chat;
+    if (chat == null) return;
+    // Omada off is the room as it always was: nothing hands anything to
+    // anyone, whatever a reply's text happens to name.
+    if (!ref.read(omadaOnProvider(chat.state.project))) return;
+    final reply = chat.messages.lastOrNull;
+    if (reply == null || reply.role != MessageRole.assistant) return;
+    // A decline is on the record: the member was addressed and passed, and
+    // nothing follows it.
+    if (_isPass(reply)) return;
+    final named = _mentionIn(chat, reply);
+    if (named == null) return;
+    _chain++;
+    if (_chain > _chainCap) return;
+    await _turn(
+      chat: chat,
+      prompt: reply,
+      history: chat.messages,
+      // The next reply is authored by the member handed to. The stamp
+      // carries the sigil, the way every author stamp does.
+      opening: [_newReply(author: "${CompletionKind.agent.trigger}$named")],
+    );
+  }
+
+  /// The one member [reply] names by handle, as the composer's own
+  /// `_mention` reads one. Null where it names none, or more than one — a
+  /// multi-mention is a round, and rounds are not sequential handoffs.
+  String? _mentionIn(Chat chat, Message reply) =>
+      singleAgentMention(reply.plainText,
+          ref.read(promptLibraryProvider(chat.state.project)));
+
+  /// Whether a reply says nothing but that its author passes: word for word,
+  /// so a longer reply is a reply and the convention is unambiguous.
+  bool _isPass(Message reply) => reply.plainText.trim() == passWord;
+
+  /// Consecutive agent-authored turns before a round stops. Counted from the
+  /// user's own turns, which reset it: the cap is about agents talking to
+  /// each other without end, not about how long a conversation may run.
+  static const _chainCap = 3;
+  int _chain = 0;
 
   /// The failure the turn last reported, for the retry row and the
   /// notification — turn-scoped like every other view state, never persisted.

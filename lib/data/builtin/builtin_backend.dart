@@ -308,7 +308,8 @@ class BuiltinBackend implements AgentBackend {
       if (prompt == null) {
         history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
       }
-      final session = await _sessionOf(chatId, history, rebuild: prompt == null);
+      final session =
+          await _sessionOf(chatId, history, rebuild: prompt == null, viewer: settings.omadaMember);
       final agent = BuiltinAgent(
         session: session,
         loadResource: _resourcesOf(chatId),
@@ -373,12 +374,18 @@ class BuiltinBackend implements AgentBackend {
       _running.add(chatId, agent.cancel);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
-      // of, so they come off the message that started it — its record of them,
-      // not the library, so an agent edited or deleted since still carries on
-      // under what the turn actually ran under.
+      // of, so they come off the message that started it. A member turn is
+      // the other shape: the overlay is the member's prompt from the library
+      // as it stands now, and it replaces the mentions rather than joining
+      // them.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
-      final agentPrompt = agentPromptFrom(said?.documents ?? const {});
+      final memberBody = settings.omadaMember == null
+          ? null
+          : memberPrompt(libraryFor(settings.project), settings.omadaMember!);
+      final agentPrompt = memberBody == null
+          ? agentPromptFrom(said?.documents ?? const {})
+          : "$memberBody\n\n${memberTurnInstructions()}";
       final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)
           : agent.run(prompt, agentPrompt: agentPrompt);
@@ -512,12 +519,21 @@ class BuiltinBackend implements AgentBackend {
   /// so that carrying on in the same process and carrying on after a restart
   /// put the same thing in front of the model — a checkpoint that failed is
   /// swallowed, so a live session can hold more than the log does.
+  ///
+  /// [viewer] is the member answering, whose session is worded for them — the
+  /// other participants' replies as labeled user messages — and rebuilt from
+  /// the log on every turn of theirs: the session is a cache, the log is the
+  /// truth, and whoever else spoke since they last ran is in the log by the
+  /// time they are called. The main agent's session keeps the warm path it
+  /// has always had; there is one main agent per chat, so nothing can have
+  /// written into its view since.
   Future<BuiltinSession> _sessionOf(String chatId, List<Message> history,
-      {bool rebuild = false}) async {
-    final session = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-    if (rebuild || session.isFresh) {
-      session.replaceWith(
-          await projectionOf(history, load: _resourcesOf(chatId)));
+      {bool rebuild = false, String? viewer}) async {
+    final key = viewer == null ? chatId : "$chatId\u0000$viewer";
+    final session = _sessions.putIfAbsent(key, BuiltinSession.new);
+    if (rebuild || viewer != null || session.isFresh) {
+      session.replaceWith(await projectionOf(history,
+          load: _resourcesOf(chatId), viewer: viewer));
     }
     return session;
   }
@@ -977,6 +993,9 @@ class BuiltinBackend implements AgentBackend {
     shell.closeSession(config.workspaceDir(chatId, project: project));
     await abort(chatId);
     _sessions.remove(chatId);
+    // Member sessions are keyed chat-prefixed, and a chat is gone with its
+    // members' projections of it.
+    _sessions.removeWhere((key, _) => key.startsWith("$chatId\u0000"));
   }
 
   @override
