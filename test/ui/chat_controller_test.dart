@@ -1289,6 +1289,51 @@ void main() {
       // Let the teardown see a finished hold rather than completing twice.
       app.backend.hold = null;
     });
+
+    test("a reply is stamped with the one member the prompt addresses",
+        () async {
+      final (id, _) = await chatWithOneTurn("hello @explore, find the tests");
+
+      final messages = messagesOf(id);
+      expect(messages.first.documents, contains("@explore"));
+      expect(messages.last.author, "@explore");
+    });
+
+    test("a command is not addressed to anyone it names", () async {
+      final (id, _) = await chatWithOneTurn("!grep @explore src/");
+
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("regenerating a command's reply names nobody either", () async {
+      final (id, controller) = await chatWithOneTurn("!grep @explore src/");
+
+      await controller.regenerate(messagesOf(id).last.id);
+      await waitIdle(id);
+
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("a regenerated reply carries the original prompt's author",
+        () async {
+      final (id, controller) =
+          await chatWithOneTurn("hello @explore, find the tests");
+
+      await controller.regenerate(messagesOf(id).first.id);
+      await waitIdle(id);
+
+      expect(messagesOf(id).last.author, "@explore");
+    });
+
+    test("an edited resend carries the new prompt's author", () async {
+      final (id, controller) = await chatWithOneTurn("helo");
+      final userId = messagesOf(id).first.id;
+
+      await controller.editAndResend(userId, "hello @explore");
+      await waitIdle(id);
+
+      expect(messagesOf(id).last.author, "@explore");
+    });
   });
 }
 

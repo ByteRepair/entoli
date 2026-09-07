@@ -165,6 +165,11 @@ abstract class Message with _$Message {
     /// sent, keyed by the reference as written — `/review`, `@researcher`. See
     /// "Commands and agents" in `lib/domain/CLAUDE.md`.
     @Default({}) Map<String, String> documents,
+
+    /// The addressed member who authored this message, as keyed in
+    /// [documents]; null is the main agent, unnamed — and every message
+    /// written before this existed.
+    String? author,
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);

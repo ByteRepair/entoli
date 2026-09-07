@@ -11,6 +11,8 @@ import "../../domain/chat_repository.dart";
 import "../../domain/reminder_alarms.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
+import "../../domain/prompt_library.dart" show authorFrom;
+import "../../domain/shell.dart" show shellBypassCommand;
 import "../../providers.dart";
 
 /// Per-chat state container exposed to the UI.
@@ -254,10 +256,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// policy, decided here and nowhere else: today every message is answered by
   /// the main agent, and the turn the user's send starts is its turn. Omada
   /// replaces this body — an `@mention` in an Omada-on project answers by the
-  /// named member. The answer is not authorship on the record: a member's
-  /// reply is still role `assistant`, and what names the author travels
-  /// through `Message.documents` and the `omada` record (see "The room and
-  /// its participants" in `lib/ui/chat/CLAUDE.md`).
+  /// named member. The answer is not authorship: what names the author is
+  /// [Message.author], stamped where the turn opens, and a member's reply is
+  /// still role `assistant`. See "The room and its participants" in
+  /// `lib/ui/chat/CLAUDE.md`.
   MessageRole _responder() => MessageRole.assistant;
 
   /// Say [text] and run the turn it starts. [files] are already under the
@@ -278,7 +280,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
-      opening: [userMsg, _newReply()],
+      opening: [userMsg, _newReply(author: authorFor(userMsg))],
       replacing: replacing,
     );
   }
@@ -332,13 +334,24 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         history: history, replaces: replacing != null));
   }
 
+  /// Who a turn opened on [prompt] names as its author: the one member the
+  /// prompt addresses. A command is not addressed to anyone, whatever its
+  /// text names — `!grep @researcher` runs a command, it does not ask
+  /// researcher to speak. Decided once, here, because the stamp is written
+  /// wherever a turn opens.
+  String? authorFor(Message prompt) =>
+      shellBypassCommand(prompt.plainText) == null
+          ? authorFrom(prompt.documents)
+          : null;
+
   /// The turn's reply, authored by whoever `_responder` answers — the role
   /// decided there, and the role is the render class, not the author.
-  Message _newReply() => Message(
+  Message _newReply({String? author}) => Message(
         id: _uuid.v4(),
         role: _responder(),
         createdAt: DateTime.now(),
         parts: const [],
+        author: author,
       );
 
   /// Carry on the turn the chat was cut off in. What this produces goes on the
@@ -425,7 +438,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       chat: chat,
       prompt: prompt,
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
-      opening: [_newReply()],
+      opening: [_newReply(author: authorFor(prompt))],
       replacing: _replyFor(chat, messageId),
     );
   }

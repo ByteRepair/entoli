@@ -186,6 +186,14 @@ String withArguments(String body, String arguments) {
   return arguments.isEmpty ? body : "$body\n\n$arguments";
 }
 
+/// What the message's `@agent` references meant, keyed as written. The one
+/// sweep of the agent half of a documents map, which both readers below walk.
+Map<String, String> agentEntriesFrom(Map<String, String> documents) => {
+      for (final entry in documents.entries)
+        if (entry.key.startsWith(CompletionKind.agent.trigger))
+          entry.key: entry.value,
+    };
+
 /// The `@agent` instructions the message asked for, joined in the order they
 /// were written — what `turnPrompt` puts under the system prompt for the turn.
 /// Null where it named none.
@@ -193,9 +201,13 @@ String withArguments(String body, String arguments) {
 /// Off the record rather than the text: the mentions were resolved when the
 /// message was composed, and a name mentioned twice was recorded once.
 String? agentPromptFrom(Map<String, String> documents) {
-  final bodies = [
-    for (final entry in documents.entries)
-      if (entry.key.startsWith(CompletionKind.agent.trigger)) entry.value,
-  ];
+  final bodies = agentEntriesFrom(documents).values.toList();
   return bodies.isEmpty ? null : bodies.join("\n\n");
+}
+
+/// The one agent key in [documents], as typed; null where there is none or
+/// more than one.
+String? authorFrom(Map<String, String> documents) {
+  final named = agentEntriesFrom(documents).keys.toList();
+  return named.length == 1 ? named.single : null;
 }

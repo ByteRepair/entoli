@@ -720,6 +720,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       Chat chat, ChatViewState view, ChatController? editing, Widget whenEmpty) {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
+    // Authors are stamped whether or not the project runs Omada; the label
+    // shows only where it does.
+    final omada = ref.watch(omadaOnProvider(chat.state.project));
     if (chat.messages.isEmpty) return whenEmpty;
     return Stack(
       children: [
@@ -736,6 +739,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               return MessageBubble(
                 chatId: widget.chatId,
                 message: m,
+                author: omada ? m.author : null,
                 isWaiting: view.isRunning && i == chat.messages.length - 1,
                 waitingNotice: view.retry,
                 waitingStatus: view.status,
