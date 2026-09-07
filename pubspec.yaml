@@ -78,7 +78,10 @@ dependencies:
   clock: ^1.1.2
   # navigator.storage.persist(), so what the browser stored is not evicted.
   web: ^1.1.1
-  flutter_webrtc: ^1.6.0
+  # Held below 1.6.2: its Linux plugin segfaults on registration (SEGV in
+  # FlutterMediaStream's constructor) whether or not libpulse was found at
+  # build time. Unpin when a release fixes it.
+  flutter_webrtc: ">=1.6.0 <1.6.2"
   cryptography: ^2.9.0
   cryptography_flutter: ^2.3.4
   web_socket_channel: ^3.0.3
