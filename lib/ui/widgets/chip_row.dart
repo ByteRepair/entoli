@@ -2,6 +2,11 @@ import "package:flutter/material.dart";
 
 import "floating_position.dart";
 
+/// How long an entry's grow or shrink runs, and how long a leaving entry's
+/// slot is held for the shrink before it goes — the hold and the tween are
+/// the same motion, so the two must not drift apart.
+const _motion = Duration(milliseconds: 180);
+
 /// One entry of a [ChipRow]: what it is, named by a stable key, and the chip
 /// to draw for it. The key is how the row tells staying from arriving and
 /// leaving across builds — it should be the thing's identity, not its
@@ -46,10 +51,6 @@ class _Shown {
 }
 
 class _ChipRowState extends State<ChipRow> {
-  /// How long an entry's grow or shrink runs, and how long its slot is held
-  /// for the shrink before it goes.
-  static const _motion = Duration(milliseconds: 180);
-
   late List<_Shown> shown;
 
   @override
@@ -66,11 +67,12 @@ class _ChipRowState extends State<ChipRow> {
     final next = {for (final entry in widget.entries) entry.key: entry};
     final kept = <_Shown>[];
     for (final entry in shown) {
-      if (next.containsKey(entry.key)) {
-        // Persists, or comes back mid-exit: a fresh instance either way, so
-        // a removal scheduled for the old one passes it by and the entry's
-        // own tween retargets home.
-        kept.add(_Shown(entry.key, next.remove(entry.key)!.child));
+      // Persists, or comes back mid-exit: a fresh instance either way, so a
+      // removal scheduled for the old one passes it by and the entry's own
+      // tween retargets home.
+      final match = next.remove(entry.key);
+      if (match != null) {
+        kept.add(_Shown(entry.key, match.child));
       } else {
         if (!entry.exiting) {
           entry.exiting = true;
@@ -79,12 +81,9 @@ class _ChipRowState extends State<ChipRow> {
         kept.add(entry);
       }
     }
-    for (final entry in widget.entries) {
-      if (!next.containsKey(entry.key)) continue;
-      if (kept.any((held) => held.key == entry.key)) continue;
-      kept.add(_Shown(entry.key, entry.child));
-    }
-    shown = kept;
+    // Whatever `next` still holds is arriving: every key the row already
+    // showed has been consumed out of it.
+    shown = kept..addAll(next.values.map((e) => _Shown(e.key, e.child)));
   }
 
   void _scheduleGone(_Shown entry) {
@@ -126,8 +125,6 @@ class _ChipRowState extends State<ChipRow> {
 /// neighbours glide rather than jump; the scale is the tween too, so painted
 /// size follows slot size and what appears from nothing is the child itself.
 class _EnterExit extends StatelessWidget {
-  static const _motion = Duration(milliseconds: 180);
-
   const _EnterExit({required this.child, this.exiting = false});
 
   final bool exiting;

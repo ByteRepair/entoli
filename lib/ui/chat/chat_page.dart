@@ -338,81 +338,71 @@ class _EmptyChat extends ConsumerWidget {
 /// sweeping rather than by snapping or fading: the new text takes over from
 /// the first character and the change front moves progressively towards the
 /// end, so the left of the line already reads the new question while the
-/// tail is still the old one.
+/// tail is still the old one. The front runs the longer string's length, so
+/// a shorter new question sees the old one's tail eaten past its own end
+/// rather than left standing behind the front.
 ///
-/// What the sweep starts from is what is currently *shown* — a hybrid, if a
-/// previous sweep is still running, which is what makes picking another
-/// badge mid-sweep retarget smoothly instead of jumping. Constant speed:
-/// a fade would rush the left end and hide the sweep the motion is.
-class _QuestionSweep extends StatefulWidget {
-  const _QuestionSweep({required this.text, required this.style});
+/// The tween carries the strings, so a change mid-sweep retargets from the
+/// hybrid on screen — the framework's own interruptible path — rather than
+/// restarting. Constant speed: a fade would rush the left end and hide the
+/// sweep the motion is.
+class _QuestionSweep extends ImplicitlyAnimatedWidget {
+  const _QuestionSweep({
+    required this.text,
+    required this.style,
+  }) : super(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.linear,
+        );
 
   final String text;
   final TextStyle? style;
 
   @override
-  State<_QuestionSweep> createState() => _QuestionSweepState();
+  ImplicitlyAnimatedWidgetState<_QuestionSweep> createState() =>
+      _QuestionSweepState();
 }
 
-class _QuestionSweepState extends State<_QuestionSweep> {
-  /// What the headline shows, which is a hybrid of the strings it has been
-  /// given whenever a sweep is under way.
-  late String shown;
+/// The sweep as a tween: at [t] the front sits [t] of the way along the
+/// longer of the two strings, left of it the new question, right of it the
+/// old one. Larping the strings rather than animating a bare scalar is what
+/// lets the framework retarget from the hybrid mid-sweep — the alternative
+/// was bookkeeping in the builder to recover what the tween never carried.
+class _SweepTween extends Tween<String> {
+  _SweepTween({super.begin, super.end});
 
-  /// Bumped per sweep, so the tween remounts and runs from 0 rather than
-  /// continuing the last one's progress.
-  int generation = 0;
+  @override
+  String lerp(double t) {
+    final target = end ?? "";
+    final from = begin ?? "";
+    final n = math.max(target.length, from.length);
+    final k = (t * n).round().clamp(0, n);
+    return target.substring(0, math.min(k, target.length)) +
+        from.substring(math.min(k, from.length));
+  }
+}
+
+class _QuestionSweepState extends AnimatedWidgetBaseState<_QuestionSweep> {
+  late _SweepTween _tween;
 
   @override
   void initState() {
+    _tween = _SweepTween(begin: widget.text, end: widget.text);
     super.initState();
-    shown = widget.text;
   }
 
   @override
-  void didUpdateWidget(_QuestionSweep oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.text == shown) return;
-    // The next sweep starts from what is on screen, not from the string the
-    // last sweep started from.
-    from = shown;
-    shown = widget.text;
-    generation++;
+  void forEachTween(TweenVisitor<dynamic> visitor) {
+    _tween = visitor(_tween, widget.text,
+        (value) => _SweepTween(begin: value as String)) as _SweepTween;
   }
-
-  /// What the running sweep is replacing. Only read once a sweep exists.
-  late String from;
 
   @override
   Widget build(BuildContext context) {
-    if (generation == 0) {
-      // First build shows the question settled: the sweep is for a change.
-      return Text(
-        shown,
-        key: const ValueKey("question"),
-        textAlign: TextAlign.center,
-        style: widget.style,
-      );
-    }
-    return TweenAnimationBuilder(
-      key: ValueKey(generation),
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.linear,
-      builder: (context, t, _) {
-        final to = shown;
-        final k = (t * to.length).round().clamp(0, to.length);
-        // Left of the front the new question, right of it what was shown
-        // before — the front itself starts at the first character.
-        final hybrid = to.substring(0, k) +
-            from.substring(math.min(k, from.length));
-        return Text(
-          hybrid,
-          key: const ValueKey("question"),
-          textAlign: TextAlign.center,
-          style: widget.style,
-        );
-      },
+    return Text(
+      _tween.evaluate(animation),
+      textAlign: TextAlign.center,
+      style: widget.style,
     );
   }
 }

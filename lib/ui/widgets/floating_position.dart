@@ -93,21 +93,12 @@ class RenderFloatingPosition extends RenderProxyBox {
     final share = (eased - _eased) / (1.0 - _eased);
     _eased = eased;
     _painted = Offset.lerp(_painted, _target, share);
-    if (progress >= 1.0) {
+    // A target that moved back onto the painted position has nothing left to
+    // close; ticking to the deadline would repaint the subtree for nothing.
+    if (progress >= 1.0 || _painted == _target) {
       _painted = _target;
       _ticker.stop();
     }
-    markNeedsPaint();
-  }
-
-  @override
-  void layout(Constraints constraints, {bool parentUsesSize = false}) {
-    super.layout(constraints, parentUsesSize: parentUsesSize);
-    // The wrap writes the new slot into parent data only after this returns,
-    // and asks nothing of a child whose constraints did not change — so the
-    // paint that would notice the move has to be asked for here. The paint
-    // flush runs after the whole layout flush, by which time the slot is
-    // written; [paint] reads it and starts a run if it differs.
     markNeedsPaint();
   }
 

@@ -31,6 +31,16 @@ void main() {
 
   /// What is in the composer. The text rather than a finder over it: a
   /// `find.text` would match the same words drawn anywhere else on the page.
+  /// What the question headline shows mid-sweep: a hybrid, so it matches no
+  /// settled question. It is the page's only centred 16pt text — the
+  /// composer's hint is left-aligned and its labels smaller.
+  String questionShown(WidgetTester tester) =>
+      tester.widget<Text>(find.byWidgetPredicate((w) =>
+          w is Text &&
+          w.data != null &&
+          w.style?.fontSize == 16 &&
+          w.textAlign == TextAlign.center)).data!;
+
   String typed(WidgetTester tester) =>
       tester.widget<TextField>(find.byType(TextField)).controller!.text;
 
@@ -311,7 +321,7 @@ void main() {
       // takes. The two questions share their first thirty characters, so the
       // front is past where they diverge — and not yet at the end.
       await tester.pump(const Duration(milliseconds: 350));
-      final mid = tester.widget<Text>(find.byKey(const ValueKey("question"))).data!;
+      final mid = questionShown(tester);
       expect(mid, isNot("What would you like to discuss?"));
       expect(mid, isNot("What would you like to discuss anonymously?"));
       // The front starts at the first character: the new question's opening
@@ -321,6 +331,31 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text("What would you like to discuss anonymously?"),
           findsOneWidget);
+    });
+
+    // The front runs the longer string's length: a shorter new question has
+    // to see the old one's tail eaten past the new question's end, not left
+    // standing behind the front forever.
+    testWidgets("deselecting sweeps the old tail away", (tester) async {
+      await openEmpty(tester);
+
+      await pick(tester, anonProjectLabel);
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss anonymously?"),
+          findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, anonProjectLabel));
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 350));
+
+      // The front has eaten past the shorter question's end: what is shown
+      // is neither the old long question nor the new short one yet.
+      final mid = questionShown(tester);
+      expect(mid, isNot("What would you like to discuss anonymously?"));
+
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+      expect(find.textContaining("nonymously"), findsNothing);
     });
 
     // The badge says where the next chat goes, which is all it can say: there
@@ -647,26 +682,12 @@ void main() {
     // happen under a screen that is already open, which is the case the
     // animation exists for.
     group("a swap of the starter set", () {
-      Future<void> reload(WidgetTester tester) async {
-        await tester.runAsync(
-          () => app.container.read(promptLibraryProvider(null).notifier).reload(),
-        );
-        await settleIo(tester);
-      }
-
       testWidgets("an arriving chip grows in while its neighbours hold",
           (tester) async {
         await openBlank(tester);
 
-        await io(tester, () async {
-          await File(
-                  "${app.config.promptsDir(CompletionKind.skill)}/review/SKILL.md")
-              .create(recursive: true);
-          await File(
-                  "${app.config.promptsDir(CompletionKind.skill)}/review/SKILL.md")
-              .writeAsString("---\ndescription: review changes\n---\n\nDo it.\n");
-        });
-        await reload(tester);
+        await io(tester, () => writeSkill(app, "review"));
+        await reloadLibrary(tester, app);
 
         // Arrived: it grows from nothing over the next frames, so it is on
         // screen already but its slot is not full width yet.
@@ -677,13 +698,8 @@ void main() {
 
       testWidgets("a leaving chip shrinks away before it goes", (tester) async {
         await openBlank(tester);
-        await io(tester, () async {
-          final file = File(
-              "${app.config.promptsDir(CompletionKind.skill)}/review/SKILL.md");
-          await file.create(recursive: true);
-          await file.writeAsString("---\ndescription: review changes\n---\n\nDo it.\n");
-        });
-        await reload(tester);
+        await io(tester, () => writeSkill(app, "review"));
+        await reloadLibrary(tester, app);
         expect(find.text("/review"), findsOneWidget);
 
         await io(tester, () async {
@@ -693,9 +709,7 @@ void main() {
         });
         // Reloaded without settling, so the shrink has not been pumped
         // through yet and the chip is still on screen for it.
-        await tester.runAsync(
-          () => app.container.read(promptLibraryProvider(null).notifier).reload(),
-        );
+        await reloadLibrary(tester, app, settle: false);
         await tester.pump();
 
         // Still shrinking: the chip is held on screen for the animation, and
@@ -714,27 +728,12 @@ void main() {
         // a reload reads the real sources rather than the test's seed.
         await io(tester, () async {
           await app.repo.createProject("work");
-          for (final (name, project) in [
-            ("review", null),
-            ("extra", "work"),
-          ]) {
-            final file = File(
-                "${app.config.promptsDir(CompletionKind.skill, project: project)}/$name/SKILL.md");
-            await file.create(recursive: true);
-            await file.writeAsString(
-                "---\ndescription: do $name\n---\n\nDo $name.\n");
-          }
+          await writeSkill(app, "review");
+          await writeSkill(app, "extra", project: "work");
         });
         await openBlank(tester);
-        await tester.runAsync(() async {
-          await app.container
-              .read(promptLibraryProvider(null).notifier)
-              .reload();
-          await app.container
-              .read(promptLibraryProvider("work").notifier)
-              .reload();
-        });
-        await settleIo(tester);
+        await reloadLibrary(tester, app);
+        await reloadLibrary(tester, app, project: "work");
         expect(find.text("/review"), findsOneWidget);
 
         await tester.tap(find.widgetWithText(ChoiceChip, "work"));
