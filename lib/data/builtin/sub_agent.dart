@@ -17,15 +17,12 @@ import "llm/rate_limit_gate.dart";
 import "projection.dart";
 import "templates.dart";
 
-/// Spawns sub-agents for `task` tool calls. Each sub-agent gets a fresh
-/// [BuiltinSession], the named `@agent`'s body as its system-prompt overlay,
-/// and runs to completion headless — no `ask_user`, no `task` (sub-agents do
-/// not spawn their own sub-agents), no per-command approval banners. Its
-/// commands run one-shot over the parent's shell: a fresh subshell per
-/// command, since a fan-out of workers wants concurrency, not a shell they
-/// all `cd` around. The parent's approval setting gates the parent's own
-/// commands; a sub-agent's commands run autonomously, which is what makes a
-/// 75-vote fan-out usable.
+/// Spawns sub-agents for `task` tool calls — the main agent scheduling
+/// delegated participant turns, each with its own [BuiltinSession] and a
+/// transcript of its own under `subagents/`. What makes a sub-agent sub is
+/// the reply route: it runs to completion headless and never addresses the
+/// room — its final text returns as the tool result, readable by the main
+/// agent alone. See "Sub-agents" in `CLAUDE.md` for the rest.
 class SubAgentRunner {
   SubAgentRunner({
     required this.client,

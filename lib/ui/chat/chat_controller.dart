@@ -33,9 +33,10 @@ class ChatViewState {
   /// call and the answers are what the conversation keeps.
   final List<AskRequest> questions;
 
-  /// Sub-agents spawned by `task` calls that are still running. Turn-scoped
-  /// view state like [approvals]: the call/result pair is what persists, and
-  /// these exist only to drive the activity strip.
+  /// Sub-agents spawned by `task` calls that are still running — delegated
+  /// participants at work, shown as room activity. Turn-scoped view state like
+  /// [approvals]: the call/result pair is what persists, and these exist only
+  /// to drive the activity strip.
   final List<SubAgentStartEvent> runningSubAgents;
 
   /// Set while the backend is retrying a failed attempt. Transient: it belongs
@@ -51,6 +52,14 @@ class ChatViewState {
   /// reached" for a step limit, null otherwise. Turn-scoped: not persisted, so
   /// a reload shows the default "Unfinished turn" text.
   final String? unfinishedNotice;
+
+  /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
+  /// one answer" in `lib/ui/chat/CLAUDE.md` owns.
+  RoomPhase get roomPhase => questions.isNotEmpty
+      ? RoomPhase.waitingOnYou
+      : isRunning
+          ? RoomPhase.agentSpeaking
+          : RoomPhase.open;
 
   ChatViewState copyWith({
     Chat? chat,
@@ -77,6 +86,20 @@ class ChatViewState {
             ? null
             : (unfinishedNotice ?? this.unfinishedNotice),
       );
+}
+
+/// Who may speak in the room — see [ChatViewState.roomPhase].
+enum RoomPhase {
+  /// Nothing is running; the composer is the user's.
+  open,
+
+  /// A turn is running and has not asked anything: the main agent is
+  /// speaking, the composer shows Stop.
+  agentSpeaking,
+
+  /// A turn is waiting on the user — the composer's place is taken by the
+  /// question panel.
+  waitingOnYou,
 }
 
 /// What a page needs of whatever is driving its turn. [ChatController] for a
@@ -227,6 +250,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     await _prompt(text, files: await repo.saveAttachments(chatId, attachments));
   }
 
+  /// Who answers a message said to the room. The whole of the scheduling
+  /// policy, decided here and nowhere else: today every message is answered by
+  /// the main agent, and the turn the user's send starts is its turn. Omada
+  /// replaces this body — an `@mention` in an Omada-on project answers by the
+  /// named member. The answer is not authorship on the record: a member's
+  /// reply is still role `assistant`, and what names the author travels
+  /// through `Message.documents` and the `omada` record (see "The room and
+  /// its participants" in `lib/ui/chat/CLAUDE.md`).
+  MessageRole _responder() => MessageRole.assistant;
+
   /// Say [text] and run the turn it starts. [files] are already under the
   /// chat's `resources/`. [replacing] makes it another thread beside a prompt
   /// already in the conversation — an edit — rather than the next thing said.
@@ -299,9 +332,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         history: history, replaces: replacing != null));
   }
 
+  /// The turn's reply, authored by whoever `_responder` answers — the role
+  /// decided there, and the role is the render class, not the author.
   Message _newReply() => Message(
         id: _uuid.v4(),
-        role: MessageRole.assistant,
+        role: _responder(),
         createdAt: DateTime.now(),
         parts: const [],
       );

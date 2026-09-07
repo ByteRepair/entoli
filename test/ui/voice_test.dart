@@ -890,7 +890,7 @@ void main() {
           Scaffold(
             body: Composer(
               controller: text,
-              isRunning: false,
+              agentSpeaking: false,
               onSend: (_, _) {},
               onAbort: () {},
               onVoice: () {},

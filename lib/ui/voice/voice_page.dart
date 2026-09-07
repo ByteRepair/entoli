@@ -195,7 +195,7 @@ class _ScriptState extends ConsumerState<_Script> {
         const SizedBox(height: 12),
         if (chat != null && driver != null) ...[
           TurnSurface(view: chat, notifier: driver),
-          if (chat.questions.isNotEmpty)
+          if (chat.roomPhase == RoomPhase.waitingOnYou)
             TurnQuestions(view: chat, notifier: driver),
         ],
       ],
