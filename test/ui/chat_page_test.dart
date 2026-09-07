@@ -616,6 +616,113 @@ void main() {
 
       expect(find.byType(ActionChip), findsNWidgets(12));
     });
+
+    // A change of set animates per chip: what stays keeps its slot, what
+    // arrives grows out of nothing, what leaves shrinks away before going.
+    // Driving the library rather than a different TestApp: the swap has to
+    // happen under a screen that is already open, which is the case the
+    // animation exists for.
+    group("a swap of the starter set", () {
+      Future<void> reload(WidgetTester tester) async {
+        await tester.runAsync(
+          () => app.container.read(promptLibraryProvider(null).notifier).reload(),
+        );
+        await settleIo(tester);
+      }
+
+      testWidgets("an arriving chip grows in while its neighbours hold",
+          (tester) async {
+        await openBlank(tester);
+
+        await io(tester, () async {
+          await File(
+                  "${app.config.promptsDir(CompletionKind.skill)}/review/SKILL.md")
+              .create(recursive: true);
+          await File(
+                  "${app.config.promptsDir(CompletionKind.skill)}/review/SKILL.md")
+              .writeAsString("---\ndescription: review changes\n---\n\nDo it.\n");
+        });
+        await reload(tester);
+
+        // Arrived: it grows from nothing over the next frames, so it is on
+        // screen already but its slot is not full width yet.
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 90));
+        expect(find.text("/review"), findsOneWidget);
+      });
+
+      testWidgets("a leaving chip shrinks away before it goes", (tester) async {
+        await openBlank(tester);
+        await io(tester, () async {
+          final file = File(
+              "${app.config.promptsDir(CompletionKind.skill)}/review/SKILL.md");
+          await file.create(recursive: true);
+          await file.writeAsString("---\ndescription: review changes\n---\n\nDo it.\n");
+        });
+        await reload(tester);
+        expect(find.text("/review"), findsOneWidget);
+
+        await io(tester, () async {
+          await Directory(
+                  "${app.config.promptsDir(CompletionKind.skill)}/review")
+              .delete(recursive: true);
+        });
+        // Reloaded without settling, so the shrink has not been pumped
+        // through yet and the chip is still on screen for it.
+        await tester.runAsync(
+          () => app.container.read(promptLibraryProvider(null).notifier).reload(),
+        );
+        await tester.pump();
+
+        // Still shrinking: the chip is held on screen for the animation, and
+        // is gone once it has run.
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text("/review"), findsNothing);
+      });
+
+      testWidgets("a project switch keeps what both share and grows in the rest",
+          (tester) async {
+        // The default's set is what a project without its own inherits, so a
+        // switch to a project with one extra skill is the both-motions case:
+        // everything shared keeps its slot, the extra grows out of nothing.
+        // Both skills are written to disk and both libraries reloaded, since
+        // a reload reads the real sources rather than the test's seed.
+        await io(tester, () async {
+          await app.repo.createProject("work");
+          for (final (name, project) in [
+            ("review", null),
+            ("extra", "work"),
+          ]) {
+            final file = File(
+                "${app.config.promptsDir(CompletionKind.skill, project: project)}/$name/SKILL.md");
+            await file.create(recursive: true);
+            await file.writeAsString(
+                "---\ndescription: do $name\n---\n\nDo $name.\n");
+          }
+        });
+        await openBlank(tester);
+        await tester.runAsync(() async {
+          await app.container
+              .read(promptLibraryProvider(null).notifier)
+              .reload();
+          await app.container
+              .read(promptLibraryProvider("work").notifier)
+              .reload();
+        });
+        await settleIo(tester);
+        expect(find.text("/review"), findsOneWidget);
+
+        await tester.tap(find.widgetWithText(ChoiceChip, "work"));
+        await tester.pump();
+
+        // Arrived mid-growth beside the chips that never left.
+        expect(find.text("/extra"), findsOneWidget);
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text("/extra"), findsOneWidget);
+      });
+    });
   });
 
   group("the conversation", () {
