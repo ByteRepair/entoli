@@ -286,20 +286,9 @@ class _EmptyChat extends ConsumerWidget {
           children: [
             const AppMark(size: 56),
             const SizedBox(height: 20),
-            // A project switch swaps the question for another one; fading
-            // between them rather than snapping the text.
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              child: Text(
-                emptyChatQuestionFor(project),
-                // The switcher's key: without one it sees the same child and
-                // does not fade.
-                key: ValueKey(project),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
-              ),
+            _QuestionSweep(
+              text: emptyChatQuestionFor(project),
+              style: theme.textTheme.titleMedium,
             ),
             _ProjectBadges(selected: project),
             const SizedBox(height: 20),
@@ -341,6 +330,89 @@ class _EmptyChat extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The empty-chat screen's question, which changes with the project by
+/// sweeping rather than by snapping or fading: the new text takes over from
+/// the first character and the change front moves progressively towards the
+/// end, so the left of the line already reads the new question while the
+/// tail is still the old one.
+///
+/// What the sweep starts from is what is currently *shown* — a hybrid, if a
+/// previous sweep is still running, which is what makes picking another
+/// badge mid-sweep retarget smoothly instead of jumping. Constant speed:
+/// a fade would rush the left end and hide the sweep the motion is.
+class _QuestionSweep extends StatefulWidget {
+  const _QuestionSweep({required this.text, required this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  State<_QuestionSweep> createState() => _QuestionSweepState();
+}
+
+class _QuestionSweepState extends State<_QuestionSweep> {
+  /// What the headline shows, which is a hybrid of the strings it has been
+  /// given whenever a sweep is under way.
+  late String shown;
+
+  /// Bumped per sweep, so the tween remounts and runs from 0 rather than
+  /// continuing the last one's progress.
+  int generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    shown = widget.text;
+  }
+
+  @override
+  void didUpdateWidget(_QuestionSweep oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text == shown) return;
+    // The next sweep starts from what is on screen, not from the string the
+    // last sweep started from.
+    from = shown;
+    shown = widget.text;
+    generation++;
+  }
+
+  /// What the running sweep is replacing. Only read once a sweep exists.
+  late String from;
+
+  @override
+  Widget build(BuildContext context) {
+    if (generation == 0) {
+      // First build shows the question settled: the sweep is for a change.
+      return Text(
+        shown,
+        key: const ValueKey("question"),
+        textAlign: TextAlign.center,
+        style: widget.style,
+      );
+    }
+    return TweenAnimationBuilder(
+      key: ValueKey(generation),
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.linear,
+      builder: (context, t, _) {
+        final to = shown;
+        final k = (t * to.length).round().clamp(0, to.length);
+        // Left of the front the new question, right of it what was shown
+        // before — the front itself starts at the first character.
+        final hybrid = to.substring(0, k) +
+            from.substring(math.min(k, from.length));
+        return Text(
+          hybrid,
+          key: const ValueKey("question"),
+          textAlign: TextAlign.center,
+          style: widget.style,
+        );
+      },
     );
   }
 }
