@@ -21,6 +21,36 @@ The room has two participants who speak, and a third shape that never does:
   as the main agent's instructions. Omada is what changes that sentence, in
   Omada-on projects only.
 
+### The contract between direct and Omada chats
+
+**A direct chat** — Omada off, the default, every chat that existed before
+there was a toggle — is **strictly 1:1 between the user and the main agent**.
+Every turn is the main agent's turn, whether the message addresses it or not;
+an `@mention` on the prompt is instruction material, stacked from
+`Message.documents`, and the reply is the main agent's, unnamed. When the
+main agent delegates, it does so through `task`: sub-agents are machinery
+inside its turn, headless and off the record, their output readable by the
+main agent alone, and the user sees only what the main agent says about it.
+Nothing stamps, nothing labels, nothing hands off. A direct chat is the
+system as it was before Omada existed, byte for byte.
+
+**An Omada chat** — Omada on for the project — adds a reply route, and
+everything Omada does hangs off it: a message addressing exactly one member
+is answered by that member as a participant, in a session of its own, with
+the author on the record; members hand off to each other by mentioning one
+member in a reply, chain-capped; a member declines with `pass`. The turn's
+scheduling is the controller's `_memberAnswering` decision, and it is gated
+on the toggle: **turning Omada off ends promotion for every turn after it**,
+whatever the prompt names. What is already on the record stays — history is
+fact — but the next send is the main agent's.
+
+**The label means a member authored the turn.** `Message.author` is stamped
+only where a member actually answered — an Omada-on turn routed by
+`_memberAnswering` — never where the main agent merely used a member's
+instructions. That is what keeps the label honest: it answers "who spoke",
+and the answer is a lie if an instruction overlay can put a name on the
+main agent's voice.
+
 **The lock is the room's rule, decided once.** While a turn runs, the user's
 send is refused — not by the composer, which only swaps Send for Stop, and
 not by peer-to-peer state between participants, but by the controller: `send`
@@ -583,6 +613,18 @@ until the character that opens one has been typed, so a user who does not know
 they exist never finds out. Six at most, because everything the user has
 written is a menu and `/` is what opens the menu; with nothing at all in the
 library it says how to reach them instead.
+
+**Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/CLAUDE.md`),
+which is why nothing here snaps when the set changes: picking a badge grows
+its check, the row re-flows around the growth, and a badge pushed onto a new
+line glides there rather than teleporting — that case is why the position
+mechanism paints rather than wraps. A change of project swaps the starters
+per chip — what both sets share keeps its slot, the delta grows out of
+nothing or shrinks into it — and with nothing at all in the library the
+"Type / for commands, @ for agents." line is an entry of the same row, so it
+gives way to the first chips through the same motion. The question headline
+cross-fades between its projects' texts. The row animates its first build
+too: the screen is grown into, not shown settled.
 
 The badges are the same discovery for projects: the switcher at the top of the
 sidebar is the only other place one is named, and on a phone the sidebar is a
