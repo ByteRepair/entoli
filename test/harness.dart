@@ -803,8 +803,7 @@ Future<void> reloadLibrary(
   bool settle = true,
 }) async {
   await tester.runAsync(
-    () =>
-        app.container.read(promptLibraryProvider(project).notifier).reload(),
+    () => app.container.read(promptLibraryProvider(project).notifier).reload(),
   );
   if (settle) await settleIo(tester);
 }
