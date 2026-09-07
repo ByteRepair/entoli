@@ -211,31 +211,38 @@ class _ProjectBadges extends ConsumerWidget {
         runSpacing: 8,
         children: [
           for (final project in projects)
-            ChoiceChip(
-              // The icon rides in the label rather than the avatar slot:
-              // Material's ChoiceChip paints the selected check over the
-              // avatar, so an icon there disappears under the tick when
-              // picked. In the label it sits beside the text, and the check
-              // keeps the leading slot to itself the way it had before the
-              // icon was added.
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (projectIcon(project) case final icon?)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Icon(icon, size: 18),
-                    ),
-                   Text(
-                     projectLabel(project),
-                     style: projectLabelStyle(
-                       ref.watch(omadaOnProvider(project)),
+            // The picked badge grows the check, and AnimatedSize animates
+            // that resize so the row re-flows its neighbours instead of
+            // snapping them.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              child: ChoiceChip(
+                // The icon rides in the label rather than the avatar slot:
+                // Material's ChoiceChip paints the selected check over the
+                // avatar, so an icon there disappears under the tick when
+                // picked. In the label it sits beside the text, and the check
+                // keeps the leading slot to itself the way it had before the
+                // icon was added.
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (projectIcon(project) case final icon?)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Icon(icon, size: 18),
+                      ),
+                     Text(
+                       projectLabel(project),
+                       style: projectLabelStyle(
+                         ref.watch(omadaOnProvider(project)),
+                       ),
                      ),
-                   ),
-                ],
+                  ],
+                ),
+                selected: project == selected,
+                onSelected: (on) => selectProject(ref, on ? project : null),
               ),
-              selected: project == selected,
-              onSelected: (on) => selectProject(ref, on ? project : null),
             ),
         ],
       ),
@@ -275,39 +282,66 @@ class _EmptyChat extends ConsumerWidget {
           children: [
             const AppMark(size: 56),
             const SizedBox(height: 20),
-            Text(
-              emptyChatQuestionFor(project),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium,
+            // A project switch swaps the question for another one; fading
+            // between them rather than snapping the text.
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              child: Text(
+                emptyChatQuestionFor(project),
+                // The switcher's key: without one it sees the same child and
+                // does not fade.
+                key: ValueKey(project),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium,
+              ),
             ),
             _ProjectBadges(selected: project),
             const SizedBox(height: 20),
-            if (starters.isEmpty)
-              Text(
-                "Type / for commands, @ for agents.",
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              )
-            else
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final starter in starters)
-                    ActionChip(
-                      label: Text("${starter.kind.trigger}${starter.option.name}"),
-                      labelStyle:
-                          theme.textTheme.bodySmall?.copyWith(fontFamily: monoFamily),
-                      // Null rather than the empty string: `Chip` builds a
-                      // `Tooltip` for whatever it is given, and an empty one is
-                      // a blank box on a long press.
-                      tooltip: starter.option.description,
-                      onPressed: () =>
-                          insertCompletion(controller, starter.kind, starter.option.name),
-                    ),
-                ],
+            // The starters swap whole for the project's library, and a
+            // switcher keyed on the set cross-fades the two instead of
+            // snapping; the empty-state line is its other child, so it fades
+            // with them too. `AnimatedSize` carries the height change the
+            // transition stacks up.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: starters.isEmpty
+                    ? Text(
+                        "Type / for commands, @ for agents.",
+                        key: ValueKey("empty-${project ?? ''}"),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      )
+                    : Wrap(
+                        key: ValueKey(starters.map((s) => s.option.name).join(" ")),
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final starter in starters)
+                            ActionChip(
+                              label: Text(
+                                  "${starter.kind.trigger}${starter.option.name}"),
+                              labelStyle: theme.textTheme.bodySmall
+                                  ?.copyWith(fontFamily: monoFamily),
+                              // Null rather than the empty string: `Chip`
+                              // builds a `Tooltip` for whatever it is given,
+                              // and an empty one is a blank box on a long
+                              // press.
+                              tooltip: starter.option.description,
+                              onPressed: () => insertCompletion(
+                                  controller, starter.kind, starter.option.name),
+                            ),
+                        ],
+                      ),
               ),
+            ),
           ],
         ),
       ),
