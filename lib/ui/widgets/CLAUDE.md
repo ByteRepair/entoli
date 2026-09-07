@@ -86,6 +86,31 @@ list. `copyToClipboard` is the other half of the same pairing: copying looks
 identical afterwards whatever did it, so what was taken is said in a snack bar
 from one place rather than each caller's own.
 
+`floating_position.dart` and `chip_row.dart` are the empty-chat screen's two
+animation mechanisms, and anything else that wants the same motion reaches for
+them rather than re-deriving it. `FloatingPosition` is a child of a `Wrap`
+whose painted position glides to wherever the wrap next puts it, because the
+wrap moves children by rewriting `WrapParentData.offset` after `layout()` and
+asks nothing of a child whose constraints did not change — so the render
+object asks for its own paint on every layout, where the new slot is already
+written, and paints at the offset it is catching up to. One fixed deadline per
+run, each frame closing the same eased share of what remains: a target that
+keeps moving (a neighbour's slot growing frame by frame) is chased smoothly
+and landed on exactly, not crawled after, and one pushed onto the next line
+travels there instead of teleporting. Hit-testing and paint transforms follow
+the painted offset, so a tap lands where the chip is shown.
+
+`ChipRow` is the row over it: a centred `Wrap` that animates a change of set
+per entry rather than swapping the row whole. It diffs the desired entries
+against what is on screen, holds a removed entry for the 180 ms its shrink
+runs (by identity, so a key back mid-exit revives it in place rather than
+being vanished by a removal scheduled for the instance it replaced), and
+grows every kept or arriving entry's slot through `_EnterExit` — the slot's
+width and the child's scale and opacity are the one tween, so painted size
+always equals slot size and what appears from nothing is the chip itself.
+A row is grown into on first build, not shown settled; the empty-state line
+of the empty chat is an entry of it like any other.
+
 `showAnchoredMenu` is a menu under a button, as a **route**. A `MenuAnchor`
 draws into an overlay instead, and an overlay is not popped by anything: the
 back key passes through it to whatever is behind, which beside the chat is the

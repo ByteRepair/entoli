@@ -14,6 +14,7 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
+import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
@@ -614,6 +615,68 @@ void main() {
       await openBlank(tester);
 
       expect(find.byType(ActionChip), findsNWidgets(12));
+    });
+  });
+
+  group("the conversation", () {
+    /// A chat whose turn openers carry the Omada modes of a mixed history:
+    /// direct, then on, then off. Written the way the controller would have.
+    Future<String> seedSectionedChat(WidgetTester tester) => io(tester, () async {
+          final at = DateTime(2026, 1, 1, 12);
+          final said = [
+            Message(
+                id: "u1",
+                role: MessageRole.user,
+                createdAt: at,
+                parts: const [TextPart(text: "first")],
+                omadaOn: false),
+            Message(id: "a1", role: MessageRole.assistant, createdAt: at),
+            Message(
+                id: "u2",
+                role: MessageRole.user,
+                createdAt: at,
+                parts: const [TextPart(text: "second")],
+                omadaOn: true),
+            Message(id: "a2", role: MessageRole.assistant, createdAt: at),
+            Message(
+                id: "u3",
+                role: MessageRole.user,
+                createdAt: at,
+                parts: const [TextPart(text: "third")],
+                omadaOn: false),
+            Message(id: "a3", role: MessageRole.assistant, createdAt: at),
+          ];
+          final chat = await app.repo.createChat();
+          await app.writeChat(chat.copyWith(messages: said));
+          return chat.state.id;
+        });
+
+    testWidgets("both flips draw their separators, with the right captions",
+        (tester) async {
+      final id = await seedSectionedChat(tester);
+      await open(tester, id);
+
+      expect(find.text("Omada is turned on"), findsOneWidget);
+      expect(find.text("Omada is turned off"), findsOneWidget);
+      // Two separators between three messages-and-replies.
+      expect(find.byType(OmadaSeparator), findsNWidgets(2));
+    });
+
+    testWidgets("a user message under a separator keeps its alignment",
+        (tester) async {
+      // Wide enough that "right side" is unambiguous.
+      useWindow(tester, const Size(1000, 800));
+      final id = await seedSectionedChat(tester);
+      await open(tester, id);
+
+      // Both user bubbles end at the same right edge, either side of the
+      // separator: the bug this pins is the wrapped bubble sitting mid-column.
+      final first = tester.getRect(find.text("first")).right;
+      final second = tester.getRect(find.text("second")).right;
+      // Text centers differ by half a character; right edges do not.
+      expect((first - second).abs(), lessThan(2));
+      // Right-aligned within the readable column: near the edge, past center.
+      expect(second, greaterThan(500));
     });
   });
 
