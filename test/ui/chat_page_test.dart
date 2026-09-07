@@ -298,6 +298,30 @@ void main() {
       expect(find.text("What would you like to discuss?"), findsNothing);
     });
 
+    // The question sweeps rather than swaps: the new text takes over from
+    // the first character and the change front moves towards the end.
+    testWidgets("the question sweeps to the new one progressively",
+        (tester) async {
+      await openEmpty(tester);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, anonProjectLabel));
+      await tester.pump(const Duration(milliseconds: 1));
+      // The sweep mounted on that frame; this one runs 350 of the 400ms it
+      // takes. The two questions share their first thirty characters, so the
+      // front is past where they diverge — and not yet at the end.
+      await tester.pump(const Duration(milliseconds: 350));
+      final mid = tester.widget<Text>(find.byKey(const ValueKey("question"))).data!;
+      expect(mid, isNot("What would you like to discuss?"));
+      expect(mid, isNot("What would you like to discuss anonymously?"));
+      // The front starts at the first character: the new question's opening
+      // is already shown.
+      expect(mid.startsWith("What would"), isTrue);
+
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss anonymously?"),
+          findsOneWidget);
+    });
+
     // The badge says where the next chat goes, which is all it can say: there
     // is no chat yet for it to be about.
     testWidgets("picking one highlights it, and the chat lands there",
