@@ -614,6 +614,18 @@ they exist never finds out. Six at most, because everything the user has
 written is a menu and `/` is what opens the menu; with nothing at all in the
 library it says how to reach them instead.
 
+**Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/CLAUDE.md`),
+which is why nothing here snaps when the set changes: picking a badge grows
+its check, the row re-flows around the growth, and a badge pushed onto a new
+line glides there rather than teleporting — that case is why the position
+mechanism paints rather than wraps. A change of project swaps the starters
+per chip — what both sets share keeps its slot, the delta grows out of
+nothing or shrinks into it — and with nothing at all in the library the
+"Type / for commands, @ for agents." line is an entry of the same row, so it
+gives way to the first chips through the same motion. The question headline
+cross-fades between its projects' texts. The row animates its first build
+too: the screen is grown into, not shown settled.
+
 The badges are the same discovery for projects: the switcher at the top of the
 sidebar is the only other place one is named, and on a phone the sidebar is a
 drawer. Picking one is `selectProject` — the switcher's own action, lifted out

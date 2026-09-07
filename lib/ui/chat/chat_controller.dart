@@ -303,8 +303,19 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     Message? replacing,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
+    // The room's mode at this turn, stamped on the turn's opener: the page
+    // derives sections from these stamps, a separator above an opener that
+    // flips from the last one. The implicit off a chat starts in is not a
+    // section — nothing separates the first exchange from a chat that never
+    // heard of Omada — so the first flip is the on-flip; the off-flip is
+    // what bounds an on-section for the label rule.
+    final omada = ref.read(omadaOnProvider(chat.state.project));
+    final openingWithMode = [
+      opening.first.copyWith(omadaOn: omada),
+      ...opening.sublist(1),
+    ];
     final updated = chat
-        .withTurn(opening, replacing: replacing)
+        .withTurn(openingWithMode, replacing: replacing)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
@@ -323,7 +334,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (prompt.role == MessageRole.user) _chain = 0;
     _turnDone = Completer<TurnEnd?>();
     _recorder.open(opening.last.id);
-    await _recorder.write(recordsOf(opening,
+    await _recorder.write(recordsOf(openingWithMode,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
     // Only the first message names the chat, and not a headless one — the
