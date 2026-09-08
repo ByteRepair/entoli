@@ -100,10 +100,15 @@ stays — history is fact.
   projection: each participant reads their own replies as assistant messages
   and every other participant's as labeled user messages. The house reads
   member replies labeled too.
-- **Sequential rounds** — a reply naming exactly one member schedules that
-  member's turn; the chain caps at three agent-authored turns; `pass`
-  declines. Multi-mention prompts stack member prompts on one turn for now —
-  the round driver replaces the stack.
+- **Sequential rounds** — the room schedules: `_schedules`, one FIFO per
+  member, filled from user prompts (their mention lists) and from handoffs
+  (the replies that name members). Sequential ordering dispatches one item
+  at a time, the mention list the schedule; parallel dispatches one per
+  member at once, each writing its own reply. A reply naming exactly one
+  member schedules that member's turn; the round caps at
+  `omadaMaxGenerations` dispatch waves (project override, app default ten);
+  `pass` declines — and ends what agents hand each other, not a schedule the
+  user made.
 - **Sectioned display** — `Message.omadaOn` on turn openers; separators at
   flips; "Entoli" on the house's replies in on-sections. The conversation
   renders as typed entries (`entriesOf`), each row owning its alignment.
@@ -111,19 +116,22 @@ stays — history is fact.
   disabled set, so the tool vanishes from the list and the prompt together;
   the house's overlay names the room and points at handles. Direct chats keep
   `task` and the sub-agent machinery intact.
+- **Phase C2 — flow control.** The settle-first handoff wave, send-while-
+  running dispatching between turns (no mid-turn injection, protecting the
+  projection-prefix invariant), the composer's empty-Stop/typed-Send rule,
+  abort killing the whole round, per-turn attribution of approvals and
+  questions, and the app-level ordering default. The recorder kept its
+  one-reply-per-turn shape: the assumption lives in the per-turn instance,
+  which is what lets two replies grow beside each other.
 
 ## What remains
 
-- **Phase C2 — flow control.** Send-while-running (appends land immediately,
-  dispatch between turns — no mid-turn injection, protecting the
-  projection-prefix invariant); parallel rounds per `omadaOrdering: parallel`
-  (concurrent member turns, each authoring its own reply — the recorder's
-  one-reply-per-turn shape is the load-bearing change, and it gets its own
-  design pass); sequential multi-mention becomes member turns in mention
-  order, replacing the stacked turn; abort kills the whole round;
-  `canSend` consolidation.
 - **Triggers, later.** What else may start a member's turn (schedule, file
-  change) once rounds exist.
+  change) now that rounds exist.
+- **Fully parallel handoffs, later.** The parallel ordering that shipped is
+  settle-first by design; the other reading — a reply fanning out the moment
+  it finishes, siblings overlapping waves — is its own option in the Omada
+  settings, tracked as an issue.
 
 ## Design invariants carried
 

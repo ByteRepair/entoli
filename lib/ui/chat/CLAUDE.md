@@ -35,40 +35,90 @@ Nothing stamps, nothing labels, nothing hands off. A direct chat is the
 system as it was before Omada existed, byte for byte.
 
 **An Omada chat** — Omada on for the project — adds a reply route, and
-everything Omada does hangs off it: a message addressing exactly one member
-is answered by that member as a participant, in a session of its own, with
-the author on the record; members hand off to each other by mentioning one
-member in a reply, chain-capped; a member declines with `pass`. The turn's
-scheduling is the controller's `_memberAnswering` decision, and it is gated
-on the toggle: **turning Omada off ends promotion for every turn after it**,
-whatever the prompt names. What is already on the record stays — history is
-fact — but the next send is the main agent's.
+everything Omada does hangs off it: a message addressing members is answered
+by them as participants, each in a session of their own, with the author on
+the record; members hand off to each other by mentioning one another in a
+reply, chain-capped; a member declines with `pass`. The turn's scheduling is
+the room's `_schedules` — one FIFO per member of what they have been
+addressed to run — resolved once at dispatch, and it is gated on the toggle:
+**turning Omada off ends promotion for every turn after it**, whatever the
+prompt names. What is already on the record stays — history is fact — but
+the next send is the main agent's.
 
 **The label means a member authored the turn.** `Message.author` is stamped
-only where a member actually answered — an Omada-on turn routed by
-`_memberAnswering` — never where the main agent merely used a member's
-instructions. That is what keeps the label honest: it answers "who spoke",
-and the answer is a lie if an instruction overlay can put a name on the
-main agent's voice.
+only where a member actually answered — an Omada-on turn the schedule routed
+to them — never where the main agent merely used a member's instructions.
+That is what keeps the label honest: it answers "who spoke", and the answer
+is a lie if an instruction overlay can put a name on the main agent's
+voice.
 
-**The lock is the room's rule, decided once.** While a turn runs, the user's
-send is refused — not by the composer, which only swaps Send for Stop, and
-not by peer-to-peer state between participants, but by the controller: `send`
-and every driving verb it guards check `isRunning` and return. Who may speak
-now is decided there and nowhere else. The renderings are consumers: the
-composer's button, the app-bar spinner, the message row's editability, all
-reading view state.
+**The schedule is the room's order of speaking.** `_schedule` puts an item
+on each member's FIFO: a user prompt addressed by its documents, or a
+handoff — the reply that names them, one generation past the turn that wrote
+it. The null key is the main agent, who answers what no member was addressed
+for. `_dispatch` runs what the schedule holds: **sequential** order
+dispatches one item at a time — the mention list is the schedule, and what
+follows dispatches at the settle it causes; **parallel** order dispatches
+one item per member at once, each FIFO's head, one turn per member still
+standing, and the rest at the settles they cause. Either way the item is off
+its FIFO before its turn opens, so a settle re-entering finds the schedule
+behind it and not the item running.
+
+**A handoff wave waits for the room to settle.** A turn that finishes while
+a sibling is still speaking records its reply in `_settledReplies`; the
+settle the last sibling causes evaluates every reply the wave finished, in
+finish order, against the cap read at dispatch. A generation is the dispatch
+wave an item belongs to — zero is the user's own and uncapped, a handoff
+lands one past the turn that named it, and the cap (`omadaMaxGenerations`,
+project override over app default) stops the wave that would pass it.
+
+**A pass ends what agents hand each other, not what the user asked for.** A
+reply that says nothing but `pass` clears the schedule of agent-addressed
+items and continues the user's own — a turn the user addressed to another
+member is that member's to run, however the round around it went.
+
+**A say is not refused, it is queued.** While a turn runs, the user's send
+lands on the log the moment it is said (`_sayLater` — the log is the queue)
+and dispatches when the room settles. The composer names which is on offer:
+an empty field while the agent speaks shows Stop; anything typed shows Send,
+which queues. Where the say lands after the settle already read the queue —
+the turn was finishing while it was typed — `_sayLater` dispatches it itself
+rather than waiting for a settle that already happened. Nothing is injected
+into a turn mid-flight, which is what protects the projection-prefix
+invariant; and a say whose members are named schedules them through the same
+ordering anything else takes.
+
+**Abort stops the round whole.** Every running turn is ended `aborted`, the
+queue of unsaid says is dropped, and the schedule is cleared — an aborted
+round is a stopped one, and whatever the user says next is the first thing
+of a new one. An interruption (`interrupt`, the app going away) does the
+same to every turn but leaves the logs open, so each reply offers to be
+carried on.
+
+**Attribution rides the turn that asked for it.** Approvals, questions and
+running sub-agents are keyed by the reply that raised them, so two turns
+running beside each other hold their own banners; a finished turn's entries
+leave with it, a sibling's kept. The status line and the retry row stay
+page-level — they answer "is the turn alive", and there is one room on
+screen.
+
+**The lock is the room's rule, decided once.** What the lock once refused it
+now queues (above), but the rule's shape is unchanged: `send` and every
+driving verb it guards check `isRunning` and decide there — queue, dispatch,
+or refuse. Who may speak now is decided in the controller and nowhere else.
+The renderings are consumers: the composer's button, the app-bar spinner,
+the message row's editability, all reading view state.
 
 **The room's phase is one answer, not a combination.** `ChatViewState.roomPhase`
-says who may speak: `open` (composer is the user's), `agentSpeaking` (the main
-agent has the floor; composer shows Stop), or `waitingOnYou` (a turn is waiting
-on answers — the composer's place is taken by the question panel). The third
-outranks the second: a turn waiting on answers is still running — the spinner
-stays up, editing stays refused — but what it wants is the user. `roomPhase`
-answers "who speaks", never "is a turn alive": surfaces about the turn itself
-(the spinner, editability, the `ResumeBar`'s `unfinished`) keep reading
-`isRunning`. Approvals are not a phase — they overlay an open composer, and
-stay their own list.
+says who may speak: `open` (composer is the user's), `agentSpeaking` (a turn
+has the floor; an empty composer shows Stop), or `waitingOnYou` (a turn is
+waiting on answers — the composer's place is taken by the question panel).
+The third outranks the second: a turn waiting on answers is still running —
+the spinner stays up, editing stays refused — but what it wants is the user.
+`roomPhase` answers "who speaks", never "is a turn alive": surfaces about
+the turn itself (the spinner, editability, the `ResumeBar`'s `unfinished`)
+keep reading `isRunning`. Approvals are not a phase — they overlay an open
+composer, and stay their own list.
 
 ## When a turn is over
 
