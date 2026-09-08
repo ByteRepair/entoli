@@ -297,8 +297,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   /// What was said while a turn ran and is still unsaid. The messages are on
   /// the log already — written as they were said — and this is what is left
-  /// to say.
-  final List<({String text, List<MessagePart> files})> _said = [];
+  /// to say. The composed message itself, so the drain dispatches what the
+  /// log holds rather than composing a second one.
+  final List<Message> _said = [];
 
   Future<void> _sayLater(String text, List<MessagePart> files) async {
     final userMsg = ref.read(chatRepositoryProvider).composeUserPrompt(text,
@@ -312,7 +313,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         chat: chat.copyWith(
             messages: messages,
             state: chat.state.copyWith(updatedAt: DateTime.now())));
-    _said.add((text: text, files: files));
+    _said.add(userMsg);
   }
 
   /// Say [text] and run the turn it starts. [files] are already under the
@@ -329,11 +330,32 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
     final userMsg =
         repo.composeUserPrompt(text, project: chat.state.project, files: files);
+    await _say(userMsg, replacing: replacing);
+  }
+
+  /// Open the turn [userMsg] starts, whether it is being composed now or was
+  /// said while the room ran and is already on the log. Where it is not on the
+  /// log yet — a fresh send — it rides in [opening]; where it is, the opening
+  /// is the reply alone and [history] ends before it, since the message is
+  /// already the last thing said.
+  Future<void> _say(Message userMsg, {Message? replacing}) async {
+    final chat = state.chat;
+    if (chat == null || state.isRunning) return;
+    final logged = replacing == null && chat.messages.contains(userMsg);
+    final at = logged
+        ? chat.messages.indexOf(userMsg)
+        : replacing == null
+            ? chat.messages.length
+            : chat.messages.indexOf(replacing);
+    if (at < 0) return;
     await openTurn(
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
-      opening: [userMsg, _newReply(author: authorFor(chat, userMsg))],
+      opening: [
+        if (!logged) userMsg,
+        _newReply(author: authorFor(chat, userMsg)),
+      ],
       replacing: replacing,
     );
   }
@@ -732,12 +754,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     }
 
     // The room has settled: what was said while it spoke is said next, in
-    // the order it was said. A say that opens its own turn clears the queue
-    // ahead of it — everything said earlier is already on the log and this
-    // is the turn the user is looking at.
+    // the order it was said. Dispatching the composed message opens the turn
+    // it is already the last message of — the reply alone is written.
     while (_said.isNotEmpty) {
       final said = _said.removeAt(0);
-      await _prompt(said.text, files: said.files);
+      await _say(said);
     }
     await _maybeHandoff(reason);
   }
@@ -775,7 +796,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     await openTurn(
       chat: chat,
       prompt: reply,
-      history: chat.messages,
+      // The conversation the member answers ends before the reply that hands
+      // to them: `sendPrompt` adds the prompt itself, and history holding it
+      // too would have the member read their mentioning reply twice.
+      history: chat.messages.take(chat.messages.indexOf(reply)).toList(),
       // The next reply is authored by the member handed to. The stamp
       // carries the sigil, the way every author stamp does.
       opening: [_newReply(author: "${CompletionKind.agent.trigger}$named")],
