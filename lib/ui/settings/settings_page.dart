@@ -10,7 +10,7 @@ import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
 import "../../domain/project_settings.dart"
-    show OmadaOrdering, omadaOrderingLabels;
+    show OmadaOrdering, omadaOrderingLabels, omadaOrderingDescriptions;
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
@@ -769,6 +769,13 @@ class _OmadaSection extends ConsumerWidget {
           options: omadaOrderingLabels,
           onChanged: (v) =>
               ref.read(appSettingsProvider.notifier).setOmadaOrdering(v),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+              omadaOrderingDescriptions[
+                  settings.omadaOrdering ?? OmadaOrdering.sequential]!,
+              style: Theme.of(context).textTheme.bodySmall),
         ),
         InheritableSlider(
           label: "Max generations per round",

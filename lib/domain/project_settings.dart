@@ -15,10 +15,22 @@ enum OmadaOrdering {
 }
 
 /// Human-readable labels, shared by the project settings page so the
-/// dropdown and the section's inherited entry name the same thing.
+/// dropdown and the section's inherited entry name the same thing. The
+/// parallel ordering is Crossfire: several members working at the same time,
+/// each writing their own reply.
 const omadaOrderingLabels = {
   OmadaOrdering.sequential: "Sequential",
-  OmadaOrdering.parallel: "Parallel",
+  OmadaOrdering.parallel: "Crossfire",
+};
+
+/// One line each, under the ordering dropdown: what the round does under
+/// that ordering. The description shown is the effective one — the
+/// project's pick, else the app default, else sequential.
+const omadaOrderingDescriptions = {
+  OmadaOrdering.sequential: "Members run one after another, in the order "
+      "the message names them.",
+  OmadaOrdering.parallel: "Members run at the same time, each writes their "
+      "own reply, in whatever order they finish.",
 };
 
 /// Project-scoped overrides. A project can override the app-level

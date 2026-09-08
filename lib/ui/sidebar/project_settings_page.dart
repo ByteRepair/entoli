@@ -281,14 +281,27 @@ class _OmadaOrderingRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return InheritableDropdown<OmadaOrdering>(
-      label: "Round order",
-      value: ref
-          .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering)),
-      inherited: omadaOrderingLabels[OmadaOrdering.sequential],
-      options: omadaOrderingLabels,
-      onChanged: (v) =>
-          ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
+    final value = ref
+        .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering));
+    final effective =
+        value ?? ref.watch(appSettingsProvider).omadaOrdering ?? OmadaOrdering.sequential;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InheritableDropdown<OmadaOrdering>(
+          label: "Round order",
+          value: value,
+          inherited: omadaOrderingLabels[OmadaOrdering.sequential],
+          options: omadaOrderingLabels,
+          onChanged: (v) =>
+              ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(omadaOrderingDescriptions[effective]!,
+              style: Theme.of(context).textTheme.bodySmall),
+        ),
+      ],
     );
   }
 }
