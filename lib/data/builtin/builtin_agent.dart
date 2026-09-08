@@ -171,6 +171,21 @@ class BuiltinOptions {
         maxConcurrentLlmRequests: maxConcurrentLlmRequests,
         rateLimitRetryBudget: rateLimitRetryBudget,
       );
+
+  /// The same options under a turn's own step limit. Null leaves what this
+  /// holds — the backend's answer, which the turn can only name a value for,
+  /// not widen past.
+  BuiltinOptions copyWithStepLimit(int? stepLimit) => stepLimit == null
+      ? this
+      : BuiltinOptions(
+          stepLimit: stepLimit,
+          commandTimeout: commandTimeout,
+          maxAttempts: maxAttempts,
+          retryBackoff: retryBackoff,
+          maxConcurrentSubAgents: maxConcurrentSubAgents,
+          maxConcurrentLlmRequests: maxConcurrentLlmRequests,
+          rateLimitRetryBudget: rateLimitRetryBudget,
+        );
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a

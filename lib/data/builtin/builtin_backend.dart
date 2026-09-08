@@ -322,8 +322,11 @@ class BuiltinBackend implements AgentBackend {
         model: target.modelId,
         // One attempt per request: the controller retries a failed turn itself,
         // and the two retrying would be the same patience twice. Sub-agents
-        // keep the default — see the parent runner below.
-        options: options.parent,
+        // keep the default — see the parent runner below. The step limit is
+        // the turn's own, resolved per turn from the settings levels; null
+        // leaves the backend's.
+        options: options.parent
+            .copyWithStepLimit(settings.turnMaxSteps),
         skills: libraryFor(settings.project)?.entries(CompletionKind.skill) ?? const [],
         approveMode: settings.approveMode,
         classifier: classifier,

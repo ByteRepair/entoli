@@ -1027,6 +1027,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     await next.save(_config, project: project);
   }
 
+  /// How many model calls a direct turn may make here. Null means the app
+  /// default stands.
+  Future<void> setTurnMaxSteps(int? value) async {
+    final next = state.copy()..turnMaxSteps = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
   /// The project's own command variables. Null means none, and the app-level
   /// ones stand alone.
   Future<void> setEnvironment(Map<String, String>? environment) async {

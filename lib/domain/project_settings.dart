@@ -34,7 +34,8 @@ class ProjectSettings {
       this.useProjectMemory = false,
       this.omada = false,
       this.omadaOrdering,
-      this.omadaMaxGenerations});
+      this.omadaMaxGenerations,
+      this.turnMaxSteps});
 
   /// How long a temporary chat in this project lives. Null means inherit the
   /// app default.
@@ -64,6 +65,12 @@ class ProjectSettings {
   /// generation one and uncapped; this bounds only the waves that follow it.
   int? omadaMaxGenerations;
 
+  /// How many model calls one direct turn may make before it stops for the
+  /// user. Null inherits the app default, which is the backend's own.
+  /// Omada rounds are never under it: a round is several turns in flight,
+  /// and one number over them all would say nothing about any member's turn.
+  int? turnMaxSteps;
+
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(config.projectSettingsFile(project: project));
     if (text == null) return ProjectSettings();
@@ -83,6 +90,7 @@ class ProjectSettings {
         omadaOrdering: OmadaOrdering.fromNameNullable(
             json["omadaOrdering"] as String?),
         omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
+        turnMaxSteps: json["turnMaxSteps"] as int?,
       );
     } catch (_) {
       return ProjectSettings();
@@ -97,6 +105,7 @@ class ProjectSettings {
       if (omada) "omada": omada,
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
       if (omadaMaxGenerations != null) "omadaMaxGenerations": omadaMaxGenerations,
+      if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
     }));
   }
 
@@ -107,5 +116,6 @@ class ProjectSettings {
         omada: omada,
         omadaOrdering: omadaOrdering,
         omadaMaxGenerations: omadaMaxGenerations,
+        turnMaxSteps: turnMaxSteps,
       );
 }

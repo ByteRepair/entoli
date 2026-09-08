@@ -32,6 +32,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   final _religion = TextEditingController();
   final _profession = TextEditingController();
 
+  /// The one writer of the instructions file — created on the first use of
+  /// the page's config, so two overlapping saves queue behind each other
+  /// rather than racing two fixed rename temps.
+  RenameWriter? _write;
+
+  RenameWriter _writerOf(AppConfig config) =>
+      _write ??= RenameWriter.fs(config.fs);
+
   DateTime? _dobValue;
   bool _loaded = false;
   bool _saving = false;
@@ -104,7 +112,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       return;
     }
     await fs.directory(fs.path.dirname(path)).create(recursive: true);
-    await RenameWriter.fs(fs).write(path, text);
+    await _writerOf(config).write(path, text);
   }
 
   Future<void> _clear() async {

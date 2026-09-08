@@ -118,6 +118,11 @@ class ProjectSettingsPage extends ConsumerWidget {
               _OmadaMaxGenerationsRow(project: project),
             ],
           ],
+          // A direct turn's step limit is a question about turns, not about
+          // Omada — built-ins included, where a project's own limit is the
+          // one a built-in note's turns also answer to.
+          const Divider(),
+          _TurnMaxStepsRow(project: project),
           // A built-in that ships its own note reads no file, so there is no
           // instructions to edit for one — unless it asks for the user's files
           // on top of the note, in which case the project AGENTS.md is the
@@ -298,17 +303,38 @@ class _OmadaMaxGenerationsRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return InheritableDropdown<int>(
+    return InheritableSlider(
       label: "Max generations per round",
       value: ref.watch(projectSettingsProvider(project)
           .select((s) => s.omadaMaxGenerations)),
-      inherited: "${ref.watch(appSettingsProvider).omadaMaxGenerations}",
-      options: {
-        for (final stop in AppSettings.omadaGenerationStops) stop: "$stop",
-      },
+      stops: AppSettings.omadaGenerationStops,
+      inherited: ref.watch(appSettingsProvider).omadaMaxGenerations,
       onChanged: (v) => ref
           .read(projectSettingsProvider(project).notifier)
           .setOmadaMaxGenerations(v),
+    );
+  }
+}
+
+/// How many model calls a direct turn may make here, overriding the app
+/// default. Not an Omada row — a turn is a turn in every project — but shown
+/// beside the round settings, the same level of override.
+class _TurnMaxStepsRow extends ConsumerWidget {
+  const _TurnMaxStepsRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return InheritableSlider(
+      label: "Max steps per turn",
+      value: ref.watch(
+          projectSettingsProvider(project).select((s) => s.turnMaxSteps)),
+      stops: AppSettings.turnStepStops,
+      inherited: ref.watch(appSettingsProvider).turnMaxSteps ??
+          AppSettings.defaultTurnMaxSteps,
+      onChanged: (v) =>
+          ref.read(projectSettingsProvider(project).notifier).setTurnMaxSteps(v),
     );
   }
 }

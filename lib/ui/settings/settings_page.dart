@@ -676,33 +676,13 @@ class _MaxStepsField extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final steps = ref.watch(
         appSettingsProvider.select((s) => s.turnMaxSteps));
-    return LabelledField(
+    return InheritableSlider(
       label: "Max steps per turn",
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DropdownButtonFormField<int?>(
-            initialValue: steps,
-            isExpanded: true,
-            items: [
-              const DropdownMenuItem(value: null, child: Text("Default")),
-              for (final stop in AppSettings.turnStepStops)
-                DropdownMenuItem(value: stop, child: Text("$stop")),
-            ],
-            onChanged: (value) => ref
-                .read(appSettingsProvider.notifier)
-                .setTurnMaxSteps(value),
-          ),
-          Text(
-            steps == null
-                ? "The built-in limit stands — 40 model calls before the turn "
-                    "stops and offers to carry on."
-                : "A turn stops after $steps model calls and offers to carry "
-                    "on. Team rounds are not under this.",
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
+      value: steps,
+      stops: AppSettings.turnStepStops,
+      inherited: AppSettings.defaultTurnMaxSteps,
+      onChanged: (v) =>
+          ref.read(appSettingsProvider.notifier).setTurnMaxSteps(v),
     );
   }
 }
@@ -790,47 +770,28 @@ class _OmadaSection extends ConsumerWidget {
           onChanged: (v) =>
               ref.read(appSettingsProvider.notifier).setOmadaOrdering(v),
         ),
-        LabelledField(
+        InheritableSlider(
           label: "Max generations per round",
-          child: Slider(
-            value: _stopIndex(settings.omadaMaxGenerations).toDouble(),
-            min: 0,
-            max: (AppSettings.omadaGenerationStops.length - 1).toDouble(),
-            divisions: AppSettings.omadaGenerationStops.length - 1,
-            label: "${_snap(settings.omadaMaxGenerations)}",
-            onChanged: (value) => ref
-                .read(appSettingsProvider.notifier)
-                .setOmadaMaxGenerations(
-                    AppSettings.omadaGenerationStops[value.round()]),
-          ),
+          value: settings.omadaMaxGenerations,
+          stops: AppSettings.omadaGenerationStops,
+          inherited: AppSettings.defaultOmadaMaxGenerations,
+          onChanged: (v) => ref
+              .read(appSettingsProvider.notifier)
+              .setOmadaMaxGenerations(
+                  v ?? AppSettings.defaultOmadaMaxGenerations),
         ),
-        Text(
-          "How many waves of agent-to-agent work one round may run before it "
-          "stops for you — your message starts the round, and a member handing "
-          "off to another starts the next wave. A project can set its own.",
-          style: Theme.of(context).textTheme.bodySmall,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            "How many waves of agent-to-agent work one round may run before "
+            "it stops for you — your message starts the round, and a member "
+            "handing off to another starts the next wave. A project can set "
+            "its own.",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
       ],
     );
-  }
-
-  /// The slider's stops are sparse (5, 10, 20, 40, 60, 80, 100); whatever a
-  /// file or an older build left in `settings.json` reads as the stop nearest
-  /// it, so the slider never asserts.
-  static int _snap(int value) =>
-      AppSettings.omadaGenerationStops[_stopIndex(value)];
-
-  /// The track position of [value]: the index of the stop nearest it.
-  static int _stopIndex(int value) {
-    var best = 0;
-    for (var i = 1; i < AppSettings.omadaGenerationStops.length; i++) {
-      if ((value - AppSettings.omadaGenerationStops[i])
-              .abs() <
-          (value - AppSettings.omadaGenerationStops[best]).abs()) {
-        best = i;
-      }
-    }
-    return best;
   }
 }
 
