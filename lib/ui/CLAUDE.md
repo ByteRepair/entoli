@@ -23,6 +23,13 @@ this used to, would break every relative reference to the files sitting beside
 it. The `LinkOpener` interface stays in `domain/`,
 which is what lets `main` inject it and the tests fake it.
 
+The one thing the opener asks beyond the store is the `SyncHub`, handed in
+`main` beside it and null in tests: a chat being mirrored has no artifact
+directory here, so its artifacts come down as one zip (see "Artifacts" in the
+root notes) and open out of a temp directory by the same platform paths. The
+null is also the shape of "no sync running", which is what keeps every
+sync-unaware caller on the local paths unchanged.
+
 ## The theme
 
 One palette, seeded from `entoliIndigo` by default — the colour the icon sits

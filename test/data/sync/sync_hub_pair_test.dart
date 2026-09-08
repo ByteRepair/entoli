@@ -1,4 +1,5 @@
 import "dart:async";
+import "dart:convert";
 import "dart:io" show Directory;
 import "dart:typed_data";
 
@@ -17,6 +18,7 @@ import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/protocol.dart";
 import "package:agent_chat/providers.dart" show syncHubProvider;
 import "package:agent_chat/ui/chat/mirror_controller.dart";
+import "package:archive/archive.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:flutter_test/flutter_test.dart";
@@ -329,6 +331,68 @@ void main() {
 
     final fetched = await away.hub.fetchResource(state.id, resource);
     expect(fetched, equals(bytes));
+  });
+
+  /// An artifact has no bytes of its own on the wire — the name under the
+  /// synthetic namespace is answered with one zip of its files, and the
+  /// far side unzips it into the directory its viewer opens. FakeChatStore's
+  /// artifact map is the published content here, so what decodes is what
+  /// `createArtifact` answered with.
+  test("an artifact crosses as one zip under its synthetic name", () async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
+
+    final artifactId =
+        await home.store.createArtifact(state.id, "/nowhere", "index.html");
+    (home.store as FakeChatStore).stageArtifact(state.id, artifactId, {
+      "index.html": utf8.encode("<p>hello</p>"),
+      "assets/logo.png": Uint8List.fromList([1, 2, 3, 4]),
+    });
+
+    final fetched = await away.hub.artifactBytes(state.id, artifactId);
+    expect(fetched, isNotNull);
+    final files = [
+      for (final member in ZipDecoder().decodeBytes(fetched!))
+        if (!member.isDirectory) (member.name, member.readBytes()!),
+    ];
+    expect(files.map((f) => f.$1), containsAll(["index.html", "assets/logo.png"]));
+    expect(utf8.decode(files.firstWhere((f) => f.$1 == "index.html").$2),
+        "<p>hello</p>");
+  });
+
+  test("an artifact that is not there answers null, not a hang", () async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
+
+    expect(await away.hub.artifactBytes(state.id, "gone"), isNull);
+  });
+
+  test("a second ask for the same artifact answers from the cache", () async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
+
+    final artifactId =
+        await home.store.createArtifact(state.id, "/nowhere", "index.html");
+    (home.store as FakeChatStore).stageArtifact(
+        state.id, artifactId, {"index.html": utf8.encode("<p>hello</p>")});
+
+    final first = await away.hub.artifactBytes(state.id, artifactId);
+    // Cut the wire: a second ask can only be answered from the cache.
+    await links.$1.close();
+    await links.$2.close();
+    await waitForSync(() =>
+        away.hub.peers.value[home.identity.id]?.status == PeerStatus.offline);
+
+    expect(await away.hub.artifactBytes(state.id, artifactId), first);
   });
 
   test("a fetch for an unknown resource answers null, not a hang", () async {

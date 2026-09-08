@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:convert";
 
+import "package:archive/archive.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 
@@ -715,6 +716,29 @@ class FakeChatStore implements ChatStore {
   Future<Uint8List?> readArtifactFile(
     String chatId, String artifactId, String relativePath, {String? project}) async =>
       _artifacts[chatId]?[artifactId]?[relativePath];
+
+  @override
+  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
+      {String? project}) async {
+    final files = _artifacts[chatId]?[artifactId];
+    if (files == null || files.isEmpty) return null;
+    final archive = Archive();
+    for (final MapEntry(key: name, value: bytes) in files.entries) {
+      archive.add(ArchiveFile.bytes(name, bytes));
+    }
+    return ZipEncoder().encodeBytes(archive, autoClose: true);
+  }
+
+  /// Puts files into a staged artifact, the way the backend's publish does —
+  /// what a sync test wants on the far side of the wire is the content the
+  /// artifact holds, and `createArtifact` copies a source directory a test
+  /// building a wire case has no reason to make.
+  void stageArtifact(
+          String chatId, String artifactId, Map<String, List<int>> files) =>
+      _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {
+        for (final MapEntry(key: name, value: bytes) in files.entries)
+          name: Uint8List.fromList(bytes),
+      };
 
   @override
   Future<String> artifactPath(String chatId, String artifactId, {String? project}) async =>
