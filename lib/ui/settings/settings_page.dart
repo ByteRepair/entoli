@@ -667,8 +667,9 @@ class _AgentSection extends ConsumerWidget {
 }
 
 /// The most model calls one direct turn may make before it stops for the
-/// user. Off is the backend's own default; Omada rounds are never under it,
-/// a round being several turns in flight.
+/// user. Null is the backend's own default; Omada member turns run under it
+/// too — the value rides every turn — and the round's own bound is the
+/// generations cap beside it.
 class _MaxStepsField extends ConsumerWidget {
   const _MaxStepsField();
 

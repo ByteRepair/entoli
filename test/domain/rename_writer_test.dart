@@ -84,10 +84,17 @@ void main() {
     await writer.write("settings", "a");
     await writer.write("settings", "b");
 
+    // The entry leaves with the write that finished. The removal runs one
+    // microtask behind the write's own completion, so let it land.
+    await Future<void>.delayed(Duration.zero);
+    expect(writer.pendingWrites, 0);
+
     // Nothing to wait on: a third write asked now starts immediately rather
     // than behind a tail that already answered.
     final stopwatch = Stopwatch()..start();
     await writer.write("settings", "c");
     expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 10)));
+    await Future<void>.delayed(Duration.zero);
+    expect(writer.pendingWrites, 0);
   });
 }

@@ -75,10 +75,11 @@ stays — history is fact.
   A's earlier replies reach B labeled as A's words (projected as user-role
   messages prefixed with the author, per the projection's parity rule), never
   as B's own assistant turns.
-- **Loops are capped.** Members may hand off to each other, but after three
-  agent-authored turns the round stops until the user speaks — the user's
-  next message resets the chain. A member can decline with the single word
-  `pass`, on the record.
+- **Loops are capped.** Members may hand off to each other, but the round
+  stops at `omadaMaxGenerations` dispatch waves of agent-to-agent work (the
+  user's message is generation zero and uncapped) until the user speaks —
+  the user's next message resets the count. A member can decline with the
+  single word `pass`, on the record.
 - **Sections, not a mode switch.** The room's Omada state at every turn is
   stamped on the turn's opener (`Message.omadaOn`), and a flip draws a
   separator ("Omada is turned on" / "Omada is turned off") above the turn

@@ -291,11 +291,10 @@ class AppSettings {
   /// where a per-project answer was first written.
   OmadaOrdering? omadaOrdering;
 
-  /// How many model calls one direct turn may make before it stops for the
-  /// user — the step limit the backend runs under. Null is the backend's own
-  /// default, and Omada rounds are never under it: a round is several turns
-  /// in flight, and one number over them all would say nothing about any
-  /// member's turn.
+  /// How many model calls one turn may make before it stops for the user —
+  /// the step limit the backend runs under. Null is the backend's own
+  /// default; the value rides every turn, an Omada member turn included,
+  /// and the round's own bound is `omadaMaxGenerations` beside it.
   int? turnMaxSteps;
 
   /// Whether the welcome tour has been finished. It is what first launch reads

@@ -171,6 +171,10 @@ class BuiltinBackend implements AgentBackend {
     required TurnSettings settings,
   }) async {
     final project = settings.project;
+    // Registered up front and removed by key in the finally: a parallel
+    // round runs several turns of one chat, and a chat-keyed map would drop
+    // the earlier kill.
+    final stopKey = _running.add(chatId, () async {});
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
@@ -374,7 +378,8 @@ class BuiltinBackend implements AgentBackend {
         onShellOutput: (callId, text) =>
             controller.add(ShellOutputEvent(callId: callId, text: text)),
       );
-      _running.add(chatId, agent.cancel);
+      // The real kill replaces the placeholder.
+      _running.replace(stopKey, agent.cancel);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it. A member turn is
@@ -445,7 +450,7 @@ class BuiltinBackend implements AgentBackend {
       // Last, after the stream is closed: dropping it here is what releases
       // Android's hold on the process, and the listener is still writing the
       // turn's closing records when the agent itself has stopped.
-      _running.remove(chatId);
+      _running.removeKey(stopKey);
     }
   }
 
@@ -486,7 +491,7 @@ class BuiltinBackend implements AgentBackend {
         project: project);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
-    _running.add(chatId, run.kill);
+    final stopKey = _running.add(chatId, run.kill);
     controller.add(StatusEvent(runningTool(bashToolName)));
     _reportOutput(controller, run);
 
@@ -496,6 +501,7 @@ class BuiltinBackend implements AgentBackend {
     final filling = _sessionOf(chatId, history);
     final result = await run.result;
     final session = await filling;
+    _running.removeKey(stopKey);
     // An aborted turn writes no part, so the session must not hold one either.
     if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
@@ -976,7 +982,8 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<void> abort(String chatId) async {
-    await _running.remove(chatId)?.call();
+    // Every turn the chat has in flight, not the last one registered.
+    await _running.stopAll(chatId);
     _clearApprovals(chatId);
     _clearQuestions(chatId);
     final controller = _controllers.remove(chatId);
@@ -988,7 +995,7 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
-    await _running.remove(chatId)?.call();
+    await _running.stopAll(chatId);
     _sessions
         .putIfAbsent(chatId, BuiltinSession.new)
         .replaceWith(await projectionOf(history, load: _resourcesOf(chatId)));
@@ -1034,21 +1041,48 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
 
   /// How to stop each, rather than what is running it: an agent's own `cancel`
   /// for a turn the model is driving, the command's `kill` for a `!` one, and
-  /// nothing here has to tell them apart.
+  /// nothing here has to tell them apart. Keyed by chat **and a token**, not
+  /// the chat alone — a parallel round runs several turns of one chat at
+  /// once, and a second registration must not drop the first's kill.
   final Map<String, Future<void> Function()> _stops = {};
 
-  void add(String chatId, Future<void> Function() stop) {
-    _stops[chatId] = stop;
-    value = _stops.keys.toSet();
+  var _token = 0;
+
+  /// Registers a stop for [chatId], returning the key the turn's own cleanup
+  /// removes.
+  String add(String chatId, Future<void> Function() stop) {
+    final key = "$chatId\u0000${_token++}";
+    _stops[key] = stop;
+    value = chats;
+    return key;
   }
 
-  /// Publishes only where something was actually removed: `abort` reaches chats
-  /// with nothing running — deleting one does — and a `Set` compares by
-  /// identity, so a fresh one would notify every time and cost a round trip to
-  /// the platform to stop a service that was never started.
-  Future<void> Function()? remove(String chatId) {
-    final stop = _stops.remove(chatId);
-    if (stop != null) value = _stops.keys.toSet();
-    return stop;
+  /// Swaps what [key] stops, without a second publish.
+  void replace(String key, Future<void> Function() stop) {
+    _stops[key] = stop;
+  }
+
+  /// The turn [key] registered finished on its own; the chat keeps any
+  /// sibling still running. Publishes only where something was actually
+  /// removed — a `Set` compares by identity, so a fresh one would notify
+  /// every time and cost a round trip to the platform.
+  void removeKey(String key) {
+    if (_stops.remove(key) != null) value = chats;
+  }
+
+  /// The chats with a turn in flight — what [runningTurns] publishes.
+  Set<String> get chats =>
+      {for (final key in _stops.keys) key.substring(0, key.indexOf("\u0000"))};
+
+  /// Kills every stop [chatId] holds, in the order they were registered.
+  Future<void> stopAll(String chatId) async {
+    final keys = [
+      for (final key in _stops.keys)
+        if (key.startsWith("$chatId\u0000")) key
+    ];
+    for (final key in keys) {
+      await _stops.remove(key)?.call();
+    }
+    if (keys.isNotEmpty) value = chats;
   }
 }

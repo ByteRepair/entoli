@@ -283,15 +283,16 @@ class _OmadaOrderingRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final value = ref
         .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering));
-    final effective =
-        value ?? ref.watch(appSettingsProvider).omadaOrdering ?? OmadaOrdering.sequential;
+    final app = ref.watch(appSettingsProvider).omadaOrdering;
+    final effective = value ?? app ?? OmadaOrdering.sequential;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InheritableDropdown<OmadaOrdering>(
           label: "Round order",
           value: value,
-          inherited: omadaOrderingLabels[OmadaOrdering.sequential],
+          // Null here resolves to the app's default, not the enum's own.
+          inherited: omadaOrderingLabels[app ?? OmadaOrdering.sequential],
           options: omadaOrderingLabels,
           onChanged: (v) =>
               ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),

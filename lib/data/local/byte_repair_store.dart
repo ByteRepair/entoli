@@ -125,12 +125,12 @@ abstract class ByteRepairStore {
   Future<String?> runToolVersion(Shell shell, String command) async {
     final result = await _run(shell, "$command --version", const Duration(seconds: 15));
     if (result.returnCode == 0) return result.output.trim().split("\n").first;
-    // A plain non-zero comes with nothing in exceptionInfo, so the rc itself
-    // is the line's only reason.
-    logFailure(
-        "byte-repair",
-        "$command --version failed",
-        result.exceptionInfo ?? "return code ${result.returnCode}");
+    // Not installed is the expected answer here — the version poll is how the
+    // settings page detects it — so it is quiet; only a call that failed to
+    // run at all gets a line.
+    if (result.exceptionInfo != null) {
+      logFailure("byte-repair", "$command --version failed", result.exceptionInfo);
+    }
     return null;
   }
 

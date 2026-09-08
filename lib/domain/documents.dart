@@ -45,6 +45,9 @@ class RenameWriter {
   /// empty.
   final Map<String, Future<void>> _writes = {};
 
+  /// How many paths still hold a queue entry — the drain the test pins.
+  int get pendingWrites => _writes.length;
+
   Future<void> write(String path, String text) {
     final queued = _writes[path];
     final write = queued == null
@@ -52,9 +55,14 @@ class RenameWriter {
         : queued.then((_) => _writeOne(path, text));
     // The catch is what keeps a failed write's queue entry from being an
     // unhandled error beside the one the await delivers — the entry has
-    // nowhere else to carry it to.
-    _writes[path] = write.catchError((_) {}).whenComplete(() {
-      if (identical(_writes[path], write)) _writes.remove(path);
+    // nowhere else to carry it to. The entry is the wrapper itself: every
+    // combinator here (`catchError`, `whenComplete`) returns a fresh future,
+    // so storing anything else and comparing against it never matches and
+    // the path never drains.
+    final tracked = write.catchError((_) {});
+    _writes[path] = tracked;
+    tracked.whenComplete(() {
+      if (identical(_writes[path], tracked)) _writes.remove(path);
     });
     return write;
   }

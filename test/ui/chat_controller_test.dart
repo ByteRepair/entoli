@@ -1618,6 +1618,7 @@ void main() {
       // Both turns hold until this completes: a fan-out is two turns in
       // flight, not one after another.
       app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
       final (id, _) = await startTurn(
           "@explore and @build, have a look", project: "team");
 
@@ -1659,6 +1660,7 @@ void main() {
         () async {
       await _inTeam(app);
       app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
       final (id, controller) =
           await startTurn("hello @explore, take your time", project: "team");
       await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
@@ -1682,16 +1684,6 @@ void main() {
       // The dispatched turn ran on the message the log already holds —
       // its id, not a second composition of the same words.
       final saidId = queued.single.id;
-      // ignore: avoid_print
-      print("DIAG saidId=$saidId");
-      for (final p in app.backend.prompts) {
-        // ignore: avoid_print
-        print("DIAG prompt=${p.prompt.id} member=${p.settings.omadaMember}");
-      }
-      for (final m in messagesOf(id)) {
-        // ignore: avoid_print
-        print("DIAG msg=${m.id} role=${m.role} text=${textOf(m)}");
-      }
       expect(app.backend.prompts.last.prompt.id, saidId);
       expect(
           messagesOf(id).where((m) => textOf(m) == "and @build after this"),

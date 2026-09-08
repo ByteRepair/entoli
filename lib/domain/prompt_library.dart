@@ -1,3 +1,5 @@
+import "package:collection/collection.dart";
+
 import "models.dart";
 
 /// One skill or agent, exactly as Entoli stores it: YAML frontmatter, then the
@@ -211,10 +213,12 @@ String? agentPromptFrom(Map<String, String> documents) {
 /// addresses one member and names another as a handoff target ("check X, then
 /// hand it to @reviewer") is still addressed to one: the first mention is the
 /// addressee, the later one the routing the reply will carry out.
-String? authorFrom(Map<String, String> documents) {
-  final named = agentEntriesFrom(documents).keys.toList();
-  return named.isEmpty ? null : named.first;
-}
+/// The member [documents] shows addressed, as typed — the first agent key in
+/// write order. Null where the message names no member at all. A message that
+/// addresses one member and names another as a handoff target ("check X, then
+/// hand it to @reviewer") is still addressed to one: the first mention is the
+/// addressee, the later one the routing the reply will carry out.
+String? authorFrom(Map<String, String> documents) => authorKeys(documents).firstOrNull;
 
 /// The members [documents] address, in the order they were written — the
 /// agent keys as typed, sigil on. Empty where the message names no member.
@@ -232,16 +236,9 @@ String? nameOf(String? author) =>
 
 /// The one member [text] mentions by handle, as the composer's own `_mention`
 /// reads one and [library] knows them. Null where it names none, or more than
-/// one — a multi-mention is a round, not a single address. A name the library
-/// does not know is prose, not an address — a member signing their own reply
-/// (`@scout reporting`) does not make the reply a mention of themselves, so
-/// the scan counts only names the library knows, then asks for exactly one.
+/// one — a multi-mention is a round, not a single address.
 String? singleAgentMention(String text, PromptLibrary library) {
-  final known = _mention
-      .allMatches(text)
-      .map((m) => m.group(1)!)
-      .where((name) => library.find(CompletionKind.agent, name) != null)
-      .toSet();
+  final known = mentionsIn(text, library);
   return known.length == 1 ? known.single : null;
 }
 
