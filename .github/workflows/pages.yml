@@ -1,10 +1,11 @@
 name: Deploy web to GitHub Pages
 
 # The site tracks releases, not master: a release publish deploys its own tag,
-# and a manual run redeploys whichever release is latest.
+# and a manual run redeploys whichever release is latest. The release trigger
+# is off until the repository is public; until then, run this by hand.
 on:
-  release:
-    types: [published]
+  # release:
+  #   types: [published]
   workflow_dispatch:
 
 permissions:
