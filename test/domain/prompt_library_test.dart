@@ -117,10 +117,9 @@ void main() {
         () {
       // Scout's reply opens with his own `@scout reporting.` — a mention of a
       // known member as far as the scan can see — beside the `@murasaki`
-      // handoff. Two known members: a round, not a handoff, and Phase B's
-      // scheduler schedules nothing. The member-turn instructions must teach
-      // members not to open with their own handle; this pins the behavior
-      // until a round driver can split it.
+      // handoff. Two known members: a round, not a handoff. The scheduler
+      // reads both as addressed, which is why the member-turn instructions
+      // teach members not to open with their own handle.
       final text = "@scout reporting. The cache directory is absent.\n\n"
           "Over to **@murasaki**: the findings are two negative results. "
           "Your turn follows mine.";
@@ -130,6 +129,33 @@ void main() {
 
     test("no mention names nobody", () {
       expect(singleAgentMention("all done here", libraryOf(["scout"])), isNull);
+    });
+  });
+
+  group("mentionsIn", () {
+    PromptLibrary libraryOf(List<String> names) => PromptLibrary(
+          [for (final name in names) PromptDocument.parse(CompletionKind.agent, name, "")],
+        );
+
+    test("the members named, in the order they were named", () {
+      expect(mentionsIn("@second first, then @reviewer",
+              libraryOf(["reviewer", "second"])),
+          ["second", "reviewer"]);
+    });
+
+    test("a name the library does not know is prose, not an address", () {
+      expect(mentionsIn("ask @stranger to look", libraryOf(["reviewer"])),
+          isEmpty);
+    });
+
+    test("one name twice is one address", () {
+      expect(mentionsIn("@reviewer, @reviewer again",
+              libraryOf(["reviewer", "second"])),
+          ["reviewer"]);
+    });
+
+    test("no mention names nobody", () {
+      expect(mentionsIn("all done here", libraryOf(["scout"])), isEmpty);
     });
   });
 }

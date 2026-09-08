@@ -337,6 +337,8 @@ class ChatRepository {
       includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
+      turnMaxSteps:
+          projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
 
       // The answering member is the caller's fact, not the chat's — it is
       // about the message the turn runs, not the settings it runs under.

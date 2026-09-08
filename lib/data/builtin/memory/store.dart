@@ -3,7 +3,7 @@ import "dart:convert";
 import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
-import "../../../domain/documents.dart" show writeThroughRename;
+import "../../../domain/documents.dart" show RenameWriter;
 
 /// A project's auto-memory: small durable facts that accumulate as turns
 /// happen and are recalled into the turns they are relevant to. The store is
@@ -87,10 +87,14 @@ class MemoryEntry {
 }
 
 class MemoryStore {
-  MemoryStore(this.fs, this.dir);
+  MemoryStore(this.fs, this.dir) : _writer = RenameWriter.fs(fs);
 
   final FileSystem fs;
   final String dir;
+
+  /// The stamp and the index both — this store owns their paths, and one
+  /// writer is what the fixed rename temp asks for.
+  final RenameWriter _writer;
 
   String get _logPath => fs.path.join(dir, _logName);
   String get _indexPath => fs.path.join(dir, _indexName);
@@ -179,7 +183,7 @@ class MemoryStore {
   Future<void> stampConsolidated(DateTime at) async {
     final directory = fs.directory(dir);
     if (!await directory.exists()) await directory.create(recursive: true);
-    await writeThroughRename(fs, _consolidatedPath, at.toUtc().toIso8601String());
+    await _writer.write(_consolidatedPath, at.toUtc().toIso8601String());
   }
 
   /// The maintenance half of the store: the ops a model reports after it has
@@ -392,8 +396,8 @@ class MemoryStore {
   Future<void> _writeIndex(int size, Map<String, List<String>> terms) async {
     // Through a rename: a torn index would cost a rebuild on the next read,
     // but a reader must never see an empty one under a non-empty log.
-    await writeThroughRename(
-        fs, _indexPath, jsonEncode({"size": size, "terms": terms}));
+    await _writer.write(
+        _indexPath, jsonEncode({"size": size, "terms": terms}));
   }
 
   static Map<String, List<String>> _indexFor(List<MemoryEntry> entries) {

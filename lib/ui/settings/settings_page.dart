@@ -9,6 +9,8 @@ import "../../data/backup.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
+import "../../domain/project_settings.dart"
+    show OmadaOrdering, omadaOrderingLabels, omadaOrderingDescriptions;
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
@@ -185,6 +187,8 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           _AppearanceSection(),
           Divider(),
           _AgentSection(),
+          Divider(),
+          _OmadaSection(),
           Divider(),
           _TempChatSection(),
           Divider(),
@@ -656,7 +660,30 @@ class _AgentSection extends ConsumerWidget {
           ),
         ),
         const _RetryTurnsField(),
+        const _MaxStepsField(),
       ],
+    );
+  }
+}
+
+/// The most model calls one direct turn may make before it stops for the
+/// user. Null is the backend's own default; Omada member turns run under it
+/// too — the value rides every turn — and the round's own bound is the
+/// generations cap beside it.
+class _MaxStepsField extends ConsumerWidget {
+  const _MaxStepsField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final steps = ref.watch(
+        appSettingsProvider.select((s) => s.turnMaxSteps));
+    return InheritableSlider(
+      label: "Max steps per turn",
+      value: steps,
+      stops: AppSettings.turnStepStops,
+      inherited: AppSettings.defaultTurnMaxSteps,
+      onChanged: (v) =>
+          ref.read(appSettingsProvider.notifier).setTurnMaxSteps(v),
     );
   }
 }
@@ -678,7 +705,8 @@ class _RetryTurnsField extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SwitchListTile(
-            contentPadding: EdgeInsets.zero,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text("Automatic retry"),
             value: on,
             onChanged: (value) => ref
                 .read(appSettingsProvider.notifier)
@@ -704,6 +732,73 @@ class _RetryTurnsField extends ConsumerWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The room the settings page has for Omada at app level: what a new project
+/// starts as, how deep its agent rounds may go, and the scheduling a project
+/// that never chose runs under. A project's own page overrides the last two.
+class _OmadaSection extends ConsumerWidget {
+  const _OmadaSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          "Omada",
+          description: "Team chats: several named agents take part in a "
+              "project's replies, alongside the main one.",
+        ),
+        SwitchListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: const Text("On by default for new projects"),
+          subtitle: const Text(
+              "The new-project dialog starts with team chats switched on. "
+              "Existing projects are untouched."),
+          value: settings.omadaByDefault,
+          onChanged: (value) =>
+              ref.read(appSettingsProvider.notifier).setOmadaByDefault(value),
+        ),
+        InheritableDropdown<OmadaOrdering>(
+          label: "Default round order",
+          value: settings.omadaOrdering,
+          inherited: omadaOrderingLabels[OmadaOrdering.sequential],
+          options: omadaOrderingLabels,
+          onChanged: (v) =>
+              ref.read(appSettingsProvider.notifier).setOmadaOrdering(v),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+              omadaOrderingDescriptions[
+                  settings.omadaOrdering ?? OmadaOrdering.sequential]!,
+              style: Theme.of(context).textTheme.bodySmall),
+        ),
+        InheritableSlider(
+          label: "Max generations per round",
+          value: settings.omadaMaxGenerations,
+          stops: AppSettings.omadaGenerationStops,
+          inherited: AppSettings.defaultOmadaMaxGenerations,
+          onChanged: (v) => ref
+              .read(appSettingsProvider.notifier)
+              .setOmadaMaxGenerations(
+                  v ?? AppSettings.defaultOmadaMaxGenerations),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            "How many waves of agent-to-agent work one round may run before "
+            "it stops for you — your message starts the round, and a member "
+            "handing off to another starts the next wave. A project can set "
+            "its own.",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
     );
   }
 }

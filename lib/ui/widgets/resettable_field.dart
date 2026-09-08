@@ -126,3 +126,68 @@ class InheritableDropdown<T> extends StatelessWidget {
     );
   }
 }
+
+/// A slider over sparse stops, paired with the reset button that puts it
+/// back on [inherited]. The dropdown-shaped sibling of [InheritableDropdown]:
+/// a count whose steps are not every number (five waves, ten, twenty) reads
+/// better as a slider whose snaps the value to, and null means "inherit what
+/// the next level up decides", named in the tooltip the same way.
+///
+/// The stops are the slider's own: a value no stop carries — whatever a file
+/// left there — reads as the stop nearest it, so the slider never asserts.
+/// [snap] and [stopIndex] are exposed because a page showing the resolved
+/// value beside the control snaps the same way.
+class InheritableSlider extends StatelessWidget {
+  const InheritableSlider({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.stops,
+    required this.onChanged,
+    required this.inherited,
+  });
+
+  final String label;
+
+  /// What the setting currently holds; null names [inherited], which the
+  /// slider then shows and the reset restores.
+  final int? value;
+
+  /// The slider's stops, in the order they sit on the track.
+  final List<int> stops;
+  final int inherited;
+  final ValueChanged<int?> onChanged;
+
+  /// The stop nearest [value], where a stored value reads as.
+  static int _index(List<int> stops, int value) {
+    var best = 0;
+    for (var i = 1; i < stops.length; i++) {
+      if ((value - stops[i]).abs() < (value - stops[best]).abs()) {
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  static int _snap(List<int> stops, int value) => stops[_index(stops, value)];
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = value ?? inherited;
+    return LabelledField(
+      label: label,
+      child: ResettableField(
+        onReset: () => onChanged(null),
+        resetLabel: "the default ($_snap(stops, inherited))",
+        child: Slider(
+          value: _index(stops, shown).toDouble(),
+          min: 0,
+          max: (stops.length - 1).toDouble(),
+          divisions: stops.length - 1,
+          label: "${_snap(stops, shown)}",
+          onChanged: (position) => onChanged(stops[position.round()]),
+        ),
+      ),
+    );
+  }
+}

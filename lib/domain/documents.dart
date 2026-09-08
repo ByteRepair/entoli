@@ -7,11 +7,65 @@ const writingSuffix = ".writing";
 
 /// A whole-file write no reader may catch mid-way: to the [writingSuffix]
 /// sibling, then a rename. The caller that owns the parent directory creates
-/// it.
+/// it. The temp name is fixed, which is safe only because a path has one
+/// writer — [RenameWriter] is that writer.
 Future<void> writeThroughRename(FileSystem fs, String path, String text) async {
   final temp = fs.file("$path$writingSuffix");
   await temp.writeAsString(text);
   await temp.rename(path);
+}
+
+/// The one writer of a path: whole-file writes queued per path, so two
+/// overlapping saves land in the order they were asked and the disk ends on
+/// the last — the copy the next read answers with. Each owner instantiates
+/// its own and writes only its own paths through it; that one-writer rule is
+/// what makes the fixed temp name under [writeThroughRename] safe, where two
+/// writers would rename the same temp away from under each other.
+///
+/// The rename itself is what protects readers of the file — one sees the
+/// whole old file or the whole new one, with no coordination to forget — so
+/// there is no lock here for them, and none wanted where the reads are the
+/// in-memory copy [Documents] serves.
+///
+/// [writeOne] is the single write a queued entry runs; it is the seam a test
+/// stands a fake behind, so queue behavior needs no filesystem at all.
+class RenameWriter {
+  RenameWriter(Future<void> Function(String path, String text) writeOne)
+      : _writeOne = writeOne;
+
+  /// The default over the filesystem the caller holds — the same write every
+  /// writer was handing before this existed.
+  factory RenameWriter.fs(FileSystem fs) =>
+      RenameWriter((path, text) => writeThroughRename(fs, path, text));
+
+  final Future<void> Function(String path, String text) _writeOne;
+
+  /// One write per path at a time. Taken out once it is the tail: a write
+  /// landing behind it queues behind it, and a clean finish leaves the map
+  /// empty.
+  final Map<String, Future<void>> _writes = {};
+
+  /// How many paths still hold a queue entry — the drain the test pins.
+  int get pendingWrites => _writes.length;
+
+  Future<void> write(String path, String text) {
+    final queued = _writes[path];
+    final write = queued == null
+        ? _writeOne(path, text)
+        : queued.then((_) => _writeOne(path, text));
+    // The catch is what keeps a failed write's queue entry from being an
+    // unhandled error beside the one the await delivers — the entry has
+    // nowhere else to carry it to. The entry is the wrapper itself: every
+    // combinator here (`catchError`, `whenComplete`) returns a fresh future,
+    // so storing anything else and comparing against it never matches and
+    // the path never drains.
+    final tracked = write.catchError((_) {});
+    _writes[path] = tracked;
+    tracked.whenComplete(() {
+      if (identical(_writes[path], tracked)) _writes.remove(path);
+    });
+    return write;
+  }
 }
 
 /// The two JSON documents that are read synchronously: `settings.json` and each
@@ -28,9 +82,12 @@ Future<void> writeThroughRename(FileSystem fs, String path, String text) async {
 /// updates the copy before it touches the filesystem, so a read on the next
 /// line sees it.
 class Documents {
-  Documents(this._fs);
+  Documents(FileSystem fs)
+      : _fs = fs,
+        _writes = RenameWriter.fs(fs);
 
   final FileSystem _fs;
+  final RenameWriter _writes;
   final Map<String, String> _texts = {};
 
   Future<void> hydrate(Iterable<String> paths) async {
@@ -48,8 +105,8 @@ class Documents {
   /// `writeAsString` truncates before it writes, so a read landing between the
   /// two finds an empty file. The copy is updated first, so a read on the next
   /// line sees the new value whatever the filesystem is still doing.
-  Future<void> write(String path, String text) async {
+  Future<void> write(String path, String text) {
     _texts[path] = text;
-    await writeThroughRename(_fs, path, text);
+    return _writes.write(path, text);
   }
 }

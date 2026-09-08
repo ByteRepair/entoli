@@ -12,6 +12,8 @@ import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:agent_chat/domain/project_settings.dart"
+    show OmadaOrdering;
 import "package:agent_chat/providers.dart"
     show projectSettingsProvider, promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
@@ -1372,18 +1374,28 @@ void main() {
       expect(messages.last.author, "@explore");
     });
 
-    test("addressing one member and naming another still stamps the addressee",
+    test("a mention list schedules the members' turns in mention order",
         () async {
       await _inTeam(app);
-      final (id, _) = await chatWithOneTurn(
-          "hello @explore, find the tests, then hand it to @build to check",
+      app.backend.scriptedRounds = [
+        for (var i = 0; i < 4; i++) ...[
+          const [TextDelta("done"), DoneEvent()],
+        ],
+      ];
+      final (id, _) = await startTurn(
+          "hello @explore and @build, look at the tests",
           project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
 
-      final messages = messagesOf(id);
-      expect(messages.first.documents.keys, ["@explore", "@build"]);
-      // The first mention is the addressee; the second is the handoff the
-      // reply will carry out. The label names who the turn was addressed to.
-      expect(messages.last.author, "@explore");
+      final prompts = app.backend.prompts;
+      // Both members run, in the order the message named them: the mention
+      // list is the schedule. The first rides the opening turn; the second
+      // is dispatched at the settle it causes.
+      expect(prompts[0].settings.omadaMember, "explore");
+      expect(prompts[1].settings.omadaMember, "build");
+      // The second member answers the same prompt — the message was
+      // addressed to them both.
+      expect(prompts[1].prompt.id, prompts[0].prompt.id);
     });
 
     test("a direct chat never stamps, whatever the prompt names", () async {
@@ -1463,6 +1475,11 @@ void main() {
 
     test("the chain stops at the cap and the user resets it", () async {
       await _inTeam(app);
+      // A cap of its own: the app default is ten, and three rounds is the
+      // shape this test pins.
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaMaxGenerations(3);
       app.backend.scriptedRounds = [
         for (var i = 0; i < 5; i++) ...[
           const [TextDelta("see @explore"), DoneEvent()],
@@ -1573,6 +1590,104 @@ void main() {
       // The pass is on the record, and nothing followed it.
       expect(textOf(messagesOf(id).last), passWord);
       expect(app.backend.prompts, hasLength(1));
+    });
+
+    test("a pass does not cancel what the user scheduled", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        const [TextDelta(passWord), DoneEvent()],
+        const [TextDelta("on it"), DoneEvent()],
+      ];
+      final (id, _) = await startTurn(
+          "@explore and @build, have a look", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // Explore passed, and build's turn still ran: the user addressed
+      // build directly, and a pass ends what agents hand each other, not
+      // what the user asked for.
+      expect(app.backend.prompts, hasLength(2));
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+    });
+
+    test("parallel ordering answers with one turn per member at once",
+        () async {
+      await _inTeam(app);
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.parallel);
+      // Both turns hold until this completes: a fan-out is two turns in
+      // flight, not one after another.
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, _) = await startTurn(
+          "@explore and @build, have a look", project: "team");
+
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the fan-out", limit: const Duration(seconds: 5));
+      expect(app.backend.prompts[0].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+
+      // Tear down: the held turns finish and the round ends.
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+    });
+
+    test("a handoff under parallel ordering waits for the siblings", () async {
+      await _inTeam(app);
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.parallel);
+      app.backend.scriptedRounds = [
+        // The fan-out: explore hands to build, build hands to nobody.
+        const [TextDelta("over to @build"), DoneEvent()],
+        const [TextDelta("done here"), DoneEvent()],
+        // The settle-first wave: build's handoff runs only once both
+        // siblings of the first wave are finished.
+        const [TextDelta("build speaking"), DoneEvent()],
+      ];
+      final (id, _) = await startTurn(
+          "@explore and @build, split this up", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The first wave was two turns; the handoff from explore's reply is
+      // the third prompt, dispatched at the settle the wave caused.
+      expect(app.backend.prompts, hasLength(3));
+      expect(app.backend.prompts[2].settings.omadaMember, "build");
+    });
+
+    test("what was said while the round ran is dispatched, not re-composed",
+        () async {
+      await _inTeam(app);
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) =
+          await startTurn("hello @explore, take your time", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      // Said while the member was speaking: on the log the moment it was
+      // said, dispatched when the room settles.
+      await controller.send("and @build after this");
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final queued =
+          chat.messages.where((m) => textOf(m) == "and @build after this");
+      expect(queued, isNotEmpty);
+
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      app.backend.scriptedRounds = [
+        const [TextDelta("done"), DoneEvent()],
+        const [TextDelta("here too"), DoneEvent()],
+      ];
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The dispatched turn ran on the message the log already holds —
+      // its id, not a second composition of the same words.
+      final saidId = queued.single.id;
+      expect(app.backend.prompts.last.prompt.id, saidId);
+      expect(
+          messagesOf(id).where((m) => textOf(m) == "and @build after this"),
+          hasLength(1));
     });
 
     test("a member turn runs under the member's prompt from the library",

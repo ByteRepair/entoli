@@ -67,8 +67,8 @@ void main() {
           chatId: ChatViewState(
             chat: chat,
             isRunning: running,
-            approvals: approvals,
-            questions: questions,
+            approvals: {"r1": approvals},
+            questions: {"r1": questions},
             status: online ? null : "offline — showing what this device last had",
           ),
         },

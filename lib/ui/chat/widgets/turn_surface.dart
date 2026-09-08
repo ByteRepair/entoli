@@ -40,14 +40,16 @@ class TurnSurface extends StatelessWidget {
             onContinue: notifier.resume,
             notice: view.unfinishedNotice,
           ),
-        SubAgentStrip(agents: view.runningSubAgents),
-        for (final approval in view.approvals)
-          ApprovalBanner(
-            approval: approval,
-            onAllow: () =>
-                notifier.respondApproval(approval.id, ApprovalResponse.allow),
-            onDeny: () => notifier.respondApproval(approval.id, ApprovalResponse.deny),
-          ),
+        for (final agents in view.runningSubAgents.values)
+          SubAgentStrip(agents: agents),
+        for (final approvals in view.approvals.values)
+          for (final approval in approvals)
+            ApprovalBanner(
+              approval: approval,
+              onAllow: () =>
+                  notifier.respondApproval(approval.id, ApprovalResponse.allow),
+              onDeny: () => notifier.respondApproval(approval.id, ApprovalResponse.deny),
+            ),
       ],
     );
   }
@@ -64,7 +66,10 @@ class TurnQuestions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final asked = view.questions.first;
+    // One panel, the first turn waiting on answers: a room with two asking
+    // is a round that misfired — nobody answers two panels at once, and the
+    // second question is still there when the first is answered.
+    final asked = view.questions.values.expand((q) => q).first;
     return QuestionPanel(
       key: ValueKey(asked.id),
       request: asked,

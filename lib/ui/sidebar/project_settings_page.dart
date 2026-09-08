@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
@@ -112,9 +113,16 @@ class ProjectSettingsPage extends ConsumerWidget {
           if (builtIn == null) ...[
             const Divider(),
             _OmadaRow(project: project),
-            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada)))
+            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada))) ...[
               _OmadaOrderingRow(project: project),
+              _OmadaMaxGenerationsRow(project: project),
+            ],
           ],
+          // A direct turn's step limit is a question about turns, not about
+          // Omada — built-ins included, where a project's own limit is the
+          // one a built-in note's turns also answer to.
+          const Divider(),
+          _TurnMaxStepsRow(project: project),
           // A built-in that ships its own note reads no file, so there is no
           // instructions to edit for one — unless it asks for the user's files
           // on top of the note, in which case the project AGENTS.md is the
@@ -273,14 +281,74 @@ class _OmadaOrderingRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return InheritableDropdown<OmadaOrdering>(
-      label: "Round order",
-      value: ref
-          .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering)),
-      inherited: omadaOrderingLabels[OmadaOrdering.sequential],
-      options: omadaOrderingLabels,
+    final value = ref
+        .watch(projectSettingsProvider(project).select((s) => s.omadaOrdering));
+    final app = ref.watch(appSettingsProvider).omadaOrdering;
+    final effective = value ?? app ?? OmadaOrdering.sequential;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InheritableDropdown<OmadaOrdering>(
+          label: "Round order",
+          value: value,
+          // Null here resolves to the app's default, not the enum's own.
+          inherited: omadaOrderingLabels[app ?? OmadaOrdering.sequential],
+          options: omadaOrderingLabels,
+          onChanged: (v) =>
+              ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(omadaOrderingDescriptions[effective]!,
+              style: Theme.of(context).textTheme.bodySmall),
+        ),
+      ],
+    );
+  }
+}
+
+/// How many handoff generations a round may run here, overriding the app
+/// default. Shown only while the project's Omada toggle is on; Default names
+/// what the app setting says now.
+class _OmadaMaxGenerationsRow extends ConsumerWidget {
+  const _OmadaMaxGenerationsRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return InheritableSlider(
+      label: "Max generations per round",
+      value: ref.watch(projectSettingsProvider(project)
+          .select((s) => s.omadaMaxGenerations)),
+      stops: AppSettings.omadaGenerationStops,
+      inherited: ref.watch(appSettingsProvider).omadaMaxGenerations,
+      onChanged: (v) => ref
+          .read(projectSettingsProvider(project).notifier)
+          .setOmadaMaxGenerations(v),
+    );
+  }
+}
+
+/// How many model calls a direct turn may make here, overriding the app
+/// default. Not an Omada row — a turn is a turn in every project — but shown
+/// beside the round settings, the same level of override.
+class _TurnMaxStepsRow extends ConsumerWidget {
+  const _TurnMaxStepsRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return InheritableSlider(
+      label: "Max steps per turn",
+      value: ref.watch(
+          projectSettingsProvider(project).select((s) => s.turnMaxSteps)),
+      stops: AppSettings.turnStepStops,
+      inherited: ref.watch(appSettingsProvider).turnMaxSteps ??
+          AppSettings.defaultTurnMaxSteps,
       onChanged: (v) =>
-          ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
+          ref.read(projectSettingsProvider(project).notifier).setTurnMaxSteps(v),
     );
   }
 }

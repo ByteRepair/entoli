@@ -23,12 +23,18 @@ have() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Works, not just present: a present-but-unstartable binary once read as
+# installed, was skipped, and setup exited 0 having done nothing.
+works() {
+  "$1" --version >/dev/null 2>&1
+}
+
 # --- make and github-cli ------------------------------------------------------
 # One invocation, not one per tool: apk --no-cache re-fetches the package
 # index on every call, and a phone pays that twice otherwise.
 PKGS=""
-have make || PKGS="make"
-have gh || PKGS="$PKGS gh"
+works make || PKGS="make"
+works gh || PKGS="$PKGS gh"
 if [ -n "$PKGS" ]; then
   # The mapping is the script's, not the call site's: apk and pacman call gh
   # github-cli and the rest call it gh.
@@ -70,7 +76,7 @@ case "$ARCH" in
     ;;
 esac
 
-if ! have esbmc; then
+if ! works esbmc; then
   URL="https://github.com/esbmc/esbmc/releases/latest/download/$ASSET"
   TMPZIP="/tmp/_esbmc.zip"
 
@@ -116,7 +122,15 @@ z.extractall('$TMPDIR_EXTRACT')
   rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
 fi
 
-# A skipped install leaves no file here — esbmc found on PATH is a machine
-# the script had nothing to do for — so the version print reads the found
-# binary, wherever it is.
-"$BIN/esbmc" --version 2>/dev/null || esbmc --version || true
+# The binary that stands at the end is the one the turns will run. Reaching
+# here without $BIN/esbmc means the works probe passed and no fetch landed, so
+# PATH's is the only candidate there can be.
+if [ -x "$BIN/esbmc" ]; then
+  CANDIDATE="$BIN/esbmc"
+else
+  CANDIDATE="esbmc"
+fi
+if ! "$CANDIDATE" --version 2>&1; then
+  echo "the esbmc at $CANDIDATE cannot be run (see the error above); setup did not succeed" >&2
+  exit 1
+fi

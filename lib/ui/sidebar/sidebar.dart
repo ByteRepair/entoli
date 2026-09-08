@@ -727,7 +727,8 @@ class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final name = await promptNewProject(context);
+    final name = await promptNewProject(context,
+        omadaByDefault: ref.read(appSettingsProvider).omadaByDefault);
     if (name == null) return;
     await ref.read(chatRepositoryProvider).createProject(name.name);
     if (name.omada) {
