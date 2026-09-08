@@ -9,6 +9,7 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
+import "package:agent_chat/data/builtin/templates.dart" show houseTurnInstructions;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
@@ -97,6 +98,7 @@ void main() {
     MemorySettings memory = MemorySettings.off,
     String? bundledInstructions,
     bool includesUserInstructions = false,
+    bool omada = false,
   }) =>
       backend
           .sendPrompt(
@@ -113,7 +115,8 @@ void main() {
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,
                   bundledInstructions: bundledInstructions,
-                  includesUserInstructions: includesUserInstructions))
+                  includesUserInstructions: includesUserInstructions,
+                  omada: omada))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -141,6 +144,35 @@ void main() {
 
       expect(events.whereType<ErrorEvent>().single.message, contains("No model is selected"));
       expect(events.last, isA<DoneEvent>());
+    });
+
+    test("an Omada-on turn withholds the task tool and names the room", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      await send(backend, "hi",
+          omada: true, disabled: {AgentCapability.task});
+
+      // The capability mechanism drops `task` from the tool list and the
+      // prompt's delegation section together; the overlay names the room.
+      final tools = client.calls.single.tools.map((t) => t.name).toSet();
+      expect(tools, isNot(contains("task")));
+      final turnMessage = client.sent.first[1].text;
+      expect(turnMessage, contains(houseTurnInstructions()));
+    });
+
+    test("a turn outside Omada still offers the task tool", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      await send(backend, "hi");
+
+      final tools = client.calls.single.tools.map((t) => t.name).toSet();
+      expect(tools, contains("task"));
+      // No second system message: nothing to say about the room.
+      expect(client.sent.first[1].text, isNot(contains(houseTurnInstructions())));
     });
 
     test("a provider that is not configured is named", () async {
