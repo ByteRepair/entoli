@@ -467,6 +467,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setOmadaOrdering(OmadaOrdering? value) =>
       _update((s) => s.omadaOrdering = value);
 
+  /// The step limit a direct turn runs under; null is the backend's default.
+  Future<void> setTurnMaxSteps(int? value) =>
+      _update((s) => s.turnMaxSteps = value);
+
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);

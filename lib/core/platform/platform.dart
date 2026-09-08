@@ -93,6 +93,10 @@ BuiltinBackend createBackend(
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
     ),
+    // Read fresh per turn rather than captured: the slider is a setting, and
+    // an edit reaches the next turn the way the environment does.
+    options: BuiltinOptions(
+        stepLimit: settings().turnMaxSteps ?? AppSettings.defaultTurnMaxSteps),
   );
   for (final entry in libraries.entries) {
     backend.setLibrary(entry.key, entry.value);

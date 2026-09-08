@@ -65,6 +65,7 @@ class AppSettings {
     this.omadaByDefault = false,
     this.omadaMaxGenerations = defaultOmadaMaxGenerations,
     this.omadaOrdering,
+    this.turnMaxSteps,
     this.welcomeSeen = false,
   });
 
@@ -290,6 +291,13 @@ class AppSettings {
   /// where a per-project answer was first written.
   OmadaOrdering? omadaOrdering;
 
+  /// How many model calls one direct turn may make before it stops for the
+  /// user — the step limit the backend runs under. Null is the backend's own
+  /// default, and Omada rounds are never under it: a round is several turns
+  /// in flight, and one number over them all would say nothing about any
+  /// member's turn.
+  int? turnMaxSteps;
+
   /// Whether the welcome tour has been finished. It is what first launch reads
   /// to decide whether to push the tour, and what its Done writes.
   bool welcomeSeen;
@@ -306,6 +314,11 @@ class AppSettings {
   /// agent-to-agent work before the round stops for the user.
   static const defaultOmadaMaxGenerations = 10;
   static const omadaGenerationStops = [5, 10, 20, 40, 60, 80, 100];
+
+  /// The stops of the max-steps dropdown, and the backend default the
+  /// "Default" entry names.
+  static const turnStepStops = [20, 40, 60, 80, 100, 150];
+  static const defaultTurnMaxSteps = 40;
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
@@ -384,6 +397,7 @@ class AppSettings {
             (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
         omadaOrdering: OmadaOrdering.fromNameNullable(
             json["omadaOrdering"] as String?),
+        turnMaxSteps: json["turnMaxSteps"] as int?,
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
@@ -470,6 +484,7 @@ class AppSettings {
         omadaByDefault: omadaByDefault,
         omadaMaxGenerations: omadaMaxGenerations,
         omadaOrdering: omadaOrdering,
+        turnMaxSteps: turnMaxSteps,
         welcomeSeen: welcomeSeen,
       );
 
@@ -532,8 +547,8 @@ class AppSettings {
       if (omadaByDefault) "omadaByDefault": omadaByDefault,
       if (omadaMaxGenerations != defaultOmadaMaxGenerations)
         "omadaMaxGenerations": omadaMaxGenerations,
-      if (omadaOrdering != null)
-        "omadaOrdering": omadaOrdering!.name,
+      if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
+      if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }

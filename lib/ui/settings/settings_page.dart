@@ -660,7 +660,49 @@ class _AgentSection extends ConsumerWidget {
           ),
         ),
         const _RetryTurnsField(),
+        const _MaxStepsField(),
       ],
+    );
+  }
+}
+
+/// The most model calls one direct turn may make before it stops for the
+/// user. Off is the backend's own default; Omada rounds are never under it,
+/// a round being several turns in flight.
+class _MaxStepsField extends ConsumerWidget {
+  const _MaxStepsField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final steps = ref.watch(
+        appSettingsProvider.select((s) => s.turnMaxSteps));
+    return LabelledField(
+      label: "Max steps per turn",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<int?>(
+            initialValue: steps,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem(value: null, child: Text("Default")),
+              for (final stop in AppSettings.turnStepStops)
+                DropdownMenuItem(value: stop, child: Text("$stop")),
+            ],
+            onChanged: (value) => ref
+                .read(appSettingsProvider.notifier)
+                .setTurnMaxSteps(value),
+          ),
+          Text(
+            steps == null
+                ? "The built-in limit stands — 40 model calls before the turn "
+                    "stops and offers to carry on."
+                : "A turn stops after $steps model calls and offers to carry "
+                    "on. Team rounds are not under this.",
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -682,7 +724,8 @@ class _RetryTurnsField extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SwitchListTile(
-            contentPadding: EdgeInsets.zero,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text("Automatic retry"),
             value: on,
             onChanged: (value) => ref
                 .read(appSettingsProvider.notifier)
@@ -730,7 +773,7 @@ class _OmadaSection extends ConsumerWidget {
               "project's replies, alongside the main one.",
         ),
         SwitchListTile(
-          contentPadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
           title: const Text("On by default for new projects"),
           subtitle: const Text(
               "The new-project dialog starts with team chats switched on. "
