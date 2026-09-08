@@ -200,13 +200,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release --split-per-abi --config-only
 
+      # Gradle, not `flutter build appbundle --config-only`: the flag exists
+      # for `apk` but not for `appbundle`. `help` forces full configuration of
+      # the root and `:app`, which is the wrapper, the plugins and the
+      # dependency resolution this primes for; the Dart-side files the APK
+      # priming wrote above carry the bundle build too.
       - name: Prime Gradle for the bundle build
         env:
           ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build appbundle --release --config-only
+        run: android/gradlew help -q --console=plain
 
       # Saved from the job that had everything warm, so the android and aab
       # jobs restore read-only and two jobs never upload the same
