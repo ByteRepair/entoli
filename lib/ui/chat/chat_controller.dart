@@ -279,13 +279,40 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   }
 
   /// The composer's own path: what it is holding becomes files under the chat
-  /// before anything else, since from here on a prompt is its parts.
+  /// before anything else, since from here on a prompt is its parts. Said
+  /// while a turn runs, it is appended to the log as it stands and dispatched
+  /// when the room settles — the log is the queue.
   @override
   Future<void> send(String text, {List<Attachment> attachments = const []}) async {
     await _ready;
-    if (state.chat == null || state.isRunning) return;
+    if (state.chat == null) return;
     final repo = ref.read(chatRepositoryProvider);
-    await _prompt(text, files: await repo.saveAttachments(chatId, attachments));
+    final files = await repo.saveAttachments(chatId, attachments);
+    if (state.isRunning) {
+      await _sayLater(text, files);
+      return;
+    }
+    await _prompt(text, files: files);
+  }
+
+  /// What was said while a turn ran and is still unsaid. The messages are on
+  /// the log already — written as they were said — and this is what is left
+  /// to say.
+  final List<({String text, List<MessagePart> files})> _said = [];
+
+  Future<void> _sayLater(String text, List<MessagePart> files) async {
+    final userMsg = ref.read(chatRepositoryProvider).composeUserPrompt(text,
+        project: state.chat?.state.project, files: files);
+    final chat = state.chat!;
+    await ref
+        .read(chatRepositoryProvider)
+        .append(chatId, recordsOf([userMsg]));
+    final messages = List<Message>.from(chat.messages)..add(userMsg);
+    state = state.copyWith(
+        chat: chat.copyWith(
+            messages: messages,
+            state: chat.state.copyWith(updatedAt: DateTime.now())));
+    _said.add((text: text, files: files));
   }
 
   /// Say [text] and run the turn it starts. [files] are already under the
@@ -695,6 +722,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     );
     done.complete(reason);
     await _notifyFailure(reason, turn.errorLine);
+
+    // The room has settled: what was said while it spoke is said next, in
+    // the order it was said. A say that opens its own turn clears the queue
+    // ahead of it — everything said earlier is already on the log and this
+    // is the turn the user is looking at.
+    while (_said.isNotEmpty) {
+      final said = _said.removeAt(0);
+      await _prompt(said.text, files: said.files);
+    }
     await _maybeHandoff(reason);
   }
 
