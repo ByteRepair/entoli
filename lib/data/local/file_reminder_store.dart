@@ -2,7 +2,7 @@ import "dart:convert";
 import "dart:math";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writingSuffix;
+import "../../domain/documents.dart" show writeThroughRename;
 import "../../domain/reminder.dart";
 
 /// The user's reminders, one JSON list at `<dataDir>/reminders.json`. Read at
@@ -32,9 +32,8 @@ class FileReminderStore {
 
   Future<void> save(List<Reminder> reminders) async {
     final fs = _config.fs;
-    final temp = fs.file("${_config.remindersFile}$writingSuffix");
-    await temp.writeAsString(jsonEncode([for (final r in reminders) r.toJson()]));
-    await temp.rename(_config.remindersFile);
+    await writeThroughRename(
+        fs, _config.remindersFile, jsonEncode([for (final r in reminders) r.toJson()]));
   }
 }
 

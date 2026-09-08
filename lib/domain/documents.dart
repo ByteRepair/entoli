@@ -1,15 +1,19 @@
 import "package:fs_shim/fs.dart";
+import "package:uuid/uuid.dart";
 
 /// What a document being written through a rename is called until the rename.
 /// Whoever writes one spells it, and a backup skips one — it is the half of a
 /// rename a kill landed in, not a file anything reads.
 const writingSuffix = ".writing";
 
-/// A whole-file write no reader may catch mid-way: to the [writingSuffix]
-/// sibling, then a rename. The caller that owns the parent directory creates
-/// it.
+/// A whole-file write no reader may catch mid-way: to a temp sibling of
+/// [path], then a rename. The temp name is unique to the write, so two
+/// overlapping writers cannot rename the same file away from under each
+/// other — a fixed name made the second rename fail ENOENT the moment the
+/// first had taken it. The suffix stays the final segment, which is what the
+/// backup's skip reads. The caller that owns the parent directory creates it.
 Future<void> writeThroughRename(FileSystem fs, String path, String text) async {
-  final temp = fs.file("$path$writingSuffix");
+  final temp = fs.file("$path.${const Uuid().v4()}$writingSuffix");
   await temp.writeAsString(text);
   await temp.rename(path);
 }
@@ -33,6 +37,11 @@ class Documents {
   final FileSystem _fs;
   final Map<String, String> _texts = {};
 
+  /// One write per path at a time, so two overlapping saves land in the
+  /// order they were asked: the disk ends on the last, which is the copy
+  /// the next read answers with.
+  final Map<String, Future<void>> _writes = {};
+
   Future<void> hydrate(Iterable<String> paths) async {
     for (final path in paths) {
       final file = _fs.file(path);
@@ -50,6 +59,17 @@ class Documents {
   /// line sees the new value whatever the filesystem is still doing.
   Future<void> write(String path, String text) async {
     _texts[path] = text;
-    await writeThroughRename(_fs, path, text);
+    final queued = _writes[path];
+    final write = queued == null
+        ? writeThroughRename(_fs, path, text)
+        : queued.then((_) => writeThroughRename(_fs, path, text));
+    // Taken out once it is the tail: a write landing behind it queues behind
+    // it, and a clean finish leaves the map empty. The catch is what keeps a
+    // failed write's queue entry from being an unhandled error beside the one
+    // the await delivers — the entry has nowhere else to carry it to.
+    _writes[path] = write.catchError((_) {}).whenComplete(() {
+      if (identical(_writes[path], write)) _writes.remove(path);
+    });
+    await write;
   }
 }

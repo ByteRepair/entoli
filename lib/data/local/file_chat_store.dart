@@ -36,11 +36,8 @@ class FileChatStore implements ChatStore {
   /// and a reader sees either the whole old file or the whole new one. This is
   /// for the documents beside the log: the log itself is appended to, where
   /// the same hazard is a torn last line the reader drops.
-  Future<void> _write(String path, String text) async {
-    final temp = _fs.file("$path$writingSuffix");
-    await temp.writeAsString(text);
-    await temp.rename(path);
-  }
+  Future<void> _write(String path, String text) =>
+      writeThroughRename(_fs, path, text);
 
   Future<String?> _readOrNull(String path) async {
     final file = _fs.file(path);

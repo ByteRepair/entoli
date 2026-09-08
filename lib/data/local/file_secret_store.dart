@@ -5,7 +5,7 @@ import "dart:typed_data";
 import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writingSuffix;
+import "../../domain/documents.dart" show writeThroughRename;
 import "../../domain/secret_store.dart";
 
 /// Secrets in a plain file under the data directory — what a platform gets
@@ -41,9 +41,7 @@ class FileSecretStore implements SecretStore {
 
   Future<void> _write(Map<String, String> values) async {
     _loaded = values;
-    final temp = _fs.file("${_file.path}$writingSuffix");
-    await temp.writeAsString(jsonEncode(values));
-    await temp.rename(_file.path);
+    await writeThroughRename(_fs, _file.path, jsonEncode(values));
   }
 
   @override
