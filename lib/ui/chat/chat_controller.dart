@@ -23,9 +23,9 @@ class ChatViewState {
   ChatViewState({
     this.chat,
     this.isRunning = false,
-    this.approvals = const [],
-    this.questions = const [],
-    this.runningSubAgents = const [],
+    this.approvals = const {},
+    this.questions = const {},
+    this.runningSubAgents = const {},
     this.retry,
     this.status,
     this.unfinishedNotice,
@@ -33,17 +33,21 @@ class ChatViewState {
   });
   final Chat? chat;
   final bool isRunning;
-  final List<ToolApproval> approvals;
+
+  /// What the turn is waiting to be allowed, keyed by the reply that asked
+  /// for it — each turn's banner answers its own turn, and a room with two
+  /// running shows both.
+  final Map<String, List<ToolApproval>> approvals;
 
   /// What the agent is waiting to be told. Turn-scoped like [approvals]: the
   /// call and the answers are what the conversation keeps.
-  final List<AskRequest> questions;
+  final Map<String, List<AskRequest>> questions;
 
   /// Sub-agents spawned by `task` calls that are still running — delegated
   /// participants at work, shown as room activity. Turn-scoped view state like
   /// [approvals]: the call/result pair is what persists, and these exist only
-  /// to drive the activity strip.
-  final List<SubAgentStartEvent> runningSubAgents;
+  /// to drive the activity strip. Keyed by the reply that fanned them out.
+  final Map<String, List<SubAgentStartEvent>> runningSubAgents;
 
   /// Set while the backend is retrying a failed attempt. Transient: it belongs
   /// to the running turn, not to the conversation, so it is never persisted.
@@ -66,7 +70,7 @@ class ChatViewState {
 
   /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
   /// one answer" in `lib/ui/chat/CLAUDE.md` owns.
-  RoomPhase get roomPhase => questions.isNotEmpty
+  RoomPhase get roomPhase => questions.values.any((q) => q.isNotEmpty)
       ? RoomPhase.waitingOnYou
       : isRunning
           ? RoomPhase.agentSpeaking
@@ -75,9 +79,9 @@ class ChatViewState {
   ChatViewState copyWith({
     Chat? chat,
     bool? isRunning,
-    List<ToolApproval>? approvals,
-    List<AskRequest>? questions,
-    List<SubAgentStartEvent>? runningSubAgents,
+    Map<String, List<ToolApproval>>? approvals,
+    Map<String, List<AskRequest>>? questions,
+    Map<String, List<SubAgentStartEvent>>? runningSubAgents,
     String? retry,
     bool clearRetry = false,
     String? status,
@@ -666,15 +670,29 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case InfoEvent():
         break;
       case ApprovalRequestEvent(:final approval):
-        state = state.copyWith(approvals: [...state.approvals, approval]);
-      case QuestionRequestEvent(:final request):
-        state = state.copyWith(questions: [...state.questions, request]);
-      case SubAgentStartEvent():
-        state = state.copyWith(runningSubAgents: [...state.runningSubAgents, event]);
-      case SubAgentEndEvent(:final id):
         state = state.copyWith(
-            runningSubAgents:
-                state.runningSubAgents.where((s) => s.id != id).toList());
+            approvals: {
+              ...state.approvals,
+              turn.replyId: [...state.approvals[turn.replyId] ?? [], approval]
+            });
+      case QuestionRequestEvent(:final request):
+        state = state.copyWith(questions: {
+          ...state.questions,
+          turn.replyId: [...state.questions[turn.replyId] ?? [], request]
+        });
+      case SubAgentStartEvent():
+        state = state.copyWith(runningSubAgents: {
+          ...state.runningSubAgents,
+          turn.replyId: [
+            ...(state.runningSubAgents[turn.replyId] ?? []),
+            event
+          ]
+        });
+      case SubAgentEndEvent(:final id):
+        state = state.copyWith(runningSubAgents: {
+          for (final entry in state.runningSubAgents.entries)
+            entry.key: entry.value.where((s) => s.id != id).toList()
+        });
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
       case ShellOutputEvent(:final text):
@@ -734,9 +752,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       if (!ref.mounted) return;
       state = state.copyWith(
         retry: "Retrying (${turn.round}/$_roundsTotal) — ${turn.errorLine}",
-        approvals: const [],
-        questions: const [],
-        runningSubAgents: const [],
+        approvals: _withoutTurn(state.approvals, turn.replyId),
+        questions: _withoutTurn(state.questions, turn.replyId),
+        runningSubAgents:
+            _withoutTurn(state.runningSubAgents, turn.replyId),
       );
       await Future<void>.delayed(wait);
       if (turn.retryGen != gen || !ref.mounted) return;
@@ -750,17 +769,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     _turns.remove(turn.replyId);
     // Nothing is left to answer once the turn is over: the backend has already
     // answered its own outstanding questions with nothing, so a banner or a
-    // panel still on screen would send its reply into the void.
+    // panel still on screen would send its reply into the void. Only this
+    // turn's — a sibling still running keeps its own.
     state = state.copyWith(
       // What a reload would now make of the log, so a turn that gave up is
       // offered straight away rather than only once the chat is opened again.
       chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
       isRunning: _turns.isNotEmpty,
-      approvals: const [],
-      questions: const [],
-      runningSubAgents: const [],
-      clearRetry: true,
-      clearStatus: true,
+      approvals: _withoutTurn(state.approvals, turn.replyId),
+      questions: _withoutTurn(state.questions, turn.replyId),
+      runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
+      clearRetry: _turns.isEmpty,
+      clearStatus: _turns.isEmpty,
       unfinishedNotice: reason == TurnEnd.stepLimit
           ? "Step limit reached"
           : null,
@@ -1068,7 +1088,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondApproval(chatId, approvalId, r);
     state = state.copyWith(
-        approvals: state.approvals.where((a) => a.id != approvalId).toList());
+        approvals: _withoutApproval(state.approvals, approvalId));
   }
 
   /// Answer a request the panel was showing. One entry per question it held,
@@ -1078,8 +1098,32 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondQuestions(chatId, requestId, answers);
     state = state.copyWith(
-        questions: state.questions.where((r) => r.id != requestId).toList());
+        questions: _withoutQuestion(state.questions, requestId));
   }
+
+  /// The map without the turn's own list — what a finished turn leaves of the
+  /// view state it was holding, a sibling's kept.
+  static Map<String, List<T>> _withoutTurn<T>(
+          Map<String, List<T>> map, String replyId) =>
+      Map<String, List<T>>.from(map)..remove(replyId);
+
+  /// The map without [id] from any turn's list. Both lists hold items with
+  /// an `id` field, read for the removal.
+  static Map<String, List<ToolApproval>> _withoutApproval(
+          Map<String, List<ToolApproval>> map, String id) =>
+      _dropItem(map, id, (item) => item.id);
+
+  static Map<String, List<AskRequest>> _withoutQuestion(
+          Map<String, List<AskRequest>> map, String id) =>
+      _dropItem(map, id, (item) => item.id);
+
+  static Map<String, List<T>> _dropItem<T>(
+          Map<String, List<T>> map, String id, Object? Function(T) keyOf) =>
+      {
+        for (final entry in map.entries)
+          entry.key:
+              entry.value.where((item) => keyOf(item) != id).toList()
+      };
 }
 
 final chatControllerProvider =
