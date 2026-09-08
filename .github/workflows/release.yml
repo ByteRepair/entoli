@@ -45,8 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # attach assets to the release
-      id-token: write # mint the short-lived Sigstore signing certificate
-      attestations: write # record the attestation against the repository
+      # attestations: write # and the Sigstore signing certificate beside it,
+      # off until the repository is public, where attest-build-provenance fails
     strategy:
       # Each entry attests and uploads a different file, so one that fails
       # should leave the other three attached rather than cancel them.
@@ -61,23 +61,20 @@ jobs:
           name: ${{ matrix.asset.artifact }}
           path: dist
 
-      - id: attest
-        uses: actions/attest-build-provenance@v4.2.2
-        with:
-          subject-path: dist/${{ matrix.asset.file }}
+      # - id: attest
+      #   uses: actions/attest-build-provenance@v4.2.2
+      #   with:
+      #     subject-path: dist/${{ matrix.asset.file }}
 
-      - name: Attach the binary and its attestation to the release
+      - name: Attach the binary to the release
         env:
           GH_TOKEN: ${{ github.token }}
-          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          cp "$BUNDLE" "dist/$FILE.sigstore.json"
           # --repo because gh reads it off the git remote otherwise, and this
           # job never checks out. --clobber so a re-run replaces the assets.
           gh release upload "$TAG" \
             "dist/$FILE" \
-            "dist/$FILE.sigstore.json" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
@@ -85,8 +82,9 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
-            echo
+            # echo "\`gh attestation verify $FILE --repo $GITHUB_REPOSITORY\`"
+            # echo
+            echo "$FILE attached."
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Upload the App Bundle to Google Play. Separate from the publish matrix,
