@@ -1029,12 +1029,17 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// the turn as having finished.
   @override
   Future<void> abort() async {
-    final turn = _liveTurn;
-    if (turn == null) return;
-    turn.retryGen++;
-    turn.recorder.outcome = TurnEnd.aborted;
+    final turns = List.of(_turns.values);
+    if (turns.isEmpty) return;
+    // The round stops whole: every running turn goes, and what was said while
+    // they ran is dropped by the endings they record.
+    for (final turn in turns) {
+      turn.retryGen++;
+      turn.recorder.outcome = TurnEnd.aborted;
+    }
     await ref.read(chatRepositoryProvider).abort(chatId);
-    await _finishTurn(turn);
+    await Future.wait(
+        [for (final turn in turns) _finishTurn(turn)]);
   }
 
   /// Stop a turn without ending it: the agent is cancelled and the log is left
@@ -1046,12 +1051,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// rather than from the line below, and it has to make the same decision
   /// whichever gets there first.
   Future<void> interrupt() async {
-    final turn = _liveTurn;
-    if (turn == null || !state.isRunning) return;
-    turn.retryGen++;
-    turn.interrupted = true;
+    if (!state.isRunning) return;
+    final turns = List.of(_turns.values);
+    if (turns.isEmpty) return;
+    for (final turn in turns) {
+      turn.retryGen++;
+      turn.interrupted = true;
+    }
     await ref.read(chatRepositoryProvider).abort(chatId);
-    await _finishTurn(turn);
+    await Future.wait(
+        [for (final turn in turns) _finishTurn(turn)]);
   }
 
   @override

@@ -221,20 +221,26 @@ class _ComposerState extends ConsumerState<Composer> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  widget.agentSpeaking
-                      ? IconButton.filled(
-                          onPressed: widget.onAbort,
-                          icon: const Icon(Icons.stop),
-                          tooltip: "Stop",
-                        )
-                      : ValueListenableBuilder<bool>(
-                          valueListenable: _canSend,
-                          builder: (context, canSend, _) => IconButton.filled(
+                  // Empty field while the agent speaks is Stop; anything
+                  // typed is Send, which queues what is said for the
+                  // settle — the room's rule is the controller's, and the
+                  // button only names which of the two is on offer.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _canSend,
+                    builder: (context, canSend, _) => widget.agentSpeaking &&
+                            !canSend
+                        ? IconButton.filled(
+                            onPressed: widget.onAbort,
+                            icon: const Icon(Icons.stop),
+                            tooltip: "Stop",
+                          )
+                        : IconButton.filled(
                             onPressed: canSend ? _submit : null,
-                            icon: Icon(_shell ? Icons.play_arrow : Icons.send),
+                            icon:
+                                Icon(_shell ? Icons.play_arrow : Icons.send),
                             tooltip: _shell ? "Run" : "Send",
                           ),
-                        ),
+                  ),
                 ],
               ),
             ],
