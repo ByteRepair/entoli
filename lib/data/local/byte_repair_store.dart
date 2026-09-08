@@ -18,7 +18,8 @@ import "../../domain/shell.dart";
 /// driver's environment carries `ENV_PACKAGE_MANAGER` (`apk` in a guest,
 /// nothing on the host, where the machine's package manager is not ours to
 /// touch and static binaries are fetched instead). A binary already on PATH
-/// is never re-fetched — the script skips it.
+/// *and runnable* is never re-fetched — the script skips it; see "Byte
+/// Repair's environment, in two variables" in the directory's CLAUDE.md.
 ///
 /// "Run Setup" owns the full lifecycle: it copies the base rootfs from cache
 /// into the project's data directory (for a project that opts into rootfs
@@ -124,9 +125,12 @@ abstract class ByteRepairStore {
   Future<String?> runToolVersion(Shell shell, String command) async {
     final result = await _run(shell, "$command --version", const Duration(seconds: 15));
     if (result.returnCode == 0) return result.output.trim().split("\n").first;
-    if (result.exceptionInfo != null) {
-      logFailure("byte-repair", "$command --version failed", result.exceptionInfo);
-    }
+    // A plain non-zero comes with nothing in exceptionInfo, so the rc itself
+    // is the line's only reason.
+    logFailure(
+        "byte-repair",
+        "$command --version failed",
+        result.exceptionInfo ?? "return code ${result.returnCode}");
     return null;
   }
 

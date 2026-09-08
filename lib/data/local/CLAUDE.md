@@ -104,6 +104,13 @@ the run carries on, so a host with make already on it pays nothing and one
 without it sees the honest "Not installed" row. A named manager that fails is
 a failure, so a guest install that did not happen never reads as done.
 
+"Already installed" means *on PATH and runs* (`works`, a `--version` probe),
+not merely found: a binary present but unstartable — a local build missing its
+libraries — once read as installed, was skipped, and setup exited 0 having
+done nothing. The run ends on a verification of the binary that stands at the
+end (the fetched one, else whatever PATH answers); if that will not run,
+setup exits 1 and the settings page shows the loader's error.
+
 On the host the fetched tools reach their turns through the driver: `platformDriver`
 prefixes the bin directory onto `PATH` for rootfs-isolated projects alone, the
 way the project's rootfs copy is its own. A user-set `PATH` in the command
