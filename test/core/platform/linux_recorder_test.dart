@@ -1,9 +1,12 @@
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
-import "package:record/record.dart" show AudioEncoder, InputDevice, RecordConfig;
+import "package:record/record.dart"
+    show AudioEncoder, InputDevice, RecordConfig, RecordPlatform;
 
 import "package:agent_chat/core/platform/io/linux_recorder.dart";
+import "package:agent_chat/core/platform/io/platform.dart"
+    show platformRegisterRecorder;
 
 /// The config the voice session sends: raw mono 16 kHz PCM with the two
 /// noise properties on. The argv for it is pinned, and the device variant
@@ -84,5 +87,15 @@ void main() {
         ),
       ),
     );
+  });
+
+  test("platformRegisterRecorder puts LinuxRecorder on RecordPlatform.instance",
+      () {
+    final before = RecordPlatform.instance;
+    platformRegisterRecorder();
+    expect(RecordPlatform.instance, isA<LinuxRecorder>());
+    // Not left standing over the suite: another test in this file spawns
+    // through the stock instance.
+    RecordPlatform.instance = before;
   });
 }
