@@ -2,7 +2,7 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writeThroughRename;
+import "../../domain/documents.dart" show writingSuffix;
 import "../../domain/secret_store.dart";
 import "../../domain/sync/devices.dart";
 
@@ -31,8 +31,11 @@ class FileDeviceRegistry implements DeviceRegistry {
     }
   }
 
-  Future<void> _write(Map<String, dynamic> json) =>
-      writeThroughRename(_config.fs, _file, jsonEncode(json));
+  Future<void> _write(Map<String, dynamic> json) async {
+    final temp = _config.fs.file("$_file$writingSuffix");
+    await temp.writeAsString(jsonEncode(json));
+    await temp.rename(_file);
+  }
 
   List<PairedDevice> _devicesOf(Map<String, dynamic> json) => [
         for (final entry
