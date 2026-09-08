@@ -5,7 +5,7 @@ import "dart:typed_data";
 import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writingSuffix;
+import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/secret_store.dart";
 
 /// Secrets in a plain file under the data directory — what a platform gets
@@ -17,11 +17,11 @@ import "../../domain/secret_store.dart";
 /// keyring; nothing else in the app can tell the difference.
 class FileSecretStore implements SecretStore {
   FileSecretStore(AppConfig config)
-      : _fs = config.fs,
-        _file = config.fs.file(config.fs.path.join(config.syncDir, "secrets.json"));
+      : _file = config.fs.file(config.fs.path.join(config.syncDir, "secrets.json")),
+        _writer = RenameWriter.fs(config.fs);
 
-  final FileSystem _fs;
   final File _file;
+  final RenameWriter _writer;
 
   Future<Map<String, String>> _values() async {
     final loaded = _loaded;
@@ -41,9 +41,7 @@ class FileSecretStore implements SecretStore {
 
   Future<void> _write(Map<String, String> values) async {
     _loaded = values;
-    final temp = _fs.file("${_file.path}$writingSuffix");
-    await temp.writeAsString(jsonEncode(values));
-    await temp.rename(_file.path);
+    await _writer.write(_file.path, jsonEncode(values));
   }
 
   @override

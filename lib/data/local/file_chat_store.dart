@@ -19,7 +19,7 @@ import "../../domain/workspace.dart";
 /// directories on desktop and Android, IndexedDB in a browser. One
 /// implementation, because the layout is the same either way.
 class FileChatStore implements ChatStore {
-  FileChatStore(this.config);
+  FileChatStore(this.config) : _write = RenameWriter.fs(config.fs);
 
   final AppConfig config;
 
@@ -36,11 +36,9 @@ class FileChatStore implements ChatStore {
   /// and a reader sees either the whole old file or the whole new one. This is
   /// for the documents beside the log: the log itself is appended to, where
   /// the same hazard is a torn last line the reader drops.
-  Future<void> _write(String path, String text) async {
-    final temp = _fs.file("$path$writingSuffix");
-    await temp.writeAsString(text);
-    await temp.rename(path);
-  }
+  final RenameWriter _write;
+
+  Future<void> _writeFile(String path, String text) => _write.write(path, text);
 
   Future<String?> _readOrNull(String path) async {
     final file = _fs.file(path);
@@ -184,7 +182,7 @@ class FileChatStore implements ChatStore {
     final project = located == null ? state.project : located.project;
     _projects[state.id] = project;
     await config.ensureChatDirs(state.id, project: project);
-    await _write(
+    await _writeFile(
       config.stateFile(state.id, project: project),
       jsonEncode(state.copyWith(project: project).toJson()),
     );
@@ -239,7 +237,7 @@ class FileChatStore implements ChatStore {
   Future<void> saveMeta(String chatId, ChatMeta meta) async {
     final project = await _projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
-    await _write(config.metaFile(chatId, project: project), meta.encode());
+    await _writeFile(config.metaFile(chatId, project: project), meta.encode());
   }
 
   @override

@@ -2,7 +2,7 @@ import "dart:convert";
 import "dart:typed_data";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writingSuffix;
+import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/secret_store.dart";
 import "../../domain/sync/devices.dart";
 
@@ -14,10 +14,12 @@ import "../../domain/sync/devices.dart";
 /// secrets are not: one JSON map under [pairingSecretsKey], in the keyring
 /// wherever there is one.
 class FileDeviceRegistry implements DeviceRegistry {
-  FileDeviceRegistry(this._config, this._secrets);
+  FileDeviceRegistry(this._config, this._secrets)
+      : _writer = RenameWriter.fs(_config.fs);
 
   final AppConfig _config;
   final SecretStore _secrets;
+  final RenameWriter _writer;
 
   String get _file => _config.fs.path.join(_config.syncDir, "devices.json");
 
@@ -31,11 +33,8 @@ class FileDeviceRegistry implements DeviceRegistry {
     }
   }
 
-  Future<void> _write(Map<String, dynamic> json) async {
-    final temp = _config.fs.file("$_file$writingSuffix");
-    await temp.writeAsString(jsonEncode(json));
-    await temp.rename(_file);
-  }
+  Future<void> _write(Map<String, dynamic> json) =>
+      _writer.write(_file, jsonEncode(json));
 
   List<PairedDevice> _devicesOf(Map<String, dynamic> json) => [
         for (final entry

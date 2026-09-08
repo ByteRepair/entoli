@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writeThroughRename;
+import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/profile.dart";
 import "../../providers.dart";
 import "../widgets/resettable_field.dart";
@@ -104,7 +104,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       return;
     }
     await fs.directory(fs.path.dirname(path)).create(recursive: true);
-    await writeThroughRename(fs, path, text);
+    await RenameWriter.fs(fs).write(path, text);
   }
 
   Future<void> _clear() async {
