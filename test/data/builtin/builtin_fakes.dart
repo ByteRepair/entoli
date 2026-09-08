@@ -119,9 +119,6 @@ class FakeShell extends Shell {
   /// The `HOME` each of [ran] was given, in step with it.
   final List<String> homes = [];
 
-  /// Whether each of [ran] was given a home to keep, in step with it.
-  final List<bool> sharedHomes = [];
-
   /// The timeout each of [ran] was given, in step with it.
   final List<Duration> timeouts = [];
 
@@ -157,14 +154,12 @@ class FakeShell extends Shell {
       required String home,
       required Duration timeout,
       Map<String, String>? environment,
-      bool sharedHome = true,
       bool oneShot = false,
       bool restart = false,
       String? project}) {
     ran.add(command);
     cwds.add(cwd);
     homes.add(home);
-    sharedHomes.add(sharedHome);
     timeouts.add(timeout);
     environments.add(environment);
     oneShots.add(oneShot);

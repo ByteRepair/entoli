@@ -417,8 +417,8 @@ void main() {
     });
 
     // A project that does not share a workspace is the answer to "a chat that
-    // must not reach past itself": the chat's own workspace is its HOME too,
-    // and the prompt says nothing of a shared one.
+    // must not reach past itself": the prompt names the chat's own workspace
+    // and nothing of a shared one.
     test("a turn with no shared workspace is told nothing of one", () async {
       final backend = backendOver([
         [finish],
@@ -433,12 +433,15 @@ void main() {
       expect(system, isNot(contains("shared with every other")));
     });
 
-    test("a ! command with no shared workspace homes in the chat's own", () async {
+    test("a ! command's home is the chat's own where no workspace is shared",
+        () async {
       final backend = backendOver([], respond: (_) => ok(""));
       await send(backend, "!pwd", project: "anonymous", sharedWorkspace: false);
 
       final workspace = config.workspaceDir(chatId, project: "anonymous");
       expect(shell.cwds, [workspace]);
+      // The home is still passed for a driver that takes one; the machine's
+      // own `HOME` is not this test's subject.
       expect(shell.homes, [workspace]);
     });
 

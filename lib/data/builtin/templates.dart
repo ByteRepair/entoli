@@ -143,6 +143,7 @@ String turnPrompt({
   bool sharedWorkspace = true,
   required bool projectHome,
   String? guestRoot,
+  String? homePath,
 }) {
   // Where the model is told its workspace is: `~` inside a guest, the real
   // path on the machine. The chat workspace is `~/chats/<id>` inside a guest.
@@ -158,6 +159,31 @@ String turnPrompt({
           "built up — goes\nthere, so another conversation can pick it up. "
           "Write to it by path; you do not\nhave to be in it."
       : "";
+  // What a command's home directory is, and where `~` expands. The value is
+  // [homePath], the shell's own answer; the three arms are wording. A
+  // desktop's home is the machine user's own, named, so `~` in a command is
+  // never misread as this workspace. Nothing to name — the web — says nothing.
+  String home() {
+    if (!canRunCommands || homePath == null) return "";
+    if (!projectHome) {
+      return "\n\n"
+          "A command's home directory is the machine user's own "
+          "($homePath), not\nthis workspace: `~` is the user's home, and "
+          "dotfiles a tool writes\nare the user's real files.";
+    }
+    if (!sharedWorkspace) {
+      return "\n\n"
+          "A command's home directory is this conversation's own "
+          "workspace\n($homePath), so `~` and a tool's home-directory "
+          "writes stay here, and\nnothing a tool keeps in a home "
+          "directory outlives the chat.";
+    }
+    return "\n\n"
+        "A command's home directory is the project workspace ($homePath), "
+        "so\nanything a tool keeps in a home directory is the project's "
+        "too, and a\nrepository cloned or a package installed by one "
+        "conversation is already\nthere for the next.";
+  }
   final parts = [
     if (canRunCommands)
       """
@@ -168,13 +194,7 @@ It is yours; the files in it survive between turns, and nothing else writes
 there. Intermediate work — scratch scripts, downloads, files you build a
 deliverable from — goes here too, not in the machine's /tmp: /tmp is outside
 both workspaces, is not kept with this conversation, and a write there is
-asked about.$shared${projectHome || !sharedWorkspace ? """
-A command's home directory is the project workspace, so anything a tool keeps
-in a home directory is the project's too, and a repository cloned or a package
-installed by one conversation is already there for the next.""" : """
-A command's home directory is the machine user's own, not the project
-workspace, so a `~` and a tool that writes to its home go there rather than to
-the project."""}""",
+asked about.$shared${home()}""",
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
     if (pinned != null && pinned.isNotEmpty)

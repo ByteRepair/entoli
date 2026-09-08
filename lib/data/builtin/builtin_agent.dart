@@ -399,8 +399,12 @@ class BuiltinAgent {
   /// The chat's own directory, and where the shell starts.
   final String workspace;
 
-  /// The one every chat in the project shares. Not the working directory:
-  /// what a turn puts there is what it means other chats to find.
+  /// The project's workspace: the one every chat in the project shares where
+  /// one is shared, the chat's own where one is not — the caller's resolution
+  /// of that question, so this field is the resolved fact alone. Where the
+  /// driver takes a workspace for `HOME`, this is the one it takes. Not the
+  /// working directory: what a turn puts here is what it means other chats to
+  /// find.
   final String projectWorkspace;
 
   /// The project's own command variables, layered over the app-level ones by
@@ -452,8 +456,8 @@ class BuiltinAgent {
   final AgentCapabilities caps;
 
   /// Whether the project's workspace is shared between its chats. When false,
-  /// the chat's own workspace is also its `HOME` and the prompt says nothing
-  /// of a shared one.
+  /// the chat's own workspace is the one the prompt names for files the user
+  /// will come back to, and the shared-workspace sentence is absent.
   final bool sharedWorkspace;
 
   /// The project this agent's turn is in, so the shell driver can resolve a
@@ -695,6 +699,10 @@ class BuiltinAgent {
       sharedWorkspace: sharedWorkspace,
       projectHome: shell.projectHome,
       guestRoot: shell.guestRoot,
+      // What a command's home is and so what `~` means: the shell's one
+      // answer, the same value `composeEnvironment` sets and the file tools
+      // resolve by.
+      homePath: shell.homeFor(projectWorkspace),
     );
     final head = [
       agentSystemMessage(
@@ -1079,11 +1087,12 @@ class BuiltinAgent {
     yield ToolResultEvent(_ran(call, result));
   }
 
-  /// Resolve a file-tool path through the workspaces and the guest root, so
-  /// every call site carries the guest translation without spelling it out.
-  String _resolvePath(String path) =>
-      resolveWorkspacePath(fs, path, workspace, projectWorkspace,
-          guestRoot: shell.guestRoot);
+  /// Resolve a file-tool path through the workspaces, the guest root and the
+  /// shell's home, so every call site carries the translation without
+  /// spelling it out.
+  String _resolvePath(String path) => resolveWorkspacePath(
+      fs, path, workspace, projectWorkspace,
+      guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
 
   /// Read a file. A path the workspaces hold runs without asking, the way
   /// `bash` reads in `never` mode; one that reaches past them is offered to
@@ -1604,7 +1613,6 @@ class BuiltinAgent {
     final run = shell.start(command,
         cwd: workspace,
         home: projectWorkspace,
-        sharedHome: sharedWorkspace,
         timeout: timeout,
         environment: environment,
         oneShot: oneShot,

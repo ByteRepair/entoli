@@ -100,30 +100,42 @@ String guestWorkspacePath(
 }
 
 /// Resolve a file tool's path. A path starting with `project:` is joined onto
-/// [projectWorkspace]; anything else is joined onto [workspace]. A relative
-/// path is sanitised by [safeRelativePath] before joining, so `..` and a
-/// leading separator cannot escape. An absolute path is the machine naming a
-/// place of its own: it is used as written, normalised.
+/// [projectWorkspace]; anything else — `chat:` included, which names it
+/// explicitly — is joined onto [workspace]. A relative path is sanitised by
+/// [safeRelativePath] before joining, so `..` and a leading separator cannot
+/// escape. An absolute path is the machine naming a place of its own: it is
+/// used as written, normalised.
 ///
 /// [guestRoot] is where [projectWorkspace] appears inside a proot guest (e.g.
 /// `/root`), or null on the machine itself. Paths starting with `~/` are
-/// expanded to [projectWorkspace]; paths starting with [guestRoot] are
-/// translated back to [projectWorkspace] so the host filesystem can find them.
+/// expanded to [homePath], which is what `HOME` is ([Shell.homeFor]'s
+/// answer); where it names nothing, `~` falls back to [projectWorkspace], the
+/// way it does where the driver takes the workspace for its home. On the
+/// machine `homePath` is the user's home and a `~` path lands past the
+/// workspaces, so it is gated like any absolute path out. Paths starting with
+/// [guestRoot] are translated back to [projectWorkspace] so the host
+/// filesystem can find them.
 String resolveWorkspacePath(
   FileSystem fs,
   String path,
   String workspace,
   String projectWorkspace, {
   String? guestRoot,
+  String? homePath,
 }) {
   final project = path.startsWith("project:");
-  var rest = project ? path.substring("project:".length) : path;
-  // Expand `~` to the project workspace, the way the shell does inside a guest
-  // or on Android where HOME is the project workspace.
+  // `chat:` names the chat's own explicitly; a bare path lands there too.
+  var rest = project
+      ? path.substring("project:".length)
+      : path.startsWith("chat:")
+          ? path.substring("chat:".length)
+          : path;
+  final base = project ? projectWorkspace : workspace;
+  // `~` follows `HOME`, which is what the shell's would expand to.
   if (rest.startsWith("~/")) {
-    rest = fs.path.join(projectWorkspace, rest.substring(2));
+    rest = fs.path.join(homePath ?? projectWorkspace, rest.substring(2));
   } else if (rest == "~") {
-    rest = projectWorkspace;
+    rest = homePath ?? projectWorkspace;
   }
   // Translate a guest path back to the host's, so the file tools — which use
   // the host filesystem — can find what the model named inside the guest.
@@ -134,8 +146,7 @@ String resolveWorkspacePath(
         : fs.path.join(projectWorkspace, suffix);
   }
   if (!fs.path.isAbsolute(rest)) {
-    return fs.path.join(
-        project ? projectWorkspace : workspace, safeRelativePath(fs, rest));
+    return fs.path.join(base, safeRelativePath(fs, rest));
   }
   return fs.path.normalize(rest);
 }

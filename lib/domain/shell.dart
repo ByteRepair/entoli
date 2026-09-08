@@ -124,10 +124,12 @@ class ShellDriver {
   /// guest should find none of them.
   final Map<String, String> environment;
 
-  /// Whether a command's `HOME` is the project workspace rather than the
-  /// machine's own home directory. True of a driver that reaches a guest,
-  /// whose home is one directory every project would share; on the machine
-  /// itself [Shell.start]'s `sharedHome` answers for it instead.
+  /// Whether a command's `HOME` is the workspace passed to [Shell.start]
+  /// rather than the machine's own home directory. True of a driver that
+  /// reaches a guest, whose home is one directory every project would share,
+  /// and of a host with no user home of its own to give (Android). False on
+  /// the desktops, where the machine user's own `HOME` stands and nothing
+  /// overrides it.
   final bool projectHome;
 
   /// Where the project workspace appears inside the guest (`/root` for proot),
@@ -179,14 +181,13 @@ abstract class ShellRun {
 abstract class Shell {
   const Shell();
 
-  /// [cwd] is where the command starts, [home] the `HOME` it is given — the
-  /// chat's directory and the project workspace above it. A sandbox always
-  /// takes [home] for its guest, and so does a turn whose home it does not
-  /// share ([sharedHome] false): a home nothing shares is the chat's own.
-  /// Where the home is shared on a machine, `HOME` is the user's and stays
-  /// that way. [environment] is layered over whatever the app's settings
-  /// provide, with a name set in it winning over the app-level one — the
-  /// project's own variables, which the app-level are the fallback for.
+  /// [cwd] is where the command starts, [home] the `HOME` it is given where
+  /// its driver takes one — the chat's directory or the project workspace
+  /// above it; where the driver runs on the machine itself the machine user's
+  /// own home stands and nothing is set. [environment] is layered over
+  /// whatever the app's settings provide, with a name set in it winning over
+  /// the app-level one — the project's own variables, which the app-level are
+  /// the fallback for.
   ///
   /// [oneShot] runs the command in a subshell that is gone when it finishes:
   /// no `cd` or export carries over to anything after it. That is what
@@ -202,7 +203,6 @@ abstract class Shell {
       required String home,
       required Duration timeout,
       Map<String, String>? environment,
-      bool sharedHome = true,
       bool oneShot = false,
       bool restart = false,
       String? project});
@@ -219,11 +219,24 @@ abstract class Shell {
   /// a command.
   bool get canRunCommands => true;
 
-  /// Whether a command's `HOME` is the project workspace rather than the
-  /// machine's own because the shell reaches a guest, whose home is one
-  /// directory every project would share. A shell on the machine itself is
-  /// false, where [start]'s `sharedHome` answers for it instead.
+  /// Whether a command's `HOME` is the workspace rather than the machine's
+  /// own, because the driver that runs it takes one — a guest's home is one
+  /// directory every project would share, and a host with no real user home
+  /// (Android) takes the workspace. A shell on the desktops is false: the
+  /// machine user's own home stands. See [Shell.machineHome].
   bool get projectHome => false;
+
+  /// The machine user's own home directory, where the shell runs on a machine
+  /// with one — what `~` means to a command on it, and what the prompt names.
+  /// Null where there is no machine behind the shell (the web) or no real user
+  /// home to name (Android's app-private storage).
+  String? get machineHome => null;
+
+  /// The `HOME` a command in this chat is given — and, being that, what `~`
+  /// means to it: the workspace where the driver takes one, the machine user's
+  /// own where it does not. The one answer the prompt and the file tools read,
+  /// so all three name the same place. Null where there is nothing to name.
+  String? homeFor(String home) => machineHome;
 
   /// Where the project workspace appears inside the guest (`/root` for proot),
   /// or null on the machine itself. The file tools translate paths under it
@@ -265,7 +278,6 @@ class UnavailableShell extends Shell {
           required String home,
           required Duration timeout,
           Map<String, String>? environment,
-          bool sharedHome = true,
           bool oneShot = false,
           bool restart = false,
           String? project}) =>
