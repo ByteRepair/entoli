@@ -61,6 +61,8 @@ class AppSettings {
     this.turnUsername,
     this.turnPassword,
     this.turnRetries = defaultTurnRetries,
+    this.omadaByDefault = false,
+    this.omadaMaxGenerations = defaultOmadaMaxGenerations,
     this.welcomeSeen = false,
   });
 
@@ -267,6 +269,18 @@ class AppSettings {
   /// bar is the only way on. App-level, like the model default it sits beside.
   int turnRetries;
 
+  /// Whether a new project starts with Omada on, so the user who wants a
+  /// workspace of teams does not flip the toggle per project. Baked into the
+  /// project at creation; existing projects and the built-ins are untouched.
+  bool omadaByDefault;
+
+  /// How many handoff generations one Omada round may run — dispatch waves,
+  /// not turns: a three-member fan-out is one generation. The user's message
+  /// is generation one and uncapped; this bounds the waves that follow, and
+  /// the user speaking resets the count. A project's
+  /// `ProjectSettings.omadaMaxGenerations` overrides it per project.
+  int omadaMaxGenerations;
+
   /// Whether the welcome tour has been finished. It is what first launch reads
   /// to decide whether to push the tour, and what its Done writes.
   bool welcomeSeen;
@@ -278,6 +292,11 @@ class AppSettings {
 
   /// The most the setting may say, and the slider's top.
   static const maxTurnRetries = 10;
+
+  /// The default and the stops of the max-generations slider. Ten waves of
+  /// agent-to-agent work before the round stops for the user.
+  static const defaultOmadaMaxGenerations = 10;
+  static const omadaGenerationStops = [5, 10, 20, 40, 60, 80, 100];
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
@@ -351,6 +370,9 @@ class AppSettings {
         turnPassword: _orNull(json["turnPassword"] as String?),
         turnRetries:
             (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(0, maxTurnRetries),
+        omadaByDefault: json["omadaByDefault"] as bool? ?? false,
+        omadaMaxGenerations:
+            (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
@@ -434,6 +456,8 @@ class AppSettings {
         turnUsername: turnUsername,
         turnPassword: turnPassword,
         turnRetries: turnRetries,
+        omadaByDefault: omadaByDefault,
+        omadaMaxGenerations: omadaMaxGenerations,
         welcomeSeen: welcomeSeen,
       );
 
@@ -493,6 +517,9 @@ class AppSettings {
       // Written only when not the default, for the same reason the memory
       // gates are: a file that predates it says nothing and gets the default.
       if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
+      if (omadaByDefault) "omadaByDefault": omadaByDefault,
+      if (omadaMaxGenerations != defaultOmadaMaxGenerations)
+        "omadaMaxGenerations": omadaMaxGenerations,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }

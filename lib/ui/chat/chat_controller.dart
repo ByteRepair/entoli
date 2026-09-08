@@ -135,46 +135,61 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   final String chatId;
   final _uuid = const Uuid();
-  StreamSubscription<AgentEvent>? _sub;
 
-  /// Everything that turns this turn's events into the reply's parts and the
-  /// records that persist them. Shared with `SubAgentRunner`, which keeps one
-  /// per `task` call — see [TurnRecorder]. Assigned in [build], which
-  /// invalidation re-runs, so this cannot be `late final`.
-  late TurnRecorder _recorder;
+  /// The live turns, keyed by the reply each writes. One today; the table is
+  /// what lets a second turn run beside the first without its recorder, its
+  /// retry state or its interrupt reaching across — see [_RunningTurn].
+  final Map<String, _RunningTurn> _turns = {};
 
-  /// This turn is being stopped rather than ended — see [interrupt]. Cleared
-  /// where a turn opens, beside the recorder's own `outcome`, so it cannot
-  /// reach the next one.
-  bool _interrupted = false;
+  /// Every recorder's writes funnel through one queue, so two turns appending
+  /// to the same log cannot interleave lines. One turn serialises through its
+  /// own recorder already; the funnel is for the room with more than one.
+  Future<void>? _appendQueue;
 
-  /// Bumped by [abort] and [interrupt] so a pending automatic retry cannot
-  /// fire after the user pressed stop: the round waits out its backoff
-  /// holding nothing, and the generation is what tells it the turn it was
-  /// carrying on was ended behind it.
-  int _retryGen = 0;
+  /// Appends [records] to this chat's log behind every append before it.
+  Future<void> _append(List<ChatRecord> records) {
+    final queued = _appendQueue;
+    final repo = ref.read(chatRepositoryProvider);
+    return _appendQueue =
+        (queued == null ? Future<void>.sync(() => repo.append(chatId, records)) : queued.then((_) => repo.append(chatId, records)))
+            .catchError((Object _) {});
+  }
 
-  /// Completes with the turn's [TurnEnd] (or null if interrupted) when the
-  /// current turn finishes. A caller that starts a turn through [send] or
-  /// [resume] and needs to know when it is done — the reminder runner, a voice
-  /// handover — awaits this. Null when no turn is running.
-  Completer<TurnEnd?>? _turnDone;
-  Future<TurnEnd?>? get turnDone => _turnDone?.future;
+  /// Open a turn: its recorder, its completer, and its place in the table.
+  /// [existing] is what the log already holds of the reply — nothing for a new
+  /// turn, its parts so far for one being carried on.
+  _RunningTurn _openTurnEntry(String replyId,
+      {List<MessagePart> existing = const []}) {
+    final turn = _RunningTurn(
+      replyId: replyId,
+      done: Completer<TurnEnd?>(),
+      append: _append,
+    );
+    turn.onParts = _writeReply;
+    turn.recorder.open(replyId, existing: existing);
+    _turns[replyId] = turn;
+    return turn;
+  }
+
+  /// Completes with the running turn's [TurnEnd] (or null if interrupted)
+  /// when it finishes. A caller that starts a turn through [send] or [resume]
+  /// and needs to know when it is done — the reminder runner, a voice
+  /// handover — awaits this. Null when no single turn is running.
+  Future<TurnEnd?>? get turnDone =>
+      _turns.length == 1 ? _turns.values.first.done.future : null;
 
   @override
   ChatViewState build() {
-    _recorder = TurnRecorder(
-      append: (records) => ref.read(chatRepositoryProvider).append(chatId, records),
-      onParts: _writeReply,
-    );
     // The provider is not auto-disposed: clear a controller that outlived its page, or its id re-opens the deleted chat from memory.
     final deletionSub = ref.read(chatRepositoryProvider).changes.listen((event) {
       if (event is Deleted && event.chatId == chatId) state = ChatViewState();
     });
     ref.onDispose(() {
-      _sub?.cancel();
+      for (final turn in _turns.values) {
+        turn.sub?.cancel();
+        turn.recorder.dispose();
+      }
       deletionSub.cancel();
-      _recorder.dispose();
     });
     _ready = _load();
     return ChatViewState();
@@ -193,16 +208,25 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     return messages == null || messages.isEmpty ? null : messages.last;
   }
 
-  /// The reply's text, for a caller that needs what the turn said without
-  /// watching the event stream — the reminder driver, after [turnDone].
+  /// The single running turn, where exactly one is — every path that drives,
+  /// stops or watches a turn speaks about it, and a room with two running has
+  /// to name which.
+  _RunningTurn? get _liveTurn =>
+      _turns.length == 1 ? _turns.values.first : null;
+
   String get replyText => _reply?.plainText ?? "";
 
-  void _writeReply(List<MessagePart> parts) {
+  /// Fold [parts] into the message [turn] is writing, by id rather than by
+  /// position: the last message is the running turn's only while it is the
+  /// only turn, and a second reply growing beside it is not patched by
+  /// coincidence.
+  void _writeReply(_RunningTurn turn, List<MessagePart> parts) {
     final chat = state.chat;
-    final reply = _reply;
-    if (chat == null || reply == null) return;
+    if (chat == null) return;
+    final at = chat.messages.indexWhere((m) => m.id == turn.replyId);
+    if (at < 0) return;
     final messages = List<Message>.from(chat.messages);
-    messages[messages.length - 1] = reply.copyWith(parts: parts);
+    messages[at] = messages[at].copyWith(parts: parts);
     state = state.copyWith(chat: chat.copyWith(messages: messages));
   }
 
@@ -278,7 +302,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
     final userMsg =
         repo.composeUserPrompt(text, project: chat.state.project, files: files);
-    await _turn(
+    await openTurn(
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
@@ -295,7 +319,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// conversation the model is answering, which does not include the prompt:
   /// `sendPrompt` adds that itself. [replacing] is the message [opening] is an
   /// alternative to, and null when this is simply the next thing said.
-  Future<void> _turn({
+  Future<void> openTurn({
     required Chat chat,
     required Message prompt,
     required List<Message> history,
@@ -324,17 +348,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // killed before the model says anything still shows what was asked. What
     // comes back carries the TTL anchor the save resolved, and is kept.
     applyState(await repo.saveState(updated.state));
-    _interrupted = false;
-    _retryable = false;
-    _errorLine = "";
-    _round = 0;
+    final turn = _openTurnEntry(opening.last.id);
+    turn.retryable = false;
+    turn.errorLine = "";
+    turn.round = 0;
     // The user speaking resets the round — a fresh send, an edit, a
     // regenerate; each is them saying the next thing, not an agent handing
     // off. The cap is about agents handing off to each other without end.
-    if (prompt.role == MessageRole.user) _chain = 0;
-    _turnDone = Completer<TurnEnd?>();
-    _recorder.open(opening.last.id);
-    await _recorder.write(recordsOf(openingWithMode,
+    if (prompt.role == MessageRole.user) _generation = 0;
+    await turn.recorder.write(recordsOf(openingWithMode,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
     // Only the first message names the chat, and not a headless one — the
@@ -347,7 +369,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // aborted whatever was running, so this turn never starts; there is
     // nothing to abort here and nothing to write beside the move.
     if (!ref.mounted) return;
-    _listen(repo.sendPrompt(chatId, prompt,
+    _listen(turn, repo.sendPrompt(chatId, prompt,
         history: history,
         replaces: replacing != null,
         omadaMember: _memberAnswering(chat, prompt)));
@@ -414,7 +436,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (chat == null || !chat.unfinished) return;
     // The user re-engaging is a new patience: their budget starts over, the
     // way a fresh send's would.
-    _round = 0;
+    _liveTurn?.round = 0;
     await _startResume();
   }
 
@@ -427,13 +449,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final reply = chat!.messages.last;
 
     state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
-    _interrupted = false;
     // Kept open across the round: a caller awaiting [turnDone] gets one
     // completion, at the true end, not one per attempt.
-    _turnDone ??= Completer<TurnEnd?>();
-    _recorder.open(reply.id, existing: reply.parts);
+    final turn = _turns[reply.id] ?? _openTurnEntry(reply.id);
+    turn.interrupted = false;
+    turn.recorder.open(reply.id, existing: reply.parts);
 
-    _listen(ref.read(chatRepositoryProvider).resumeTurn(chatId,
+    _listen(turn, ref.read(chatRepositoryProvider).resumeTurn(chatId,
         history: chat.messages, omadaMember: _memberResuming(chat)));
   }
 
@@ -447,9 +469,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     return _memberIfKnown(chat, nameOf(last.author));
   }
 
-  void _listen(Stream<AgentEvent> stream) {
-    _sub?.cancel();
-    _sub = stream.listen(_onEvent, onDone: _finishTurn, onError: _onError);
+  void _listen(_RunningTurn turn, Stream<AgentEvent> stream) {
+    turn.sub = stream.listen(
+        (event) => _onEvent(turn, event),
+        onDone: () => _finishTurn(turn),
+        onError: (Object e) => _onError(turn, e));
   }
 
   /// The user message that produced [messageId] — itself when it is one,
@@ -493,7 +517,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
     if (prompt == null) return;
-    await _turn(
+    await openTurn(
       chat: chat,
       prompt: prompt,
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
@@ -536,10 +560,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     }
   }
 
-  void _onEvent(AgentEvent event) {
+  void _onEvent(_RunningTurn turn, AgentEvent event) {
     if (_reply == null) return;
 
-    _recorder.handle(event);
+    turn.recorder.handle(event);
     switch (event) {
       // What the recorder already turned into parts. Listed rather than
       // defaulted, so a new kind of event has to be decided about here too.
@@ -562,9 +586,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         // line for the retry row and the failure notification. Both are
         // turn-scoped view state: the error part is what the conversation
         // keeps, and neither field outlives the turn.
-        _retryable = retryable;
+        turn.retryable = retryable;
         final lineAt = message.indexOf("\n");
-        _errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+        turn.errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
         break;
       case StepLimitEvent():
       case InfoEvent():
@@ -590,9 +614,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
             ? state.copyWith(clearStatus: true)
             : state.copyWith(status: label);
       case DoneEvent(:final aborted):
-        if (aborted) _recorder.outcome ??= TurnEnd.aborted;
+        if (aborted) turn.recorder.outcome ??= TurnEnd.aborted;
         state = state.copyWith(clearShellOutput: true);
-        _finishTurn();
+        _finishTurn(turn);
     }
   }
 
@@ -606,18 +630,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// The terminal record is the point of this: a log whose last message has no
   /// [TurnEndRecord] was being written when the process died, and that absence
   /// is the only thing that can tell a reload the difference.
-  Future<void> _finishTurn() async {
-    _sub?.cancel();
-    _sub = null;
+  Future<void> _finishTurn(_RunningTurn turn) async {
+    turn.sub?.cancel();
+    turn.sub = null;
     // Null is a turn that was interrupted rather than ended — the log has no
     // closing record, and `?? true` below is the same thing its reader makes
     // of one. See "Carrying on an interrupted turn".
     final TurnEnd? reason;
-    if (_interrupted) {
-      await _recorder.interrupt();
+    if (turn.interrupted) {
+      await turn.recorder.interrupt();
       reason = null;
     } else {
-      reason = await _recorder.close();
+      reason = await turn.recorder.close();
     }
     // A retryable failure is a blip the turn is carried on from, not an
     // outcome to report: the round waits out its backoff and re-enters the
@@ -625,29 +649,33 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // the user pressing stop has to reach it first, which is what the
     // generation is for. The turn's completer stays open across rounds, so a
     // caller awaiting [turnDone] — the reminder runner, voice — gets one
-    // completion, at the true end.
-    if (reason == TurnEnd.error && _retryable && _round < _roundsTotal) {
-      final gen = _retryGen;
-      final round = _round;
-      _round++;
+    // completion, at the true end. The entry stays in the table across the
+    // rounds — a retry re-opens this entry's recorder, not a fresh one whose
+    // completer nobody holds — and leaves the table only at the true end.
+    if (reason == TurnEnd.error &&
+        turn.retryable &&
+        turn.round < _roundsTotal) {
+      final gen = turn.retryGen;
+      final round = turn.round;
+      turn.round++;
       final wait = Duration(seconds: (1 << round).clamp(1, 30));
       if (!ref.mounted) return;
       state = state.copyWith(
-        retry: "Retrying ($_round/$_roundsTotal) — $_errorLine",
+        retry: "Retrying (${turn.round}/$_roundsTotal) — ${turn.errorLine}",
         approvals: const [],
         questions: const [],
         runningSubAgents: const [],
       );
       await Future<void>.delayed(wait);
-      if (_retryGen != gen || !ref.mounted) return;
+      if (turn.retryGen != gen || !ref.mounted) return;
       // A deleted chat has nothing to carry on.
       if (state.chat == null) return;
       await _startResume();
       return;
     }
     if (!ref.mounted) return;
-    final done = _turnDone;
-    _turnDone = null;
+    final done = turn.done;
+    _turns.remove(turn.replyId);
     // Nothing is left to answer once the turn is over: the backend has already
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void.
@@ -655,7 +683,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       // What a reload would now make of the log, so a turn that gave up is
       // offered straight away rather than only once the chat is opened again.
       chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
-      isRunning: false,
+      isRunning: _turns.isNotEmpty,
       approvals: const [],
       questions: const [],
       runningSubAgents: const [],
@@ -665,15 +693,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
           ? "Step limit reached"
           : null,
     );
-    done?.complete(reason);
-    await _notifyFailure(reason);
+    done.complete(reason);
+    await _notifyFailure(reason, turn.errorLine);
     await _maybeHandoff(reason);
   }
 
   /// What a finished turn may hand the baton to. A reply that addresses
   /// exactly one member — and whose turn ended `done`, nothing a failure
   /// leaves carrying — schedules that member's turn, the room's sequential
-  /// round, until the chain cap says the agents have had the floor long
+  /// round, until the generation cap says the agents have had the floor long
   /// enough. The mention is read off the reply's text against the library —
   /// the member named *now* is the one handed to, the room's own wording —
   /// and scheduled through the same `_turn` path every turn takes.
@@ -685,6 +713,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // Omada off is the room as it always was: nothing hands anything to
     // anyone, whatever a reply's text happens to name.
     if (!ref.read(omadaOnProvider(chat.state.project))) return;
+    // A handoff wave waits for the room to settle: siblings of the turn that
+    // just finished may still be speaking, and a wave started now would fork
+    // the round and reorder authorship.
+    if (_turns.isNotEmpty) return;
     final reply = chat.messages.lastOrNull;
     if (reply == null || reply.role != MessageRole.assistant) return;
     // A decline is on the record: the member was addressed and passed, and
@@ -692,11 +724,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (_isPass(reply)) return;
     final named = _mentionIn(chat, reply);
     if (named == null) return;
-    _chain++;
-    // The addressed member's reply is chain turn one; two handoffs follow it
-    // before the round stops. _chain reaching the cap blocks the next turn.
-    if (_chain >= _chainCap) return;
-    await _turn(
+    _generation++;
+    // The addressed member's reply is generation one; the cap counts the
+    // waves a round may run, and reaching it blocks the next.
+    if (_generation >= _maxGenerations) return;
+    await openTurn(
       chat: chat,
       prompt: reply,
       history: chat.messages,
@@ -717,20 +749,20 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// so a longer reply is a reply and the convention is unambiguous.
   bool _isPass(Message reply) => reply.plainText.trim() == passWord;
 
-  /// Consecutive agent-authored turns before a round stops. The user's
-  /// message starts the round, and the addressee's reply is turn one of the
-  /// chain: three agent turns — the addressed member plus two handoffs — and
-  /// the round stops until the user speaks. Counted from the user's own
-  /// turns, which reset it: the cap is about agents talking to each other
-  /// without end, not about how long a conversation may run.
-  static const _chainCap = 3;
-  int _chain = 0;
+  /// How deep the agent-to-agent rounds of a round may go: dispatch waves,
+  /// not turns — a three-member fan-out is one generation whatever it fans
+  /// out to. The project's override wins over the app default, and the user
+  /// speaking resets the count: the cap is about agents talking to each
+  /// other without end, not about how long a conversation may run.
+  int get _maxGenerations {
+    final project = state.chat?.state.project;
+    return ref.read(projectSettingsProvider(project)).omadaMaxGenerations ??
+        ref.read(appSettingsProvider).omadaMaxGenerations;
+  }
 
-  /// The failure the turn last reported, for the retry row and the
-  /// notification — turn-scoped like every other view state, never persisted.
-  bool _retryable = false;
-  String _errorLine = "";
-  int _round = 0;
+  /// Generations dispatched since the user last spoke. Zero is "the user
+  /// started this round"; the first handoff wave makes it one.
+  int _generation = 0;
 
   /// What this turn is allowed: the setting, resolved at the round the same
   /// way the approve mode is, so an edit reaches the next failure rather than
@@ -739,10 +771,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   /// The notification. A failure the user cannot see is a failure the app has
   /// to say — the turn is over, the chat is on disk, and the tap opens it.
-  /// Gated on the app being hidden and the chat not headless: a reminder's
-  /// completion is the scheduler's, and a second would be a double. Where the
-  /// platform has no notification route the port is the no-op it always was.
-  Future<void> _notifyFailure(TurnEnd? reason) async {
+  /// [line] is what the failing turn reported. Gated on the app being hidden
+  /// and the chat not headless: a reminder's completion is the scheduler's,
+  /// and a second would be a double. Where the platform has no notification
+  /// route the port is the no-op it always was.
+  Future<void> _notifyFailure(TurnEnd? reason, String line) async {
     if (reason != TurnEnd.error) return;
     if (!ref.read(appHiddenProvider)) return;
     if (await _isHeadless()) return;
@@ -750,7 +783,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final title = state.chat?.state.title ?? "Chat failed";
     await alarms.notify(
       title: title,
-      body: _errorLine.isEmpty ? "The turn failed." : _errorLine,
+      body: line.isEmpty ? "The turn failed." : line,
       chatId: chatId,
       channel: ReminderAlarms.turnFailureChannel,
     );
@@ -760,13 +793,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   Future<bool> _isHeadless() async =>
       (await ref.read(chatRepositoryProvider).loadMeta(chatId)).headless == true;
 
-  void _onError(Object e) {
-    _retryable = false;
+  void _onError(_RunningTurn turn, Object e) {
+    turn.retryable = false;
     final message = e.toString();
     final lineAt = message.indexOf("\n");
-    _errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
-    _recorder.handle(ErrorEvent(message));
-    _finishTurn();
+    turn.errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+    turn.recorder.handle(ErrorEvent(message));
+    _finishTurn(turn);
   }
 
   /// Set before the abort is awaited, though `DoneEvent.aborted` would say the
@@ -775,10 +808,12 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// the turn as having finished.
   @override
   Future<void> abort() async {
-    _retryGen++;
-    _recorder.outcome = TurnEnd.aborted;
+    final turn = _liveTurn;
+    if (turn == null) return;
+    turn.retryGen++;
+    turn.recorder.outcome = TurnEnd.aborted;
     await ref.read(chatRepositoryProvider).abort(chatId);
-    await _finishTurn();
+    await _finishTurn(turn);
   }
 
   /// Stop a turn without ending it: the agent is cancelled and the log is left
@@ -790,11 +825,12 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// rather than from the line below, and it has to make the same decision
   /// whichever gets there first.
   Future<void> interrupt() async {
-    if (!state.isRunning) return;
-    _retryGen++;
-    _interrupted = true;
+    final turn = _liveTurn;
+    if (turn == null || !state.isRunning) return;
+    turn.retryGen++;
+    turn.interrupted = true;
     await ref.read(chatRepositoryProvider).abort(chatId);
-    await _finishTurn();
+    await _finishTurn(turn);
   }
 
   @override
@@ -818,6 +854,60 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
 final chatControllerProvider =
     NotifierProvider.family<ChatController, ChatViewState, String>(ChatController.new);
+
+/// One live turn of the room: everything that was a controller field when a
+/// turn was the only thing a chat could run. The recorder is built per entry
+/// — its one-reply assumption is per-instance, which is what keeps
+/// [TurnRecorder] unchanged under parallel turns — and the fields below it
+/// are the retry machinery, scoped to the turn they carry.
+class _RunningTurn {
+  /// [onParts] is wired late, from [attach]: the recorder wants the turn it
+  /// belongs to, and the turn does not exist until its constructor returns.
+  factory _RunningTurn(
+      {required String replyId,
+      required Completer<TurnEnd?> done,
+      required Future<void> Function(List<ChatRecord>) append}) {
+    final turn = _RunningTurn._(replyId: replyId, done: done);
+    turn.recorder = TurnRecorder(append: append, onParts: (parts) {
+      if (turn.onParts != null) turn.onParts!(turn, parts);
+    });
+    return turn;
+  }
+
+  _RunningTurn._({required this.replyId, required this.done});
+
+  /// The reply this turn writes, and the table's key.
+  final String replyId;
+
+  /// Everything the turn's events become: the reply's parts, and the records
+  /// that persist them.
+  late final TurnRecorder recorder;
+
+  /// The controller's own fold of the parts into the conversation — wired at
+  /// open, so a recorder built for one chat's log cannot outlive it.
+  void Function(_RunningTurn turn, List<MessagePart> parts)? onParts;
+
+  /// Completes at the turn's true end — across retry rounds, one completion.
+  final Completer<TurnEnd?> done;
+
+  /// The turn's stream subscription, cancelled in [_finishTurn].
+  StreamSubscription<AgentEvent>? sub;
+
+  /// This turn is being stopped rather than ended — see [ChatController.interrupt].
+  bool interrupted = false;
+
+  /// Bumped by abort and interrupt so a pending retry cannot fire after the
+  /// user pressed stop — this turn's generation, not the room's.
+  int retryGen = 0;
+
+  /// Whether the turn's last failure can be carried on from, and the line for
+  /// the retry row and the failure notification.
+  bool retryable = false;
+  String errorLine = "";
+
+  /// Retry rounds spent on this turn so far.
+  int round = 0;
+}
 
 /// Stop whatever turns are running the way the app going away stops them:
 /// **interrupted rather than aborted**. See "Carrying on an interrupted turn"

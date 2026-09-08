@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
@@ -112,8 +113,10 @@ class ProjectSettingsPage extends ConsumerWidget {
           if (builtIn == null) ...[
             const Divider(),
             _OmadaRow(project: project),
-            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada)))
+            if (ref.watch(projectSettingsProvider(project).select((s) => s.omada))) ...[
               _OmadaOrderingRow(project: project),
+              _OmadaMaxGenerationsRow(project: project),
+            ],
           ],
           // A built-in that ships its own note reads no file, so there is no
           // instructions to edit for one — unless it asks for the user's files
@@ -281,6 +284,31 @@ class _OmadaOrderingRow extends ConsumerWidget {
       options: omadaOrderingLabels,
       onChanged: (v) =>
           ref.read(projectSettingsProvider(project).notifier).setOmadaOrdering(v),
+    );
+  }
+}
+
+/// How many handoff generations a round may run here, overriding the app
+/// default. Shown only while the project's Omada toggle is on; Default names
+/// what the app setting says now.
+class _OmadaMaxGenerationsRow extends ConsumerWidget {
+  const _OmadaMaxGenerationsRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return InheritableDropdown<int>(
+      label: "Max generations per round",
+      value: ref.watch(projectSettingsProvider(project)
+          .select((s) => s.omadaMaxGenerations)),
+      inherited: "${ref.watch(appSettingsProvider).omadaMaxGenerations}",
+      options: {
+        for (final stop in AppSettings.omadaGenerationStops) stop: "$stop",
+      },
+      onChanged: (v) => ref
+          .read(projectSettingsProvider(project).notifier)
+          .setOmadaMaxGenerations(v),
     );
   }
 }

@@ -33,7 +33,8 @@ class ProjectSettings {
       this.environment,
       this.useProjectMemory = false,
       this.omada = false,
-      this.omadaOrdering});
+      this.omadaOrdering,
+      this.omadaMaxGenerations});
 
   /// How long a temporary chat in this project lives. Null means inherit the
   /// app default.
@@ -54,8 +55,14 @@ class ProjectSettings {
   /// existing files need no migration.
   bool omada;
 
-  /// The project's default for how its rounds run. Null is sequential.
+  /// The project's default for how its rounds run. Null inherits the app
+  /// default, resolved live.
   OmadaOrdering? omadaOrdering;
+
+  /// How many handoff generations one round may run before it stops for the
+  /// user. Null inherits the app default. The user's own message is
+  /// generation one and uncapped; this bounds only the waves that follow it.
+  int? omadaMaxGenerations;
 
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(config.projectSettingsFile(project: project));
@@ -75,6 +82,7 @@ class ProjectSettings {
         omada: json["omada"] as bool? ?? false,
         omadaOrdering: OmadaOrdering.fromNameNullable(
             json["omadaOrdering"] as String?),
+        omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
       );
     } catch (_) {
       return ProjectSettings();
@@ -88,6 +96,7 @@ class ProjectSettings {
       if (useProjectMemory) "useProjectMemory": useProjectMemory,
       if (omada) "omada": omada,
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
+      if (omadaMaxGenerations != null) "omadaMaxGenerations": omadaMaxGenerations,
     }));
   }
 
@@ -97,5 +106,6 @@ class ProjectSettings {
         useProjectMemory: useProjectMemory,
         omada: omada,
         omadaOrdering: omadaOrdering,
+        omadaMaxGenerations: omadaMaxGenerations,
       );
 }

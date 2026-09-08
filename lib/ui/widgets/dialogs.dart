@@ -103,10 +103,13 @@ Future<String?> promptForText(
 
 /// Ask for a new project's name and whether it is a team. Returns null if
 /// dismissed, or if the name is not one — [projectNameFrom]'s answer is the
-/// only thing that leaves.
-Future<({String name, bool omada})?> promptNewProject(BuildContext context) {
+/// only thing that leaves. The switch starts where the app default says a
+/// project should.
+Future<({String name, bool omada})?> promptNewProject(
+    BuildContext context,
+    {required bool omadaByDefault}) {
   final controller = TextEditingController();
-  var omada = false;
+  var omada = omadaByDefault;
   ({String name, bool omada})? submit() {
     final name = projectNameFrom(controller.text);
     return name == null ? null : (name: name, omada: omada);

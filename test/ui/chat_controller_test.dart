@@ -1463,6 +1463,11 @@ void main() {
 
     test("the chain stops at the cap and the user resets it", () async {
       await _inTeam(app);
+      // A cap of its own: the app default is ten, and three rounds is the
+      // shape this test pins.
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaMaxGenerations(3);
       app.backend.scriptedRounds = [
         for (var i = 0; i < 5; i++) ...[
           const [TextDelta("see @explore"), DoneEvent()],

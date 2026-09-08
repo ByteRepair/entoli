@@ -186,6 +186,8 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           Divider(),
           _AgentSection(),
           Divider(),
+          _OmadaSection(),
+          Divider(),
           _TempChatSection(),
           Divider(),
           _EnvironmentSection(),
@@ -705,6 +707,77 @@ class _RetryTurnsField extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// The room the settings page has for Omada at app level: what a new project
+/// starts as, how deep its agent rounds may go, and the scheduling a project
+/// that never chose runs under. A project's own page overrides the last two.
+class _OmadaSection extends ConsumerWidget {
+  const _OmadaSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(appSettingsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          "Omada",
+          description: "Team chats: several named agents take part in a "
+              "project's replies, alongside the main one.",
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text("On by default for new projects"),
+          subtitle: const Text(
+              "The new-project dialog starts with team chats switched on. "
+              "Existing projects are untouched."),
+          value: settings.omadaByDefault,
+          onChanged: (value) =>
+              ref.read(appSettingsProvider.notifier).setOmadaByDefault(value),
+        ),
+        LabelledField(
+          label: "Max generations per round",
+          child: Slider(
+            value: _stopIndex(settings.omadaMaxGenerations).toDouble(),
+            min: 0,
+            max: (AppSettings.omadaGenerationStops.length - 1).toDouble(),
+            divisions: AppSettings.omadaGenerationStops.length - 1,
+            label: "${_snap(settings.omadaMaxGenerations)}",
+            onChanged: (value) => ref
+                .read(appSettingsProvider.notifier)
+                .setOmadaMaxGenerations(
+                    AppSettings.omadaGenerationStops[value.round()]),
+          ),
+        ),
+        Text(
+          "How many waves of agent-to-agent work one round may run before it "
+          "stops for you — your message starts the round, and a member handing "
+          "off to another starts the next wave. A project can set its own.",
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+
+  /// The slider's stops are sparse (5, 10, 20, 40, 60, 80, 100); whatever a
+  /// file or an older build left in `settings.json` reads as the stop nearest
+  /// it, so the slider never asserts.
+  static int _snap(int value) =>
+      AppSettings.omadaGenerationStops[_stopIndex(value)];
+
+  /// The track position of [value]: the index of the stop nearest it.
+  static int _stopIndex(int value) {
+    var best = 0;
+    for (var i = 1; i < AppSettings.omadaGenerationStops.length; i++) {
+      if ((value - AppSettings.omadaGenerationStops[i])
+              .abs() <
+          (value - AppSettings.omadaGenerationStops[best]).abs()) {
+        best = i;
+      }
+    }
+    return best;
   }
 }
 
