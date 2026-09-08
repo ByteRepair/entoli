@@ -12,7 +12,8 @@ import "../../domain/reminder_alarms.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
 import "../../domain/prompt_library.dart"
-    show authorFrom, nameOf, singleAgentMention;
+    show authorFrom, authorKeys, nameOf, singleAgentMention, mentionsIn;
+import "../../domain/project_settings.dart" show OmadaOrdering;
 import "../../domain/shell.dart" show shellBypassCommand;
 import "../../data/builtin/templates.dart" show passWord;
 import "../../providers.dart";
@@ -319,6 +320,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// Say [text] and run the turn it starts. [files] are already under the
   /// chat's `resources/`. [replacing] makes it another thread beside a prompt
   /// already in the conversation — an edit — rather than the next thing said.
+  ///
+  /// The prompt is composed once and schedules from there: what it addresses
+  /// runs through the ordering like anything else in the room, one member
+  /// turn per mention. [replacing] is the exception — an edit answers for
+  /// itself, under whoever the prompt it stands beside named.
   Future<void> _prompt(String text,
       {List<MessagePart> files = const [], Message? replacing}) async {
     final repo = ref.read(chatRepositoryProvider);
@@ -330,15 +336,22 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
     final userMsg =
         repo.composeUserPrompt(text, project: chat.state.project, files: files);
-    await _say(userMsg, replacing: replacing);
+    if (replacing != null) {
+      await _say(userMsg, replacing: replacing);
+      return;
+    }
+    _schedule(chat, mentioned(chat, userMsg), userPrompt: userMsg);
+    await _dispatch();
   }
 
   /// Open the turn [userMsg] starts, whether it is being composed now or was
   /// said while the room ran and is already on the log. Where it is not on the
   /// log yet — a fresh send — it rides in [opening]; where it is, the opening
   /// is the reply alone and [history] ends before it, since the message is
-  /// already the last thing said.
-  Future<void> _say(Message userMsg, {Message? replacing}) async {
+  /// already the last thing said. [member] is who the room has decided
+  /// answers it, where scheduling decided ahead of the prompt.
+  Future<void> _say(Message userMsg,
+      {Message? replacing, String? member, int generation = 0}) async {
     final chat = state.chat;
     if (chat == null || state.isRunning) return;
     final logged = replacing == null && chat.messages.contains(userMsg);
@@ -348,15 +361,22 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
             ? chat.messages.length
             : chat.messages.indexOf(replacing);
     if (at < 0) return;
+    // Scheduling that named the member stamps them directly; a fresh send
+    // reads the address off what composing wrote into the message.
+    final author = member != null
+        ? "${CompletionKind.agent.trigger}$member"
+        : authorFor(chat, userMsg);
     await openTurn(
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
       opening: [
         if (!logged) userMsg,
-        _newReply(author: authorFor(chat, userMsg)),
+        _newReply(author: author),
       ],
       replacing: replacing,
+      omadaMember: member,
+      generation: generation,
     );
   }
 
@@ -368,12 +388,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// conversation the model is answering, which does not include the prompt:
   /// `sendPrompt` adds that itself. [replacing] is the message [opening] is an
   /// alternative to, and null when this is simply the next thing said.
+  /// [omadaMember] is who the room has decided answers it, where scheduling
+  /// decided ahead of the prompt — a dispatched item — rather than from it.
+  /// [generation] is the dispatch wave the turn belongs to, on the entry for
+  /// the handoff that reads it.
   Future<void> openTurn({
     required Chat chat,
     required Message prompt,
     required List<Message> history,
     required List<Message> opening,
     Message? replacing,
+    String? omadaMember,
+    int generation = 0,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
     // The room's mode at this turn, stamped on the turn's opener: the page
@@ -401,10 +427,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     turn.retryable = false;
     turn.errorLine = "";
     turn.round = 0;
-    // The user speaking resets the round — a fresh send, an edit, a
-    // regenerate; each is them saying the next thing, not an agent handing
-    // off. The cap is about agents handing off to each other without end.
-    if (prompt.role == MessageRole.user) _generation = 0;
+    turn.generation = generation;
     await turn.recorder.write(recordsOf(openingWithMode,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
@@ -421,7 +444,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     _listen(turn, repo.sendPrompt(chatId, prompt,
         history: history,
         replaces: replacing != null,
-        omadaMember: _memberAnswering(chat, prompt)));
+        omadaMember: omadaMember ?? _memberAnswering(chat, prompt)));
   }
 
   /// The member a turn is answered by: the one the project's Omada addresses
@@ -749,28 +772,35 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       // and is still unsaid is dropped — an aborted round is a stopped one,
       // and whatever the user said next is the first thing of a new one.
       _said.clear();
-      await _maybeHandoff(reason);
+      _schedules.clear();
       return;
     }
 
     // The room has settled: what was said while it spoke is said next, in
-    // the order it was said. Dispatching the composed message opens the turn
-    // it is already the last message of — the reply alone is written.
-    while (_said.isNotEmpty) {
+    // the order it was said. Said messages schedule their members the same
+    // way anything else does, so a mention in one runs through the ordering
+    // like a handoff's does. Handoffs read the room only once the schedule
+    // holds nothing — the user's own words dispatch ahead of the agents'.
+    final chat = state.chat;
+    while (_said.isNotEmpty && chat != null) {
       final said = _said.removeAt(0);
-      await _say(said);
+      _schedule(chat, mentioned(chat, said), userPrompt: said);
     }
-    await _maybeHandoff(reason);
+    if (_schedules.isNotEmpty) {
+      await _dispatch();
+      return;
+    }
+    await _maybeHandoff(reason, turn);
   }
 
-  /// What a finished turn may hand the baton to. A reply that addresses
-  /// exactly one member — and whose turn ended `done`, nothing a failure
-  /// leaves carrying — schedules that member's turn, the room's sequential
-  /// round, until the generation cap says the agents have had the floor long
-  /// enough. The mention is read off the reply's text against the library —
-  /// the member named *now* is the one handed to, the room's own wording —
-  /// and scheduled through the same `_turn` path every turn takes.
-  Future<void> _maybeHandoff(TurnEnd? reason) async {
+  /// What a finished turn may hand the baton to. A reply that names members —
+  /// and whose turn ended `done`, nothing a failure leaves carrying —
+  /// schedules their turns, the room's round, until the generation cap says
+  /// the agents have had the floor long enough. The mentions are read off the
+  /// reply's text against the library — the members named *now* are the ones
+  /// handed to, the room's own wording — and scheduled through the same
+  /// [_dispatch] path every turn takes.
+  Future<void> _maybeHandoff(TurnEnd? reason, _RunningTurn finished) async {
     if (reason != TurnEnd.done) return;
     if (!ref.mounted) return;
     final chat = state.chat;
@@ -784,15 +814,130 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (_turns.isNotEmpty) return;
     final reply = chat.messages.lastOrNull;
     if (reply == null || reply.role != MessageRole.assistant) return;
-    // A decline is on the record: the member was addressed and passed, and
-    // nothing follows it.
-    if (_isPass(reply)) return;
-    final named = _mentionIn(chat, reply);
-    if (named == null) return;
-    _generation++;
-    // The addressed member's reply is generation one; the cap counts the
-    // waves a round may run, and reaching it blocks the next.
-    if (_generation >= _maxGenerations) return;
+    // A decline ends what agents are handing each other: the member was
+    // addressed and passed, and nothing follows from them. The user's own
+    // schedule is not theirs to cancel — a turn they addressed to another
+    // member is that member's to run.
+    if (_isPass(reply)) {
+      _schedules.removeWhere((_, items) =>
+          items.isNotEmpty && items.first.generation > 0);
+      return;
+    }
+    // The wave lands one past the turn that named it: the round's depth is
+    // the finished turn's own, and the cap reads it at dispatch. The entry
+    // is out of the table by now — the finished turn's own is what counts.
+    _schedule(chat, mentioned(chat, reply),
+        reply: reply, generation: finished.generation);
+    await _dispatch();
+  }
+
+  /// The members [message] addresses, in the order it names them — a user
+  /// prompt through what composing wrote into its documents, a member's
+  /// reply through its text. Names the library does not know are prose,
+  /// not an address, a command is addressed to no one it names —
+  /// `!grep @researcher` runs a command, it does not ask researcher to
+  /// speak — and a direct chat addresses no one at all: Omada off is the
+  /// room as it always was, the house answering whatever is said. The
+  /// sigil is off what comes back: a schedule is keyed by the library's
+  /// name for the member.
+  List<String> mentioned(Chat chat, Message message) {
+    if (!ref.read(omadaOnProvider(chat.state.project)) ||
+        shellBypassCommand(message.plainText) != null) {
+      return const [];
+    }
+    return message.role == MessageRole.user
+        ? authorKeys(message.documents)
+            .map(nameOf)
+            .whereType<String>()
+            .where((name) => _memberIfKnown(chat, name) != null)
+            .toList()
+        : mentionsIn(message.plainText,
+            ref.read(promptLibraryProvider(chat.state.project)));
+  }
+
+  /// The room's scheduling. `_schedules` is one FIFO per member of what they
+  /// have been addressed to run; a member runs one turn at a time and reads
+  /// the next item when the room settles. An item is either a user prompt —
+  /// already on the log where it was said while the room ran — or a handoff,
+  /// the reply that names them. The null key is the main agent, who answers
+  /// what no member was addressed for. [generation] is the dispatch wave the
+  /// item belongs to: zero is the user's own and uncapped, a handoff lands
+  /// one past the reply that names it.
+  final Map<String?, List<_Scheduled>> _schedules = {};
+
+  void _schedule(Chat chat, List<String> members,
+      {Message? userPrompt, Message? reply, int generation = 0}) {
+    if (members.isEmpty) {
+      // Nobody addressed: the main agent's, and only a user prompt makes
+      // one — a reply that names nobody is the round ending, not the house
+      // speaking unprompted.
+      if (userPrompt != null) {
+        (_schedules[null] ??= [])
+            .add(_Scheduled(userPrompt: userPrompt, generation: generation));
+      }
+      return;
+    }
+    for (final member in members) {
+      (_schedules[member] ??= []).add(_Scheduled(
+          userPrompt: userPrompt,
+          reply: reply,
+          generation: reply == null ? generation : generation + 1));
+    }
+  }
+
+  /// Run what the schedule holds. Sequential order runs one item at a time —
+  /// the first of the schedule, whatever member it names — and what follows
+  /// dispatches at the settle it causes. Parallel order answers with one
+  /// turn per member at once, each FIFO's head: one turn per member still
+  /// stands, and what is left dispatches at the settle they cause.
+  ///
+  /// A dispatched item is gone from its FIFO before the turn opens, so a
+  /// settle re-entering while the turn runs finds the schedule behind it and
+  /// not the item running.
+  Future<void> _dispatch() async {
+    final chat = state.chat;
+    if (chat == null) return;
+    final parallel = _ordering == OmadaOrdering.parallel;
+    // The cap counts dispatch waves of agent-to-agent work: an item in its
+    // generation or under is the user's own and never blocked, one past it
+    // is the round's and the cap stops the wave.
+    final max = _maxGenerations;
+    var dispatched = false;
+    for (final member in _schedules.keys.toList()) {
+      final items = _schedules[member];
+      if (items == null || items.isEmpty) {
+        if (items != null) _schedules.remove(member);
+        continue;
+      }
+      final item = items.first;
+      if (item.generation > 0 && item.generation >= max) {
+        items.clear();
+        _schedules.remove(member);
+        continue;
+      }
+      // Sequential runs one item at a time, and parallel runs one per
+      // member: either way one dispatch per member here, the rest at the
+      // settles this causes.
+      if (!parallel && dispatched) continue;
+      items.removeAt(0);
+      if (items.isEmpty) _schedules.remove(member);
+      dispatched = true;
+      await _run(member, item);
+    }
+  }
+
+  /// Open the turn one scheduled item runs as. [member] null is the main
+  /// agent's; a handoff's prompt is the reply that names the member, already
+  /// in the conversation.
+  Future<void> _run(String? member, _Scheduled item) async {
+    final prompt = item.userPrompt;
+    final reply = item.reply;
+    if (prompt != null) {
+      await _say(prompt, member: member, generation: item.generation);
+      return;
+    }
+    final chat = state.chat;
+    if (chat == null || reply == null) return;
     await openTurn(
       chat: chat,
       prompt: reply,
@@ -802,8 +947,20 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       history: chat.messages.take(chat.messages.indexOf(reply)).toList(),
       // The next reply is authored by the member handed to. The stamp
       // carries the sigil, the way every author stamp does.
-      opening: [_newReply(author: "${CompletionKind.agent.trigger}$named")],
+      opening: [_newReply(author: "${CompletionKind.agent.trigger}$member")],
+      omadaMember: member,
+      generation: item.generation,
     );
+  }
+
+  /// The room's scheduling order: the project's pick, else the app default,
+  /// else sequential — the answer a room that never heard of the setting
+  /// runs under.
+  OmadaOrdering get _ordering {
+    final project = state.chat?.state.project;
+    return ref.read(projectSettingsProvider(project)).omadaOrdering ??
+        ref.read(appSettingsProvider).omadaOrdering ??
+        OmadaOrdering.sequential;
   }
 
   /// The one member [reply] names by handle, as the composer's own
@@ -827,10 +984,6 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     return ref.read(projectSettingsProvider(project)).omadaMaxGenerations ??
         ref.read(appSettingsProvider).omadaMaxGenerations;
   }
-
-  /// Generations dispatched since the user last spoke. Zero is "the user
-  /// started this round"; the first handoff wave makes it one.
-  int _generation = 0;
 
   /// What this turn is allowed: the setting, resolved at the round the same
   /// way the approve mode is, so an edit reaches the next failure rather than
@@ -975,6 +1128,11 @@ class _RunningTurn {
 
   /// Retry rounds spent on this turn so far.
   int round = 0;
+
+  /// The dispatch wave this turn belongs to: zero for the user's own, one
+  /// and up for what agents handed to each other. The handoff that follows
+  /// this turn reads it to know how deep the round has run.
+  int generation = 0;
 }
 
 /// Stop whatever turns are running the way the app going away stops them:
@@ -986,4 +1144,18 @@ Future<void> interruptLiveTurns(ProviderContainer container) async {
       if (container.exists(chatControllerProvider(id)))
         container.read(chatControllerProvider(id).notifier).interrupt(),
   ]);
+}
+
+/// One item of the room's schedule: what a member (or the main agent, where
+/// the schedule names nobody) has been addressed to run. Either a user
+/// prompt — already on the log where it was said while the room ran — or a
+/// handoff, the reply that names the member. [generation] is the dispatch
+/// wave the item belongs to: zero is the user's own, uncapped, and one and
+/// up counts against the cap.
+class _Scheduled {
+  _Scheduled({this.userPrompt, this.reply, required this.generation});
+
+  final Message? userPrompt;
+  final Message? reply;
+  final int generation;
 }

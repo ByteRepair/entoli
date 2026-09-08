@@ -216,6 +216,11 @@ String? authorFrom(Map<String, String> documents) {
   return named.isEmpty ? null : named.first;
 }
 
+/// The members [documents] address, in the order they were written — the
+/// agent keys as typed, sigil on. Empty where the message names no member.
+List<String> authorKeys(Map<String, String> documents) =>
+    agentEntriesFrom(documents).keys.toList();
+
 /// The member name an author stamp carries — the sigil off, the library's
 /// name for them. An unnamed stamp names nothing.
 String? nameOf(String? author) =>
@@ -239,3 +244,15 @@ String? singleAgentMention(String text, PromptLibrary library) {
       .toSet();
   return known.length == 1 ? known.single : null;
 }
+
+/// The members [text] addresses, in the order it names them. A name the
+/// library does not know is prose, not an address — a member signing their own
+/// reply (`@scout reporting`) is not addressed by their own signature. The
+/// empty list is no address at all.
+List<String> mentionsIn(String text, PromptLibrary library) =>
+    _mention
+        .allMatches(text)
+        .map((m) => m.group(1)!)
+        .where((name) => library.find(CompletionKind.agent, name) != null)
+        .toSet()
+        .toList();

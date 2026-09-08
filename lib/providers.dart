@@ -463,6 +463,10 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setOmadaMaxGenerations(int value) =>
       _update((s) => s.omadaMaxGenerations = value);
 
+  /// The room's scheduling default for projects that picked none of their own.
+  Future<void> setOmadaOrdering(OmadaOrdering? value) =>
+      _update((s) => s.omadaOrdering = value);
+
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);

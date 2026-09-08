@@ -1372,18 +1372,28 @@ void main() {
       expect(messages.last.author, "@explore");
     });
 
-    test("addressing one member and naming another still stamps the addressee",
+    test("a mention list schedules the members' turns in mention order",
         () async {
       await _inTeam(app);
-      final (id, _) = await chatWithOneTurn(
-          "hello @explore, find the tests, then hand it to @build to check",
+      app.backend.scriptedRounds = [
+        for (var i = 0; i < 4; i++) ...[
+          const [TextDelta("done"), DoneEvent()],
+        ],
+      ];
+      final (id, _) = await startTurn(
+          "hello @explore and @build, look at the tests",
           project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
 
-      final messages = messagesOf(id);
-      expect(messages.first.documents.keys, ["@explore", "@build"]);
-      // The first mention is the addressee; the second is the handoff the
-      // reply will carry out. The label names who the turn was addressed to.
-      expect(messages.last.author, "@explore");
+      final prompts = app.backend.prompts;
+      // Both members run, in the order the message named them: the mention
+      // list is the schedule. The first rides the opening turn; the second
+      // is dispatched at the settle it causes.
+      expect(prompts[0].settings.omadaMember, "explore");
+      expect(prompts[1].settings.omadaMember, "build");
+      // The second member answers the same prompt — the message was
+      // addressed to them both.
+      expect(prompts[1].prompt.id, prompts[0].prompt.id);
     });
 
     test("a direct chat never stamps, whatever the prompt names", () async {

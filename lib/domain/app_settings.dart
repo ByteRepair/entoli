@@ -9,6 +9,7 @@ import "llm_provider.dart";
 import "local_llm.dart";
 import "permission.dart";
 import "profile.dart";
+import "project_settings.dart";
 import "temp_chat_ttl.dart";
 import "theme_colour.dart";
 
@@ -63,6 +64,7 @@ class AppSettings {
     this.turnRetries = defaultTurnRetries,
     this.omadaByDefault = false,
     this.omadaMaxGenerations = defaultOmadaMaxGenerations,
+    this.omadaOrdering,
     this.welcomeSeen = false,
   });
 
@@ -281,6 +283,13 @@ class AppSettings {
   /// `ProjectSettings.omadaMaxGenerations` overrides it per project.
   int omadaMaxGenerations;
 
+  /// The room's scheduling default for a project that picked none of its own:
+  /// sequential runs the schedule one turn at a time, parallel answers with
+  /// one turn per member at once. `ProjectSettings.omadaOrdering` overrides
+  /// it per project; the enum lives with the project settings, which is
+  /// where a per-project answer was first written.
+  OmadaOrdering? omadaOrdering;
+
   /// Whether the welcome tour has been finished. It is what first launch reads
   /// to decide whether to push the tour, and what its Done writes.
   bool welcomeSeen;
@@ -373,6 +382,8 @@ class AppSettings {
         omadaByDefault: json["omadaByDefault"] as bool? ?? false,
         omadaMaxGenerations:
             (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
+        omadaOrdering: OmadaOrdering.fromNameNullable(
+            json["omadaOrdering"] as String?),
         welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
@@ -458,6 +469,7 @@ class AppSettings {
         turnRetries: turnRetries,
         omadaByDefault: omadaByDefault,
         omadaMaxGenerations: omadaMaxGenerations,
+        omadaOrdering: omadaOrdering,
         welcomeSeen: welcomeSeen,
       );
 
@@ -520,6 +532,8 @@ class AppSettings {
       if (omadaByDefault) "omadaByDefault": omadaByDefault,
       if (omadaMaxGenerations != defaultOmadaMaxGenerations)
         "omadaMaxGenerations": omadaMaxGenerations,
+      if (omadaOrdering != null)
+        "omadaOrdering": omadaOrdering!.name,
       if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }
