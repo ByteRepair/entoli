@@ -752,35 +752,29 @@ class SyncHub {
   /// asking side by that platform's own viewer. The `/` is what keeps the
   /// name out of `resourceName`'s alphabet — a user attachment can never
   /// land here by accident.
-  static const artifactPrefix = ".artifacts/";
-
-  /// The resource name [artifactBytes] asks for [artifactId] under.
-  static String artifactResourceName(String artifactId) =>
-      "$artifactPrefix$artifactId";
+  static const _artifactPrefix = ".artifacts/";
 
   /// An artifact of a mirrored chat: from the cache, or as one zip over the
   /// ordinary resource channel and into it. Same steps as [resourceBytes],
   /// and the same cache — an artifact re-published after the fetch shows
   /// stale content until the mirror reconnects, the price of not paging a
   /// second kind of entry through the byte bound.
-  Future<Uint8List?> artifactBytes(String chatId, String artifactId) {
-    final name = artifactResourceName(artifactId);
-    return resourceBytes(chatId, name);
-  }
+  Future<Uint8List?> artifactBytes(String chatId, String artifactId) =>
+      resourceBytes(chatId, "$_artifactPrefix$artifactId");
 
   /// Streams a resource to a subscribing peer, base64 inside control
   /// frames — correlation stays trivial and every frame rides the same AEAD
   /// as the rest of the traffic. Binary framing can come later without a
   /// protocol change: the type byte already separates the streams. A name
-  /// under [artifactPrefix] is an artifact rather than an attachment, and
+  /// under [_artifactPrefix] is an artifact rather than an attachment, and
   /// goes out as one zip of its files.
   Future<void> _serveResource(
       LivePeer peer, String id, String chatId, String resource) async {
     Uint8List? bytes;
     if (peer.subscriptions.contains(chatId)) {
-      bytes = resource.startsWith(artifactPrefix)
+      bytes = resource.startsWith(_artifactPrefix)
           ? await _repo?.readArtifactZip(
-              chatId, resource.substring(artifactPrefix.length))
+              chatId, resource.substring(_artifactPrefix.length))
           : await _repo?.readResource(chatId, resource);
     }
     if (bytes == null || bytes.isEmpty) {

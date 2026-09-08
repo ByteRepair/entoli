@@ -244,9 +244,9 @@ belongs to the `SyncHub` rather than to the page that shows them, so a mirror
 being dropped takes its bytes with it.
 
 **An artifact rides the same channel as one zip.** An artifact's files live
-under the home device's `artifacts/`, so opening one on a mirror asks for the
-synthetic resource name `SyncHub.artifactResourceName` builds from the
-artifact id — a name containing a `/`, which `resourceName` can never produce,
+under the home device's `artifacts/`, so opening one on a mirror asks for a
+synthetic resource name built from the artifact id under `.artifacts/` — a
+name containing a `/`, which `resourceName` can never produce,
 so a user attachment cannot land in the namespace by accident — and is
 answered with `readArtifactZip`, the whole directory as one archive. No new
 `SyncMessage`: old builds never ask, and a new build against an old peer gets

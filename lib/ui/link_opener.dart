@@ -1,4 +1,4 @@
-import "dart:io" show Directory;
+import "dart:io" show Directory, File;
 
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
@@ -42,13 +42,19 @@ import "widgets/dialogs.dart";
 /// same platform path a local artifact takes. The hub is null in tests, which
 /// is also the shape of "no sync running": the local paths answer.
 class PlatformLinkOpener implements LinkOpener {
-  const PlatformLinkOpener(this._store, [this._hub]);
+  PlatformLinkOpener(this._store, [this._hub]);
 
   final ChatStore _store;
 
   /// Set in `main`, where the hub is built before the container is. Null
   /// leaves every artifact on the local paths.
   final SyncHub? _hub;
+
+  /// The temp directories remote artifacts have been unzipped into, by chat.
+  /// An external viewer may hold a `file://` URL long after the tap that
+  /// made it, so a directory goes only when the next open of the same chat
+  /// replaces it — never at dispose, which a desktop open never has.
+  final _tempDirs = <String, String>{};
 
   static bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -72,18 +78,14 @@ class PlatformLinkOpener implements LinkOpener {
     required String entryFile,
     String? title,
   }) async {
-    if (kIsWeb) {
-      if (await _openRemoteArtifact(context, chatId, artifactId,
-          entryFile: entryFile, title: title)) {
-        return;
-      }
-      await WebArtifactOpenerImpl(_store).open(chatId, artifactId, entryFile: entryFile);
+    // A mirrored chat's artifact is fetched from its home device first; the
+    // remote arm says which directory it landed in and whether to clean up.
+    if (await _remoteArtifact(context, chatId, artifactId,
+        entryFile: entryFile, title: title)) {
       return;
     }
-    // A remote artifact on desktop or Android: one zip, a temp directory,
-    // and the viewer it would have had at home.
-    if (await _openRemoteArtifact(context, chatId, artifactId,
-        entryFile: entryFile, title: title)) {
+    if (kIsWeb) {
+      await WebArtifactOpenerImpl(_store).open(chatId, artifactId, entryFile: entryFile);
       return;
     }
     final dir = await _store.artifactPath(chatId, artifactId);
@@ -99,10 +101,12 @@ class PlatformLinkOpener implements LinkOpener {
     );
   }
 
-  /// The remote arm, where [chatId] is a mirror: fetch the zip and open it.
-  /// False is everything that is not that — no hub, a local chat, a browser
-  /// with a local copy of its own — and hands the call to the local paths.
-  Future<bool> _openRemoteArtifact(
+  /// The remote arm, where [chatId] is a mirror: fetch the zip, unzip it, and
+  /// open it by the same viewer a local artifact takes. False is everything
+  /// that is not that — no hub, a local chat, a browser with a local copy of
+  /// its own — and hands the call to the local paths. On web the local blob
+  /// path is the only viewer, so a mirror says so rather than fetching.
+  Future<bool> _remoteArtifact(
     BuildContext context,
     String chatId,
     String artifactId, {
@@ -126,8 +130,21 @@ class PlatformLinkOpener implements LinkOpener {
               "made on is away, or it is no longer there.")));
       return true;
     }
+    // The directory outlives the call — an external viewer may still be
+    // reading it — so the previous one goes only when the next is made.
+    final previous = _tempDirs[chatId];
     final dir = await unzipRemoteArtifact(bytes);
+    _tempDirs[chatId] = dir;
+    if (previous != null) {
+      Directory(previous).delete(recursive: true).ignore();
+    }
     if (!_isAndroid) {
+      // The existence check reads the unzipped copy, which is also what
+      // names the failure honestly when the zip is missing its entry file.
+      if (!File("$dir/$entryFile").existsSync()) {
+        logFailure("open", "Artifact entry file missing: $dir/$entryFile");
+        return true;
+      }
       await launchUrl(Uri.file("$dir/$entryFile"),
           mode: LaunchMode.externalApplication);
       return true;
@@ -136,7 +153,7 @@ class PlatformLinkOpener implements LinkOpener {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _ArtifactWebViewPage(
-            dir: dir, entryFile: entryFile, title: title, temp: true),
+            dir: dir, entryFile: entryFile, title: title),
       ),
     );
     return true;
@@ -242,17 +259,11 @@ class _WebViewPageState extends State<_WebViewPage> {
 /// in `initState` and stops in `dispose`, so it lives only while the page
 /// is on screen — which is why this one has no Copy link or Open in browser:
 /// its URL is a port that is gone by the time anything else could follow it.
-/// A page opened over a remote artifact's unzipped copy names a [temp]
-/// directory that exists only for this viewing, and goes with the page.
 class _ArtifactWebViewPage extends StatefulWidget {
-  const _ArtifactWebViewPage(
-      {required this.dir, required this.entryFile, this.title, this.temp = false});
+  const _ArtifactWebViewPage({required this.dir, required this.entryFile, this.title});
   final String dir;
   final String entryFile;
   final String? title;
-
-  /// [dir] was made for this viewing and is deleted on dispose.
-  final bool temp;
 
   @override
   State<_ArtifactWebViewPage> createState() => _ArtifactWebViewPageState();
@@ -298,7 +309,6 @@ class _ArtifactWebViewPageState extends State<_ArtifactWebViewPage> {
   @override
   void dispose() {
     _server?.stop();
-    if (widget.temp) Directory(widget.dir).delete(recursive: true).ignore();
     super.dispose();
   }
 

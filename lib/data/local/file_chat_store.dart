@@ -298,8 +298,14 @@ class FileChatStore implements ChatStore {
   @override
   Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
       {String? project}) async {
+    // On the far side of this call is a peer-named id (`_serveResource` strips
+    // the prefix off the wire and hands the rest over), so the id is held to
+    // what `createArtifact` hands out — one path segment, the way
+    // `readResource` basenames what it reads back.
+    final id = _fs.path.basename(artifactId);
+    if (id != artifactId || id.isEmpty) return null;
     project = project ?? await _projectOf(chatId);
-    final dir = config.artifactDir(chatId, artifactId, project: project);
+    final dir = config.artifactDir(chatId, id, project: project);
     if (!await _fs.isDirectory(dir)) return null;
     // `base` is the artifact root itself: the entries come out named relative
     // to it, the shape the unzip on the far side writes back.
