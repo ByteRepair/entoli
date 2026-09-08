@@ -309,7 +309,7 @@ Future<String> _resolveBase() async {
   return dir.path;
 }
 
-String get _home => Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"]!;
+String get _home => LocalShell.machineHomeDir()!;
 
 /// Where things that can be fetched again live — the voice models, and a
 /// downloaded Linux beside them. `$AGENT_CHAT_CACHE` if set, else this platform's own cache

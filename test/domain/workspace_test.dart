@@ -284,10 +284,11 @@ void main() {
 
   group("resolveWorkspacePath", () {
     const workspace = "chats/c1";
-    String resolve(String path) =>
-        resolveWorkspacePath(fileSystemIo, path, "$dir/$workspace", dir);
-    bool outside(String path) =>
-        outsideWorkspaces(fileSystemIo, resolve(path), "$dir/$workspace", dir);
+    String resolve(String path, {String? homePath}) =>
+        resolveWorkspacePath(fileSystemIo, path, "$dir/$workspace", dir,
+            homePath: homePath);
+    bool outside(String path, {String? homePath}) => outsideWorkspaces(
+        fileSystemIo, resolve(path, homePath: homePath), "$dir/$workspace", dir);
 
     test("a relative path lands in the chat's workspace, and is not outside", () {
       expect(resolve("notes/a.txt"), "$dir/$workspace/notes/a.txt");
@@ -297,6 +298,28 @@ void main() {
     test("a project-relative path lands in the project's workspace", () {
       expect(resolve("project:notes/a.txt"), "$dir/notes/a.txt");
       expect(outside("project:notes/a.txt"), isFalse);
+    });
+
+    test("a chat-relative path lands in the chat's own, explicitly", () {
+      expect(resolve("chat:notes/a.txt"), "$dir/$workspace/notes/a.txt");
+      expect(outside("chat:notes/a.txt"), isFalse);
+    });
+
+    test("`~` follows the home it is given, the way the shell's would", () {
+      expect(resolve("~/notes/a.txt", homePath: "$dir/$workspace"),
+          "$dir/$workspace/notes/a.txt");
+      expect(resolve("~", homePath: "$dir/$workspace"), "$dir/$workspace");
+      expect(outside("~/notes/a.txt", homePath: "$dir/$workspace"), isFalse);
+    });
+
+    test("and on a machine it is the user's home: past the workspaces", () {
+      expect(resolve("~/notes/a.txt", homePath: "/home/yiannis"),
+          "/home/yiannis/notes/a.txt");
+      expect(outside("~/notes/a.txt", homePath: "/home/yiannis"), isTrue);
+    });
+
+    test("without a home named, `~` falls back to the project workspace", () {
+      expect(resolve("~/notes/a.txt"), "$dir/notes/a.txt");
     });
 
     test("an absolute path into a workspace is the model using the path it was told", () {

@@ -207,7 +207,7 @@ class BuiltinBackend implements AgentBackend {
           sharedWorkspace: settings.sharedWorkspace);
       String resolvePath(String path) => resolveWorkspacePath(
           config.fs, path, workspace, projectWorkspace,
-          guestRoot: shell.guestRoot);
+          guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
       // What this turn is offered: the device's facts minus a headless turn's
       // takes and the project's. One value, so the prompt and the tool list
       // cannot disagree.
@@ -455,8 +455,9 @@ class BuiltinBackend implements AgentBackend {
   }
 
   /// Where a turn in [project] reaches for the project's files, and the
-  /// `HOME` of its commands: the shared workspace where it is shared, the
-  /// chat's own otherwise, so that nothing reaches past the conversation.
+  /// `HOME` of its commands where the driver takes one: the shared workspace
+  /// where it is shared, the chat's own otherwise, so that nothing reaches
+  /// past the conversation.
   String _projectWorkspaceFor({
     required String workspace,
     required String? project,
@@ -485,7 +486,6 @@ class BuiltinBackend implements AgentBackend {
             workspace: workspace,
             project: project,
             sharedWorkspace: sharedWorkspace),
-        sharedHome: sharedWorkspace,
         timeout: options.commandTimeout,
         environment: environment,
         project: project);
