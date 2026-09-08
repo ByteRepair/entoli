@@ -722,6 +722,14 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     );
     done.complete(reason);
     await _notifyFailure(reason, turn.errorLine);
+    if (reason == TurnEnd.aborted || reason == TurnEnd.error) {
+      // Stop here and the round is over: what was said while the round ran
+      // and is still unsaid is dropped — an aborted round is a stopped one,
+      // and whatever the user said next is the first thing of a new one.
+      _said.clear();
+      await _maybeHandoff(reason);
+      return;
+    }
 
     // The room has settled: what was said while it spoke is said next, in
     // the order it was said. A say that opens its own turn clears the queue
