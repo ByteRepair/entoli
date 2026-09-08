@@ -64,6 +64,26 @@ void main() {
     await stubTool("esbmc", 'echo "esbmc version 99.0 stub"');
   }
 
+  /// The POSIX base every fetch-path run reaches for, then the fetch itself:
+  /// wget leaves a zip where the script told it to, and unzip copies [body]
+  /// as the binary it lands, in the [layout] a release ships — through
+  /// /bin/cp, the stubs being the whole of the PATH and `cp` not among them.
+  /// The binary is staged beside the config first, made executable before
+  /// the run, since the stubs are the whole of the PATH.
+  Future<void> stubEsbmcFetch(String layout, String body) async {
+    final staged = p.join(config.dataDir, "esbmc-staged");
+    final file = File(staged)..writeAsStringSync("#!/bin/sh\n$body\n");
+    await Process.run("chmod", ["+x", file.path]);
+    for (final name in ["mkdir", "uname", "find", "head", "mv", "rm", "chmod"]) {
+      await stubReal(name);
+    }
+    await stubTool("wget", 'echo zip > "\$3"');
+    await stubTool("unzip",
+        'mkdir -p /tmp/_esbmc_extract/$layout && '
+        'cp "$staged" /tmp/_esbmc_extract/$layout/esbmc'
+        .replaceFirst("cp ", "/bin/cp "));
+  }
+
   test("the script refuses to run without ENV_INSTALL_DIR", () async {
     final result = await runScript(const {});
     expect(result.exitCode, isNot(0));
@@ -135,26 +155,10 @@ void main() {
   });
 
   test("the ESBMC fetch lands the binary where ENV_INSTALL_DIR names", () async {
-    await stubReal("mkdir");
-    await stubReal("uname");
-    await stubReal("find");
-    await stubReal("head");
-    await stubReal("mv");
-    await stubReal("rm");
-    await stubReal("chmod");
     // No package manager, so make and gh are skipped; the esbmc download is
-    // what this run is for. The stub wget leaves a file where the script
-    // told it to, and the stub unzip copies a prepared binary into the
-    // release/bin layout a current release ships — through dart:io, since
-    // the stubs are the whole of the PATH and `cp` is not among them.
-    final fakeEsbmc = File(p.join(config.dataDir, "esbmc-fake"))
-      ..writeAsStringSync('#!/bin/sh\necho "esbmc version 8.5 stub"\n');
-    await Process.run("chmod", ["+x", fakeEsbmc.path]);
-    await stubTool("wget", 'echo zip > "\$3"');
-    await stubTool("unzip",
-        'mkdir -p /tmp/_esbmc_extract/release/bin && '
-        'cp "${fakeEsbmc.path}" /tmp/_esbmc_extract/release/bin/esbmc'
-        .replaceFirst("cp ", "/bin/cp "));
+    // what this run is for, landing in the release/bin layout a current
+    // release ships.
+    await stubEsbmcFetch("release/bin", 'echo "esbmc version 8.5 stub"');
 
     final result = await runScript({"ENV_INSTALL_DIR": bin});
 
@@ -168,30 +172,12 @@ void main() {
   });
 
   test("an esbmc on PATH that cannot run is fetched rather than skipped", () async {
-    await stubReal("mkdir");
-    await stubReal("uname");
-    await stubReal("find");
-    await stubReal("head");
-    await stubReal("mv");
-    await stubReal("rm");
-    await stubReal("chmod");
-    // Found by command -v, dead when run: the shape a local build missing
-    // its libraries takes, which once made the whole setup a green nothing.
+    // Found by command -v, dead when run — yet the apk call proves the fetch
+    // path was taken, and the runnable staged binary is what it landed.
     await stubTool("esbmc", 'echo "libz3.so: cannot open shared object file" >&2; exit 127');
     final apkLog = File(p.join(config.dataDir, "apk.log"))..createSync();
     await stubTool("apk", 'echo "\$*" >> "${apkLog.path}"');
-    // The zip lands a stub that really runs, so the final verification passes.
-    // The stubs are the whole of the test's PATH: find/head/mv/rm/chmod are
-    // resolved, and the unzip stub copies through /bin/cp for the same reason
-    // the fetch test below the original does.
-    final fakeEsbmc = File(p.join(config.dataDir, "esbmc-fake"))
-      ..writeAsStringSync('#!/bin/sh\necho "esbmc version 8.5 stub"\n');
-    await Process.run("chmod", ["+x", fakeEsbmc.path]);
-    await stubTool("wget", 'echo zip > "\$3"');
-    await stubTool("unzip",
-        'mkdir -p /tmp/_esbmc_extract/bin && '
-        'cp "${fakeEsbmc.path}" /tmp/_esbmc_extract/bin/esbmc'
-        .replaceFirst("cp ", "/bin/cp "));
+    await stubEsbmcFetch("bin", 'echo "esbmc version 8.5 stub"');
 
     final result = await runScript({
       "ENV_INSTALL_DIR": bin,
@@ -199,8 +185,6 @@ void main() {
     });
 
     expect(result.exitCode, 0, reason: result.stderr);
-    // The dead one did not satisfy the probe: the fetch happened and the
-    // runnable binary landed where ENV_INSTALL_DIR names.
     final installed = File(p.join(bin, "esbmc"));
     expect(installed.existsSync(), isTrue);
     expect(installed.readAsStringSync(), contains("8.5 stub"));
@@ -208,24 +192,8 @@ void main() {
   });
 
   test("a fetched esbmc that cannot run is setup's failure to report", () async {
-    await stubReal("mkdir");
-    await stubReal("uname");
-    await stubReal("find");
-    await stubReal("head");
-    await stubReal("mv");
-    await stubReal("rm");
-    await stubReal("chmod");
     await stubTool("esbmc", 'echo "loader error" >&2; exit 127');
-    await stubTool("wget", 'echo zip > "\$3"');
-    // The unzip installs a second dead binary: the fetch "succeeds" and the
-    // verification is what has to catch it. `/bin/cp` absolute, as above.
-    await stubTool("unzip",
-        'mkdir -p /tmp/_esbmc_extract/bin && '
-        'cp "${config.dataDir}/esbmc-dead" /tmp/_esbmc_extract/bin/esbmc'
-        .replaceFirst("cp ", "/bin/cp "));
-    final dead = File(p.join(config.dataDir, "esbmc-dead"))
-      ..writeAsStringSync('#!/bin/sh\nexit 127\n');
-    await Process.run("chmod", ["+x", dead.path]);
+    await stubEsbmcFetch("bin", 'exit 127');
 
     final result = await runScript({"ENV_INSTALL_DIR": bin});
 

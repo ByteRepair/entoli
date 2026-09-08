@@ -23,11 +23,10 @@ have() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# On PATH and runs. Presence alone is not the test: a binary that exists but
-# cannot start (a local build missing its libraries) would otherwise read as
-# installed, be skipped, and leave setup a green nothing.
+# Works, not just present: a present-but-unstartable binary once read as
+# installed, was skipped, and setup exited 0 having done nothing.
 works() {
-  have "$1" && "$1" --version >/dev/null 2>&1
+  "$1" --version >/dev/null 2>&1
 }
 
 # --- make and github-cli ------------------------------------------------------
@@ -123,17 +122,13 @@ z.extractall('$TMPDIR_EXTRACT')
   rm -rf "$TMPDIR_EXTRACT" "$TMPZIP"
 fi
 
-# The binary that stands at the end is the one the turns will run, so it —
-# not just the fetch — has to work: the fetched one where one landed, else
-# whatever PATH answers. A won't-run binary here is setup's failure to report,
-# not a version line to swallow.
+# The binary that stands at the end is the one the turns will run. Reaching
+# here without $BIN/esbmc means the works probe passed and no fetch landed, so
+# PATH's is the only candidate there can be.
 if [ -x "$BIN/esbmc" ]; then
   CANDIDATE="$BIN/esbmc"
-elif works esbmc; then
-  CANDIDATE="esbmc"
 else
-  echo "no esbmc was fetched and none is runnable on PATH" >&2
-  exit 1
+  CANDIDATE="esbmc"
 fi
 if ! "$CANDIDATE" --version 2>&1; then
   echo "the esbmc at $CANDIDATE cannot be run (see the error above); setup did not succeed" >&2
