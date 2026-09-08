@@ -41,6 +41,7 @@ void main() async {
   registerBundledFontLicences();
   registerBundledSkillLicences();
   platform.registerVoiceLicences();
+  platform.registerRecorder();
   await platform.persist();
   // Built here rather than by the root, so the platform's splash covers the
   // first read of the data directory instead of a blank frame.
