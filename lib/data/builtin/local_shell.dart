@@ -124,9 +124,30 @@ class LocalShell extends Shell {
   /// Where this shell reaches a guest or Android: the home is one directory
   /// every project would share, so a command gets the project workspace as
   /// its `HOME` and one project is one environment. On a desktop it is false,
-  /// where a turn's `sharedHome` answers for the home instead.
+  /// where the machine user's own `HOME` stands.
   @override
   bool get projectHome => _driver()?.projectHome ?? false;
+
+  /// One expression, beside the shell that reads it: `io/platform.dart`'s
+  /// `_home` composes the data and cache directories from the same answer.
+  static String? machineHomeDir() =>
+      Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"];
+
+  /// The machine user's own home directory; null where there is no real user
+  /// home (the web, Android's app-private storage).
+  @override
+  String? get machineHome => machineHomeDir();
+
+  /// What `HOME` is for a command here: the workspace the driver takes where
+  /// it takes one, the machine user's own otherwise. One answer, so the
+  /// prompt, the file tools and [composeEnvironment] cannot disagree.
+  @override
+  String? homeFor(String home) {
+    final driver = _driver();
+    return (driver?.projectHome ?? false)
+        ? driver?.guestRoot ?? home
+        : machineHome;
+  }
 
   /// Where the project workspace appears inside the guest, or null on the
   /// machine itself. The file tools translate paths under it back to the
@@ -196,7 +217,6 @@ class LocalShell extends Shell {
       required String home,
       required Duration timeout,
       Map<String, String>? environment,
-      bool sharedHome = true,
       bool oneShot = false,
       bool restart = false,
       String? project}) {
@@ -210,19 +230,13 @@ class LocalShell extends Shell {
         cwd: cwd,
         timeout: timeout,
         environment: _compose(
-            home: home,
-            driver: driver,
-            sharedHome: sharedHome,
-            environment: environment),
+            home: home, driver: driver, environment: environment),
         includeParentEnvironment: driver?.includeParentEnvironment ?? true,
       );
     }
     return _sessions
         .putIfAbsent(cwd, () => _Session(this, cwd, home, project: project))
-        .start(command, timeout,
-            environment: environment,
-            sharedHome: sharedHome,
-            restart: restart);
+        .start(command, timeout, environment: environment, restart: restart);
   }
 
   /// What a command runs under, with the layers in the order they win. The
@@ -236,19 +250,15 @@ class LocalShell extends Shell {
     required Map<String, String> defaults,
     ShellDriver? driver,
     required String home,
-    required bool sharedHome,
     required Map<String, String> app,
     Map<String, String>? project,
   }) =>
       {
         ...defaults,
         ...?driver?.environment,
-        // A guest's home is at [guestRoot] (e.g. `/root`), not the host path;
-        // Android's own home is a shared app user's, so the project workspace
-        // takes it; a home that is not shared is the chat's own. Where the home
-        // is shared on a desktop, the machine's own `HOME` stands.
-        if ((driver?.projectHome ?? false) || !sharedHome)
-          "HOME": driver?.guestRoot ?? home,
+        // The home is the workspace where the driver takes one — a guest's at
+        // [guestRoot], not the host path — and the machine's own otherwise.
+        if (driver?.projectHome ?? false) "HOME": driver?.guestRoot ?? home,
         ...app,
         ...?project,
       };
@@ -256,14 +266,12 @@ class LocalShell extends Shell {
   Map<String, String> _compose({
     required String home,
     required ShellDriver? driver,
-    required bool sharedHome,
     Map<String, String>? environment,
   }) =>
       composeEnvironment(
         defaults: _defaults,
         driver: driver,
         home: home,
-        sharedHome: sharedHome,
         app: _environment(),
         project: environment,
       );
@@ -455,15 +463,10 @@ class _Session {
   static const _grace = Duration(seconds: 1);
 
   ShellRun start(String command, Duration timeout,
-       {Map<String, String>? environment,
-       bool sharedHome = true,
-       bool restart = false}) {
+       {Map<String, String>? environment, bool restart = false}) {
     final run = _SessionRun(_RunState(timeout), this);
-    _queue = _queue.then((_) =>
-        _execute(run, command, timeout,
-            environment: environment,
-            sharedHome: sharedHome,
-            restart: restart));
+    _queue = _queue.then((_) => _execute(run, command, timeout,
+        environment: environment, restart: restart));
     return run;
   }
 
@@ -472,7 +475,6 @@ class _Session {
     String command,
     Duration timeout, {
     Map<String, String>? environment,
-    bool sharedHome = true,
     bool restart = false,
   }) async {
     final driver = _shell._driver(project: _project);
@@ -483,10 +485,7 @@ class _Session {
       return;
     }
     final env = _shell._compose(
-        home: _home,
-        driver: driver,
-        sharedHome: sharedHome,
-        environment: environment);
+        home: _home, driver: driver, environment: environment);
     final fp = _fingerprint(command0, env);
     if (restart || _fp != fp) {
       try {

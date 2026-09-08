@@ -24,14 +24,10 @@ void main() {
 
   Future<dynamic> run(String command,
           {Duration timeout = const Duration(seconds: 10),
-          Map<String, String> env = const {},
-          bool sharedHome = true}) =>
+          Map<String, String> env = const {}}) =>
       LocalShell(environment: () => env)
           .start(command,
-              cwd: workspace.path,
-              home: home.path,
-              timeout: timeout,
-              sharedHome: sharedHome)
+              cwd: workspace.path, home: home.path, timeout: timeout)
           .result;
 
   test("reports what the command printed and the code it exited with", () async {
@@ -62,16 +58,10 @@ void main() {
     expect(result.output.trim(), "abc123");
   });
 
-  test("a shared home leaves the machine's own HOME", () async {
+  test("the machine's own HOME stands: the workspace is not it", () async {
     final result = await run(r'echo "$HOME"');
 
     expect(result.output.trim(), isNot(home.path));
-  });
-
-  test("a home that is not shared becomes HOME", () async {
-    final result = await run(r'echo "$HOME"', sharedHome: false);
-
-    expect(result.output.trim(), home.path);
   });
 
   test("nothing waits for a keypress", () async {
@@ -145,7 +135,7 @@ void main() {
     expect(result.output, contains("not found"));
   });
 
-  test("off a guest, home is left as the machine's own", () async {
+  test("the machine's own HOME stands, not the workspace's", () async {
     final result = await run(r'echo "$HOME"');
 
     expect(result.output.trim(), Platform.environment["HOME"]);
@@ -423,6 +413,22 @@ void main() {
     expect(LocalShell.hostDriver(shell: () => null), isNull);
   });
 
+  test("what the home is is one answer: what composeEnvironment sets", () {
+    final host = LocalShell(driver: ({String? project}) => LocalShell.hostDriver(
+        shell: () => "/bin/sh"));
+    expect(host.homeFor(home.path), Platform.environment["HOME"]);
+    expect(host.machineHome, Platform.environment["HOME"]);
+
+    final guest = LocalShell(
+        driver: ({String? project}) => ShellDriver(
+            commandFor: _hostCommand,
+            environment: const {},
+            projectHome: true,
+            guestRoot: "/root",
+            description: "guest"));
+    expect(guest.homeFor(home.path), "/root");
+  });
+
   group("inside a guest", () {
     /// What proot is on a device, faked with something every machine running
     /// these tests has: a prefix that really runs, ending in a shell.
@@ -530,7 +536,6 @@ void main() {
         defaults: const {"PAGER": "cat", "TERM": "dumb"},
         driver: host,
         home: "/home",
-        sharedHome: true,
         app: const {},
       );
 
@@ -544,7 +549,6 @@ void main() {
         defaults: const {},
         driver: host,
         home: "/home",
-        sharedHome: true,
         app: const {"PAGER": "most", "OWN": "app"},
         project: const {"OWN": "project"},
       );
@@ -553,42 +557,23 @@ void main() {
       expect(env["OWN"], "project");
     });
 
-    test("HOME is the workspace where the driver reaches a guest, and where "
-        "the home is not shared", () {
+    test("HOME is the workspace where the driver takes one, and the machine's "
+        "own where it does not", () {
       final guest = ShellDriver(
         commandFor: _hostCommand,
         environment: const {},
         projectHome: true,
         description: "guest",
       );
-      // A guest takes the workspace for its home, shared or not.
       expect(
-          LocalShell.composeEnvironment(
-              defaults: const {},
-              driver: guest,
-              home: "/workspace",
-              sharedHome: true,
-              app: const {})["HOME"],
+          LocalShell.composeEnvironment(defaults: const {}, driver: guest,
+              home: "/workspace", app: const {})["HOME"],
           "/workspace");
-      // On the machine itself a shared home keeps the machine's own.
       expect(
-          LocalShell.composeEnvironment(
-              defaults: const {},
-              driver: host,
-              home: "/workspace",
-              sharedHome: true,
-              app: const {})
+          LocalShell.composeEnvironment(defaults: const {}, driver: host,
+              home: "/workspace", app: const {})
               .containsKey("HOME"),
           isFalse);
-      // and an unshared one is the chat's own.
-      expect(
-          LocalShell.composeEnvironment(
-              defaults: const {},
-              driver: host,
-              home: "/workspace",
-              sharedHome: false,
-              app: const {})["HOME"],
-          "/workspace");
     });
 
     test("a variable the store puts in the command environment survives the "
@@ -599,7 +584,6 @@ void main() {
         defaults: const {},
         driver: host,
         home: "/home",
-        sharedHome: true,
         app: const {"ENV_INSTALL_DIR": "/somewhere/else"},
         project: const {"ENV_INSTALL_DIR": "/cache/byte-repair/bin"},
       );

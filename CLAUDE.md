@@ -250,15 +250,19 @@ Two workspaces reach a turn, and they answer different questions. The project's
 (`<project>/workspace/`) is where work another conversation should find goes,
 and it is the `HOME` of every command where a command gets a project's home at
 all — inside a guest, whose own home is one directory every project would
-share, and in a chat whose workspace is not shared, where the home is the
-chat's own — so a repository cloned, a package installed or a `~/.gitconfig`
-written by one conversation is already there for the next, and one project is
-one environment; where the home is shared, the machine's own `HOME` stands and
-is shared by every project. The chat's own is a folder *inside* it
-(`<project>/workspace/chats/<id>/`) and is the working directory every command
-starts in — the shell that runs them keeps whatever directory a command moved
-it to, one per chat; see "Running the commands". What a chat *is* — the log, and what was
-attached to it — stays in `chats/`, which the agent is never given a path to.
+share, and on Android, where the app has no real user home to give — so a
+repository cloned, a package installed or a `~/.gitconfig` written by one
+conversation is already there for the next, and one project is one environment;
+on the desktops the machine's own `HOME` stands, shared by every project, and
+`~` in a command is the user's real home. The chat's own is a folder *inside*
+the project's (`<project>/workspace/chats/<id>/`) and is the working directory
+every command starts in — the shell that runs them keeps whatever directory a
+command moved it to, one per chat; see "Running the commands". What a chat *is*
+— the log, and what was attached to it — stays in `chats/`, which the agent is
+never given a path to. A file-tool path may be prefixed `project:` to name the
+project's workspace explicitly or `chat:` to name the chat's own; `~` follows
+`HOME`, so on a desktop it lands past the workspaces and is gated like any
+absolute path out.
 
 `moveChat` therefore moves two directories, and `delete` removes two.
 
