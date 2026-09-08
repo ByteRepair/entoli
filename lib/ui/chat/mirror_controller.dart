@@ -50,18 +50,25 @@ class MirrorChatController extends Notifier<ChatViewState>
     return ChatViewState(
       chat: chatFrom(mirror.state, mirror.records),
       isRunning: online && mirror.running,
-      approvals: online ? mirror.approvals : const [],
+      // A mirror sees one turn, the home device's — keyed by that turn's
+      // own reply, the shape the state asks for.
+      approvals: online
+          ? {"mirror": mirror.approvals}
+          : const {},
       // Rebuilt from the call's own arguments rather than from a second
       // encoding of the questions — the same string the home device read.
-      questions: [
-        if (online)
-          for (final asked in mirror.asks)
-            AskRequest(
-              id: asked.id,
-              questions: askQuestionsFrom(asked.argumentsJson),
-              argumentsJson: asked.argumentsJson,
-            ),
-      ],
+      questions: online
+          ? {
+              "mirror": [
+                for (final asked in mirror.asks)
+                  AskRequest(
+                    id: asked.id,
+                    questions: askQuestionsFrom(asked.argumentsJson),
+                    argumentsJson: asked.argumentsJson,
+                  ),
+              ]
+            }
+          : const {},
       retry: online ? mirror.retry : null,
       // Offline outranks whatever the turn was last saying: a status line from
       // before the connection dropped is a turn claiming to still be alive,

@@ -477,7 +477,7 @@ void main() {
       expect(find.text("Round order"), findsOneWidget);
       await tester.tap(find.byType(DropdownButtonFormField<OmadaOrdering?>));
       await settleIo(tester);
-      await tester.tap(find.text("Parallel").last);
+      await tester.tap(find.text("Crossfire").last);
       await settleIo(tester, least: 10);
 
       await io(tester, () async {});

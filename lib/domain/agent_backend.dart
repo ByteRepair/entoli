@@ -349,6 +349,12 @@ class TurnSettings {
   /// addressed by handle, and `task` is not offered.
   final bool omada;
 
+  /// How many model calls this turn may make before it stops. The app's own
+  /// answer for the level that resolved the turn — a project's own, else the
+  /// app default, else the backend's. The backend's [BuiltinOptions.stepLimit]
+  /// is the floor this can only name a value for, not widen.
+  final int? turnMaxSteps;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -365,6 +371,7 @@ class TurnSettings {
     this.environment = const {},
     this.omadaMember,
     this.omada = false,
+    this.turnMaxSteps,
   });
 }
 

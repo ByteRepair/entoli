@@ -87,4 +87,15 @@ void main() {
     expect(loaded.omada, true);
     expect(loaded.omadaOrdering, isNull);
   });
+
+  test("the step limit survives a save and a load", () async {
+    await (ProjectSettings()..turnMaxSteps = 80).save(config, project: "work");
+    final loaded = ProjectSettings.load(config, project: "work");
+    expect(loaded.turnMaxSteps, 80);
+
+    // Absent is inherit: nothing written, nothing named.
+    Directory(config.projectDir(project: "elsewhere")).createSync(recursive: true);
+    expect(ProjectSettings.load(config, project: "elsewhere").turnMaxSteps,
+        isNull);
+  });
 }

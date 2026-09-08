@@ -108,7 +108,9 @@ void main() {
     // The option's own value, not the label it was read under.
     expect(app.backend.answered.single.requestId, "ask-1");
     expect(app.backend.answered.single.answers, ["sqlite", "No"]);
-    expect(app.container.read(chatControllerProvider(id)).questions, isEmpty);
+    expect(app.container.read(chatControllerProvider(id)).questions.values
+            .every((q) => q.isEmpty),
+        isTrue);
     expect(find.byType(QuestionPanel), findsNothing);
     expect(find.byType(Composer), findsOneWidget);
     await endTurn(tester);

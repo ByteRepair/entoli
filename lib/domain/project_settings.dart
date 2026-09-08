@@ -15,10 +15,22 @@ enum OmadaOrdering {
 }
 
 /// Human-readable labels, shared by the project settings page so the
-/// dropdown and the section's inherited entry name the same thing.
+/// dropdown and the section's inherited entry name the same thing. The
+/// parallel ordering is Crossfire: several members working at the same time,
+/// each writing their own reply.
 const omadaOrderingLabels = {
   OmadaOrdering.sequential: "Sequential",
-  OmadaOrdering.parallel: "Parallel",
+  OmadaOrdering.parallel: "Crossfire",
+};
+
+/// One line each, under the ordering dropdown: what the round does under
+/// that ordering. The description shown is the effective one — the
+/// project's pick, else the app default, else sequential.
+const omadaOrderingDescriptions = {
+  OmadaOrdering.sequential: "Members run one after another, in the order "
+      "the message names them.",
+  OmadaOrdering.parallel: "Members run at the same time, each writes their "
+      "own reply, in whatever order they finish.",
 };
 
 /// Project-scoped overrides. A project can override the app-level
@@ -33,7 +45,9 @@ class ProjectSettings {
       this.environment,
       this.useProjectMemory = false,
       this.omada = false,
-      this.omadaOrdering});
+      this.omadaOrdering,
+      this.omadaMaxGenerations,
+      this.turnMaxSteps});
 
   /// How long a temporary chat in this project lives. Null means inherit the
   /// app default.
@@ -54,8 +68,20 @@ class ProjectSettings {
   /// existing files need no migration.
   bool omada;
 
-  /// The project's default for how its rounds run. Null is sequential.
+  /// The project's default for how its rounds run. Null inherits the app
+  /// default, resolved live.
   OmadaOrdering? omadaOrdering;
+
+  /// How many handoff generations one round may run before it stops for the
+  /// user. Null inherits the app default. The user's own message is
+  /// generation one and uncapped; this bounds only the waves that follow it.
+  int? omadaMaxGenerations;
+
+  /// How many model calls one direct turn may make before it stops for the
+  /// user. Null inherits the app default, which is the backend's own.
+  /// Omada rounds are never under it: a round is several turns in flight,
+  /// and one number over them all would say nothing about any member's turn.
+  int? turnMaxSteps;
 
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(config.projectSettingsFile(project: project));
@@ -75,6 +101,8 @@ class ProjectSettings {
         omada: json["omada"] as bool? ?? false,
         omadaOrdering: OmadaOrdering.fromNameNullable(
             json["omadaOrdering"] as String?),
+        omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
+        turnMaxSteps: json["turnMaxSteps"] as int?,
       );
     } catch (_) {
       return ProjectSettings();
@@ -88,6 +116,8 @@ class ProjectSettings {
       if (useProjectMemory) "useProjectMemory": useProjectMemory,
       if (omada) "omada": omada,
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
+      if (omadaMaxGenerations != null) "omadaMaxGenerations": omadaMaxGenerations,
+      if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
     }));
   }
 
@@ -97,5 +127,7 @@ class ProjectSettings {
         useProjectMemory: useProjectMemory,
         omada: omada,
         omadaOrdering: omadaOrdering,
+        omadaMaxGenerations: omadaMaxGenerations,
+        turnMaxSteps: turnMaxSteps,
       );
 }

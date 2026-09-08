@@ -455,6 +455,22 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// How many times a retryable turn failure is carried on automatically.
   Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
 
+  /// Whether a new project starts with Omada on.
+  Future<void> setOmadaByDefault(bool value) =>
+      _update((s) => s.omadaByDefault = value);
+
+  /// How many handoff generations one Omada round may run, app-wide.
+  Future<void> setOmadaMaxGenerations(int value) =>
+      _update((s) => s.omadaMaxGenerations = value);
+
+  /// The room's scheduling default for projects that picked none of their own.
+  Future<void> setOmadaOrdering(OmadaOrdering? value) =>
+      _update((s) => s.omadaOrdering = value);
+
+  /// The step limit a direct turn runs under; null is the backend's default.
+  Future<void> setTurnMaxSteps(int? value) =>
+      _update((s) => s.turnMaxSteps = value);
+
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
       _update((s) => s.instructionImports = value);
@@ -999,6 +1015,22 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// The project's default for how its rounds run. Null is sequential.
   Future<void> setOmadaOrdering(OmadaOrdering? value) async {
     final next = state.copy()..omadaOrdering = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// How many handoff generations a round may run here. Null means the app
+  /// default stands.
+  Future<void> setOmadaMaxGenerations(int? value) async {
+    final next = state.copy()..omadaMaxGenerations = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// How many model calls a direct turn may make here. Null means the app
+  /// default stands.
+  Future<void> setTurnMaxSteps(int? value) async {
+    final next = state.copy()..turnMaxSteps = value;
     state = next;
     await next.save(_config, project: project);
   }
