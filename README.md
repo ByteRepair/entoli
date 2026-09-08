@@ -6,6 +6,27 @@ own LLM endpoints and runs the agent's commands on your machine.
 _Entoli_ (εντολή) is the Greek word for a command; both the one you give and the
 one the agent runs.
 
+![Entoli on Linux: a chat where the agent has finished an artifact, published
+to the viewer](docs/screenshot.png)
+
+## Obtaining Entoli
+
+Entoli ships for Linux, Android, and the web.
+
+**Linux**: download `entoli-<version>-x86_64.AppImage` from the
+[GitHub releases](https://github.com/Yiannis128/agent-chat/releases), make it
+executable, and run it.
+
+**Android**: the app is distributed through Google Play closed testing.
+
+1. Join the [Entoli Google group](https://groups.google.com/g/entoli).
+2. Join the [closed test](https://play.google.com/apps/testing/io.byterepair.entoli).
+3. Get the app from the
+   [Google Play Store](https://play.google.com/store/apps/details?id=io.byterepair.entoli).
+
+**Web**: the latest release is served at
+[yiannis128.github.io/agent-chat](https://yiannis128.github.io/agent-chat/).
+
 ## Development
 
 Entoli is a Flutter app targeting Linux, Android, and the web. Beyond the
