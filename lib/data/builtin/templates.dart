@@ -257,6 +257,19 @@ Do not write your own handle in the reply — not even to sign it. A reply
 that names two members is read as addressing a group, and no one's turn
 follows a group.""";
 
+/// The house's half of the same contract: in an Omada-on project the main
+/// agent reaches members by handle too. Appended to the house's overlay when
+/// the turn runs under Omada, beside the member's half — never the system
+/// prompt, which stays the one cacheable prefix.
+String houseTurnInstructions() => """
+## The room
+
+You are the main agent of a project team, and you answer the user directly.
+To bring in another member, mention their handle (for example @researcher)
+in your reply — their turn follows yours, and you can pass them the part of
+the work that suits them. You cannot run a member yourself: addressing them
+by handle is the way.""";
+
 /// Where there is no shell, the model cannot run commands. But it does have a
 /// filesystem: the `read`/`write`/`edit` tools work on the workspace via the
 /// same `FileSystem` the app uses, so a browser can still produce files and

@@ -623,8 +623,13 @@ per chip — what both sets share keeps its slot, the delta grows out of
 nothing or shrinks into it — and with nothing at all in the library the
 "Type / for commands, @ for agents." line is an entry of the same row, so it
 gives way to the first chips through the same motion. The question headline
-cross-fades between its projects' texts. The row animates its first build
-too: the screen is grown into, not shown settled.
+sweeps between its projects' texts: the new question takes over from the
+first character and the change front moves progressively towards the end,
+over 400ms at constant speed, starting from whatever is on screen so picking
+another badge mid-sweep retargets rather than jumps — where two strings
+agree nothing visibly changes, so what moves is the divergence toward the
+end. The row animates its first build too: the screen is grown into, not
+shown settled.
 
 The badges are the same discovery for projects: the switcher at the top of the
 sidebar is the only other place one is named, and on a phone the sidebar is a

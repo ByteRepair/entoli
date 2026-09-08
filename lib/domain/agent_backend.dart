@@ -344,6 +344,11 @@ class TurnSettings {
   /// is the main agent — the house — answering as it always has.
   final String? omadaMember;
 
+  /// Whether the project runs Omada, resolved with the turn's other facts so
+  /// the prompt and the capability set answer the same question. Members are
+  /// addressed by handle, and `task` is not offered.
+  final bool omada;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -359,6 +364,7 @@ class TurnSettings {
     this.includesUserInstructions = false,
     this.environment = const {},
     this.omadaMember,
+    this.omada = false,
   });
 }
 

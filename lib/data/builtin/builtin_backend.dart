@@ -383,8 +383,13 @@ class BuiltinBackend implements AgentBackend {
       final memberBody = settings.omadaMember == null
           ? null
           : memberPrompt(libraryFor(settings.project), settings.omadaMember!);
+      final mentions = agentPromptFrom(said?.documents ?? const {});
       final agentPrompt = memberBody == null
-          ? agentPromptFrom(said?.documents ?? const {})
+          ? settings.omada
+              ? mentions == null
+                  ? houseTurnInstructions()
+                  : "$mentions\n\n${houseTurnInstructions()}"
+              : mentions
           : "$memberBody\n\n${memberTurnInstructions()}";
       final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)

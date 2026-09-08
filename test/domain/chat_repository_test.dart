@@ -10,6 +10,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
+import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/prompt_library.dart";
@@ -247,6 +248,32 @@ void main() {
       // The built-in ships its own note; the user's files are not read.
       expect(settings.bundledInstructions, contains("anonymous chat"));
       expect(settings.includesUserInstructions, isFalse);
+    });
+
+    test("an Omada-on project drops the task tool; an off one keeps it", () async {
+      await repoWith(AppSettings()).createProject("team");
+      Directory(config.projectDir(project: "team"))
+          .createSync(recursive: true);
+      // What the project settings page writes when Omada is flipped on.
+      File(config
+              .projectSettingsFile(project: "team"))
+          .writeAsStringSync('{"omada": true}');
+      await config.documents
+          .hydrate([config.projectSettingsFile(project: "team")]);
+      final repo = repoWith(AppSettings());
+      final on = await repo.createChat(project: "team");
+      await writeChatVia(repo, on);
+      await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
+      final onSettings = backend.prompts.last.settings;
+      expect(onSettings.omada, isTrue);
+      expect(onSettings.disabled, contains(AgentCapability.task));
+
+      final off = await repo.createChat();
+      await writeChatVia(repo, off);
+      await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
+      final offSettings = backend.prompts.last.settings;
+      expect(offSettings.omada, isFalse);
+      expect(offSettings.disabled, isEmpty);
     });
 
     // A draft is not on disk, so it answers for its own project: the same

@@ -315,6 +315,11 @@ class ChatRepository {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
     final projectSettings = await projectSettingsOf(project);
+    // In an Omada-on project, members are brought in by mentioning them —
+    // their turn follows — so the `task` relay has no job left. The capability
+    // mechanism drops it from the tool list and the prompt together.
+    final omada = projectSettings.omada;
+    if (omada) disabled.add(AgentCapability.task);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -336,6 +341,7 @@ class ChatRepository {
       // The answering member is the caller's fact, not the chat's — it is
       // about the message the turn runs, not the settings it runs under.
       omadaMember: omadaMember,
+      omada: omada,
     );
   }
 

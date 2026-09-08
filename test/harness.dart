@@ -792,7 +792,6 @@ class _AppHidden extends AppHidden {
   bool build() => initial;
 }
 
-
 /// Reload a project's prompt library and settle, so what a page draws reflects
 /// what is on disk rather than the test's seeded library. The reload is real
 /// file I/O, so it goes through `runAsync`; [settle] turns the settle off for
