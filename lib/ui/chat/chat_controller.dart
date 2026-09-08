@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:collection/collection.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
@@ -319,6 +320,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
             messages: messages,
             state: chat.state.copyWith(updatedAt: DateTime.now())));
     _said.add(userMsg);
+    // The running turn may have been settling while this said its piece —
+    // the drain reads the queue before the entry was in it. Where the room
+    // has gone quiet since, what was just logged is dispatched here rather
+    // than waiting for a settle that already happened.
+    if (!state.isRunning && _said.isNotEmpty) {
+      final chat = state.chat;
+      while (_said.isNotEmpty && chat != null) {
+        final said = _said.removeAt(0);
+        _schedule(chat, mentioned(chat, said), userPrompt: said);
+      }
+      await _dispatch();
+    }
   }
 
   /// Say [text] and run the turn it starts. [files] are already under the
@@ -353,11 +366,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// log yet — a fresh send — it rides in [opening]; where it is, the opening
   /// is the reply alone and [history] ends before it, since the message is
   /// already the last thing said. [member] is who the room has decided
-  /// answers it, where scheduling decided ahead of the prompt.
+  /// answers it, where scheduling decided ahead of the prompt. No guard on
+  /// the room here: dispatching a fan-out is what puts several turns in
+  /// flight, and the verbs that need the guard carry their own.
   Future<void> _say(Message userMsg,
       {Message? replacing, String? member, int generation = 0}) async {
     final chat = state.chat;
-    if (chat == null || state.isRunning) return;
+    if (chat == null) return;
     final logged = replacing == null && chat.messages.contains(userMsg);
     final at = logged
         ? chat.messages.indexOf(userMsg)
@@ -767,6 +782,9 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (!ref.mounted) return;
     final done = turn.done;
     _turns.remove(turn.replyId);
+    // The settle reads how deep the round ran when this turn finished; the
+    // entry is leaving the table, so the fact stays behind.
+    _finishedGenerations[turn.replyId] = turn.generation;
     // Nothing is left to answer once the turn is over: the backend has already
     // answered its own outstanding questions with nothing, so a banner or a
     // panel still on screen would send its reply into the void. Only this
@@ -810,17 +828,51 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       await _dispatch();
       return;
     }
-    await _maybeHandoff(reason, turn);
+    await _settle(turn, reason);
   }
 
-  /// What a finished turn may hand the baton to. A reply that names members —
-  /// and whose turn ended `done`, nothing a failure leaves carrying —
-  /// schedules their turns, the room's round, until the generation cap says
-  /// the agents have had the floor long enough. The mentions are read off the
+  /// A turn has ended and the schedule holds nothing: the room may hand off.
+  /// Where siblings were still speaking when this turn finished, its reply is
+  /// already waiting in `_settledReplies` — handoffs evaluate at the settle,
+  /// against every reply that finished the wave, not only the last one
+  /// written.
+  Future<void> _settle(_RunningTurn turn, TurnEnd? reason) async {
+    if (_turns.isNotEmpty) {
+      // A sibling is still speaking: this reply hands off when the room
+      // settles, not now — the wave waits, whatever order the siblings
+      // finished in.
+      if (reason == TurnEnd.done) _settledReplies.add(turn.replyId);
+      return;
+    }
+    final chat = state.chat;
+    if (chat == null) return;
+    // The room is settled: every reply the wave finished hands off in
+    // conversation order, the order they were said — this turn's own first,
+    // where it finished the wave.
+    final ids = [..._settledReplies, if (reason == TurnEnd.done) turn.replyId];
+    _settledReplies.clear();
+    _finishedGenerations.removeWhere(
+        (id, _) => !ids.contains(id));
+    final replies = [
+      for (final id in ids)
+        chat.messages.firstWhereOrNull((m) => m.id == id),
+    ].whereType<Message>().toList();
+    await _maybeHandoff(reason, replies);
+  }
+
+  /// The replies of turns that finished while a sibling was still speaking,
+  /// in finish order: their handoffs wait for the settle this one causes.
+  final List<String> _settledReplies = [];
+
+  /// What finished replies hand the baton to. A reply that names members —
+  /// each turn ended `done`, nothing a failure leaves carrying — has their
+  /// turns scheduled, the room's round, until the generation cap says the
+  /// agents have had the floor long enough. The mentions are read off each
   /// reply's text against the library — the members named *now* are the ones
   /// handed to, the room's own wording — and scheduled through the same
   /// [_dispatch] path every turn takes.
-  Future<void> _maybeHandoff(TurnEnd? reason, _RunningTurn finished) async {
+  Future<void> _maybeHandoff(
+      TurnEnd? reason, List<Message> replies) async {
     if (reason != TurnEnd.done) return;
     if (!ref.mounted) return;
     final chat = state.chat;
@@ -828,28 +880,29 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // Omada off is the room as it always was: nothing hands anything to
     // anyone, whatever a reply's text happens to name.
     if (!ref.read(omadaOnProvider(chat.state.project))) return;
-    // A handoff wave waits for the room to settle: siblings of the turn that
-    // just finished may still be speaking, and a wave started now would fork
-    // the round and reorder authorship.
-    if (_turns.isNotEmpty) return;
-    final reply = chat.messages.lastOrNull;
-    if (reply == null || reply.role != MessageRole.assistant) return;
     // A decline ends what agents are handing each other: the member was
     // addressed and passed, and nothing follows from them. The user's own
     // schedule is not theirs to cancel — a turn they addressed to another
     // member is that member's to run.
-    if (_isPass(reply)) {
-      _schedules.removeWhere((_, items) =>
-          items.isNotEmpty && items.first.generation > 0);
-      return;
+    for (final reply in replies) {
+      if (_isPass(reply)) {
+        _schedules.removeWhere((_, items) =>
+            items.isNotEmpty && items.first.generation > 0);
+        continue;
+      }
+      // The wave lands one past the turn that named it: the round's depth is
+      // the finished turn's own, and the cap reads it at dispatch. The entry
+      // is out of the table by now — the finished turn's own is what counts.
+      final finished = _finishedGenerations[reply.id] ?? 0;
+      _schedule(chat, mentioned(chat, reply),
+          reply: reply, generation: finished);
     }
-    // The wave lands one past the turn that named it: the round's depth is
-    // the finished turn's own, and the cap reads it at dispatch. The entry
-    // is out of the table by now — the finished turn's own is what counts.
-    _schedule(chat, mentioned(chat, reply),
-        reply: reply, generation: finished.generation);
     await _dispatch();
   }
+
+  /// How deep the round ran when each reply finished, kept for the settle
+  /// that reads it — the turn entries are gone from the table by then.
+  final Map<String, int> _finishedGenerations = {};
 
   /// The members [message] addresses, in the order it names them — a user
   /// prompt through what composing wrote into its documents, a member's
