@@ -241,7 +241,6 @@ void main() {
       expect(settings.profile, isNull);
       // Auto-memory is on in the app, but the built-in says off.
       expect(settings.memory.autoMemory, isFalse);
-      // No shared workspace: the chat's own is the one the prompt names.
       expect(settings.sharedWorkspace, isFalse);
       // A watched turn: nothing is taken away beyond the built-in's (none).
       expect(settings.disabled, isEmpty);

@@ -226,16 +226,13 @@ abstract class Shell {
   /// machine user's own home stands. See [Shell.machineHome].
   bool get projectHome => false;
 
-  /// The machine user's own home directory, where the shell runs on a machine
-  /// with one — what `~` means to a command on it, and what the prompt names.
-  /// Null where there is no machine behind the shell (the web) or no real user
-  /// home to name (Android's app-private storage).
+  /// The machine user's own home directory; null where there is no machine
+  /// behind the shell or no real user home to name.
   String? get machineHome => null;
 
   /// The `HOME` a command in this chat is given — and, being that, what `~`
-  /// means to it: the workspace where the driver takes one, the machine user's
-  /// own where it does not. The one answer the prompt and the file tools read,
-  /// so all three name the same place. Null where there is nothing to name.
+  /// means to it. One answer, so the prompt and the file tools read the same
+  /// place [composeEnvironment] sets. Null where there is nothing to name.
   String? homeFor(String home) => machineHome;
 
   /// Where the project workspace appears inside the guest (`/root` for proot),

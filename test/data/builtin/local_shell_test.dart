@@ -414,15 +414,11 @@ void main() {
   });
 
   test("what the home is is one answer: what composeEnvironment sets", () {
-    // On the machine itself the machine's own home stands; a workspace is
-    // never it, so the prompt and the file tools name the user's home.
     final host = LocalShell(driver: ({String? project}) => LocalShell.hostDriver(
         shell: () => "/bin/sh"));
     expect(host.homeFor(home.path), Platform.environment["HOME"]);
     expect(host.machineHome, Platform.environment["HOME"]);
 
-    // Where the driver takes one, it is the workspace it is handed — the
-    // guest's spelled as the guest names it, when the driver has a guestRoot.
     final guest = LocalShell(
         driver: ({String? project}) => ShellDriver(
             commandFor: _hostCommand,
@@ -573,8 +569,6 @@ void main() {
           LocalShell.composeEnvironment(defaults: const {}, driver: guest,
               home: "/workspace", app: const {})["HOME"],
           "/workspace");
-      // On the machine itself the machine's own `HOME` stands: the workspace
-      // is not it, and nothing is set.
       expect(
           LocalShell.composeEnvironment(defaults: const {}, driver: host,
               home: "/workspace", app: const {})

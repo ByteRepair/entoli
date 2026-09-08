@@ -440,8 +440,6 @@ void main() {
 
       final workspace = config.workspaceDir(chatId, project: "anonymous");
       expect(shell.cwds, [workspace]);
-      // The home is still passed for a driver that takes one; the machine's
-      // own `HOME` is not this test's subject.
       expect(shell.homes, [workspace]);
     });
 

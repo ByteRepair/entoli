@@ -159,10 +159,8 @@ String turnPrompt({
           "built up — goes\nthere, so another conversation can pick it up. "
           "Write to it by path; you do not\nhave to be in it."
       : "";
-  // What a command's home directory is, and where `~` expands. The value is
-  // [homePath], the shell's own answer; the three arms are wording. A
-  // desktop's home is the machine user's own, named, so `~` in a command is
-  // never misread as this workspace. Nothing to name — the web — says nothing.
+  // What a command's home directory is, and so where `~` expands. The value
+  // is [homePath], the shell's answer; the arms are wording.
   String home() {
     if (!canRunCommands || homePath == null) return "";
     if (!projectHome) {
@@ -277,10 +275,9 @@ Do not write your own handle in the reply — not even to sign it. A reply
 that names two members is read as addressing a group, and no one's turn
 follows a group.""";
 
-/// The house's half of the same contract: in an Omada-on project the main
-/// agent reaches members by handle too. Appended to the house's overlay when
-/// the turn runs under Omada, beside the member's half — never the system
-/// prompt, which stays the one cacheable prefix.
+/// The house's half of the member's room contract: in an Omada-on project the
+/// main agent reaches members by handle too. Beside the member's half, never
+/// the system prompt — which stays the one cacheable prefix.
 String houseTurnInstructions() => """
 ## The room
 

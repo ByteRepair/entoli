@@ -108,13 +108,11 @@ String guestWorkspacePath(
 ///
 /// [guestRoot] is where [projectWorkspace] appears inside a proot guest (e.g.
 /// `/root`), or null on the machine itself. Paths starting with `~/` are
-/// expanded to [homePath], which is what `HOME` is ([Shell.homeFor]'s
-/// answer); where it names nothing, `~` falls back to [projectWorkspace], the
-/// way it does where the driver takes the workspace for its home. On the
-/// machine `homePath` is the user's home and a `~` path lands past the
-/// workspaces, so it is gated like any absolute path out. Paths starting with
-/// [guestRoot] are translated back to [projectWorkspace] so the host
-/// filesystem can find them.
+/// expanded to [homePath], what `HOME` is; where it names nothing, `~` falls
+/// back to [projectWorkspace]. On the machine `homePath` is the user's home
+/// and a `~` path lands past the workspaces, so it is gated like any absolute
+/// path out. Paths starting with [guestRoot] are translated back to
+/// [projectWorkspace] so the host filesystem can find them.
 String resolveWorkspacePath(
   FileSystem fs,
   String path,
@@ -124,14 +122,12 @@ String resolveWorkspacePath(
   String? homePath,
 }) {
   final project = path.startsWith("project:");
-  // `chat:` names the chat's own explicitly; a bare path lands there too.
   var rest = project
       ? path.substring("project:".length)
       : path.startsWith("chat:")
           ? path.substring("chat:".length)
           : path;
   final base = project ? projectWorkspace : workspace;
-  // `~` follows `HOME`, which is what the shell's would expand to.
   if (rest.startsWith("~/")) {
     rest = fs.path.join(homePath ?? projectWorkspace, rest.substring(2));
   } else if (rest == "~") {

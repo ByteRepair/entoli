@@ -400,11 +400,9 @@ class BuiltinAgent {
   final String workspace;
 
   /// The project's workspace: the one every chat in the project shares where
-  /// one is shared, the chat's own where one is not — the caller's resolution
-  /// of that question, so this field is the resolved fact alone. Where the
-  /// driver takes a workspace for `HOME`, this is the one it takes. Not the
-  /// working directory: what a turn puts here is what it means other chats to
-  /// find.
+  /// one is shared, the chat's own where one is not, resolved by the caller.
+  /// Not the working directory: what a turn puts here is what it means other
+  /// chats to find.
   final String projectWorkspace;
 
   /// The project's own command variables, layered over the app-level ones by
@@ -456,8 +454,8 @@ class BuiltinAgent {
   final AgentCapabilities caps;
 
   /// Whether the project's workspace is shared between its chats. When false,
-  /// the chat's own workspace is the one the prompt names for files the user
-  /// will come back to, and the shared-workspace sentence is absent.
+  /// the chat's own workspace is the one the prompt names, and the
+  /// shared-workspace sentence is absent.
   final bool sharedWorkspace;
 
   /// The project this agent's turn is in, so the shell driver can resolve a
@@ -699,9 +697,6 @@ class BuiltinAgent {
       sharedWorkspace: sharedWorkspace,
       projectHome: shell.projectHome,
       guestRoot: shell.guestRoot,
-      // What a command's home is and so what `~` means: the shell's one
-      // answer, the same value `composeEnvironment` sets and the file tools
-      // resolve by.
       homePath: shell.homeFor(projectWorkspace),
     );
     final head = [

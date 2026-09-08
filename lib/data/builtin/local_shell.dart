@@ -133,16 +133,14 @@ class LocalShell extends Shell {
   static String? machineHomeDir() =>
       Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"];
 
-  /// The machine user's own home directory, on the platforms where there is
-  /// one. What `~` expands to in a command and what the prompt names; null
-  /// where there is no machine behind the shell or no real user home.
+  /// The machine user's own home directory; null where there is no real user
+  /// home (the web, Android's app-private storage).
   @override
   String? get machineHome => machineHomeDir();
 
-  /// The `HOME` a command in this chat is given — and, being that, what `~`
-  /// means to it: the workspace where the driver takes one, the machine user's
-  /// own where it does not. One answer, so the prompt, the file tools and
-  /// [composeEnvironment] cannot disagree about what `~` is.
+  /// What `HOME` is for a command here: the workspace the driver takes where
+  /// it takes one, the machine user's own otherwise. One answer, so the
+  /// prompt, the file tools and [composeEnvironment] cannot disagree.
   @override
   String? homeFor(String home) {
     final driver = _driver();
@@ -258,10 +256,8 @@ class LocalShell extends Shell {
       {
         ...defaults,
         ...?driver?.environment,
-        // Where the home is the driver's to give, it is the workspace: a
-        // guest's at [guestRoot] (e.g. `/root`), not the host path. Where it
-        // is not — the desktops — the machine's own `HOME` stands, inherited
-        // and never overridden.
+        // The home is the workspace where the driver takes one — a guest's at
+        // [guestRoot], not the host path — and the machine's own otherwise.
         if (driver?.projectHome ?? false) "HOME": driver?.guestRoot ?? home,
         ...app,
         ...?project,
