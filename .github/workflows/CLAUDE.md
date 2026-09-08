@@ -50,8 +50,10 @@ intermediates a single runner did not have room for beside the Gradle build.
 `android-tools` builds only, uploads the stripped `dist/` as an artifact, and
 the runner is recycled with all its build directories. `build-common` primes
 Gradle on a fresh runner — wrapper, plugins, dependencies, the generated
-files `flutter build` writes — with `--config-only`, which builds no
-artifacts, and saves the Gradle caches under a key derived from the Gradle
+files `flutter build` writes — with `--config-only` on the APK side and
+`gradlew help` on the bundle side, where `build appbundle` has no
+`--config-only`, neither building any artifact — and saves the Gradle caches
+under a key derived from the Gradle
 files. `android` and `aab` each download the tools artifact and restore those
 caches onto a fresh runner, then build — split APKs and an App Bundle
 respectively, in parallel. `debug-build.yml` splits the same way, for the
