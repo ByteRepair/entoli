@@ -47,7 +47,8 @@ class ProjectSettings {
       this.omada = false,
       this.omadaOrdering,
       this.omadaMaxGenerations,
-      this.turnMaxSteps});
+      this.turnMaxSteps,
+      this.description});
 
   /// How long a temporary chat in this project lives. Null means inherit the
   /// app default.
@@ -83,6 +84,11 @@ class ProjectSettings {
   /// and one number over them all would say nothing about any member's turn.
   int? turnMaxSteps;
 
+  /// The text the new-chat screen asks over this project's badge, in place
+  /// of the app-wide question. Empty is a deliberate answer — the screen
+  /// then asks nothing — and null is the app default.
+  String? description;
+
   static ProjectSettings load(AppConfig config, {String? project}) {
     final text = config.documents.read(config.projectSettingsFile(project: project));
     if (text == null) return ProjectSettings();
@@ -103,6 +109,7 @@ class ProjectSettings {
             json["omadaOrdering"] as String?),
         omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
         turnMaxSteps: json["turnMaxSteps"] as int?,
+        description: json["description"] as String?,
       );
     } catch (_) {
       return ProjectSettings();
@@ -118,6 +125,9 @@ class ProjectSettings {
       if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
       if (omadaMaxGenerations != null) "omadaMaxGenerations": omadaMaxGenerations,
       if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
+      // Empty is written as it stands: the screen asking nothing is a value
+      // here, where an absent key is the app default.
+      if (description != null) "description": description,
     }));
   }
 
@@ -129,5 +139,6 @@ class ProjectSettings {
         omadaOrdering: omadaOrdering,
         omadaMaxGenerations: omadaMaxGenerations,
         turnMaxSteps: turnMaxSteps,
+        description: description,
       );
 }

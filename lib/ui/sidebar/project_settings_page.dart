@@ -4,6 +4,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
 import "../../domain/models.dart";
+import "../../domain/project.dart"
+    show defaultEmptyChatQuestion, emptyChatQuestionFor;
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
@@ -95,6 +97,10 @@ class ProjectSettingsPage extends ConsumerWidget {
             value: path,
             snack: "Copied project path",
           ),
+          if (builtIn == null) ...[
+            const Divider(),
+            _DescriptionRow(project: project),
+          ],
           const Divider(),
           WorkspaceTile(
             root: ref.watch(appConfigProvider).projectWorkspaceDir(project: project),
@@ -199,6 +205,50 @@ class _CopyField extends StatelessWidget {
         tooltip: "Copy",
         onPressed: () => copyToClipboard(context, value, said: snack),
       ),
+    );
+  }
+}
+
+/// What the new-chat screen asks over this project's badge. Null is the
+/// app-wide question; empty means the screen asks nothing. The reset button
+/// is the way back to null — a blank save is the other value, not the
+/// default's.
+class _DescriptionRow extends ConsumerWidget {
+  const _DescriptionRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final description =
+        ref.watch(projectSettingsProvider(project).select((s) => s.description));
+    return ListTile(
+      title: const Text("Description"),
+      // What the screen asks for this project, the resolver owning the
+      // null/blank/text cases; null out of it is the blank answer, shown
+      // here as what it is.
+      subtitle: Text(
+        emptyChatQuestionFor(project, description: description) ?? "Empty",
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: ResetButton(
+        resetLabel: "default",
+        onReset: () =>
+            ref.read(projectSettingsProvider(project).notifier).setDescription(null),
+      ),
+      onTap: () async {
+        final text = await promptForText(
+          context,
+          title: "Description",
+          initial: description ?? "",
+          hint: defaultEmptyChatQuestion,
+          confirmLabel: "Save",
+          allowBlank: true,
+        );
+        if (text == null || !context.mounted) return;
+        ref.read(projectSettingsProvider(project).notifier).setDescription(text);
+      },
     );
   }
 }

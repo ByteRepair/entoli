@@ -35,7 +35,7 @@ import "domain/models.dart";
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
-import "domain/project.dart" show everyProject;
+import "domain/project.dart" show emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
 import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
@@ -985,6 +985,20 @@ final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
   return ref.watch(projectSettingsProvider(project).select((s) => s.omada));
 });
 
+/// What the new-chat screen asks over [project]'s badge: the project's own
+/// description where it set one, a built-in's shipped question, or the
+/// app-wide default — or nothing, where the project set an empty one. The
+/// read the screen makes, so an edit landing re-sweeps the headline. Null
+/// and empty mean the same thing here — nothing to ask — so the answer is
+/// the one string the sweep takes.
+final emptyChatQuestionProvider =
+    Provider.family<String, String?>((ref, project) {
+  final description = project == null
+      ? null
+      : ref.watch(projectSettingsProvider(project).select((s) => s.description));
+  return emptyChatQuestionFor(project, description: description) ?? "";
+});
+
 class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   ProjectSettingsNotifier(this.project);
 
@@ -1039,6 +1053,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// ones stand alone.
   Future<void> setEnvironment(Map<String, String>? environment) async {
     final next = state.copy()..environment = environment;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// What the new-chat screen asks over this project's badge. Null is the
+  /// app default; empty is the screen asking nothing.
+  Future<void> setDescription(String? value) async {
+    final next = state.copy()..description = value;
     state = next;
     await next.save(_config, project: project);
   }

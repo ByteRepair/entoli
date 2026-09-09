@@ -358,6 +358,53 @@ void main() {
       expect(find.textContaining("nonymously"), findsNothing);
     });
 
+    // A user project's description is what the screen asks over its badge:
+    // the settings field is the only way a project names its own.
+    testWidgets("a project's description asks over its badge", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("work");
+        await app.container
+            .read(projectSettingsProvider("work").notifier)
+            .setDescription("What are we building?");
+      });
+      await openEmpty(tester);
+
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+
+      await pick(tester, "work");
+      await tester.pumpAndSettle();
+
+      expect(find.text("What are we building?"), findsOneWidget);
+      expect(find.text("What would you like to discuss?"), findsNothing);
+    });
+
+    // Empty is a value of its own: the screen asks nothing at all, and the
+    // reset button is what puts the app-wide question back.
+    testWidgets("an empty description asks nothing until reset", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("work");
+        await app.container
+            .read(projectSettingsProvider("work").notifier)
+            .setDescription("");
+      });
+      await openEmpty(tester);
+
+      await pick(tester, "work");
+      await tester.pumpAndSettle();
+
+      expect(find.text("What would you like to discuss?"), findsNothing);
+      // The label stays on the tree and swept to empty rather than leaving
+      // it, so nothing is what it reads.
+      expect(questionShown(tester), "");
+
+      await io(tester, () => app.container
+          .read(projectSettingsProvider("work").notifier)
+          .setDescription(null));
+      await tester.pumpAndSettle();
+
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+    });
+
     // The badge says where the next chat goes, which is all it can say: there
     // is no chat yet for it to be about.
     testWidgets("picking one highlights it, and the chat lands there",

@@ -106,6 +106,22 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     COMPONENT Runtime)
 endforeach(bundled_library)
 
+# The on-device model server, built by tool/linux/build-llama.sh and staged at
+# the repo root by it. Installed into the bundle's lib/ beside the executable,
+# which is where platformLocalLlm looks for it; when the stage directory is
+# absent — a fresh clone that has not run the script — nothing is installed and
+# the app reports that the build carries no model server. A directory rather
+# than a file list: which libggml-*.so the build produced is the llama build's
+# answer, and naming them here would be a second place to keep in step.
+# Evaluated at install time, so a stage filled after configure still lands, and
+# source permissions carried through, which keeps the server executable —
+# `install(FILES)` copies content only and would leave it 644.
+set(LLAMA_STAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/llama" CACHE PATH
+  "Where tool/linux/build-llama.sh staged the on-device model server")
+install(DIRECTORY "${LLAMA_STAGE_DIR}/"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  USE_SOURCE_PERMISSIONS COMPONENT Runtime)
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

@@ -349,6 +349,11 @@ is `logDetail`, which is debug-only.
   toolbox, and is built for arm64 alone. `$HOME` rather than `~`: a tilde is not
   expanded as an argument to `env` or inside quotes, and the build then fails on
   a literal `~`.
+- The Linux model server: `tool/linux/build-llama.sh`, native (no toolbox —
+  host cmake, ninja and glslc), sharing the pin in `tool/android/versions.sh`.
+  Stages into `build/llama/`, which `linux/CMakeLists.txt` installs into the
+  bundle when it is filled; a build that skipped it still builds and says what
+  it is missing.
 - git is no longer among them. The agent gets it from `apk` inside the Alpine
   rootfs, which is a distribution's job to patch rather than ours — so a device
   with no rootfs installed has no git.
