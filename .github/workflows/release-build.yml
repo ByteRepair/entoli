@@ -570,7 +570,7 @@ jobs:
       # The stage the bundle's CMakeLists installs from — the artifact the llama
       # job uploaded. Unpacked before `flutter build linux` runs, which is what
       # makes the "whole or not at all" above true.
-      - uses: actions/download-artifact@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
         with:
           name: llama-linux
           path: build/llama
