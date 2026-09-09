@@ -21,6 +21,7 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$here/versions.sh"
+source "$here/../fetch.sh"
 
 abi=${1:?usage: build.sh <abi>}
 work=${WORK_DIR:-$here/build}
@@ -66,15 +67,6 @@ llama_abis=${LLAMA_ABIS:-arm64-v8a}
 if [[ " $llama_abis " == *" $abi "* ]]; then llama=yes; else llama=no; fi
 
 mkdir -p "$work" "$out"
-
-fetch() {
-  local url=$1 file=$2 sha=$3
-  if [ ! -f "$work/$file" ]; then
-    curl -fsSL --retry 3 -o "$work/$file.part" "$url"
-    mv "$work/$file.part" "$work/$file"
-  fi
-  echo "$sha  $work/$file" | sha256sum -c - >/dev/null
-}
 
 echo "==> fetching sources"
 fetch "$TALLOC_URL" "talloc.tar.gz" "$TALLOC_SHA256"
