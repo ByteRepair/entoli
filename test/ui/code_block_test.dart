@@ -1,6 +1,4 @@
-import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:re_highlight/styles/github-dark.dart";
@@ -209,31 +207,21 @@ void main() {
     });
 
     // The bar is the block's chrome, not what the model said. Dragging the
-    // whole reply still copies its markdown, the language name included in
+    // whole reply copies the rendered text, the language name included in
     // neither direction.
     testWidgets("a drag across the reply does not pick up the bar",
         (tester) async {
       final copied = clipboard(tester);
-      const markdown = "read this:\n\n```python\nprint(1)\n```";
-      await pump(tester, markdown);
+      await pump(tester, "read this:\n\n```python\nprint(1)\n```");
 
       final reply = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
+      await dragCopy(
+        tester,
         tester.getTopLeft(reply) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
+        to: tester.getBottomRight(reply) - const Offset(2, 4),
       );
-      await tester.pump();
-      await gesture.moveTo(tester.getBottomRight(reply) - const Offset(2, 4));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
-
-      expect(copied, [markdown]);
+      expect(copied, ["read this:\nprint(1)"]);
     });
   });
 
