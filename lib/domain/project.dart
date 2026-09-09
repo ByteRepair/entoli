@@ -38,10 +38,18 @@ IconData? projectIcon(String? project) => builtinProjectOf(project)?.icon;
 /// string.
 const defaultEmptyChatQuestion = "What would you like to discuss?";
 
-/// The question the empty-chat screen asks for a project: a built-in's own, or
-/// the default. Mirrors [projectLabel] in resolving a built-in's shipped string.
-String emptyChatQuestionFor(String? project) =>
-    builtinProjectOf(project)?.emptyChatQuestion ?? defaultEmptyChatQuestion;
+/// The question the empty-chat screen asks for a project: a built-in's own,
+/// else the project's description where it set one — empty included, which
+/// asks nothing — else the default. Mirrors [projectLabel] in resolving a
+/// built-in's shipped string.
+String? emptyChatQuestionFor(String? project, {String? description}) {
+  final builtIn = builtinProjectOf(project)?.emptyChatQuestion;
+  if (builtIn != null) return builtIn;
+  if (description != null && description.trim().isNotEmpty) {
+    return description;
+  }
+  return description == null ? defaultEmptyChatQuestion : null;
+}
 
 /// Every project there is, the default one first, then the built-in ones, then
 /// the user's — the order the menus offer them in, and the order a chat is

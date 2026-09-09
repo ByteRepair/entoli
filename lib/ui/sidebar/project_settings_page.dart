@@ -3,6 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
+import "../../domain/project.dart" show defaultEmptyChatQuestion;
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
@@ -92,6 +93,10 @@ class ProjectSettingsPage extends ConsumerWidget {
             value: path,
             snack: "Copied project path",
           ),
+          if (builtIn == null) ...[
+            const Divider(),
+            _DescriptionRow(project: project),
+          ],
           const Divider(),
           WorkspaceTile(
             root: ref.watch(appConfigProvider).projectWorkspaceDir(project: project),
@@ -180,6 +185,60 @@ class _CopyField extends StatelessWidget {
         tooltip: "Copy",
         onPressed: () => copyToClipboard(context, value, said: snack),
       ),
+    );
+  }
+}
+
+/// What the new-chat screen asks over this project's badge. Null is the
+/// app-wide question; empty means the screen asks nothing. The reset button
+/// is the way back to null — a blank save is the other value, not the
+/// default's.
+class _DescriptionRow extends ConsumerWidget {
+  const _DescriptionRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final description =
+        ref.watch(projectSettingsProvider(project).select((s) => s.description));
+    return ListTile(
+      title: const Text("Description"),
+      subtitle: Text(
+        switch (description) {
+          null => defaultEmptyChatQuestion,
+          "" => "Empty",
+          final text => text.trim().isEmpty ? "Empty" : text,
+        },
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.settings_backup_restore),
+            tooltip: "Reset to default",
+            onPressed: () =>
+                ref.read(projectSettingsProvider(project).notifier).setDescription(null),
+          ),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
+      onTap: () async {
+        final current =
+            ref.read(projectSettingsProvider(project)).description;
+        final text = await promptForText(
+          context,
+          title: "Description",
+          initial: current ?? "",
+          hint: defaultEmptyChatQuestion,
+          confirmLabel: "Save",
+          allowBlank: true,
+        );
+        if (text == null || !context.mounted) return;
+        ref.read(projectSettingsProvider(project).notifier).setDescription(text);
+      },
     );
   }
 }

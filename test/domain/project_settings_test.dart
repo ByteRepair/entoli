@@ -47,11 +47,13 @@ void main() {
     final settings = ProjectSettings()
       ..environment = {"KEY": "value"}
       ..omada = true
-      ..omadaOrdering = OmadaOrdering.parallel;
+      ..omadaOrdering = OmadaOrdering.parallel
+      ..description = "What are we building?";
     final copy = settings.copy();
     expect(copy.environment, {"KEY": "value"});
     expect(copy.omada, true);
     expect(copy.omadaOrdering, OmadaOrdering.parallel);
+    expect(copy.description, "What are we building?");
   });
 
   test("omada off writes nothing and an absent key loads as off", () async {
@@ -97,5 +99,24 @@ void main() {
     Directory(config.projectDir(project: "elsewhere")).createSync(recursive: true);
     expect(ProjectSettings.load(config, project: "elsewhere").turnMaxSteps,
         isNull);
+  });
+
+  test("a description survives a save and a load, empty written as empty",
+      () async {
+    await (ProjectSettings()..description = "What are we building?")
+        .save(config, project: "work");
+    expect(ProjectSettings.load(config, project: "work").description,
+        "What are we building?");
+
+    // Empty is the screen asking nothing, and is saved as it stands rather
+    // than dropped.
+    await (ProjectSettings()..description = "").save(config, project: "work");
+    expect(ProjectSettings.load(config, project: "work").description, "");
+
+    // Null writes no key, and an absent one loads as null.
+    await ProjectSettings().save(config, project: "work");
+    expect(config.documents.read(config.projectSettingsFile(project: "work")),
+        isNot(contains("description")));
+    expect(ProjectSettings.load(config, project: "work").description, isNull);
   });
 }

@@ -490,6 +490,12 @@ void main() {
       await io(tester, () => app.repo.createProject("research"));
       await app.pump(tester, const ProjectSettingsPage(project: "research"));
 
+      await tester.scrollUntilVisible(
+        find.text("Omada"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
       expect(find.text("Omada"), findsOneWidget);
       expect(find.text("Round order"), findsNothing);
     });
@@ -501,6 +507,74 @@ void main() {
       );
 
       expect(find.text("Omada"), findsNothing);
+    });
+
+    testWidgets("a built-in's settings page has no Description row", (tester) async {
+      await app.pump(
+        tester,
+        ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
+      );
+
+      expect(find.text("Description"), findsNothing);
+    });
+
+    // The row is the description's own surface: open, edit, save, and the
+    // screen reads it back.
+    testWidgets("the Description row edits through its dialog", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+
+      expect(find.text("Description"), findsOneWidget);
+      // Unset, it names what the screen would ask.
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+
+      await tester.tap(find.text("Description"));
+      await settleIo(tester);
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text("What would you like to discuss?"), findsNWidgets(2));
+
+      await tester.enterText(find.byType(TextField), "What are we building?");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      expect(
+          ProjectSettings.load(app.config, project: "research").description,
+          "What are we building?");
+      expect(find.text("What are we building?"), findsOneWidget);
+    });
+
+    // Empty is saved as it stands — the screen asks nothing — and the reset
+    // button, not a blank save, is what puts the default back.
+    testWidgets("an empty save clears the question and reset restores it", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("research");
+        await app.container
+            .read(projectSettingsProvider("research").notifier)
+            .setDescription("What are we building?");
+      });
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+
+      await tester.tap(find.text("Description"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField), "");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      expect(ProjectSettings.load(app.config, project: "research").description,
+          "");
+      expect(find.text("Empty"), findsOneWidget);
+
+      await tester.tap(find.byTooltip("Reset to default"));
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      expect(ProjectSettings.load(app.config, project: "research").description,
+          isNull);
+      expect(find.text("Empty"), findsNothing);
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
     });
 
     testWidgets("deleting one takes its chats and goes back to the default", (tester) async {
