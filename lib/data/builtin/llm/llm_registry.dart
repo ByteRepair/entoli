@@ -29,7 +29,11 @@ class LlmEndpoint {
 /// Both inputs are read when used rather than captured: the settings page
 /// edits them, and it does so long after this was built.
 class LlmRegistry {
-  LlmRegistry({required this.endpoints, required this.lookupEnv, this.lookupKey});
+  LlmRegistry({
+    required this.endpoints,
+    required this.lookupEnv,
+    required this.lookupKey,
+  });
 
   final List<LlmEndpoint> Function() endpoints;
 
@@ -39,11 +43,9 @@ class LlmRegistry {
   final String? Function(String name) lookupEnv;
 
   /// The key stored for a provider id, or null for none — the store the
-  /// settings page writes into, held by the OS where there is one. Configured
-  /// before [lookupEnv]: a key pasted here wins over a named one, and is
-  /// consulted after the config's own field, which is what an edit in flight
-  /// still reads.
-  final String? Function(String providerId)? lookupKey;
+  /// settings page writes into, held by the OS where there is one. Asked
+  /// before [lookupEnv]: a key pasted here wins over a named one.
+  final String? Function(String providerId) lookupKey;
 
   final _clients = LlmClientCache();
 
@@ -79,13 +81,12 @@ class LlmRegistry {
     );
   }
 
-  /// One order, decided once: the config's own field — the copy a dialog just
-  /// returned — then the stored key, then the named environment variable. The
-  /// registry builds clients from exactly this, so an edited stored key
-  /// reaching the next turn is the cache signature above, not a second path.
+  /// One order, decided once: the stored key, then the named environment
+  /// variable. The registry builds clients from exactly this, so an edited
+  /// stored key reaching the next turn is the cache signature above, not a
+  /// second path.
   String? resolveKeyFor(LlmProviderConfig config) {
-    if (config.apiKey.isNotEmpty) return config.apiKey;
-    final stored = lookupKey?.call(config.id);
+    final stored = lookupKey(config.id);
     if (stored != null && stored.isNotEmpty) return stored;
     return config.resolveKeyWith(lookupEnv);
   }

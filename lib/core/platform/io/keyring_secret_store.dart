@@ -5,17 +5,20 @@ import "package:freedesktop_secret/freedesktop_secret.dart";
 import "../../../domain/secret_store.dart";
 
 /// Secrets in the desktop's keyring — the Secret Service API that seahorse
-/// and KWallet's manager read. Two items, labelled so a user browsing their
-/// passwords knows where they came from:
+/// and KWallet's manager read. One item per stored key, labelled so a user
+/// browsing their passwords knows where they came from:
 ///
 ///   Entoli — sync identity
 ///   Entoli — paired devices
+///   Entoli — provider-keys
+///   Entoli — turn-password
 ///
-/// Where no service answers — a headless session, a minimal window manager,
-/// the dev toolbox — reads and writes fall through to the plain file under
-/// the data directory, the same store Android uses. The fallback is decided
-/// once, at first use: a session whose daemon appears later is next launch's
-/// business.
+/// (the last two named by the fallback label, which is the arm every key
+/// this side of sync's two rides). Where no service answers — a headless
+/// session, a minimal window manager, the dev toolbox — reads and writes
+/// fall through to the plain file under the data directory, the same store
+/// Android uses. The fallback is decided once, at first use: a session whose
+/// daemon appears later is next launch's business.
 class KeyringSecretStore implements SecretStore {
   KeyringSecretStore(this._fallback);
 

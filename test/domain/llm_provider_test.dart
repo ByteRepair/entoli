@@ -14,7 +14,7 @@ import "../harness.dart";
 
 void main() {
   group("reading one out of settings", () {
-    test("keeps everything it was written with", () {
+    test("keeps everything it was written with, and ignores an old key", () {
       final provider = LlmProviderConfig.fromJson(const {
         "id": "openrouter",
         "api": "openai",
@@ -28,6 +28,10 @@ void main() {
       expect(provider.api, LlmApi.openai);
       expect(provider.displayName, "OpenRouter");
       expect(provider.models, ["a", "b"]);
+      // The key is not the config's any more; nothing here carries one.
+      expect(
+          provider.resolveKeyWith((name) => name == "ANTHROPIC_API_KEY" ? "x" : null),
+          isNull);
     });
 
     test("defaults to the OpenAI shape, which most of them speak", () {
@@ -72,13 +76,7 @@ void main() {
       apiKeyEnv: "ANTHROPIC_API_KEY",
     );
 
-    test("what was typed in wins", () {
-      final provider = named.copyWith(apiKey: "sk-typed");
-
-      expect(provider.resolveKey(const {"ANTHROPIC_API_KEY": "sk-env"}), "sk-typed");
-    });
-
-    test("otherwise the environment answers", () {
+    test("the environment answers", () {
       expect(named.resolveKey(const {"ANTHROPIC_API_KEY": "sk-env"}), "sk-env");
     });
 
@@ -101,7 +99,9 @@ void main() {
           containsAll(["anthropic", "openai", "openrouter", "ollama-cloud", "ollama"]));
       for (final preset in llmProviderPresets) {
         expect(preset.baseUrl, endsWith("/v1"), reason: preset.id);
-        expect(preset.apiKey, isEmpty, reason: "${preset.id} must not ship a key");
+        // A preset names a variable, never key material: nothing shipped
+        // carries a credential.
+        expect(preset.toJson().containsKey("apiKey"), isFalse, reason: preset.id);
       }
     });
 
@@ -115,7 +115,7 @@ void main() {
   });
 
   group("through settings.json", () {
-    test("providers survive a save and a load, and no key reaches the file", () async {
+    test("providers survive a save and a load", () async {
       final config = tempConfig("agent_chat_providers_");
       await AppSettings(
         defaultProviderId: "ollama-cloud",
@@ -125,7 +125,7 @@ void main() {
             id: "ollama-cloud",
             api: LlmApi.openai,
             baseUrl: "https://ollama.com/v1",
-            apiKey: "sk-1",
+            apiKeyEnv: "OLLAMA_API_KEY",
           ),
         ],
         approveMode: ApproveMode.never,
@@ -134,8 +134,7 @@ void main() {
       final loaded = AppSettings.load(config);
 
       expect(loaded.llmProviders.single.id, "ollama-cloud");
-      // The save strips the key: the store, not the file, is where it goes.
-      expect(loaded.llmProviders.single.apiKey, isEmpty);
+      expect(loaded.llmProviders.single.apiKeyEnv, "OLLAMA_API_KEY");
       expect(loaded.approveMode, ApproveMode.never);
       expect(loaded.defaultModelId, "kimi");
     });
@@ -195,6 +194,7 @@ void main() {
             }),
         ],
         lookupEnv: (name) => environment[name],
+        lookupKey: (_) => null,
       );
     }
 
@@ -221,14 +221,16 @@ void main() {
       expect(built, hasLength(1));
     });
 
-    test("a key edited in settings reaches the next turn", () {
+    test("a URL edited in settings reaches the next turn", () {
       final registry = registryOver();
       registry.clientFor("fake");
 
-      providers = [providers.single.copyWith(apiKey: "sk-new")];
+      providers = [
+        providers.single.copyWith(baseUrl: "https://moved.test/v1"),
+      ];
       registry.clientFor("fake");
 
-      expect(built, ["fake:null", "fake:sk-new"]);
+      expect(built, hasLength(2));
     });
 
     test("what a provider lists is taken at its word", () async {
@@ -272,32 +274,6 @@ void main() {
           lookupEnv: (name) => name == "FAKE_API_KEY" ? "sk-env" : null,
           lookupKey: (id) => stored[id],
         );
-
-    test("a stored key is the middle of the order, behind a typed one", () {
-      final config = const LlmProviderConfig(
-        id: "fake",
-        api: LlmApi.openai,
-        baseUrl: "https://fake.test/v1",
-        apiKey: "sk-typed",
-      );
-      expect(
-        LlmRegistry(
-          endpoints: () => const [],
-          lookupEnv: (_) => "sk-env",
-          lookupKey: (_) => "sk-stored",
-        ).resolveKeyFor(config),
-        "sk-typed",
-      );
-      expect(
-        registryOver({"fake": "sk-stored"})
-            .resolveKeyFor(const LlmProviderConfig(
-              id: "fake",
-              api: LlmApi.openai,
-              baseUrl: "https://fake.test/v1",
-            )),
-        "sk-stored",
-      );
-    });
 
     test("a stored key wins over the named environment variable", () {
       expect(

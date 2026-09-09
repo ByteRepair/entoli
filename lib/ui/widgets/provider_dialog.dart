@@ -2,26 +2,14 @@ import "package:flutter/material.dart";
 
 import "../../domain/llm_provider.dart";
 
-/// How a provider's stored key changes, returned beside the config. The dialog
-/// cannot decide keep against clear from an empty field alone — the field
-/// starts empty when a key is stored, which used to mean "keep" and still
-/// means "none stored" — so the three answers are spelled.
-enum KeyChange {
-  /// Leave whatever is stored as it is.
-  keep,
-
-  /// Remove the stored key.
-  clear,
-
-  /// Store the text the field held.
-  set,
-}
-
 /// Add or edit one endpoint the agent can call. Returns null if dismissed, or
 /// if the name or base URL was left blank — either one missing makes the entry
 /// unusable, and a half-written provider fails at the first prompt rather than
-/// here. The key rides beside it as a [KeyChange], because the store it goes
-/// to is written by the caller's notifier, not by this dialog.
+/// here. The key decision rides beside it as the notifier's own [setKey]
+/// encoding — null leaves the stored key, `""` clears it, a string stores it —
+/// because the dialog cannot decide keep against clear from an empty field
+/// alone, and the store is written by the caller's notifier, not by this
+/// dialog.
 Future<ProviderEdit?> promptForProvider(
   BuildContext context, {
   LlmProviderConfig? initial,
@@ -40,14 +28,12 @@ Future<ProviderEdit?> promptForProvider(
     );
 
 class ProviderEdit {
-  const ProviderEdit(this.config, this.key, {this.typedKey});
+  const ProviderEdit(this.config, this.setKey);
 
   final LlmProviderConfig config;
-  final KeyChange key;
 
-  /// What the field held when [key] is [KeyChange.set] — the config's own
-  /// `apiKey` is left empty, the store being where the material goes.
-  final String? typedKey;
+  /// Null keeps the stored key, `""` clears it, a string stores itself.
+  final String? setKey;
 }
 
 class _ProviderDialog extends StatefulWidget {
@@ -88,22 +74,21 @@ class _ProviderDialogState extends State<_ProviderDialog> {
     super.dispose();
   }
 
-  KeyChange get _keyChange {
+  /// The key decision in the notifier's own encoding: typed text stores,
+  /// the "Remove stored key" press clears, and an empty field otherwise keeps
+  /// — over no stored key, clearing is the honest answer, so a key saved since
+  /// the dialog opened is not resurrected by a save that typed nothing.
+  String? get _setKey {
     final text = _apiKey.text.trim();
-    if (text.isNotEmpty) return KeyChange.set;
-    if (_clearKey) return KeyChange.clear;
-    // An empty field over a stored key is the keep case — the user was shown
-    // "leave empty to keep" and typed nothing. Over no stored key it is the
-    // clear case of nothing, and answers clear so a cleared field beside a
-    // key saved since the dialog opened does not resurrect it.
-    return widget.storedKey == null ? KeyChange.clear : KeyChange.keep;
+    if (text.isNotEmpty) return text;
+    if (_clearKey) return "";
+    return widget.storedKey == null ? "" : null;
   }
 
   ProviderEdit? _submit() {
     final id = _id.text.trim();
     final baseUrl = _baseUrl.text.trim();
     if (id.isEmpty || baseUrl.isEmpty) return null;
-    final typed = _apiKey.text.trim();
     return ProviderEdit(
       LlmProviderConfig(
         id: id,
@@ -118,8 +103,7 @@ class _ProviderDialogState extends State<_ProviderDialog> {
             if (model.trim().isNotEmpty) model.trim(),
         ],
       ),
-      _keyChange,
-      typedKey: typed.isEmpty ? null : typed,
+      _setKey,
     );
   }
 

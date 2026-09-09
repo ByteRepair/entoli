@@ -507,14 +507,7 @@ class AppSettings {
       if (environment.isNotEmpty) "environment": environment,
       "approveMode": approveMode.name,
       if (llmProviders.isNotEmpty)
-        // A provider config in memory may carry a key a dialog is returning —
-        // the store, not the file, is where it goes. jsonEncode never writes
-        // an empty apiKey, so the belt here is against an unrelated save
-        // re-encoding a config whose key was stripped after it was built.
-        "llmProviders": [
-          for (final provider in llmProviders)
-            provider.apiKey.isEmpty ? provider : provider.copyWith(apiKey: "")
-        ],
+        "llmProviders": [for (final provider in llmProviders) provider.toJson()],
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
       "appIcon": appIcon.name,
       "appTheme": appTheme.name,

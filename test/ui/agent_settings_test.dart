@@ -55,10 +55,8 @@ void main() {
 
       expect(saved().single.id, "ollama-cloud");
       expect(saved().single.baseUrl, "https://ollama.com/v1");
-      // The key went to the store, and the file carries none of it.
-      expect(saved().single.apiKey, isEmpty);
+      // The key went to the store; no config carries one.
       expect(app.secrets.providerKey("ollama-cloud"), "sk-ollama");
-      expect(AppSettings.load(app.config).llmProviders.single.apiKey, isEmpty);
     });
 
     testWidgets("a custom endpoint starts empty and is typed in", (tester) async {
@@ -183,6 +181,26 @@ void main() {
       await saveDialog(tester);
 
       expect(app.secrets.providerKey("openai"), "sk-o");
+    });
+
+    testWidgets("renaming one moves the stored key with it", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Custom…");
+      await tester.enterText(dialogField("Name"), "vllm");
+      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await tester.enterText(dialogField("API key"), "sk-v");
+      await saveDialog(tester);
+      expect(app.secrets.providerKey("vllm"), "sk-v");
+
+      await tester.tap(find.text("vllm"));
+      await settleIo(tester);
+      await tester.enterText(dialogField("Name"), "gpu");
+      await saveDialog(tester);
+      await settleIo(tester);
+
+      expect(saved().map((p) => p.id), ["gpu"]);
+      expect(app.secrets.providerKey("gpu"), "sk-v");
+      expect(app.secrets.providerKey("vllm"), isNull);
     });
   });
 

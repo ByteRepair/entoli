@@ -49,7 +49,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(1), "https://a.test/v1");
     await tester.tap(find.text("Save"));
     await tester.pumpAndSettle();
-    expect(returned!.key, KeyChange.clear);
+    expect(returned!.setKey, "");
   });
 
   testWidgets("a typed key is a set", (tester) async {
@@ -60,8 +60,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(2), "sk-1");
     await tester.tap(find.text("Save"));
     await tester.pumpAndSettle();
-    expect(returned!.key, KeyChange.set);
-    expect(returned!.typedKey, "sk-1");
+    expect(returned!.setKey, "sk-1");
   });
 
   testWidgets("an empty field over a stored key keeps it, and offers to remove it",
@@ -75,7 +74,7 @@ void main() {
 
     await tester.tap(find.text("Save"));
     await tester.pumpAndSettle();
-    expect(returned!.key, KeyChange.keep);
+    expect(returned!.setKey, isNull);
   });
 
   testWidgets("the remove press, then save, clears the stored key", (tester) async {
@@ -88,7 +87,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text("Save"));
     await tester.pumpAndSettle();
-    expect(returned!.key, KeyChange.clear);
+    expect(returned!.setKey, "");
   });
 
   testWidgets("the remove press and then typing is a replace, not a remove",
@@ -103,8 +102,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(2), "sk-new");
     await tester.tap(find.text("Save"));
     await tester.pumpAndSettle();
-    expect(returned!.key, KeyChange.set);
-    expect(returned!.typedKey, "sk-new");
+    expect(returned!.setKey, "sk-new");
   });
 
   testWidgets("a stored key is not put back into the field", (tester) async {

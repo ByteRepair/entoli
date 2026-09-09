@@ -75,6 +75,13 @@ class AppSession {
     final version = platform.appVersion();
     final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
+    // Started here and awaited before the identity load below: the keyring
+    // probe is decided once, so the identity's own first read must not race
+    // this one, and the mirror the registry reads keys through is filled by
+    // the time the container reads the model list.
+    final secretStore = platform.createSecretStore(config);
+    final secrets = AppSecrets(secretStore);
+    final secretsLoaded = secrets.load();
     // Before the library is built: the bundled skills are written from
     // embedded code to a real directory for bash access, and self-healed.
     await installBundledSkills(config);
@@ -117,10 +124,8 @@ class AppSession {
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
     final byteRepairBin = platform.byteRepairBinDir(cache);
-    // Before the backend, which reads stored keys when it builds a client;
-    // loaded before the container, so the first turn sees the mirror filled.
-    final secrets = AppSecrets(platform.createSecretStore(config));
-    await secrets.load();
+    // The backend captures the closure; nothing reads the mirror until the
+    // container does, so the load only has to be in before that.
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
         byteRepairBinDir: byteRepairBin, secrets: secrets);
@@ -162,8 +167,11 @@ class AppSession {
     // two are independent and overlap rather than serialise on the startup
     // path.
     final hostname = platform.deviceHostname();
-    final identity = await SyncIdentity.load(secrets.store);
-    final registry = FileDeviceRegistry(config, secrets.store);
+    // The one await of the store's own I/O: the identity is the next reader,
+    // and the keyring probe must not be raced by a second first read.
+    await secretsLoaded;
+    final identity = await SyncIdentity.load(secretStore);
+    final registry = FileDeviceRegistry(config, secretStore);
     // Assigned two statements down, and read only from a running app — the
     // hub has to exist before the container that overrides its provider.
     late final ProviderContainer settingsHome;

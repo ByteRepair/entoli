@@ -239,31 +239,21 @@ void main() {
   });
 
   test("no key material rides in the archive", () async {
-    // A provider key is written to the secret store and stripped from
-    // settings.json by the notifier; the store's directory is skipped whole.
-    // Both halves are what keeps a key out of the zip, so a backup can be
-    // shared without carrying credentials.
-    write("settings.json",
-        jsonEncode({"llmProviders": [ {"id": "a", "baseUrl": "https://a.test/v1"} ]}));
+    // A provider key lives only in the secret store, and the store's
+    // directory is the one a backup skips — so a backup can be shared
+    // without carrying credentials.
     write("sync/secrets.json",
         jsonEncode({"provider-keys": base64Encode(utf8.encode('{"a":"sk-secret"}'))}));
 
-    final bytes = await writeBackup(config);
-    // Match on bytes rather than a decoded string: the zip is binary and only
-    // its members are text.
-    final needle = utf8.encode("sk-secret");
-    bool carries(List<int> haystack) {
-      for (var i = 0; i + needle.length <= haystack.length; i++) {
-        if (List.generate(needle.length, (j) => haystack[i + j])
-                .toString() ==
-            needle.toString()) {
-          return true;
-        }
-      }
-      return false;
-    }
+    final zip = ZipDecoder().decodeBytes(await writeBackup(config));
 
-    expect(carries(bytes), isFalse, reason: "the key is in the archive");
-    expect((await archive()).findFile("sync/secrets.json"), isNull);
+    // Every member decoded, the same idiom the tests above use: a key never
+    // rides in the archive, under any name.
+    for (final member in zip.files) {
+      if (member.isDirectory) continue;
+      expect(String.fromCharCodes(member.readBytes()!),
+          isNot(contains("sk-secret")), reason: member.name);
+    }
+    expect(zip.findFile("sync/secrets.json"), isNull);
   });
 }

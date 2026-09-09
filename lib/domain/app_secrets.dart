@@ -6,10 +6,11 @@ import "secret_store.dart";
 /// The secrets that are not sync's: every provider's API key and the TURN
 /// relay's password, held beside the two sync items in the same store.
 ///
-/// The keys cross as a single map under one item, the way the pairing secrets
-/// do — one item per key would make a user browsing their keyring count
-/// providers instead of seeing the app. A map that writes to empty deletes the
-/// item, so a device with no providers stores nothing at all.
+/// The keys cross as a single map under one item — [secretMapOf] is the codec
+/// the pairing secrets share — because one item per key would make a user
+/// browsing their keyring count providers instead of seeing the app. A map
+/// that writes to empty deletes the item, so a device with no providers
+/// stores nothing at all.
 ///
 /// Reads are served from the in-memory mirror and are synchronous, because
 /// `LlmRegistry` resolves a key on the path to every model call; the mirror is
@@ -19,21 +20,14 @@ class AppSecrets {
 
   final SecretStore _store;
 
-  /// The store behind this, for the sync identity and pairing secrets, which
-  /// read the same store by key rather than through here.
-  SecretStore get store => _store;
-
   Map<String, String> _providers = const {};
   String? _turnPassword;
 
   Future<void> load() async {
-    final raw = await _store.read(providerKeysKey);
-    _providers = raw == null || raw.isEmpty
-        ? const {}
-        : _providerMapOf(raw);
-    final turn = await _store.read(turnPasswordKey);
-    _turnPassword =
-        turn == null || turn.isEmpty ? null : utf8.decode(turn);
+    final (keys, turn) =
+        await (_store.read(providerKeysKey), _store.read(turnPasswordKey)).wait;
+    _providers = keys == null || keys.isEmpty ? const {} : secretMapOf(keys);
+    _turnPassword = turn == null || turn.isEmpty ? null : utf8.decode(turn);
   }
 
   /// The stored key for a provider, or null for none. Sync: read off the
@@ -66,8 +60,7 @@ class AppSecrets {
       await _store.delete(providerKeysKey);
       return;
     }
-    await _store.write(providerKeysKey,
-        Uint8List.fromList(utf8.encode(jsonEncode(_providers))));
+    await _store.write(providerKeysKey, secretBytesOf(_providers));
   }
 
   /// The TURN credential, or null for none. Sync, like the provider keys.
@@ -85,7 +78,4 @@ class AppSecrets {
     await _store.write(
         turnPasswordKey, Uint8List.fromList(utf8.encode(password)));
   }
-
-  static Map<String, String> _providerMapOf(List<int> raw) =>
-      (jsonDecode(utf8.decode(raw)) as Map).cast<String, String>();
 }

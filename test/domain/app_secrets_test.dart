@@ -40,15 +40,10 @@ void main() {
     await secrets.setProviderKey("ollama-cloud", "sk-1");
     await AppSettings(llmProviders: const []).save(config);
 
-    final raw = await config.fs
-        .file(config.fs.path.join(config.syncDir, "secrets.json"))
-        .readAsString();
-    // Base64 values, the store's own encoding: decode and match on that.
-    final stored = {
-      for (final entry in (jsonDecode(raw) as Map).cast<String, String>().entries)
-        entry.key: utf8.decode(base64Decode(entry.value)),
-    };
-    expect(stored[providerKeysKey], contains("sk-1"));
+    // Through the store, the way a second process would read it.
+    final stored =
+        utf8.decode((await FileSecretStore(config).read(providerKeysKey))!);
+    expect(stored, contains("sk-1"));
     final settings = await config.fs.file(config.settingsFile).exists()
         ? await config.fs.file(config.settingsFile).readAsString()
         : "";

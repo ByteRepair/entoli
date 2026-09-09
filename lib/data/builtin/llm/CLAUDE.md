@@ -39,15 +39,13 @@ on-device server's "may not be answering yet" arrives without the registry
 knowing there is such a thing. See "Running a model on the device" in
 `lib/data/local/CLAUDE.md`.
 
-**The key is resolved in one order, by `resolveKeyFor`**: the config's own
-`apiKey` field (the copy a dialog just returned, or an edit in flight), then
-the key stored for the provider id in the secret store, then `apiKeyEnv` in
-the environment. The config field and the named variable are the only two
-that leave `settings.json`; the stored one lives in the secret store — see
-"Secrets at rest" in `lib/data/sync/CLAUDE.md` — and never in the file, which
-`AppSettings.save` strips even where a config in memory still carries one.
-The resolved key is the client cache signature's third term, so an edited
-stored key rebuilds the client the way an edited URL does.
+**The key is resolved in one order, by `resolveKeyFor`**: the key stored for
+the provider id in the secret store, then `apiKeyEnv` in the environment.
+Only the named variable ever leaves `settings.json`; the stored one lives in
+the secret store — see "Secrets at rest" in `lib/data/sync/CLAUDE.md` — and
+no `LlmProviderConfig` carries a key at all, so no write path has to strip
+one. The resolved key is the client cache signature's third term, so an
+edited stored key rebuilds the client the way an edited URL does.
 
 A `RateLimitGate` is built per turn in `BuiltinBackend.sendPrompt` and shared by
 the parent `BuiltinAgent` and every sub-agent it spawns: it bounds in-flight

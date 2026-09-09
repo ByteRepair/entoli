@@ -60,7 +60,7 @@ BuiltinBackend createBackend(
   required LocalLlm localLlm,
   LocalKvCache? kvCache,
   String? byteRepairBinDir,
-  AppSecrets? secrets,
+  required AppSecrets secrets,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -96,7 +96,7 @@ BuiltinBackend createBackend(
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
       // The stored keys are the middle of the order in the registry: pasted
       // config wins over them, they win over a named variable.
-      lookupKey: secrets == null ? null : (id) => secrets.providerKey(id),
+      lookupKey: secrets.providerKey,
     ),
     // Read fresh per turn rather than captured: the slider is a setting, and
     // an edit reaches the next turn the way the environment does.

@@ -76,11 +76,10 @@ class SyncPairing {
     this._hostname,
     http.Client? client,
     RelayDial? relayDial,
-  })  : _lanFactory = lanSignaling,
+  })  : _turnPassword = turnPassword ?? (() => null),
+        _lanFactory = lanSignaling,
         _relayDial = relayDial ?? RelaySignaler.connect,
-        _client = client ?? http.Client() {
-    if (turnPassword != null) _turnPassword = turnPassword;
-  }
+        _client = client ?? http.Client();
 
   final SyncIdentity identity;
   final DeviceRegistry registry;
@@ -88,7 +87,7 @@ class SyncPairing {
   /// The TURN credential, read from the secret store through the closure
   /// rather than from settings — where it no longer lives. Read per ICE
   /// config, the way the URL and username are: an edit reaches the next dial.
-  String? Function() _turnPassword = () => null;
+  final String? Function() _turnPassword;
   final AppSettings Function() _settings;
   final SyncPeers _peers;
 

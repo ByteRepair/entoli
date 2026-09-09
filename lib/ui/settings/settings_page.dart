@@ -946,12 +946,10 @@ class _ProvidersEditor extends ConsumerWidget {
       title: title,
     );
     if (saved == null) return;
+    // A renamed provider is a move: the stored key follows the new id and the
+    // old entry goes, in the same upsert — the notifier owns both stores.
     await notifier.upsertProvider(saved.config,
-        setKey: switch (saved.key) {
-          KeyChange.keep => null,
-          KeyChange.clear => "",
-          KeyChange.set => saved.typedKey ?? "",
-        });
+        fromId: initial?.id, setKey: saved.setKey);
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {

@@ -648,21 +648,39 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// done — until the user picks something themselves. A role the user has
   /// already picked is left where it is; importing a backup and other bulk
   /// writes stay on [setProviders], which adopts nothing.
+  /// The endpoints the agent can call, replacing any entry that shares an id.
+  /// The model list is rebuilt from them, so it is invalidated here rather
+  /// than left showing the old one.
+  ///
+  /// [setKey] is the key decision in the dialog's own encoding — null leaves
+  /// the stored key, `""` clears it, a string stores it — and [fromId] names
+  /// the entry this replaces where a rename moved its id: the stored key
+  /// follows the new id and the old entry goes, all before the state change
+  /// whose rebuild reads the store.
+  ///
+  /// The first provider ever configured becomes what every still-unset role
+  /// resolves to — the same `_update` as the save, so it cannot land half
+  /// done — until the user picks something themselves. A role the user has
+  /// already picked is left where it is; importing a backup and other bulk
+  /// writes stay on [setProviders], which adopts nothing.
   Future<void> upsertProvider(LlmProviderConfig provider,
-      {String? setKey}) async {
+      {String? fromId, String? setKey}) async {
     // The key first: the settings state change below is what rebuilds the
     // section drawing the row, and the row reads the store — so the key has
     // to be in it before that rebuild runs.
-    if (setKey != null) {
-      await ref
-          .read(appSecretsProvider)
-          .setProviderKey(provider.id, setKey.isEmpty ? null : setKey);
+    final secrets = ref.read(appSecretsProvider);
+    if (fromId != null && fromId != provider.id) {
+      await secrets.setProviderKey(provider.id, setKey ?? secrets.providerKey(fromId));
+      await secrets.setProviderKey(fromId, null);
+    } else if (setKey != null) {
+      await secrets.setProviderKey(provider.id, setKey.isEmpty ? null : setKey);
     }
     final existing = state.llmProviders;
-    final isNew = existing.every((p) => p.id != provider.id);
+    final isNew = existing.every((p) => p.id != provider.id && p.id != fromId);
     await _update((s) => s
-      ..llmProviders = List.unmodifiable([...existing.where((p) => p.id != provider.id),
-          provider.copyWith(apiKey: "")])
+      ..llmProviders = List.unmodifiable([
+        ...existing.where((p) => p.id != provider.id && p.id != fromId), provider
+      ])
       ..defaultProviderId = s.defaultProviderId ?? (isNew ? provider.id : null)
       ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
       ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
