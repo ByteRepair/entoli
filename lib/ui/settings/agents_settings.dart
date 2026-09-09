@@ -8,6 +8,7 @@ import "../../core/config.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
+import "../../domain/project.dart" show promptsDirUserWritable;
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
 import "../widgets/add_button_row.dart";
@@ -22,8 +23,16 @@ import "../widgets/section_header.dart";
 /// Entoli's and not editable, the user's are written here and are. An agent is
 /// one flat `.md` file (a system prompt with `description` frontmatter), so it
 /// is written in-app rather than imported the way a skill's directory is.
+///
+/// [project] is whose set the page reads and whose directory it writes: null
+/// is the app-level page and the default project, a name is that project's
+/// settings page. A built-in project's page is view-only — it shows the
+/// entries its directory, the default's and the bundled presets make up, with
+/// nothing to change any of them, since a turn in it answers to the spec.
 class AgentsSection extends ConsumerStatefulWidget {
-  const AgentsSection({super.key});
+  const AgentsSection({super.key, this.project});
+
+  final String? project;
 
   @override
   ConsumerState<AgentsSection> createState() => _AgentsSectionState();
@@ -32,10 +41,13 @@ class AgentsSection extends ConsumerStatefulWidget {
 class _AgentsSectionState extends ConsumerState<AgentsSection> {
   final _busy = ValueNotifier(false);
 
-  /// Which agents live in the user's directory. Null while the first scan is
-  /// out, the same as skills: the library knows what is loaded, not where each
-  /// one came from.
+  /// Which agents live in [project]'s own directory. Null while the first
+  /// scan is out, the same as skills: the library knows what is loaded, not
+  /// where each one came from. Every other name on the list is inherited or
+  /// bundled.
   Set<String>? _userAgents;
+
+  bool get _writable => promptsDirUserWritable(widget.project);
 
   @override
   void initState() {
@@ -52,7 +64,8 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
   Future<void> _scan() async {
     final config = ref.read(appConfigProvider);
     final names = <String>{};
-    final dir = config.fs.directory(config.promptsDir(CompletionKind.agent));
+    final dir = config.fs
+        .directory(config.promptsDir(CompletionKind.agent, project: widget.project));
     if (await dir.exists()) {
       await for (final entity in dir.list()) {
         if (entity is File && config.fs.path.extension(entity.path) == ".md") {
@@ -92,7 +105,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       return;
     }
     final config = ref.read(appConfigProvider);
-    final file = config.fs.file(_agentPath(config, edit.name));
+    final file = config.fs.file(_agentPath(config, edit.name, project: widget.project));
     final exists = await file.exists();
     if (!mounted) return;
     if (!replacing && exists) {
@@ -109,15 +122,16 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     await _guard(() async {
       final config = ref.read(appConfigProvider);
       await platform.withWritableDir(
-        config.promptsDir(CompletionKind.agent),
+        config.promptsDir(CompletionKind.agent, project: widget.project),
         () async {
-          final file = config.fs.file(_agentPath(config, edit.name));
+          final file =
+              config.fs.file(_agentPath(config, edit.name, project: widget.project));
           await file.create(recursive: true);
           await file.writeAsString(
               PromptDocument.toSource(description: edit.description, body: edit.body));
         },
       );
-      await reloadAllPromptLibraries(ref);
+      await _reload();
       await _scan();
       _say(replacing ? "Saved ${edit.name}." : "Added ${edit.name}.");
     });
@@ -137,16 +151,24 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     await _guard(() async {
       final config = ref.read(appConfigProvider);
       await platform.withWritableDir(
-        config.promptsDir(CompletionKind.agent),
+        config.promptsDir(CompletionKind.agent, project: widget.project),
         () async {
-          await config.fs.file(_agentPath(config, agent.name)).delete();
+          await config.fs
+              .file(_agentPath(config, agent.name, project: widget.project))
+              .delete();
         },
       );
-      await reloadAllPromptLibraries(ref);
+      await _reload();
       await _scan();
       _say("Removed ${agent.name}.");
     });
   }
+
+  /// An agent page has one directory it writes into, so one project's
+  /// library is all a change here has to rebuild.
+  Future<void> _reload() => ref
+      .read(promptLibraryProvider(widget.project).notifier)
+      .reload();
 
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
@@ -158,20 +180,23 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final agents = ref.watch(promptLibraryProvider(null)).entries(CompletionKind.agent);
+    final agents =
+        ref.watch(promptLibraryProvider(widget.project)).entries(CompletionKind.agent);
     final userAgents = _userAgents;
+    final description = !_writable
+        ? "System prompts a message can address as @name in this project. "
+            "Shown read-only: the entries are this project's, the default "
+            "project's, or the app's own."
+        : agents.isEmpty
+            ? "System prompts a message can address as @name. None are "
+                "installed yet."
+            : "System prompts a message can address as @name. The bundled "
+                "ones ship with the app; the rest are yours.";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          "Agents",
-          description: agents.isEmpty
-              ? "System prompts a message can address as @name. None are "
-                  "installed yet."
-              : "System prompts a message can address as @name. The bundled "
-                  "ones ship with the app; the rest are yours.",
-        ),
+        SectionHeader("Agents", description: description),
         for (final agent in agents) _row(agent, userAgents),
         if (agents.isEmpty && userAgents != null && userAgents.isNotEmpty)
           const Padding(
@@ -181,34 +206,37 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
               "with no body in it.",
             ),
           ),
-        AddButtonRow(
-          child: ValueListenableBuilder(
-            valueListenable: _busy,
-            builder: (context, busy, _) => OutlinedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text("Add agent"),
-              onPressed: busy ? null : _add,
+        if (_writable)
+          AddButtonRow(
+            child: ValueListenableBuilder(
+              valueListenable: _busy,
+              builder: (context, busy, _) => OutlinedButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text("Add agent"),
+                onPressed: busy ? null : _add,
+              ),
             ),
           ),
-        ),
         BusyBar(_busy),
       ],
     );
   }
 
-  /// The trailing half of a row: the user's agents can be edited or removed,
-  /// the bundled ones say so, and while the scan is still out neither is drawn
-  /// — a button that flashes in is a row lying twice in a second.
+  /// The trailing half of a row: an agent the scanned directory holds is this
+  /// project's own and can be edited or removed, an inherited or bundled one
+  /// is not here and says which, and while the scan is still out neither is
+  /// drawn — a button that flashes in is a row lying twice in a second.
   Widget _row(PromptDocument agent, Set<String>? userAgents) {
-    final owned = userAgents?.contains(agent.name);
+    final inDir = userAgents?.contains(agent.name);
+    final owned = inDir == true && _writable;
     return ListTile(
       dense: true,
       title: Text(agent.name),
       subtitle: agent.description == null ? null : Text(agent.description!),
-      onTap: owned == true ? () => _edit(agent) : null,
-      trailing: switch (owned) {
+      onTap: owned ? () => _edit(agent) : null,
+      trailing: switch (inDir) {
         null => null,
-        true => Row(
+        true when _writable => Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
@@ -223,18 +251,28 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
               ),
             ],
           ),
-        false => const Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: Text("Bundled"),
+        false => Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Text(_originLabel(CompletionKind.agent, agent.name)),
           ),
+        true => null,
       },
     );
   }
+
+  /// Where an entry the project's directory does not hold came from: a preset
+  /// the binary embeds, or a default-project entry this project inherits.
+  String _originLabel(CompletionKind kind, String name) =>
+      isBundledPromptName(kind, name, project: widget.project)
+          ? "Bundled"
+          : "Inherited";
 }
 
-/// Where an agent called [name] lives in the user's agents directory.
-String _agentPath(AppConfig config, String name) =>
-    config.fs.path.join(config.promptsDir(CompletionKind.agent), "$name.md");
+/// Where an agent called [name] lives: [project]'s own agents directory — the
+/// default project's where it is null.
+String _agentPath(AppConfig config, String name, {String? project}) =>
+    config.fs.path
+        .join(config.promptsDir(CompletionKind.agent, project: project), "$name.md");
 
 /// What the editor page hands back on save.
 typedef AgentEdit = ({String name, String description, String body});

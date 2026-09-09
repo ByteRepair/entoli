@@ -6,10 +6,12 @@ import "package:fs_shim/fs.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
+import "../../domain/project.dart" show promptsDirUserWritable;
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/install_destination.dart";
 import "../widgets/section_header.dart";
 
 const _skillFiles = XTypeGroup(
@@ -20,11 +22,19 @@ const _skillFiles = XTypeGroup(
   webWildCards: ["application/zip"],
 );
 
-/// What the agent can be told to do by name. The list is the library's, the
+/// What the agent can be told to do by name. The list is the library's; the
 /// page's own question is where each one came from — a bundled skill is
 /// Entoli's and not deletable, the user's are imported here and are.
+///
+/// [project] is whose set the page reads and whose directory it writes: null
+/// is the app-level page and the default project, a name is that project's
+/// settings page. A built-in project's page is view-only — it shows the
+/// entries its directory, the default's and the bundled presets make up, with
+/// nothing to change any of them, since a turn in it answers to the spec.
 class SkillsSection extends ConsumerStatefulWidget {
-  const SkillsSection({super.key});
+  const SkillsSection({super.key, this.project});
+
+  final String? project;
 
   @override
   ConsumerState<SkillsSection> createState() => _SkillsSectionState();
@@ -33,9 +43,17 @@ class SkillsSection extends ConsumerStatefulWidget {
 class _SkillsSectionState extends ConsumerState<SkillsSection> {
   final _busy = ValueNotifier(false);
 
-  /// Which skills live in the user's directory. Null while the first scan is
-  /// out: the library knows what is loaded, not where each one came from.
+  /// Which skills live in [project]'s own directory. Null while the first
+  /// scan is out: the library knows what is loaded, not where each one came
+  /// from. Every other name on the list is inherited or bundled.
   Set<String>? _userSkills;
+
+  /// Where a skill imported here goes. Null is the default project — the
+  /// global page offers every project; a project's own page has no choice to
+  /// offer, so the field stays null and means this [SkillsSection.project].
+  String? _destination;
+
+  bool get _writable => promptsDirUserWritable(widget.project);
 
   @override
   void initState() {
@@ -52,7 +70,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   Future<void> _scan() async {
     final config = ref.read(appConfigProvider);
     final names = <String>{};
-    final dir = config.fs.directory(config.promptsDir(CompletionKind.skill));
+    final dir = config.fs
+        .directory(config.promptsDir(CompletionKind.skill, project: widget.project));
     if (await dir.exists()) {
       await for (final entity in dir.list()) {
         if (entity is Directory) names.add(config.fs.path.basename(entity.path));
@@ -70,16 +89,22 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     final package = _guardSync(() => parseSkillPackage(bytes));
     if (package == null) return;
 
+    // The destination dropdown's pick on the global page, the page's own
+    // project on a project page. The global page's scan reads only the
+    // default project's directory, so what lands elsewhere is visible in the
+    // snack bar, not in the list.
+    final target = widget.project ?? _destination;
     final config = ref.read(appConfigProvider);
-    final replacing =
-        await config.fs.directory(skillDirectory(config, package.name)).exists();
+    final replacing = await config.fs
+        .directory(skillDirectory(config, package.name, project: target))
+        .exists();
     if (!mounted) return;
     if (replacing) {
       final confirmed = await confirm(
         context,
         title: "Replace ${package.name}?",
-        message: "A skill with that name is already installed. Importing this "
-            "one replaces it, files included.",
+        message: "A skill with that name is already installed there. Importing "
+            "this one replaces it, files included.",
         confirmLabel: "Replace",
       );
       if (!confirmed) return;
@@ -88,13 +113,12 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     await _guard(() async {
       final config = ref.read(appConfigProvider);
       await platform.withWritableDir(
-          config.promptsDir(CompletionKind.skill),
-          () async {
-            await installSkillPackage(config, package);
-          });
-      await reloadAllPromptLibraries(ref);
+          config.promptsDir(CompletionKind.skill, project: target), () async {
+        await installSkillPackage(config, package, project: target);
+      });
+      await _reload(target);
       await _scan();
-      _say("Imported ${package.name}.");
+      _say(installedSnack("Imported", package.name, target));
     });
   }
 
@@ -113,17 +137,24 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     await _guard(() async {
       final config = ref.read(appConfigProvider);
       await platform.withWritableDir(
-          config.promptsDir(CompletionKind.skill),
+          config.promptsDir(CompletionKind.skill, project: widget.project),
           () async {
-            await config.fs
-                .directory(skillDirectory(config, skill.name))
-                .delete(recursive: true);
-          });
-      await reloadAllPromptLibraries(ref);
+        await config.fs
+            .directory(skillDirectory(config, skill.name, project: widget.project))
+            .delete(recursive: true);
+      });
+      await _reload(widget.project);
       await _scan();
       _say("Removed ${skill.name}.");
     });
   }
+
+  /// Re-read the library of the project a change landed in. The global page's
+  /// import can land in any of them, so it reloads every project's; a
+  /// project's own pages have one target and reload that one alone.
+  Future<void> _reload(String? target) => target == null
+      ? reloadAllPromptLibraries(ref)
+      : ref.read(promptLibraryProvider(target).notifier).reload();
 
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
@@ -146,21 +177,24 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final skills = ref.watch(promptLibraryProvider(null)).entries(CompletionKind.skill);
+    final skills =
+        ref.watch(promptLibraryProvider(widget.project)).entries(CompletionKind.skill);
     final userSkills = _userSkills;
+    final description = !_writable
+        ? "Named procedures the agent can load in this project, offered as "
+            "/name in the composer. Shown read-only: the entries are this "
+            "project's, the default project's, or the app's own."
+        : skills.isEmpty
+            ? "Named procedures the agent can load, offered as /name in the "
+                "composer. None are installed yet."
+            : "Named procedures the agent can load, offered as /name in the "
+                "composer. The bundled ones ship with the app; the rest are "
+                "yours.";
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(
-          "Skills",
-          description: skills.isEmpty
-              ? "Named procedures the agent can load, offered as /name in the "
-                  "composer. None are installed yet."
-              : "Named procedures the agent can load, offered as /name in the "
-                  "composer. The bundled ones ship with the app; the rest are "
-                  "yours.",
-        ),
+        SectionHeader("Skills", description: description),
         for (final skill in skills) _row(skill, userSkills),
         if (skills.isEmpty && userSkills != null && userSkills.isNotEmpty)
           const Padding(
@@ -170,40 +204,64 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
               "with no SKILL.md in it.",
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: ValueListenableBuilder(
-            valueListenable: _busy,
-            builder: (context, busy, _) => OutlinedButton.icon(
-              icon: const Icon(Icons.upload_file),
-              label: const Text("Import skill"),
-              onPressed: busy ? null : _import,
+        if (_writable) ...[
+          if (widget.project == null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: InstallDestination(
+                value: _destination,
+                onChanged: (value) => setState(() => _destination = value),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: ValueListenableBuilder(
+              valueListenable: _busy,
+              builder: (context, busy, _) => OutlinedButton.icon(
+                icon: const Icon(Icons.upload_file),
+                label: const Text("Import skill"),
+                onPressed: busy ? null : _import,
+              ),
             ),
           ),
-        ),
+        ],
         BusyBar(_busy),
       ],
     );
   }
 
-  /// The trailing half of a row: the user's skills can be removed, the
-  /// bundled ones say so, and while the scan is still out neither is drawn —
+  /// The trailing half of a row: an entry the scanned directory holds is this
+  /// project's own and can be removed, an inherited or bundled one is not
+  /// here and says which, and while the scan is still out neither is drawn —
   /// a remove button that flashes in is a row lying twice in a second.
-  Widget _row(PromptDocument skill, Set<String>? userSkills) => ListTile(
+  Widget _row(PromptDocument skill, Set<String>? userSkills) =>
+      ListTile(
         dense: true,
         title: Text(skill.name),
         subtitle: skill.description == null ? null : Text(skill.description!),
         trailing: switch (userSkills?.contains(skill.name)) {
+          // The scan is still out: neither button nor badge is drawn.
           null => null,
-          true => IconButton(
+          // The project's own — but only where the directory is the user's to
+          // write into; a built-in's rows say what they are and stop there.
+          true when _writable => IconButton(
               icon: const Icon(Icons.close),
               tooltip: "Remove ${skill.name}",
               onPressed: () => _delete(skill),
             ),
-          false => const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Text("Bundled"),
+          false => Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(_originLabel(CompletionKind.skill, skill.name)),
             ),
+          true => null,
         },
       );
+
+  /// Where an entry the project's directory does not hold came from: a preset
+  /// the binary embeds, or a default-project entry this project inherits.
+  String _originLabel(CompletionKind kind, String name) =>
+      isBundledPromptName(kind, name, project: widget.project)
+          ? "Bundled"
+          : "Inherited";
 }
+

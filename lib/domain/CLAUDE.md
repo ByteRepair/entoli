@@ -583,9 +583,12 @@ nothing downstream should wait on it; a skill dropped into the directory by
 hand therefore does not appear until a restart, though nothing would break if it
 did — a message resolves against whatever the library holds when it is
 composed, and keeps the answer. The routes that buy a refresh are the places
-that change the library from inside the app — the Skills settings page and a
-`create_skill` install — each reloads every project's library after it writes,
-so the change lands without a restart.
+that change the library from inside the app — the skills and agents settings
+pages, at the app level and from a project settings page, and a `create_skill`
+install — each reloads every project's library after it writes, so the change
+lands without a restart. The same settings widgets serve both levels, under a
+`project` parameter: a project's page writes that project's directory, and a
+built-in's is the read-only view of the set it serves.
 
 A skill is a **directory**, not a file: a `SKILL.md` and whatever files it runs
 with. Its name is the frontmatter's `name` where it has one, the folder
