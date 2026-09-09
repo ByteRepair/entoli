@@ -5,11 +5,7 @@
 /// builds enforce the same call.
 library;
 
-import "dart:typed_data";
-
-abstract interface class ArtifactBytes {
-  Future<Uint8List?> artifactBytes(String chatId, String artifactId);
-}
+import "../../../data/sync/artifact_bytes.dart" show ArtifactBytes;
 
 class RemoteArtifacts {
   RemoteArtifacts(ArtifactBytes hub);

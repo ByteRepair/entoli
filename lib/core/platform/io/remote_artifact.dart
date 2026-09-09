@@ -4,6 +4,7 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 import "package:fs_shim/fs_io.dart" show fileSystemIo;
 
+import "../../../data/sync/artifact_bytes.dart" show ArtifactBytes;
 import "../../../domain/workspace.dart";
 import "../../log.dart";
 
@@ -69,9 +70,4 @@ class RemoteArtifacts {
         .delete(recursive: true)
         .then((_) {}, onError: (Object e) => logFailure("open", "$e"));
   }
-}
-
-/// What [RemoteArtifacts] asks of the hub, so a test can stand in for it.
-abstract interface class ArtifactBytes {
-  Future<Uint8List?> artifactBytes(String chatId, String artifactId);
 }
