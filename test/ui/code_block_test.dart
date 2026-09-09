@@ -209,13 +209,12 @@ void main() {
     });
 
     // The bar is the block's chrome, not what the model said. Dragging the
-    // whole reply still copies its markdown, the language name included in
+    // whole reply copies the rendered text, the language name included in
     // neither direction.
     testWidgets("a drag across the reply does not pick up the bar",
         (tester) async {
       final copied = clipboard(tester);
-      const markdown = "read this:\n\n```python\nprint(1)\n```";
-      await pump(tester, markdown);
+      await pump(tester, "read this:\n\n```python\nprint(1)\n```");
 
       final reply = find.byType(MarkdownBody);
       final gesture = await tester.startGesture(
@@ -233,7 +232,7 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
 
-      expect(copied, [markdown]);
+      expect(copied, ["read this:\nprint(1)"]);
     });
   });
 
