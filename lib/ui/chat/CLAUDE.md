@@ -678,8 +678,20 @@ first character and the change front moves progressively towards the end,
 over 400ms at constant speed, starting from whatever is on screen so picking
 another badge mid-sweep retargets rather than jumps — where two strings
 agree nothing visibly changes, so what moves is the divergence toward the
-end. The row animates its first build too: the screen is grown into, not
-shown settled.
+end.
+
+**The screen opens settled.** It used to be that the rows animated their
+first build too — the screen was grown into, not shown settled — and what
+that bought was a page the user opens on that moves before anything has been
+touched. So both rows are built `settled`: what this screen is created with
+is already there, and everything from the first interaction on animates. The
+same body serves a chat that exists with nothing said in it yet — what voice
+mode and a reminder can leave — and it opens settled the same way. A remount
+across `navBreakpoint` rebuilds the rows, and they open settled again, which
+is right: that remount *is* the screen appearing. The say-so is scoped to the
+row's first build, so content that is not on screen at that moment — a cold
+start whose project list resolves a frame later — arrives the way any change
+does: animated.
 
 What the headline says is `emptyChatQuestionProvider`: a built-in's shipped
 question, else the project's `description` (the settings page's Description
