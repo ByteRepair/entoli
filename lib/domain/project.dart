@@ -90,6 +90,12 @@ bool projectHasSettingsPage(String? project) {
   return isProjectName(project);
 }
 
+/// Whether a project's skills and agents directories are the user's to write
+/// into. False for a built-in: its entries are the spec's, which is why its
+/// prompt pages are view-only. The one answer the shared prompt sections gate
+/// their buttons and row actions on.
+bool promptsDirUserWritable(String? project) => !isBuiltinProject(project);
+
 /// The directory name for what the user typed, or null if nothing usable is
 /// left of it. Deliberately strict: this ends up as a `cd` target in commands
 /// the model writes.

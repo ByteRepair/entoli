@@ -3,11 +3,14 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
+import "../../domain/models.dart";
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
 import "../memory/memory_page.dart";
 import "../profile/profile_page.dart";
+import "../settings/agents_settings.dart";
+import "../settings/skills_settings.dart";
 import "../fonts.dart";
 import "../widgets/destructive_button.dart";
 import "../widgets/dialogs.dart";
@@ -132,6 +135,22 @@ class ProjectSettingsPage extends ConsumerWidget {
             const Divider(),
             _ProfileRow(project: project),
           ],
+          // What a turn in this project is told by name: the shared skills and
+          // agents pages against this project's directories. The built-ins'
+          // pages are view-only — the sections gate themselves on the spec —
+          // but what they hold is shown, the way the Memory rows are.
+          const Divider(),
+          _PromptsRow(
+            project: project,
+            kind: CompletionKind.skill,
+            icon: Icons.extension_outlined,
+          ),
+          const Divider(),
+          _PromptsRow(
+            project: project,
+            kind: CompletionKind.agent,
+            icon: Icons.smart_toy_outlined,
+          ),
           const Divider(),
           _TempChatTtlRow(project: project),
           const Divider(),
@@ -422,6 +441,48 @@ class _TempChatTtlRow extends ConsumerWidget {
       options: tempChatTtlLabels,
       onChanged: (v) =>
           ref.read(projectSettingsProvider(project).notifier).setTempChatTtl(v),
+    );
+  }
+}
+
+/// The row that opens one of the shared prompt pages — skills or agents —
+/// against this project's directories. The subtitle counts the entries the
+/// project's library serves, inherited and bundled included, since that is
+/// what a turn in the project is offered; the page itself says which are the
+/// project's own.
+class _PromptsRow extends ConsumerWidget {
+  const _PromptsRow({
+    required this.project,
+    required this.kind,
+    required this.icon,
+  });
+
+  final String project;
+  final CompletionKind kind;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count =
+        ref.watch(promptLibraryProvider(project)).entries(kind).length;
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(kind.label),
+      subtitle: Text(count == 0 ? "None" : "$count"),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: Text("${kind.label} — $project")),
+            body: ListView(children: [
+              switch (kind) {
+                CompletionKind.skill => SkillsSection(project: project),
+                CompletionKind.agent => AgentsSection(project: project),
+              }
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }
