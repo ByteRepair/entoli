@@ -226,30 +226,64 @@ WebSearch platformWebSearch() => DuckDuckGoSearch();
 LocalModelStore platformLocalModelStore(String cacheDir) =>
     FileLocalModelStore(p.join(cacheDir, "llm"));
 
-/// llama.cpp's server, where this build carried one for the device's ABI.
+/// llama.cpp's server, where this build carried one.
 ///
-/// **Android only, and that is a judgement rather than a limit.** The desktops
-/// can already reach a model on the machine they are on — Ollama and LM Studio
-/// are two of the presets in `llmProviderPresets`, and both are a better answer
-/// than a second copy of llama.cpp inside this app. A phone has no such thing
-/// to reach, which is the whole reason to carry one.
+/// The binary sits with the app's own: on Android in the native library
+/// directory — the one place an app may execute a file from — and on Linux in
+/// the bundle's `lib/`, which `tool/linux/build-llama.sh` fills and
+/// `linux/CMakeLists.txt` installs from. Nowhere else it could be found is
+/// looked at: a machine's own llama.cpp or llama-server is the user's install
+/// of it, reached the way Ollama and LM Studio are, under Providers.
+///
+/// The desktops could already reach a model on the machine they are on —
+/// Ollama and LM Studio are two of the presets in `llmProviderPresets`, and
+/// for a machine that has one they remain the better answer. The bundled
+/// server is the zero-setup one: nothing installed, nothing running yet, the
+/// same catalog the phone downloads from.
 Future<LocalLlm> platformLocalLlm(LocalModelStore store, String cacheDir) async {
-  if (!Platform.isAndroid) return const UnavailableLocalLlm();
-  final libDir = await BundledTools.nativeLibraryDir();
-  if (libDir == null) return const UnavailableLocalLlm();
-  final server = File(p.join(libDir, "libllama-server.so"));
-  if (!await server.exists()) return const UnavailableLocalLlm();
-  return LlamaServerPool(
-    LlamaBinaries(server: server.path, libDir: libDir),
-    store,
-    slotSaveDir: _kvCacheDir(cacheDir),
-  );
+  if (Platform.isAndroid) {
+    final libDir = await BundledTools.nativeLibraryDir();
+    if (libDir == null) return const UnavailableLocalLlm();
+    final server = File(p.join(libDir, "libllama-server.so"));
+    if (!await server.exists()) return const UnavailableLocalLlm();
+    return LlamaServerPool(
+      LlamaBinaries(server: server.path, libDir: libDir),
+      store,
+      slotSaveDir: _kvCacheDir(cacheDir),
+    );
+  }
+  if (Platform.isLinux) {
+    final libDir = bundledLinuxLibDir();
+    if (libDir == null) return const UnavailableLocalLlm();
+    final server = File(p.join(libDir, "llama-server"));
+    if (!await server.exists()) return const UnavailableLocalLlm();
+    return LlamaServerPool(
+      LlamaBinaries(server: server.path, libDir: libDir),
+      store,
+      slotSaveDir: _kvCacheDir(cacheDir),
+    );
+  }
+  return const UnavailableLocalLlm();
+}
+
+/// The directory beside the running executable that a Linux bundle holds its
+/// native libraries in — the same `lib/` the launcher resolves through an
+/// `$ORIGIN` rpath. Null where the process is not running from a bundle
+/// layout, which is every non-Linux platform and a `dart` test run.
+///
+/// Pure over [executablePath] rather than reading [Platform] itself, so a test
+/// can pin what is built for each shape of path.
+String? bundledLinuxLibDir({String? executablePath}) {
+  final path = executablePath ?? Platform.resolvedExecutable;
+  final dir = p.dirname(path);
+  return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");
 }
 
 /// The one directory the server's slot dumps and [FileKvCache] both read: the
 /// pool launches the server with it as `--slot-save-path`, the cache reads and
-/// evicts within it, so the two are built from the one join. Null off Android,
-/// where there is no server to persist for.
+/// evicts within it, so the two are built from the one join. Null where there
+/// is no server to persist for — [platformLocalKvCache] gates on the same
+/// [LocalLlm.available] the pool's presence answers.
 String _kvCacheDir(String cacheDir) => p.join(cacheDir, "kv-cache");
 
 LocalKvCache? platformLocalKvCache(String cacheDir, LocalLlm localLlm) =>

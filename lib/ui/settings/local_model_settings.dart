@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter/foundation.dart" show kIsWeb;
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
@@ -382,21 +383,44 @@ class _RunningRow extends StatelessWidget {
   }
 }
 
-/// What the section says where no server was bundled, which is every platform
-/// but Android. Said rather than hidden, for the reason the Voice category is
-/// drawn where `Voice.available` is false: the settings are the app's whatever
-/// it is running on, and the answer here is a good one rather than an apology.
+/// What the section says where no server was bundled. Said rather than hidden,
+/// for the reason the Voice category is drawn where `Voice.available` is
+/// false: the settings are the app's whatever it is running on, and the answer
+/// here is a good one rather than an apology.
+///
+/// The two cases differ in what went missing. On the web there is nothing that
+/// could run a model, and the better answer is a hosted provider or a machine
+/// running one. On a desktop the build could have carried one and did not —
+/// which is a build fault in the same sense a missing proot is, and is said
+/// the way that one is: what to run to fill it.
 class _Elsewhere extends StatelessWidget {
   const _Elsewhere();
 
   @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) return const _ElsewhereWeb();
+    return const SectionHeader(
+      "Answering on this device",
+      description: "This build carries no model server. Run "
+          "tool/linux/build-llama.sh and build again, and the catalog below "
+          "is bundled into the app. Until then the better answer is already "
+          "there: add Ollama or LM Studio under Providers, and everything "
+          "they serve appears in the pickers.",
+    );
+  }
+}
+
+class _ElsewhereWeb extends StatelessWidget {
+  const _ElsewhereWeb();
+
+  @override
   Widget build(BuildContext context) => const SectionHeader(
         "Answering on this device",
-        description: "This build carries no model server. On a desktop the "
-            "better answer is already there: add Ollama or LM Studio under "
+        description: "A browser can hold no model and run none. The better "
+            "answer is already there: add Ollama or LM Studio under "
             "Providers, and everything they serve appears in the pickers. "
-            "Carrying a model is Android's, where there is nothing else on the "
-            "phone to ask.",
+            "Carrying a model is the desktops' and the phone's, where there "
+            "is a machine of one's own to ask.",
       );
 }
 
@@ -417,8 +441,9 @@ class LocalModelCatalogSection extends ConsumerWidget {
           "Available",
           description: "Downloaded once and kept outside the app's data, so a "
               "backup does not carry it and a restore does not delete it. All "
-              "of them are Q4_0, which is the one quantisation an NPU can be "
-              "handed as it is.",
+              "of them are Q4_0 — the one quantisation an NPU can be handed "
+              "as it is, and small enough that the phones this list is sized "
+              "for run the larger sizes well.",
         ),
         for (final model in localModelCatalog) LocalModelTile(model: model),
         const _StaleModelTiles(),
