@@ -148,6 +148,13 @@ pumping the real one would build the real backend and read `rootBundle` for the
 prompt library. What is pinned is that a restore asks for a restart, that the
 restore happens inside it, and that a refused one does neither.
 
+`app.secrets` is the `AppSecrets` the settings notifiers write into — the real
+one over an in-memory `FakeSecretStore`, so what a page reads back after it
+saves is the class's own behaviour rather than a fake's. A test that wants keys
+pre-stored passes its own store to `TestApp.create(secrets: …)`. Assert on
+`app.secrets.providerKey(id)` rather than on `settings.json`, which no longer
+carries the keys.
+
 `heldTurn` is a chat parked mid-turn with one event delivered and the widget it
 raises on screen, over a backend whose `hold` keeps the turn open the way a real
 one is while it waits to be told something. Everything drawing turn-scoped view

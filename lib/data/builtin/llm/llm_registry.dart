@@ -29,7 +29,11 @@ class LlmEndpoint {
 /// Both inputs are read when used rather than captured: the settings page
 /// edits them, and it does so long after this was built.
 class LlmRegistry {
-  LlmRegistry({required this.endpoints, required this.lookupEnv});
+  LlmRegistry({
+    required this.endpoints,
+    required this.lookupEnv,
+    required this.lookupKey,
+  });
 
   final List<LlmEndpoint> Function() endpoints;
 
@@ -37,6 +41,11 @@ class LlmRegistry {
   /// finding a named key, and building a map of the process environment to
   /// answer that copies a hundred entries per lookup.
   final String? Function(String name) lookupEnv;
+
+  /// The key stored for a provider id, or null for none — the store the
+  /// settings page writes into, held by the OS where there is one. Asked
+  /// before [lookupEnv]: a key pasted here wins over a named one.
+  final String? Function(String providerId) lookupKey;
 
   final _clients = LlmClientCache();
 
@@ -59,7 +68,7 @@ class LlmRegistry {
   /// parse `settings.json` all over again.
   LlmClient clientOf(LlmEndpoint endpoint) {
     final config = endpoint.config;
-    final key = config.resolveKeyWith(lookupEnv);
+    final key = resolveKeyFor(config);
     // A URL or key edited in settings has to reach the next turn, so a cached
     // client built from the old one is dropped rather than reused. The
     // on-device endpoint is the one this never rebuilds: its URL is empty and
@@ -70,6 +79,16 @@ class LlmRegistry {
       "${config.api.name}|${config.baseUrl}|$key",
       () => (endpoint.build ?? _defaultBuild)(config, key),
     );
+  }
+
+  /// One order, decided once: the stored key, then the named environment
+  /// variable. The registry builds clients from exactly this, so an edited
+  /// stored key reaching the next turn is the cache signature above, not a
+  /// second path.
+  String? resolveKeyFor(LlmProviderConfig config) {
+    final stored = lookupKey(config.id);
+    if (stored != null && stored.isNotEmpty) return stored;
+    return config.resolveKeyWith(lookupEnv);
   }
 
   /// Every model the configured endpoints offer. One that lists its own is

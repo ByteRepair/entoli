@@ -70,6 +70,7 @@ void main() {
         endpoints: () =>
             [for (final p in providers) LlmEndpoint(p, build: (_, _) => client)],
         lookupEnv: (_) => null,
+        lookupKey: (_) => null,
       ),
     );
     if (library != null) backend.setLibrary(null, library);
