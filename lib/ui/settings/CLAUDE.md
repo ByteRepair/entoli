@@ -90,7 +90,20 @@ live in their own directory beside the extracted presets, so a bundled one is
 not deletable and a user's is; import and delete are the two things that change
 it, and they reload the library the moment they are done, the one way a change
 to it lands without a restart, where a skill dropped into the directory by hand
-still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
+still waits for one. The same widget is a project settings page's too, under a
+`project` parameter: it then reads that project's library and scans that
+project's directory, so an entry it holds is editable there and everything else
+is a row that says where it came from — `Inherited` from the default project,
+or `Bundled`. A built-in's page is the read-only version of the same thing: no
+import, no remove, the badges only, since what a turn in it may have is the
+spec's to say. A user project's page imports without the destination combobox —
+it is in that project — and the global page's import carries one, `Global`
+default, where a skill the user picks can land in any project. The skill-install
+preview page has the same combobox, so a model-drafted skill is aimed the same
+way; `InstallDestination` is the one widget both carry. A project's agents page
+is the same widget with `@name` prose: add, edit and delete against the
+project's directory, inherited rows badged. See "Skills and agents" in
+`lib/domain/CLAUDE.md`.
 **Agents** is the list of what a message can address by name — the bundled
 ones, which ship with the app and are read-only, and the user's own, written
 in-app and editable or removable. An agent is one flat `.md` file (a system
