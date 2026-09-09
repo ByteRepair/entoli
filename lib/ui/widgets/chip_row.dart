@@ -28,11 +28,20 @@ class ChipRowEntry {
 /// wants the same.
 ///
 /// The row animates on its first build too: a row is grown into, not shown
-/// settled, which is what keeps one rule for every change.
+/// settled, which is what keeps one rule for every change. [settled] is the
+/// caller's say-so not to: the entries a screen is built with while it is
+/// appearing are already there, and everything from the first change on
+/// animates.
 class ChipRow extends StatefulWidget {
-  const ChipRow({super.key, required this.entries});
+  const ChipRow({super.key, required this.entries, this.settled = false});
 
   final List<ChipRowEntry> entries;
+
+  /// Whether the entries the row is first built with are already there.
+  /// Snapshot at the row's own first build: kept entries stay settled
+  /// whatever a later rebuild says, and entries arriving after animate as
+  /// always.
+  final bool settled;
 
   @override
   State<ChipRow> createState() => _ChipRowState();
@@ -43,10 +52,15 @@ class ChipRow extends StatefulWidget {
 /// removal is matched against the very instance it was scheduled for, so a
 /// revival that builds a fresh instance cannot be removed by it.
 class _Shown {
-  _Shown(this.key, this.child) : exiting = false;
+  _Shown(this.key, this.child, {this.settled = false}) : exiting = false;
 
   final Key key;
   final Widget child;
+
+  /// Whether this entry was on the row the row was first built with —
+  /// snapshot there, so a kept entry's tween stays degenerate without
+  /// relying on what a retarget would do to a flipped flag.
+  bool settled;
   bool exiting;
 }
 
@@ -57,7 +71,8 @@ class _ChipRowState extends State<ChipRow> {
   void initState() {
     super.initState();
     shown = [
-      for (final entry in widget.entries) _Shown(entry.key, entry.child),
+      for (final entry in widget.entries)
+        _Shown(entry.key, entry.child, settled: widget.settled),
     ];
   }
 
@@ -72,7 +87,7 @@ class _ChipRowState extends State<ChipRow> {
       // tween retargets home.
       final match = next.remove(entry.key);
       if (match != null) {
-        kept.add(_Shown(entry.key, match.child));
+        kept.add(_Shown(entry.key, match.child, settled: entry.settled));
       } else {
         if (!entry.exiting) {
           entry.exiting = true;
@@ -99,22 +114,27 @@ class _ChipRowState extends State<ChipRow> {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final entry in shown)
-          FloatingPosition(
-            // Under the entry's key: it is how the wrap's children match up
-            // across builds, and it is the caller's identity for the chip.
-            key: entry.key,
+    return AnimatedSize(
+      duration: _motion,
+      curve: Curves.easeOut,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final entry in shown)
+            FloatingPosition(
+              // Under the entry's key: it is how the wrap's children match up
+              // across builds, and it is the caller's identity for the chip.
+              key: entry.key,
             child: _EnterExit(
               exiting: entry.exiting,
+              settled: entry.settled,
               child: entry.child,
             ),
-          ),
-      ],
+            ),
+        ],
+      ),
     );
   }
 }
@@ -125,15 +145,22 @@ class _ChipRowState extends State<ChipRow> {
 /// neighbours glide rather than jump; the scale is the tween too, so painted
 /// size follows slot size and what appears from nothing is the child itself.
 class _EnterExit extends StatelessWidget {
-  const _EnterExit({required this.child, this.exiting = false});
+  const _EnterExit({required this.child, this.exiting = false, this.settled = false});
 
-  final bool exiting;
   final Widget child;
+  final bool exiting;
+
+  /// The `begin` a first build carries: 1.0 rather than 0.0. The tween is
+  /// then degenerate, and `TweenAnimationBuilder` runs nothing on it —
+  /// whatever was on the row when it was first built is already there. The
+  /// flag rides the entry rather than the widget, so it never changes for a
+  /// living entry and the flip question does not arise.
+  final bool settled;
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder(
-      tween: Tween(begin: 0.0, end: exiting ? 0.0 : 1.0),
+      tween: Tween(begin: settled ? 1.0 : 0.0, end: exiting ? 0.0 : 1.0),
       duration: _motion,
       curve: exiting ? Curves.easeIn : Curves.easeOut,
       builder: (context, value, child) => Opacity(

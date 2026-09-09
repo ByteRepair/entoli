@@ -11,7 +11,8 @@ void main() {
   Widget chip(String name) =>
       SizedBox(key: ValueKey("$name-chip"), width: 100, height: 40);
 
-  Future<void> pumpRow(WidgetTester tester, List<String> names) async {
+  Future<void> pumpRow(WidgetTester tester, List<String> names,
+      {bool settled = false}) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -20,6 +21,7 @@ void main() {
             child: SizedBox(
               width: 300,
               child: ChipRow(
+                settled: settled,
                 entries: [
                   for (final name in names)
                     ChipRowEntry(key: ValueKey(name), child: chip(name)),
@@ -34,6 +36,13 @@ void main() {
 
   Finder chipOf(String name) => find.byKey(ValueKey("$name-chip"));
 
+  /// The slot the entry is grown into: the thing whose width the tween
+  /// moves, since the chip's own box is full size from the first frame.
+  RenderFloatingPosition slotOf(WidgetTester tester, String name) =>
+      tester.renderObject<RenderFloatingPosition>(
+        find.ancestor(of: chipOf(name), matching: find.byType(FloatingPosition)),
+      );
+
   testWidgets("the first build grows in from nothing", (tester) async {
     await pumpRow(tester, ["a", "b"]);
     await tester.pump(const Duration(milliseconds: 60));
@@ -41,10 +50,41 @@ void main() {
     // Mid-growth: both entries are on screen, part grown.
     expect(chipOf("a"), findsOneWidget);
     expect(chipOf("b"), findsOneWidget);
+    expect(slotOf(tester, "a").size.width, lessThan(100.0));
 
     await tester.pumpAndSettle(const Duration(milliseconds: 16));
     expect(chipOf("a"), findsOneWidget);
     expect(chipOf("b"), findsOneWidget);
+  });
+
+  testWidgets("a settled row shows full size on its first build", (tester) async {
+    await pumpRow(tester, ["a", "b"], settled: true);
+    await tester.pump(const Duration(milliseconds: 60));
+
+    // Not part grown: the flag snapshot makes the first tween degenerate, so
+    // what the row is built with is already there.
+    expect(slotOf(tester, "a").size.width, 100.0);
+    expect(slotOf(tester, "b").size.width, 100.0);
+
+    await tester.pumpAndSettle(const Duration(milliseconds: 16));
+    expect(slotOf(tester, "a").size.width, 100.0);
+  });
+
+  testWidgets("a settled row animates what arrives after it", (tester) async {
+    await pumpRow(tester, ["a", "b"], settled: true);
+    await tester.pumpAndSettle(const Duration(milliseconds: 16));
+
+    // The screen's own sequence: opened settled, then a change. What arrives
+    // now was not on the row it was built with, so it grows in as always.
+    await pumpRow(tester, ["a", "b", "c"], settled: true);
+    await tester.pump(const Duration(milliseconds: 60));
+
+    // Mid-growth: "c" is on screen but its slot is not yet full.
+    expect(chipOf("c"), findsOneWidget);
+    expect(slotOf(tester, "c").size.width, lessThan(100.0));
+
+    await tester.pumpAndSettle(const Duration(milliseconds: 16));
+    expect(slotOf(tester, "c").size.width, 100.0);
   });
 
   testWidgets("a removal shrinks away before it goes", (tester) async {
@@ -91,9 +131,7 @@ void main() {
     // While the leaving chip shrinks, "a"'s slot moves frame by frame and the
     // paint chases it: the painted position and the settled one disagree
     // mid-motion, which is the glide.
-    final a = tester.renderObject<RenderFloatingPosition>(
-      find.ancestor(of: chipOf("a"), matching: find.byType(FloatingPosition)),
-    );
+    final a = slotOf(tester, "a");
     expect(a.paintedOffset.dx, isNot(a.localToGlobal(Offset.zero).dx));
 
     await tester.pumpAndSettle(const Duration(milliseconds: 16));
