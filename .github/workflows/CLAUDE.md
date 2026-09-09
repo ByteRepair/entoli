@@ -43,7 +43,6 @@ Linux builds then share is one composite action,
 what they do with what comes back, which is a bundle and an AppImage either
 way. The four signing secrets are named at the call site rather than
 `inherit`ed, since only the Android jobs sign anything.
-
 **The Android build is four jobs, not one.** The native tools build fetches
 the Hexagon SDK and cross-compiles proot and llama.cpp — several gigabytes of
 intermediates a single runner did not have room for beside the Gradle build.
@@ -59,6 +58,30 @@ caches onto a fresh runner, then build — split APKs and an App Bundle
 respectively, in parallel. `debug-build.yml` splits the same way, for the
 same reason; it does not pass `gradle-cache`, so it pays its own Gradle setup
 as it always did. The tools job does not touch Dart.
+
+**The Linux build is two jobs, not one, for the same reason.** `llama-linux`
+builds the desktop model server (`.github/actions/linux-llama`, over
+`tool/linux/build-llama.sh`) and uploads the stage as an artifact; `linux`
+downloads it before `flutter build linux`, so the bundle either carries the
+server whole or not at all — the artifact check between the download and the
+build is what says which. The cache lives on the llama job, whose only other
+content is two apt packages, so a cache miss costs the build alone rather
+than a Flutter setup too; the app job carries no llama cache at all, and its
+composite (`linux-appimage`) installs nothing for the server. One trap this
+closes: the cache's post-save never ran where the job failed mid-composite —
+the first run of the llama step was thrown away whole, and every retry
+rebuilt it — so a build worth caching is worth a job that does nothing
+besides it.
+
+**`LLAMA_OPENSSL` is pinned OFF, in both builds.** The option defaults ON,
+and where the host has libssl3's dev files — the ubuntu runner, most
+desktops — cpp-httplib links `libssl.so.3` into the server, which the
+staging check refuses: the bundle ships what the app owns plus the
+libc-family names, and a distro's SSL is neither. The Android cross build
+got OFF by accident (no OpenSSL for `find_package` to find under the NDK);
+the pin makes all three environments agree by statement rather than by two
+of them agreeing by luck. The app does its own downloading; the server is
+local inference.
 
 **The Gradle cache has one writer.** `build-common` saves it; the build jobs
 restore read-only (`cache/restore`), so two jobs never upload the same

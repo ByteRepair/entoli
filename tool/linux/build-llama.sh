@@ -108,7 +108,11 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
     # ggml's runtime dispatch on, so one binary runs a 2015 x-86-64 and a
     # Zen 5 both. `native` would bake this machine's -march into it.
     # `GGML_BACKEND_DL`, `GGML_OPENMP` and `LLAMA_CURL` are shared with the
-    # Android build and said there.
+    # Android build and said there. `LLAMA_OPENSSL=OFF` pins what that build
+    # got by accident: the option defaults ON, the app does its own
+    # downloading, and where the host has libssl3's dev files — the CI
+    # runner, any desktop that does — it would link libssl.so.3 into what is
+    # staged, which the check below refuses.
     cmake -B "$bdir" -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_SHARED_LIBS=ON \
@@ -122,6 +126,7 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
       -DVulkan_GLSLC_EXECUTABLE="$glslc" \
       -DSPIRV-Headers_DIR="$spirv/share/cmake/SPIRV-Headers" \
       -DLLAMA_CURL=OFF \
+      -DLLAMA_OPENSSL=OFF \
       -DLLAMA_BUILD_SERVER=ON \
       -DLLAMA_BUILD_TESTS=OFF \
       -DLLAMA_BUILD_EXAMPLES=OFF \

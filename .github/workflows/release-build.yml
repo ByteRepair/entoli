@@ -530,13 +530,62 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  linux:
+  # The desktop model server and the app run on separate runners, the way the
+  # Android tools and APK do: the server build is a native cmake of llama.cpp
+  # with minutes of its own, and the app build has no use for the toolchain
+  # under it. The llama job builds and uploads the stage as an artifact; the
+  # linux job downloads it before `flutter build linux`, so the bundle either
+  # carries the server whole or not at all. The cache lives on the llama job,
+  # whose only other content is two apt packages, so a cache miss costs the
+  # build alone rather than a Flutter setup too.
+  llama-linux:
     needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag }}
+
+      - id: llama
+        uses: ./.github/actions/linux-llama
+        with:
+          stage: false
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: llama-linux
+          path: build/llama/
+          if-no-files-found: error
+          # Already stripped .so files; recompressing buys little and costs time.
+          compression-level: 0
+          # Read by the linux job right after; a re-run of the publisher never
+          # wants it, unlike the apks and aab, so one day is enough.
+          retention-days: 1
+
+  linux:
+    needs: [version, llama-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+
+      # The stage the bundle's CMakeLists installs from — the artifact the llama
+      # job uploaded. Unpacked before `flutter build linux` runs, which is what
+      # makes the "whole or not at all" above true.
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: llama-linux
+          path: build/llama
+
+      - name: Check the downloaded model server is whole
+        run: |
+          set -euo pipefail
+          for lib in llama-server libllama-common.so.0 libggml-base.so.0 \
+            libggml-vulkan.so libggml-cpu.so; do
+            [ -e "build/llama/$lib" ] ||
+              { echo "::error::the llama artifact has no $lib" >&2; exit 1; }
+          done
 
       - id: build
         uses: ./.github/actions/linux-appimage
