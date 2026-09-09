@@ -28,6 +28,8 @@ void main() {
     app = TestApp.create();
     await pumpOnDevice(tester);
 
+    // Web and a server-less desktop build get different wordings — the
+    // desktop could have run the script — but both name the presets either.
     expect(find.textContaining("Ollama or LM Studio"), findsOneWidget);
     expect(find.text(model.name), findsNothing);
     expect(find.text("Max LLMs running"), findsNothing);
