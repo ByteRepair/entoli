@@ -53,8 +53,8 @@ void main() {
     // The default project and the user's projects have no shipped question;
     // what they show is the description they set, or the app default.
     test("the default question is what nothing set asks", () {
-      expect(emptyChatQuestionFor(null), defaultEmptyChatQuestion);
-      expect(emptyChatQuestionFor("work"), defaultEmptyChatQuestion);
+      expect(emptyChatQuestionFor(null, description: null),
+          defaultEmptyChatQuestion);
       expect(emptyChatQuestionFor("work", description: null),
           defaultEmptyChatQuestion);
     });

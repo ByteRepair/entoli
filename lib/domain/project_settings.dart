@@ -46,9 +46,9 @@ class ProjectSettings {
       this.useProjectMemory = false,
       this.omada = false,
       this.omadaOrdering,
-        this.omadaMaxGenerations,
-        this.turnMaxSteps,
-        this.description});
+      this.omadaMaxGenerations,
+      this.turnMaxSteps,
+      this.description});
 
   /// How long a temporary chat in this project lives. Null means inherit the
   /// app default.
