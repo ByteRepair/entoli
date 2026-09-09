@@ -3,9 +3,9 @@ import "package:flutter/material.dart";
 // `SelectedContent`, which material does not re-export.
 import "package:flutter/rendering.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
-import "package:markdown/markdown.dart" as md;
 
 import "../../../domain/ask.dart";
+import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../widgets/action_icon.dart";
@@ -697,10 +697,12 @@ class _RenderedSelection extends StaticSelectionContainerDelegate {
   @override
   SelectedContent? getSelectedContent() {
     final buffer = StringBuffer();
-    // The union of what has been selected so far, in container coordinates:
-    // a fragment that does not overlap it vertically is on a rendered line of
-    // its own, and one newline separates it from what went before.
-    Rect? covered;
+    // The box of what has been selected so far, in container coordinates: a
+    // fragment that does not overlap it vertically is on a rendered line of
+    // its own, and one newline separates it from what went before. It is
+    // never null where it is read: every fragment that writes text sets it,
+    // and the newline is asked only once something has.
+    Rect covered = Rect.zero;
     for (final Selectable selectable in selectables) {
       final SelectedContent? selected = selectable.getSelectedContent();
       if (selected == null) continue;
@@ -709,80 +711,14 @@ class _RenderedSelection extends StaticSelectionContainerDelegate {
         selectable.boundingBoxes.first,
       );
       if (buffer.isNotEmpty &&
-          covered != null &&
           (box.top > covered.bottom || box.bottom < covered.top)) {
         buffer.write("\n");
       }
       buffer.write(selected.plainText);
-      covered = covered?.expandToInclude(box) ?? box;
+      covered = covered.expandToInclude(box);
     }
     if (buffer.isEmpty) return null;
     return SelectedContent(plainText: buffer.toString());
-  }
-}
-
-/// What a message's markdown reads once rendered: the formatted text the copy
-/// button takes, where the selection's copy answers from what is on screen.
-/// Inline styles fall away, links by the words they carry, blocks as lines.
-///
-/// Parsed with the same document grammar the renderer uses, so the two cannot
-/// disagree about what a fence or a list is.
-String formattedTextOf(String markdown) {
-  final buffer = StringBuffer();
-  final visitor = _FormattedTextVisitor(buffer);
-  final document = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored);
-  for (final node in document.parseLines(markdown.split("\n"))) {
-    node.accept(visitor);
-  }
-  return buffer.toString().trimRight();
-}
-
-class _FormattedTextVisitor implements md.NodeVisitor {
-  _FormattedTextVisitor(this.buffer);
-
-  final StringBuffer buffer;
-
-  /// A paragraph or heading writes into a fresh line, so the next one starts
-  /// below it rather than glued to its last word.
-  bool _needsBreak = false;
-
-  void _break() {
-    if (buffer.isEmpty) return;
-    if (_needsBreak) buffer.write("\n");
-    _needsBreak = false;
-  }
-
-  @override
-  bool visitElementBefore(md.Element element) {
-    switch (element.tag) {
-      case "h1" || "h2" || "h3" || "h4" || "h5" || "h6" || "p" || "li" || "hr":
-        _break();
-      case "br":
-        buffer.write("\n");
-        return false;
-    }
-    // The children carry the content; nothing is written for the element
-    // itself, so there is nothing to stand in for it.
-    return true;
-  }
-
-  @override
-  void visitText(md.Text text) {
-    _break();
-    buffer.write(text.text);
-  }
-
-  @override
-  void visitElementAfter(md.Element element) {
-    switch (element.tag) {
-      case "h1" || "h2" || "h3" || "h4" || "h5" || "h6" || "p" || "li":
-        _needsBreak = true;
-      case "pre":
-        // The fenced code the parser kept, not the styling round it.
-        _break();
-        buffer.write(element.textContent.trimRight());
-        _needsBreak = true;
-    }
   }
 }
 

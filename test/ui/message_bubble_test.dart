@@ -1,10 +1,8 @@
 import "dart:convert";
 
-import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
 // `RenderParagraph`, which material does not re-export.
 import "package:flutter/rendering.dart";
-import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
@@ -1213,20 +1211,11 @@ void main() {
       );
 
       final rendered = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
+      await dragCopy(
+        tester,
         tester.getTopLeft(rendered) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
+        to: tester.getBottomRight(rendered) - const Offset(2, 4),
       );
-      await tester.pump();
-      await gesture.moveTo(tester.getBottomRight(rendered) - const Offset(2, 4));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
 
       expect(copied, ["Heading\nhere is bold code"]);
     });
@@ -1245,20 +1234,11 @@ void main() {
       );
 
       final said = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
+      await dragCopy(
+        tester,
         tester.getTopLeft(said.first) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
+        to: tester.getBottomRight(said.last) - const Offset(2, 4),
       );
-      await tester.pump();
-      await gesture.moveTo(tester.getBottomRight(said.last) - const Offset(2, 4));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
 
       expect(copied.single, contains("before the call"));
       expect(copied.single, contains("after it"));
@@ -1290,17 +1270,7 @@ void main() {
           paragraph.getOffsetForCaret(TextPosition(offset: index), Rect.fromLTWH(0, 0, 400, 14)) +
           const Offset(0, 7);
 
-      final gesture = await tester.startGesture(at(4), kind: PointerDeviceKind.mouse);
-      await tester.pump();
-      await gesture.moveTo(at(10));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
+      await dragCopy(tester, at(4), to: at(10));
 
       // A trailing space is inside what was dragged: the highlight reaches to
       // the caret before "words", and the space before it is under it.
@@ -1317,18 +1287,7 @@ void main() {
       );
 
       final rendered = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
-        tester.getTopLeft(rendered) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
+      await dragCopy(tester, tester.getTopLeft(rendered) + const Offset(2, 4));
 
       expect(copied, isEmpty);
     });

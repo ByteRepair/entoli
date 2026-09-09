@@ -323,17 +323,17 @@ and joins the blocks with a newline, so Ctrl+C, the context menu and the
 mobile toolbar all write exactly what is highlighted. The newline is the one
 thing the base delegate does not answer: the gaps between blocks live in
 widgets, not in text, so the framework's own answer glues a heading to its
-paragraph. Inline `code` is the one thing a selection cannot pick up — a
-`WidgetSpan` is a placeholder to the selection system, so a sentence holding
-one copies minus its characters. Selection can also not cross messages, one
-region per message as ever.
+paragraph. What is not text contributes nothing — an image and anything a
+custom element builder drew is outside the fragments — and selection can also
+not cross messages, one region per message as ever.
 
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
 it. Left to right: which thread this is and the arrows between them, copy,
 raw copy, delete, then Edit and Regenerate. **Copy takes the formatted text**
-(`formattedTextOf`, parsed with the same grammar the renderer reads, so the
-two cannot disagree about what a fence is) — what a reader would paste into
+(`formattedTextOf`, in `lib/domain/formatted_text.dart`, parsed with the same
+grammar the renderer reads, so the two cannot disagree about what a fence is)
+— what a reader would paste into
 another document, and the same answer at message scale the selection is.
 **Raw copy (`<>`) takes the markdown**, every text part and no thinking — the
 same rule a rewound session is seeded by — and the Edit field reads that too,
@@ -485,7 +485,7 @@ default is `cardColor`, which M3 resolves to `colorScheme.surface`, and a code
 block the colour of the page is why this was worth doing at all.
 
 The bar is `SelectionContainer.disabled`, the same rule the labels above the
-bubble keep: a drag across the reply copies the markdown behind it, and the
+bubble keep: a drag across the reply copies the rendered text, and the
 language name is not something the model said. Its copy button is `ActionIcon`
 and reports through `copyToClipboard`, which is the same button and the same
 snack bar the row under a message uses — the other idiom, an icon that turns
