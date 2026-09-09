@@ -197,7 +197,8 @@ class AppSession {
             (project) => PromptLibraryNotifier(project, libraries[project])),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         systemAccentProvider.overrideWithValue(await accent),
-        linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
+        linkOpenerProvider
+            .overrideWithValue(PlatformLinkOpener(store, syncHub)),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),

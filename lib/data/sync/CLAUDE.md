@@ -243,6 +243,20 @@ count of entries — an image-heavy conversation is where the megabytes are. It
 belongs to the `SyncHub` rather than to the page that shows them, so a mirror
 being dropped takes its bytes with it.
 
+**An artifact rides the same channel as one zip.** An artifact's files live
+under the home device's `artifacts/`, so opening one on a mirror asks for a
+synthetic resource name built from the artifact id under `.artifacts/` — a
+name containing a `/`, which `resourceName` can never produce,
+so a user attachment cannot land in the namespace by accident — and is
+answered with `readArtifactZip`, the whole directory as one archive. No new
+`SyncMessage`: old builds never ask, and a new build against an old peer gets
+the empty-chunk "not there" answer. On the far side `unzipRemoteArtifact`
+writes the zip to a temp directory and every platform viewer is the one the
+local artifact already had. A re-publish invalidates the fetched zip the
+moment its record lands: the mirror sees it as the record naming the
+artifact again, and that record's arrival drops the cache entry, so the next
+open refetches.
+
 ### What a mirror looks like
 
 `MirrorChatController` is deliberately its own provider family rather than an

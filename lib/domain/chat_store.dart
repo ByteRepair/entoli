@@ -88,6 +88,12 @@ abstract class ChatStore {
   Future<Uint8List?> readArtifactFile(
     String chatId, String artifactId, String relativePath, {String? project});
 
+  /// The whole artifact as one zip, entries named relative to the artifact's
+  /// own root. Null where the artifact is not there. What a mirror fetches
+  /// when its user opens an artifact whose files live on the home device.
+  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
+      {String? project});
+
   /// The artifact's directory, for building a `file://` URL or serving over
   /// HTTP. Returns the path whether or not the directory exists — callers that
   /// need to verify it exists should use [readArtifactFile] instead.

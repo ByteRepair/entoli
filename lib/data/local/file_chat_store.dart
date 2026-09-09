@@ -1,11 +1,13 @@
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:archive/archive.dart" show ZipEncoder;
 import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../core/log.dart";
+import "../../data/zip.dart" show archiveOf;
 import "../../domain/chat_log.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/documents.dart";
@@ -289,6 +291,23 @@ class FileChatStore implements ChatStore {
     final safe = safeRelativePath(_fs, relativePath);
     final file = _fs.file(_fs.path.join(dir, safe));
     return await file.exists() ? file.readAsBytes() : null;
+  }
+
+  @override
+  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
+      {String? project}) async {
+    // On the far side of this call is a peer-named id (`_serveResource` strips
+    // the prefix off the wire and hands the rest over), so the id is held to
+    // what `createArtifact` hands out — one path segment, the way
+    // `readResource` basenames what it reads back.
+    final id = _fs.path.basename(artifactId);
+    if (id != artifactId || id.isEmpty) return null;
+    project = project ?? await _projectOf(chatId);
+    final dir = config.artifactDir(chatId, id, project: project);
+    if (!await _fs.isDirectory(dir)) return null;
+    // `base` is the artifact root itself: the entries come out named relative
+    // to it, the shape the unzip on the far side writes back.
+    return ZipEncoder().encodeBytes(await archiveOf(_fs, [dir], base: dir));
   }
 
   @override
