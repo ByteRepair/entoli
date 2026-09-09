@@ -6,11 +6,13 @@ import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
 import "../../core/log.dart";
+import "../../core/platform/io/remote_artifact.dart" show ArtifactBytes;
 import "../../domain/app_settings.dart";
-import "../../domain/chat_log.dart" show ChatRecord;
+import "../../domain/chat_log.dart" show ChatRecord, PartRecord;
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_repository.dart";
-import "../../domain/models.dart" show ChatState, ToolApproval;
+import "../../domain/models.dart"
+    show ArtifactPart, ChatState, ToolApproval;
 import "../../domain/sync/devices.dart";
 import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
@@ -116,7 +118,7 @@ class RemoteChatEntry {
 /// ones it watches elsewhere. Both at once, always — and in one file, because
 /// they are the two ends of the same twelve messages. See this directory's
 /// CLAUDE.md for why that is not two files.
-class SyncHub {
+class SyncHub implements ArtifactBytes {
   SyncHub({
     required this.identity,
     required this.registry,
@@ -335,6 +337,13 @@ class SyncHub {
           ..meta = meta);
       case SyncRecordAppend(:final chatId, :final records):
         _onMirror(peer, chatId, (mirror) => mirror.records.addAll(records));
+        // A re-publish names its artifact again; a zip fetched before that
+        // is stale, and this is where a mirror can tell.
+        for (final record in records) {
+          if (record case PartRecord(part: ArtifactPart(:final artifactId))) {
+            byteCache.dropResource(chatId, "$_artifactPrefix$artifactId");
+          }
+        }
       case SyncStateDiff(:final chatId, :final state):
         _onMirror(peer, chatId, (mirror) => mirror.state = state);
       case SyncMetaPatch(:final chatId, :final meta):
@@ -755,10 +764,8 @@ class SyncHub {
   static const _artifactPrefix = ".artifacts/";
 
   /// An artifact of a mirrored chat: from the cache, or as one zip over the
-  /// ordinary resource channel and into it. Same steps as [resourceBytes],
-  /// and the same cache — an artifact re-published after the fetch shows
-  /// stale content until the mirror reconnects, the price of not paging a
-  /// second kind of entry through the byte bound.
+  /// ordinary resource channel and into it. Same steps as [resourceBytes].
+  @override
   Future<Uint8List?> artifactBytes(String chatId, String artifactId) =>
       resourceBytes(chatId, "$_artifactPrefix$artifactId");
 

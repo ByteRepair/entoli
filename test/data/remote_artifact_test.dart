@@ -37,4 +37,78 @@ void main() {
     expect(File("$dir/escape.html").existsSync(), isTrue);
     expect(File("$dir/../escape.html").existsSync(), isFalse);
   });
+
+  /// The lifecycle is what [RemoteArtifacts] adds over the bare unzip: the
+  /// directory outlives the call, the one it replaces goes only after the
+  /// new one is in place, and a zip short of its entry file stages nothing
+  /// and answers null — with the previous one, if there was one, left alone.
+  group("RemoteArtifacts", () {
+    late _Hub hub;
+    late RemoteArtifacts remote;
+
+    setUp(() {
+      hub = _Hub();
+      remote = RemoteArtifacts(hub);
+    });
+
+    test("answers the directory the zip landed in", () async {
+      hub.artifacts["c1/a1"] = zipOf({"index.html": utf8.encode("<p>")});
+      final dir =
+          await remote.fetch("c1", "a1", entryFile: "index.html");
+      addTearDown(() => Directory(dir!).delete(recursive: true));
+
+      expect(File("$dir/index.html").existsSync(), isTrue);
+    });
+
+    test("answers null and stages nothing where the entry file is missing",
+        () async {
+      hub.artifacts["c1/a1"] = zipOf({"other.html": utf8.encode("<p>")});
+      final dir = await remote.fetch("c1", "a1", entryFile: "index.html");
+
+      expect(dir, isNull);
+    });
+
+    test("answers null where the artifact is not there", () async {
+      expect(await remote.fetch("c1", "gone", entryFile: "index.html"), isNull);
+    });
+
+    test("a re-fetch replaces the directory and takes the old one down",
+        () async {
+      hub.artifacts["c1/a1"] = zipOf({"index.html": utf8.encode("<p>v1</p>")});
+      final first = await remote.fetch("c1", "a1", entryFile: "index.html");
+
+      hub.artifacts["c1/a1"] = zipOf({"index.html": utf8.encode("<p>v2</p>")});
+      final second = await remote.fetch("c1", "a1", entryFile: "index.html");
+      expect(second, isNot(first));
+      expect(File("$second/index.html").readAsStringSync(), "<p>v2</p>");
+
+      // The delete is fire-and-forget; a poll keeps the test off its timing.
+      final gone = Directory(first!);
+      for (var i = 0; i < 100 && gone.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(gone.existsSync(), isFalse);
+    });
+
+    test("a failed re-fetch leaves the staged directory standing", () async {
+      hub.artifacts["c1/a1"] = zipOf({"index.html": utf8.encode("<p>v1</p>")});
+      final first = await remote.fetch("c1", "a1", entryFile: "index.html");
+
+      hub.artifacts["c1/a1"] = zipOf({"other.html": utf8.encode("<p>")});
+      final second = await remote.fetch("c1", "a1", entryFile: "index.html");
+      expect(second, isNull);
+
+      expect(Directory(first!).existsSync(), isTrue);
+      addTearDown(() => Directory(first).delete(recursive: true));
+    });
+  });
+}
+
+/// What [RemoteArtifacts] asks its hub for, as a map a test writes into.
+class _Hub implements ArtifactBytes {
+  final artifacts = <String, Uint8List>{};
+
+  @override
+  Future<Uint8List?> artifactBytes(String chatId, String artifactId) async =>
+      artifacts["$chatId/$artifactId"];
 }

@@ -252,8 +252,10 @@ answered with `readArtifactZip`, the whole directory as one archive. No new
 `SyncMessage`: old builds never ask, and a new build against an old peer gets
 the empty-chunk "not there" answer. On the far side `unzipRemoteArtifact`
 writes the zip to a temp directory and every platform viewer is the one the
-local artifact already had; the cache is shared with the attachments, so an
-artifact re-published after its fetch shows stale content until a reconnect.
+local artifact already had. A re-publish invalidates the fetched zip the
+moment its record lands: the mirror sees it as the record naming the
+artifact again, and that record's arrival drops the cache entry, so the next
+open refetches.
 
 ### What a mirror looks like
 

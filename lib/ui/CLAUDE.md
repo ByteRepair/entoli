@@ -27,8 +27,10 @@ The one thing the opener asks beyond the store is the `SyncHub`, handed in
 `main` beside it and null in tests: a chat being mirrored has no artifact
 directory here, so its artifacts come down as one zip (see "Artifacts" in the
 root notes) and open out of a temp directory by the same platform paths. The
-null is also the shape of "no sync running", which is what keeps every
-sync-unaware caller on the local paths unchanged.
+staging itself is the `RemoteArtifacts` port, not opener code — the opener
+asks it where the artifact landed and says the device-away line where the
+answer is null. The null is also the shape of "no sync running", which is
+what keeps every sync-unaware caller on the local paths unchanged.
 
 ## The theme
 

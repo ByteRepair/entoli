@@ -395,6 +395,48 @@ void main() {
     expect(await away.hub.artifactBytes(state.id, artifactId), first);
   });
 
+  test("a re-published artifact is fetched fresh, not stale from the cache",
+      () async {
+    final state = _seedChat(home);
+    final links = loopbackPair();
+    await pair(links.$1, links.$2);
+    away.hub.followChat(state.id);
+    await waitForSync(() => away.hub.mirror(state.id) != null);
+
+    final artifactId =
+        await home.store.createArtifact(state.id, "/nowhere", "index.html");
+    (home.store as FakeChatStore).stageArtifact(
+        state.id, artifactId, {"index.html": utf8.encode("<p>v1</p>")});
+    final first = await away.hub.artifactBytes(state.id, artifactId);
+
+    // The re-publish reaches the mirror as the record naming the artifact
+    // again — a publish mid-turn rides `recordAppend` like any other part.
+    (home.store as FakeChatStore).stageArtifact(
+        state.id, artifactId, {"index.html": utf8.encode("<p>v2</p>")});
+    final now = DateTime.now();
+    await home.repo.append(state.id, [
+      ChatRecord.message(id: "m2", role: MessageRole.assistant, createdAt: now),
+      ChatRecord.part(
+          messageId: "m2",
+          index: 0,
+          part: MessagePart.artifact(
+              artifactId: artifactId, entryFile: "index.html", title: "t")),
+    ]);
+    await waitForSync(() => away.hub.mirror(state.id)!.records.any((r) =>
+        r is PartRecord &&
+        r.messageId == "m2" &&
+        r.part is ArtifactPart));
+
+    final second = await away.hub.artifactBytes(state.id, artifactId);
+    expect(second, isNot(first));
+    final files = [
+      for (final member in ZipDecoder().decodeBytes(second!))
+        if (!member.isDirectory) (member.name, member.readBytes()!),
+    ];
+    expect(utf8.decode(files.firstWhere((f) => f.$1 == "index.html").$2),
+        "<p>v2</p>");
+  });
+
   test("a fetch for an unknown resource answers null, not a hang", () async {
     final state = _seedChat(home);
     final links = loopbackPair();
