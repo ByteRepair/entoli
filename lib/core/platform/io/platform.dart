@@ -241,39 +241,33 @@ LocalModelStore platformLocalModelStore(String cacheDir) =>
 /// server is the zero-setup one: nothing installed, nothing running yet, the
 /// same catalog the phone downloads from.
 Future<LocalLlm> platformLocalLlm(LocalModelStore store, String cacheDir) async {
-  if (Platform.isAndroid) {
-    final libDir = await BundledTools.nativeLibraryDir();
-    if (libDir == null) return const UnavailableLocalLlm();
-    final server = File(p.join(libDir, "libllama-server.so"));
-    if (!await server.exists()) return const UnavailableLocalLlm();
-    return LlamaServerPool(
-      LlamaBinaries(server: server.path, libDir: libDir),
-      store,
-      slotSaveDir: _kvCacheDir(cacheDir),
-    );
-  }
-  if (Platform.isLinux) {
-    final libDir = bundledLinuxLibDir();
-    if (libDir == null) return const UnavailableLocalLlm();
-    final server = File(p.join(libDir, "llama-server"));
-    if (!await server.exists()) return const UnavailableLocalLlm();
-    return LlamaServerPool(
-      LlamaBinaries(server: server.path, libDir: libDir),
-      store,
-      slotSaveDir: _kvCacheDir(cacheDir),
-    );
-  }
-  return const UnavailableLocalLlm();
+  // What varies by platform is where the build put the server and what it
+  // named it; what does not is the gate and the pool built from it, which is
+  // the tail below — one construction, not one per platform.
+  final (String? libDir, String serverName) = Platform.isAndroid
+      ? (await BundledTools.nativeLibraryDir(), "libllama-server.so")
+      : Platform.isLinux
+          ? (bundledLinuxLibDir(), "llama-server")
+          : (null, "");
+  if (libDir == null) return const UnavailableLocalLlm();
+  final server = p.join(libDir, serverName);
+  if (!await File(server).exists()) return const UnavailableLocalLlm();
+  return LlamaServerPool(
+    LlamaBinaries(server: server, libDir: libDir),
+    store,
+    slotSaveDir: _kvCacheDir(cacheDir),
+  );
 }
 
 /// The directory beside the running executable that a Linux bundle holds its
 /// native libraries in — the same `lib/` the launcher resolves through an
-/// `$ORIGIN` rpath. Null where the process is not running from a bundle
-/// layout, which is every non-Linux platform and a `dart` test run.
+/// `$ORIGIN` rpath. A path that does not exist — a bare install's
+/// `/usr/bin/lib` — is answered by the `exists()` check the caller makes of
+/// it, which is the honest "no server" rather than a null here.
 ///
 /// Pure over [executablePath] rather than reading [Platform] itself, so a test
 /// can pin what is built for each shape of path.
-String? bundledLinuxLibDir({String? executablePath}) {
+String bundledLinuxLibDir({String? executablePath}) {
   final path = executablePath ?? Platform.resolvedExecutable;
   final dir = p.dirname(path);
   return p.basename(dir) == "lib" ? dir : p.join(dir, "lib");

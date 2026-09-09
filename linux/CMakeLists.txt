@@ -110,22 +110,17 @@ endforeach(bundled_library)
 # the repo root by it. Installed into the bundle's lib/ beside the executable,
 # which is where platformLocalLlm looks for it; when the stage directory is
 # absent — a fresh clone that has not run the script — nothing is installed and
-# the app reports that the build carries no model server. A glob rather than a
-# file list: which libggml-*.so the build produced is the llama build's answer,
-# and naming them here would be a second place to keep in step.
-file(GLOB _llama_stage "${CMAKE_CURRENT_SOURCE_DIR}/../build/llama/*")
-if(_llama_stage)
-  install(FILES ${_llama_stage}
-    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-    COMPONENT Runtime)
-  # The server is exec'd by path, and `install(FILES)` does not carry the
-  # source's mode through — a bundle's copy lands 644 and unrunnable.
-  install(CODE "
-    file(CHMOD \"${INSTALL_BUNDLE_LIB_DIR}/llama-server\"
-      PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
-                  GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-  " COMPONENT Runtime)
-endif()
+# the app reports that the build carries no model server. A directory rather
+# than a file list: which libggml-*.so the build produced is the llama build's
+# answer, and naming them here would be a second place to keep in step.
+# Evaluated at install time, so a stage filled after configure still lands, and
+# source permissions carried through, which keeps the server executable —
+# `install(FILES)` copies content only and would leave it 644.
+set(LLAMA_STAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/llama" CACHE PATH
+  "Where tool/linux/build-llama.sh staged the on-device model server")
+install(DIRECTORY "${LLAMA_STAGE_DIR}/"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  USE_SOURCE_PERMISSIONS COMPONENT Runtime)
 
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")

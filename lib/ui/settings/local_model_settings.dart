@@ -391,36 +391,26 @@ class _RunningRow extends StatelessWidget {
 /// The two cases differ in what went missing. On the web there is nothing that
 /// could run a model, and the better answer is a hosted provider or a machine
 /// running one. On a desktop the build could have carried one and did not —
-/// which is a build fault in the same sense a missing proot is, and is said
-/// the way that one is: what to run to fill it.
+/// a build fault in the same sense a missing proot is, though said as a line
+/// in the section rather than a banner, since the section itself is the
+/// apology enough: what to run to fill it, and the presets meanwhile.
 class _Elsewhere extends StatelessWidget {
   const _Elsewhere();
 
   @override
-  Widget build(BuildContext context) {
-    if (kIsWeb) return const _ElsewhereWeb();
-    return const SectionHeader(
-      "Answering on this device",
-      description: "This build carries no model server. Run "
-          "tool/linux/build-llama.sh and build again, and the catalog below "
-          "is bundled into the app. Until then the better answer is already "
-          "there: add Ollama or LM Studio under Providers, and everything "
-          "they serve appears in the pickers.",
-    );
-  }
-}
-
-class _ElsewhereWeb extends StatelessWidget {
-  const _ElsewhereWeb();
-
-  @override
-  Widget build(BuildContext context) => const SectionHeader(
+  Widget build(BuildContext context) => SectionHeader(
         "Answering on this device",
-        description: "A browser can hold no model and run none. The better "
-            "answer is already there: add Ollama or LM Studio under "
-            "Providers, and everything they serve appears in the pickers. "
-            "Carrying a model is the desktops' and the phone's, where there "
-            "is a machine of one's own to ask.",
+        description: kIsWeb
+            ? "A browser can hold no model and run none. The better answer is "
+                "already there: add Ollama or LM Studio under Providers, and "
+                "everything they serve appears in the pickers. Carrying a "
+                "model is the desktops' and the phone's, where there is a "
+                "machine of one's own to ask."
+            : "This build carries no model server. Run "
+                "tool/linux/build-llama.sh and build again, and the catalog "
+                "below is bundled into the app. Until then the better answer "
+                "is already there: add Ollama or LM Studio under Providers, "
+                "and everything they serve appears in the pickers.",
       );
 }
 

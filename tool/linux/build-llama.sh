@@ -22,6 +22,7 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../.." && pwd)
 source "$here/../android/versions.sh"
+source "$root/tool/fetch.sh"
 
 work=${WORK_DIR:-$here/../android/build}
 # The directory CMake installs from — the repo root's build/, which flutter
@@ -35,16 +36,7 @@ jobs=${JOBS:-$(nproc)}
 export CC=${CC:-cc}
 export CXX=${CXX:-c++}
 
-mkdir -p "$work" "$out"
-
-fetch() {
-  local url=$1 file=$2 sha=$3
-  if [ ! -f "$work/$file" ]; then
-    curl -fsSL --retry 3 -o "$work/$file.part" "$url"
-    mv "$work/$file.part" "$work/$file"
-  fi
-  echo "$sha  $work/$file" | sha256sum -c - >/dev/null
-}
+mkdir -p "$work"
 
 echo "==> fetching sources"
 fetch "$LLAMA_CPP_URL" "llama.tar.gz" "$LLAMA_CPP_SHA256"
@@ -65,7 +57,9 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
     # SPIRV-Headers, which ggml-vulkan's cmake requires at configure time.
     # Installed here, not built — the same arrangement build.sh makes, and for
     # the same reason: `project()` runs a compiler check, and the one compiler
-    # that is right for that is the host's own.
+    # that is right for that is the host's own. The stanza is build.sh's
+    # lines 156–180 kept in step; its one delta is the compiler that check is
+    # allowed to find, this script's being the host's own everywhere.
     spirv_src=$src/SPIRV-Headers-$SPIRV_HEADERS_VERSION
     spirv=$src/spirv-headers-root
     [ -d "$spirv_src" ] || tar -C "$src" -xf "$work/spirv-headers.tar.gz"
@@ -146,25 +140,24 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
   mkdir -p "$out"
   cp -P "$bdir"/bin/lib*.so* "$out/"
   cp "$bdir/bin/llama-server" "$out/"
-  find "$out" -type f \( -name "lib*.so.*" -o -name llama-server \) -exec strip {} +
+  # One pass over the real files, in the shape build.sh's strip loop is: the
+  # soname symlinks beside them are names of the same ELF, and walking them
+  # would read each library once per name it answers to.
+  real_files=$(find "$out" -type f \( -name "lib*.so.*" -o -name llama-server \))
+  echo "$real_files" | xargs strip
   # CMake puts a runpath naming this build tree into what it links; a staged
   # binary must resolve by name out of `LD_LIBRARY_PATH` or nothing else.
-  for lib in "$out"/lib*.so.* "$out"/llama-server; do
+  while IFS= read -r lib; do
     [ -f "$lib" ] || continue
-    case "$lib" in libggml-htp-*) continue ;; esac
-    if patchelf --print-rpath "$lib" >/dev/null 2>&1; then
-      case "$(patchelf --print-rpath "$lib")" in
-        *"$bdir"*) patchelf --remove-rpath "$lib" ;;
-      esac
-    fi
-  done
+    rpath=$(patchelf --print-rpath "$lib" 2>/dev/null || true)
+    case "$rpath" in *"$bdir"*) patchelf --remove-rpath "$lib" ;; esac
+  done <<<"$real_files"
   # A build with no rpath left resolves by name, so every `NEEDED` has to be
   # beside it — the same check build.sh makes against the NDK sysroot, minus
   # the sysroot half: the libc-family names are the machine's to provide.
   echo "==> checking what is staged"
   unlinkable=0
-  for lib in "$out"/*.so* "$out"/llama-server; do
-    [ -e "$lib" ] || continue
+  while IFS= read -r lib; do
     while IFS= read -r need; do
       [ -f "$out/$need" ] || {
         case "$need" in
@@ -176,7 +169,7 @@ echo "==> llama.cpp $LLAMA_CPP_VERSION"
         esac
       }
     done < <(readelf -d "$lib" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
-  done
+  done <<<"$real_files"
   [ "$unlinkable" = 0 ] || exit 1
 )
 
