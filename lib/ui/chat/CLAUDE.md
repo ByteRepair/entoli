@@ -294,44 +294,53 @@ had to be written for that.
 
 ### Selecting a reply, and copying it
 
-The **message** is one `SelectionArea` and the markdown inside it is not
-selectable of its own accord. `MarkdownBody(selectable: true)` builds a
-`SelectableText` per element, and each of those is a selection region to itself
-— so a drag stopped at the paragraph it started in, which is the whole
-complaint. Plain `Text.rich` under one region selects across the lot.
+The **message** is one `SelectionArea`, with one `SelectionContainer` under it
+and nothing between that and the fragments — heading, paragraph, list item,
+code block — so a drag runs from the first paragraph to the last, and copy
+answers from the same fragments the highlight is drawn from. The per-part
+container this replaced built a region to itself per text part, which is what
+stopped a drag at the paragraph it started in; `MarkdownBody(selectable:
+true)` is worse still, a `SelectableText` per element. The container delegate
+is held on the bubble's state rather than per build: a streamed delta rebuilds
+the message every frame, and a delegate per build would drop the selection
+under the drag that is making it.
 
 The region is around all of `_rows` rather than inside `_bubble`, and that is
 the whole point rather than a detail: `_rows` closes the bubble at every
 reasoning part and every tool call, so a region per bubble would have stopped
-the drag at the first tool label — which is most of the replies this app makes.
-It also cost a `SelectableRegion` per bubble on every streamed delta, since a
-message is one list item and rebuilds whole.
+the drag at the first tool label — which is most of the replies this app
+makes. It also cost a `SelectableRegion` per bubble on every streamed delta,
+since a message is one list item and rebuilds whole.
 
 What that puts inside the region is the labels, which are not what the message
 said, so each is wrapped in `SelectionContainer.disabled` — dragging past one
 must not put "Thought for 12 seconds" on the clipboard. The `SelectableText` in
 a label's drawer is on its own route, so nothing nests.
 
-What a selection copies is the **markdown that was rendered**, not the text it
-rendered to: `_MarkdownSource` is a `SelectionContainer` delegate per text part
-that answers `getSelectedContent` with the part's source. There is no finer
-granularity available — the renderer keeps no source offsets, so there is
-nothing to map a partial selection back through — so anything selected inside a
-part copies the whole of that part. That is what puts `**bold**` on the
-clipboard rather than `bold`, and it is why the copy button below is the same
-answer at message scale rather than a second mechanism. The delegate answers
-from `value.hasSelection` rather than from `super.getSelectedContent()`, which
-would walk every selectable and concatenate what each holds only for the answer
-to be thrown away.
+What a selection copies is **the rendered text, the words on screen** —
+`_RenderedSelection` answers `getSelectedContent` from each selected fragment
+and joins the blocks with a newline, so Ctrl+C, the context menu and the
+mobile toolbar all write exactly what is highlighted. The newline is the one
+thing the base delegate does not answer: the gaps between blocks live in
+widgets, not in text, so the framework's own answer glues a heading to its
+paragraph. What is not text contributes nothing — an image and anything a
+custom element builder drew is outside the fragments — and selection can also
+not cross messages, one region per message as ever.
 
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
 it. Left to right: which thread this is and the arrows between them, copy,
-delete, then Edit and Regenerate. Copy takes the message's `plainText`, which is
-every text part and no thinking — the same rule a rewound session is seeded by.
-It is offered only where something was said, since a message of tool calls alone
-would copy nothing. The counter and the arrows are there only where there
-is more than one thread — `1/1` and two dead arrows say nothing — while delete
+raw copy, delete, then Edit and Regenerate. **Copy takes the formatted text**
+(`formattedTextOf`, in `lib/domain/formatted_text.dart`, parsed with the same
+grammar the renderer reads, so the two cannot disagree about what a fence is)
+— what a reader would paste into
+another document, and the same answer at message scale the selection is.
+**Raw copy (`<>`) takes the markdown**, every text part and no thinking — the
+same rule a rewound session is seeded by — and the Edit field reads that too,
+since editing the rendered text would not resend to what produced it. Copy is
+offered only where something was said, since a message of tool calls alone
+would copy nothing. The counter and the arrows are there only where there is
+more than one thread — `1/1` and two dead arrows say nothing — while delete
 is offered whatever the count, since deleting the last thread at a point is the
 conversation being cut off there and is worth being able to do. The arrows stop
 at either end rather than wrapping: one that comes back round to where the
@@ -476,7 +485,7 @@ default is `cardColor`, which M3 resolves to `colorScheme.surface`, and a code
 block the colour of the page is why this was worth doing at all.
 
 The bar is `SelectionContainer.disabled`, the same rule the labels above the
-bubble keep: a drag across the reply copies the markdown behind it, and the
+bubble keep: a drag across the reply copies the rendered text, and the
 language name is not something the model said. Its copy button is `ActionIcon`
 and reports through `copyToClipboard`, which is the same button and the same
 snack bar the row under a message uses — the other idiom, an icon that turns

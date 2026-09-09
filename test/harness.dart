@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:io";
 
 import "package:clock/clock.dart";
+import "package:flutter/gestures.dart" show PointerDeviceKind;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -607,6 +608,33 @@ List<String> clipboard(WidgetTester tester) {
   });
   addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
   return copied;
+}
+
+/// A mouse drag from [from] to [to] — [to] null collapses the selection at
+/// [from] — and Ctrl+C over it. The whole of what a selection-copy test
+/// varies in is the two positions; the gesture, the pump between them and
+/// the key sequence are the same every time.
+Future<void> dragCopy(
+  WidgetTester tester,
+  Offset from, {
+  Offset? to,
+}) async {
+  final gesture = await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+  await tester.pump();
+  if (to != null) await gesture.moveTo(to);
+  await tester.pump();
+  await gesture.up();
+  await tester.pumpAndSettle();
+  await copyViaKeyboard(tester);
+}
+
+/// Ctrl+C, the way the framework's copy action reads it. The gesture that
+/// made a selection is the test's own; this is the copy half of it.
+Future<void> copyViaKeyboard(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.pumpAndSettle();
 }
 
 /// The soft keyboard, the way the platform reports one: insets over the bottom

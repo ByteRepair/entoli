@@ -1,8 +1,8 @@
 import "dart:convert";
 
-import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
+// `RenderParagraph`, which material does not re-export.
+import "package:flutter/rendering.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
@@ -1105,7 +1105,7 @@ void main() {
   });
 
   group("the message as text", () {
-    testWidgets("the copy button takes the whole message, markdown and all",
+    testWidgets("the copy button takes the message as it reads, rendered",
         (tester) async {
       final copied = clipboard(tester);
       await pump(
@@ -1120,8 +1120,45 @@ void main() {
       await tester.tap(find.byTooltip("Copy message"));
       await tester.pumpAndSettle();
 
-      // What was said, not what was thought.
+      // What was said, not what was thought, and as it reads rather than as
+      // it is kept.
+      expect(copied, ["here is bold code"]);
+    });
+
+    testWidgets("the raw copy button takes the markdown", (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const ReasoningPart(text: "thinking", durationMs: 12000),
+          const TextPart(text: "here is **bold** code"),
+        ]),
+      );
+      await reveal(tester, find.textContaining("bold"));
+
+      await tester.tap(find.byTooltip("Copy raw markdown"));
+      await tester.pumpAndSettle();
+
       expect(copied, ["here is **bold** code"]);
+    });
+
+    testWidgets("formatted copy separates a heading from its paragraph, raw copy does not",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant,
+            [const TextPart(text: "# Heading\n\nhere is **bold** code")]),
+      );
+      await reveal(tester, find.textContaining("bold"));
+
+      await tester.tap(find.byTooltip("Copy message"));
+      await tester.pumpAndSettle();
+      expect(copied.single, "Heading\nhere is bold code");
+
+      await tester.tap(find.byTooltip("Copy raw markdown"));
+      await tester.pumpAndSettle();
+      expect(copied.last, "# Heading\n\nhere is **bold** code");
     });
 
     testWidgets("the read-aloud button offers to stop while it is reading",
@@ -1162,9 +1199,9 @@ void main() {
       expect(find.byTooltip("Copy message"), findsNothing);
     });
 
-    // A selection used to stop at the element it started in, and copied what
-    // the markdown rendered to rather than the markdown itself.
-    testWidgets("selecting a rendered reply copies the markdown behind it",
+    // A selection used to stop at the element it started in, and copied whole
+    // parts as markdown rather than what was highlighted.
+    testWidgets("selecting a rendered reply copies the words on screen",
         (tester) async {
       final copied = clipboard(tester);
       await pump(
@@ -1174,22 +1211,13 @@ void main() {
       );
 
       final rendered = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
+      await dragCopy(
+        tester,
         tester.getTopLeft(rendered) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
+        to: tester.getBottomRight(rendered) - const Offset(2, 4),
       );
-      await tester.pump();
-      await gesture.moveTo(tester.getBottomRight(rendered) - const Offset(2, 4));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
-
-      expect(copied, ["# Heading\n\nhere is **bold** code"]);
+      expect(copied, ["Heading\nhere is bold code"]);
     });
 
     // The bubble closes at every tool call, so a region per bubble would stop
@@ -1206,24 +1234,82 @@ void main() {
       );
 
       final said = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
+      await dragCopy(
+        tester,
         tester.getTopLeft(said.first) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
+        to: tester.getBottomRight(said.last) - const Offset(2, 4),
       );
-      await tester.pump();
-      await gesture.moveTo(tester.getBottomRight(said.last) - const Offset(2, 4));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
-
-      expect(copied.single, contains("before **the** call"));
-      expect(copied.single, contains("after *it*"));
+      expect(copied.single, contains("before the call"));
+      expect(copied.single, contains("after it"));
       expect(copied.single, isNot(contains("bash")));
+    });
+
+    // The bullets are chrome like a code block's bar: what a selection reads
+    // is what the copy button reads, the list's items and not `•Item`.
+    testWidgets("a drag over a list copies its items without the bullets",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "- one\n- two")]),
+      );
+
+      final rendered = find.byType(MarkdownBody);
+      await dragCopy(
+        tester,
+        tester.getTopLeft(rendered) + const Offset(2, 4),
+        to: tester.getBottomRight(rendered) - const Offset(2, 4),
+      );
+
+      expect(copied.single, "one\ntwo");
+    });
+
+    // Whole-part copy answered a three-word drag with the whole paragraph's
+    // markdown; a selection copies the range it covers, and only that.
+    testWidgets("selecting part of a paragraph copies only what it covered",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(
+            MessageRole.assistant, [const TextPart(text: "the first words")]),
+      );
+
+      // The caret position of the range's ends, laid out: 4 is before
+      // "first", 10 is before "words", so the drag covers "first" alone.
+      // Positions rather than guessed widths.
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byType(MarkdownBody),
+          matching: find.textContaining("the first words", findRichText: true),
+        ),
+      );
+      Offset at(int index) =>
+          tester.getTopLeft(find.byType(MarkdownBody)) +
+          paragraph.getOffsetForCaret(TextPosition(offset: index), Rect.fromLTWH(0, 0, 400, 14)) +
+          const Offset(0, 7);
+
+      await dragCopy(tester, at(4), to: at(10));
+
+      // A trailing space is inside what was dragged: the highlight reaches to
+      // the caret before "words", and the space before it is under it.
+      expect(copied.single, "first ");
+    });
+
+    // A collapsed selection is a tap, not a copy: writing the empty string
+    // would report success over nothing.
+    testWidgets("a selection collapsed to a point copies nothing", (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "hello there")]),
+      );
+
+      final rendered = find.byType(MarkdownBody);
+      await dragCopy(tester, tester.getTopLeft(rendered) + const Offset(2, 4));
+
+      expect(copied, isEmpty);
     });
   });
 
