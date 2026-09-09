@@ -59,7 +59,8 @@ Future<({String? project})?> pickProject(
 Widget _indentable(int maxLines, TextEditingController controller, Widget field) =>
     maxLines == 1 ? field : TabIndents(controller: controller, child: field);
 
-/// Ask for a line (or a few) of text. Returns null if dismissed or left blank.
+/// Ask for a line (or a few) of text. Returns null if dismissed or, unless
+/// [allowBlank], left blank — a blank answer names nothing.
 Future<String?> promptForText(
   BuildContext context, {
   required String title,
@@ -67,11 +68,12 @@ Future<String?> promptForText(
   required String confirmLabel,
   String? hint,
   int maxLines = 1,
+  bool allowBlank = false,
 }) {
   final controller = TextEditingController(text: initial);
   String? submit() {
     final text = controller.text.trim();
-    return text.isEmpty ? null : text;
+    return (text.isEmpty && !allowBlank) ? null : text;
   }
 
   return showDialog<String>(
