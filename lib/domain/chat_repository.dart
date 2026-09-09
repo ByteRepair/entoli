@@ -434,6 +434,11 @@ class ChatRepository {
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);
 
+  /// A whole artifact as one zip — what a peer's `resourceRequest` naming one
+  /// is answered with. Null where there is no artifact by that id.
+  Future<Uint8List?> readArtifactZip(String chatId, String artifactId) =>
+      _store.readArtifactZip(chatId, artifactId);
+
   /// Read [messageId] rather than the thread beside it that is on screen.
   Future<Chat> selectThread(Chat chat, String messageId) =>
       _rethread(chat, ChatRecord.select(messageId: messageId));

@@ -216,6 +216,18 @@ their runtime paths (an HTTP server, blob URLs) over the same injected copy,
 where the marker makes the second injection a no-op. Artifacts published before
 the injection moved open unstyled on desktop until the model re-publishes them.
 
+An artifact of a mirrored chat has no local directory to open: the sync hub
+carries the whole artifact as one zip over the ordinary resource channel (see
+"Attachments" in `lib/data/sync/CLAUDE.md`), `unzipRemoteArtifact` writes it
+to a temp directory, and the local paths above take it from there. That
+staging is a port (`RemoteArtifacts` under `core/platform/io/`, the hub
+reached through a one-method interface), not a page: it owns the temp
+directories' lifecycle, where the previous one for the same chat and artifact
+goes only when the next one has checked out. A re-publish invalidates the
+fetched zip the moment its record lands. The web is the exception — it opens
+the local blob-URL path only, and a browser mirror says so rather than
+fetching.
+
 ### Projects
 
 A project is a directory holding its own chats, one workspace they share, and
