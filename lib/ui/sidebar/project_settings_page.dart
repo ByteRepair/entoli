@@ -3,7 +3,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../domain/app_settings.dart";
 import "../../domain/builtin_project.dart";
-import "../../domain/project.dart" show defaultEmptyChatQuestion;
+import "../../domain/project.dart"
+    show defaultEmptyChatQuestion, emptyChatQuestionFor;
 import "../../domain/project_settings.dart";
 import "../../domain/temp_chat_ttl.dart";
 import "../../providers.dart";
@@ -204,34 +205,24 @@ class _DescriptionRow extends ConsumerWidget {
         ref.watch(projectSettingsProvider(project).select((s) => s.description));
     return ListTile(
       title: const Text("Description"),
+      // What the screen asks for this project, the resolver owning the
+      // null/blank/text cases; null out of it is the blank answer, shown
+      // here as what it is.
       subtitle: Text(
-        switch (description) {
-          null => defaultEmptyChatQuestion,
-          "" => "Empty",
-          final text => text.trim().isEmpty ? "Empty" : text,
-        },
+        emptyChatQuestionFor(project, description: description) ?? "Empty",
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.settings_backup_restore),
-            tooltip: "Reset to default",
-            onPressed: () =>
-                ref.read(projectSettingsProvider(project).notifier).setDescription(null),
-          ),
-          const Icon(Icons.chevron_right),
-        ],
+      trailing: ResetButton(
+        resetLabel: "default",
+        onReset: () =>
+            ref.read(projectSettingsProvider(project).notifier).setDescription(null),
       ),
       onTap: () async {
-        final current =
-            ref.read(projectSettingsProvider(project)).description;
         final text = await promptForText(
           context,
           title: "Description",
-          initial: current ?? "",
+          initial: description ?? "",
           hint: defaultEmptyChatQuestion,
           confirmLabel: "Save",
           allowBlank: true,
