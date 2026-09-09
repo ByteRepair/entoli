@@ -174,20 +174,20 @@ class _TurnSection extends ConsumerWidget {
             decoration: const InputDecoration(isDense: true),
             onChanged: (value) => ref
                 .read(appSettingsProvider.notifier)
-                .setTurnCredentials(
-                    value.isEmpty ? null : value, settings.turnPassword),
+                .setTurnUsername(value.isEmpty ? null : value),
           ),
         ),
         LabelledField(
           label: "TURN password",
           child: TextFormField(
-            initialValue: settings.turnPassword ?? "",
+            // Held in the secret store, not settings — read through the
+            // mirror here the way the row above reads its own field.
+            initialValue: ref.read(appSecretsProvider).turnPassword ?? "",
             obscureText: true,
             decoration: const InputDecoration(isDense: true),
             onChanged: (value) => ref
-                .read(appSettingsProvider.notifier)
-                .setTurnCredentials(settings.turnUsername,
-                    value.isEmpty ? null : value),
+                .read(appSecretsProvider)
+                .setTurnPassword(value.isEmpty ? null : value),
           ),
         ),
       ],

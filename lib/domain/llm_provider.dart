@@ -5,13 +5,14 @@ enum LlmApi { openai, anthropic }
 /// An endpoint the agent can call, as the user configured it. Held in
 /// `settings.json` rather than guessed from environment variables: the same
 /// key reaches half a dozen gateways, and only the base URL says which one.
+/// The key itself is not here — it is stored per id in the secret store
+/// (`AppSecrets`), or named by [apiKeyEnv] and read from the environment.
 class LlmProviderConfig {
   const LlmProviderConfig({
     required this.id,
     required this.api,
     required this.baseUrl,
     this.label,
-    this.apiKey = "",
     this.apiKeyEnv,
     this.models = const [],
     this.defaultModelId,
@@ -27,9 +28,6 @@ class LlmProviderConfig {
 
   final String? label;
 
-  /// The key itself. Empty means look at [apiKeyEnv] instead, which is how a
-  /// key already in the environment stays out of `settings.json`.
-  final String apiKey;
   final String? apiKeyEnv;
 
   /// What to offer in the model picker. Empty asks the endpoint, which most
@@ -51,7 +49,6 @@ class LlmProviderConfig {
   /// [lookup] reads the app's own environment and whatever settings adds, so a
   /// key can be named there instead of pasted here.
   String? resolveKeyWith(String? Function(String name) lookup) {
-    if (apiKey.isNotEmpty) return apiKey;
     final name = apiKeyEnv;
     if (name == null) return null;
     final value = lookup(name);
@@ -75,7 +72,6 @@ class LlmProviderConfig {
     LlmApi? api,
     String? baseUrl,
     String? label,
-    String? apiKey,
     String? apiKeyEnv,
     List<String>? models,
     String? defaultModelId,
@@ -86,7 +82,6 @@ class LlmProviderConfig {
         api: api ?? this.api,
         baseUrl: baseUrl ?? this.baseUrl,
         label: label ?? this.label,
-        apiKey: apiKey ?? this.apiKey,
         apiKeyEnv: apiKeyEnv ?? this.apiKeyEnv,
         models: models ?? this.models,
         defaultModelId: defaultModelId ?? this.defaultModelId,
@@ -98,7 +93,6 @@ class LlmProviderConfig {
         "api": api.name,
         "baseUrl": baseUrl,
         if (label != null) "label": label,
-        if (apiKey.isNotEmpty) "apiKey": apiKey,
         if (apiKeyEnv != null) "apiKeyEnv": apiKeyEnv,
         if (models.isNotEmpty) "models": models,
         if (defaultModelId != null) "defaultModelId": defaultModelId,
@@ -118,7 +112,8 @@ class LlmProviderConfig {
       api: value["api"] == "anthropic" ? LlmApi.anthropic : LlmApi.openai,
       baseUrl: baseUrl,
       label: value["label"] as String?,
-      apiKey: value["apiKey"] as String? ?? "",
+      // An older file's `apiKey` is ignored: the store is where a key lives,
+      // and a key left in the file was stripped by the save that followed it.
       apiKeyEnv: value["apiKeyEnv"] as String?,
       models: models is List ? models.whereType<String>().toList() : const [],
       defaultModelId: value["defaultModelId"] as String?,

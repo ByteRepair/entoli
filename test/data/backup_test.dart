@@ -237,4 +237,23 @@ void main() {
     expect(backupFilename(DateTime(2026, 8, 18, 9, 5)),
         "entoli-backup-2026-08-18-0905.zip");
   });
+
+  test("no key material rides in the archive", () async {
+    // A provider key lives only in the secret store, and the store's
+    // directory is the one a backup skips — so a backup can be shared
+    // without carrying credentials.
+    write("sync/secrets.json",
+        jsonEncode({"provider-keys": base64Encode(utf8.encode('{"a":"sk-secret"}'))}));
+
+    final zip = ZipDecoder().decodeBytes(await writeBackup(config));
+
+    // Every member decoded, the same idiom the tests above use: a key never
+    // rides in the archive, under any name.
+    for (final member in zip.files) {
+      if (member.isDirectory) continue;
+      expect(String.fromCharCodes(member.readBytes()!),
+          isNot(contains("sk-secret")), reason: member.name);
+    }
+    expect(zip.findFile("sync/secrets.json"), isNull);
+  });
 }

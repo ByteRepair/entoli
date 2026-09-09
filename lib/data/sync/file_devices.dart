@@ -1,5 +1,4 @@
 import "dart:convert";
-import "dart:typed_data";
 
 import "../../core/config.dart";
 import "../../domain/documents.dart" show RenameWriter;
@@ -83,24 +82,19 @@ class FileDeviceRegistry implements DeviceRegistry {
   Future<String?> pairingSecret(String id) async {
     final raw = await _secrets.read(pairingSecretsKey);
     if (raw == null) return null;
-    final map = _secretMapOf(raw);
-    return map[id];
+    return secretMapOf(raw)[id];
   }
 
   @override
   Future<void> setPairingSecret(String id, String? secretB64) async {
     final raw = await _secrets.read(pairingSecretsKey);
-    var map = raw == null ? <String, String>{} : _secretMapOf(raw);
+    var map = raw == null ? <String, String>{} : secretMapOf(raw);
     if (secretB64 == null) {
       if (!map.containsKey(id)) return;
       map.remove(id);
     } else {
       map = {...map, id: secretB64};
     }
-    await _secrets.write(
-        pairingSecretsKey, Uint8List.fromList(utf8.encode(jsonEncode(map))));
+    await _secrets.write(pairingSecretsKey, secretBytesOf(map));
   }
-
-  static Map<String, String> _secretMapOf(List<int> raw) =>
-      (jsonDecode(utf8.decode(raw)) as Map).cast<String, String>();
 }

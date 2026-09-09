@@ -111,7 +111,10 @@ rather than in it, so deleting one's own skill does not reach the presets.
 `settings.json` holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
- `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's
+ `cornerRadius` and `systemPalette` — and `llmProviders`, whose entries carry
+no key: the provider API keys and the TURN password live in the secret store
+beside the sync identity (`AppSecrets`), which is what keeps them out of
+`settings.json` and out of every backup zip; and the user's
  global `AGENTS.md`, the instructions that reach every turn in every user
  project, beside it.
 `<dataDir>/reminders.json` is the user's reminders, one JSON

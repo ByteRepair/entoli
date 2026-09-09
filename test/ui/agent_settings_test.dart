@@ -55,8 +55,8 @@ void main() {
 
       expect(saved().single.id, "ollama-cloud");
       expect(saved().single.baseUrl, "https://ollama.com/v1");
-      expect(saved().single.apiKey, "sk-ollama");
-      expect(AppSettings.load(app.config).llmProviders.single.apiKey, "sk-ollama");
+      // The key went to the store; no config carries one.
+      expect(app.secrets.providerKey("ollama-cloud"), "sk-ollama");
     });
 
     testWidgets("a custom endpoint starts empty and is typed in", (tester) async {
@@ -91,7 +91,8 @@ void main() {
       await saveDialog(tester);
 
       expect(find.text("sk-ant-secret"), findsNothing);
-      expect(find.textContaining("key set"), findsOneWidget);
+      // The row says a key is stored, never which.
+      expect(find.textContaining("key stored"), findsOneWidget);
     });
 
     testWidgets("one with no key of its own says which variable it reads", (tester) async {
@@ -152,6 +153,54 @@ void main() {
       // Invalidated rather than left showing a list built before the provider
       // existed.
       expect(identical(before, app.container.read(availableModelsProvider)), isFalse);
+    });
+
+    testWidgets("removing one takes its stored key with it", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "OpenAI");
+      await tester.enterText(dialogField("API key"), "sk-o");
+      await saveDialog(tester);
+      expect(app.secrets.providerKey("openai"), "sk-o");
+
+      await scrollTo(tester, find.byTooltip("Remove openai"));
+      await tester.tap(find.byTooltip("Remove openai"));
+      await settleIo(tester);
+
+      expect(app.secrets.providerKey("openai"), isNull);
+    });
+
+    testWidgets("editing one with a stored key, saving empty, keeps the key",
+        (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "OpenAI");
+      await tester.enterText(dialogField("API key"), "sk-o");
+      await saveDialog(tester);
+
+      await tester.tap(find.text("OpenAI"));
+      await settleIo(tester);
+      await saveDialog(tester);
+
+      expect(app.secrets.providerKey("openai"), "sk-o");
+    });
+
+    testWidgets("renaming one moves the stored key with it", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Custom…");
+      await tester.enterText(dialogField("Name"), "vllm");
+      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await tester.enterText(dialogField("API key"), "sk-v");
+      await saveDialog(tester);
+      expect(app.secrets.providerKey("vllm"), "sk-v");
+
+      await tester.tap(find.text("vllm"));
+      await settleIo(tester);
+      await tester.enterText(dialogField("Name"), "gpu");
+      await saveDialog(tester);
+      await settleIo(tester);
+
+      expect(saved().map((p) => p.id), ["gpu"]);
+      expect(app.secrets.providerKey("gpu"), "sk-v");
+      expect(app.secrets.providerKey("vllm"), isNull);
     });
   });
 

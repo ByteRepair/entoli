@@ -137,7 +137,15 @@ so and hides the rest until a rootfs is picked from Terminal; on every other
 platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
-handshake. **Providers** is the endpoints.
+handshake. **Providers** is the endpoints — and the keys, which are not in
+`settings.json` at all: a key typed into the provider dialog (or the
+recommended-provider card) goes to the secret store, under the provider's id,
+and the row says "key stored" rather than showing any of it. The dialog's key
+field is tri-state — typed text stores, an empty field over a stored key
+keeps it, and the explicit remove clears it — because an empty field alone
+cannot say keep from clear once the field no longer echoes what is stored.
+The TURN password is in the store the same way; the TURN username is not a
+secret and rides in `settings.json` beside the URL.
 **LLMs** is what a new chat is answered by and what names it. **Memory** is
 what one conversation leaves the others: the two `AGENTS.md` files every turn
 is read from — the user's own at the root of the data directory and the
@@ -253,6 +261,14 @@ hundred megabytes of bytes that can be fetched again would be in every export,
 and a restore would drag them between machines and delete whatever was already
 downloaded. Keeping them outside is what makes both false, rather than an
 exception in here that someone has to remember — see "Where the models live".
+
+It is also why the provider API keys and the TURN password live in the secret
+store rather than in `settings.json`: `sync/` is the one directory a backup
+skips, so a secret behind it is out of every export, where a key in a JSON
+file the format carries by default would ride in all of them. What a backup
+costs the user is stated plainly — restoring onto another device does not
+bring the keys, and they are typed again where the store is local to it (the
+keyring is a machine's own).
 
 A per-project `rootfs/` is the one re-fetchable tree that *does* live under the
 data directory, because a built-in with rootfs isolation keeps its living

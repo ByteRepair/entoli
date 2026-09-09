@@ -16,6 +16,7 @@ import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
+import "domain/app_secrets.dart";
 import "domain/models.dart" show CompletionKind;
 import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
@@ -74,6 +75,13 @@ class AppSession {
     final version = platform.appVersion();
     final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
+    // Started here and awaited before the identity load below: the keyring
+    // probe is decided once, so the identity's own first read must not race
+    // this one, and the mirror the registry reads keys through is filled by
+    // the time the container reads the model list.
+    final secretStore = platform.createSecretStore(config);
+    final secrets = AppSecrets(secretStore);
+    final secretsLoaded = secrets.load();
     // Before the library is built: the bundled skills are written from
     // embedded code to a real directory for bash access, and self-healed.
     await installBundledSkills(config);
@@ -116,9 +124,11 @@ class AppSession {
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
     final byteRepairBin = platform.byteRepairBinDir(cache);
+    // The backend captures the closure; nothing reads the mirror until the
+    // container does, so the load only has to be in before that.
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        byteRepairBinDir: byteRepairBin);
+        byteRepairBinDir: byteRepairBin, secrets: secrets);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -149,15 +159,17 @@ class AppSession {
     // between depends on the answer.
     final alarms = platform.createReminderAlarms();
     // Sync: identity from the keyring (or file fallback), registry on disk.
-    // The hub reads settings from the container; the closure below defers
-    // that read until after the container exists — the same pattern the
+    // The hub reads settings from the container; the closures below defer
+    // those reads until after the container exists — the same pattern the
     // repository uses with `() => ref.read(appSettingsProvider)`.
-    final secretStore = platform.createSecretStore(config);
     // Started alongside the identity load: on Android the hostname is a
     // method-channel round-trip and the identity is keyring/file I/O, so the
     // two are independent and overlap rather than serialise on the startup
     // path.
     final hostname = platform.deviceHostname();
+    // The one await of the store's own I/O: the identity is the next reader,
+    // and the keyring probe must not be raced by a second first read.
+    await secretsLoaded;
     final identity = await SyncIdentity.load(secretStore);
     final registry = FileDeviceRegistry(config, secretStore);
     // Assigned two statements down, and read only from a running app — the
@@ -167,6 +179,7 @@ class AppSession {
       identity: identity,
       registry: registry,
       settings: () => settingsHome.read(appSettingsProvider),
+      turnPassword: () => secrets.turnPassword,
       lanSignaling: platform.createLanSignaling,
       hostname: await hostname,
     );
@@ -176,6 +189,7 @@ class AppSession {
         agentBackendProvider.overrideWithValue(backend),
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
+        appSecretsProvider.overrideWithValue(secrets),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.

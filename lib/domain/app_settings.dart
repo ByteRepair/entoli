@@ -60,7 +60,6 @@ class AppSettings {
     this.syncRelayUrl,
     this.turnUrl,
     this.turnUsername,
-    this.turnPassword,
     this.turnRetries = defaultTurnRetries,
     this.omadaByDefault = false,
     this.omadaMaxGenerations = defaultOmadaMaxGenerations,
@@ -262,9 +261,9 @@ class AppSettings {
   String? turnUrl;
 
   /// TURN credentials, stored beside the URL. Null where the TURN server
-  /// needs none (rare) or none is configured.
+  /// needs none (rare) or none is configured. The password is not here: it is
+  /// a secret, and lives in the [AppSecrets] store beside the sync identity.
   String? turnUsername;
-  String? turnPassword;
 
   /// How many times a turn that died on a retryable error — a connection that
   /// dropped, a provider hiccup — is carried on automatically before it is
@@ -388,7 +387,6 @@ class AppSettings {
         syncRelayUrl: _orNull(json["syncRelayUrl"] as String?),
         turnUrl: _orNull(json["turnUrl"] as String?),
         turnUsername: _orNull(json["turnUsername"] as String?),
-        turnPassword: _orNull(json["turnPassword"] as String?),
         turnRetries:
             (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(0, maxTurnRetries),
         omadaByDefault: json["omadaByDefault"] as bool? ?? false,
@@ -478,7 +476,6 @@ class AppSettings {
         syncRelayUrl: syncRelayUrl,
         turnUrl: turnUrl,
         turnUsername: turnUsername,
-        turnPassword: turnPassword,
         turnRetries: turnRetries,
         omadaByDefault: omadaByDefault,
         omadaMaxGenerations: omadaMaxGenerations,
@@ -539,7 +536,6 @@ class AppSettings {
       if (syncRelayUrl != null) "syncRelayUrl": syncRelayUrl,
       if (turnUrl != null) "turnUrl": turnUrl,
       if (turnUsername != null) "turnUsername": turnUsername,
-      if (turnPassword != null) "turnPassword": turnPassword,
       // Written only when not the default, for the same reason the memory
       // gates are: a file that predates it says nothing and gets the default.
       if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
