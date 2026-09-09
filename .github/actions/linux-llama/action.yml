@@ -7,32 +7,9 @@ description: >
   own, so the key carries this file — where the recipe lives is the other half
   of what it answers.
 
-inputs:
-  stage:
-    description: >
-      Whether to leave the staged output in place. The llama job sets this
-      false and uploads build/llama as an artifact; the app job downloads it
-      and unpacks it, so the two never share a runner.
-    required: false
-    default: 'true'
-
-outputs:
-  filled:
-    description: Whether the stage directory holds a build.
-    value: ${{ steps.llama.outputs.filled }}
-
 runs:
   using: composite
   steps:
-    # The build's own list, minus the ones the app build brings: glslc for the
-    # shaders, patchelf to strip the build tree's rpath, and readelf's binutils
-    # for the staging check.
-    - name: Install build dependencies
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build glslc patchelf binutils
-
     - name: Restore the built model server
       id: llama-cache
       uses: actions/cache@v6.1.0
@@ -42,20 +19,22 @@ runs:
           build/llama
         key: linux-llama-${{ hashFiles('tool/android/versions.sh', 'tool/linux/build-llama.sh', '.github/actions/linux-llama/action.yml') }}
 
-    - name: Build the bundled llama.cpp server
-      id: llama
+    # Nothing on a hit path reaches for a toolchain, so the install is gated
+    # with the build — the same shape bundled-tools' Ninja step has.
+    - name: Install build dependencies
       if: steps.llama-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        tool/linux/build-llama.sh
-        echo "filled=true" >> "$GITHUB_OUTPUT"
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build glslc patchelf binutils
 
-    # The build itself is the witness that the stage is filled; this names the
-    # output for a caller whose cache hit skipped the script.
-    - name: Stage them where the bundle installs from
-      if: steps.llama.outputs.filled != 'true'
+    - name: Build the bundled llama.cpp server
+      if: steps.llama-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: |
-        test -f build/llama/llama-server ||
-          { echo "::error::the llama cache restored no model server" >&2; exit 1; }
-        echo "filled=true" >> "$GITHUB_OUTPUT"
+      run: tool/linux/build-llama.sh
+
+    # The upload below names the directory either way; this is what fails the
+    # job with its own line where a cache hit restored nothing.
+    - name: Confirm the stage holds a build
+      shell: bash
+      run: test -f build/llama/llama-server

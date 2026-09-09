@@ -233,8 +233,13 @@ else
       -DSPIRV-Headers_DIR="$spirv/share/cmake/SPIRV-Headers"
       # The server downloads models when it is told to; this app does its own
       # downloading, and linking curl here would mean cross-compiling it a second
-      # time for a feature nothing reaches.
+      # time for a feature nothing reaches. LLAMA_OPENSSL is pinned OFF beside
+      # it — the option defaults ON, and the NDK today has no OpenSSL for
+      # find_package to find, which is OFF by accident; a future NDK that ships
+      # it would link libssl into the APK for the staging check's sysroot
+      # half to wave through, and the failure would land on a phone.
       -DLLAMA_CURL=OFF
+      -DLLAMA_OPENSSL=OFF
       -DLLAMA_BUILD_SERVER=ON
       -DLLAMA_BUILD_TESTS=OFF
       -DLLAMA_BUILD_EXAMPLES=OFF

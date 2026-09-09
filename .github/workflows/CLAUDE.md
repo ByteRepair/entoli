@@ -65,23 +65,23 @@ builds the desktop model server (`.github/actions/linux-llama`, over
 downloads it before `flutter build linux`, so the bundle either carries the
 server whole or not at all — the artifact check between the download and the
 build is what says which. The cache lives on the llama job, whose only other
-content is two apt packages, so a cache miss costs the build alone rather
-than a Flutter setup too; the app job carries no llama cache at all, and its
-composite (`linux-appimage`) installs nothing for the server. One trap this
-closes: the cache's post-save never ran where the job failed mid-composite —
-the first run of the llama step was thrown away whole, and every retry
-rebuilt it — so a build worth caching is worth a job that does nothing
-besides it.
+content is two apt packages on a miss, so a cache miss costs the build alone
+rather than a Flutter setup too; the app job carries no llama cache at all,
+and its composite (`linux-appimage`) installs nothing for the server. One
+trap this closes: the cache's post-save never ran where the job failed
+mid-composite — the first run of the llama step was thrown away whole, and
+every retry rebuilt it — so a build worth caching is worth a job that does
+nothing besides it.
 
 **`LLAMA_OPENSSL` is pinned OFF, in both builds.** The option defaults ON,
 and where the host has libssl3's dev files — the ubuntu runner, most
 desktops — cpp-httplib links `libssl.so.3` into the server, which the
 staging check refuses: the bundle ships what the app owns plus the
 libc-family names, and a distro's SSL is neither. The Android cross build
-got OFF by accident (no OpenSSL for `find_package` to find under the NDK);
-the pin makes all three environments agree by statement rather than by two
-of them agreeing by luck. The app does its own downloading; the server is
-local inference.
+gets there the same way; the pin replaces an accident (no OpenSSL for
+`find_package` to find under the NDK) with a statement, so a future NDK
+that ships OpenSSL fails at staging rather than on a phone. The app does
+its own downloading; the server is local inference.
 
 **The Gradle cache has one writer.** `build-common` saves it; the build jobs
 restore read-only (`cache/restore`), so two jobs never upload the same
