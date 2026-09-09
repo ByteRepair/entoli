@@ -291,7 +291,7 @@ class _EmptyChat extends ConsumerWidget {
             // away, rather than the widget leaving the tree and the next
             // question's arrival being a mount instead of a change.
             _QuestionSweep(
-              text: ref.watch(emptyChatQuestionProvider(project)) ?? "",
+              text: ref.watch(emptyChatQuestionProvider(project)),
               style: theme.textTheme.titleMedium,
             ),
             _ProjectBadges(selected: project),

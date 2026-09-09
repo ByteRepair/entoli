@@ -356,9 +356,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text("What would you like to discuss?"), findsOneWidget);
       expect(find.textContaining("nonymously"), findsNothing);
-      await tester.pumpAndSettle();
-      expect(find.text("What would you like to discuss?"), findsOneWidget);
-      expect(find.textContaining("nonymously"), findsNothing);
     });
 
     // A user project's description is what the screen asks over its badge:

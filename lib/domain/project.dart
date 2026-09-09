@@ -40,15 +40,14 @@ const defaultEmptyChatQuestion = "What would you like to discuss?";
 
 /// The question the empty-chat screen asks for a project: a built-in's own,
 /// else the project's description where it set one — empty included, which
-/// asks nothing — else the default. Mirrors [projectLabel] in resolving a
-/// built-in's shipped string.
-String? emptyChatQuestionFor(String? project, {String? description}) {
+/// asks nothing — else the default. The built-in-first step is what mirrors
+/// [projectLabel]; the description comes in from the settings rather than
+/// being read here.
+String? emptyChatQuestionFor(String? project, {required String? description}) {
   final builtIn = builtinProjectOf(project)?.emptyChatQuestion;
   if (builtIn != null) return builtIn;
-  if (description != null && description.trim().isNotEmpty) {
-    return description;
-  }
-  return description == null ? defaultEmptyChatQuestion : null;
+  if (description == null) return defaultEmptyChatQuestion;
+  return description.trim().isEmpty ? null : description;
 }
 
 /// Every project there is, the default one first, then the built-in ones, then

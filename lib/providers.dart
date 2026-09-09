@@ -987,18 +987,16 @@ final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
 
 /// What the new-chat screen asks over [project]'s badge: the project's own
 /// description where it set one, a built-in's shipped question, or the
-/// app-wide default. The read the screen makes, so an edit landing there
-/// re-sweeps the headline.
-/// What the new-chat screen asks over [project]'s badge: the project's own
-/// description where it set one, a built-in's shipped question, or the
 /// app-wide default — or nothing, where the project set an empty one. The
-/// read the screen makes, so an edit landing re-sweeps the headline.
+/// read the screen makes, so an edit landing re-sweeps the headline. Null
+/// and empty mean the same thing here — nothing to ask — so the answer is
+/// the one string the sweep takes.
 final emptyChatQuestionProvider =
-    Provider.family<String?, String?>((ref, project) {
+    Provider.family<String, String?>((ref, project) {
   final description = project == null
       ? null
       : ref.watch(projectSettingsProvider(project).select((s) => s.description));
-  return emptyChatQuestionFor(project, description: description);
+  return emptyChatQuestionFor(project, description: description) ?? "";
 });
 
 class ProjectSettingsNotifier extends Notifier<ProjectSettings> {

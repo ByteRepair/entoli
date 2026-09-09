@@ -9,6 +9,27 @@ const defaultOptionLabel = "Default";
 /// Distinct from [defaultOptionLabel], which resolves to something.
 const noneOptionLabel = "None";
 
+/// The reset affordance itself, shared by [ResettableField]'s layout and by
+/// rows that carry a reset beside what they already trail.
+class ResetButton extends StatelessWidget {
+  const ResetButton({super.key, required this.onReset, this.resetLabel});
+
+  final VoidCallback onReset;
+
+  /// What the reset puts the field back on, named in the tooltip. Null is
+  /// [defaultOptionLabel], the pairing's own name for what it restores.
+  final String? resetLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.settings_backup_restore),
+      tooltip: "Reset to ${resetLabel ?? defaultOptionLabel}",
+      onPressed: onReset,
+    );
+  }
+}
+
 /// A field paired with a button that puts it back on [resetLabel]. The button
 /// is always live: pressed where the field already sits on the reset target
 /// it rewrites the same value, which is nothing worth a disabled state — and
@@ -38,11 +59,7 @@ class ResettableField extends StatelessWidget {
         const SizedBox(width: 4),
         Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: IconButton(
-            icon: const Icon(Icons.settings_backup_restore),
-            tooltip: "Reset to $resetLabel",
-            onPressed: onReset,
-          ),
+          child: ResetButton(onReset: onReset, resetLabel: resetLabel),
         ),
       ],
     );
