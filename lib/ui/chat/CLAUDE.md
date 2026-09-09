@@ -681,6 +681,14 @@ agree nothing visibly changes, so what moves is the divergence toward the
 end. The row animates its first build too: the screen is grown into, not
 shown settled.
 
+What the headline says is `emptyChatQuestionProvider`: a built-in's shipped
+question, else the project's `description` (the settings page's Description
+row, its dialog saving an empty field as empty and its reset button the way
+back to null), else the app-wide default. Empty is a value the sweep can be
+handed — the label stays on the tree and eats its own tail away rather than
+leaving it — so setting a description never unmounts the headline, and the
+next question's arrival is a change, not a mount.
+
 The badges are the same discovery for projects: the switcher at the top of the
 sidebar is the only other place one is named, and on a phone the sidebar is a
 drawer. Picking one is `selectProject` — the switcher's own action, lifted out

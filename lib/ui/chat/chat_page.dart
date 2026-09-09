@@ -286,8 +286,12 @@ class _EmptyChat extends ConsumerWidget {
           children: [
             const AppMark(size: 56),
             const SizedBox(height: 20),
+            // A project whose description is the empty string asks nothing:
+            // the sweep is handed the empty string and eats its own tail
+            // away, rather than the widget leaving the tree and the next
+            // question's arrival being a mount instead of a change.
             _QuestionSweep(
-              text: emptyChatQuestionFor(project),
+              text: ref.watch(emptyChatQuestionProvider(project)) ?? "",
               style: theme.textTheme.titleMedium,
             ),
             _ProjectBadges(selected: project),
