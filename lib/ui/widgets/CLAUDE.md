@@ -109,7 +109,14 @@ grows every kept or arriving entry's slot through `_EnterExit` — the slot's
 width and the child's scale and opacity are the one tween, so painted size
 always equals slot size and what appears from nothing is the chip itself.
 A row is grown into on first build, not shown settled; the empty-state line
-of the empty chat is an entry of it like any other.
+of the empty chat is an entry of it like any other. `settled` is the caller's
+say-so otherwise: it is snapshot at the row's own first build, so the entries
+the row is created with are shown at full size and everything arriving after
+animates — how a screen the user arrives on opens without motion while every
+change after it keeps the one rule. The row's own height is part of the same
+motion: an `AnimatedSize` over the `Wrap` glides a change of line count — a
+badge pushed onto a new line, or a line collapsing — where the column below
+used to snap with it.
 
 `showAnchoredMenu` is a menu under a button, as a **route**. A `MenuAnchor`
 draws into an overlay instead, and an overlay is not popped by anything: the

@@ -200,9 +200,10 @@ class _NewChatState extends ConsumerState<_NewChat> {
 /// one pushed onto a new line travels there rather than teleports — and a
 /// project made or deleted elsewhere grows in or shrinks out.
 class _ProjectBadges extends ConsumerWidget {
-  const _ProjectBadges({required this.selected});
+  const _ProjectBadges({required this.selected, required this.settled});
 
   final String? selected;
+  final bool settled;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -213,6 +214,7 @@ class _ProjectBadges extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
       child: ChipRow(
+        settled: settled,
         entries: [
           for (final project in projects)
             ChipRowEntry(
@@ -258,6 +260,9 @@ class _ProjectBadges extends ConsumerWidget {
 /// on. The mark, the question, the project it would happen in, and what the
 /// composer's `/` and `@` menus hold — which is the only place those are named
 /// before the user has typed the character that opens them.
+///
+/// Its rows are `settled`, so what the user arrives on is static and every
+/// change from their first interaction on animates.
 class _EmptyChat extends ConsumerWidget {
   const _EmptyChat({required this.project, required this.controller});
 
@@ -294,9 +299,10 @@ class _EmptyChat extends ConsumerWidget {
               text: ref.watch(emptyChatQuestionProvider(project)),
               style: theme.textTheme.titleMedium,
             ),
-            _ProjectBadges(selected: project),
+            _ProjectBadges(selected: project, settled: true),
             const SizedBox(height: 20),
             ChipRow(
+              settled: true,
               entries: starters.isEmpty
                   ? [
                       // Nothing to offer is said as an entry of the same row,
