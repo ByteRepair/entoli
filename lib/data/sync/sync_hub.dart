@@ -6,7 +6,6 @@ import "package:flutter/foundation.dart";
 import "package:http/http.dart" as http;
 
 import "../../core/log.dart";
-import "../../core/platform/io/remote_artifact.dart" show ArtifactBytes;
 import "../../domain/app_settings.dart";
 import "../../domain/chat_log.dart" show ChatRecord, PartRecord;
 import "../../domain/chat_meta.dart";
@@ -18,6 +17,7 @@ import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
 import "../../domain/sync/protocol.dart";
 import "../../domain/sync/relay_signaling.dart";
+import "artifact_bytes.dart" show ArtifactBytes;
 import "channel.dart";
 import "pairing.dart";
 import "peers.dart";
