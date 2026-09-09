@@ -6,6 +6,14 @@ import "dart:typed_data";
 const identitySecretKey = "identity";
 const pairingSecretsKey = "pairing-secrets";
 
+/// Map of provider id → API key, for the endpoints configured under
+/// `llmProviders`.
+const providerKeysKey = "provider-keys";
+
+/// The TURN relay's credential, held beside the username that names it in
+/// `settings.json` — the username is not a secret.
+const turnPasswordKey = "turn-password";
+
 /// Where this device's sync secrets live: the identity key and the pairing
 /// secrets shared with each paired device.
 ///

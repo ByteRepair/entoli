@@ -16,6 +16,7 @@ import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
+import "domain/app_secrets.dart";
 import "domain/models.dart" show CompletionKind;
 import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
@@ -116,9 +117,13 @@ class AppSession {
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
     final byteRepairBin = platform.byteRepairBinDir(cache);
+    // Before the backend, which reads stored keys when it builds a client;
+    // loaded before the container, so the first turn sees the mirror filled.
+    final secrets = AppSecrets(platform.createSecretStore(config));
+    await secrets.load();
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        byteRepairBinDir: byteRepairBin);
+        byteRepairBinDir: byteRepairBin, secrets: secrets);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -149,17 +154,16 @@ class AppSession {
     // between depends on the answer.
     final alarms = platform.createReminderAlarms();
     // Sync: identity from the keyring (or file fallback), registry on disk.
-    // The hub reads settings from the container; the closure below defers
-    // that read until after the container exists — the same pattern the
+    // The hub reads settings from the container; the closures below defer
+    // those reads until after the container exists — the same pattern the
     // repository uses with `() => ref.read(appSettingsProvider)`.
-    final secretStore = platform.createSecretStore(config);
     // Started alongside the identity load: on Android the hostname is a
     // method-channel round-trip and the identity is keyring/file I/O, so the
     // two are independent and overlap rather than serialise on the startup
     // path.
     final hostname = platform.deviceHostname();
-    final identity = await SyncIdentity.load(secretStore);
-    final registry = FileDeviceRegistry(config, secretStore);
+    final identity = await SyncIdentity.load(secrets.store);
+    final registry = FileDeviceRegistry(config, secrets.store);
     // Assigned two statements down, and read only from a running app — the
     // hub has to exist before the container that overrides its provider.
     late final ProviderContainer settingsHome;
@@ -167,6 +171,7 @@ class AppSession {
       identity: identity,
       registry: registry,
       settings: () => settingsHome.read(appSettingsProvider),
+      turnPassword: () => secrets.turnPassword,
       lanSignaling: platform.createLanSignaling,
       hostname: await hostname,
     );
@@ -176,6 +181,7 @@ class AppSession {
         agentBackendProvider.overrideWithValue(backend),
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
+        appSecretsProvider.overrideWithValue(secrets),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.

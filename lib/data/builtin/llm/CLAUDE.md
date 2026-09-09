@@ -26,18 +26,28 @@ enabled, Anthropic rejects a tool-use turn whose thinking was dropped, so
 pins the temperature at 1, so the two are never sent together.
 
 Providers are configured in `settings.json` under `llmProviders` — id, API
-shape, base URL, key, and an optional model list — and `llmProviderPresets`
-fills in the endpoints worth naming so that adding one is a key rather than a
-URL nobody remembers. A key can be left out and named as `apiKeyEnv` instead,
-which is how one already exported stays out of the file. `LlmRegistry` builds a
-client per endpoint and rebuilds it when the URL or key changes; a provider that
-lists no models is asked, and one that cannot answer contributes nothing rather
-than failing the whole list. What it builds a client *with* is the endpoint's
-own business: an `LlmEndpoint` is a config and, where reaching it is not the
-ordinary thing, the client to reach it with — which is how the on-device
-server's "may not be answering yet" arrives without the registry knowing there
-is such a thing. See "Running a model on the device" in
+shape, base URL, an optional model list — and `llmProviderPresets` fills in
+the endpoints worth naming so that adding one is a key rather than a URL
+nobody remembers. A key can be left out and named as `apiKeyEnv` instead,
+which is how one already exported stays out of the file. `LlmRegistry` builds
+a client per endpoint and rebuilds it when the URL or key changes; a provider
+that lists no models is asked, and one that cannot answer contributes nothing
+rather than failing the whole list. What it builds a client *with* is the
+endpoint's own business: an `LlmEndpoint` is a config and, where reaching it
+is not the ordinary thing, the client to reach it with — which is how the
+on-device server's "may not be answering yet" arrives without the registry
+knowing there is such a thing. See "Running a model on the device" in
 `lib/data/local/CLAUDE.md`.
+
+**The key is resolved in one order, by `resolveKeyFor`**: the config's own
+`apiKey` field (the copy a dialog just returned, or an edit in flight), then
+the key stored for the provider id in the secret store, then `apiKeyEnv` in
+the environment. The config field and the named variable are the only two
+that leave `settings.json`; the stored one lives in the secret store — see
+"Secrets at rest" in `lib/data/sync/CLAUDE.md` — and never in the file, which
+`AppSettings.save` strips even where a config in memory still carries one.
+The resolved key is the client cache signature's third term, so an edited
+stored key rebuilds the client the way an edited URL does.
 
 A `RateLimitGate` is built per turn in `BuiltinBackend.sendPrompt` and shared by
 the parent `BuiltinAgent` and every sub-agent it spawns: it bounds in-flight

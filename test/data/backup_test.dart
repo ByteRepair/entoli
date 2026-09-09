@@ -237,4 +237,33 @@ void main() {
     expect(backupFilename(DateTime(2026, 8, 18, 9, 5)),
         "entoli-backup-2026-08-18-0905.zip");
   });
+
+  test("no key material rides in the archive", () async {
+    // A provider key is written to the secret store and stripped from
+    // settings.json by the notifier; the store's directory is skipped whole.
+    // Both halves are what keeps a key out of the zip, so a backup can be
+    // shared without carrying credentials.
+    write("settings.json",
+        jsonEncode({"llmProviders": [ {"id": "a", "baseUrl": "https://a.test/v1"} ]}));
+    write("sync/secrets.json",
+        jsonEncode({"provider-keys": base64Encode(utf8.encode('{"a":"sk-secret"}'))}));
+
+    final bytes = await writeBackup(config);
+    // Match on bytes rather than a decoded string: the zip is binary and only
+    // its members are text.
+    final needle = utf8.encode("sk-secret");
+    bool carries(List<int> haystack) {
+      for (var i = 0; i + needle.length <= haystack.length; i++) {
+        if (List.generate(needle.length, (j) => haystack[i + j])
+                .toString() ==
+            needle.toString()) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    expect(carries(bytes), isFalse, reason: "the key is in the archive");
+    expect((await archive()).findFile("sync/secrets.json"), isNull);
+  });
 }

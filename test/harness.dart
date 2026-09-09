@@ -19,6 +19,7 @@ import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/app_secrets.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
@@ -69,6 +70,7 @@ final _testNow = DateTime(2026, 7, 1, 12);
 class TestApp {
   TestApp._({
     required this.config,
+    required this.secrets,
     required this.backend,
     required this.picker,
     required this.launcher,
@@ -91,6 +93,11 @@ class TestApp {
   });
 
   final Clock clock;
+
+  /// The secrets the app's notifier writes into — exposed so a test can assert
+  /// on what a settings save put in the store, the way `config` is for the
+  /// settings file.
+  final AppSecrets secrets;
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
@@ -159,6 +166,7 @@ class TestApp {
     SyncHub? hub,
     Clock? clock,
     bool appHidden = false,
+    FakeSecretStore? secrets,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -190,8 +198,13 @@ class TestApp {
       if (nativeVoice.recognition) nativeRecognition.id,
       if (nativeVoice.speech) nativeSpeech.id,
     };
+    // The real one over an in-memory store: what a settings page reads back
+    // after it writes is [AppSecrets]'s own, so faking it would only prove
+    // the fake. A test that wants keys pre-stored passes its own store.
+    final appSecrets = AppSecrets(secrets ?? FakeSecretStore());
     return TestApp._(
       config: config,
+      secrets: appSecrets,
       backend: backend,
       picker: picker,
       launcher: launcher,
@@ -217,6 +230,7 @@ class TestApp {
           shellProvider.overrideWithValue(
               shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
+          appSecretsProvider.overrideWithValue(appSecrets),
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWith2(
               (project) => PromptLibraryNotifier(project, library ?? testLibrary())),

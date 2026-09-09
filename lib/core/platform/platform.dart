@@ -14,6 +14,7 @@ import "../../data/local/file_chat_store.dart";
 import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/app_secrets.dart";
 import "../../domain/background_work.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
@@ -59,6 +60,7 @@ BuiltinBackend createBackend(
   required LocalLlm localLlm,
   LocalKvCache? kvCache,
   String? byteRepairBinDir,
+  AppSecrets? secrets,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -92,6 +94,9 @@ BuiltinBackend createBackend(
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
+      // The stored keys are the middle of the order in the registry: pasted
+      // config wins over them, they win over a named variable.
+      lookupKey: secrets == null ? null : (id) => secrets.providerKey(id),
     ),
     // Read fresh per turn rather than captured: the slider is a setting, and
     // an edit reaches the next turn the way the environment does.

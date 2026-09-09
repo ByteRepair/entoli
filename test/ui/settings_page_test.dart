@@ -236,9 +236,9 @@ void main() {
 
       final providers = app.container.read(appSettingsProvider).llmProviders;
       expect(providers.map((p) => p.id), contains("ollama-cloud"));
-      expect(
-          providers.firstWhere((p) => p.id == "ollama-cloud").apiKey,
-          "ollama-key-123");
+      // The key went to the store; the config carries none of it.
+      expect(providers.firstWhere((p) => p.id == "ollama-cloud").apiKey, isEmpty);
+      expect(app.secrets.providerKey("ollama-cloud"), "ollama-key-123");
       expect(find.textContaining("We recommend Ollama Cloud"), findsNothing);
 
       // The first provider becomes what every role resolves to, until the

@@ -515,8 +515,9 @@ non-required camera feature for it.
 
 - **Linux**: `KeyringSecretStore` over the FreeDesktop Secret Service API
   (`freedesktop_secret`), items labelled "Entoli — sync identity" and
-  "Entoli — paired devices". Falls back to `FileSecretStore` where no service
-  answers (headless, minimal WM, the dev toolbox).
+  "Entoli — paired devices" (and one per other kind, named by its key).
+  Falls back to `FileSecretStore` where no service answers (headless, minimal
+  WM, the dev toolbox).
 - **Android**: `FileSecretStore` under app-private storage — already out of
   every other app's reach — until Keystore wiring lands.
 - **Web**: `FileSecretStore` in origin-scoped IndexedDB. The weakest of the
@@ -526,10 +527,19 @@ non-required camera feature for it.
 should say so on the web, where the keys sit in ordinary IndexedDB, and does
 not.
 
+Sync is not the only tenant. `AppSecrets` (`lib/domain/app_secrets.dart`)
+holds the provider API keys (`provider-keys`, one JSON map under one item —
+one item per provider would make a user browsing their keyring count
+providers) and the TURN password (`turn-password`) in the same store. Its
+reads are served from a mirror filled once at startup, because
+`LlmRegistry` resolves a key on the path to every model call; the writers
+are the settings notifiers, which store or delete per provider and delete
+the item when the map empties. `turnUsername` is *not* a secret and stays in
+`settings.json` beside the TURN URL.
+
 ## Data dir layout
 
 ```
-<dataDir>/sync/identity.json   # public: device id, name, public key
 <dataDir>/sync/devices.json    # public: paired peers, addresses, last seen
 <dataDir>/sync/secrets.json    # private: only where no keyring answered
 ```
@@ -538,7 +548,9 @@ Backups skip `sync/` entirely (`writeBackup` passes `skipDir` to `archiveOf`):
 a backup must not carry private keys, and a restore wipes the data directory
 first — so `sync/` in a backup would silently unpair this device on every
 restore. The identity key itself lives in the keyring where there is one, not
-in `identity.json`, which holds only public facts.
+in `identity.json`, which holds only public facts. The provider keys and the
+TURN password are skipped with the same directory, which is what keeps them
+out of every export.
 
 **`AppConfig.ensureDirs` is what creates the directory**, beside `projects/`
 and the prompt directories, and neither writer here makes it. That is not a

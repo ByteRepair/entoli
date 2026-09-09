@@ -12,6 +12,7 @@ import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
+import "domain/app_secrets.dart";
 import "domain/app_settings.dart";
 import "domain/app_theme.dart";
 import "domain/assistant_launch.dart";
@@ -605,10 +606,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setTurnUrl(String? url) => _update((s) => s.turnUrl = url);
 
-  Future<void> setTurnCredentials(String? username, String? password) =>
-      _update((s) => s
-        ..turnUsername = username
-        ..turnPassword = password);
+  /// The TURN username is not a secret: it stays in `settings.json` beside the
+  /// URL and the retries. The password goes to [setTurnPassword], in the
+  /// secret store.
+  Future<void> setTurnUsername(String? username) =>
+      _update((s) => s.turnUsername = username);
 
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value
@@ -636,17 +638,31 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// The model list is rebuilt from them, so it is invalidated here rather
   /// than left showing the old one.
   ///
+  /// [setKey] is what happens to the stored key: null leaves it as it is (the
+  /// keep-empty-field case in the dialog), `""` clears it, a string stores it.
+  /// The config written here never carries one — `apiKey` on it is the dialog's
+  /// in-memory copy, and the store is where the material goes.
+  ///
   /// The first provider ever configured becomes what every still-unset role
   /// resolves to — the same `_update` as the save, so it cannot land half
   /// done — until the user picks something themselves. A role the user has
   /// already picked is left where it is; importing a backup and other bulk
   /// writes stay on [setProviders], which adopts nothing.
-  Future<void> upsertProvider(LlmProviderConfig provider) async {
+  Future<void> upsertProvider(LlmProviderConfig provider,
+      {String? setKey}) async {
+    // The key first: the settings state change below is what rebuilds the
+    // section drawing the row, and the row reads the store — so the key has
+    // to be in it before that rebuild runs.
+    if (setKey != null) {
+      await ref
+          .read(appSecretsProvider)
+          .setProviderKey(provider.id, setKey.isEmpty ? null : setKey);
+    }
     final existing = state.llmProviders;
     final isNew = existing.every((p) => p.id != provider.id);
     await _update((s) => s
-      ..llmProviders = List.unmodifiable(
-          [...existing.where((p) => p.id != provider.id), provider])
+      ..llmProviders = List.unmodifiable([...existing.where((p) => p.id != provider.id),
+          provider.copyWith(apiKey: "")])
       ..defaultProviderId = s.defaultProviderId ?? (isNew ? provider.id : null)
       ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
       ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
@@ -657,8 +673,19 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
 
   /// The endpoints the agent can call, written as given. The model list is
   /// rebuilt from them, so it is invalidated here rather than left showing
-  /// the old one. Bulk and removal writes: no adoption.
+  /// the old one. Bulk and removal writes: no adoption. A provider removed
+  /// here takes its stored key with it — nothing else would ever delete it,
+  /// and an entry nobody names is a secret kept for no one.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
+    final removed =
+        state.llmProviders.map((p) => p.id).toSet()
+          ..removeAll(providers.map((p) => p.id));
+    // Deleted before the state change, for the same reason the upsert stores
+    // first: the rebuild the state change starts reads the store.
+    final secrets = ref.read(appSecretsProvider);
+    for (final id in removed) {
+      await secrets.setProviderKey(id, null);
+    }
     await _update((s) => s.llmProviders = List.unmodifiable(providers));
     ref.invalidate(availableModelsProvider);
   }
@@ -698,6 +725,12 @@ final paletteAccentProvider = Provider<int?>((ref) =>
 
 final linkOpenerProvider =
     Provider<LinkOpener>((ref) => throw UnimplementedError());
+
+/// The provider API keys and the TURN password. Overridden in `main` with the
+/// one built over the platform's secret store; faked in tests over a
+/// `FakeSecretStore`.
+final appSecretsProvider =
+    Provider<AppSecrets>((ref) => throw UnimplementedError());
 
 final backgroundWorkProvider =
     Provider<BackgroundWork>((ref) => throw UnimplementedError());

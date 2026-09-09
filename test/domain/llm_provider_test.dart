@@ -115,7 +115,7 @@ void main() {
   });
 
   group("through settings.json", () {
-    test("providers survive a save and a load", () async {
+    test("providers survive a save and a load, and no key reaches the file", () async {
       final config = tempConfig("agent_chat_providers_");
       await AppSettings(
         defaultProviderId: "ollama-cloud",
@@ -134,7 +134,8 @@ void main() {
       final loaded = AppSettings.load(config);
 
       expect(loaded.llmProviders.single.id, "ollama-cloud");
-      expect(loaded.llmProviders.single.apiKey, "sk-1");
+      // The save strips the key: the store, not the file, is where it goes.
+      expect(loaded.llmProviders.single.apiKey, isEmpty);
       expect(loaded.approveMode, ApproveMode.never);
       expect(loaded.defaultModelId, "kimi");
     });
@@ -252,6 +253,92 @@ void main() {
       registry.close();
 
       expect(client.closed, isTrue);
+    });
+  });
+
+  group("the registry over stored keys", () {
+    LlmRegistry registryOver(Map<String, String> stored) => LlmRegistry(
+          endpoints: () => [
+            for (final provider in [
+              const LlmProviderConfig(
+                id: "fake",
+                api: LlmApi.openai,
+                baseUrl: "https://fake.test/v1",
+                apiKeyEnv: "FAKE_API_KEY",
+              ),
+            ])
+              LlmEndpoint(provider, build: (config, key) => FakeLlmClient(const [])),
+          ],
+          lookupEnv: (name) => name == "FAKE_API_KEY" ? "sk-env" : null,
+          lookupKey: (id) => stored[id],
+        );
+
+    test("a stored key is the middle of the order, behind a typed one", () {
+      final config = const LlmProviderConfig(
+        id: "fake",
+        api: LlmApi.openai,
+        baseUrl: "https://fake.test/v1",
+        apiKey: "sk-typed",
+      );
+      expect(
+        LlmRegistry(
+          endpoints: () => const [],
+          lookupEnv: (_) => "sk-env",
+          lookupKey: (_) => "sk-stored",
+        ).resolveKeyFor(config),
+        "sk-typed",
+      );
+      expect(
+        registryOver({"fake": "sk-stored"})
+            .resolveKeyFor(const LlmProviderConfig(
+              id: "fake",
+              api: LlmApi.openai,
+              baseUrl: "https://fake.test/v1",
+            )),
+        "sk-stored",
+      );
+    });
+
+    test("a stored key wins over the named environment variable", () {
+      expect(
+        registryOver({"fake": "sk-stored"}).resolveKeyFor(const LlmProviderConfig(
+          id: "fake",
+          api: LlmApi.openai,
+          baseUrl: "https://fake.test/v1",
+        )),
+        "sk-stored",
+      );
+    });
+
+    test("with nothing stored the named environment variable is still asked", () {
+      expect(
+        registryOver(const {}).resolveKeyFor(const LlmProviderConfig(
+          id: "fake",
+          api: LlmApi.openai,
+          baseUrl: "https://fake.test/v1",
+          apiKeyEnv: "FAKE_API_KEY",
+        )),
+        "sk-env",
+      );
+    });
+
+    test("an edited stored key rebuilds the client", () {
+      final stored = <String, String>{"fake": "sk-1"};
+      final registry = LlmRegistry(
+        endpoints: () => [
+          const LlmEndpoint(
+              LlmProviderConfig(
+                  id: "fake", api: LlmApi.openai, baseUrl: "https://fake.test/v1")),
+        ],
+        lookupEnv: (_) => null,
+        lookupKey: (id) => stored[id],
+      );
+      final first = registry.clientFor("fake");
+
+      stored["fake"] = "sk-2";
+      final second = registry.clientFor("fake");
+
+      expect(second, isNot(same(first)));
     });
   });
 }

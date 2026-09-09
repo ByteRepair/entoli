@@ -869,9 +869,9 @@ class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
     if (key.isEmpty) return;
     // Notifier first: adding the provider unmounts this card on the next
     // frame, and the save must outlive it rather than resume on a defunct
-    // ref.
+    // ref. The key goes to the store (setKey), never onto the config.
     final notifier = ref.read(appSettingsProvider.notifier);
-    await notifier.upsertProvider(_ollamaCloud.copyWith(apiKey: key));
+    await notifier.upsertProvider(_ollamaCloud, setKey: key);
   }
 
   @override
@@ -937,9 +937,21 @@ class _ProvidersEditor extends ConsumerWidget {
     // Notifier first: this page can go away while the dialog is open, and the
     // save must outlive it rather than resume on a defunct ref.
     final notifier = ref.read(appSettingsProvider.notifier);
-    final saved = await promptForProvider(context, initial: initial, title: title);
+    final secrets = ref.read(appSecretsProvider);
+    final saved = await promptForProvider(
+      context,
+      initial: initial,
+      storedKey: initial == null ? null : secrets.providerKey(initial.id),
+      encrypted: secrets.encrypted,
+      title: title,
+    );
     if (saved == null) return;
-    await notifier.upsertProvider(saved);
+    await notifier.upsertProvider(saved.config,
+        setKey: switch (saved.key) {
+          KeyChange.keep => null,
+          KeyChange.clear => "",
+          KeyChange.set => saved.typedKey ?? "",
+        });
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
@@ -967,7 +979,8 @@ class _ProvidersEditor extends ConsumerWidget {
         for (final provider in providers)
           EditableRow(
             title: provider.displayName,
-            subtitle: _describe(provider),
+            subtitle: _describe(provider,
+                storedKey: ref.read(appSecretsProvider).providerKey(provider.id)),
             removeLabel: "Remove ${provider.id}",
             onTap: () => _upsert(context, ref,
                 initial: provider, title: "Edit ${provider.displayName}"),
@@ -1004,9 +1017,9 @@ class _ProvidersEditor extends ConsumerWidget {
     if (context.mounted) chosen?.call();
   }
 
-  String _describe(LlmProviderConfig provider) {
-    final key = provider.apiKey.isNotEmpty
-        ? "key set"
+  String _describe(LlmProviderConfig provider, {String? storedKey}) {
+    final key = storedKey != null
+        ? "key stored"
         : provider.apiKeyEnv != null
             ? "\$${provider.apiKeyEnv}"
             : "no key";
