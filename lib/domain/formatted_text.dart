@@ -8,12 +8,20 @@ import "package:markdown/markdown.dart" as md;
 /// button takes, where the selection's copy answers from what is on screen.
 /// Inline styles fall away, links by the words they carry, blocks as lines.
 ///
-/// Parsed with the same document grammar the renderer reads, so the two cannot
-/// disagree about what a fence or a list is.
+/// Parsed with the same document grammar the renderer reads, and with HTML
+/// encoding off the way the renderer has it — encoding on would rewrite the
+/// quotes and ampersands of what was said as `&quot;` and friends, entities
+/// that were never drawn.
 String formattedTextOf(String markdown) {
   final buffer = StringBuffer();
   final visitor = _FormattedTextVisitor(buffer);
-  final document = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored);
+  final document = md.Document(
+    extensionSet: md.ExtensionSet.gitHubFlavored,
+    // The renderer's own answer (flutter_markdown_plus builds every document
+    // with `encodeHtml: false`): the entities are HTML machinery, and the
+    // rendered text is the words they encode.
+    encodeHtml: false,
+  );
   for (final node in document.parseLines(markdown.split("\n"))) {
     node.accept(visitor);
   }

@@ -24,5 +24,17 @@ void main() {
     test("reads a list as its items, one per line", () {
       expect(formattedTextOf("- one\n- two"), "one\ntwo");
     });
+
+    // What was said, not the entities the HTML layer would encode it as.
+    test("keeps quotes and ampersands as the characters they encode", () {
+      expect(
+        formattedTextOf('He said "hello" & <left> — quoted'),
+        'He said "hello" & <left> — quoted',
+      );
+    });
+
+    test("decodes an entity the markdown itself carried", () {
+      expect(formattedTextOf("call it &quot;done&quot;"), 'call it "done"');
+    });
   });
 }
