@@ -1245,6 +1245,26 @@ void main() {
       expect(copied.single, isNot(contains("bash")));
     });
 
+    // The bullets are chrome like a code block's bar: what a selection reads
+    // is what the copy button reads, the list's items and not `•Item`.
+    testWidgets("a drag over a list copies its items without the bullets",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "- one\n- two")]),
+      );
+
+      final rendered = find.byType(MarkdownBody);
+      await dragCopy(
+        tester,
+        tester.getTopLeft(rendered) + const Offset(2, 4),
+        to: tester.getBottomRight(rendered) - const Offset(2, 4),
+      );
+
+      expect(copied.single, "one\ntwo");
+    });
+
     // Whole-part copy answered a three-word drag with the whole paragraph's
     // markdown; a selection copies the range it covers, and only that.
     testWidgets("selecting part of a paragraph copies only what it covered",

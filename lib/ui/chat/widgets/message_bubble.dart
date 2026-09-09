@@ -668,11 +668,24 @@ class _MessageTextState extends State<_MessageText> {
     // with the message's own container above, which is what makes a drag run
     // from the first paragraph to the last — `selectable` builds a
     // `SelectableText` per element, each a selection region to itself, which
-    // is what made a selection stop at the paragraph it started in.
+    // is what made a selection stop at the paragraph it started in. The
+    // bullets are chrome, like a code block's bar: on screen, but not part of
+    // what a drag picks up, so what a selection copies reads as the list's
+    // items rather than `•Item`.
     return MarkdownBody(
       data: widget.text,
       styleSheet: _styleSheet,
       builders: codeBlockBuilders,
+      bulletBuilder: (parameters) => SelectionContainer.disabled(
+        child: Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Text(
+            "•",
+            style: _styleSheet?.listBullet ?? Theme.of(context).textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
       onTapLink: (text, href, title) {
         if (href != null) widget.onTapLink?.call(href);
       },
