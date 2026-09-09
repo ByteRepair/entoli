@@ -3,7 +3,9 @@ import "dart:typed_data";
 
 /// The keys this app stores. Each becomes one item in the system's keyring
 /// where there is one, so a user browsing their secrets sees a handful of
-/// Entoli entries however many providers, devices or models there are.
+/// Entoli entries however many providers, devices or models there are. The
+/// labels follow the app's name — "Entoli (Debug)" in a debug build — and the
+/// lookups carry a `build` attribute, so a debug install's items are its own.
 const identitySecretKey = "identity";
 const pairingSecretsKey = "pairing-secrets";
 

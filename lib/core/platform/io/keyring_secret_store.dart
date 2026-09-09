@@ -1,7 +1,9 @@
 import "dart:typed_data";
 
 import "package:freedesktop_secret/freedesktop_secret.dart";
+import "package:flutter/foundation.dart" show kDebugMode;
 
+import "../../../core/brand.dart";
 import "../../../domain/secret_store.dart";
 
 /// Secrets in the desktop's keyring — the Secret Service API that seahorse
@@ -10,11 +12,13 @@ import "../../../domain/secret_store.dart";
 ///
 ///   Entoli — sync identity
 ///   Entoli — paired devices
-///   Entoli — provider-keys
-///   Entoli — turn-password
+///   Entoli — provider keys
+///   Entoli — TURN password
 ///
-/// (the last two named by the fallback label, which is the arm every key
-/// this side of sync's two rides). Where no service answers — a headless
+/// (in a debug build, "Entoli (Debug)" throughout). Lookups carry a `build`
+/// attribute beside the schema, so a debug install's items are its own and
+/// never touch the release one's — the keyring-side twin of the
+/// `agent-chat-debug` data directory. Where no service answers — a headless
 /// session, a minimal window manager, the dev toolbox — reads and writes
 /// fall through to the plain file under the data directory, the same store
 /// Android uses. The fallback is decided once, at first use: a session whose
@@ -24,8 +28,10 @@ class KeyringSecretStore implements SecretStore {
 
   static const _schema = "io.byterepair.entoli.sync";
   static const _labels = {
-    identitySecretKey: "Entoli — sync identity",
-    pairingSecretsKey: "Entoli — paired devices",
+    identitySecretKey: "$appBrand — sync identity",
+    pairingSecretsKey: "$appBrand — paired devices",
+    providerKeysKey: "$appBrand — provider keys",
+    turnPasswordKey: "$appBrand — TURN password",
   };
 
   final SecretStore _fallback;
@@ -46,7 +52,7 @@ class KeyringSecretStore implements SecretStore {
   }
 
   Map<String, String> _attributes(String key) =>
-      {"xdg:schema": _schema, "kind": key};
+      {"xdg:schema": _schema, "kind": key, "build": kDebugMode ? "debug" : "release"};
 
   @override
   Future<Uint8List?> read(String key) async {
@@ -72,7 +78,7 @@ class KeyringSecretStore implements SecretStore {
         // Bytes, not text: keys are binary, and the content type libsecret's
         // own CLI chokes on is one more thing not to ship.
         contentType: "application/octet-stream",
-        label: _labels[key] ?? "Entoli — $key",
+        label: _labels[key] ?? "$appBrand — $key",
         replace: true,
       );
       // The file copy is removed where it exists: a secret that moved into

@@ -1,7 +1,7 @@
-import "package:flutter/foundation.dart" show kDebugMode;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../core/brand.dart";
 import "../domain/app_theme.dart";
 import "../domain/theme_colour.dart";
 import "fonts.dart";
@@ -17,7 +17,7 @@ const entoliIndigo = Color(entoliIndigoArgb);
 /// `@string/app_name`, which `src/debug/` overrides: `MaterialApp.title` is the
 /// Android recents entry and *replaces* the launcher label there, so without
 /// this a debug build would name itself twice and differently.
-const appTitle = kDebugMode ? "Entoli (Debug)" : "Entoli";
+const appTitle = appBrand;
 
 /// The two voices on the voice screen, and the only colours in the app not
 /// taken from the scheme. A scheme's tones are picked to be *read on* a
