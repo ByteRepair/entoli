@@ -25,36 +25,18 @@ outputs:
 runs:
   using: composite
   steps:
-    # The Ubuntu list in README.md; keep the two in step.
+    # The Ubuntu list in README.md; keep the README part in step. cmake and
+    # ninja stay here — `flutter build linux` drives the engine's own cmake
+    # too — and patchelf and binutils do not: their one consumer is the
+    # model-server build, which installs its own on the job that runs it.
     - name: Install build dependencies
       shell: bash
       run: |
         sudo apt-get update
         sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev \
-          libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev glslc patchelf \
-          binutils
+          libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
     - uses: ./.github/actions/flutter-setup
-
-    # The on-device model server, staged where linux/CMakeLists.txt installs it
-    # from. The app is built after this, so the bundle either carries the
-    # server whole or not at all. Cached on what decides the output, the way
-    # the Android tools are: the versions and the recipe, and the work dir the
-    # sources unpack into is the Android build's own, so the key carries this
-    # file — where the recipe lives is the other half of what it answers.
-    - name: Restore the built model server
-      id: llama-cache
-      uses: actions/cache@v6.1.0
-      with:
-        path: |
-          tool/android/build
-          build/llama
-        key: linux-llama-${{ hashFiles('tool/android/versions.sh', 'tool/linux/build-llama.sh', '.github/actions/linux-appimage/action.yml') }}
-
-    - name: Build the bundled llama.cpp server
-      if: steps.llama-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: tool/linux/build-llama.sh
 
     - shell: bash
       env:

@@ -1,0 +1,40 @@
+name: Build the Linux model server
+description: >
+  Builds llama.cpp's server for the desktop — `tool/linux/build-llama.sh` — and
+  stages it where `linux/CMakeLists.txt` installs the bundle's lib/ from. Cached
+  on what decides the output, the way the Android tools are: the versions and
+  the recipe, and the work dir the sources unpack into is the Android build's
+  own, so the key carries this file — where the recipe lives is the other half
+  of what it answers.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore the built model server
+      id: llama-cache
+      uses: actions/cache@v6.1.0
+      with:
+        path: |
+          tool/android/build
+          build/llama
+        key: linux-llama-${{ hashFiles('tool/android/versions.sh', 'tool/linux/build-llama.sh', '.github/actions/linux-llama/action.yml') }}
+
+    # Nothing on a hit path reaches for a toolchain, so the install is gated
+    # with the build — the same shape bundled-tools' Ninja step has.
+    - name: Install build dependencies
+      if: steps.llama-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build glslc patchelf binutils
+
+    - name: Build the bundled llama.cpp server
+      if: steps.llama-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: tool/linux/build-llama.sh
+
+    # The upload below names the directory either way; this is what fails the
+    # job with its own line where a cache hit restored nothing.
+    - name: Confirm the stage holds a build
+      shell: bash
+      run: test -f build/llama/llama-server
