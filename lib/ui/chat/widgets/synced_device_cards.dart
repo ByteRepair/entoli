@@ -92,13 +92,17 @@ List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
   final devices = <String, ({String name, bool online})>{};
   final projects = <String, Map<String?, List<ChatState>>>{};
   for (final entry in entries) {
-    final (:name, :online) = devices[entry.deviceId] ??= (
+    final device = devices[entry.deviceId] ??= (
       name: entry.deviceName,
       online: entry.online,
     );
-    devices[entry.deviceId] = (name: name, online: online || entry.online);
-    final byProject = projects.putIfAbsent(entry.deviceId, () => {});
-    byProject.putIfAbsent(entry.state.project, () => []).add(entry.state);
+    devices[entry.deviceId] = (
+      name: device.name,
+      online: device.online || entry.online,
+    );
+    projects
+        .putIfAbsent(entry.deviceId, () => {})[entry.state.project] ??= [];
+    projects[entry.deviceId]![entry.state.project]!.add(entry.state);
   }
   return [
     for (final MapEntry(key: id, value: device) in devices.entries)

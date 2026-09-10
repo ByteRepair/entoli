@@ -1085,7 +1085,9 @@ void main() {
     testWidgets("a device with nothing mirrored has no card", (tester) async {
       await openEmpty(tester, []);
 
-      expect(find.byType(SyncedDeviceCards), findsNothing);
+      // The widget is mounted and draws nothing: what this asserts is that
+      // no card is drawn, not that the widget left the tree.
+      expect(find.byType(Card), findsNothing);
     });
 
     testWidgets("the cards start collapsed and the button folds each device",
