@@ -4,6 +4,7 @@ import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -18,6 +19,7 @@ import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
+import "package:agent_chat/ui/chat/widgets/synced_device_cards.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
 
@@ -1012,6 +1014,113 @@ void main() {
 
     expect(find.text("line 39"), findsOneWidget);
     expect(revealed(tester).where((o) => o == 1), isEmpty);
+  });
+
+  group("the paired devices' cards", () {
+    // What the welcome of a paired device named, as the hub would hold it.
+    RemoteChatEntry mirrorOf(
+      String deviceId,
+      String deviceName,
+      ChatState state, {
+      bool online = true,
+    }) =>
+        RemoteChatEntry(
+          chatId: state.id,
+          deviceId: deviceId,
+          deviceName: deviceName,
+          state: state,
+          online: online,
+        );
+
+    Future<void> openNew(WidgetTester tester) async {
+      await app.pump(tester, const ChatPage(withDrawer: true), settle: false);
+      await pumpUntil(tester, find.byType(Composer));
+      await settleIo(tester);
+    }
+
+    Future<void> openEmpty(WidgetTester tester, List<RemoteChatEntry> remotes) {
+      app.dispose();
+      app = TestApp.create(remotes: remotes);
+      return openNew(tester);
+    }
+
+    testWidgets("the new-chat screen draws one card per paired device",
+        (tester) async {
+      await openEmpty(tester, [
+        mirrorOf("d1", "Desktop", makeState("r1")),
+        mirrorOf("d1", "Desktop", makeState("r2", project: "work")),
+        mirrorOf("d2", "Phone", makeState("r3")),
+      ]);
+
+      expect(find.byType(SyncedDeviceCards), findsOneWidget);
+      expect(find.text("Desktop"), findsOneWidget);
+      expect(find.text("Phone"), findsOneWidget);
+      expect(find.text("2 projects"), findsOneWidget);
+      expect(find.text("1 project"), findsOneWidget);
+    });
+
+    testWidgets("a chat that exists with nothing said in it draws none",
+        (tester) async {
+      // The second caller of `_EmptyChat`: an existing chat, mid-turn at
+      // worst. A list of other devices under its question would say nothing
+      // true about it, which is why the cards are the new-chat screen's own.
+      // The mirrors are there, so what this asserts is the screen asking for
+      // them, not their absence.
+      app.dispose();
+      app = TestApp.create(remotes: [
+        mirrorOf("d1", "Desktop", makeState("r1")),
+      ]);
+      final chat = await io(tester, () => app.seedChat(title: "fresh"));
+      app.container
+          .read(selectedChatIdProvider.notifier)
+          .select(chat.state.id);
+      await app.pump(tester, const ChatPage(), settle: false);
+      await pumpUntil(tester, find.byType(Composer));
+      await settleIo(tester);
+
+      expect(find.byType(SyncedDeviceCards), findsNothing);
+      expect(find.text("Desktop"), findsNothing);
+    });
+
+    testWidgets("a device with nothing mirrored has no card", (tester) async {
+      await openEmpty(tester, []);
+
+      expect(find.byType(SyncedDeviceCards), findsNothing);
+    });
+
+    testWidgets("the cards start collapsed and the button folds each device",
+        (tester) async {
+      await openEmpty(tester, [
+        mirrorOf("d1", "Desktop", makeState("r1")),
+        mirrorOf("d1", "Desktop", makeState("r2", project: "work")),
+      ]);
+
+      expect(find.text("work"), findsNothing);
+      await tester.tap(find.text("Desktop"));
+      await tester.pump();
+
+      expect(find.text("work"), findsOneWidget);
+      await tester.tap(find.text("Desktop"));
+      await tester.pump();
+
+      expect(find.text("work"), findsNothing);
+    });
+
+    testWidgets("a project card opens that device's project in the sidebar",
+        (tester) async {
+      await openEmpty(tester, [
+        mirrorOf("d1", "Desktop", makeState("r1", project: "work")),
+      ]);
+      await tester.tap(find.text("Desktop"));
+      await tester.pump();
+
+      await tester.tap(find.text("work"));
+      await tester.pump();
+
+      expect(app.container.read(selectedRemoteProvider),
+          (deviceId: "d1", project: "work"));
+      expect(app.container.read(selectedChatIdProvider), isNull);
+    });
   });
 
   group("when a memory note lands", () {
