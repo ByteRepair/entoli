@@ -14,16 +14,31 @@ turn.
 mode is listening and `DownloadService` holds a model being fetched, and both
 are as much work the process must not be killed in the middle of as a turn is.
 They are separate because a service has one foreground notification and these
-are three different things to stop — and because from Android 14 the one that
+are different things to stop — and because from Android 14 the one that
 holds the microphone has to say so, hold `RECORD_AUDIO`, and be started while
 the app is in use, none of which a `dataSync` service may claim. Everything
 about *how* a service is held, stopped, refused and woken is `ForegroundWork`;
-each of the three says only which it is and what its notification reads.
+each of the four says only which it is and what its notification reads.
 `BackgroundWork` therefore carries a kind rather than a count, and
 `stopRequests` says which button was pressed — killing every turn because a
 download was cancelled is not what the user pressed. The wording stays in Kotlin
 for the first two; a download's cannot, since which model is being fetched is
 the catalog's and Kotlin has never heard of the catalog.
+
+The fourth is `SyncService`, and it is held for a different reason from the
+other three: nothing is mid-flight, but a WebRTC channel that no process
+running is a channel no longer there. When the screen goes dark the process
+freezes, the data channel dies, and a phone's end of a pair goes quiet for the
+night — this is what stops that, behind the Sync page's "Keep connected off
+screen" setting (off by default; the cost is a wake lock and a notification
+for as long as a device is connected). `SyncKeepAlive` (`lib/data/sync/`)
+reports the connected peers to it and answers its Disconnect by calling the
+same `hub.disconnect` the Sync page's row does — which is what drops the
+statuses and releases the service, the notification going when the
+connections do rather than when the button is pressed. The count is worded in
+Kotlin, the names ride in from Dart the way a download's label does, and the
+action says Disconnect rather than Stop — what it ends is connections, not
+work mid-flight.
 
 **Nothing moves into the service.** The turn runs in the app's own isolate, as
 it always did; all the service buys is the right for that isolate to keep
@@ -100,7 +115,8 @@ as long as the user does not answer; releasing it there needs a second signal
 through three layers for a rare case, and the six-hour cap bounds it. And the
 notification's wording lives in Kotlin, because the port carries a count rather
 than the chats — which is also what a notification naming the chat would have to
-change.
+change. The sync hold is the same shape, minus the parking: it is behind a
+setting, so the wake lock it holds is one the user chose.
 
 ## The workspaces in the Files app
 

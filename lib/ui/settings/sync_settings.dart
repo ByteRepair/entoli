@@ -64,6 +64,8 @@ class SyncSection extends ConsumerWidget {
         Divider(),
         _PairedDevices(hub: hub),
         Divider(),
+        _KeepAliveField(settings: settings),
+        Divider(),
         _RelaySection(settings: settings),
         Divider(),
         _TurnSection(settings: settings),
@@ -191,6 +193,27 @@ class _TurnSection extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _KeepAliveField extends ConsumerWidget {
+  const _KeepAliveField({required this.settings});
+
+  final AppSettings settings;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text("Keep connected off screen"),
+      subtitle: const Text(
+          "While a device is connected, hold the app open off screen with a "
+          "notification naming it and a Disconnect action. Costs battery — "
+          "a wake lock for as long as the connection lasts."),
+      value: settings.syncKeepAlive,
+      onChanged: (value) =>
+          ref.read(appSettingsProvider.notifier).setSyncKeepAlive(value),
     );
   }
 }

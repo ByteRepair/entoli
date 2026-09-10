@@ -6,7 +6,7 @@ import "../../domain/background_work.dart";
 import "../../core/log.dart";
 
 /// Android's foreground services, on the other end of `agent_chat/background`
-/// and implemented by `ForegroundWork.kt` and the three services beside it. Not
+/// and implemented by `ForegroundWork.kt` and the services beside it. Not
 /// behind the conditional import, for the same reason `LauncherAliases` is not:
 /// a `MethodChannel` compiles on every platform, and one with nothing answering
 /// it throws `MissingPluginException` — which is the no-op every other platform
@@ -43,6 +43,17 @@ class ForegroundService implements BackgroundWork {
 
   @override
   Future<void> prefilling(String? model) => _tell("prefilling", model);
+
+  @override
+  Future<void> syncing(SyncNotice? notice) => _tell(
+        "syncing",
+        notice == null
+            ? null
+            : {
+                "count": notice.count,
+                "devices": notice.devices,
+              },
+      );
 
   Future<void> _tell(String method, Object? argument) async {
     // Logged rather than raised: a platform that will not hold the process

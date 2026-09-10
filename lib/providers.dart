@@ -45,6 +45,7 @@ import "domain/reminder_scheduler.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
 import "data/sync/sync_hub.dart";
+import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/theme_colour.dart";
 import "domain/turn_keep_alive.dart";
@@ -604,6 +605,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSyncRelayUrl(String? url) =>
       _update((s) => s.syncRelayUrl = url);
 
+  Future<void> setSyncKeepAlive(bool on) =>
+      _update((s) => s.syncKeepAlive = on);
+
   Future<void> setTurnUrl(String? url) => _update((s) => s.turnUrl = url);
 
   /// The TURN username is not a secret: it stays in `settings.json` beside the
@@ -825,6 +829,16 @@ final downloadHoldProvider =
 final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
   final keepAlive = TurnKeepAlive(
       ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));
+  ref.onDispose(keepAlive.dispose);
+  return keepAlive;
+});
+
+final syncKeepAliveProvider = Provider<SyncKeepAlive>((ref) {
+  final keepAlive = SyncKeepAlive(
+    ref.watch(syncHubProvider),
+    ref.watch(backgroundWorkProvider),
+    keepAlive: () => ref.read(appSettingsProvider).syncKeepAlive,
+  );
   ref.onDispose(keepAlive.dispose);
   return keepAlive;
 });

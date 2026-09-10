@@ -20,8 +20,8 @@ import io.flutter.plugin.common.MethodChannel
 // opening the app. The work itself stays in the Flutter isolate — see "Staying
 // alive off screen" in CLAUDE.md.
 //
-// Three services rather than one because they are three different things to
-// stop, and because Android insists a service that holds the microphone be of
+// Three services rather than one because they are different things to stop,
+// and because Android insists a service that holds the microphone be of
 // a different type from one that does not. What they share is all of this: the
 // channel, the wake lock, the Stop action and the refusal handling.
 abstract class ForegroundWork : Service() {
@@ -39,6 +39,12 @@ abstract class ForegroundWork : Service() {
     /// work the user set going and then left, so it is meant to be seen.
     protected open val importance: Int
         get() = NotificationManager.IMPORTANCE_LOW
+
+    /// What the notification's one action button says. "Stop" for the three
+    /// that stop work mid-flight; the sync one says "Disconnect", since what
+    /// it stops is connections, and the devices go offline rather than stop.
+    protected open val actionLabel: String
+        get() = "Stop"
 
     /// What the notification says about this piece of work.
     protected abstract fun describe(intent: Intent, builder: Notification.Builder)
@@ -115,7 +121,7 @@ abstract class ForegroundWork : Service() {
             .setSmallIcon(R.drawable.ic_cookie_monochrome)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(Notification.Action.Builder(null as Icon?, "Stop", pendingStop()).build())
+            .addAction(Notification.Action.Builder(null as Icon?, actionLabel, pendingStop()).build())
 
         // Whichever launcher entry is enabled: the other one is disabled and
         // cannot be started. See IconChannel.
@@ -152,6 +158,7 @@ abstract class ForegroundWork : Service() {
         private var listening = false
         private var downloading = false
         private var prefilling = false
+        private var syncing = false
 
         // A hold the alarm receiver took before Dart was listening. It starts
         // AgentService itself, inside the one window a backgrounded app may —
@@ -165,7 +172,8 @@ abstract class ForegroundWork : Service() {
         // MainActivity reads it to decide whether to keep the engine — voice
         // mode counts, since the session it holds is in that isolate too.
         val busy: Boolean
-            get() = turns > 0 || listening || downloading || prefilling || alarmHold
+            get() = turns > 0 || listening || downloading || prefilling ||
+                syncing || alarmHold
 
         fun holdForAlarm() {
             alarmHold = true
@@ -211,6 +219,15 @@ abstract class ForegroundWork : Service() {
                             prefilling = model != null
                             hold(appContext, PrefillService::class.java, prefilling) {
                                 it.putExtra(PrefillService.EXTRA_MODEL, model)
+                            }
+                        }
+                        "syncing" -> {
+                            @Suppress("UNCHECKED_CAST")
+                            val notice = call.arguments as? Map<String, Any?>
+                            syncing = notice != null
+                            hold(appContext, SyncService::class.java, syncing) {
+                                it.putExtra(SyncService.EXTRA_COUNT, (notice?.get("count") as? Number)?.toInt() ?: 0)
+                                it.putExtra(SyncService.EXTRA_DEVICES, notice?.get("devices") as? String)
                             }
                         }
                         else -> return@setMethodCallHandler result.notImplemented()

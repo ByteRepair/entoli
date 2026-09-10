@@ -410,6 +410,32 @@ which is also what keeps every sync-unaware test working, since there is no
 hub: it sends past the mirror-side guard, which is the only way to check that
 the *home* device is what refuses a peer holding nothing.
 
+## Keeping a connection through the screen going dark
+
+On Android the process freezes when the screen does, and a frozen process's
+data channel is a channel the peer has already lost — this is why the phone's
+end of a pair goes quiet overnight while the desktop still lists it. The
+answer is the foreground service of "Staying alive off screen" in
+`android/CLAUDE.md`, as the fourth `BackgroundJob`.
+
+`SyncKeepAlive` (`sync_keep_alive.dart`) is the keep-alive's owner, the same
+shape `TurnKeepAlive` is for turns: it watches `hub.peers`, reports the
+online-or-connecting peers to `BackgroundWork.syncing`, and answers the
+notification's Disconnect by calling the same `hub.disconnect` the Sync page's
+row does — which is what drops the statuses, empties the list, and releases
+the service. The hold is the setting's: `syncKeepAlive` in `settings.json`,
+off by default (a wake lock and a notification for as long as a device is
+connected is a cost nobody opted into), and read live through a closure the
+way the hub reads its own settings — so the switch reaches the next status
+change, and turning it off mid-connection is released by that same change.
+
+What it does not buy: a peer dialling *in* while nothing holds the process.
+Android refuses to start a foreground service from the background, so an
+inbound dial against a frozen process still fails honestly — the setting
+covers keeping a connection, not answering one with the app dead. And Android
+15's six-hour-a-day `dataSync` cap ends the hold the way it ends a turn's:
+`onTimeout` drops the service and leaves the connection merely killable.
+
 ## The container's half of the hub
 
 The hub is built in `main` before the container, so the repository the whole
