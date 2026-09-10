@@ -7,9 +7,11 @@
 /// user a way to stop it from outside the app.
 library;
 
-/// What the process is being held open for. Four, because they are four
-/// different things to stop — and because Android insists the one holding the
-/// microphone be a service of a different type from the others that are not.
+import "package:flutter/foundation.dart" show listEquals;
+
+/// What the process is being held open for, each one a different thing to
+/// stop — and Android insists the one holding the microphone be a service of
+/// a different type from the others that are not.
 enum BackgroundJob { turns, voice, download, prefill, sync }
 
 /// A download worth telling the user about. Unlike the other two, its wording
@@ -26,14 +28,23 @@ class DownloadNotice {
   final int total;
 }
 
-/// The connected sync peers, while the keep-alive setting is on. Kotlin words
-/// the notification around the count; the names are this side's, the way a
-/// download's label is.
+/// The connected sync peers, while the keep-alive setting is on. Names rather
+/// than a count and a rendering of them: the count and the line the
+/// notification words from it are the one renderer's, which is Kotlin's —
+/// the same shape `DownloadNotice` keeps, a label rather than a layout. By
+/// value, so the keep-alive can answer "is this the same notice as last time"
+/// without crossing the channel to ask.
 class SyncNotice {
-  const SyncNotice({required this.count, required this.devices});
+  const SyncNotice({required this.names});
 
-  final int count;
-  final String devices;
+  final List<String> names;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SyncNotice && listEquals(other.names, names);
+
+  @override
+  int get hashCode => Object.hashAll(names);
 }
 
 /// The one caller of [BackgroundWork.downloading].

@@ -47,12 +47,7 @@ class ForegroundService implements BackgroundWork {
   @override
   Future<void> syncing(SyncNotice? notice) => _tell(
         "syncing",
-        notice == null
-            ? null
-            : {
-                "count": notice.count,
-                "devices": notice.devices,
-              },
+        notice == null ? null : {"names": notice.names},
       );
 
   Future<void> _tell(String method, Object? argument) async {

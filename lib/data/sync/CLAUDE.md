@@ -416,18 +416,24 @@ On Android the process freezes when the screen does, and a frozen process's
 data channel is a channel the peer has already lost — this is why the phone's
 end of a pair goes quiet overnight while the desktop still lists it. The
 answer is the foreground service of "Staying alive off screen" in
-`android/CLAUDE.md`, as the fourth `BackgroundJob`.
+`android/CLAUDE.md`, as the sync `BackgroundJob`.
 
 `SyncKeepAlive` (`sync_keep_alive.dart`) is the keep-alive's owner, the same
 shape `TurnKeepAlive` is for turns: it watches `hub.peers`, reports the
-online-or-connecting peers to `BackgroundWork.syncing`, and answers the
-notification's Disconnect by calling the same `hub.disconnect` the Sync page's
-row does — which is what drops the statuses, empties the list, and releases
-the service. The hold is the setting's: `syncKeepAlive` in `settings.json`,
-off by default (a wake lock and a notification for as long as a device is
-connected is a cost nobody opted into), and read live through a closure the
-way the hub reads its own settings — so the switch reaches the next status
-change, and turning it off mid-connection is released by that same change.
+connected peers to `BackgroundWork.syncing`, and answers the notification's
+Disconnect by calling the same `hub.disconnect` the Sync page's row does —
+which is what drops the statuses, empties the list, and releases the service.
+What "connected" means is `SyncPeers.connected`'s, beside the statuses it
+names: a dial counts, and a status added later is decided once beside the
+enum rather than again in the keep-alive. The hold is the setting's:
+`syncKeepAlive` in `settings.json`, off by default (a wake lock and a
+notification for as long as a device is connected is a cost nobody opted
+into), read live through a closure the way the hub reads its own settings,
+and reached by the switch itself through a `ref.listen` on the provider —
+so turning it off mid-connection releases at once, not at the next status
+change. A peers change that answers what the last one answered does not
+cross the channel at all: a failing dial elsewhere and a registry seed are
+free.
 
 What it does not buy: a peer dialling *in* while nothing holds the process.
 Android refuses to start a foreground service from the background, so an

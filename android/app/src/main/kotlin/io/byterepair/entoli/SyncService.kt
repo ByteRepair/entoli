@@ -20,21 +20,19 @@ class SyncService : ForegroundWork() {
     override val actionLabel = "Disconnect"
 
     override fun describe(intent: Intent, builder: Notification.Builder) {
-        val count = intent.getIntExtra(EXTRA_COUNT, 1)
-        val names = intent.getStringExtra(EXTRA_DEVICES)
+        val names = intent.getStringArrayListExtra(EXTRA_NAMES) ?: emptyList()
         builder.setContentText(
-            if (count == 1) "1 device is connected" else "$count devices are connected"
+            if (names.size == 1) "1 device is connected" else "${names.size} devices are connected"
         )
         // Every name, under the count. BigText rather than one line per device:
         // the count is the line a lock screen shows, the list is what pulling
         // the notification down says.
-        if (!names.isNullOrBlank()) {
-            builder.setStyle(Style.BigTextStyle().bigText(names))
+        if (names.isNotEmpty()) {
+            builder.setStyle(Style.BigTextStyle().bigText(names.joinToString("\n")))
         }
     }
 
     companion object {
-        const val EXTRA_COUNT = "count"
-        const val EXTRA_DEVICES = "devices"
+        const val EXTRA_NAMES = "names"
     }
 }

@@ -839,6 +839,13 @@ final syncKeepAliveProvider = Provider<SyncKeepAlive>((ref) {
     ref.watch(backgroundWorkProvider),
     keepAlive: () => ref.read(appSettingsProvider).syncKeepAlive,
   );
+  // The keep-alive only hears of the setting when a status moves; the switch
+  // itself has to act at once, which is what this listen is for. The
+  // subscription dies with the container, as the keep-alive's own does.
+  ref.listen(
+    appSettingsProvider.select((s) => s.syncKeepAlive),
+    (_, _) => keepAlive.refresh(),
+  );
   ref.onDispose(keepAlive.dispose);
   return keepAlive;
 });

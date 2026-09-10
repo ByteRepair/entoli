@@ -20,10 +20,11 @@ import io.flutter.plugin.common.MethodChannel
 // opening the app. The work itself stays in the Flutter isolate — see "Staying
 // alive off screen" in CLAUDE.md.
 //
-// Three services rather than one because they are different things to stop,
-// and because Android insists a service that holds the microphone be of
-// a different type from one that does not. What they share is all of this: the
-// channel, the wake lock, the Stop action and the refusal handling.
+// One service per kind rather than one for all, because they are different
+// things to stop, and because Android insists a service that holds the
+// microphone be of a different type from one that does not. What they share is
+// all of this: the channel, the wake lock, the Stop action and the refusal
+// handling.
 abstract class ForegroundWork : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -226,8 +227,9 @@ abstract class ForegroundWork : Service() {
                             val notice = call.arguments as? Map<String, Any?>
                             syncing = notice != null
                             hold(appContext, SyncService::class.java, syncing) {
-                                it.putExtra(SyncService.EXTRA_COUNT, (notice?.get("count") as? Number)?.toInt() ?: 0)
-                                it.putExtra(SyncService.EXTRA_DEVICES, notice?.get("devices") as? String)
+                                @Suppress("UNCHECKED_CAST")
+                                val names = notice?.get("names") as? List<String>
+                                it.putStringArrayListExtra(SyncService.EXTRA_NAMES, ArrayList(names ?: emptyList()))
                             }
                         }
                         else -> return@setMethodCallHandler result.notImplemented()

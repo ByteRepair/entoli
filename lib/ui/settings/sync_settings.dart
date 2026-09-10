@@ -205,12 +205,15 @@ class _KeepAliveField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
       title: const Text("Keep connected off screen"),
-      subtitle: const Text(
-          "While a device is connected, hold the app open off screen with a "
-          "notification naming it and a Disconnect action. Costs battery — "
-          "a wake lock for as long as the connection lasts."),
+      subtitle: Text(
+        defaultTargetPlatform == TargetPlatform.android && !kIsWeb
+            ? "While a device is connected, hold the app open off screen with a "
+                "notification naming it and a Disconnect action. Costs battery — "
+                "a wake lock for as long as the connection lasts."
+            : "Android only — a phone must hold its process open to keep a "
+                "connection through the screen going dark.",
+      ),
       value: settings.syncKeepAlive,
       onChanged: (value) =>
           ref.read(appSettingsProvider.notifier).setSyncKeepAlive(value),
