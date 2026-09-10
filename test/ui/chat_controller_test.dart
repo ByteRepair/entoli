@@ -1690,6 +1690,141 @@ void main() {
           hasLength(1));
     });
 
+    test("a say for a member already speaking queues for their next turn",
+        () async {
+      await _inTeam(app);
+      // The member's turn holds the floor: its scripted round carries no
+      // DoneEvent and the hold keeps the stream open, so the room is busy
+      // the whole time.
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("working on it")],
+        const [TextDelta("again, done"), DoneEvent()],
+      ];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) =
+          await startTurn("hello @explore, take your time", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      // Said to the member who is already speaking. It lands on the log,
+      // and it waits: the room schedules it, the settle dispatches it.
+      await controller.send("again @explore, one more thing");
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final said = chat.messages
+          .where((m) => textOf(m) == "again @explore, one more thing")
+          .single;
+
+      // No second turn opens while the first still has the floor.
+      final end = DateTime.now().add(const Duration(milliseconds: 500));
+      while (DateTime.now().isBefore(end)) {
+        expect(app.backend.prompts, hasLength(1),
+            reason:
+                "a say for a busy member must queue, not spawn a parallel turn");
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+
+      // The settle runs it: the same member's turn, on the message the log
+      // already holds.
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(app.backend.prompts, hasLength(2));
+      expect(app.backend.prompts[1].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].prompt.id, said.id);
+      expect(
+          messagesOf(id)
+              .where((m) => textOf(m) == "again @explore, one more thing"),
+          hasLength(1));
+    });
+
+    test("a say in a direct chat queues for the room's settle too", () async {
+      // Omada off: the say addresses nobody, and the bug was not about
+      // members — the drain dispatched whatever landed, so even here a say
+      // opened a second turn beside the first instead of queueing.
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("thinking")],
+        const [TextDelta("later, done"), DoneEvent()],
+      ];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) = await startTurn("hello, take your time");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      await controller.send("one more thing");
+
+      // No second turn opens while the first still has the floor.
+      final end = DateTime.now().add(const Duration(milliseconds: 500));
+      while (DateTime.now().isBefore(end)) {
+        expect(app.backend.prompts, hasLength(1),
+            reason: "a say to a busy room must queue, not spawn a turn");
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+
+      // The settle runs it: the main agent's turn, on the message the log
+      // already holds.
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the queued say", limit: const Duration(seconds: 5));
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final said =
+          chat.messages.where((m) => textOf(m) == "one more thing").single;
+      expect(app.backend.prompts, hasLength(2));
+      expect(app.backend.prompts[1].settings.omadaMember, isNull);
+      expect(app.backend.prompts[1].prompt.id, said.id);
+      expect(messagesOf(id).where((m) => textOf(m) == "one more thing"),
+          hasLength(1));
+    });
+
+    test("a handoff survives a settle the schedule holds something", () async {
+      // The shape the `_endTurn` guard removal exists for: the settle that
+      // ends this turn reads a schedule it cannot finish — sequential order
+      // runs the head member's item and leaves the next member's queued —
+      // and a schedule non-empty at the settle must not stop the reply's
+      // handoff from being parked for the wave's settle. The guard it
+      // replaced returned before the settle and dropped the handoff.
+      await _inTeam(app);
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      app.backend.scriptedRounds = [
+        // Explore holds the floor, then hands to build.
+        const [TextDelta("over to @build")],
+        // The two queued says run in schedule order, then the handoff.
+        const [TextDelta("got it, done"), DoneEvent()],
+        const [TextDelta("looking, done"), DoneEvent()],
+        const [TextDelta("on it, done"), DoneEvent()],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore, take your time", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      // Two says while explore still speaks: one for build, one for the
+      // house. Sequential order dispatches only the first of them at the
+      // settle, so the schedule is not empty when the settle runs — and the
+      // reply's handoff must still be parked, not skipped.
+      await controller.send("and @build after this");
+      await controller.send("and also take a look");
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitFor(() => app.backend.prompts.length >= 4,
+          what: "the parked handoff", limit: const Duration(seconds: 5));
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final messages = messagesOf(id);
+      // The say for build ran as build's turn on the message the log
+      // already holds; the say for the house ran as the main agent's.
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+      expect(app.backend.prompts[1].prompt.id, messages[2].id);
+      expect(app.backend.prompts[2].settings.omadaMember, isNull);
+      expect(app.backend.prompts[2].prompt.id, messages[3].id);
+      // And the handoff followed: explore's mentioning reply, build's turn.
+      expect(app.backend.prompts[3].settings.omadaMember, "build");
+      expect(app.backend.prompts[3].prompt.id, messages[1].id);
+    });
+
     test("a member turn runs under the member's prompt from the library",
         () async {
       await _inTeam(app);
