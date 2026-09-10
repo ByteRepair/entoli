@@ -324,9 +324,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     _drainSaid();
   }
 
-  /// What was said while a turn ran, in the order it was said: schedule each
-  /// and dispatch. Both ends of the queue — a say landing while a turn runs,
-  /// and the drain a finishing turn runs — read it through this one method.
+  /// What was said while a turn ran, in the order it was said: schedule each,
+  /// and dispatch what the room may run now. The schedule is the queue — what
+  /// waits sits in its member's FIFO, and the settle that ends the turn
+  /// dispatches it ([_endTurn]), so a say for a member already speaking waits
+  /// for that member's turn to finish instead of opening a second one beside
+  /// it. Both ends of the queue — a say landing while a turn runs, and the
+  /// drain a finishing turn runs — read it through this one method.
   void _drainSaid() {
     final chat = state.chat;
     if (chat == null) return;
@@ -334,6 +338,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       final said = _said.removeAt(0);
       _schedule(chat, mentioned(chat, said), userPrompt: said);
     }
+    if (_turns.isNotEmpty) return;
     unawaited(_dispatch());
   }
 
@@ -861,15 +866,21 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // like a handoff's does. Handoffs read the room only once the schedule
     // holds nothing — the user's own words dispatch ahead of the agents'.
     _drainSaid();
-    if (_schedules.isNotEmpty) return;
+    // The settle runs whatever the schedule may run now: what it left — a
+    // second item for a member whose first is still queued, the cap's —
+    // dispatches at the settles it causes. This reply hands off with them,
+    // parked for the settle that ends the wave, rather than now.
     await _settle(turn, reason);
   }
 
-  /// A turn has ended and the schedule holds nothing: the room may hand off.
-  /// Where siblings were still speaking when this turn finished, its reply is
-  /// already waiting in `_settledReplies` — handoffs evaluate at the settle,
-  /// against every reply that finished the wave, not only the last one
-  /// written.
+  /// A turn has ended: the room may hand off. The schedule may still hold
+  /// what the settle will not run now — an item the cap stops, or a member's
+  /// second item behind one still running — and this turn's reply hands off
+  /// with the wave, parked for the settle that ends it, rather than waiting
+  /// on a schedule that will not drain this settle. Where siblings were still
+  /// speaking when this turn finished, its reply is already waiting in
+  /// `_settledReplies` — handoffs evaluate at the settle, against every reply
+  /// that finished the wave, not only the last one written.
   Future<void> _settle(_RunningTurn turn, TurnEnd? reason) async {
     if (_turns.isNotEmpty) {
       // A sibling is still speaking: this reply hands off when the room
@@ -892,6 +903,12 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
         chat.messages.firstWhereOrNull((m) => m.id == id),
     ].whereType<Message>().toList();
     await _maybeHandoff(reason, replies);
+    // Whatever the schedule may run now, runs: a queued say, a handoff just
+    // scheduled, or a member's next item behind one still queued. The
+    // handoff's own gate decides what was scheduled, not what runs — an
+    // off-Omada room's queued says and what a failure leaves queued drain
+    // through here all the same.
+    await _dispatch();
   }
 
   /// The replies of turns that finished while a sibling was still speaking,
@@ -937,7 +954,6 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       _schedule(chat, mentioned(chat, reply),
           reply: reply, generation: finished);
     }
-    await _dispatch();
   }
 
   /// How deep the round ran when each reply finished, kept for the settle

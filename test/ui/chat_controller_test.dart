@@ -1690,6 +1690,54 @@ void main() {
           hasLength(1));
     });
 
+    test("a say for a member already speaking queues for their next turn",
+        () async {
+      await _inTeam(app);
+      // The member's turn holds the floor: its scripted round carries no
+      // DoneEvent and the hold keeps the stream open, so the room is busy
+      // the whole time.
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("working on it")],
+        const [TextDelta("again, done"), DoneEvent()],
+      ];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) =
+          await startTurn("hello @explore, take your time", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      // Said to the member who is already speaking. It lands on the log,
+      // and it waits: the room schedules it, the settle dispatches it.
+      await controller.send("again @explore, one more thing");
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final said = chat.messages
+          .where((m) => textOf(m) == "again @explore, one more thing")
+          .single;
+
+      // No second turn opens while the first still has the floor.
+      final end = DateTime.now().add(const Duration(milliseconds: 500));
+      while (DateTime.now().isBefore(end)) {
+        expect(app.backend.prompts, hasLength(1),
+            reason:
+                "a say for a busy member must queue, not spawn a parallel turn");
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+
+      // The settle runs it: the same member's turn, on the message the log
+      // already holds.
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(app.backend.prompts, hasLength(2));
+      expect(app.backend.prompts[1].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].prompt.id, said.id);
+      expect(
+          messagesOf(id)
+              .where((m) => textOf(m) == "again @explore, one more thing"),
+          hasLength(1));
+    });
+
     test("a member turn runs under the member's prompt from the library",
         () async {
       await _inTeam(app);
