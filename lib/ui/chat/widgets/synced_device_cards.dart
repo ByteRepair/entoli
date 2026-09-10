@@ -24,7 +24,7 @@ import "../../sidebar/sidebar.dart";
 /// means. The card carries no buttons of its own; the chat list it opens is
 /// the sidebar's, under it.
 class SyncedDeviceCards extends ConsumerWidget {
-  const SyncedDeviceCards();
+  const SyncedDeviceCards({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
