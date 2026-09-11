@@ -21,8 +21,6 @@ void main() {
 
   Finder button(String label) => find.widgetWithText(FilledButton, label);
 
-  Finder tile(String label) => find.widgetWithText(ListTile, label);
-
   Finder previous() => find.widgetWithText(OutlinedButton, "Previous");
 
   Future<void> walkToLast(WidgetTester tester) async {
@@ -109,15 +107,6 @@ void main() {
   });
 
   group("in settings", () {
-    // Welcome is second to last now, below the fold of a test window: scroll
-    // it in. The first tile is General's.
-    testWidgets("Welcome is in the list", (tester) async {
-      await app.pump(tester, const SettingsPage());
-
-      await scrollTo(tester, tile("Welcome"));
-      expect(find.widgetWithText(ListTile, "Welcome"), findsOneWidget);
-    });
-
     testWidgets("picked wide, the tour fills the pane", (tester) async {
       useWindow(tester, const Size(1200, 800));
       await pumpSettings(tester, app, SettingsCategory.welcome);

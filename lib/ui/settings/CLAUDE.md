@@ -37,8 +37,8 @@ The settings page is fifteen categories, picked from a panel beside it or, below
 `navBreakpoint`, from a page of their own. The order is the `SettingsCategory`
 enum's, which is also where the groupings live: a `dividerAbove` on the enum
 says a group ends before that category, and the list draws a `Divider` ahead of
-the tile — one source of truth for both. The groups: **General** (the app
-itself); **Providers, On-device, LLMs** (the plumbing that answers a chat);
+the tile — one source of truth for both. The six drawn groups: **General,
+Providers, On-device, LLMs** (the app and the plumbing that answers a chat);
 **Memory, Voice, Reminders** (what a conversation does beyond the text);
 **Agents, Skills** (what a message addresses by name); **Terminal, Byte
 Repair** (where commands run); **Sync, Data** (the device and all of it at

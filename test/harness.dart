@@ -726,6 +726,9 @@ Future<void> pumpSettings(
   await openCategory(tester, category);
 }
 
+/// A settings category's tile by its label, in the panel or the list of them.
+Finder tile(String label) => find.widgetWithText(ListTile, label);
+
 /// The settings page at its Appearance section, which is in General and far
 /// enough down a test window to need scrolling to. Shared by the two files that
 /// test what is in it.
@@ -742,19 +745,19 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
   if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
     await pressBack(tester);
   }
-  final tile = find.widgetWithText(ListTile, category.label);
+  final categoryTile = tile(category.label);
   // Coming back from a far-down category, the one wanted can be above the
   // viewport, off the top of the list's extent. A drag down finds the top,
   // where [scrollTo]'s drag-up cannot.
-  if (tile.evaluate().isEmpty) {
+  if (categoryTile.evaluate().isEmpty) {
     await tester.drag(find.byType(Scrollable).first, const Offset(0, 400));
     await tester.pumpAndSettle();
   }
   // Only when it is still off the bottom: [scrollTo] aligns what it reveals
   // with the top of the list, which would push the categories above it out of
   // the tree and leave the next call with nothing to tap.
-  if (tile.evaluate().isEmpty) await scrollTo(tester, tile);
-  await tester.tap(tile);
+  if (categoryTile.evaluate().isEmpty) await scrollTo(tester, categoryTile);
+  await tester.tap(categoryTile);
   await settleIo(tester);
 }
 
