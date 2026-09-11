@@ -1044,12 +1044,19 @@ void main() {
       return openNew(tester);
     }
 
+    // The badges a device's card holds, as against the page's own `/`-`@`
+    // chips, which are ActionChips too.
+    Finder cardChips() => find.descendant(
+        of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip));
+
     testWidgets("the new-chat screen draws one card per paired device",
         (tester) async {
+      // Seeded so arrival order differs from name order: the cards are
+      // device-name sorted, so what lands first is not what draws first.
       await openEmpty(tester, [
+        mirrorOf("d2", "Phone", makeState("r3")),
         mirrorOf("d1", "Desktop", makeState("r1")),
         mirrorOf("d1", "Desktop", makeState("r2", project: "work")),
-        mirrorOf("d2", "Phone", makeState("r3")),
       ]);
 
       expect(find.byType(SyncedDeviceCards), findsOneWidget);
@@ -1062,11 +1069,7 @@ void main() {
       await tester.tap(find.text("Phone"));
       await tester.pumpAndSettle();
 
-      expect(
-        find.descendant(
-            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
-        findsNWidgets(3),
-      );
+      expect(cardChips(), findsNWidgets(3));
       expect(find.text("Default"), findsNWidgets(2));
       expect(find.text("work"), findsOneWidget);
     });
@@ -1110,29 +1113,17 @@ void main() {
       ]);
 
       expect(find.text("work"), findsNothing);
-      expect(
-        find.descendant(
-            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
-        findsNothing,
-      );
+      expect(cardChips(), findsNothing);
       await tester.tap(find.text("Desktop"));
       await tester.pumpAndSettle();
 
       expect(find.text("work"), findsOneWidget);
-      expect(
-        find.descendant(
-            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
-        findsNWidgets(2),
-      );
+      expect(cardChips(), findsNWidgets(2));
       await tester.tap(find.text("Desktop"));
       await tester.pumpAndSettle();
 
       expect(find.text("work"), findsNothing);
-      expect(
-        find.descendant(
-            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
-        findsNothing,
-      );
+      expect(cardChips(), findsNothing);
     });
 
     testWidgets("a project badge opens that device's project in the sidebar",

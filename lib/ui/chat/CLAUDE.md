@@ -708,8 +708,8 @@ mirrored from a paired device, whose welcome named it — and that is also the
 limit of what is honest to draw: a project exists at this end only where one
 of its chats has been mirrored, there being no message that asks a paired
 device for a listing of its own. So a device with nothing mirrored has no
-card, a card's counts are of what this device holds, and the list is watched
-rather than a second source invented. Each card is a device with the projects
+card, and the list is watched rather than a second source invented. Each card
+is a device with the projects
 its mirrors sit in, folded behind the device's own name — the header is the
 toggle, per device and in-memory, the same shape `ActivityGroup` is, and
 carries the name and nothing else: no dot for the connection, no count of

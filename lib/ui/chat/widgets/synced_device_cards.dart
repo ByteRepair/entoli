@@ -35,13 +35,7 @@ class SyncedDeviceCards extends ConsumerWidget {
         for (final group in groups)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: _DeviceCard(
-              group: group,
-              onOpen: (project) => selectRemote(
-                ref,
-                (deviceId: group.deviceId, project: project),
-              ),
-            ),
+            child: _DeviceCard(group: group),
           ),
       ],
     );
@@ -52,47 +46,41 @@ class SyncedDeviceCards extends ConsumerWidget {
 /// device's badges away and brings them back, and, when it is open, the
 /// badges under it.
 class _DeviceGroup {
-  _DeviceGroup({required this.deviceId, required this.deviceName, required this.projects});
+  _DeviceGroup({
+    required this.deviceId,
+    required this.deviceName,
+    required this.projects,
+  });
 
   final String deviceId;
   final String deviceName;
 
-  /// The projects this device's mirrors sit in, label-sorted.
-  final List<_ProjectGroup> projects;
-}
-
-/// One project's share of a device's card.
-class _ProjectGroup {
-  _ProjectGroup({required this.project});
-
-  /// Null is that device's default project, named the way [projectLabel]
-  /// names it everywhere else a project is shown.
-  final String? project;
-
-  String get label => projectLabel(project);
+  /// The projects this device's mirrors sit in, label-sorted. Null is that
+  /// device's default project, named the way [projectLabel] names it
+  /// everywhere else a project is shown.
+  final List<String?> projects;
 }
 
 /// Every device that has a mirrored chat, with the projects its mirrors sit
 /// in. Devices sorted by name and projects by label, so a state diff arriving
 /// again does not reshuffle what is on screen.
 List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
-  final devices = <String>{};
-  final projects = <String, Map<String?, void>>{};
+  final names = <String, String>{};
+  final projects = <String, Set<String?>>{};
   for (final entry in entries) {
-    devices.add(entry.deviceId);
-    (projects[entry.deviceId] ??= {})[entry.state.project] = null;
+    names[entry.deviceId] ??= entry.deviceName;
+    (projects[entry.deviceId] ??= {}).add(entry.state.project);
   }
   return [
-    for (final id in devices)
+    for (final id in names.keys)
       _DeviceGroup(
         deviceId: id,
-        deviceName:
-            entries.firstWhere((entry) => entry.deviceId == id).deviceName,
+        deviceName: names[id]!,
         projects: [
-          for (final project in projects[id]!.keys)
-            _ProjectGroup(project: project),
-        ]..sort((a, b) =>
-              a.label.toLowerCase().compareTo(b.label.toLowerCase())),
+          for (final project in projects[id]!) project,
+        ]..sort((a, b) => projectLabel(a)
+            .toLowerCase()
+            .compareTo(projectLabel(b).toLowerCase())),
       ),
   ]..sort((a, b) =>
       a.deviceName.toLowerCase().compareTo(b.deviceName.toLowerCase()));
@@ -109,12 +97,9 @@ List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
 /// the name and nothing else — no dot for the connection, no count of what is
 /// folded behind it: what is there is one tap away either way.
 class _DeviceCard extends ConsumerStatefulWidget {
-  const _DeviceCard({required this.group, required this.onOpen});
+  const _DeviceCard({required this.group});
 
   final _DeviceGroup group;
-
-  /// The device's project being read, named the way [RemoteScope] names one.
-  final void Function(String? project) onOpen;
 
   @override
   ConsumerState<_DeviceCard> createState() => _DeviceCardState();
@@ -169,7 +154,7 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                 entries: [
                   for (final project in group.projects)
                     ChipRowEntry(
-                      key: ValueKey(project.project),
+                      key: ValueKey(project),
                       child: ActionChip(
                         // The icon rides in the label rather than the avatar
                         // slot, the way the empty-chat badges keep the label
@@ -177,21 +162,22 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                         label: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (projectIcon(project.project) case final icon?)
+                            if (projectIcon(project) case final icon?)
                               Padding(
                                 padding: const EdgeInsets.only(right: 6),
                                 child: Icon(icon, size: 18),
                               ),
                             Text(
-                              project.label,
-                              style: projectLabelStyle(
-                                project.project != null &&
-                                    ref.watch(omadaOnProvider(project.project)),
-                              ),
+                              projectLabel(project),
+                              style:
+                                  projectLabelStyle(ref.watch(omadaOnProvider(project))),
                             ),
                           ],
                         ),
-                        onPressed: () => widget.onOpen(project.project),
+                        onPressed: () => selectRemote(
+                          ref,
+                          (deviceId: group.deviceId, project: project),
+                        ),
                       ),
                     ),
                 ],
