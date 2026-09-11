@@ -42,8 +42,8 @@ void main() {
       await app.pump(tester, const SettingsPage());
 
       // The list is what settings opens on, and there is no hamburger because
-      // there is no drawer to open. Providers is far enough down the list to
-      // need scrolling to, now that Welcome leads it.
+      // there is no drawer to open. Providers is below the fold of a test
+      // window: four categories lead it, then a divider.
       await scrollTo(tester, tile("Providers"));
       expect(tile("Providers"), findsOneWidget);
       expect(find.byIcon(Icons.menu), findsNothing);
@@ -133,14 +133,14 @@ void main() {
     });
 
     testWidgets(
-        "are offered Welcome, General, Terminal, On-device, Voice, Reminders, "
-        "Skills, Agents, Byte Repair, Sync, Providers, LLMs, Memory, Data, "
-        "About, in that order", (tester) async {
+        "are offered General, Providers, On-device, LLMs, Memory, Voice, "
+        "Reminders, Agents, Skills, Terminal, Byte Repair, Sync, Data, "
+        "Welcome, About, in that order", (tester) async {
       useWindow(tester, const Size(1200, 800));
       await app.pump(tester, const SettingsPage());
 
       // About is the last, and one tile lower than a test window shows. Only
-      // its presence is asserted here: scrolling it in pushes Welcome out, and
+      // its presence is asserted here: scrolling it in pushes General out, and
       // the walk of the list below reads the order top-down.
       await scrollTo(tester, tile("About"));
       expect(tile("About"), findsOneWidget);
@@ -156,20 +156,61 @@ void main() {
             .widgetList<ListTile>(find.descendant(of: panel, matching: find.byType(ListTile)))
             .map((t) => (t.title! as Text).data),
         [
-          "Welcome",
           "General",
-          "Terminal",
-          "On-device",
-          "Voice",
-          "Reminders",
-          "Skills",
-          "Agents",
-          "Byte Repair",
-          "Sync",
           "Providers",
+          "On-device",
           "LLMs",
           "Memory",
+          "Voice",
+          "Reminders",
+          "Agents",
+          "Skills",
+          "Terminal",
+          "Byte Repair",
+          "Sync",
           "Data",
+          "Welcome",
+          "About",
+        ],
+      );
+    });
+
+    testWidgets("a divider stands where one group ends and another begins",
+        (tester) async {
+      useWindow(tester, const Size(1200, 1200));
+      await app.pump(tester, const SettingsPage());
+      final panel = find.ancestor(of: tile("General"), matching: find.byType(ListView));
+
+      // Tiles and dividers are siblings at one depth under the list, so a walk
+      // of the panel reads the order as it is drawn. Scoped to the panel: the
+      // settings beside it are dividers of their own.
+      expect(
+        tester
+            .widgetList<Widget>(find.descendant(
+                of: panel,
+                matching: find.byWidgetPredicate(
+                    (w) => w is ListTile || w is Divider)))
+            .map((w) => w is ListTile ? (w.title! as Text).data! : "─"),
+        [
+          "General",
+          "Providers",
+          "On-device",
+          "LLMs",
+          "─",
+          "Memory",
+          "Voice",
+          "Reminders",
+          "─",
+          "Agents",
+          "Skills",
+          "─",
+          "Terminal",
+          "Byte Repair",
+          "─",
+          "Sync",
+          "Data",
+          "─",
+          "Welcome",
           "About",
         ],
       );
