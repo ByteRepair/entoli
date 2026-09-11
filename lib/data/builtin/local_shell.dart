@@ -172,32 +172,63 @@ class LocalShell extends Shell {
     String? Function()? shell,
     bool projectHome = false,
     Map<String, String>? environment,
+    SandboxHelper? sandboxHelper,
+    String? loginPath,
   }) {
     final path = (shell ?? (() => shellPath))();
     if (path == null) return null;
+    // The login shell's PATH is the base of the command environment, under
+    // anything the caller layers on: a user-set `PATH` in the settings or a
+    // project's bin directory still wins, which is the layering
+    // [composeEnvironment] keeps.
+    final environment0 = loginPath == null
+        ? environment
+        : {"PATH": loginPath, ...?environment};
     final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
         "commands run under $path";
     final bundled = tools?.names;
     if (bundled != null) {
       return _host(path, tools, "$where, with $bundled bundled with the app",
-          projectHome: projectHome, environment: environment);
+          projectHome: projectHome, environment: environment0,
+          sandboxHelper: sandboxHelper);
     }
     final description = Platform.isAndroid && tools?.proot != null
         ? "$where. There is no git and no package manager here; installing "
             "a Linux from the Terminal settings gives you both"
         : where;
     return _host(path, tools, description,
-        projectHome: projectHome, environment: environment);
+        projectHome: projectHome, environment: environment0,
+        sandboxHelper: sandboxHelper);
   }
 
   static ShellDriver _host(String path, Toolset? tools, String description,
-          {bool projectHome = false, Map<String, String>? environment}) =>
+          {bool projectHome = false, Map<String, String>? environment,
+          SandboxHelper? sandboxHelper}) =>
       ShellDriver(
         commandFor: (_, _) => [path],
         environment: {...?environment, ...?tools?.environment},
         projectHome: projectHome,
         description: description,
+        sandboxHelper: sandboxHelper,
       );
+
+  @override
+  SandboxHelper? get driverSandboxHelper {
+    final helper = _driver()?.sandboxHelper;
+    return helper;
+  }
+
+  @override
+  String? tmpDirFor(String workspace) {
+    // The chat workspace's own scratch directory: inside the granted set a
+    // sandbox names, beside the files the command is there to touch. A
+    // directory per chat rather than one shared tmp, so two chats' scratch
+    // never meet.
+    return Directory("$workspace/.entoli-tmp").path;
+  }
+
+  @override
+  bool get platformIsWindows => Platform.isWindows;
 
   @override
   ValueListenable<String?>? sessionCwd(String cwd) {
@@ -219,8 +250,16 @@ class LocalShell extends Shell {
       Map<String, String>? environment,
       bool oneShot = false,
       bool restart = false,
-      String? project}) {
-    if (oneShot) {
+      String? project,
+      CommandSandbox? sandbox}) {
+    // A sandboxed command runs in a confined subshell of its own, whatever
+    // the caller asked for: the session shell is the conversation's shared
+    // state, and a boundary asked for per command cannot be attached to it
+    // and dropped for the next — a `cd` into the workspace would stand in a
+    // shell whose exports, aliases and functions the next command inherits
+    // unconfined. The confinement is per run, so the run is.
+    final confined = sandbox != null || oneShot;
+    if (confined) {
       final driver = _driver(project: project);
       return _OneShotRun(
         // The driver's shell, built for this chat's cwd and home, or nothing
@@ -232,6 +271,8 @@ class LocalShell extends Shell {
         environment: _compose(
             home: home, driver: driver, environment: environment),
         includeParentEnvironment: driver?.includeParentEnvironment ?? true,
+        sandbox: sandbox,
+        sandboxHelper: driver?.sandboxHelper,
       );
     }
     return _sessions
@@ -806,6 +847,30 @@ class _SessionRun implements ShellRun {
   }
 }
 
+/// The failure a one-shot run's spawn carries when a sandbox was asked for
+/// and could not be built. Thrown rather than returned so [result] completes
+/// as a failed command; `_run` catches it as its own case so the fail-closed
+/// reason reaches the model un-mangled.
+class ShellUnavailable implements Exception {
+  const ShellUnavailable(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// The line a refused write prints: either the shell's own (`sh: /path:
+/// Permission denied`) or the tool's (`tool: cannot open '/path' for
+/// writing: Permission denied`). A build's errors are the model's only
+/// report of what the sandbox took away, so both wordings are matched. The
+/// [writeWords] group is the tool's own name for a write — `cannot touch`,
+/// `cannot create`, `for writing` — and is what says a match may be worded
+/// `writing` rather than neutrally; the shell's redirect shape carries no
+/// such words, so it reads `denied` and a read refused by the file's own
+/// Unix perms is not misreported as a write.
+final RegExp deniedPathPattern = RegExp(
+    r"""(?:^|[\s:"'(])(?:(?<write>cannot (?:open|touch|create regular file|create) )?|[\s:"(])'?(/[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)""",
+    multiLine: true);
+
 /// What a `oneShot` command is: today's contract, a fresh subshell per
 /// command, kept for sub-agents and for the platforms a persistent shell
 /// would only complicate.
@@ -817,6 +882,8 @@ class _OneShotRun implements ShellRun {
     required this.timeout,
     required this.environment,
     this.includeParentEnvironment = true,
+    this.sandbox,
+    this.sandboxHelper,
   }) {
     result = _run();
   }
@@ -831,6 +898,12 @@ class _OneShotRun implements ShellRun {
   final Duration timeout;
   final Map<String, String> environment;
   final bool includeParentEnvironment;
+
+  /// The confinement this one command runs under, with the helper that
+  /// applies it. Both null where there is nothing to apply — the common case,
+  /// and the only one a platform without confinement is ever handed.
+  final CommandSandbox? sandbox;
+  final SandboxHelper? sandboxHelper;
 
   @override
   late final Future<ShellResult> result;
@@ -890,15 +963,24 @@ class _OneShotRun implements ShellRun {
           returnCode: -1,
           output: output.toString(),
           exceptionInfo: "The command was interrupted and killed.",
+          violations: _violations(output.toString()),
         );
       }
-      if (timer.isActive) return ShellResult(returnCode: code, output: output.toString());
+      if (timer.isActive) {
+        return ShellResult(returnCode: code, output: output.toString(),
+            violations: _violations(output.toString()));
+      }
       return ShellResult(
         returnCode: -1,
         output: output.toString(),
         exceptionInfo: "The command timed out after ${timeout.inSeconds}s and was killed. "
             "Anything it printed before that is above.",
+        violations: _violations(output.toString()),
       );
+    } on ShellUnavailable catch (e) {
+      // Fail-closed has its own words: a confinement that did not happen is
+      // not a spawn error, and the reason is what the model rewrites around.
+      return ShellResult.failed(e.message, output: output.toString());
     } catch (e) {
       return ShellResult.failed(
         "An error occurred while executing the command: $e",
@@ -909,15 +991,77 @@ class _OneShotRun implements ShellRun {
     }
   }
 
+  /// What the confinement denied, read out of the command's own output: a
+  /// write the kernel refused prints its EACCES, and the line names the path.
+  /// Only lines naming a path outside what the sandbox granted are collected
+  /// — a permission error on a workspace file is the command's own business,
+  /// not the sandbox's — and the count is capped, so one bad loop cannot
+  /// bury the tool result in copies of the same refusal.
+  List<String> _violations(String text) {
+    if (sandbox == null) return const [];
+    final workspace = sandbox!.workspace;
+    final tmp = sandbox!.tmp;
+    // The path and whether the line worded a write. A read refusal carries
+    // no write words and reads neutrally, so a `cat` denied by the file's
+    // own Unix perms is not misreported as a write this sandbox did not
+    // take away.
+    final found = <String, bool>{};
+    for (final match in deniedPathPattern.allMatches(text)) {
+      final path = match.group(2);
+      if (path == null || path.isEmpty) continue;
+      if (pathInside(path, workspace) || tmp != null && pathInside(path, tmp)) {
+        continue;
+      }
+      if (path == "/dev/null") continue;
+      final isWrite = match.namedGroup("write") != null ||
+          match.namedGroup("forwriting") != null;
+      found[path] = (found[path] ?? false) || isWrite;
+      if (found.length >= 5) break;
+    }
+    return [
+      for (final entry in found.entries)
+        entry.value ? "writing ${entry.key}" : "denied ${entry.key}"
+    ];
+  }
+
   /// `exec 2>&1` redirects the shell's own error output and everything it goes
   /// on to spawn, which is what makes the transcript read in order.
   ///
   /// Whether `setsid` exists is learned by trying it rather than by probing
   /// first: a failed spawn says the same thing without costing a subprocess.
   Future<Process> _spawn() async {
-    final argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
+    var argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
+    var head = command.first;
+    // The sandboxed shape: the helper's prefix goes ahead of the shell, so
+    // the subshell and everything it execs is confined from its first
+    // instruction. A sandbox asked for and not built is a command not run —
+    // the same fail-closed answer the session path gives.
+    var confined = environment;
+    if (sandbox != null) {
+      final prefix =
+          sandboxHelper == null ? null : await sandboxHelper!.prefixFor(sandbox!);
+      if (prefix == null) {
+        throw const ShellUnavailable("No sandbox is available on this machine "
+            "to run this command confined, so it was not run. Landlock needs "
+            "Linux 5.13 or newer and a C compiler.");
+      }
+      // The helper refuses a grant to a directory that is not there, so the
+      // tmp the ruleset names is made before the spawn. It is inside the
+      // workspace, so making it costs nothing the sandbox has not already
+      // granted.
+      final tmp = sandbox!.tmp;
+      if (tmp != null) {
+        Directory(tmp).createSync(recursive: true);
+        confined = {...environment, "TMPDIR": tmp};
+      }
+      // The helper's prefix, then the driver's whole shell argv: the shell is
+      // confined from its first instruction and `-c` with the script goes on
+      // the end of it, the shape the helper's usage line takes.
+      head = prefix.first;
+      argv = [...prefix.skip(1), ...command, "-c", "exec 2>&1\n$script"];
+    }
     final started = await LocalShell._spawnInGroup(
-        [command.first, ...argv], cwd, environment,
+        [head, ...argv], cwd, confined,
         includeParentEnvironment: includeParentEnvironment);
     _ownsGroup = started.ownsGroup;
     return started.process;

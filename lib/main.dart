@@ -70,9 +70,16 @@ class AppSession {
     // A third round trip on the same channel, and the only thing that decides
     // which rootfs a download fetches.
     final abi = platform.deviceAbi();
-    // Started with them and awaited below: an asset read off a disk, or a fetch
+    // Started here and awaited below: an asset read off a disk, or a fetch
     // in a browser, and nothing between wants it.
     final version = platform.appVersion();
+    // Started here and awaited below: the login shell's PATH, captured once
+    // per app run. It is a shell round trip that sources the user's whole
+    // profile, so the earlier it starts the more of the startup work above it
+    // overlaps — the driver is resolved synchronously per command, so it
+    // cannot be asked for there. Null where there is nothing to ask, which
+    // leaves the inherited PATH standing.
+    final loginPath = platform.captureLoginPath();
     final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
     // Started here and awaited before the identity load below: the keyring
@@ -128,7 +135,7 @@ class AppSession {
     // container does, so the load only has to be in before that.
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        byteRepairBinDir: byteRepairBin, secrets: secrets);
+        byteRepairBinDir: byteRepairBin, secrets: secrets, loginPath: await loginPath);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();

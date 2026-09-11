@@ -26,12 +26,13 @@ class ShellResult {
     required this.output,
     this.exceptionInfo,
     this.cwd,
+    this.violations = const [],
   });
 
-  const ShellResult.failed(this.exceptionInfo,
-      {this.output = ""}) :
-    returnCode = -1,
-    cwd = null;
+  const ShellResult.failed(this.exceptionInfo, {this.output = ""})
+      : returnCode = -1,
+        cwd = null,
+        violations = const [];
 
   final int returnCode;
   final String output;
@@ -42,6 +43,11 @@ class ShellResult {
   /// no such state to report: a one-shot subshell is gone with the command,
   /// and a command that was killed or never ran left no directory to read.
   final String? cwd;
+
+  /// What the sandbox denied while the command ran, appended to the tool
+  /// result the model reads, so it rewrites instead of retrying blind. Empty
+  /// where nothing was denied or where the command ran with no sandbox.
+  final List<String> violations;
 }
 
 /// What this build ships beside the machine's own commands: the environment a
@@ -62,6 +68,69 @@ class Toolset {
   /// executables laid out by the same install, and a second return value is one
   /// a caller can take and forget.
   final Proot? proot;
+}
+
+/// The confinement one command runs under, described where it will be
+/// applied. [CommandSandbox.workspace] is the directory the conversation may
+/// write to freely — the chat's own workspace on the host — and [tmp] the
+/// scratch the OS gives the command; writes anywhere else are what the kernel
+/// refuses. The profile files in `$HOME` — `.bashrc`, `.gitconfig`, `.ssh` —
+/// are *inside* [home] where the desktop's real home is reachable, which is
+/// why the sandbox's write side is an allowlist rather than a denylist: read
+/// everything, write the workspace and tmp, and those files fall outside the
+/// granted set without being named.
+class CommandSandbox {
+  const CommandSandbox({
+    required this.workspace,
+    this.tmp,
+    this.home,
+  });
+
+  /// The one directory writes are granted, at its host path.
+  final String workspace;
+
+  /// The scratch directory writes are allowed in; a command's own TMPDIR
+  /// where one is laid out for it.
+  final String? tmp;
+
+  /// The `HOME` the command sees, where that differs from the workspace — a
+  /// desktop command's own home, which is read freely and written never.
+  final String? home;
+
+  /// The sentence the tool result carries when this sandbox denied something.
+  static String violationsNote(List<String> violations) =>
+      "\n\nDenied by the sandbox: ${violations.join("; ")}. The command "
+      "carried on; what it printed above is what it could reach.";
+}
+
+/// Whether [path] is [root] or under it, compared by components so `/w/x`
+/// does not match `/wextra`.
+bool pathInside(String path, String root) {
+  if (root == "/" || root.isEmpty) return true;
+  final p = _trimSlash(path);
+  final r = _trimSlash(root);
+  return p == r || p.startsWith("$r/");
+}
+
+String _trimSlash(String path) =>
+    path.length > 1 && path.endsWith("/") ? path.substring(0, path.length - 1) : path;
+
+/// What turns a command into one that enforces [sandbox] on itself, by the
+/// helper the OS driver owns. Null where this build has no confinement for
+/// the platform — which is the only case where a confinement-requiring
+/// command fails closed.
+abstract class SandboxHelper {
+  /// The argv that runs everything after it confined: the helper's own
+  /// invocation, ending where the confined command's argv continues. Null
+  /// where the helper cannot be built — the binary is missing, the kernel is
+  /// too old — which the caller reports rather than working around.
+  ///
+  /// A prefix rather than a whole command, because the two run shapes need
+  /// different tails: a one-shot subshell appends its shell with the script,
+  /// and the chat's persistent shell appends its shell with the dispatcher —
+  /// the session's `cd` and exports live *inside* the confined shell, which
+  /// is the shape that keeps the state a session exists to keep.
+  Future<List<String>?> prefixFor(CommandSandbox sandbox);
 }
 
 /// Everything needed to run a command inside a downloaded Linux, bar the Linux.
@@ -110,6 +179,7 @@ class ShellDriver {
     this.guestRoot,
     this.hostToGuestPaths = const {},
     this.includeParentEnvironment = true,
+    this.sandboxHelper,
   });
 
   /// The executable and its arguments, ending in the shell a command runs in,
@@ -152,6 +222,14 @@ class ShellDriver {
   /// driver does not, since the parent's values are host paths the guest cannot
   /// see and [environment] names every var the guest needs.
   final bool includeParentEnvironment;
+
+  /// The confinement a command can be run under, where this driver's OS
+  /// offers one the process can reach. Null everywhere the answer is "no
+  /// sandbox here" — a guest (its rootfs is the boundary), Android (the
+  /// per-app sandbox already bounds it), the web (no shell at all) — and
+  /// non-null on the desktops, where a command's text and its behaviour can
+  /// disagree and the kernel is what settles it.
+  final SandboxHelper? sandboxHelper;
 }
 
 /// A command already running. Separate from its result so an aborted turn can
@@ -198,6 +276,11 @@ abstract class Shell {
   ///
   /// [restart] drops that shell's state before running: the command starts
   /// back in [cwd] with nothing exported.
+  ///
+  /// [sandbox] is the confinement this one command runs under, where the
+  /// driver offers one and the caller wants it — null runs the command as the
+  /// shell itself runs, which is what a session shell does with its state,
+  /// and what a platform with no confinement to offer is handed.
   ShellRun start(String command,
       {required String cwd,
       required String home,
@@ -205,7 +288,8 @@ abstract class Shell {
       Map<String, String>? environment,
       bool oneShot = false,
       bool restart = false,
-      String? project});
+      String? project,
+      CommandSandbox? sandbox});
 
   /// What the model is told it is operating on, e.g. `Linux 6.11.0 x86_64`.
   /// The agent's system prompt names it, so a command can be written for the
@@ -255,6 +339,24 @@ abstract class Shell {
   /// its project: a shell standing in a directory that is gone — or moving —
   /// is a process outliving the thing it was for.
   void closeSession(String cwd) {}
+
+  /// The confinement a command can be run under, from the driver that would
+  /// run it, or null where this shell's platforms offer none — a guest (its
+  /// rootfs is the boundary), Android (the per-app sandbox is the OS's), the
+  /// web (no shell at all).
+  SandboxHelper? get driverSandboxHelper => null;
+
+  /// The scratch directory a sandboxed command may write beside [workspace],
+  /// or null where this shell lays none out. The workspace itself is granted
+  /// by every sandbox; this is the second path a command's temp files land
+  /// in, and it is named by the shell because the shell knows where its
+  /// platform's tmp is.
+  String? tmpDirFor(String workspace) => null;
+
+  /// Whether this shell's commands are modeled as POSIX shell. False only on
+  /// Windows, whose `cmd` is not; a parse there would be a guess, and a guess
+  /// in the deterministic layer is the thing this layer does not make.
+  bool get platformIsWindows => false;
 }
 
 /// The web's shell: there isn't one. A command that reaches it anyway is
@@ -277,7 +379,8 @@ class UnavailableShell extends Shell {
           Map<String, String>? environment,
           bool oneShot = false,
           bool restart = false,
-          String? project}) =>
+          String? project,
+          CommandSandbox? sandbox}) =>
       const _Unavailable();
 }
 

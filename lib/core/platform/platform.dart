@@ -61,6 +61,7 @@ BuiltinBackend createBackend(
   LocalKvCache? kvCache,
   String? byteRepairBinDir,
   required AppSecrets secrets,
+  String? loginPath,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -85,6 +86,7 @@ BuiltinBackend createBackend(
         project: project,
         config: config,
         byteRepairBinDir: byteRepairBinDir,
+        loginPath: loginPath,
       ),
     ),
     webSearch: platformWebSearch(),
@@ -361,6 +363,13 @@ List<PromptSource> createPromptSources(AppConfig config, {String? project}) => [
 /// this is the system device name, read through a method channel; on Linux the
 /// hostname; null where the platform has none of its own (the web).
 Future<String?> deviceHostname() => platformHostname();
+
+/// The user's login shell's PATH, or null where there is nothing to ask — a
+/// platform with no shell behind its commands, or a login shell this build
+/// does not know how to read. Answered once per app run by `main.dart`, and
+/// the answer reaches every command's driver after it; the capture is a
+/// subprocess round trip, so it is never asked for where a driver is built.
+Future<String?> captureLoginPath() => platformCaptureLoginPath();
 
 /// Makes the skill directories read-only so a model running `bash` cannot
 /// unintentionally write to them. No-op on the web (no bash). See

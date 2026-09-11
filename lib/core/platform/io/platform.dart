@@ -24,6 +24,7 @@ import "../../../data/local/file_local_model_store.dart";
 import "../../../data/local/file_rootfs_store.dart";
 import "../../../data/local/llama_server.dart";
 import "../../../data/local/proot.dart";
+import "../../../data/local/landlock.dart";
 import "../../../data/local/shared_backup.dart";
 import "../../../data/local/tree_ops.dart";
 import "../../../data/local/desktop_file_handoff.dart";
@@ -81,6 +82,12 @@ ShellDriver? platformDriver({
   String? project,
   AppConfig? config,
   String? byteRepairBinDir,
+
+  /// The login shell's PATH, captured once per app run by the caller —
+  /// `main.dart` awaits it beside the other startup reads. The driver is
+  /// resolved per command and synchronously, so the capture cannot happen
+  /// here; a value captured at startup reaches every command after it.
+  String? loginPath,
 }) {
   final rootfs = rootfsById(rootfsId);
   final baseDir =
@@ -117,8 +124,26 @@ ShellDriver? platformDriver({
               "PATH":
                   "$byteRepairBinDir:${Platform.environment["PATH"] ?? ""}"
             }
-          : null);
+          : null,
+      sandboxHelper: Platform.isLinux && config != null
+          ? LandlockSandboxHelper(cacheDir: landlockCacheDir(config))
+          : null,
+      // The login shell's PATH, captured once per app run and handed in by
+      // the caller: the directories the user's own profile adds
+      // (`~/.local/bin` and friends) are what a desktop launch's inherited
+      // PATH misses, and a command run through the agent is a desktop
+      // launch. Null leaves the inherited PATH standing — today's answer,
+      // and never a wrong one.
+      loginPath: loginPath);
 }
+
+/// Where the Landlock helper's binary is compiled: inside the app's data
+/// directory rather than the OS cache, so a cache clear between launches
+/// does not cost the compile again on the first command that needs it. The
+/// helper is a tool of the app's, not a downloaded artifact, and it is
+/// rebuilt from the embedded source whenever it is missing.
+String landlockCacheDir(AppConfig config) =>
+    p.join(config.dataDir, "landlock");
 
 /// The per-project rootfs directory, or null where the copy has not been
 /// created yet. Lives under the project's data directory, beside its workspace
@@ -413,6 +438,46 @@ SecretStore platformSecretStore(AppConfig config) =>
 /// Desktops listen while pairing. The one-time code is armed per pairing
 /// window by the hub, so the factory needs nothing from its caller.
 LanSignaling? platformLanSignaling() => SignalingServer();
+
+/// The user's login shell's PATH on the desktops, where a real login shell
+/// exists to ask; null on Android, whose app has no login shell of the user's
+/// to read and whose commands want the workspace, not the user's tools.
+///
+/// The capture runs `$SHELL` as a login shell with a short timeout — a shell
+/// that is not bash or zsh is not asked, its profile syntax being unknown.
+/// Any failure answers null and the caller keeps the inherited PATH: today's
+/// behaviour, and never a wrong one.
+Future<String?> platformCaptureLoginPath() async {
+  final home = LocalShell.machineHomeDir();
+  final login = Platform.environment["SHELL"];
+  if (home == null || login == null) return null;
+  final isBourne = login.endsWith("/bash") || login == "bash";
+  final isZsh = login.endsWith("/zsh");
+  if (!isBourne && !isZsh) return null;
+  if (!File(login).existsSync()) return null;
+  // `-l` is what makes it a login shell whose profile has run; a
+  // non-interactive `-c` run sources nothing interactive, and the same
+  // sentence answers for bash and zsh. A profile that prints anything else
+  // corrupts the answer, so the line read is the last non-empty one.
+  try {
+    final result = await Process.run(login, ["-l", "-c", r'echo "$PATH"'],
+        environment: {"HOME": home, "PATH": "/usr/bin:/bin"},
+        includeParentEnvironment: false)
+        .timeout(const Duration(seconds: 5));
+    if (result.exitCode != 0) return null;
+    final lines = result.stdout
+        .toString()
+        .split("\n")
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return null;
+    final path = lines.last;
+    return path.contains("/") ? path : null;
+  } on Exception {
+    return null;
+  }
+}
 
 /// What this machine calls itself, for the sync device name.
 ///

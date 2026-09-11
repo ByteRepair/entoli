@@ -326,6 +326,9 @@ void main() {
     expect(projected.last.toolCalls, isEmpty);
     expect(projected.last.text, contains("echo hello"));
     expect(projected.last.text, contains('"returncode": 0'));
+    // Real newlines, not the literal `\n` the text once carried: the
+    // transcript is prose the model reads, not an escaped string.
+    expect(projected.last.text, contains("me to:\n\necho hello\n\n"));
   });
 
   test("a message with nothing in it contributes nothing", () async {
