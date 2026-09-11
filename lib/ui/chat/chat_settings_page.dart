@@ -342,13 +342,32 @@ class _ApprovalField extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final noClassifier = settings.classifierProviderId == null;
-    return InheritableDropdown<ApproveMode>(
-      label: "Running commands",
-      value: value,
-      inherited: approveModeLabels[settings.approveMode],
-      options: approveModeLabels,
-      disabled: {if (noClassifier) ApproveMode.auto},
-      onChanged: onChanged,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InheritableDropdown<ApproveMode>(
+          label: "Running commands",
+          value: value,
+          inherited: approveModeLabels[settings.approveMode],
+          options: approveModeLabels,
+          disabled: {if (noClassifier) ApproveMode.auto},
+          onChanged: onChanged,
+        ),
+        // The auto posture hides two decisions from the user it names: the
+        // classifier can refuse without asking, and a run of escalations
+        // falls back to asking. The label cannot carry that; this line can.
+        if ((value ?? settings.approveMode) == ApproveMode.auto)
+          const Padding(
+            padding: EdgeInsets.only(left: 16, top: 2),
+            child: Text(
+              "The classifier can also refuse a command outright, without "
+              "asking you. Reads and writes inside the chat's workspace "
+              "pass; anything past it waits for you. After several "
+              "escalations in a turn, the rest of the turn asks.",
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+      ],
     );
   }
 }

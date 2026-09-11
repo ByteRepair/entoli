@@ -625,8 +625,15 @@ class _AgentSection extends ConsumerWidget {
             initialValue: settings.approveMode,
             isExpanded: true,
             decoration: InputDecoration(
-              helperText: settings.approveMode == ApproveMode.auto && noClassifier
-                  ? "No classifier model set — auto mode will ask for every command."
+              helperText: settings.approveMode == ApproveMode.auto
+                  ? noClassifier
+                      ? "No classifier model set — auto mode will ask for "
+                          "every command."
+                      : "The classifier can also refuse a command outright, "
+                          "without asking you. Reads and writes inside the "
+                          "chat's workspace pass; anything past it waits for "
+                          "you. After several escalations in a turn, the rest "
+                          "of the turn asks."
                   : null,
             ),
             items: [

@@ -13,11 +13,14 @@ enum ApproveMode {
 }
 
 /// Human-readable labels for each [ApproveMode], shared by the app and chat
-/// settings pages so they always agree.
+/// settings pages so they always agree. Each names the whole posture, not
+/// just the mechanism: what runs unasked, what waits, and what can be refused
+/// without the user ever seeing it.
 const approveModeLabels = {
-  ApproveMode.ask: "Ask every time",
-  ApproveMode.auto: "Auto (classifier)",
-  ApproveMode.never: "Run without asking (DANGEROUS)",
+  ApproveMode.ask: "Ask before every command",
+  ApproveMode.auto:
+      "Auto: run what the classifier rates safe, ask on the rest",
+  ApproveMode.never: "Run everything without asking (DANGEROUS)",
 };
 
 /// Reads [ApproveMode] from its persisted form, migrating the legacy
