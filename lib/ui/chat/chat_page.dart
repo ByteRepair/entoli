@@ -25,6 +25,7 @@ import "chat_controller.dart";
 import "mirror_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
+import "widgets/synced_device_cards.dart";
 import "widgets/message_bubble.dart";
 import "widgets/omada_separator.dart";
 import "widgets/needs_setup_bar.dart";
@@ -183,6 +184,11 @@ class _NewChatState extends ConsumerState<_NewChat> {
           child: _EmptyChat(
             project: ref.watch(selectedProjectProvider),
             controller: _controller,
+            // The paired devices' cards are the new-chat screen's own — a
+            // chat that exists with nothing said in it yet is mid-turn at
+            // worst, and a list of other devices under its question would
+            // say nothing true about it.
+            showSyncedCards: true,
           ),
         ),
       );
@@ -264,7 +270,11 @@ class _ProjectBadges extends ConsumerWidget {
 /// Its rows are `settled`, so what the user arrives on is static and every
 /// change from their first interaction on animates.
 class _EmptyChat extends ConsumerWidget {
-  const _EmptyChat({required this.project, required this.controller});
+  const _EmptyChat({
+    required this.project,
+    required this.controller,
+    this.showSyncedCards = false,
+  });
 
   /// The project this chat is in, or on the new-chat screen the one the next
   /// chat goes to. Either way it is the badge picked out.
@@ -273,6 +283,10 @@ class _EmptyChat extends ConsumerWidget {
   /// The composer's, so a chip can type into it. See [insertCompletion] for
   /// where a trigger lands and why it does not ask for the focus.
   final TextEditingController controller;
+
+  /// The paired devices' cards, which only the new-chat screen asks for —
+  /// see its own call for why.
+  final bool showSyncedCards;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -337,6 +351,10 @@ class _EmptyChat extends ConsumerWidget {
                         ),
                     ],
             ),
+            if (showSyncedCards) ...[
+              const SizedBox(height: 20),
+              const SyncedDeviceCards(),
+            ],
           ],
         ),
       ),

@@ -702,6 +702,28 @@ row's first build, so content that is not on screen at that moment — a cold
 start whose project list resolves a frame later — arrives the way any change
 does: animated.
 
+Below the chips, and only on the new-chat screen, sit **the paired devices'
+cards** (`synced_device_cards.dart`). The data is the Remotes list — chats
+mirrored from a paired device, whose welcome named it — and that is also the
+limit of what is honest to draw: a project exists at this end only where one
+of its chats has been mirrored, there being no message that asks a paired
+device for a listing of its own. So a device with nothing mirrored has no
+card, and the list is watched rather than a second source invented. Each card
+is a device with the projects
+its mirrors sit in, folded behind the device's own name — the header is the
+toggle, per device and in-memory, the same shape `ActivityGroup` is, and
+carries the name and nothing else: no dot for the connection, no count of
+what is folded behind it, what is there being one tap away either way. A
+project unfolds as a badge, the same `ActionChip` in a `ChipRow` the
+`/`-`@` chips are — an unfold grows them out of nothing through the row's
+own motion rather than a list appearing under the header — and a badge opens
+that device's project through `selectRemote`, the switcher's own action, so
+the two ways into a paired device's project cannot come to disagree about
+what picking it means. The cards are `_EmptyChat`'s
+only under `showSyncedCards`, which `_NewChat` alone passes: the same body
+serving a chat that exists with nothing said in it yet has no business
+listing other devices under its question.
+
 What the headline says is `emptyChatQuestionProvider`: a built-in's shipped
 question, else the project's `description` (the settings page's Description
 row, its dialog saving an empty field as empty and its reset button the way
