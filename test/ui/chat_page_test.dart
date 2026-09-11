@@ -456,7 +456,7 @@ void main() {
         await scrollTo(tester, find.byType(DropdownButtonFormField<ApproveMode?>));
         await tester.tap(find.byType(DropdownButtonFormField<ApproveMode?>));
         await settleIo(tester);
-        await tester.tap(find.textContaining("Run without asking").last);
+        await tester.tap(find.textContaining("Run everything without asking").last);
         await settleIo(tester);
       }
 
