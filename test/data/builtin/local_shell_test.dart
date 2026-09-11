@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/domain/shell.dart";
 
 List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
@@ -626,6 +627,131 @@ void main() {
 
       expect(result.returnCode, -1);
       expect(result.exceptionInfo, contains("No shell"));
+    });
+  });
+
+  group("a sandboxed command", () {
+    // Landlock is where the deny is decided, so these run the real helper;
+    // a machine without it skips the confined assertions and keeps the
+    // fail-closed one, which is the contract everywhere.
+    late LandlockSandboxHelper helper;
+    setUp(() {
+      helper = LandlockSandboxHelper(
+          cacheDir: Directory.systemTemp.createTempSync("agent_chat_ll_").path);
+    });
+
+    test("runs confined and collects what was denied", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final outside = p.join(home.path, "outside.txt");
+      File(outside).writeAsStringSync("keep\n");
+      final result = await shell
+          .start("echo try > $outside",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      if (Platform.isLinux && await helper.prefixFor(sandbox) != null) {
+        expect(result.returnCode, isNot(0),
+            reason: "out=${result.output} info=${result.exceptionInfo} "
+                "viol=${result.violations}");
+        expect(result.violations, isNotEmpty,
+            reason: "rc=${result.returnCode} out=${result.output} "
+                "info=${result.exceptionInfo}");
+        expect(result.violations.first, contains("outside.txt"));
+        expect(File(outside).readAsStringSync(), "keep\n");
+      } else {
+        // Fail closed: no sandbox, no run.
+        expect(result.returnCode, -1);
+        expect(result.exceptionInfo, contains("sandbox"));
+      }
+    });
+
+    test("a read runs confined without a violation", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final available = Platform.isLinux && await helper.prefixFor(sandbox) != null;
+      if (!available) return;
+      final result = await shell
+          .start("echo confined",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.output, "confined\n");
+      expect(result.violations, isEmpty);
+    });
+
+    test("does not touch the session shell's state", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      await shell
+          .start("export SANDBOXED=yes",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 5), sandbox: sandbox)
+          .result;
+      final after = await shell
+          .start(r"echo ${SANDBOXED:-unset}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 5))
+          .result;
+      expect(after.output.trim(), "unset",
+          reason: "the sandboxed run was its own subshell; the session's "
+              "environment carries nothing from it");
+    });
+
+    test("a tmp the command was never told about is made and named", () async {
+      // The sandbox grants a scratch directory beside the workspace, and the
+      // command learns of it the only way a process can: TMPDIR, set for the
+      // confined run alone. Nothing created the directory by hand here — the
+      // spawn makes it, because the helper refuses a grant to a directory
+      // that is not there.
+      final sandbox = CommandSandbox(
+          workspace: workspace.path,
+          tmp: p.join(workspace.path, ".entoli-tmp"));
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      final result = await shell
+          .start(r'echo "TMPDIR=$TMPDIR"; mktemp XXXXXX >/dev/null && echo done',
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.returnCode, 0,
+          reason: "out=${result.output} info=${result.exceptionInfo} "
+              "viol=${result.violations}");
+      expect(result.output, contains('TMPDIR=${sandbox.tmp}'),
+          reason: "the command learns the scratch the sandbox granted it");
+      expect(Directory(sandbox.tmp!).existsSync(), isTrue,
+          reason: "the tmp is made for the confined run");
+    });
+
+    test("a read denial is worded neutrally, a write denial as a write",
+        () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      final denied = File(p.join(home.path, "denied.txt"));
+      // Outside the workspace: the kernel refuses both, with the two
+      // wordings a transcript shows — the shell's own for the write, the
+      // tool's for the read the file's own perms give. Only the second
+      // carries the tool's write words, so only it is worded `writing`.
+      denied.writeAsStringSync("keep\n");
+      Process.runSync("chmod", ["000", denied.path]);
+      addTearDown(() => Process.runSync("chmod", ["644", denied.path]));
+      final result = await shell
+          .start(
+              "cat ${denied.path} ; touch ${p.join(home.path, "w.txt")}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.violations, contains("writing ${p.join(home.path, "w.txt")}"),
+          reason: "out=${result.output} viol=${result.violations}");
+      expect(result.violations, contains("denied ${denied.path}"),
+          reason: "out=${result.output} viol=${result.violations}");
     });
   });
 }

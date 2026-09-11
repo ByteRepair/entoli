@@ -232,6 +232,7 @@ sealed class MessagePart with _$MessagePart {
     required String output,
     String? exceptionInfo,
     String? cwd,
+    @Default([]) List<String> violations,
   }) = ShellRunPart;
   const factory MessagePart.file({
     required String resource,
@@ -288,6 +289,7 @@ abstract class ToolResult with _$ToolResult {
     required String output,
     String? exceptionInfo,
     String? cwd,
+    @Default([]) List<String> violations,
   }) = _ToolResult;
 
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);

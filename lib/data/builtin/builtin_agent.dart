@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:fs_shim/fs.dart";
+import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
@@ -12,6 +13,7 @@ import "../../domain/permission.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
+import "../../domain/shell_command_analysis.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
@@ -342,7 +344,36 @@ class BuiltinAgent {
     this.index = "",
     this.memoryStore,
     this.memoryChat,
+    this.sandboxHelper,
   });
+
+  /// The sandbox helper a test hands in, where the shell is a fake with no
+  /// driver behind it. The agent reads the real one through
+  /// [Shell.driverSandboxHelper]; this is the test seam for it, which is why
+  /// it is nullable and the real answer wins when both exist.
+  @visibleForTesting
+  final SandboxHelper? sandboxHelper;
+
+  /// The confinement a command runs under, from the shell's driver. Read per
+  /// turn rather than held: the driver is resolved per command in the shell,
+  /// and the sandbox is only ever offered where the machine itself is the
+  /// driver — a guest's rootfs is already the boundary, and Android's
+  /// per-app sandbox is the OS's.
+  CommandSandbox? sandboxFor() {
+    final helper = sandboxHelper ?? shell.driverSandboxHelper;
+    if (helper == null) return null;
+    final tmp = shell.tmpDirFor(workspace);
+    return CommandSandbox(
+      workspace: workspace,
+      tmp: tmp,
+      home: shell.machineHome,
+    );
+  }
+
+  /// Whether this build's host platform models its shell as POSIX. Windows
+  /// `cmd` is not, and its commands are escalated rather than parsed; the
+  /// flag reaches the parse from the platform the shell names.
+  bool get platformIsWindows => shell.platformIsWindows;
 
   final BuiltinSession session;
 
@@ -976,12 +1007,16 @@ class BuiltinAgent {
   /// A command's outcome as the result of the call that asked for it: one that
   /// ran, one that was refused, one that was never reached. The directory the
   /// shell was left in rides on it as a fact; the projection words the change.
+  /// What the sandbox denied rides on it too, where one ran and denied
+  /// something — the wording is `observation`'s, so the model reads it beside
+  /// the output it belongs to.
   ToolResult _ran(LlmToolCall call, ShellResult result) => ToolResult(
         callId: call.id,
         returnCode: result.returnCode,
         output: result.output,
         exceptionInfo: result.exceptionInfo,
         cwd: result.cwd,
+        violations: result.violations,
       );
 
   /// The model asking the user something. The call and its answers are a pair
@@ -1562,10 +1597,12 @@ class BuiltinAgent {
     );
     yield ApprovalRequestEvent(approval);
     final allowed = await approve(approval) == ApprovalResponse.allow;
+    _humanDecided = true;
     _commandResult = allowed
         ? await run()
         : const ShellResult.failed("The user denied this command. Ask them what to do "
             "instead, or try something else.");
+    _humanDecided = false;
   }
 
   /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
@@ -1606,6 +1643,13 @@ class BuiltinAgent {
     }
   }
 
+  /// Whether the run this turn is composing sits behind an approval banner —
+  /// a human reads the call and answers before it goes. Set by the arms that
+  /// run after an approval, cleared by the arms that run without one: the
+  /// static gate reads it to stand down, because a parse vetoing what a
+  /// person approved is the machine overriding its keeper.
+  bool _humanDecided = false;
+
   Future<ShellResult> _execute(LlmToolCall call, String command) async {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
@@ -1620,6 +1664,31 @@ class BuiltinAgent {
           ? options.commandTimeout.inMilliseconds
           : requested.clamp(0, options.commandTimeout.inMilliseconds),
     );
+    // What the command parses to, decided before anything asks a model about
+    // it. The parse answers for the deterministic safe side — reads, and
+    // writes the workspace can hold — and refuses what it cannot answer for:
+    // a command that cannot be modeled is one the model decided the wording
+    // of, and one that assigns to a variable that rewrites where its own
+    // writes land is not answering for itself.
+    //
+    // The gate is on only where a sandbox exists to make the boundary hold:
+    // without one the parse has nothing to enforce, and refusing on its word
+    // would be trusting the same text-only read the sandbox exists to back.
+    // And it stands down where a person has decided: a run behind the
+    // approval banner was read and answered by a human, and a parse vetoing
+    // what the human approved is the machine overriding its keeper. The
+    // banner, not the mode, is what carries that — auto mode reaches the
+    // banner through the classifier's ask — so the gate reads the flag the
+    // run itself sets.
+    final sandbox = sandboxFor();
+    if (sandbox != null && !_humanDecided) {
+      final analysis =
+          ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
+      final note = analysis.escalationNote;
+      if (note != null) {
+        return ShellResult.failed(note);
+      }
+    }
     final run = shell.start(command,
         cwd: workspace,
         home: projectWorkspace,
@@ -1627,7 +1696,8 @@ class BuiltinAgent {
         environment: environment,
         oneShot: oneShot,
         restart: args?["restart"] == true,
-        project: project);
+        project: project,
+        sandbox: sandbox);
     _running = run;
     _runWatched(call, run);
     try {
