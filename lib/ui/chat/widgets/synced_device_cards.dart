@@ -2,10 +2,10 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../data/sync/sync_hub.dart";
-import "../../../domain/models.dart";
 import "../../../domain/project.dart";
 import "../../../providers.dart";
 import "../../sidebar/sidebar.dart";
+import "../../widgets/chip_row.dart";
 
 /// The new-chat screen's cards for the projects of the devices paired with
 /// this one, below the mark, the question, the badges and the chips.
@@ -15,10 +15,9 @@ import "../../sidebar/sidebar.dart";
 /// draw**: a project exists at this end only where one of its chats has been
 /// mirrored, which is why the cards group the mirror list rather than asking
 /// a paired device for a listing of its own — there is no such message. A
-/// device with nothing mirrored has no card, and a card's counts are of what
-/// this device holds, which is what a mirror reads anyway.
+/// device with nothing mirrored has no card.
 ///
-/// A card is a [RemoteScope] with a label, which is what makes tapping it
+/// A badge is a [RemoteScope] with a label, which is what makes tapping it
 /// [selectRemote] — the sidebar switcher's own action, so the two ways into a
 /// paired device's project cannot come to disagree about what picking it
 /// means. The card carries no buttons of its own; the chat list it opens is
@@ -50,74 +49,48 @@ class SyncedDeviceCards extends ConsumerWidget {
 }
 
 /// One device's share of the new-chat screen: the header that folds the
-/// device's project rows away and brings them back, and, when it is open,
-/// the rows under it.
+/// device's badges away and brings them back, and, when it is open, the
+/// badges under it.
 class _DeviceGroup {
-  _DeviceGroup({
-    required this.deviceId,
-    required this.deviceName,
-    required this.online,
-    required this.projects,
-  });
+  _DeviceGroup({required this.deviceId, required this.deviceName, required this.projects});
 
   final String deviceId;
   final String deviceName;
 
-  /// Whether the connection to them is up, as any entry this device
-  /// contributed said. The header shows it; the list behind a tap is readable
-  /// either way, a snapshot being what a mirror holds.
-  final bool online;
-
+  /// The projects this device's mirrors sit in, label-sorted.
   final List<_ProjectGroup> projects;
 }
 
-/// One project's share of a device's card: its name and the chats of it this
-/// device mirrors, newest first.
+/// One project's share of a device's card.
 class _ProjectGroup {
-  _ProjectGroup({required this.project, required this.chats});
+  _ProjectGroup({required this.project});
 
   /// Null is that device's default project, named the way [projectLabel]
   /// names it everywhere else a project is shown.
   final String? project;
 
-  final List<ChatState> chats;
-
   String get label => projectLabel(project);
 }
 
-/// Every device that has a mirrored chat, each with the projects its mirrors
-/// sit in. Devices sorted by name and projects by label, so a state diff
-/// arriving again does not reshuffle what is on screen.
+/// Every device that has a mirrored chat, with the projects its mirrors sit
+/// in. Devices sorted by name and projects by label, so a state diff arriving
+/// again does not reshuffle what is on screen.
 List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
-  final devices = <String, ({String name, bool online})>{};
-  final projects = <String, Map<String?, List<ChatState>>>{};
+  final devices = <String>{};
+  final projects = <String, Map<String?, void>>{};
   for (final entry in entries) {
-    final device = devices[entry.deviceId] ??= (
-      name: entry.deviceName,
-      online: entry.online,
-    );
-    devices[entry.deviceId] = (
-      name: device.name,
-      online: device.online || entry.online,
-    );
-    projects
-        .putIfAbsent(entry.deviceId, () => {})[entry.state.project] ??= [];
-    projects[entry.deviceId]![entry.state.project]!.add(entry.state);
+    devices.add(entry.deviceId);
+    (projects[entry.deviceId] ??= {})[entry.state.project] = null;
   }
   return [
-    for (final MapEntry(key: id, value: device) in devices.entries)
+    for (final id in devices)
       _DeviceGroup(
         deviceId: id,
-        deviceName: device.name,
-        online: device.online,
+        deviceName:
+            entries.firstWhere((entry) => entry.deviceId == id).deviceName,
         projects: [
-          for (final MapEntry(key: project, value: chats)
-              in projects[id]!.entries)
-            _ProjectGroup(
-              project: project,
-              chats: chats
-                ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
-            ),
+          for (final project in projects[id]!.keys)
+            _ProjectGroup(project: project),
         ]..sort((a, b) =>
               a.label.toLowerCase().compareTo(b.label.toLowerCase())),
       ),
@@ -126,10 +99,16 @@ List<_DeviceGroup> _deviceGroups(List<RemoteChatEntry> entries) {
 }
 
 /// One device's card: the header row that folds it, and, when it is open, the
-/// project rows under it. Folded to start, the way [ActivityGroup] — the
+/// project badges under it. Folded to start, the way [ActivityGroup] — the
 /// toggle this one answers to — starts, and in-memory: a screen that exists
 /// to be left has no state worth carrying out of it.
-class _DeviceCard extends StatefulWidget {
+///
+/// The badges are the same `ActionChip` in a `ChipRow` the empty-chat chips
+/// are, so an unfold grows each of them out of nothing through the row's own
+/// motion rather than a list appearing under the header. The header carries
+/// the name and nothing else — no dot for the connection, no count of what is
+/// folded behind it: what is there is one tap away either way.
+class _DeviceCard extends ConsumerStatefulWidget {
   const _DeviceCard({required this.group, required this.onOpen});
 
   final _DeviceGroup group;
@@ -138,10 +117,10 @@ class _DeviceCard extends StatefulWidget {
   final void Function(String? project) onOpen;
 
   @override
-  State<_DeviceCard> createState() => _DeviceCardState();
+  ConsumerState<_DeviceCard> createState() => _DeviceCardState();
 }
 
-class _DeviceCardState extends State<_DeviceCard> {
+class _DeviceCardState extends ConsumerState<_DeviceCard> {
   bool _collapsed = true;
 
   @override
@@ -174,15 +153,6 @@ class _DeviceCardState extends State<_DeviceCard> {
                           .copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
-                  _OnlineDot(online: group.online),
-                  const SizedBox(width: 8),
-                  Text(
-                    "${group.projects.length} "
-                    "${group.projects.length == 1 ? "project" : "projects"}",
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(width: 4),
                   Icon(
                     _collapsed ? Icons.expand_more : Icons.expand_less,
                     size: 18,
@@ -195,85 +165,40 @@ class _DeviceCardState extends State<_DeviceCard> {
           if (!_collapsed)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+              child: ChipRow(
+                entries: [
                   for (final project in group.projects)
-                    _ProjectRow(
-                      project: project,
-                      onOpen: () => widget.onOpen(project.project),
+                    ChipRowEntry(
+                      key: ValueKey(project.project),
+                      child: ActionChip(
+                        // The icon rides in the label rather than the avatar
+                        // slot, the way the empty-chat badges keep the label
+                        // and any mark beside it one piece.
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (projectIcon(project.project) case final icon?)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: Icon(icon, size: 18),
+                              ),
+                            Text(
+                              project.label,
+                              style: projectLabelStyle(
+                                project.project != null &&
+                                    ref.watch(omadaOnProvider(project.project)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        onPressed: () => widget.onOpen(project.project),
+                      ),
                     ),
                 ],
               ),
             ),
         ],
       ),
-    );
-  }
-}
-
-/// One project row of a device's card: the whole row is the tap, which reads
-/// that device's project through the sidebar's switcher.
-class _ProjectRow extends ConsumerWidget {
-  const _ProjectRow({required this.project, required this.onOpen});
-
-  final _ProjectGroup project;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final name = project.project;
-    return InkWell(
-      onTap: onOpen,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            // A built-in project's icon sits in the slot a user project
-            // reserves, the way the empty-chat badges and the sidebar's menu
-            // keep the labels aligned.
-            if (projectIcon(name) case final icon?)
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Icon(icon, size: 18),
-              )
-            else
-              const SizedBox(width: 28),
-            Expanded(
-              child: Text(
-                project.label,
-                overflow: TextOverflow.ellipsis,
-                style: projectLabelStyle(
-                  name != null && ref.watch(omadaOnProvider(name)),
-                ),
-              ),
-            ),
-            Text(
-              "${project.chats.length} "
-              "${project.chats.length == 1 ? "chat" : "chats"}",
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OnlineDot extends StatelessWidget {
-  const _OnlineDot({required this.online});
-
-  final bool online;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Icon(
-      online ? Icons.circle : Icons.circle_outlined,
-      size: 10,
-      color: online ? Colors.green : theme.colorScheme.onSurfaceVariant,
     );
   }
 }

@@ -1055,8 +1055,20 @@ void main() {
       expect(find.byType(SyncedDeviceCards), findsOneWidget);
       expect(find.text("Desktop"), findsOneWidget);
       expect(find.text("Phone"), findsOneWidget);
-      expect(find.text("2 projects"), findsOneWidget);
-      expect(find.text("1 project"), findsOneWidget);
+
+      // The projects are the folded badges: unfolded, each card names the
+      // projects its mirrors sit in and nothing else about them.
+      await tester.tap(find.text("Desktop"));
+      await tester.tap(find.text("Phone"));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
+        findsNWidgets(3),
+      );
+      expect(find.text("Default"), findsNWidgets(2));
+      expect(find.text("work"), findsOneWidget);
     });
 
     testWidgets("a chat that exists with nothing said in it draws none",
@@ -1098,23 +1110,38 @@ void main() {
       ]);
 
       expect(find.text("work"), findsNothing);
+      expect(
+        find.descendant(
+            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
+        findsNothing,
+      );
       await tester.tap(find.text("Desktop"));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text("work"), findsOneWidget);
+      expect(
+        find.descendant(
+            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
+        findsNWidgets(2),
+      );
       await tester.tap(find.text("Desktop"));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text("work"), findsNothing);
+      expect(
+        find.descendant(
+            of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip)),
+        findsNothing,
+      );
     });
 
-    testWidgets("a project card opens that device's project in the sidebar",
+    testWidgets("a project badge opens that device's project in the sidebar",
         (tester) async {
       await openEmpty(tester, [
         mirrorOf("d1", "Desktop", makeState("r1", project: "work")),
       ]);
       await tester.tap(find.text("Desktop"));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text("work"));
       await tester.pump();

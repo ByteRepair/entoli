@@ -711,10 +711,15 @@ device for a listing of its own. So a device with nothing mirrored has no
 card, a card's counts are of what this device holds, and the list is watched
 rather than a second source invented. Each card is a device with the projects
 its mirrors sit in, folded behind the device's own name — the header is the
-toggle, per device and in-memory, the same shape `ActivityGroup` is — and a
-project row opens that device's project through `selectRemote`, the
-switcher's own action, so the two ways into a paired device's project cannot
-come to disagree about what picking it means. The cards are `_EmptyChat`'s
+toggle, per device and in-memory, the same shape `ActivityGroup` is, and
+carries the name and nothing else: no dot for the connection, no count of
+what is folded behind it, what is there being one tap away either way. A
+project unfolds as a badge, the same `ActionChip` in a `ChipRow` the
+`/`-`@` chips are — an unfold grows them out of nothing through the row's
+own motion rather than a list appearing under the header — and a badge opens
+that device's project through `selectRemote`, the switcher's own action, so
+the two ways into a paired device's project cannot come to disagree about
+what picking it means. The cards are `_EmptyChat`'s
 only under `showSyncedCards`, which `_NewChat` alone passes: the same body
 serving a chat that exists with nothing said in it yet has no business
 listing other devices under its question.
