@@ -527,7 +527,7 @@ String shellRunTranscript({
   List<String> violations = const [],
 }) =>
     "The user ran this command in the chat themselves, rather than asking me "
-    "to:\\n\\n$command\\n\\n"
+    "to:\n\n$command\n\n"
     "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations)}";
 
 /// What a call the agent never got to is answered with — the ones left over

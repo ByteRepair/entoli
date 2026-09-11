@@ -406,6 +406,26 @@ void main() {
       expect(client.sent[1].last.text, contains("denied"));
     });
 
+    test("in ask mode the approval banner is the decision, not the parse",
+        () async {
+      // An un-modelable command is exactly the shape a person is asked
+      // about: the parse cannot answer for it, so the human's answer is the
+      // answer, and the gate stands down rather than vetoing an approval.
+      final client = FakeLlmClient([
+        [bashCall(r'echo "unclosed')],
+        [finish],
+      ]);
+      await agentOver(client,
+              sandboxHelper: _StubSandboxHelper(),
+              approveMode: ApproveMode.ask,
+              approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
+          .run(userMessage("go"))
+          .toList();
+
+      expect(shell.ran, hasLength(1),
+          reason: "the parse does not override an approval the user made");
+    });
+
     test("nothing is asked when the chat runs without asking", () async {
       final client = FakeLlmClient([
         [finish],

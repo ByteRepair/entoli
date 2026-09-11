@@ -857,11 +857,6 @@ class ShellUnavailable implements Exception {
   String toString() => message;
 }
 
-/// The line a refused write prints: the path, then the shell's or the tool's
-/// own name for the refusal. Both orders a transcript shows are matched —
-/// `sh: /path: Permission denied` and `tool: cannot open '/path'...` —
-/// because a build's errors are the model's only report of what the sandbox
-/// took away.
 /// The line a refused write prints: either the shell's own (`sh: /path:
 /// Permission denied`) or the tool's (`tool: cannot open '/path' for
 /// writing: Permission denied`). A build's errors are the model's only
@@ -976,6 +971,10 @@ class _OneShotRun implements ShellRun {
             "Anything it printed before that is above.",
         violations: _violations(output.toString()),
       );
+    } on ShellUnavailable catch (e) {
+      // Fail-closed has its own words: a confinement that did not happen is
+      // not a spawn error, and the reason is what the model rewrites around.
+      return ShellResult.failed(e.message, output: output.toString());
     } catch (e) {
       return ShellResult.failed(
         "An error occurred while executing the command: $e",
@@ -997,17 +996,28 @@ class _OneShotRun implements ShellRun {
     final workspace = sandbox!.workspace;
     final tmp = sandbox!.tmp;
     final found = <String>{};
+    final write = <String>{};
     for (final match in deniedPathPattern.allMatches(text)) {
       final path = match.group(1);
       if (path == null || path.isEmpty) continue;
-      if (path.startsWith(workspace) || tmp != null && path.startsWith(tmp)) {
+      if (pathInside(path, workspace) || tmp != null && pathInside(path, tmp)) {
         continue;
       }
       if (path == "/dev/null") continue;
       found.add(path);
+      // Only the line's own words say this was a write: `cannot touch`,
+      // `cannot create`, `for writing`. A plain `sh: /path: Permission
+      // denied` is a refused redirect, but a `cat` denied by the file's own
+      // Unix perms prints the same shape — and this sandbox grants every
+      // read, so a line without the tool's write words is worded neutrally
+      // rather than reported as a write it may not have been.
+      final line = match.group(0)!;
+      if (line.contains("cannot ") || line.contains("for writing")) {
+        write.add(path);
+      }
       if (found.length >= 5) break;
     }
-    return [for (final path in found) "writing $path"];
+    return [for (final path in found) write.contains(path) ? "writing $path" : "denied $path"];
   }
 
   /// `exec 2>&1` redirects the shell's own error output and everything it goes
@@ -1022,6 +1032,7 @@ class _OneShotRun implements ShellRun {
     // the subshell and everything it execs is confined from its first
     // instruction. A sandbox asked for and not built is a command not run —
     // the same fail-closed answer the session path gives.
+    var confined = environment;
     if (sandbox != null) {
       final prefix =
           sandboxHelper == null ? null : await sandboxHelper!.prefixFor(sandbox!);
@@ -1030,6 +1041,15 @@ class _OneShotRun implements ShellRun {
             "to run this command confined, so it was not run. Landlock needs "
             "Linux 5.13 or newer and a C compiler.");
       }
+      // The helper refuses a grant to a directory that is not there, so the
+      // tmp the ruleset names is made before the spawn. It is inside the
+      // workspace, so making it costs nothing the sandbox has not already
+      // granted.
+      final tmp = sandbox!.tmp;
+      if (tmp != null) {
+        Directory(tmp).createSync(recursive: true);
+        confined = {...environment, "TMPDIR": tmp};
+      }
       // The helper's prefix, then the driver's whole shell argv: the shell is
       // confined from its first instruction and `-c` with the script goes on
       // the end of it, the shape the helper's usage line takes.
@@ -1037,7 +1057,7 @@ class _OneShotRun implements ShellRun {
       argv = [...prefix.skip(1), ...command, "-c", "exec 2>&1\n$script"];
     }
     final started = await LocalShell._spawnInGroup(
-        [head, ...argv], cwd, environment,
+        [head, ...argv], cwd, confined,
         includeParentEnvironment: includeParentEnvironment);
     _ownsGroup = started.ownsGroup;
     return started.process;

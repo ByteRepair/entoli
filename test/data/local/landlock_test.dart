@@ -127,6 +127,30 @@ void main() {
     expect(r.out.trim(), "quiet");
   });
 
+  test("creating a file or a symlink outside the workspace is denied", () async {
+    // A first draft of this ruleset left MAKE_REG and MAKE_SYM unhandled,
+    // and an unhandled right is granted everywhere — a confined command
+    // could create a symlink at a well-known path outside its boundary.
+    if (!landlockUsable) return;
+    final home = Directory(p.join(cache.path, "home"))..createSync();
+    final r = await run0(
+        "touch ${home.path}/new.txt; ln -s /etc/passwd ${home.path}/link",
+        sandboxOverride: CommandSandbox(
+            workspace: p.join(cache.path, "ws"),
+            tmp: tmp.path,
+            home: home.path));
+    expect(r.err, contains("Permission denied"));
+    expect(File(p.join(home.path, "new.txt")).existsSync(), isFalse,
+        reason: "a make outside the granted set is a refusal, not a hole");
+    expect(File(p.join(home.path, "link")).existsSync(), isFalse);
+  });
+
+  test("a file and a symlink are created inside the workspace", () async {
+    if (!landlockUsable) return;
+    final r = await run0("touch in.txt && ln -s in.txt link && echo made");
+    expect(r.out.trim(), "made");
+  });
+
   test("the violations note names what was denied", () {
     final note = CommandSandbox.violationsNote(["writing /etc/passwd"]);
     expect(note, contains("/etc/passwd"));

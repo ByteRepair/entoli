@@ -1,11 +1,10 @@
 /// What a shell command parses to, decided before anything asks a model about
 /// it. The approval regime reads command text, and a command's text can lie —
 /// an `eval` built out of pieces, a redirect buried in a substitution — so the
-/// deterministic layer answers for the commands it can model and hands the
-/// rest to the user. The safe side is the deterministic side: reads and
-/// workspace writes are provable from the parse, the classifier model keeps
-/// the gray cases, and anything this cannot model at all is escalated rather
-/// than guessed about.
+/// deterministic layer answers for the commands it can model and refuses the
+/// rest. The safe side is the deterministic side: a command whose write
+/// behaviour this cannot answer for is not run, and the reason is worded so
+/// the model can rewrite around it.
 library;
 
 /// One command's parse. [isWindows] is the answer of a platform whose shell
@@ -16,8 +15,6 @@ class ShellCommandAnalysis {
     required this.modelable,
     required this.unmodelableReasons,
     required this.escalationReasons,
-    required this.writeTargets,
-    required this.substitutionCount,
   });
 
   factory ShellCommandAnalysis.parse(String command, {bool isWindows = false}) {
@@ -26,8 +23,6 @@ class ShellCommandAnalysis {
         modelable: false,
         unmodelableReasons: const ["commands on this platform are not analyzed"],
         escalationReasons: const [],
-        writeTargets: const [],
-        substitutionCount: 0,
       );
     }
 
@@ -38,13 +33,10 @@ class ShellCommandAnalysis {
         modelable: false,
         unmodelableReasons: List.unmodifiable(reasons),
         escalationReasons: const [],
-        writeTargets: const [],
-        substitutionCount: 0,
       );
     }
     final parsed = _Pipeline._of(tokens);
     final escalations = <String>[];
-    final targets = <String?>[];
 
     // Assignments in the command position — `VAR=value command` or a plain
     // `VAR=value` line. One to a write-deciding name rewrites the
@@ -70,14 +62,11 @@ class ShellCommandAnalysis {
       if (target == null) {
         // `>&1`, `&>` with no file, or a target the parse could not resolve.
         if (!redirect.fdOnly) {
-          targets.add(null);
           escalations.add("cannot tell where the redirect writes");
         }
         continue;
       }
-      final substitution = target.any((piece) => piece is _Substitution);
-      if (substitution) {
-        targets.add(null);
+      if (target.any((piece) => piece is _Substitution)) {
         escalations.add("redirects through a substitution, so the parse "
             "cannot name the file");
         continue;
@@ -86,13 +75,11 @@ class ShellCommandAnalysis {
         // An expansion carried as its name is not resolved to a value: where
         // the file ends up depends on the environment, which is the
         // sandbox's answer to make, not the parse's guess.
-        targets.add(null);
         final named = target.whereType<_Expansion>().first.name;
         escalations.add("redirects through \$$named, so the parse cannot "
             "name the file");
         continue;
       }
-      targets.add(target.cast<String>().join());
     }
     for (final word in parsed.words) {
       for (final piece in word) {
@@ -107,8 +94,6 @@ class ShellCommandAnalysis {
               modelable: false,
               unmodelableReasons: List.unmodifiable(reasons),
               escalationReasons: const [],
-              writeTargets: const [],
-              substitutionCount: 0,
             );
           }
           final inside = _Pipeline._of(inner);
@@ -134,9 +119,7 @@ class ShellCommandAnalysis {
             if (redirect.target!.any((piece) => piece is _Substitution)) {
               escalations.add("a redirect inside a substitution whose file "
                   "the parse cannot name");
-              continue;
             }
-            targets.add(redirect.target!.cast<String>().join());
           }
         }
       }
@@ -145,8 +128,6 @@ class ShellCommandAnalysis {
       modelable: true,
       unmodelableReasons: const [],
       escalationReasons: List.unmodifiable(escalations),
-      writeTargets: List.unmodifiable(targets),
-      substitutionCount: parsed.substitutions,
     );
   }
 
@@ -161,26 +142,13 @@ class ShellCommandAnalysis {
   /// What the parse found that an automatic decision cannot stand on.
   final List<String> escalationReasons;
 
-  /// Where output redirects land, as written: absolute paths as themselves,
-  /// `~/…` against the command's home, bare words against the working
-  /// directory. Null entries are the ones the parse could not name.
-  final List<String?> writeTargets;
-
-  /// How many command substitutions the parse walked, including the ones
-  /// nested inside a redirect target or an argument.
-  final int substitutionCount;
-
-  /// Whether the parse found nothing that writes a file anywhere: reads,
-  /// pipes between reads, assignments to ordinary variables.
-  bool get hasNoFileWrites => writeTargets.isEmpty;
-
   /// The sentence the model reads when this was escalated, or null where
   /// nothing needs saying.
   String? get escalationNote {
     final all = [...unmodelableReasons, ...escalationReasons];
     if (all.isEmpty) return null;
-    return "Not classified automatically (${all.join("; ")}): the user was "
-        "asked. Rewrite the command so what it does is plain, or split it.";
+    return "Not classified automatically (${all.join("; ")}): this command "
+        "was not run. Rewrite it so what it does is plain, or split it.";
   }
 }
 
@@ -241,16 +209,14 @@ class _Substitution {
 }
 
 /// One parsed pipeline: the commands a pipe/`;`/`&&`/`||` sequence separates,
-/// their redirects and their leading assignments, and the substitution count.
+/// their redirects and their leading assignments.
 class _Pipeline {
-  _Pipeline._(
-      this.words, this.redirects, this.assignments, this.substitutions);
+  _Pipeline._(this.words, this.redirects, this.assignments);
 
   factory _Pipeline._of(List<_Tok> tokens) {
     final words = <List<Object>>[];
     final redirects = <_Redirect>[];
     final assignments = <String, String>{};
-    var substitutions = 0;
     var current = _Simple();
     var expectWord = false;
 
@@ -269,8 +235,8 @@ class _Pipeline {
       if (tok.kind == _TokKind.word) {
         if (expectWord) {
           final last = current.redirects.removeLast();
-          current.redirects.add(_Redirect(
-              tok.pieces!, last.append, last.fromInput, last.fdOnly));
+          current.redirects
+              .add(_Redirect(tok.pieces!, last.fromInput, last.fdOnly));
           expectWord = false;
         } else if (current.words.isEmpty &&
             current.redirects.isEmpty &&
@@ -287,16 +253,15 @@ class _Pipeline {
             endCommand();
           case ">>" || ">&" || "&>" || "&>>":
             expectWord = tok.text != ">&";
-            current.redirects.add(_Redirect(null,
-                tok.text == ">>" || tok.text == "&>>", false,
-                tok.text == ">&"));
+            current.redirects
+                .add(_Redirect(null, false, tok.text == ">&"));
           case ">":
             expectWord = true;
-            current.redirects.add(_Redirect(null, false, false, false));
+            current.redirects.add(_Redirect(null, false, false));
           case "<" || "<<" || "<<<" || "<&":
             expectWord = tok.text != "<&";
             current.redirects
-                .add(_Redirect(null, false, true, tok.text == "<&"));
+                .add(_Redirect(null, true, tok.text == "<&"));
           default:
             // `(`, `)` and the rest: a group or subshell's insides are read
             // as words by this same loop, which is flat but answers for
@@ -306,26 +271,19 @@ class _Pipeline {
       }
     }
     endCommand();
-    for (final word in words) {
-      for (final piece in word) {
-        if (piece is _Substitution) substitutions++;
-      }
-    }
-    return _Pipeline._(words, redirects, assignments, substitutions);
+    return _Pipeline._(words, redirects, assignments);
   }
 
   final List<List<Object>> words;
   final List<_Redirect> redirects;
   final Map<String, String> assignments;
-  final int substitutions;
 }
 
 /// A redirect with its target as written, or [fdOnly] where it names a file
 /// descriptor rather than a file.
 class _Redirect {
-  const _Redirect(this.target, this.append, this.fromInput, this.fdOnly);
+  const _Redirect(this.target, this.fromInput, this.fdOnly);
   final List<Object>? target;
-  final bool append;
   final bool fromInput;
   final bool fdOnly;
 }
@@ -348,10 +306,6 @@ bool _isAssignmentWord(String word) {
 /// The word's whole text, where it has no substitutions in it. Null where it
 /// does, because an assignment whose value is a substitution is not read here
 /// as one — it is a word like any other.
-/// The word's whole text, where it has no substitutions in it. Null where it
-/// does, because an assignment whose value is a substitution is not read here
-/// as one — it is a word like any other. Character pieces are joined into the
-/// single text they came from.
 String? _plainOf(_Tok tok) {
   final pieces = tok.pieces!;
   if (pieces.any((piece) => piece is! String)) return null;
@@ -555,54 +509,4 @@ class _Expansion {
   final String name;
   @override
   String toString() => "\$$name";
-}
-
-/// What [asWritten] names on the machine: an absolute path as itself, `~/…`
-/// against [home], anything else against [cwd]. Null where it is an expansion
-/// or a `~user` form the parse does not resolve.
-String? resolveWritePath(String asWritten,
-    {required String? home, required String cwd}) {
-  if (asWritten.startsWith("\$")) return null;
-  if (asWritten.startsWith("/")) return asWritten;
-  if (asWritten == "~") return home;
-  if (asWritten.startsWith("~/")) {
-    if (home == null) return null;
-    return home + asWritten.substring(1);
-  }
-  if (asWritten.startsWith("~")) return null; // `~user`: not resolved.
-  if (cwd.isEmpty) return null;
-  return "$cwd/$asWritten";
-}
-
-/// Whether [path] is [root] or under it, compared by components so `/w/x`
-/// does not match `/wextra`.
-bool pathInside(String path, String root) {
-  if (root == "/" || root.isEmpty) return true;
-  final p = _trimSlash(path);
-  final r = _trimSlash(root);
-  return p == r || p.startsWith("$r/");
-}
-
-String _trimSlash(String path) =>
-    path.length > 1 && path.endsWith("/") ? path.substring(0, path.length - 1) : path;
-
-/// Whether the parse predicts a file write outside [allowed] — the workspace
-/// roots and tmp, given by the driver that will enforce the verdict. An
-/// unnamable target counts as outside: a promise cannot be made about a path
-/// the parse could not resolve, and the escalation layer is where the
-/// unnamable ones are asked about anyway.
-bool writesOutsidePaths(
-  ShellCommandAnalysis analysis, {
-  required List<String> allowed,
-  required String? home,
-  required String cwd,
-}) {
-  if (analysis.hasNoFileWrites) return false;
-  for (final target in analysis.writeTargets) {
-    if (target == null) return true;
-    final resolved = resolveWritePath(target, home: home, cwd: cwd);
-    if (resolved == null) return true;
-    if (!allowed.any((root) => pathInside(resolved, root))) return true;
-  }
-  return false;
 }

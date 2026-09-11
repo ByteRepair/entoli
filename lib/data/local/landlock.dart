@@ -31,7 +31,7 @@ import "../../domain/shell.dart";
 /// execs the command's shell.
 ///
 /// Where Landlock is not available — an older kernel, a machine without a C
-/// compiler — [commandFor] answers null and the caller fails the command
+/// compiler — [prefixFor] answers null and the caller fails the command
 /// closed. A confinement-requiring command is never run unrestricted.
 class LandlockSandboxHelper implements SandboxHelper {
   LandlockSandboxHelper({required this.cacheDir});
@@ -168,14 +168,21 @@ int main(int argc, char **argv) {
    * decides about. A right not handled here is a right every rule grants by
    * omission, so the set is "everything this kernel can express that is not
    * a read": the ABI-1 write and make rights plus execute, with truncate
-   * added where the kernel answers for it. REFER (ABI 2) is left unhandled
+   * added where the kernel answers for it. MAKE_REG and MAKE_SYM are the
+   * ones a first draft of this ruleset missed, and their omission is a hole
+   * a confined command could walk through: creating a file or a symlink
+   * anywhere (a link whose target only matters when something writes through
+   * it, but a link at a well-known path is already a footgun) is a make, and
+   * an unhandled make is granted everywhere. REFER (ABI 2) is left unhandled
    * on purpose: it governs cross-hierarchy links and renames, its rules are
    * pairwise, and a workspace that cannot link into itself would break git. */
   __u64 handled = LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_WRITE_FILE |
       LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR |
       LANDLOCK_ACCESS_FS_REMOVE_DIR | LANDLOCK_ACCESS_FS_REMOVE_FILE |
       LANDLOCK_ACCESS_FS_MAKE_CHAR | LANDLOCK_ACCESS_FS_MAKE_DIR |
-      LANDLOCK_ACCESS_FS_MAKE_SOCK | LANDLOCK_ACCESS_FS_MAKE_FIFO;
+      LANDLOCK_ACCESS_FS_MAKE_REG | LANDLOCK_ACCESS_FS_MAKE_SYM |
+      LANDLOCK_ACCESS_FS_MAKE_BLOCK | LANDLOCK_ACCESS_FS_MAKE_SOCK |
+      LANDLOCK_ACCESS_FS_MAKE_FIFO;
   if (abi >= 3) handled |= LANDLOCK_ACCESS_FS_TRUNCATE;
 
   struct landlock_ruleset_attr attr;

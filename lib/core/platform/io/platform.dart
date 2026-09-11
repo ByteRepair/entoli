@@ -442,7 +442,44 @@ LanSignaling? platformLanSignaling() => SignalingServer();
 /// The user's login shell's PATH on the desktops, where a real login shell
 /// exists to ask; null on Android, whose app has no login shell of the user's
 /// to read and whose commands want the workspace, not the user's tools.
-Future<String?> platformCaptureLoginPath() async => null;
+///
+/// The capture runs `$SHELL` as a login shell with a short timeout — a shell
+/// that is not bash or zsh is not asked, its profile syntax being unknown.
+/// Any failure answers null and the caller keeps the inherited PATH: today's
+/// behaviour, and never a wrong one.
+Future<String?> platformCaptureLoginPath({
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final home = Platform.environment["HOME"];
+  final login = Platform.environment["SHELL"];
+  if (home == null || login == null) return null;
+  final isBourne = login.endsWith("/bash") || login == "bash";
+  final isZsh = login.endsWith("/zsh");
+  if (!isBourne && !isZsh) return null;
+  if (!File(login).existsSync()) return null;
+  // `-l` is what makes it a login shell whose profile has run; a
+  // non-interactive `-c` run sources nothing interactive, and the same
+  // sentence answers for bash and zsh. A profile that prints anything else
+  // corrupts the answer, so the line read is the last non-empty one.
+  try {
+    final result = await Process.run(login, ["-l", "-c", r'echo "$PATH"'],
+        environment: {"HOME": home, "PATH": "/usr/bin:/bin"},
+        includeParentEnvironment: false)
+        .timeout(timeout);
+    if (result.exitCode != 0) return null;
+    final lines = result.stdout
+        .toString()
+        .split("\n")
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return null;
+    final path = lines.last;
+    return path.contains("/") ? path : null;
+  } on Exception {
+    return null;
+  }
+}
 
 /// What this machine calls itself, for the sync device name.
 ///

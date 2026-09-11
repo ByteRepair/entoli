@@ -701,5 +701,59 @@ void main() {
           reason: "the sandboxed run was its own subshell; the session's "
               "environment carries nothing from it");
     });
+
+    test("a tmp the command was never told about is made and named", () async {
+      // The sandbox grants a scratch directory beside the workspace, and the
+      // command learns of it the only way a process can: TMPDIR, set for the
+      // confined run alone. Nothing created the directory by hand here — the
+      // spawn makes it, because the helper refuses a grant to a directory
+      // that is not there.
+      final sandbox = CommandSandbox(
+          workspace: workspace.path,
+          tmp: p.join(workspace.path, ".entoli-tmp"));
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      final result = await shell
+          .start(r'echo "TMPDIR=$TMPDIR"; mktemp XXXXXX >/dev/null && echo done',
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.returnCode, 0,
+          reason: "out=${result.output} info=${result.exceptionInfo} "
+              "viol=${result.violations}");
+      expect(result.output, contains('TMPDIR=${sandbox.tmp}'),
+          reason: "the command learns the scratch the sandbox granted it");
+      expect(Directory(sandbox.tmp!).existsSync(), isTrue,
+          reason: "the tmp is made for the confined run");
+    });
+
+    test("a read denial is worded neutrally, a write denial as a write",
+        () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final denied = File(p.join(home.path, "denied.txt"));
+      // Outside the workspace: the kernel refuses both, with the two
+      // wordings a transcript shows — the shell's own for the write, the
+      // tool's for the read the file's own perms give. Only the second
+      // carries the tool's write words, so only it is worded `writing`.
+      denied.writeAsStringSync("keep\n");
+      Process.runSync("chmod", ["000", denied.path]);
+      addTearDown(() => Process.runSync("chmod", ["644", denied.path]));
+      final result = await shell
+          .start(
+              "cat ${denied.path} ; touch ${p.join(home.path, "w.txt")}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) {
+        return;
+      }
+      expect(result.violations, contains("writing ${p.join(home.path, "w.txt")}"),
+          reason: "out=${result.output} viol=${result.violations}");
+      expect(result.violations, contains("denied ${denied.path}"),
+          reason: "out=${result.output} viol=${result.violations}");
+    });
   });
 }

@@ -1657,23 +1657,25 @@ class BuiltinAgent {
     );
     // What the command parses to, decided before anything asks a model about
     // it. The parse answers for the deterministic safe side — reads, and
-    // writes the workspace can hold — and hands everything else to the
-    // approval path: a command that cannot be modeled is one the model
-    // decided the wording of, and one that assigns to a variable that
-    // rewrites where its own writes land is not answering for itself.
+    // writes the workspace can hold — and refuses what it cannot answer for:
+    // a command that cannot be modeled is one the model decided the wording
+    // of, and one that assigns to a variable that rewrites where its own
+    // writes land is not answering for itself.
     //
     // The gate is on only where a sandbox exists to make the boundary hold:
     // without one the parse has nothing to enforce, and refusing on its word
     // would be trusting the same text-only read the sandbox exists to back.
+    // And it stands down where a person is already reading the text: in ask
+    // mode the approval banner is the decision, and a parse vetoing what a
+    // human just approved is the machine overriding its keeper. Auto and
+    // never are the modes nothing asks in, so the refusal is the gate's.
     final sandbox = sandboxFor();
-    if (sandbox != null) {
+    if (sandbox != null && approveMode != ApproveMode.ask) {
       final analysis =
           ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
       final note = analysis.escalationNote;
       if (note != null) {
-        return ShellResult.failed(
-            "$note This command was not run. Split it into plain commands "
-            "and run them one at a time.");
+        return ShellResult.failed(note);
       }
     }
     final run = shell.start(command,

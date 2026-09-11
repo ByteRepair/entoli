@@ -71,14 +71,14 @@ class Toolset {
 }
 
 /// The confinement one command runs under, described where it will be
-/// applied. [workspace] is the directory the conversation may write to freely
-/// — the chat's own workspace on the host — and [tmp] the scratch the OS
-/// gives the command; writes anywhere else are what the kernel refuses. The
-/// sensitive paths ([sensitive] as the deny-write set) are *inside* [home]
-/// where the desktop's real home is reachable, which is why the sandbox's
-/// write side is an allowlist rather than a denylist: read everything,
-/// write the workspace and tmp, and the profile files in `$HOME` fall outside
-/// the granted set without being named.
+/// applied. [CommandSandbox.workspace] is the directory the conversation may
+/// write to freely — the chat's own workspace on the host — and [tmp] the
+/// scratch the OS gives the command; writes anywhere else are what the kernel
+/// refuses. The profile files in `$HOME` — `.bashrc`, `.gitconfig`, `.ssh` —
+/// are *inside* [home] where the desktop's real home is reachable, which is
+/// why the sandbox's write side is an allowlist rather than a denylist: read
+/// everything, write the workspace and tmp, and those files fall outside the
+/// granted set without being named.
 class CommandSandbox {
   const CommandSandbox({
     required this.workspace,
@@ -102,6 +102,18 @@ class CommandSandbox {
       "\n\nDenied by the sandbox: ${violations.join("; ")}. The command "
       "carried on; what it printed above is what it could reach.";
 }
+
+/// Whether [path] is [root] or under it, compared by components so `/w/x`
+/// does not match `/wextra`.
+bool pathInside(String path, String root) {
+  if (root == "/" || root.isEmpty) return true;
+  final p = _trimSlash(path);
+  final r = _trimSlash(root);
+  return p == r || p.startsWith("$r/");
+}
+
+String _trimSlash(String path) =>
+    path.length > 1 && path.endsWith("/") ? path.substring(0, path.length - 1) : path;
 
 /// What turns a command into one that enforces [sandbox] on itself, by the
 /// helper the OS driver owns. Null where this build has no confinement for
