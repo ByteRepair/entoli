@@ -447,10 +447,8 @@ LanSignaling? platformLanSignaling() => SignalingServer();
 /// that is not bash or zsh is not asked, its profile syntax being unknown.
 /// Any failure answers null and the caller keeps the inherited PATH: today's
 /// behaviour, and never a wrong one.
-Future<String?> platformCaptureLoginPath({
-  Duration timeout = const Duration(seconds: 5),
-}) async {
-  final home = Platform.environment["HOME"];
+Future<String?> platformCaptureLoginPath() async {
+  final home = LocalShell.machineHomeDir();
   final login = Platform.environment["SHELL"];
   if (home == null || login == null) return null;
   final isBourne = login.endsWith("/bash") || login == "bash";
@@ -465,7 +463,7 @@ Future<String?> platformCaptureLoginPath({
     final result = await Process.run(login, ["-l", "-c", r'echo "$PATH"'],
         environment: {"HOME": home, "PATH": "/usr/bin:/bin"},
         includeParentEnvironment: false)
-        .timeout(timeout);
+        .timeout(const Duration(seconds: 5));
     if (result.exitCode != 0) return null;
     final lines = result.stdout
         .toString()

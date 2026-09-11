@@ -733,6 +733,7 @@ void main() {
       final sandbox = CommandSandbox(workspace: workspace.path);
       final driver = LocalShell.hostDriver(sandboxHelper: helper);
       final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
       final denied = File(p.join(home.path, "denied.txt"));
       // Outside the workspace: the kernel refuses both, with the two
       // wordings a transcript shows — the shell's own for the write, the
@@ -747,9 +748,6 @@ void main() {
               cwd: workspace.path, home: home.path,
               timeout: const Duration(seconds: 10), sandbox: sandbox)
           .result;
-      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) {
-        return;
-      }
       expect(result.violations, contains("writing ${p.join(home.path, "w.txt")}"),
           reason: "out=${result.output} viol=${result.violations}");
       expect(result.violations, contains("denied ${denied.path}"),

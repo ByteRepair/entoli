@@ -58,7 +58,7 @@ void main() {
     expect(a.modelable, isTrue);
   });
 
-  test("an include.* assignment escalates", () {
+  test("an assignment to a git config var escalates", () {
     final a = parse("GIT_CONFIG_COUNT=1 git status");
     expect(a.modelable, isTrue);
     expect(a.escalationReasons, isNotEmpty);

@@ -48,10 +48,6 @@ class ShellCommandAnalysis {
         escalations.add("sets ${assignment.key}, which changes where writes "
             "and tools land");
       }
-      if (_gitConfigPattern.hasMatch(assignment.key)) {
-        escalations.add("sets ${assignment.key}, which redirects git's "
-            "configuration");
-      }
     }
     for (final redirect in parsed.redirects) {
       // An input redirect is a read; a here-document's "target" is a
@@ -101,10 +97,6 @@ class ShellCommandAnalysis {
           for (final assignment in inside.assignments.entries) {
             if (writeTargetVars.contains(assignment.key)) {
               escalations.add("sets ${assignment.key} inside a substitution");
-            }
-            if (_gitConfigPattern.hasMatch(assignment.key)) {
-              escalations.add("sets ${assignment.key}, git's configuration, "
-                  "inside a substitution");
             }
           }
           for (final redirect in inside.redirects) {
@@ -174,11 +166,6 @@ const writeTargetVars = {
   "ZDOTDIR",
   "TMPDIR",
 };
-
-/// `git include.<something>` and `includeIf.<condition>.<something>`: config
-/// keys whose value is a file of more configuration, settable in one command.
-final RegExp _gitConfigPattern =
-    RegExp(r"^include(If\.[^.]+\.)?[A-Za-z][A-Za-z0-9]*$");
 
 // ---------------------------------------------------------------------------
 // The parser. POSIX enough for the commands this app's models write: words,
@@ -251,17 +238,16 @@ class _Pipeline {
         switch (tok.text) {
           case "||" || "&&" || "|" || ";" || "&" || ";;" || "\n":
             endCommand();
-          case ">>" || ">&" || "&>" || "&>>":
-            expectWord = tok.text != ">&";
-            current.redirects
-                .add(_Redirect(null, false, tok.text == ">&"));
-          case ">":
+          case ">" || ">>" || "&>" || "&>>":
             expectWord = true;
             current.redirects.add(_Redirect(null, false, false));
-          case "<" || "<<" || "<<<" || "<&":
-            expectWord = tok.text != "<&";
-            current.redirects
-                .add(_Redirect(null, true, tok.text == "<&"));
+          case ">&":
+            current.redirects.add(_Redirect(null, false, true));
+          case "<" || "<<" || "<<<":
+            expectWord = true;
+            current.redirects.add(_Redirect(null, true, false));
+          case "<&":
+            current.redirects.add(_Redirect(null, true, true));
           default:
             // `(`, `)` and the rest: a group or subshell's insides are read
             // as words by this same loop, which is flat but answers for
@@ -295,8 +281,9 @@ class _Simple {
 }
 
 /// An assignment is a word of name=value shape whose name is a valid variable
-/// name. A word like `--flag=x` is not one: the name must start with a letter
-/// or underscore.
+/// name — a shell name, letters, digits and underscores. A git config key is
+/// not one: `include.path=x` is a command word to the shell, and it is `git
+/// config`'s business, not an environment rewrite.
 bool _isAssignmentWord(String word) {
   final eq = word.indexOf("=");
   if (eq <= 0) return false;
@@ -507,6 +494,4 @@ List<_Tok> _tokenize(String source, List<String> reasons) {
 class _Expansion {
   const _Expansion.text(this.name);
   final String name;
-  @override
-  String toString() => "\$$name";
 }

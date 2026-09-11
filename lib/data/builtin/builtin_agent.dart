@@ -1597,10 +1597,12 @@ class BuiltinAgent {
     );
     yield ApprovalRequestEvent(approval);
     final allowed = await approve(approval) == ApprovalResponse.allow;
+    _humanDecided = true;
     _commandResult = allowed
         ? await run()
         : const ShellResult.failed("The user denied this command. Ask them what to do "
             "instead, or try something else.");
+    _humanDecided = false;
   }
 
   /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
@@ -1641,6 +1643,13 @@ class BuiltinAgent {
     }
   }
 
+  /// Whether the run this turn is composing sits behind an approval banner —
+  /// a human reads the call and answers before it goes. Set by the arms that
+  /// run after an approval, cleared by the arms that run without one: the
+  /// static gate reads it to stand down, because a parse vetoing what a
+  /// person approved is the machine overriding its keeper.
+  bool _humanDecided = false;
+
   Future<ShellResult> _execute(LlmToolCall call, String command) async {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
@@ -1665,12 +1674,14 @@ class BuiltinAgent {
     // The gate is on only where a sandbox exists to make the boundary hold:
     // without one the parse has nothing to enforce, and refusing on its word
     // would be trusting the same text-only read the sandbox exists to back.
-    // And it stands down where a person is already reading the text: in ask
-    // mode the approval banner is the decision, and a parse vetoing what a
-    // human just approved is the machine overriding its keeper. Auto and
-    // never are the modes nothing asks in, so the refusal is the gate's.
+    // And it stands down where a person has decided: a run behind the
+    // approval banner was read and answered by a human, and a parse vetoing
+    // what the human approved is the machine overriding its keeper. The
+    // banner, not the mode, is what carries that — auto mode reaches the
+    // banner through the classifier's ask — so the gate reads the flag the
+    // run itself sets.
     final sandbox = sandboxFor();
-    if (sandbox != null && approveMode != ApproveMode.ask) {
+    if (sandbox != null && !_humanDecided) {
       final analysis =
           ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
       final note = analysis.escalationNote;

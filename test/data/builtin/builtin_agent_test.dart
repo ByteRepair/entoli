@@ -36,6 +36,7 @@ void main() {
     List<String?>? answers,
     BuiltinOptions options = const BuiltinOptions(),
     ApproveMode approveMode = ApproveMode.never,
+    PermissionClassifier? classifier,
     bool canRunCommands = true,
     Future<String> Function(String path, String entryFile, {String? artifactId})? saveArtifact,
     MemorySettings memory = MemorySettings.off,
@@ -63,6 +64,7 @@ void main() {
       model: "fake-model",
       options: options,
       approveMode: approveMode,
+      classifier: classifier,
       approve: (_) async => allowed.isEmpty ? ApprovalResponse.allow : allowed.removeAt(0),
       // Nothing picked, unless the test says what was.
       answer: (request) async => answers ?? request.unanswered,
@@ -406,11 +408,11 @@ void main() {
       expect(client.sent[1].last.text, contains("denied"));
     });
 
-    test("in ask mode the approval banner is the decision, not the parse",
+    test("a command behind an approval banner runs whatever it parses to",
         () async {
-      // An un-modelable command is exactly the shape a person is asked
-      // about: the parse cannot answer for it, so the human's answer is the
-      // answer, and the gate stands down rather than vetoing an approval.
+      // The banner is the decision, however the run reaches it: a parse
+      // vetoing what a person approved is the machine overriding its keeper.
+      // In ask mode every command has one.
       final client = FakeLlmClient([
         [bashCall(r'echo "unclosed')],
         [finish],
@@ -1418,6 +1420,46 @@ void main() {
       // No sandbox means no parse to trust and nothing to enforce with: the
       // command runs, and the approval regime is what answered for it.
       expect(shell.ran, hasLength(1));
+    });
+
+    test("auto mode's banner-bound command is not vetoed by the parse either",
+        () async {
+      // The classifier's ask reaches the same banner in auto mode, so the
+      // gate reads whether a human decided, not which mode the chat runs.
+      final client = FakeLlmClient([
+        [bashCall(r'echo "unclosed')], [finish],
+      ]);
+      await agentOver(client,
+              sandboxHelper: _StubSandboxHelper(),
+              approveMode: ApproveMode.auto,
+              classifier: FakeClassifier(decision: PermissionDecision.ask),
+              approvals: [ApprovalResponse.allow, ApprovalResponse.allow])
+          .run(userMessage("go"))
+          .toList();
+
+      expect(shell.ran, hasLength(1),
+          reason: "the banner is the decision, in auto mode as in ask");
+    });
+
+    test("a classified-allow command that cannot be modeled is refused",
+        () async {
+      // The arm without a banner is where the gate holds: nothing read the
+      // text and decided, so the parse refusal is what says why.
+      final client = FakeLlmClient([
+        [bashCall(r'echo "unclosed')], [finish],
+      ]);
+      final events = await agentOver(client,
+              sandboxHelper: helper,
+              approveMode: ApproveMode.auto,
+              classifier: FakeClassifier(decision: PermissionDecision.allow))
+          .run(userMessage("go"))
+          .toList();
+      final text = events
+          .whereType<ToolResultEvent>()
+          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
+          .join();
+      expect(text.toLowerCase(), contains("not classified automatically"));
+      expect(shell.ran, isEmpty);
     });
   });
 }

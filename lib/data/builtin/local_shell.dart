@@ -849,7 +849,8 @@ class _SessionRun implements ShellRun {
 
 /// The failure a one-shot run's spawn carries when a sandbox was asked for
 /// and could not be built. Thrown rather than returned so [result] completes
-/// as a failed command through the same catch a spawn error takes.
+/// as a failed command; `_run` catches it as its own case so the fail-closed
+/// reason reaches the model un-mangled.
 class ShellUnavailable implements Exception {
   const ShellUnavailable(this.message);
   final String message;
@@ -860,9 +861,14 @@ class ShellUnavailable implements Exception {
 /// The line a refused write prints: either the shell's own (`sh: /path:
 /// Permission denied`) or the tool's (`tool: cannot open '/path' for
 /// writing: Permission denied`). A build's errors are the model's only
-/// report of what the sandbox took away, so both wordings are matched.
+/// report of what the sandbox took away, so both wordings are matched. The
+/// [writeWords] group is the tool's own name for a write — `cannot touch`,
+/// `cannot create`, `for writing` — and is what says a match may be worded
+/// `writing` rather than neutrally; the shell's redirect shape carries no
+/// such words, so it reads `denied` and a read refused by the file's own
+/// Unix perms is not misreported as a write.
 final RegExp deniedPathPattern = RegExp(
-    r"""(?:^|[\s:"'(])(?:(?:cannot (?:open|touch|create regular file|create) )?|[\s:"(])'?(/[\w.@+/ -]*?)'?(?:\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)""",
+    r"""(?:^|[\s:"'(])(?:(?<write>cannot (?:open|touch|create regular file|create) )?|[\s:"(])'?(/[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)""",
     multiLine: true);
 
 /// What a `oneShot` command is: today's contract, a fresh subshell per
@@ -995,29 +1001,27 @@ class _OneShotRun implements ShellRun {
     if (sandbox == null) return const [];
     final workspace = sandbox!.workspace;
     final tmp = sandbox!.tmp;
-    final found = <String>{};
-    final write = <String>{};
+    // The path and whether the line worded a write. A read refusal carries
+    // no write words and reads neutrally, so a `cat` denied by the file's
+    // own Unix perms is not misreported as a write this sandbox did not
+    // take away.
+    final found = <String, bool>{};
     for (final match in deniedPathPattern.allMatches(text)) {
-      final path = match.group(1);
+      final path = match.group(2);
       if (path == null || path.isEmpty) continue;
       if (pathInside(path, workspace) || tmp != null && pathInside(path, tmp)) {
         continue;
       }
       if (path == "/dev/null") continue;
-      found.add(path);
-      // Only the line's own words say this was a write: `cannot touch`,
-      // `cannot create`, `for writing`. A plain `sh: /path: Permission
-      // denied` is a refused redirect, but a `cat` denied by the file's own
-      // Unix perms prints the same shape — and this sandbox grants every
-      // read, so a line without the tool's write words is worded neutrally
-      // rather than reported as a write it may not have been.
-      final line = match.group(0)!;
-      if (line.contains("cannot ") || line.contains("for writing")) {
-        write.add(path);
-      }
+      final isWrite = match.namedGroup("write") != null ||
+          match.namedGroup("forwriting") != null;
+      found[path] = (found[path] ?? false) || isWrite;
       if (found.length >= 5) break;
     }
-    return [for (final path in found) write.contains(path) ? "writing $path" : "denied $path"];
+    return [
+      for (final entry in found.entries)
+        entry.value ? "writing ${entry.key}" : "denied ${entry.key}"
+    ];
   }
 
   /// `exec 2>&1` redirects the shell's own error output and everything it goes
