@@ -7,6 +7,7 @@ import "../../domain/builtin_project.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart" show CompletionKind;
 import "../../domain/profile.dart";
+import "../../domain/shell.dart" show CommandSandbox;
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
 import "task_tool.dart";
@@ -482,10 +483,14 @@ const _elidedHalf = 5000;
 /// How a command's result is shown to the model: JSON, and elided in the
 /// middle once it is long enough to crowd out the conversation. Both ends are
 /// kept because a build prints what it is doing first and why it failed last.
+/// [violations] is what a sandbox denied while the command ran, worded after
+/// the output it belongs to so the model reads the refusal beside what it
+/// could reach, and rewrites rather than retrying blind.
 String observation({
   required int returnCode,
   required String output,
   String? exceptionInfo,
+  List<String> violations = const [],
 }) {
   final elide = output.length > _fullOutputLimit;
   return _pretty.convert({
@@ -498,6 +503,8 @@ String observation({
       "warning": "Output too long.",
     },
     if (exceptionInfo != null && exceptionInfo.isNotEmpty) "exception_info": exceptionInfo,
+    if (violations.isNotEmpty)
+      "sandbox_violations": CommandSandbox.violationsNote(violations).trim(),
   });
 }
 
@@ -517,10 +524,11 @@ String shellRunTranscript({
   required int returnCode,
   required String output,
   String? exceptionInfo,
+  List<String> violations = const [],
 }) =>
     "The user ran this command in the chat themselves, rather than asking me "
-    "to:\n\n$command\n\n"
-    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo)}";
+    "to:\\n\\n$command\\n\\n"
+    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations)}";
 
 /// What a call the agent never got to is answered with — the ones left over
 /// when a turn is aborted part-way through a message's calls. A call that may

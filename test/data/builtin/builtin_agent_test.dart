@@ -6,6 +6,7 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/builtin_agent.dart";
+import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/data/builtin/memory/instructions.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
 import "package:agent_chat/data/builtin/memory_tools.dart";
@@ -15,7 +16,6 @@ import "package:agent_chat/domain/artifact.dart";
 import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
-import "package:agent_chat/domain/shell.dart";
 
 import "../../fakes.dart";
 import "builtin_fakes.dart";
@@ -42,6 +42,7 @@ void main() {
     List<InstructionFile> instructions = const [],
     MemoryStore? memoryStore,
     String? memoryChat,
+    SandboxHelper? sandboxHelper,
   }) {
     final tempDir = Directory.systemTemp.createTempSync("agent-test");
     final testProjectWorkspace = p.join(tempDir.path, "project-workspace");
@@ -70,6 +71,7 @@ void main() {
       instructions: instructions,
       memoryStore: memoryStore,
       memoryChat: memoryChat,
+      sandboxHelper: sandboxHelper,
     );
   }
 
@@ -1337,4 +1339,74 @@ void main() {
       expect(result.output, contains("No memories match"));
     });
   });
+
+  group("the static gate", () {
+    /// A helper the agent reads through `sandboxFor`, so the gate is on. The
+    /// fake shell never runs anything confined; these tests are about what
+    /// the agent refuses and what it hands the shell, not what the kernel
+    /// does — the landlock tests answer for that.
+    final helper = _StubSandboxHelper();
+
+    test("a command that cannot be modeled is not run and says why", () async {
+      final client = FakeLlmClient([
+        [bashCall(r'echo "unclosed')], [finish],
+      ]);
+      final events = await agentOver(client, sandboxHelper: helper)
+          .run(userMessage("go"))
+          .toList();
+      final results = events.whereType<ToolResultEvent>().toList();
+      expect(results, isNotEmpty);
+      final text = results
+          .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
+          .join();
+      expect(text.toLowerCase(), contains("not classified automatically"));
+      expect(shell.ran, isEmpty,
+          reason: "an unmodelable command never reaches the shell");
+    });
+
+    test("an assignment that rewrites where writes land is not run", () async {
+      final client = FakeLlmClient([
+        [bashCall("HOME=/tmp/evil git commit")], [finish],
+      ]);
+      final events = await agentOver(client, sandboxHelper: helper)
+          .run(userMessage("go"))
+          .toList();
+      expect(
+          events
+              .whereType<ToolResultEvent>()
+              .map((r) => [r.result.output, r.result.exceptionInfo ?? ""].join(" "))
+              .join(),
+          contains("HOME"));
+      expect(shell.ran, isEmpty);
+    });
+
+    test("a modeled command runs and reaches the shell sandboxed", () async {
+      final client = FakeLlmClient([
+        [bashCall("echo hi")], [finish],
+      ]);
+      await agentOver(client, sandboxHelper: helper).run(userMessage("go")).toList();
+      expect(shell.ran, ["echo hi"]);
+      expect(shell.sandboxes.single, isNotNull);
+      expect(shell.sandboxes.single!.workspace, isNotEmpty);
+    });
+
+    test("with no sandbox behind it, the gate is off", () async {
+      final client = FakeLlmClient([
+        [bashCall(r'echo "unclosed')], [finish],
+      ]);
+      await agentOver(client).run(userMessage("go")).toList();
+      // No sandbox means no parse to trust and nothing to enforce with: the
+      // command runs, and the approval regime is what answered for it.
+      expect(shell.ran, hasLength(1));
+    });
+  });
+}
+
+/// A sandbox helper that builds a prefix, so the agent's gate and the shell's
+/// sandbox plumbing run without a kernel in the loop. The prefix is the
+/// shape the real helper's is; what runs it is the test's business.
+class _StubSandboxHelper implements SandboxHelper {
+  @override
+  Future<List<String>?> prefixFor(CommandSandbox sandbox) async =>
+      ["/bin/entoli-landlock", "exec", "--workspace", sandbox.workspace, "--"];
 }

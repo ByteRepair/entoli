@@ -124,11 +124,16 @@ class AppSession {
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
     final byteRepairBin = platform.byteRepairBinDir(cache);
+    // The login shell's PATH, captured once per app run and beside the other
+    // startup reads: it is a shell round trip, and the driver is resolved
+    // synchronously per command, so it cannot be asked for there. Null where
+    // there is nothing to ask, which leaves the inherited PATH standing.
+    final loginPath = platform.captureLoginPath();
     // The backend captures the closure; nothing reads the mirror until the
     // container does, so the load only has to be in before that.
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        byteRepairBinDir: byteRepairBin, secrets: secrets);
+        byteRepairBinDir: byteRepairBin, secrets: secrets, loginPath: await loginPath);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();

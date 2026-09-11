@@ -53,6 +53,7 @@ ShellDriver? platformDriver({
   String? project,
   AppConfig? config,
   String? byteRepairBinDir,
+  String? loginPath,
 }) =>
     null;
 
@@ -177,6 +178,10 @@ LanSignaling? platformLanSignaling() => createWebLanSignaling();
 /// A browser has no hostname of its own to give. `location.hostname` is the
 /// server the page came from, which is a different machine's name entirely.
 Future<String?> platformHostname() async => null;
+
+/// And no login shell: there is no shell behind any of a browser's commands,
+/// which is the whole of what a browser's shell driver is.
+Future<String?> platformCaptureLoginPath() async => null;
 
 /// No-op: a browser has no `chmod`, and no `bash` to guard against. The file
 /// tools' `safeRelativePath` already prevents reaching skill dirs.

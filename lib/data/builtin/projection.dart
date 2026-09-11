@@ -205,6 +205,7 @@ Iterable<LlmMessage> _assistant(Message message) sync* {
               returnCode: part.returnCode,
               output: part.output,
               exceptionInfo: part.exceptionInfo,
+              violations: part.violations,
             ),
             part.cwd,
           ));
@@ -307,6 +308,7 @@ String _observed(ToolResult result) => _observations[result] ??= observation(
       returnCode: result.returnCode,
       output: result.output,
       exceptionInfo: result.exceptionInfo,
+      violations: result.violations,
     );
 
 final _observations = Expando<String>("observation");

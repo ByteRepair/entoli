@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/domain/shell.dart";
 
 List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
@@ -626,6 +627,79 @@ void main() {
 
       expect(result.returnCode, -1);
       expect(result.exceptionInfo, contains("No shell"));
+    });
+  });
+
+  group("a sandboxed command", () {
+    // Landlock is where the deny is decided, so these run the real helper;
+    // a machine without it skips the confined assertions and keeps the
+    // fail-closed one, which is the contract everywhere.
+    late LandlockSandboxHelper helper;
+    setUp(() {
+      helper = LandlockSandboxHelper(
+          cacheDir: Directory.systemTemp.createTempSync("agent_chat_ll_").path);
+    });
+
+    test("runs confined and collects what was denied", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final outside = p.join(home.path, "outside.txt");
+      File(outside).writeAsStringSync("keep\n");
+      final result = await shell
+          .start("echo try > $outside",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      if (Platform.isLinux && await helper.prefixFor(sandbox) != null) {
+        expect(result.returnCode, isNot(0),
+            reason: "out=${result.output} info=${result.exceptionInfo} "
+                "viol=${result.violations}");
+        expect(result.violations, isNotEmpty,
+            reason: "rc=${result.returnCode} out=${result.output} "
+                "info=${result.exceptionInfo}");
+        expect(result.violations.first, contains("outside.txt"));
+        expect(File(outside).readAsStringSync(), "keep\n");
+      } else {
+        // Fail closed: no sandbox, no run.
+        expect(result.returnCode, -1);
+        expect(result.exceptionInfo, contains("sandbox"));
+      }
+    });
+
+    test("a read runs confined without a violation", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final available = Platform.isLinux && await helper.prefixFor(sandbox) != null;
+      if (!available) return;
+      final result = await shell
+          .start("echo confined",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.output, "confined\n");
+      expect(result.violations, isEmpty);
+    });
+
+    test("does not touch the session shell's state", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      await shell
+          .start("export SANDBOXED=yes",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 5), sandbox: sandbox)
+          .result;
+      final after = await shell
+          .start(r"echo ${SANDBOXED:-unset}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 5))
+          .result;
+      expect(after.output.trim(), "unset",
+          reason: "the sandboxed run was its own subshell; the session's "
+              "environment carries nothing from it");
     });
   });
 }

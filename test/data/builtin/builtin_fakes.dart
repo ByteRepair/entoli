@@ -131,6 +131,9 @@ class FakeShell extends Shell {
   /// Whether each of [ran] asked for a restart, in step with it.
   final List<bool> restarts = [];
 
+  /// The sandbox each of [ran] was handed, in step with it.
+  final List<CommandSandbox?> sandboxes = [];
+
   final List<String> killed = [];
 
   /// The sessions [closeSession] ended, in the order they ended.
@@ -156,7 +159,8 @@ class FakeShell extends Shell {
       Map<String, String>? environment,
       bool oneShot = false,
       bool restart = false,
-      String? project}) {
+      String? project,
+      CommandSandbox? sandbox}) {
     ran.add(command);
     cwds.add(cwd);
     homes.add(home);
@@ -164,6 +168,7 @@ class FakeShell extends Shell {
     environments.add(environment);
     oneShots.add(oneShot);
     restarts.add(restart);
+    sandboxes.add(sandbox);
     return _FakeRun(this, command);
   }
 }
