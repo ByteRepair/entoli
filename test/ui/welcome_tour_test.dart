@@ -107,19 +107,6 @@ void main() {
   });
 
   group("in settings", () {
-    testWidgets("Welcome is the first item in the list", (tester) async {
-      await app.pump(tester, const SettingsPage());
-
-      expect(
-        tester
-            .widgetList<ListTile>(find.byType(ListTile))
-            .map((t) => (t.title as Text?)?.data),
-        contains("Welcome"),
-      );
-      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
-      expect((tiles.first.title as Text).data, "Welcome");
-    });
-
     testWidgets("picked wide, the tour fills the pane", (tester) async {
       useWindow(tester, const Size(1200, 800));
       await pumpSettings(tester, app, SettingsCategory.welcome);

@@ -34,7 +34,16 @@ edited from its settings page, and a name set there wins over one set in
 rewrite themselves under the new name on the next save.
 
 The settings page is fifteen categories, picked from a panel beside it or, below
-`navBreakpoint`, from a page of their own. **Welcome** leads the list and is the
+`navBreakpoint`, from a page of their own. The order is the `SettingsCategory`
+enum's, which is also where the groupings live: a `dividerAbove` on the enum
+says a group ends before that category, and the list draws a `Divider` ahead of
+the tile — one source of truth for both. The six drawn groups: **General,
+Providers, On-device, LLMs** (the app and the plumbing that answers a chat);
+**Memory, Voice, Reminders** (what a conversation does beyond the text);
+**Agents, Skills** (what a message addresses by name); **Terminal, Byte
+Repair** (where commands run); **Sync, Data** (the device and all of it at
+once); and **Welcome, About** (the app rather than anything it does), last.
+**Welcome** is the
 tour rather than a list of sections — `welcome_page.dart`, not this file — so
 `_categoryBody` renders it whole where every other category is
 `ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
