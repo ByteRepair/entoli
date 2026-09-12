@@ -44,32 +44,41 @@ import "terminal_settings.dart";
 import "voice_settings.dart";
 import "welcome_page.dart";
 
-/// The page's categories, in the order they are offered. Everything an
-/// endpoint is is Providers, everything a model is asked to do is LLMs, General
-/// is the app itself, Data is all of it at once — the chats, the settings and
-/// the workspaces as one file to keep — and About is the app rather than
-/// anything it does, which is why it is last.
+/// The page's categories, in the order they are offered and the groups they
+/// are offered in. General, Providers, On-device and LLMs are the app and the
+/// plumbing that answers a chat — everything an endpoint is, where a model can
+/// run without a network, and everything a model is asked to do; Memory, Voice
+/// and Reminders are what a conversation does beyond the text; Agents and
+/// Skills are what a message addresses by name; Terminal and Byte Repair are
+/// where commands run; Sync and Data are the device and all of it at once —
+/// the chats, the settings and the workspaces as one file to keep; and
+/// Welcome and About are the app rather than anything it does, which is why
+/// they are last.
 enum SettingsCategory {
-  welcome("Welcome", Icons.waving_hand),
   general("General", Icons.tune),
-  terminal("Terminal", Icons.terminal),
+  providers("Providers", Icons.cloud_outlined),
   onDevice("On-device", Icons.memory),
+  llms("LLMs", Icons.auto_awesome_outlined),
+  memory("Memory", Icons.psychology, dividerAbove: true),
   voice("Voice", Icons.graphic_eq),
   reminders("Reminders", Icons.alarm),
+  agents("Agents", Icons.person_outline, dividerAbove: true),
   skills("Skills", Icons.extension),
-  agents("Agents", Icons.person_outline),
+  terminal("Terminal", Icons.terminal, dividerAbove: true),
   byteRepair("Byte Repair", Icons.verified_user),
-  sync("Sync", Icons.sync),
-  providers("Providers", Icons.cloud_outlined),
-  llms("LLMs", Icons.auto_awesome_outlined),
-  memory("Memory", Icons.psychology),
+  sync("Sync", Icons.sync, dividerAbove: true),
   data("Data", Icons.inventory_2_outlined),
+  welcome("Welcome", Icons.waving_hand, dividerAbove: true),
   about("About", Icons.info_outline);
 
-  const SettingsCategory(this.label, this.icon);
+  const SettingsCategory(this.label, this.icon, {this.dividerAbove = false});
 
   final String label;
   final IconData icon;
+
+  /// A divider drawn above the category's tile, where one group of categories
+  /// ends and another begins.
+  final bool dividerAbove;
 }
 
 class SettingsPage extends StatefulWidget {
@@ -262,7 +271,8 @@ class _Categories extends StatelessWidget {
         child: SafeArea(
           child: ListView(
             children: [
-              for (final category in SettingsCategory.values)
+              for (final category in SettingsCategory.values) ...[
+                if (category.dividerAbove) const Divider(),
                 ListTile(
                   selected: category == selected,
                   leading: Icon(category.icon),
@@ -270,6 +280,7 @@ class _Categories extends StatelessWidget {
                   trailing: selected == null ? const Icon(Icons.chevron_right) : null,
                   onTap: () => onSelect(category),
                 ),
+              ],
             ],
           ),
         ),
