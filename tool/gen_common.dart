@@ -33,6 +33,8 @@ List<String> allFiles(Directory dir) {
 String sha256Of(String content) =>
     crypto.sha256.convert(utf8.encode(content)).toString();
 
+String sha256OfBytes(List<int> bytes) => crypto.sha256.convert(bytes).toString();
+
 void sortByProject(List<BundledPromptFile> entries) {
   entries.sort((a, b) {
     final c = a.project.compareTo(b.project);
@@ -50,6 +52,7 @@ void writeGenerated(String path, StringBuffer buf) {
 
 /// Emits `const $varName = <BundledPromptFile>[ ... ]` from [entries],
 /// each as `BundledPromptFile(project, name, relativePath, sha256, content)`.
+/// A binary entry adds the flag and carries base64 — see the field's note.
 void emitPromptFileList(StringBuffer buf, String varName,
     List<BundledPromptFile> entries) {
   buf.writeln("const $varName = <BundledPromptFile>[");
@@ -59,7 +62,12 @@ void emitPromptFileList(StringBuffer buf, String varName,
     buf.writeln("      ${stringLiteral(e.name)},");
     buf.writeln("      ${stringLiteral(e.relativePath)},");
     buf.writeln("      ${stringLiteral(e.sha256)},");
-    buf.writeln("      ${stringLiteral(e.content)}),");
+    if (e.binary) {
+      buf.writeln("      ${stringLiteral(e.content)},");
+      buf.writeln("      binary: true),");
+    } else {
+      buf.writeln("      ${stringLiteral(e.content)}),");
+    }
   }
   buf.writeln("];");
   buf.writeln();

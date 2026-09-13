@@ -48,12 +48,12 @@ Future<void> _installFor(AppConfig config, String project) async {
     try {
       final target = fs.file(dest);
       if (await target.exists()) {
-        final onDisk = await target.readAsString();
-        final diskHash = sha256.convert(utf8.encode(onDisk)).toString();
+        final onDisk = await target.readAsBytes();
+        final diskHash = sha256.convert(onDisk).toString();
         if (diskHash == file.sha256) continue;
       }
       await target.create(recursive: true);
-      await target.writeAsString(file.content);
+      await target.writeAsBytes(Uint8List.fromList(file.bytes));
     } catch (e) {
       logFailure("skills", "could not write ${file.name}/${file.relativePath}", e);
     }
@@ -86,14 +86,21 @@ Future<void> _deleteStrays(
   }
 }
 
-/// The licence of the bundled skill-creator, which is Apache-2.0 and carries
-/// its own copy in the tree. Read from the embedded data rather than the asset
-/// bundle.
+/// One licence entry per bundled skill that carries its own `LICENSE.txt` —
+/// the fetched ones are Anthropic's and Apache-2.0, and the notice has to
+/// travel with the skill wherever it is redistributed. Read from the
+/// embedded data rather than the asset bundle, and rendered by the licence
+/// page About opens.
 void registerBundledSkillLicences() {
+  final groups = <String, String>{};
+  for (final file in bundledSkillFiles) {
+    if (file.relativePath != "LICENSE.txt") continue;
+    groups[file.name] = utf8.decode(file.bytes);
+  }
+  final names = groups.keys.toList()..sort();
   LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(
-      const ["skill-creator"],
-      bundledSkillLicence,
-    );
+    for (final name in names) {
+      yield LicenseEntryWithLineBreaks([name], groups[name]!);
+    }
   });
 }
