@@ -1,6 +1,7 @@
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:collection/collection.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
@@ -10,6 +11,7 @@ import "../../data/prompts/skill_validate.dart";
 import "../../domain/frontmatter.dart";
 import "../../providers.dart";
 import "../chat/widgets/reply_style.dart";
+import "../widgets/formatting.dart" show formatSize;
 
 /// A full page showing one skill the library offers: its description, the
 /// SKILL.md body rendered, its files, and — where its frontmatter does not
@@ -38,7 +40,13 @@ class SkillViewPage extends ConsumerStatefulWidget {
 }
 
 class _SkillViewPageState extends ConsumerState<SkillViewPage> {
+  /// What the page shows once loaded, derived in [_load] and not in [build]:
+  /// the parse, the problems and the sort are one answer per skill, and the
+  /// file list is not built to change while the page is open.
   List<(String, Uint8List)>? _entries;
+  Frontmatter? _parsed;
+  List<String> _problems = const [];
+  List<(String, Uint8List)> _otherFiles = const [];
   bool _loading = true;
 
   @override
@@ -52,8 +60,31 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
     final entries = await skillSourceEntries(config, widget.name,
         project: widget.project);
     if (!mounted) return;
+    var problems = const <String>[];
+    var otherFiles = const <(String, Uint8List)>[];
+    Frontmatter? parsed;
+    if (entries != null) {
+      final skillMd =
+          entries.where((e) => e.$1 == "SKILL.md").firstOrNull;
+      if (skillMd != null) {
+        parsed = Frontmatter.parse(utf8.decode(skillMd.$2));
+        problems = skillProblems(
+          name: parsed.name ?? widget.name,
+          description: parsed.description,
+          frontmatter: parsed.scalars,
+          folderName: widget.name,
+        );
+      }
+      otherFiles = entries
+          .where((e) => e.$1 != "SKILL.md")
+          .toList()
+        ..sort((a, b) => a.$1.compareTo(b.$1));
+    }
     setState(() {
       _entries = entries;
+      _parsed = parsed;
+      _problems = problems;
+      _otherFiles = otherFiles;
       _loading = false;
     });
   }
@@ -83,20 +114,8 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
         ),
       );
     }
-    final skillMd =
-        entries.firstWhere((e) => e.$1 == "SKILL.md", orElse: () => ("", Uint8List(0))).$2;
-    final parsed = Frontmatter.parse(utf8.decode(skillMd));
-    final name = parsed.name ?? widget.name;
-    final problems = entries.any((e) => e.$1 == "SKILL.md")
-        ? skillProblems(
-            name: name,
-            description: parsed.description,
-            frontmatter: parsed.scalars,
-            folderName: widget.name,
-          )
-        : <String>[];
-    final otherFiles =
-        entries.where((e) => e.$1 != "SKILL.md").toList()..sort((a, b) => a.$1.compareTo(b.$1));
+    final parsed = _parsed;
+    final name = parsed?.name ?? widget.name;
 
     return Scaffold(
       appBar: AppBar(title: Text(name)),
@@ -104,15 +123,15 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
         padding: const EdgeInsets.all(16),
         children: [
           Text("${widget.origin} · ${widget.name}", style: theme.textTheme.bodySmall),
-          if (parsed.description != null) ...[
+          if (parsed?.description case final description?) ...[
             const SizedBox(height: 4),
-            Text(parsed.description!, style: theme.textTheme.bodyMedium),
+            Text(description, style: theme.textTheme.bodyMedium),
           ],
-          if (problems.isNotEmpty) ...[
+          if (_problems.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _ProblemsCard(problems: problems),
+            _ProblemsCard(problems: _problems),
           ],
-          if (parsed.metadata.isNotEmpty) ...[
+          if (parsed != null && parsed.metadata.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text("Metadata", style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
@@ -126,22 +145,23 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
           const SizedBox(height: 24),
           Text("SKILL.md", style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainer,
-              borderRadius: BorderRadius.circular(12),
+          if (parsed != null)
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: MarkdownBody(
+                data: parsed.body,
+                styleSheet: replyStyleSheet(theme),
+              ),
             ),
-            padding: const EdgeInsets.all(16),
-            child: MarkdownBody(
-              data: parsed.body,
-              styleSheet: replyStyleSheet(theme),
-            ),
-          ),
-          if (otherFiles.isNotEmpty) ...[
+          if (_otherFiles.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text("Files", style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
-            for (final (path, bytes) in otherFiles)
+            for (final (path, bytes) in _otherFiles)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
@@ -152,7 +172,7 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
                     Expanded(
                       child: Text(path, style: theme.textTheme.bodyMedium),
                     ),
-                    Text(_sizeLabel(bytes),
+                    Text(formatSize(bytes.length),
                         style: theme.textTheme.bodySmall),
                   ],
                 ),
@@ -161,11 +181,6 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
         ],
       ),
     );
-  }
-
-  String _sizeLabel(Uint8List bytes) {
-    if (bytes.length < 1024) return "${bytes.length} B";
-    return "${(bytes.length / 1024).toStringAsFixed(1)} KB";
   }
 }
 

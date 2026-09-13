@@ -99,12 +99,7 @@ class BundledPrompts implements PromptSource {
             skillMd.content,
             config.fs.path.join(baseDir, skillName),
           );
-          final problems = skillProblems(
-            name: document.frontmatter["name"] ?? skillName,
-            description: document.description,
-            frontmatter: document.frontmatter,
-            folderName: skillName,
-          );
+          final problems = skillDocumentProblems(document, skillName);
           if (problems.isNotEmpty) {
             logFailure("skills",
                 "bundled skill $skillName skipped: ${problems.join("; ")}");
@@ -204,12 +199,7 @@ Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String director
       if (!await file.exists()) continue;
       final document =
           _skillDocument(folderName, await file.readAsString(), entity.path);
-      final problems = skillProblems(
-        name: document.frontmatter["name"] ?? folderName,
-        description: document.description,
-        frontmatter: document.frontmatter,
-        folderName: folderName,
-      );
+      final problems = skillDocumentProblems(document, folderName);
       if (problems.isNotEmpty) {
         logFailure("skills", "$folderName skipped: ${problems.join("; ")}");
         continue;

@@ -29,8 +29,7 @@ class SkillImportException implements Exception {
 
 /// A skill archive, decoded and named, not yet written anywhere.
 class SkillPackage {
-  SkillPackage(this.name, this.entries,
-      {this.description, this.body = "", this.metadata = const {}});
+  SkillPackage(this.name, this.entries, {this.description, this.body = ""});
 
   /// The frontmatter's `name` where the SKILL.md has one, the folder it was
   /// packaged from otherwise. What a skill is *called* and where it *lands*
@@ -42,9 +41,6 @@ class SkillPackage {
   /// the producer does not care (the packager zips and discards).
   final String? description;
   final String body;
-
-  /// The nested `metadata:` map, parsed once with the rest.
-  final Map<String, String> metadata;
 
   /// Paths as they sit inside the skill's own directory — the top-level
   /// folder a zip of one adds is already taken off, so where it lands is not
@@ -130,9 +126,7 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
     throw SkillImportException(problems.join("; "));
   }
   return SkillPackage(name, entries,
-      description: document.description,
-      body: document.body,
-      metadata: document.metadata);
+      description: document.description, body: document.body);
 }
 
 /// One directory under `skills/` and nothing else: a name holding a separator

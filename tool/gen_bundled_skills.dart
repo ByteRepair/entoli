@@ -79,12 +79,7 @@ List<BundledPromptFile> _collectSkills(Directory skillsRoot, String project) {
     final skillMd = File("${skillDir.path}/SKILL.md");
     if (skillMd.existsSync()) {
       final parsed = Frontmatter.parse(skillMd.readAsStringSync());
-      final problems = skillProblems(
-        name: parsed.name ?? skillName,
-        description: parsed.description,
-        frontmatter: parsed.scalars,
-        folderName: skillName,
-      );
+      final problems = skillFrontmatterProblems(parsed, skillName);
       if (problems.isNotEmpty) {
         stderr.writeln(
             "bundled skill $project/$skillName does not conform to the "

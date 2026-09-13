@@ -14,10 +14,14 @@ import "skill_validate.dart";
 /// Reads the skill directory at [dir] (an absolute path on the config's
 /// filesystem) and builds a [SkillPackage] from it. The [name] overrides the
 /// directory's folder name where one is given; otherwise the folder is the
-/// name, unless the SKILL.md frontmatter names one. Throws [SkillImportException]
-/// where the SKILL.md does not conform — the same refusal the settings import
-/// gives, so a draft the `create_skill` tool packages is held to the spec
-/// before the user is ever offered a card.
+/// name, unless the SKILL.md frontmatter names one. Throws
+/// [SkillImportException] where the SKILL.md does not conform — the
+/// `create_skill` tool's packageSkill is the one caller, and the agent words
+/// the refusal.
+///
+/// [prompt_export.dart] deliberately does not ride this: export packages
+/// whatever sits in the folder, since that is the way out for a skill the
+/// loader skipped, and it walks the directory itself through `archiveOf`.
 Future<SkillPackage> packageSkillDirectory(
     FileSystem fs, String dir, String? name) async {
   final path = fs.path;
@@ -36,18 +40,15 @@ Future<SkillPackage> packageSkillDirectory(
     throw SkillImportException(problems.join("; "));
   }
 
-  final entries = <(String, Uint8List)>[];
   final files = <(String, File)>[];
   await _collectFiles(fs, dir, dir, files);
   final contents = await Future.wait([for (final (_, f) in files) f.readAsBytes()]);
-  for (var i = 0; i < files.length; i++) {
-    entries.add((files[i].$1, contents[i]));
-  }
+  final entries = [
+    for (var i = 0; i < files.length; i++) (files[i].$1, contents[i]),
+  ];
 
   return SkillPackage(skillName, entries,
-      description: parsed.description,
-      body: parsed.body,
-      metadata: parsed.metadata);
+      description: parsed.description, body: parsed.body);
 }
 
 Future<void> _collectFiles(FileSystem fs, String dir, String root,
@@ -63,7 +64,7 @@ Future<void> _collectFiles(FileSystem fs, String dir, String root,
 }
 
 /// Encodes a [SkillPackage] as a `.skill` zip — the same format
-/// `parseSkillPackage` reads and `installSkillPackage` writes from.
+/// [parseSkillPackage] reads and `installSkillPackage` writes from.
 Uint8List packageSkillBytes(SkillPackage package) {
   final archive = Archive();
   for (final (name, data) in package.entries) {

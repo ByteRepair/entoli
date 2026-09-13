@@ -5,18 +5,18 @@
 import "dart:convert";
 import "dart:typed_data";
 
-import "package:fs_shim/fs.dart";
-
 import "../../core/config.dart";
 import "../../data/prompts/bundled_skill_data.dart"
     show bundledSkillFiles, bundledAgentFiles;
+import "../../data/zip.dart" show archiveOf;
 import "../../domain/backup_handoff.dart";
 import "../../domain/bundled_prompt_file.dart"
     show BundledPromptFile, bundledPromptFileOf, bundledPromptFilesOf;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
-import "skill_import.dart";
-import "skill_package.dart";
+import "skill_import.dart"
+    show SkillImportException, SkillPackage, skillDirectory, agentFilePath;
+import "skill_package.dart" show packageSkillBytes;
 
 /// What the exported file is called: a `.skill` zip for a skill — the format
 /// `parseSkillPackage` reads — and the agent's own `.md` otherwise.
@@ -84,11 +84,11 @@ Future<List<(String, Uint8List)>?> skillSourceEntries(
   String name, {
   String? project,
 }) async {
-  final own = await _entriesFromDirectory(config, name, project: project);
+  final own = await _skillEntries(config, name, project: project);
   if (own != null) return own;
   if (project != null && project != defaultProjectDir) {
     final inherited =
-        await _entriesFromDirectory(config, name, project: defaultProjectDir);
+        await _skillEntries(config, name, project: defaultProjectDir);
     if (inherited != null) return inherited;
   }
   final bundled = bundledPromptFileOf(bundledSkillFiles, project, name);
@@ -96,11 +96,14 @@ Future<List<(String, Uint8List)>?> skillSourceEntries(
   return [
     for (final file in bundledPromptFilesOf(
         bundledSkillFiles, bundled.project, bundled.name))
-      (file.relativePath, Uint8List.fromList(utf8.encode(file.content))),
+      (file.relativePath, utf8.encode(file.content)),
   ];
 }
 
-Future<List<(String, Uint8List)>?> _entriesFromDirectory(
+/// The files under a skill's directory as relative-path bytes pairs, through
+/// the one walker, the way [archiveOf] names them. Directories are left out:
+/// [parseSkillPackage] takes files alone, so the two shapes agree.
+Future<List<(String, Uint8List)>?> _skillEntries(
   AppConfig config,
   String name, {
   String? project,
@@ -108,29 +111,26 @@ Future<List<(String, Uint8List)>?> _entriesFromDirectory(
   final fs = config.fs;
   final dir = skillDirectory(config, name, project: project);
   if (!await fs.directory(dir).exists()) return null;
-  return _collectSkillFiles(fs, dir, dir, []);
-}
-
-Future<List<(String, Uint8List)>> _collectSkillFiles(
-    FileSystem fs, String dir, String root, List<(String, Uint8List)> out) async {
-  final path = fs.path;
-  await for (final entity in fs.directory(dir).list()) {
-    if (entity is File) {
-      final rel = path.relative(entity.path, from: root);
-      out.add((rel, Uint8List.fromList(await entity.readAsBytes())));
-    } else if (entity is Directory) {
-      await _collectSkillFiles(fs, entity.path, root, out);
-    }
-  }
-  return out;
+  final archive = await archiveOf(fs, [dir], base: dir);
+  return [
+    for (final file in archive)
+      if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),
+  ];
 }
 
 /// A `.skill` zip of the skill directory at [dir] under its own folder — the
 /// shape the import names a skill by, so one without a `name:` frontmatter
-/// in its SKILL.md round-trips to the name it had here.
+/// in its SKILL.md round-trips to the name it had here. No validation: export
+/// is the way out for a folder the loader skipped, whatever is in it.
 Future<Uint8List> _packageSkill(AppConfig config, String dir) async {
-  final fromDir = await packageSkillDirectory(config.fs, dir, null);
-  return _zipUnderFolder(config.fs.path.basename(dir), fromDir.name, fromDir.entries);
+  final fs = config.fs;
+  final archive = await archiveOf(fs, [dir], base: dir);
+  final entries = [
+    for (final file in archive)
+      if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),
+  ];
+  return _zipUnderFolder(
+      fs.path.basename(dir), fs.path.basename(dir), entries);
 }
 
 /// [entries] under one folder named [folder], in a package called [name].

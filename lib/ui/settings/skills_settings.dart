@@ -90,10 +90,20 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     final dir = config.fs
         .directory(config.promptsDir(CompletionKind.skill, project: widget.project));
     if (await dir.exists()) {
+      final folders = <(String, String)>[];
       await for (final entity in dir.list()) {
         if (entity is! Directory) continue;
         final folderName = config.fs.path.basename(entity.path);
-        problems[folderName] = await _folderProblems(config, entity.path, folderName);
+        folders.add((folderName, entity.path));
+      }
+      // The reads are independent; a browser's IndexedDB makes each one a
+      // round trip, so they go out together.
+      final answers = await Future.wait([
+        for (final (folderName, path) in folders)
+          _folderProblems(config, path, folderName),
+      ]);
+      for (var i = 0; i < folders.length; i++) {
+        problems[folders[i].$1] = answers[i];
       }
     }
     if (mounted) setState(() => _userSkills = problems);
@@ -109,13 +119,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     final file = fs.file(fs.path.join(path, "SKILL.md"));
     if (!await file.exists()) return ["no SKILL.md in it"];
     try {
-      final parsed = Frontmatter.parse(await file.readAsString());
-      return skillProblems(
-        name: parsed.name ?? folderName,
-        description: parsed.description,
-        frontmatter: parsed.scalars,
-        folderName: folderName,
-      );
+      return skillFrontmatterProblems(
+          Frontmatter.parse(await file.readAsString()), folderName);
     } catch (e) {
       return ["SKILL.md could not be read: $e"];
     }
@@ -197,15 +202,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       ? reloadAllPromptLibraries(ref)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
-  Future<void> _export(PromptDocument skill) => _guard(() => exportAndSave(
-        ref.read(appConfigProvider),
-        ref.read(backupHandoffProvider),
-        CompletionKind.skill,
-        skill.name,
-        project: widget.project,
-      ));
-
-  Future<void> _exportFolder(String name) => _guard(() => exportAndSave(
+  Future<void> _export(String name) => _guard(() => exportAndSave(
         ref.read(appConfigProvider),
         ref.read(backupHandoffProvider),
         CompletionKind.skill,
@@ -213,9 +210,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
         project: widget.project,
       ));
 
-  void _open(PromptDocument skill) => _openNamed(skill.name);
-
-  void _openNamed(String name, {String? origin}) =>
+  void _open(String name, {String? origin}) =>
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => SkillViewPage(
           name: name,
@@ -248,11 +243,10 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     final skills =
         ref.watch(promptLibraryProvider(widget.project)).entries(CompletionKind.skill);
     final userSkills = _userSkills;
+    final loaded = {for (final skill in skills) skill.name};
     final notLoaded = [
       for (final entry in userSkills?.entries ?? const <MapEntry<String, List<String>>>[])
-        if (entry.value.isNotEmpty &&
-            !skills.any((s) => s.name == entry.key))
-          entry.key,
+        if (entry.value.isNotEmpty && !loaded.contains(entry.key)) entry.key,
     ];
     final description = !_writable
         ? "Named procedures the agent can load in this project, offered as "
@@ -317,7 +311,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       dense: true,
       title: Text(skill.name),
       subtitle: skill.description == null ? null : Text(skill.description!),
-      onTap: () => _open(skill),
+      onTap: () => _open(skill.name),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -347,7 +341,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
           IconButton(
             icon: const Icon(Icons.download),
             tooltip: "Export ${skill.name}",
-            onPressed: () => _export(skill),
+            onPressed: () => _export(skill.name),
           ),
         ],
       ),
@@ -363,7 +357,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
         dense: true,
         title: Text(name),
         subtitle: const Text("Not loaded"),
-        onTap: () => _openNamed(name, origin: "Not loaded"),
+        onTap: () => _open(name, origin: "Not loaded"),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -380,7 +374,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
             IconButton(
               icon: const Icon(Icons.download),
               tooltip: "Export $name",
-              onPressed: () => _exportFolder(name),
+              onPressed: () => _export(name),
             ),
           ],
         ),
