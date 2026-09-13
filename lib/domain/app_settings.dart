@@ -58,6 +58,7 @@ class AppSettings {
     this.localModelKvCachePrompts,
     this.deviceName,
     this.syncRelayUrl,
+    this.syncKeepAlive = false,
     this.turnUrl,
     this.turnUsername,
     this.turnRetries = defaultTurnRetries,
@@ -256,6 +257,13 @@ class AppSettings {
   /// Empty or null means relay is off and only LAN / manual paste work.
   String? syncRelayUrl;
 
+  /// Whether a connected peer holds the process open off screen, as a
+  /// foreground service with a notification naming the connected devices and
+  /// a Disconnect action. Off by default: the cost is a wake lock and a
+  /// persistent notification for as long as a device is connected. Android
+  /// only; a no-op everywhere a foreground service cannot be started.
+  bool syncKeepAlive;
+
   /// TURN server URL for NAT traversal. Bring-your-own; STUN defaults are
   /// public. Null means no TURN, so symmetric-NAT pairs fail honestly.
   String? turnUrl;
@@ -385,6 +393,7 @@ class AppSettings {
             json["localModelKvCacheChats"]) as int?,
         deviceName: _orNull(json["deviceName"] as String?),
         syncRelayUrl: _orNull(json["syncRelayUrl"] as String?),
+        syncKeepAlive: json["syncKeepAlive"] as bool? ?? false,
         turnUrl: _orNull(json["turnUrl"] as String?),
         turnUsername: _orNull(json["turnUsername"] as String?),
         turnRetries:
@@ -474,6 +483,7 @@ class AppSettings {
         localModelKvCachePrompts: localModelKvCachePrompts,
         deviceName: deviceName,
         syncRelayUrl: syncRelayUrl,
+        syncKeepAlive: syncKeepAlive,
         turnUrl: turnUrl,
         turnUsername: turnUsername,
         turnRetries: turnRetries,
@@ -534,6 +544,7 @@ class AppSettings {
         "localModelKvCachePrompts": localModelKvCachePrompts,
       if (deviceName != null) "deviceName": deviceName,
       if (syncRelayUrl != null) "syncRelayUrl": syncRelayUrl,
+      if (syncKeepAlive) "syncKeepAlive": syncKeepAlive,
       if (turnUrl != null) "turnUrl": turnUrl,
       if (turnUsername != null) "turnUsername": turnUsername,
       // Written only when not the default, for the same reason the memory

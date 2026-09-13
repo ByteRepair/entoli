@@ -246,6 +246,10 @@ class AppSession {
     await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
+    // And for sync, behind the keep-alive setting: it holds the process open
+    // while a paired device is connected, which is what keeps the channel
+    // through the screen going dark.
+    container.read(syncKeepAliveProvider);
     // The same again for sync: it holds a controller open per chat a paired
     // device is watching, so a turn is visible there, and runs a teleported
     // prompt here.

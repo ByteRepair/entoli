@@ -217,4 +217,21 @@ void main() {
       expect(hub.pairing.value, isNull);
     });
   });
+
+  group("keeping connected off screen", () {
+    testWidgets("the switch writes the setting", (tester) async {
+      await open(tester);
+
+      await scrollTo(tester, find.text("Keep connected off screen"));
+      await tester.tap(find.text("Keep connected off screen"));
+      await settleIo(tester);
+
+      expect(AppSettings.load(app.config).syncKeepAlive, isTrue);
+
+      await tester.tap(find.text("Keep connected off screen"));
+      await settleIo(tester);
+
+      expect(AppSettings.load(app.config).syncKeepAlive, isFalse);
+    });
+  });
 }

@@ -7,10 +7,12 @@
 /// user a way to stop it from outside the app.
 library;
 
-/// What the process is being held open for. Three, because they are three
-/// different things to stop — and because Android insists the one holding the
-/// microphone be a service of a different type from the two that are not.
-enum BackgroundJob { turns, voice, download, prefill }
+import "package:flutter/foundation.dart" show listEquals;
+
+/// What the process is being held open for, each one a different thing to
+/// stop — and Android insists the one holding the microphone be a service of
+/// a different type from the others that are not.
+enum BackgroundJob { turns, voice, download, prefill, sync }
 
 /// A download worth telling the user about. Unlike the other two, its wording
 /// cannot live in Kotlin: which model is being fetched is the catalog's.
@@ -24,6 +26,25 @@ class DownloadNotice {
   final String label;
   final int received;
   final int total;
+}
+
+/// The connected sync peers, while the keep-alive setting is on. Names rather
+/// than a count and a rendering of them: the count and the line the
+/// notification words from it are the one renderer's, which is Kotlin's —
+/// the same shape `DownloadNotice` keeps, a label rather than a layout. By
+/// value, so the keep-alive can answer "is this the same notice as last time"
+/// without crossing the channel to ask.
+class SyncNotice {
+  const SyncNotice({required this.names});
+
+  final List<String> names;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SyncNotice && listEquals(other.names, names);
+
+  @override
+  int get hashCode => Object.hashAll(names);
 }
 
 /// The one caller of [BackgroundWork.downloading].
@@ -87,6 +108,11 @@ abstract interface class BackgroundWork {
   /// one rather than the silent hold the others keep. The model names it, so
   /// its wording comes from here rather than Kotlin, the way a download's does.
   Future<void> prefilling(String? model);
+
+  /// The connected peers to hold the process open for, or null when there are
+  /// none — or when the keep-alive setting is off, which is the same answer:
+  /// the hold is the setting's, and reporting through it is how both say stop.
+  Future<void> syncing(SyncNotice? notice);
 
   /// The user said stop from outside the app — each notification has a button,
   /// and this says which was pressed. Whoever owns that kind of work stops it,

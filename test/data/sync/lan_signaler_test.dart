@@ -34,7 +34,6 @@ void main() {
   });
 
   tearDown(() async {
-    client.close();
     await host.close();
   });
 

@@ -24,7 +24,7 @@ import "peers.dart";
 import "sync_byte_cache.dart";
 
 // The two extracted pieces' types are part of what a `SyncHub` hands out.
-export "peers.dart" show PeerState, PeerStatus;
+export "peers.dart" show PeerState, PeerStatus, SyncPeers;
 export "pairing.dart" show PairingActivity, PairingStage;
 export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;

@@ -128,6 +128,12 @@ class SyncPeers {
 
   bool hasLive(String? deviceId) => _live.containsKey(deviceId);
 
+  /// Whether [status] is a connection — held, or being established. The
+  /// answer is this class's because the statuses are: a dial counts, since
+  /// the moment a hold is wanted most is the one before the channel exists.
+  static bool connected(PeerStatus status) =>
+      status == PeerStatus.online || status == PeerStatus.connecting;
+
   void adopt(LivePeer peer) {
     _live[peer.deviceId]?.close();
     _live[peer.deviceId] = peer;
