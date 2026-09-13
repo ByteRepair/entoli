@@ -22,6 +22,7 @@ import "artifact_tool.dart";
 import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
+import "../prompts/skill_import.dart" show SkillImportException;
 import "skill_create_tool.dart";
 import "skill_tool.dart";
 import "sub_agent.dart";
@@ -1487,9 +1488,15 @@ class BuiltinAgent {
             return ShellResult.failed(
                 "The directory '$path' has no SKILL.md. A skill needs one.");
           }
-          final result = await packageSkill!(args.path, args.name);
-          installId = result.installId;
-          skillName = result.name;
+          try {
+            final result = await packageSkill!(args.path, args.name);
+            installId = result.installId;
+            skillName = result.name;
+          } on SkillImportException catch (e) {
+            return ShellResult.failed(
+                "SKILL.md does not conform to the Agent Skills spec: $e. "
+                "Fix the frontmatter and call $createSkillToolName again.");
+          }
           return const ShellResult(returnCode: 0, output: "");
         });
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {

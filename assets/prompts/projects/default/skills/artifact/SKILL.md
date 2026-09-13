@@ -1,4 +1,5 @@
 ---
+name: artifact
 description: Present a result as an interactive HTML artifact
 ---
 You are producing an artifact — an HTML page the user can view in the app.

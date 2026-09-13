@@ -1,5 +1,6 @@
 import "package:collection/collection.dart";
 
+import "frontmatter.dart";
 import "models.dart";
 
 /// One skill or agent, exactly as Entoli stores it: YAML frontmatter, then the
@@ -10,6 +11,7 @@ class PromptDocument {
     required this.name,
     required this.frontmatter,
     required this.body,
+    this.metadata = const {},
   });
 
   final CompletionKind kind;
@@ -17,18 +19,23 @@ class PromptDocument {
   final Map<String, String> frontmatter;
   final String body;
 
+  /// The nested `metadata:` map — the spec's extension point, and where
+  /// Entoli's own per-client keys live (`argument-hint`, `user-invocable`,
+  /// `disable-model-invocation`).
+  final Map<String, String> metadata;
+
   String? get description => frontmatter["description"];
 
-  String? get argumentHint => frontmatter["argument-hint"];
+  String? get argumentHint => metadata["argument-hint"];
 
   /// Whether the `/` menu offers it. False is the model's half alone: a skill
   /// the user can only reach by the model deciding to load it.
-  bool get userInvocable => frontmatter["user-invocable"]?.toLowerCase() != "false";
+  bool get userInvocable => metadata["user-invocable"]?.toLowerCase() != "false";
 
   /// Whether the model may load it through the `skill` tool. False is the
   /// user's half alone: the tool refuses it, reserved for `/name`.
   bool get modelInvocable =>
-      frontmatter["disable-model-invocation"]?.toLowerCase() != "true";
+      metadata["disable-model-invocation"]?.toLowerCase() != "true";
 
   CompletionOption get option => CompletionOption(
         name: name,
@@ -36,44 +43,20 @@ class PromptDocument {
         argumentHint: argumentHint,
       );
 
-  /// Only the top-level scalars are read, because [description] is all the menu
-  /// shows. Everything else — nested permissions, tool maps — is dropped.
+  /// Only the top-level scalars and one nested `metadata:` map are read,
+  /// because `description` and the metadata keys are all the menu and the
+  /// tool gates need. Everything else — nested lists, deeper maps — is
+  /// dropped. The parsing lives in [Frontmatter], its own file so the
+  /// build-time generators can share it without the freezed models.
   factory PromptDocument.parse(CompletionKind kind, String name, String source) {
-    final (frontmatter, body) = _split(source.replaceAll("\r\n", "\n"));
+    final parsed = Frontmatter.parse(source.replaceAll("\r\n", "\n"));
     return PromptDocument(
       kind: kind,
       name: name,
-      frontmatter: frontmatter,
-      body: body,
+      frontmatter: parsed.scalars,
+      metadata: parsed.metadata,
+      body: parsed.body,
     );
-  }
-
-  static final _scalar = RegExp(r"^([A-Za-z0-9_.-]+):[ \t]*(.*)$");
-
-  static (Map<String, String>, String) _split(String text) {
-    if (!text.startsWith("---\n")) return (const {}, text.trim());
-    final close = text.indexOf("\n---", 3);
-    if (close < 0) return (const {}, text.trim());
-
-    final frontmatter = <String, String>{};
-    for (final line in text.substring(4, close + 1).split("\n")) {
-      final match = _scalar.firstMatch(line);
-      // An empty value opens a nested block; its indented lines never match.
-      if (match == null || match.group(2)!.isEmpty) continue;
-      frontmatter[match.group(1)!] = _unquote(match.group(2)!.trim());
-    }
-
-    final newline = text.indexOf("\n", close + 1);
-    return (frontmatter, newline < 0 ? "" : text.substring(newline + 1).trim());
-  }
-
-  static String _unquote(String value) {
-    if (value.length < 2) return value;
-    final first = value[0];
-    if ((first == '"' || first == "'") && value.endsWith(first)) {
-      return value.substring(1, value.length - 1);
-    }
-    return value;
   }
 
   /// The `.md` source for a document: a `description` frontmatter where there

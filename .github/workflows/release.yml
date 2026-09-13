@@ -1,10 +1,11 @@
 name: Release
 
-# Attaches the binaries a published release is downloaded from — a signed APK
-# per ABI, a signed App Bundle for Google Play, and a Linux AppImage — to the
-# tag they were built from, each with a provenance attestation beside it, and
-# uploads the bundle to Play. `release-build.yml` is what builds them and can
-# be run on its own; `pages.yml` answers the same event for the web app.
+# Attaches the binaries a published release is downloaded from — a signed App
+# Bundle for Google Play and a Linux AppImage — to the tag they were built
+# from, each with a provenance attestation beside it, and uploads the bundle to
+# Play. The release APKs are off; `debug-build.yml` builds an APK by hand.
+# `release-build.yml` is what builds them and can be run on its own;
+# `pages.yml` answers the same event for the web app.
 # See "Releasing" in CLAUDE.md.
 on:
   release:
