@@ -6,7 +6,6 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs.dart";
 
-import "../../core/config.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
@@ -121,8 +120,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       return;
     }
     final config = ref.read(appConfigProvider);
-    final file = config.fs.file(_agentPath(config, edit.name, project: widget.project));
-    final exists = await file.exists();
+    final exists = await config.fs
+        .file(agentFilePath(config, edit.name, project: widget.project))
+        .exists();
     if (!mounted) return;
     if (!replacing && exists) {
       final confirmed = await confirm(
@@ -135,23 +135,32 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       if (!confirmed) return;
     }
 
-    await _guard(() async {
-      final config = ref.read(appConfigProvider);
-      await platform.withWritableDir(
-        config.promptsDir(CompletionKind.agent, project: widget.project),
-        () async {
-          final file =
-              config.fs.file(_agentPath(config, edit.name, project: widget.project));
-          await file.create(recursive: true);
-          await file.writeAsString(
-              PromptDocument.toSource(description: edit.description, body: edit.body));
-        },
-      );
-      await _reload();
-      await _scan();
-      _say(replacing ? "Saved ${edit.name}." : "Added ${edit.name}.");
-    });
+    await _write(
+      edit.name,
+      PromptDocument.toSource(description: edit.description, body: edit.body),
+      replacing ? "Saved ${edit.name}." : "Added ${edit.name}.",
+    );
   }
+
+  /// The one write an agent page makes — editor save or import alike — with
+  /// the library reload and directory rescan that land it on the list.
+  /// The create is load-bearing: `writeAsString` does not make parents.
+  Future<void> _write(String name, String source, String said) =>
+      _guard(() async {
+        final config = ref.read(appConfigProvider);
+        await platform.withWritableDir(
+          config.promptsDir(CompletionKind.agent, project: widget.project),
+          () async {
+            final file =
+                config.fs.file(agentFilePath(config, name, project: widget.project));
+            await file.create(recursive: true);
+            await file.writeAsString(source);
+          },
+        );
+        await _reload();
+        await _scan();
+        _say(said);
+      });
 
   Future<void> _delete(PromptDocument agent) async {
     final confirmed = await confirm(
@@ -170,7 +179,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
         config.promptsDir(CompletionKind.agent, project: widget.project),
         () async {
           await config.fs
-              .file(_agentPath(config, agent.name, project: widget.project))
+              .file(agentFilePath(config, agent.name, project: widget.project))
               .delete();
         },
       );
@@ -193,7 +202,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
 
     final source = utf8.decode(bytes, allowMalformed: true);
     final document = PromptDocument.parse(CompletionKind.agent, "", source);
-    if (document.body.trim().isEmpty) {
+    if (document.body.isEmpty) {
       _say("That file cannot be imported: there is no prompt in it.");
       return;
     }
@@ -203,7 +212,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       _say("That file cannot be imported: its name cannot be a file name.");
       return;
     }
-    final exists = await config.fs.file(_agentPath(config, name, project: widget.project)).exists();
+    final exists = await config.fs
+        .file(agentFilePath(config, name, project: widget.project))
+        .exists();
     if (!mounted) return;
     if (exists) {
       final confirmed = await confirm(
@@ -216,21 +227,7 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       if (!confirmed) return;
     }
 
-    await _guard(() async {
-      final config = ref.read(appConfigProvider);
-      await platform.withWritableDir(
-        config.promptsDir(CompletionKind.agent, project: widget.project),
-        () async {
-          final file = config.fs
-              .file(_agentPath(config, name, project: widget.project));
-          await file.create(recursive: true);
-          await file.writeAsString(source);
-        },
-      );
-      await _reload();
-      await _scan();
-      _say("Imported $name.");
-    });
+    await _write(name, source, "Imported $name.");
   }
 
   /// An agent page has one directory it writes into, so one project's
@@ -239,21 +236,13 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       .read(promptLibraryProvider(widget.project).notifier)
       .reload();
 
-  Future<void> _export(PromptDocument agent) => _guard(() async {
-        final config = ref.read(appConfigProvider);
-        final bytes = await exportPromptBytes(
-          config,
-          CompletionKind.agent,
-          agent.name,
-          project: widget.project,
-        );
-        if (bytes == null) {
-          throw const SkillImportException("its file could not be read");
-        }
-        await ref
-            .read(backupHandoffProvider)
-            .save(promptExportName(CompletionKind.agent, agent.name), bytes);
-      });
+  Future<void> _export(PromptDocument agent) => _guard(() => exportAndSave(
+        ref.read(appConfigProvider),
+        ref.read(backupHandoffProvider),
+        CompletionKind.agent,
+        agent.name,
+        project: widget.project,
+      ));
 
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
@@ -324,11 +313,12 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
     );
   }
 
-  /// The trailing half of a row: an agent the scanned directory holds is this
-  /// project's own and can be edited or removed, an inherited or bundled one
-  /// is not here and says which, and while the scan is still out neither is
-  /// drawn — a button that flashes in is a row lying twice in a second.
-  /// Export stands ahead of all of it, on every row.
+  /// The trailing half of a row. The variable part — edit and remove where
+  /// the scanned directory holds the agent and the directory is the user's
+  /// to write into, the origin badge where it does not, nothing while the
+  /// scan is still out — stands first, and Export last: the trailing slot is
+  /// right-aligned, so the row's right edge pins Export whether or not the
+  /// scan has landed, and nothing flashes sideways when it does.
   Widget _row(PromptDocument agent, Set<String>? userAgents) {
     final inDir = userAgents?.contains(agent.name);
     final owned = inDir == true && _writable;
@@ -340,14 +330,9 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: "Export ${agent.name}",
-            onPressed: () => _export(agent),
-          ),
           switch (inDir) {
             // The scan is still out: neither button nor badge is drawn.
-            null => const SizedBox(width: 88),
+            null => const SizedBox.shrink(),
             true when _writable => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -367,8 +352,13 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
                 padding: const EdgeInsets.only(right: 12),
                 child: Text(_originLabel(CompletionKind.agent, agent.name)),
               ),
-            true => const SizedBox(width: 88),
+            true => const SizedBox.shrink(),
           },
+          IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: "Export ${agent.name}",
+            onPressed: () => _export(agent),
+          ),
         ],
       ),
     );
@@ -381,12 +371,6 @@ class _AgentsSectionState extends ConsumerState<AgentsSection> {
           ? "Bundled"
           : "Inherited";
 }
-
-/// Where an agent called [name] lives: [project]'s own agents directory — the
-/// default project's where it is null.
-String _agentPath(AppConfig config, String name, {String? project}) =>
-    config.fs.path
-        .join(config.promptsDir(CompletionKind.agent, project: project), "$name.md");
 
 /// What the editor page hands back on save.
 typedef AgentEdit = ({String name, String description, String body});

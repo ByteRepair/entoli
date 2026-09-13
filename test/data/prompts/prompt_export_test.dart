@@ -64,6 +64,21 @@ void main() {
       expect(parseSkillPackage(bytes!).name, "review");
     }, timeout: testTimeout);
 
+    test("a default-directory entry shadows the bundled preset it shares a "
+        "name with, the way the library serves it", () async {
+      // The bundled three do not carry this name, so the disk decides.
+      await writeAgentChatSkill(config, "deep-research");
+      final bytes = await exportPromptBytes(
+        config,
+        CompletionKind.skill,
+        "deep-research",
+        project: "work",
+      );
+      final package = parseSkillPackage(bytes!);
+      expect(package.body, contains("Do deep-research."));
+      expect(package.body, isNot(contains("interactive HTML artifact")));
+    }, timeout: testTimeout);
+
     test("a user agent's export is the file itself", () async {
       final dir = config.promptsDir(CompletionKind.agent, project: "work");
       final file = File("$dir/researcher.md");

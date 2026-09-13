@@ -50,7 +50,6 @@ void main() {
       // What landed is the same shape an install offers: it re-installs.
       await io(tester,
           () => installSkillPackage(app.config, package, project: "work"));
-      await io(tester, () async {});
       expect(
         File(
                 "${app.config.promptsDir(CompletionKind.skill, project: "work")}/review/SKILL.md")
