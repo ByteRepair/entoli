@@ -1,7 +1,6 @@
 package io.byterepair.entoli
 
 import android.app.Notification
-import android.app.Notification.Style
 import android.content.Intent
 import android.content.pm.ServiceInfo
 
@@ -19,6 +18,10 @@ class SyncService : ForegroundWork() {
     override val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
     override val actionLabel = "Disconnect"
 
+    // A swiped hold looks exactly like the failure this service exists to
+    // prevent, and its Disconnect goes with the notification. Put back.
+    override val rePostOnSwipe = true
+
     override fun describe(intent: Intent, builder: Notification.Builder) {
         val names = intent.getStringArrayListExtra(EXTRA_NAMES) ?: emptyList()
         builder.setContentText(
@@ -28,7 +31,7 @@ class SyncService : ForegroundWork() {
         // the count is the line a lock screen shows, the list is what pulling
         // the notification down says.
         if (names.isNotEmpty()) {
-            builder.setStyle(Style.BigTextStyle().bigText(names.joinToString("\n")))
+            builder.setStyle(Notification.BigTextStyle().bigText(names.joinToString("\n")))
         }
     }
 

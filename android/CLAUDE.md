@@ -41,6 +41,18 @@ Kotlin, the names ride in from Dart the way a download's label does, and the
 action says Disconnect rather than Stop — what it ends is connections, not
 work mid-flight.
 
+**A swiped notification is put back.** Since Android 14 the user can dismiss
+any foreground-service notification, and the service keeps running when it
+goes — a swiped sync hold would look exactly like the failure it exists to
+prevent, and the Disconnect would be gone with it. Nothing is told of a
+dismissal, so `ForegroundWork` polls its own notifications (one array scan a
+second, under the wake lock it already holds) and re-attaches the
+notification through `startForeground`, silent because `setOnlyAlertOnce`
+is on; a legitimate stop never meets the watch, since `stopService` runs
+`onDestroy` and the watch dies there. `rePostOnSwipe` is the opt-in, sync the
+only service that has; the others would want it eventually, which is issue
+#244's.
+
 **Nothing moves into the service.** The turn runs in the app's own isolate, as
 it always did; all the service buys is the right for that isolate to keep
 running. That is what keeps the invariant of "Carrying on an interrupted turn"
