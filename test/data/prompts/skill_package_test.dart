@@ -45,7 +45,7 @@ void main() {
 
     test("a name argument wins over the frontmatter and the folder", () async {
       write({
-        "SKILL.md": "---\nname: from-frontmatter\n---\n\nDo it.\n",
+        "SKILL.md": "---\nname: from-frontmatter\ndescription: d\n---\n\nDo it.\n",
       });
 
       final package =
@@ -60,10 +60,31 @@ void main() {
         "SKILL.md": "---\ndescription: d\n---\n\nDo it.\n",
       });
 
+      // The folder is a temp dir whose name is not a spec name, so the
+      // packager is handed the name the folder would be renamed to.
       final package =
-          await packageSkillDirectory(fileSystemIo, dir.path, null);
+          await packageSkillDirectory(fileSystemIo, dir.path, "demo");
 
-      expect(package.name, dir.path.split(Platform.pathSeparator).last);
+      expect(package.name, "demo");
+    });
+
+    test("a frontmatter that does not conform is refused with the reasons",
+        () async {
+      write({
+        "SKILL.md":
+            "---\nname: Demo\ndescription: d\nargument-hint: args\n---\n\nDo it.\n",
+      });
+
+      await expectLater(
+        packageSkillDirectory(fileSystemIo, dir.path, null),
+        throwsA(isA<SkillImportException>().having(
+            (e) => e.message,
+            "message",
+            allOf(
+              contains("name \"Demo\""),
+              contains("unknown frontmatter key \"argument-hint\""),
+            ))),
+      );
     });
   });
 

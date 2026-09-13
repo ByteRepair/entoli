@@ -7,13 +7,19 @@
 // Agents are code-only — never written to disk — since nothing reads them
 // by path.
 //
+// Each skill's SKILL.md is validated against the Agent Skills spec before it
+// is embedded: the loader skips a non-conformant skill with a log line, so a
+// preset that did not conform would silently ship broken.
+//
 // Each entry is tagged with the project it belongs to. `default` is the base
 // set every project inherits; another project's entries override a
 // same-named default one for that project alone. See "Skills and agents" in
 // lib/domain/CLAUDE.md.
 import "dart:io";
 
+import "package:agent_chat/data/prompts/skill_validate.dart";
 import "package:agent_chat/domain/bundled_prompt_file.dart";
+import "package:agent_chat/domain/frontmatter.dart";
 
 import "gen_common.dart";
 
@@ -63,11 +69,32 @@ void main() {
 
 /// Walks the `skills/` directory of a project and collects every file under
 /// each skill folder. [name] is the skill folder, [relativePath] is the path
-/// within it.
+/// within it. The SKILL.md is validated first — a preset that does not
+/// conform would be skipped by the loader, so generation refuses it here
+/// where the failure is a build failure rather than a silent one.
 List<BundledPromptFile> _collectSkills(Directory skillsRoot, String project) {
   final entries = <BundledPromptFile>[];
   for (final skillDir in skillsRoot.listSync().whereType<Directory>()) {
     final skillName = basename(skillDir.path);
+    final skillMd = File("${skillDir.path}/SKILL.md");
+    if (skillMd.existsSync()) {
+      final parsed = Frontmatter.parse(skillMd.readAsStringSync());
+      final problems = skillProblems(
+        name: parsed.name ?? skillName,
+        description: parsed.description,
+        frontmatter: parsed.scalars,
+        folderName: skillName,
+      );
+      if (problems.isNotEmpty) {
+        stderr.writeln(
+            "bundled skill $project/$skillName does not conform to the "
+            "Agent Skills spec:");
+        for (final problem in problems) {
+          stderr.writeln("  - $problem");
+        }
+        exitCode = 1;
+      }
+    }
     for (final file in allFiles(skillDir)) {
       final content = File(file).readAsStringSync();
       final relative = file.substring(skillDir.path.length + 1);

@@ -152,5 +152,6 @@ Future<void> writeAgentChatSkill(
   final dir = skillDirectory(config, name, project: project);
   final file = File("$dir/SKILL.md");
   await file.create(recursive: true);
-  await file.writeAsString("---\ndescription: do $name\n---\n\nDo $name.\n");
+  await file
+      .writeAsString("---\nname: $name\ndescription: do $name\n---\n\nDo $name.\n");
 }

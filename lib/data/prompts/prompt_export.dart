@@ -1,9 +1,11 @@
 // Exporting a skill or agent as a file: the way out for an entry the app
 // holds, wherever it holds it from. The inverse of the import the settings
 // pages take in — a `.skill` zip for a skill, the `.md` file itself for an
-// agent.
+// agent — and the resolver the skill view page reads its bytes through.
 import "dart:convert";
 import "dart:typed_data";
+
+import "package:fs_shim/fs.dart";
 
 import "../../core/config.dart";
 import "../../data/prompts/bundled_skill_data.dart"
@@ -71,6 +73,56 @@ Future<void> exportAndSave(
     throw const SkillImportException("its file could not be read");
   }
   await handoff.save(promptExportName(kind, name), bytes);
+}
+
+/// The skill's files as they sit inside its own directory, resolved the way
+/// [exportPromptBytes] resolves them — the page project's own directory, then
+/// the default project's, then a bundled preset — so a view page shows the
+/// same bytes an export would save. Null where no source holds it.
+Future<List<(String, Uint8List)>?> skillSourceEntries(
+  AppConfig config,
+  String name, {
+  String? project,
+}) async {
+  final own = await _entriesFromDirectory(config, name, project: project);
+  if (own != null) return own;
+  if (project != null && project != defaultProjectDir) {
+    final inherited =
+        await _entriesFromDirectory(config, name, project: defaultProjectDir);
+    if (inherited != null) return inherited;
+  }
+  final bundled = bundledPromptFileOf(bundledSkillFiles, project, name);
+  if (bundled == null) return null;
+  return [
+    for (final file in bundledPromptFilesOf(
+        bundledSkillFiles, bundled.project, bundled.name))
+      (file.relativePath, Uint8List.fromList(utf8.encode(file.content))),
+  ];
+}
+
+Future<List<(String, Uint8List)>?> _entriesFromDirectory(
+  AppConfig config,
+  String name, {
+  String? project,
+}) async {
+  final fs = config.fs;
+  final dir = skillDirectory(config, name, project: project);
+  if (!await fs.directory(dir).exists()) return null;
+  return _collectSkillFiles(fs, dir, dir, []);
+}
+
+Future<List<(String, Uint8List)>> _collectSkillFiles(
+    FileSystem fs, String dir, String root, List<(String, Uint8List)> out) async {
+  final path = fs.path;
+  await for (final entity in fs.directory(dir).list()) {
+    if (entity is File) {
+      final rel = path.relative(entity.path, from: root);
+      out.add((rel, Uint8List.fromList(await entity.readAsBytes())));
+    } else if (entity is Directory) {
+      await _collectSkillFiles(fs, entity.path, root, out);
+    }
+  }
+  return out;
 }
 
 /// A `.skill` zip of the skill directory at [dir] under its own folder — the

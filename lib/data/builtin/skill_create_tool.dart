@@ -11,10 +11,16 @@ const createSkillTool = LlmTool(
   description: "Package a skill you have drafted in the workspace and offer it "
       "to the user to install. Write the skill as a directory containing a "
       "SKILL.md plus any scripts, references, or assets it needs, then call "
-      "this with the directory's path. The user reviews and installs it from "
-      "a card in the chat; you cannot install it yourself. The skill lands in "
-      "the user's own skills directory, shadowing any bundled skill of the "
-      "same name.",
+      "this with the directory's path. The SKILL.md's frontmatter must follow "
+      "the Agent Skills spec: a `name` of lowercase letters, digits and "
+      "hyphens (max 64 characters, matching the directory's name), a "
+      "`description` of at most 1024 characters, and only the keys name, "
+      "description, license, compatibility, metadata, allowed-tools — Entoli's "
+      "own settings belong under `metadata:`. A frontmatter that does not "
+      "conform is refused with the reasons. The user reviews and installs it "
+      "from a card in the chat; you cannot install it yourself. The skill "
+      "lands in the user's own skills directory, shadowing any bundled skill "
+      "of the same name.",
   schema: {
     "type": "object",
     "properties": {

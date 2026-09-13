@@ -1,7 +1,9 @@
 ---
+name: deep-research
 description: Deep research — fan-out web searches, fetch sources, adversarially verify claims, synthesize a cited report
-agent: general
-subtask: true
+metadata:
+  agent: general
+  subtask: "true"
 ---
 `/deep-research <question>` - 5 angles → search → fetch+extract → 3-vote verify → synthesize
 

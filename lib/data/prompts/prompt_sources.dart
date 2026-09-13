@@ -9,6 +9,7 @@ import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
 import "../../domain/prompt_library.dart";
 import "bundled_skill_data.dart";
+import "skill_validate.dart";
 
 /// The presets, embedded in code at build time by `tool/gen_bundled_skills.dart`.
 /// The app is the source of truth for bundled skills and agents: the library
@@ -93,11 +94,23 @@ class BundledPrompts implements PromptSource {
           orElse: () => entry.value.first,
         );
         try {
-          documents.add(_skillDocument(
+          final document = _skillDocument(
             skillName,
             skillMd.content,
             config.fs.path.join(baseDir, skillName),
-          ));
+          );
+          final problems = skillProblems(
+            name: document.frontmatter["name"] ?? skillName,
+            description: document.description,
+            frontmatter: document.frontmatter,
+            folderName: skillName,
+          );
+          if (problems.isNotEmpty) {
+            logFailure("skills",
+                "bundled skill $skillName skipped: ${problems.join("; ")}");
+            continue;
+          }
+          documents.add(document);
         } catch (e) {
           logFailure("skills", "could not parse bundled skill $skillName: $e");
         }
@@ -168,13 +181,16 @@ class DirectoryPrompts implements PromptSource {
 /// The skills under [directory]: one folder holding a `SKILL.md` each. The
 /// document's name is the frontmatter's `name` where it has one, the folder's
 /// name otherwise — the folder is what a `.skill` zip unpacks to and what the
-/// base directory is, so the two names diverging is normal.
+/// base directory is, and the spec requires the two to match, which
+/// [skillProblems] checks.
 ///
 /// The body carries the base directory above the template, because that is
 /// the one thing every reader needs and none of them can work out: the
 /// composer's expansion, the `skill` tool, and a replayed log all read the
-/// same string. A folder whose `SKILL.md` cannot be read is skipped with a
-/// line in the log — one broken skill does not take the menu with it.
+/// same string. A folder whose `SKILL.md` cannot be read, or whose frontmatter
+/// does not conform, is skipped with a line in the log — one broken skill
+/// does not take the menu with it, and the skills settings page shows the
+/// reason on the skill's view page.
 Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String directory) async {
   final path = fs.path;
   final root = fs.directory(directory);
@@ -186,7 +202,19 @@ Future<List<PromptDocument>> loadSkillDirectories(FileSystem fs, String director
     final file = fs.file(path.join(entity.path, "SKILL.md"));
     try {
       if (!await file.exists()) continue;
-      documents.add(_skillDocument(folderName, await file.readAsString(), entity.path));
+      final document =
+          _skillDocument(folderName, await file.readAsString(), entity.path);
+      final problems = skillProblems(
+        name: document.frontmatter["name"] ?? folderName,
+        description: document.description,
+        frontmatter: document.frontmatter,
+        folderName: folderName,
+      );
+      if (problems.isNotEmpty) {
+        logFailure("skills", "$folderName skipped: ${problems.join("; ")}");
+        continue;
+      }
+      documents.add(document);
     } catch (e) {
       logFailure("skills", "could not read $folderName: $e");
     }
@@ -204,6 +232,7 @@ PromptDocument _skillDocument(String folderName, String skillMd, String baseDir)
     kind: CompletionKind.skill,
     name: parsed.frontmatter["name"] ?? folderName,
     frontmatter: parsed.frontmatter,
+    metadata: parsed.metadata,
     body: _withBaseDir(baseDir, parsed.body),
   );
 }

@@ -14,6 +14,7 @@ import "../../domain/models.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/project.dart" show projectLabel;
 import "../../domain/workspace.dart";
+import "skill_validate.dart";
 
 /// Why a `.skill` file was refused. One line, meant for a snack bar — the
 /// user picked the file, so the reason is theirs to read.
@@ -28,7 +29,8 @@ class SkillImportException implements Exception {
 
 /// A skill archive, decoded and named, not yet written anywhere.
 class SkillPackage {
-  SkillPackage(this.name, this.entries, {this.description, this.body = ""});
+  SkillPackage(this.name, this.entries,
+      {this.description, this.body = "", this.metadata = const {}});
 
   /// The frontmatter's `name` where the SKILL.md has one, the folder it was
   /// packaged from otherwise. What a skill is *called* and where it *lands*
@@ -40,6 +42,9 @@ class SkillPackage {
   /// the producer does not care (the packager zips and discards).
   final String? description;
   final String body;
+
+  /// The nested `metadata:` map, parsed once with the rest.
+  final Map<String, String> metadata;
 
   /// Paths as they sit inside the skill's own directory — the top-level
   /// folder a zip of one adds is already taken off, so where it lands is not
@@ -112,13 +117,29 @@ SkillPackage parseSkillPackage(Uint8List bytes) {
   if (!isFolderName(name)) {
     throw const SkillImportException("its name cannot be a folder name");
   }
+  // Strict against the Agent Skills spec: a package that does not conform is
+  // refused with the reasons rather than installed and rendered oddly. The
+  // name it lands under is the name the validator checked, so the folder rule
+  // holds by construction.
+  final problems = skillProblems(
+    name: name,
+    description: document.description,
+    frontmatter: document.frontmatter,
+  );
+  if (problems.isNotEmpty) {
+    throw SkillImportException(problems.join("; "));
+  }
   return SkillPackage(name, entries,
-      description: document.description, body: document.body);
+      description: document.description,
+      body: document.body,
+      metadata: document.metadata);
 }
 
 /// One directory under `skills/` and nothing else: a name holding a separator
 /// would reach outside it, and a dot-name is invisible to nothing but the eye.
-/// The agents settings page holds agent file names to the same rule.
+/// The agents settings page holds agent file names to the same rule. Not the
+/// spec's name rule — that is [skillProblems]' — just the shape a folder name
+/// can have.
 bool isFolderName(String name) =>
     name.isNotEmpty && !name.startsWith(".") && !name.contains("/") && !name.contains("\\");
 

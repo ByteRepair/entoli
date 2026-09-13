@@ -26,8 +26,8 @@ PromptDocument skillDoc(
     PromptDocument(
       kind: CompletionKind.skill,
       name: name,
-      frontmatter: {
-        "description": description,
+      frontmatter: {"description": description},
+      metadata: {
         if (!modelInvocable) "disable-model-invocation": "true",
       },
       body: body,
