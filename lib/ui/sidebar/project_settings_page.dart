@@ -524,12 +524,13 @@ class _PromptsRow extends ConsumerWidget {
         MaterialPageRoute(
           builder: (_) => Scaffold(
             appBar: AppBar(title: Text("${kind.label} — $project")),
-            body: ListView(children: [
-              switch (kind) {
-                CompletionKind.skill => SkillsSection(project: project),
-                CompletionKind.agent => AgentsSection(project: project),
-              }
-            ]),
+            // The section owns the scroll: its footer (import, install-to)
+            // is pinned to the bottom of the page rather than one row more
+            // of a list here.
+            body: switch (kind) {
+              CompletionKind.skill => SkillsSection(project: project),
+              CompletionKind.agent => AgentsSection(project: project),
+            },
           ),
         ),
       ),
