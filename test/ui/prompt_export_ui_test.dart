@@ -101,6 +101,37 @@ void main() {
     });
   });
 
+  group("conformance on the page", () {
+    testWidgets("a folder the loader skipped is a row with a warning, and "
+        "loaded rows carry none", (tester) async {
+      await io(tester, () async {
+        await writeSkill(app, "loaded-fine");
+        final broken = File(
+            "${app.config.promptsDir(CompletionKind.skill)}/broken-one/SKILL.md");
+        await broken.create(recursive: true);
+        await broken.writeAsString("---\nname: broken-one\n---\n\nBody.\n");
+      });
+
+      await pumpSettings(tester, app, SettingsCategory.skills);
+      await reloadLibrary(tester, app);
+
+      // The fetched presets sort ahead of the user's entries, so both rows
+      // are below the fold and brought up in turn — asserting on both while
+      // they are together on screen would be asserting on a list's window,
+      // not on its contents.
+      await scrollTo(tester, find.text("loaded-fine"));
+      expect(find.text("loaded-fine"), findsOneWidget);
+      // The skipped folder is a row of its own — not an absence.
+      await scrollTo(tester, find.text("broken-one"));
+      expect(find.text("broken-one"), findsOneWidget);
+      expect(find.text("Not loaded"), findsOneWidget);
+      final warnings = find.byIcon(Icons.warning_amber_rounded);
+      expect(warnings, findsOneWidget);
+      expect(find.textContaining("no description"), findsNothing,
+          reason: "the problems are the view page's to say");
+    });
+  });
+
   group("the fixed footers", () {
     testWidgets("the skills page's import button stays put while the list "
         "scrolls", (tester) async {

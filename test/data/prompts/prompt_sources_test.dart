@@ -105,7 +105,7 @@ void main() {
     Directory(p.join(config.promptsDir(CompletionKind.skill), "ship"))
         .createSync(recursive: true);
     File(p.join(config.promptsDir(CompletionKind.skill), "ship", "SKILL.md"))
-        .writeAsStringSync("---\ndescription: ship it\n---\n\nShip \$ARGUMENTS.\n");
+        .writeAsStringSync("---\nname: ship\ndescription: ship it\n---\n\nShip \$ARGUMENTS.\n");
     File(p.join(config.promptsDir(CompletionKind.agent), "notes.txt"))
         .writeAsStringSync("not markdown");
 
@@ -116,7 +116,7 @@ void main() {
     expect(await DirectoryPrompts(config).load(CompletionKind.agent), isEmpty);
   });
 
-  test("a skill is named by its frontmatter over its folder", () async {
+  test("a frontmatter name that does not match the folder is skipped", () async {
     final config = tempConfig();
     await config.ensureDirs();
     Directory(p.join(config.promptsDir(CompletionKind.skill), "my-folder"))
@@ -126,7 +126,22 @@ void main() {
 
     final skills = await DirectoryPrompts(config).load(CompletionKind.skill);
 
-    expect(skills.single.name, "named-otherwise");
+    expect(skills, isEmpty,
+        reason: "the spec requires the name to match the folder, and the "
+            "view page says why it was skipped");
+  });
+
+  test("a frontmatter name matching the folder is the name", () async {
+    final config = tempConfig();
+    await config.ensureDirs();
+    Directory(p.join(config.promptsDir(CompletionKind.skill), "my-folder"))
+        .createSync(recursive: true);
+    File(p.join(config.promptsDir(CompletionKind.skill), "my-folder", "SKILL.md"))
+        .writeAsStringSync("---\nname: my-folder\ndescription: d\n---\n\nBody.\n");
+
+    final skills = await DirectoryPrompts(config).load(CompletionKind.skill);
+
+    expect(skills.single.name, "my-folder");
   });
 
   test("an empty user skills directory offers nothing from DirectoryPrompts",
@@ -162,7 +177,7 @@ void main() {
     Directory(p.join(config.promptsDir(CompletionKind.skill), preset.name))
         .createSync(recursive: true);
     File(p.join(config.promptsDir(CompletionKind.skill), preset.name, "SKILL.md"))
-        .writeAsStringSync("---\ndescription: mine\n---\n\nDo it my way.\n");
+        .writeAsStringSync("---\nname: ${preset.name}\ndescription: mine\n---\n\nDo it my way.\n");
 
     final library = await PromptLibrary.from([
       BundledPrompts(config: config),
@@ -323,7 +338,7 @@ void main() {
           .createSync(recursive: true);
       File(p.join(config.promptsDir(CompletionKind.skill), "ship", "SKILL.md"))
           .writeAsStringSync(
-              "---\ndescription: ship it\n---\n\nShip \$ARGUMENTS.\n");
+              "---\nname: ship\ndescription: ship it\n---\n\nShip \$ARGUMENTS.\n");
 
       // A project with no skills of its own sees the default's user skill.
       final library = await PromptLibrary.from([
@@ -341,7 +356,7 @@ void main() {
       Directory(p.join(config.promptsDir(CompletionKind.skill), "shared"))
           .createSync(recursive: true);
       File(p.join(config.promptsDir(CompletionKind.skill), "shared", "SKILL.md"))
-          .writeAsStringSync("---\ndescription: default's\n---\n\nDefault.\n");
+          .writeAsStringSync("---\nname: shared\ndescription: default's\n---\n\nDefault.\n");
       // The project's override of the same name.
       Directory(p.join(
               config.promptsDir(CompletionKind.skill, project: "my-project"),
@@ -349,7 +364,7 @@ void main() {
           .createSync(recursive: true);
       File(p.join(config.promptsDir(CompletionKind.skill, project: "my-project"),
               "shared", "SKILL.md"))
-          .writeAsStringSync("---\ndescription: project's\n---\n\nProject.\n");
+          .writeAsStringSync("---\nname: shared\ndescription: project's\n---\n\nProject.\n");
 
       final library = await PromptLibrary.from([
         const BundledPrompts(project: "my-project"),

@@ -14,7 +14,10 @@
 // second-guess here. They are embedded unscoped — tagged with the default
 // project, inherited by every other — and land only where the source tree
 // has no skill of the same name, which keeps the locally adapted files the
-// source of truth for the skills we carry ourselves.
+// source of truth for the skills we carry ourselves. Every skill's SKILL.md
+// is still validated against the Agent Skills spec before it is embedded:
+// the loader skips a non-conformant skill with a log line, so a preset that
+// did not conform would silently ship broken.
 //
 // Each entry is tagged with the project it belongs to. `default` is the base
 // set every project inherits; another project's entries override a
@@ -23,7 +26,9 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:agent_chat/data/prompts/skill_validate.dart";
 import "package:agent_chat/domain/bundled_prompt_file.dart";
+import "package:agent_chat/domain/frontmatter.dart";
 
 import "gen_common.dart";
 
@@ -93,14 +98,30 @@ void main() {
 }
 
 /// Collects every file under one skill folder: [skillDir] is the folder the
-/// skill is addressed by, [relativePath] the path within it. A file that is
-/// not text at all — a font, an archive — is embedded base64 with
-/// [BundledPromptFile.binary], where `readAsStringSync` could only have
-/// thrown or mangled it.
+/// skill is addressed by, [relativePath] the path within it. The SKILL.md is
+/// validated first — a preset that does not conform would be skipped by the
+/// loader, so generation refuses it here where the failure is a build
+/// failure rather than a silent one. A file that is not text at all — a
+/// font, an archive — is embedded base64 with [BundledPromptFile.binary],
+/// where `readAsStringSync` could only have thrown or mangled it.
 List<BundledPromptFile> _collectSkill(
     Directory skillDir, String project) {
   final skillName = basename(skillDir.path);
   final entries = <BundledPromptFile>[];
+  final skillMd = File("${skillDir.path}/SKILL.md");
+  if (skillMd.existsSync()) {
+    final parsed = Frontmatter.parse(skillMd.readAsStringSync());
+    final problems = skillFrontmatterProblems(parsed, skillName);
+    if (problems.isNotEmpty) {
+      stderr.writeln(
+          "bundled skill $project/$skillName does not conform to the "
+          "Agent Skills spec:");
+      for (final problem in problems) {
+        stderr.writeln("  - $problem");
+      }
+      exitCode = 1;
+    }
+  }
   for (final file in allFiles(skillDir)) {
     final relative = file.substring(skillDir.path.length + 1);
     final binary = _isBinary(File(file));

@@ -8,7 +8,11 @@ obvious from reading a test. Everything about the app itself is in the root
 
 `test/harness.dart` holds `TestApp` — the app over a throwaway data directory
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
-and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
+and the pumping helpers below. `writeSkill` writes a skill the library will
+actually offer: since skills are held to the Agent Skills spec (see
+"Skills and agents" in `lib/domain/CLAUDE.md`), its `SKILL.md` carries a
+`name:` matching the folder and a `description`, and its `metadata:` argument
+is the way a test writes the client keys. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
 beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
 `FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`,

@@ -91,8 +91,10 @@ and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
 Every project is a directory under `projects/`, the default one included.
 `<dataDir>/projects/<project>/skills/<name>/` is a skill — a directory with a
-`SKILL.md` and the files it runs with, not a single file — and
-`<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
+`SKILL.md` and the files it runs with, not a single file, the frontmatter held
+to the Agent Skills spec (see "Skills and agents" in `lib/domain/CLAUDE.md`;
+a folder that does not conform is skipped at load and said on the view page) —
+and `<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
 default project's skills and agents are the base set every other project
 inherits; another project's own replace a same-named default entry for that
 project alone. The bundled skills and agents live in the binary:
