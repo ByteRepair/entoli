@@ -56,6 +56,14 @@ String skillDirectory(AppConfig config, String name, {String? project}) =>
     config.fs.path
         .join(config.promptsDir(CompletionKind.skill, project: project), name);
 
+/// Where an agent called [name] lives: the `.md` under [project]'s agents
+/// directory — the default project's where it is null. The name is the file
+/// name, which is what the writer, the remover, the importer and the exporter
+/// all have to agree on.
+String agentFilePath(AppConfig config, String name, {String? project}) =>
+    config.fs.path
+        .join(config.promptsDir(CompletionKind.agent, project: project), "$name.md");
+
 /// Decode a `.skill` archive. Refused rather than repaired: not a zip, no
 /// `SKILL.md`, or a name that is not a single directory segment — the folder
 /// is the skill's base directory and is named by prompts, so anything else

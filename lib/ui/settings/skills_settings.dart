@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs.dart";
 
 import "../../core/platform/platform.dart" as platform;
+import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show promptsDirUserWritable;
@@ -25,6 +26,11 @@ const _skillFiles = XTypeGroup(
 /// What the agent can be told to do by name. The list is the library's; the
 /// page's own question is where each one came from — a bundled skill is
 /// Entoli's and not deletable, the user's are imported here and are.
+///
+/// The import flow and the install-to combobox are the footer, fixed to the
+/// bottom of the page so they do not scroll with the list — the same shape
+/// the skill-install preview page pins its Install button in. Export rides
+/// every row, wherever the entry it names came from.
 ///
 /// [project] is whose set the page reads and whose directory it writes: null
 /// is the app-level page and the default project, a name is that project's
@@ -156,6 +162,14 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       ? reloadAllPromptLibraries(ref)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
+  Future<void> _export(PromptDocument skill) => _guard(() => exportAndSave(
+        ref.read(appConfigProvider),
+        ref.read(backupHandoffProvider),
+        CompletionKind.skill,
+        skill.name,
+        project: widget.project,
+      ));
+
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
 
@@ -194,16 +208,23 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader("Skills", description: description),
-        for (final skill in skills) _row(skill, userSkills),
-        if (skills.isEmpty && userSkills != null && userSkills.isNotEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "Something in the skills directory is not loadable — a folder "
-              "with no SKILL.md in it.",
-            ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 8),
+            children: [
+              SectionHeader("Skills", description: description),
+              for (final skill in skills) _row(skill, userSkills),
+              if (skills.isEmpty && userSkills != null && userSkills.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    "Something in the skills directory is not loadable — a "
+                    "folder with no SKILL.md in it.",
+                  ),
+                ),
+            ],
           ),
+        ),
         if (_writable) ...[
           if (widget.project == null)
             Padding(
@@ -230,31 +251,44 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     );
   }
 
-  /// The trailing half of a row: an entry the scanned directory holds is this
-  /// project's own and can be removed, an inherited or bundled one is not
-  /// here and says which, and while the scan is still out neither is drawn —
-  /// a remove button that flashes in is a row lying twice in a second.
+  /// The trailing half of a row. The variable part — remove where the
+  /// scanned directory holds the entry and the directory is the user's to
+  /// write into, the origin badge where it does not, nothing while the scan
+  /// is still out — stands first, and Export last: the trailing slot is
+  /// right-aligned, so the row's right edge pins Export whether or not the
+  /// scan has landed, and nothing flashes sideways when it does.
   Widget _row(PromptDocument skill, Set<String>? userSkills) =>
       ListTile(
         dense: true,
         title: Text(skill.name),
         subtitle: skill.description == null ? null : Text(skill.description!),
-        trailing: switch (userSkills?.contains(skill.name)) {
-          // The scan is still out: neither button nor badge is drawn.
-          null => null,
-          // The project's own — but only where the directory is the user's to
-          // write into; a built-in's rows say what they are and stop there.
-          true when _writable => IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: "Remove ${skill.name}",
-              onPressed: () => _delete(skill),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            switch (userSkills?.contains(skill.name)) {
+              // The scan is still out: neither button nor badge is drawn.
+              null => const SizedBox.shrink(),
+              // The project's own — but only where the directory is the user's
+              // to write into; a built-in's rows say what they are and stop
+              // there.
+              true when _writable => IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: "Remove ${skill.name}",
+                  onPressed: () => _delete(skill),
+                ),
+              false => Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Text(_originLabel(CompletionKind.skill, skill.name)),
+                ),
+              true => const SizedBox.shrink(),
+            },
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: "Export ${skill.name}",
+              onPressed: () => _export(skill),
             ),
-          false => Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Text(_originLabel(CompletionKind.skill, skill.name)),
-            ),
-          true => null,
-        },
+          ],
+        ),
       );
 
   /// Where an entry the project's directory does not hold came from: a preset
