@@ -1,20 +1,22 @@
 // Exporting a skill or agent as a file: the way out for an entry the app
 // holds, wherever it holds it from. The inverse of the import the settings
 // pages take in — a `.skill` zip for a skill, the `.md` file itself for an
-// agent.
+// agent — and the resolver the skill view page reads its bytes through.
 import "dart:convert";
 import "dart:typed_data";
 
 import "../../core/config.dart";
 import "../../data/prompts/bundled_skill_data.dart"
     show bundledSkillFiles, bundledAgentFiles;
+import "../../data/zip.dart" show archiveOf;
 import "../../domain/backup_handoff.dart";
 import "../../domain/bundled_prompt_file.dart"
     show BundledPromptFile, bundledPromptFileOf, bundledPromptFilesOf;
 import "../../domain/models.dart";
 import "../../domain/project.dart" show defaultProjectDir;
-import "skill_import.dart";
-import "skill_package.dart";
+import "skill_import.dart"
+    show SkillImportException, SkillPackage, skillDirectory, agentFilePath;
+import "skill_package.dart" show packageSkillBytes;
 
 /// What the exported file is called: a `.skill` zip for a skill — the format
 /// `parseSkillPackage` reads — and the agent's own `.md` otherwise.
@@ -73,12 +75,62 @@ Future<void> exportAndSave(
   await handoff.save(promptExportName(kind, name), bytes);
 }
 
+/// The skill's files as they sit inside its own directory, resolved the way
+/// [exportPromptBytes] resolves them — the page project's own directory, then
+/// the default project's, then a bundled preset — so a view page shows the
+/// same bytes an export would save. Null where no source holds it.
+Future<List<(String, Uint8List)>?> skillSourceEntries(
+  AppConfig config,
+  String name, {
+  String? project,
+}) async {
+  final own = await _skillEntries(config, name, project: project);
+  if (own != null) return own;
+  if (project != null && project != defaultProjectDir) {
+    final inherited =
+        await _skillEntries(config, name, project: defaultProjectDir);
+    if (inherited != null) return inherited;
+  }
+  final bundled = bundledPromptFileOf(bundledSkillFiles, project, name);
+  if (bundled == null) return null;
+  return [
+    for (final file in bundledPromptFilesOf(
+        bundledSkillFiles, bundled.project, bundled.name))
+      (file.relativePath, utf8.encode(file.content)),
+  ];
+}
+
+/// The files under a skill's directory as relative-path bytes pairs, through
+/// the one walker, the way [archiveOf] names them. Directories are left out:
+/// [parseSkillPackage] takes files alone, so the two shapes agree.
+Future<List<(String, Uint8List)>?> _skillEntries(
+  AppConfig config,
+  String name, {
+  String? project,
+}) async {
+  final fs = config.fs;
+  final dir = skillDirectory(config, name, project: project);
+  if (!await fs.directory(dir).exists()) return null;
+  final archive = await archiveOf(fs, [dir], base: dir);
+  return [
+    for (final file in archive)
+      if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),
+  ];
+}
+
 /// A `.skill` zip of the skill directory at [dir] under its own folder — the
 /// shape the import names a skill by, so one without a `name:` frontmatter
-/// in its SKILL.md round-trips to the name it had here.
+/// in its SKILL.md round-trips to the name it had here. No validation: export
+/// is the way out for a folder the loader skipped, whatever is in it.
 Future<Uint8List> _packageSkill(AppConfig config, String dir) async {
-  final fromDir = await packageSkillDirectory(config.fs, dir, null);
-  return _zipUnderFolder(config.fs.path.basename(dir), fromDir.name, fromDir.entries);
+  final fs = config.fs;
+  final archive = await archiveOf(fs, [dir], base: dir);
+  final entries = [
+    for (final file in archive)
+      if (file.isFile) (file.name, file.readBytes() ?? Uint8List(0)),
+  ];
+  return _zipUnderFolder(
+      fs.path.basename(dir), fs.path.basename(dir), entries);
 }
 
 /// [entries] under one folder named [folder], in a package called [name].

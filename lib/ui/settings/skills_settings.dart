@@ -4,12 +4,16 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs.dart";
 
 import "../../core/platform/platform.dart" as platform;
+import "../../core/config.dart" show AppConfig;
 import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
+import "../../data/prompts/skill_validate.dart";
+import "../../domain/frontmatter.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show promptsDirUserWritable;
 import "../../domain/prompt_library.dart";
 import "../../providers.dart";
+import "../skills/skill_view.dart";
 import "../widgets/busy.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/install_destination.dart";
@@ -26,6 +30,11 @@ const _skillFiles = XTypeGroup(
 /// What the agent can be told to do by name. The list is the library's; the
 /// page's own question is where each one came from — a bundled skill is
 /// Entoli's and not deletable, the user's are imported here and are.
+///
+/// Every row opens the skill view page, where the body, the files and — for
+/// a folder the loader skipped — the conformance problems are shown. The scan
+/// validates each folder in the project's own directory, so a skill that is
+/// not loadable is a row with a warning badge rather than an absence.
 ///
 /// The import flow and the install-to combobox are the footer, fixed to the
 /// bottom of the page so they do not scroll with the list — the same shape
@@ -49,10 +58,12 @@ class SkillsSection extends ConsumerStatefulWidget {
 class _SkillsSectionState extends ConsumerState<SkillsSection> {
   final _busy = ValueNotifier(false);
 
-  /// Which skills live in [project]'s own directory. Null while the first
-  /// scan is out: the library knows what is loaded, not where each one came
-  /// from. Every other name on the list is inherited or bundled.
-  Set<String>? _userSkills;
+  /// What [project]'s own directory holds: each folder's conformance problems,
+  /// empty where it would load. Null while the first scan is out: the library
+  /// knows what is loaded, not where each one came from or what is wrong with
+  /// what it could not take. Every other name on the list is inherited or
+  /// bundled.
+  Map<String, List<String>>? _userSkills;
 
   /// Where a skill imported here goes. Null is the default project — the
   /// global page offers every project; a project's own page has no choice to
@@ -75,15 +86,44 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
 
   Future<void> _scan() async {
     final config = ref.read(appConfigProvider);
-    final names = <String>{};
+    final problems = <String, List<String>>{};
     final dir = config.fs
         .directory(config.promptsDir(CompletionKind.skill, project: widget.project));
     if (await dir.exists()) {
+      final folders = <(String, String)>[];
       await for (final entity in dir.list()) {
-        if (entity is Directory) names.add(config.fs.path.basename(entity.path));
+        if (entity is! Directory) continue;
+        final folderName = config.fs.path.basename(entity.path);
+        folders.add((folderName, entity.path));
+      }
+      // The reads are independent; a browser's IndexedDB makes each one a
+      // round trip, so they go out together.
+      final answers = await Future.wait([
+        for (final (folderName, path) in folders)
+          _folderProblems(config, path, folderName),
+      ]);
+      for (var i = 0; i < folders.length; i++) {
+        problems[folders[i].$1] = answers[i];
       }
     }
-    if (mounted) setState(() => _userSkills = names);
+    if (mounted) setState(() => _userSkills = problems);
+  }
+
+  /// What a folder in the user's own directory is wrong about — the same
+  /// rules the loader skips on, computed here so the row and the view page
+  /// say them without a reload. A folder with no SKILL.md in it is a problem
+  /// of its own; the loader skips it silently, this makes it a row.
+  Future<List<String>> _folderProblems(
+      AppConfig config, String path, String folderName) async {
+    final fs = config.fs;
+    final file = fs.file(fs.path.join(path, "SKILL.md"));
+    if (!await file.exists()) return ["no SKILL.md in it"];
+    try {
+      return skillFrontmatterProblems(
+          Frontmatter.parse(await file.readAsString()), folderName);
+    } catch (e) {
+      return ["SKILL.md could not be read: $e"];
+    }
   }
 
   Future<void> _import() async {
@@ -128,10 +168,10 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     });
   }
 
-  Future<void> _delete(PromptDocument skill) async {
+  Future<void> _delete(String name) async {
     final confirmed = await confirm(
       context,
-      title: "Remove ${skill.name}?",
+      title: "Remove $name?",
       message: "The skill and its files are deleted. A bundled skill of the "
           "same name, if there is one, is back the next time the library "
           "loads.",
@@ -146,12 +186,12 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
           config.promptsDir(CompletionKind.skill, project: widget.project),
           () async {
         await config.fs
-            .directory(skillDirectory(config, skill.name, project: widget.project))
+            .directory(skillDirectory(config, name, project: widget.project))
             .delete(recursive: true);
       });
       await _reload(widget.project);
       await _scan();
-      _say("Removed ${skill.name}.");
+      _say("Removed $name.");
     });
   }
 
@@ -162,12 +202,21 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       ? reloadAllPromptLibraries(ref)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
-  Future<void> _export(PromptDocument skill) => _guard(() => exportAndSave(
+  Future<void> _export(String name) => _guard(() => exportAndSave(
         ref.read(appConfigProvider),
         ref.read(backupHandoffProvider),
         CompletionKind.skill,
-        skill.name,
+        name,
         project: widget.project,
+      ));
+
+  void _open(String name, {String? origin}) =>
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SkillViewPage(
+          name: name,
+          project: widget.project,
+          origin: origin ?? _originLabel(CompletionKind.skill, name),
+        ),
       ));
 
   Future<void> _guard(Future<void> Function() work) =>
@@ -194,6 +243,11 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     final skills =
         ref.watch(promptLibraryProvider(widget.project)).entries(CompletionKind.skill);
     final userSkills = _userSkills;
+    final loaded = {for (final skill in skills) skill.name};
+    final notLoaded = [
+      for (final entry in userSkills?.entries ?? const <MapEntry<String, List<String>>>[])
+        if (entry.value.isNotEmpty && !loaded.contains(entry.key)) entry.key,
+    ];
     final description = !_writable
         ? "Named procedures the agent can load in this project, offered as "
             "/name in the composer. Shown read-only: the entries are this "
@@ -214,14 +268,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
             children: [
               SectionHeader("Skills", description: description),
               for (final skill in skills) _row(skill, userSkills),
-              if (skills.isEmpty && userSkills != null && userSkills.isNotEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    "Something in the skills directory is not loadable — a "
-                    "folder with no SKILL.md in it.",
-                  ),
-                ),
+              for (final name in notLoaded) _notLoadedRow(name, userSkills!),
             ],
           ),
         ),
@@ -254,38 +301,81 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// The trailing half of a row. The variable part — remove where the
   /// scanned directory holds the entry and the directory is the user's to
   /// write into, the origin badge where it does not, nothing while the scan
-  /// is still out — stands first, and Export last: the trailing slot is
+  /// is still out — stands first, then the warning badge where the folder's
+  /// SKILL.md does not conform, then Export: the trailing slot is
   /// right-aligned, so the row's right edge pins Export whether or not the
   /// scan has landed, and nothing flashes sideways when it does.
-  Widget _row(PromptDocument skill, Set<String>? userSkills) =>
+  Widget _row(PromptDocument skill, Map<String, List<String>>? userSkills) {
+    final problems = userSkills?[skill.name];
+    return ListTile(
+      dense: true,
+      title: Text(skill.name),
+      // No subtitle: the description is the view page's content, and the row
+      // is the way in, not a preview of it.
+      onTap: () => _open(skill.name),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          switch (userSkills?.containsKey(skill.name)) {
+            // The scan is still out: neither button nor badge is drawn.
+            null => const SizedBox.shrink(),
+            // The project's own — but only where the directory is the user's
+            // to write into; a built-in's rows say what they are and stop
+            // there.
+            true when _writable => IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: "Remove ${skill.name}",
+                onPressed: () => _delete(skill.name),
+              ),
+            false => Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Text(_originLabel(CompletionKind.skill, skill.name)),
+              ),
+            true => const SizedBox.shrink(),
+          },
+          if (problems != null && problems.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(Icons.warning_amber_rounded,
+                  size: 20, color: Theme.of(context).colorScheme.error),
+            ),
+          IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: "Export ${skill.name}",
+            onPressed: () => _export(skill.name),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A folder the loader skipped: not in the library, so not drawn by the
+  /// rows above, and a row here is the only place it is anything but an
+  /// absence. The view page says the problems; remove takes the folder away
+  /// where the directory is the user's.
+  Widget _notLoadedRow(String name, Map<String, List<String>> userSkills) =>
       ListTile(
         dense: true,
-        title: Text(skill.name),
-        subtitle: skill.description == null ? null : Text(skill.description!),
+        title: Text(name),
+        subtitle: const Text("Not loaded"),
+        onTap: () => _open(name, origin: "Not loaded"),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            switch (userSkills?.contains(skill.name)) {
-              // The scan is still out: neither button nor badge is drawn.
-              null => const SizedBox.shrink(),
-              // The project's own — but only where the directory is the user's
-              // to write into; a built-in's rows say what they are and stop
-              // there.
-              true when _writable => IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: "Remove ${skill.name}",
-                  onPressed: () => _delete(skill),
-                ),
-              false => Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Text(_originLabel(CompletionKind.skill, skill.name)),
-                ),
-              true => const SizedBox.shrink(),
-            },
+            Icon(Icons.warning_amber_rounded,
+                size: 20, color: Theme.of(context).colorScheme.error),
+            if (_writable)
+              IconButton(
+                icon: const Icon(Icons.close),
+                tooltip: "Remove $name",
+                onPressed: () => _delete(name),
+              )
+            else
+              const SizedBox(width: 48),
             IconButton(
               icon: const Icon(Icons.download),
-              tooltip: "Export ${skill.name}",
-              onPressed: () => _export(skill),
+              tooltip: "Export $name",
+              onPressed: () => _export(name),
             ),
           ],
         ),
@@ -298,4 +388,3 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
           ? "Bundled"
           : "Inherited";
 }
-

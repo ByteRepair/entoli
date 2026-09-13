@@ -854,14 +854,21 @@ Future<void> reloadLibrary(
 }
 
 /// Write a skill the library will offer, the shape `loadSkillDirectories`
-/// reads: one folder, one `SKILL.md` with frontmatter.
+/// reads: one folder, one `SKILL.md` with conforming frontmatter. The folder
+/// name is the skill's name, as the spec requires the two to match.
 Future<void> writeSkill(
   TestApp app,
   String name, {
   String? project,
+  Map<String, String> metadata = const {},
 }) async {
   final file = File(
       "${app.config.promptsDir(CompletionKind.skill, project: project)}/$name/SKILL.md");
   await file.create(recursive: true);
-  await file.writeAsString("---\ndescription: do $name\n---\n\nDo $name.\n");
+  final metadataBlock = metadata.isEmpty
+      ? ""
+      : "\nmetadata:\n"
+          "${[for (final e in metadata.entries) "  ${e.key}: \"${e.value}\""].join("\n")}\n";
+  await file.writeAsString(
+      "---\nname: $name\ndescription: do $name$metadataBlock\n---\n\nDo $name.\n");
 }

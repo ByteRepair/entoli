@@ -8,6 +8,8 @@ import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/skill_create_tool.dart";
+import "package:agent_chat/data/prompts/skill_import.dart"
+    show SkillImportException;
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/permission.dart";
@@ -16,7 +18,6 @@ import "../../fakes.dart";
 import "builtin_fakes.dart";
 
 const _skillMd = "---\nname: demo\ndescription: does the demo thing\n---\n\nDo it.\n";
-const _skillMdNoName = "---\ndescription: no name in the frontmatter\n---\n\nDo it.\n";
 
 void main() {
   late Directory workspace;
@@ -54,7 +55,8 @@ void main() {
 
   BuiltinAgent agentWith(FakeLlmClient client,
       {ApproveMode approveMode = ApproveMode.never,
-      void Function()? onPackage}) =>
+      void Function()? onPackage,
+      Object? packageError}) =>
       BuiltinAgent(
         session: session,
         client: client,
@@ -70,6 +72,7 @@ void main() {
         packageSkill: (path, name) async {
           packaged.add((path: path, name: name));
           onPackage?.call();
+          if (packageError != null) throw packageError;
           return (installId: "install-1", name: name ?? path.split("/").last);
         },
       );
@@ -148,7 +151,9 @@ void main() {
     });
 
     test("without a frontmatter name, the folder is the name", () async {
-      final dir = await writeSkill("skills/letterbox", _skillMdNoName);
+      final dir = await writeSkill(
+          "skills/letterbox",
+          "---\ndescription: no name in the frontmatter\n---\n\nDo it.\n");
       final client = FakeLlmClient([
         [createCall(dir)],
         [finish],
@@ -228,6 +233,32 @@ void main() {
           .result;
       expect(result.returnCode, -1);
       expect(result.exceptionInfo, contains("no SKILL.md"));
+    });
+
+    test("a frontmatter that does not conform is refused with the reasons",
+        () async {
+      final dir = await writeSkill("skills/upper",
+          "---\nname: Upper\ndescription: d\n---\n\nDo it.\n");
+      final client = FakeLlmClient([
+        [createCall(dir)],
+        [finish],
+      ]);
+      final events = await agentWith(
+              client,
+              packageError: const SkillImportException(
+                  'name "Upper" is not lowercase letters, digits and hyphens '
+                  'with no doubled or leading/trailing hyphen'))
+          .run(userMessage("go"))
+          .toList();
+
+      expect(events.whereType<SkillInstallEvent>(), isEmpty);
+      final result = events
+          .whereType<ToolResultEvent>()
+          .firstWhere((e) => e.result.callId == "cs-1")
+          .result;
+      expect(result.returnCode, -1);
+      expect(result.exceptionInfo, contains("Agent Skills spec"));
+      expect(result.exceptionInfo, contains('name "Upper"'));
     });
 
     test("a call with no path is a format error", () async {

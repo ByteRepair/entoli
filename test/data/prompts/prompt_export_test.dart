@@ -1,6 +1,7 @@
 import "dart:convert";
 import "dart:io";
 
+import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
@@ -33,9 +34,25 @@ void main() {
 
       final package = parseSkillPackage(bytes!);
       expect(package.name, "review");
-      expect(package.description, "do review");
       expect(package.body, contains("Do review."));
-      expect(package.entries.map((e) => e.$1), contains("SKILL.md"));
+    }, timeout: testTimeout);
+
+    test("a skill the loader skipped exports anyway — export is its way out",
+        () async {
+      final dir = skillDirectory(config, "broken", project: "work");
+      final file = File("$dir/SKILL.md");
+      await file.create(recursive: true);
+      await file.writeAsString("---\nname: broken\n---\n\nNo description.\n");
+
+      final bytes =
+          await exportPromptBytes(config, CompletionKind.skill, "broken", project: "work");
+      expect(bytes, isNotNull);
+      // The zip holds the folder's files under the folder's own name. Only
+      // the import, not the export, holds a package to the spec — the strict
+      // parser would refuse these bytes, which is the point.
+      final archive = ZipDecoder().decodeBytes(bytes!);
+      expect(archive.files.map((f) => f.name),
+          containsAll(["broken/SKILL.md"]));
     }, timeout: testTimeout);
 
     test("a bundled skill exports its SKILL.md under the skill's folder",
@@ -152,5 +169,6 @@ Future<void> writeAgentChatSkill(
   final dir = skillDirectory(config, name, project: project);
   final file = File("$dir/SKILL.md");
   await file.create(recursive: true);
-  await file.writeAsString("---\ndescription: do $name\n---\n\nDo $name.\n");
+  await file
+      .writeAsString("---\nname: $name\ndescription: do $name\n---\n\nDo $name.\n");
 }

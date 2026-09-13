@@ -63,9 +63,20 @@ Check available MCPs - if useful for research (searching docs, finding similar s
 
 Based on the user interview, fill in these components:
 
-- **name**: Skill identifier
-- **description**: When to trigger, what it does. This is the primary triggering mechanism - include both what the skill does AND specific contexts for when to use it. All "when to use" info goes here, not in the body. Note: models have a tendency to "undertrigger" skills -- to not use them when they'd be useful. To combat this, please make the skill descriptions a little bit "pushy". So for instance, instead of "How to build a simple fast dashboard to display internal Anthropic data.", you might write "How to build a simple fast dashboard to display internal Anthropic data. Make sure to use this skill whenever the user mentions dashboards, data visualization, internal metrics, or wants to display any kind of company data, even if they don't explicitly ask for a 'dashboard.'"
-- **compatibility**: Required tools, dependencies (optional, rarely needed)
+- **name**: Skill identifier — lowercase letters, digits and hyphens (1-64
+  characters, no leading/trailing/doubled hyphen), and it must match the
+  skill folder's name. Required by the Agent Skills spec, which Entoli
+  enforces: a skill whose frontmatter does not conform is refused at package
+  and import time with the reasons.
+- **description**: When to trigger, what it does. Required, up to 1024
+  characters. This is the primary triggering mechanism - include both what the skill does AND specific contexts for when to use it. All "when to use" info goes here, not in the body. Note: models have a tendency to "undertrigger" skills -- to not use them when they'd be useful. To combat this, please make the skill descriptions a little bit "pushy". So for instance, instead of "How to build a simple fast dashboard to display internal Anthropic data.", you might write "How to build a simple fast dashboard to display internal Anthropic data. Make sure to use this skill whenever the user mentions dashboards, data visualization, internal metrics, or wants to display any kind of company data, even if they don't explicitly ask for a 'dashboard.'"
+- **compatibility**: Required tools, dependencies (optional, rarely needed;
+  up to 500 characters)
+- **metadata**: A string-to-string map for client-specific settings — Entoli's
+  own (`argument-hint`, `user-invocable`, `disable-model-invocation`) live
+  here, as does anything else per-client like `author` or `version`. Only the
+  keys name, description, license, compatibility, metadata and allowed-tools
+  may sit at the top level; anything else is refused.
 - **the rest of the skill :)**
 
 ### Skill Writing Guide
@@ -75,7 +86,9 @@ Based on the user interview, fill in these components:
 ```
 skill-name/
 ├── SKILL.md (required)
-│   ├── YAML frontmatter (name, description required)
+│   ├── YAML frontmatter (name, description required; spec keys only at
+│   │   the top level — name, description, license, compatibility, metadata,
+│   │   allowed-tools — and name matching the folder name)
 │   └── Markdown instructions
 └── Bundled Resources (optional)
     ├── scripts/    - Executable code for deterministic/repetitive tasks
@@ -415,6 +428,8 @@ create_skill(path: "<path/to/skill-folder>")
 ```
 
 Pass the directory that holds `SKILL.md` (the `name` argument is optional; it defaults to the directory name, which should match the frontmatter's `name`). The tool packages the directory, stages it, and posts a card into the chat. The user taps the card to review the skill and press Install — that is what puts it into their own skills directory, where it shows up in the `/` menu and the system prompt from the next turn on.
+
+The frontmatter is held to the Agent Skills spec at package time. Where the call fails, the refusal names what does not conform — an invalid `name`, a missing or oversized `description`, an unexpected top-level key — and the fix is to correct the SKILL.md and call `create_skill` again.
 
 You cannot install it yourself, and you do not need to run `scripts/package_skill.py` or point the user at Settings: the card is the whole of the hand-off. If the user changes their mind or wants a different name, re-run `create_skill` on the updated directory — each call posts a fresh card rather than overwriting the last.
 
