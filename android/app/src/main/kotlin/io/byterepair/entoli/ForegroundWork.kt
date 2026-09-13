@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import io.flutter.Log
 import io.flutter.plugin.common.BinaryMessenger
@@ -20,12 +22,20 @@ import io.flutter.plugin.common.MethodChannel
 // opening the app. The work itself stays in the Flutter isolate — see "Staying
 // alive off screen" in CLAUDE.md.
 //
-// Three services rather than one because they are three different things to
-// stop, and because Android insists a service that holds the microphone be of
-// a different type from one that does not. What they share is all of this: the
-// channel, the wake lock, the Stop action and the refusal handling.
+// One service per kind rather than one for all, because they are different
+// things to stop, and because Android insists a service that holds the
+// microphone be of a different type from one that does not. What they share is
+// all of this: the channel, the wake lock, the Stop action and the refusal
+// handling.
 abstract class ForegroundWork : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // The last intent this service was started for, what a swiped-away
+    // notification is rebuilt from. The Stop intent never lands here — it is
+    // answered above and returns before the assignment.
+    private var lastIntent: Intent? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var watching = false
 
     /// Which Dart `BackgroundJob` this is, and so what Stop reports.
     protected abstract val job: String
@@ -39,6 +49,20 @@ abstract class ForegroundWork : Service() {
     /// work the user set going and then left, so it is meant to be seen.
     protected open val importance: Int
         get() = NotificationManager.IMPORTANCE_LOW
+
+    /// What the notification's one action button says. "Stop" for the three
+    /// that stop work mid-flight; the sync one says "Disconnect", since what
+    /// it stops is connections, and the devices go offline rather than stop.
+    protected open val actionLabel: String
+        get() = "Stop"
+
+    /// Whether a notification swiped off the shade is put back. Android 14+
+    /// lets the user dismiss any foreground-service notification — the
+    /// service keeps running, but the notice and its one button go, and the
+    /// button was the outside way to stop the work. Opted into per service;
+    /// see the sync one for why it wants this.
+    protected open val rePostOnSwipe: Boolean
+        get() = false
 
     /// What the notification says about this piece of work.
     protected abstract fun describe(intent: Intent, builder: Notification.Builder)
@@ -55,14 +79,7 @@ abstract class ForegroundWork : Service() {
         }
 
         try {
-            val notification = notification(intent ?: Intent())
-            // Service types arrived in Android 10; below it the manifest's is
-            // ignored and there is only the two-argument call.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(notificationId, notification, serviceType)
-            } else {
-                startForeground(notificationId, notification)
-            }
+            attach(intent ?: Intent())
         } catch (e: Exception) {
             // Refusing is allowed — most likely the daily cap has already been
             // spent, or the microphone permission is not held — and an uncaught
@@ -71,7 +88,9 @@ abstract class ForegroundWork : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        lastIntent = intent
         acquireWakeLock()
+        if (rePostOnSwipe) startSwipeWatch()
         // Not START_STICKY: a restart would have no work to keep alive, since
         // it died with the process.
         return START_NOT_STICKY
@@ -85,7 +104,22 @@ abstract class ForegroundWork : Service() {
         stopSelf()
     }
 
+    // Building the notification and putting it in the foreground slot, with
+    // the SDK branch both callers share. Service types arrived in Android 10;
+    // below it the manifest's is ignored and there is only the two-argument
+    // call. Throws what Android refuses with; each caller answers that its
+    // own way.
+    private fun attach(intent: Intent) {
+        val notification = notification(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(notificationId, notification, serviceType)
+        } else {
+            startForeground(notificationId, notification)
+        }
+    }
+
     override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
         wakeLock?.takeIf { it.isHeld }?.release()
         super.onDestroy()
     }
@@ -102,6 +136,36 @@ abstract class ForegroundWork : Service() {
         }
     }
 
+    // Android 14+ lets a user swipe a foreground-service notification away
+    // while the service goes on, which takes the one outside button with it.
+    // Nothing is told of the dismissal, so the shade is polled instead: this
+    // app's notifications are already local, and one array scan a second under
+    // a wake lock the service already holds is nothing. Rebuilding and
+    // re-attaching through startForeground is legal on a running service and
+    // silent — setOnlyAlertOnce is on.
+    private fun startSwipeWatch() {
+        if (watching) return
+        watching = true
+        mainHandler.postDelayed(::swipeTick, SWIPE_POLL_MS)
+    }
+
+    private fun swipeTick() {
+        if (!watching) return
+        val posted = getSystemService(NotificationManager::class.java)
+            .activeNotifications.any { it.id == notificationId }
+        if (!posted) {
+            try {
+                attach(lastIntent ?: Intent())
+            } catch (e: Exception) {
+                // The same refusals onStartCommand catches. Logged and
+                // retried on the next tick: a daily cap reached mid-watch is
+                // a reason to stop, not to crash.
+                Log.w(TAG, "Foreground service re-post refused: $e")
+            }
+        }
+        mainHandler.postDelayed(::swipeTick, SWIPE_POLL_MS)
+    }
+
     private fun notification(intent: Intent): Notification {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(channelId, channelLabel, importance)
@@ -115,7 +179,7 @@ abstract class ForegroundWork : Service() {
             .setSmallIcon(R.drawable.ic_cookie_monochrome)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(Notification.Action.Builder(null as Icon?, "Stop", pendingStop()).build())
+            .addAction(Notification.Action.Builder(null as Icon?, actionLabel, pendingStop()).build())
 
         // Whichever launcher entry is enabled: the other one is disabled and
         // cannot be started. See IconChannel.
@@ -142,6 +206,7 @@ abstract class ForegroundWork : Service() {
         private const val TAG = "ForegroundWork"
         const val ACTION_STOP = "io.byterepair.entoli.STOP"
         private const val WAKE_LOCK_TIMEOUT_MS = 6L * 60 * 60 * 1000
+        private const val SWIPE_POLL_MS = 1000L
 
         // Static because a service has to reach the channel and is not what
         // registered it. There is one engine per process and it is cached for
@@ -152,6 +217,7 @@ abstract class ForegroundWork : Service() {
         private var listening = false
         private var downloading = false
         private var prefilling = false
+        private var syncing = false
 
         // A hold the alarm receiver took before Dart was listening. It starts
         // AgentService itself, inside the one window a backgrounded app may —
@@ -165,7 +231,8 @@ abstract class ForegroundWork : Service() {
         // MainActivity reads it to decide whether to keep the engine — voice
         // mode counts, since the session it holds is in that isolate too.
         val busy: Boolean
-            get() = turns > 0 || listening || downloading || prefilling || alarmHold
+            get() = turns > 0 || listening || downloading || prefilling ||
+                syncing || alarmHold
 
         fun holdForAlarm() {
             alarmHold = true
@@ -211,6 +278,16 @@ abstract class ForegroundWork : Service() {
                             prefilling = model != null
                             hold(appContext, PrefillService::class.java, prefilling) {
                                 it.putExtra(PrefillService.EXTRA_MODEL, model)
+                            }
+                        }
+                        "syncing" -> {
+                            @Suppress("UNCHECKED_CAST")
+                            val notice = call.arguments as? Map<String, Any?>
+                            syncing = notice != null
+                            hold(appContext, SyncService::class.java, syncing) {
+                                @Suppress("UNCHECKED_CAST")
+                                val names = notice?.get("names") as? List<String>
+                                it.putStringArrayListExtra(SyncService.EXTRA_NAMES, ArrayList(names ?: emptyList()))
                             }
                         }
                         else -> return@setMethodCallHandler result.notImplemented()

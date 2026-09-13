@@ -6,10 +6,15 @@ import "package:http/http.dart" as http;
 /// The joiner's half of a LAN exchange: POST an offer to the first address
 /// that answers, and wait in the same request for the host's answer — one
 /// round trip, no polling.
+///
+/// The [client] is the caller's: a dial borrows the pairing's one client and
+/// this class has no lifetime of its own to close it at. Owning one here
+/// behind an optional parameter had `close()` shutting the pairing's shared
+/// client off after the first dial.
 class LanSignaler {
-  LanSignaler({http.Client? client}) : _client = client ?? http.Client();
+  LanSignaler({required this.client});
 
-  final http.Client _client;
+  final http.Client client;
 
   /// Posts [offerSdp] under [code] — or, for a reconnect, under the [token]
   /// derived from this pair's secret — and returns the answer SDP. The
@@ -42,7 +47,7 @@ class LanSignaler {
   Future<String> _exchange(String host, int port, String code, String token,
       String offerSdp, Duration timeout) async {
     final uri = Uri.parse("http://$host:$port/entoli/offer");
-    final response = await _client
+    final response = await client
         .post(uri,
             headers: const {"content-type": "application/json"},
             body: jsonEncode({
@@ -62,8 +67,6 @@ class LanSignaler {
     }
     return answer;
   }
-
-  void close() => _client.close();
 }
 
 class SignalingException implements Exception {
