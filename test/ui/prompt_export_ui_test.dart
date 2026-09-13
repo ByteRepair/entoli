@@ -34,8 +34,11 @@ void main() {
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "work");
 
-      // The bundled three plus the project's own review — every row exports.
-      expect(_exportButtons, findsNWidgets(4));
+      // The bundled presets plus the project's own review — every row
+      // exports. The fetched skills lengthen the list, so what is counted is
+      // that the row exists and exports, not how many rows there are.
+      expect(_exportButtons, findsWidgets);
+      await scrollTo(tester, find.byTooltip("Export review"));
       await tester.tap(find.byTooltip("Export review"));
       await settleIo(tester, least: 10);
 
@@ -64,7 +67,10 @@ void main() {
       await reloadLibrary(tester, app);
 
       // No directory scan needed — export is on every row, scan or not.
-      expect(_exportButtons, findsNWidgets(3));
+      // The fetched presets lengthen the list; the point here is that a
+      // bundled row's export reads the embedded preset, wherever it sits.
+      expect(_exportButtons, findsWidgets);
+      await scrollTo(tester, find.byTooltip("Export artifact"));
       await tester.tap(find.byTooltip("Export artifact"));
       await settleIo(tester, least: 10);
 
@@ -109,6 +115,11 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.skills);
       await reloadLibrary(tester, app);
 
+      // The fetched presets sort ahead of the user's entries, so both rows
+      // are below the fold and brought up in turn — asserting on both while
+      // they are together on screen would be asserting on a list's window,
+      // not on its contents.
+      await scrollTo(tester, find.text("loaded-fine"));
       expect(find.text("loaded-fine"), findsOneWidget);
       // The skipped folder is a row of its own — not an absence.
       await scrollTo(tester, find.text("broken-one"));

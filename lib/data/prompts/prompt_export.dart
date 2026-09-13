@@ -2,7 +2,6 @@
 // holds, wherever it holds it from. The inverse of the import the settings
 // pages take in — a `.skill` zip for a skill, the `.md` file itself for an
 // agent — and the resolver the skill view page reads its bytes through.
-import "dart:convert";
 import "dart:typed_data";
 
 import "../../core/config.dart";
@@ -96,7 +95,7 @@ Future<List<(String, Uint8List)>?> skillSourceEntries(
   return [
     for (final file in bundledPromptFilesOf(
         bundledSkillFiles, bundled.project, bundled.name))
-      (file.relativePath, utf8.encode(file.content)),
+      (file.relativePath, Uint8List.fromList(file.bytes)),
   ];
 }
 
@@ -170,7 +169,7 @@ Future<Uint8List?> _fromDirectory(
 /// takes; an agent is its own `.md`.
 Uint8List _fromBundled(CompletionKind kind, BundledPromptFile bundled) {
   if (kind == CompletionKind.agent) {
-    return utf8.encode(bundled.content);
+    return Uint8List.fromList(bundled.bytes);
   }
   return _zipUnderFolder(
     bundled.name,
@@ -178,7 +177,7 @@ Uint8List _fromBundled(CompletionKind kind, BundledPromptFile bundled) {
     [
       for (final file in bundledPromptFilesOf(
           bundledSkillFiles, bundled.project, bundled.name))
-        (file.relativePath, utf8.encode(file.content)),
+        (file.relativePath, Uint8List.fromList(file.bytes)),
     ],
   );
 }
