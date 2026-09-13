@@ -8,16 +8,28 @@
 // disk or the asset bundle. Each entry is tagged with the project it belongs
 // to — `default` is the base set every project inherits, another project's
 // entries override a same-named default one for that project alone.
+import "dart:convert";
+
 import "package:collection/collection.dart";
 
 class BundledPromptFile {
   const BundledPromptFile(
-      this.project, this.name, this.relativePath, this.sha256, this.content);
+      this.project, this.name, this.relativePath, this.sha256, this.content,
+      {this.binary = false});
   final String project;
   final String name;
   final String relativePath;
   final String sha256;
+
+  /// The file's bytes: a UTF-8 string for [binary] false — what the
+  /// generators read and every prompt-facing reader wants — and base64 for
+  /// [binary] true, where the file is not text at all (a font, an archive)
+  /// and `readAsStringSync` could not have carried it.
   final String content;
+  final bool binary;
+
+  List<int> get bytes =>
+      binary ? base64Decode(content) : utf8.encode(content);
 }
 
 /// Every entry of [files] tagged [name] for [project] — a skill's files

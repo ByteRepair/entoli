@@ -97,11 +97,28 @@ default project's skills and agents are the base set every other project
 inherits; another project's own replace a same-named default entry for that
 project alone. The bundled skills and agents live in the binary:
 `tool/gen_bundled_skills.dart` writes them, build-time, from
-`assets/prompts/projects/<project>/` into
+`assets/prompts/projects/<project>/` — the locally written skills and agents —
+and from `build/skills-upstream/` into
 `lib/data/prompts/bundled_skill_data.dart`, tagged with the project they
 belong to, so the library the model reads cannot be poisoned from the skills
 directory and a project sees only what it is meant to (esbmc-verifier is
 byte-repair's alone).
+
+**The presets are completed from a release, not a pin.** `tool/fetch-skills.sh`
+resolves the latest release of `ByteRepair/skills` — our fork, where the
+wording fixes are made — and extracts its tarball to `build/skills-upstream/`,
+its cache keyed on the tag so a new release flows in on the next `prepare.sh`
+with nothing edited. The generator copies what the release ships wholesale and
+unscoped, skipping only names the source tree already carries: what ships is
+the fork's release decision — its `RELEASE_EXCLUDED` and `tool/release.sh`,
+which prune, reword Claude to Entoli and check the result when cutting a tag —
+not ours, and the one rule kept here is a tripwire: a fetched skill with no
+`LICENSE.txt` says so on stderr, and a test refuses any fetched skill whose
+licence is not Apache. A skill's own licence is registered per skill for the
+licence page (see "What the app is" in `lib/ui/settings/CLAUDE.md`), and a
+file that is not text at all — a font, an archive — is embedded base64 beside
+its text siblings (`BundledPromptFile.binary`), which the self-heal and the
+export read back as bytes.
 `<dataDir>/projects/<project>/skills-bundled/` is a read-only copy of that
 project's bundled skills on disk, there only so `bash` can reach a skill's
 scripts (which want a real base directory); it is self-healed from the

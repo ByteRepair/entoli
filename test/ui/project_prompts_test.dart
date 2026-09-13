@@ -76,12 +76,16 @@ void main() {
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "work");
 
-      expect(find.text("review"), findsOneWidget);
-      expect(find.text("Inherited"), findsOneWidget);
+      // The fetched presets sort ahead of the user's entries, and the list
+      // scrolls one way: `local-note` is brought up from below `review`
+      // first, and `review` is then below it, still a forward scroll away.
+      await scrollTo(tester, find.text("local-note"));
       expect(find.text("local-note"), findsOneWidget);
       expect(find.byIcon(Icons.close), findsOneWidget);
 
-      // Removing it deletes the project's own directory, not the default's.
+      // Removing it deletes the project's own directory, not the default's —
+      // tapped while the row is on screen, since bringing `review` up from
+      // below would take this one off the top of the window again.
       await tester.tap(find.byIcon(Icons.close));
       await settleIo(tester);
       await tester.tap(find.text("Remove"));
@@ -93,6 +97,11 @@ void main() {
               "${app.config.promptsDir(CompletionKind.skill)}/review")
           .existsSync(),
         isTrue);
+
+      // The default project's entry is badged Inherited and read-only.
+      await scrollTo(tester, find.text("review"));
+      expect(find.text("review"), findsOneWidget);
+      expect(find.text("Inherited"), findsOneWidget);
     });
 
     testWidgets("a user project's page imports, without the destination "
@@ -196,9 +205,11 @@ void main() {
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "byte-repair");
 
-      // The bundled presets the library serves every project.
+      // The bundled presets the library serves every project — the local
+      // three and the fetched ones together, one badge each.
+      await scrollTo(tester, find.text("artifact"));
       expect(find.text("artifact"), findsOneWidget);
-      expect(find.text("Bundled"), findsNWidgets(3));
+      expect(find.text("Bundled"), findsWidgets);
       expect(find.text("Import skill"), findsNothing);
       expect(find.byType(InstallDestination), findsNothing);
       expect(find.byIcon(Icons.close), findsNothing);

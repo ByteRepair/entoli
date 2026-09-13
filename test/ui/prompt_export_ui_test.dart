@@ -34,8 +34,11 @@ void main() {
       await settleIo(tester);
       await reloadLibrary(tester, app, project: "work");
 
-      // The bundled three plus the project's own review — every row exports.
-      expect(_exportButtons, findsNWidgets(4));
+      // The bundled presets plus the project's own review — every row
+      // exports. The fetched skills lengthen the list, so what is counted is
+      // that the row exists and exports, not how many rows there are.
+      expect(_exportButtons, findsWidgets);
+      await scrollTo(tester, find.byTooltip("Export review"));
       await tester.tap(find.byTooltip("Export review"));
       await settleIo(tester, least: 10);
 
@@ -64,7 +67,10 @@ void main() {
       await reloadLibrary(tester, app);
 
       // No directory scan needed — export is on every row, scan or not.
-      expect(_exportButtons, findsNWidgets(3));
+      // The fetched presets lengthen the list; the point here is that a
+      // bundled row's export reads the embedded preset, wherever it sits.
+      expect(_exportButtons, findsWidgets);
+      await scrollTo(tester, find.byTooltip("Export artifact"));
       await tester.tap(find.byTooltip("Export artifact"));
       await settleIo(tester, least: 10);
 
