@@ -24,19 +24,18 @@ class SyncKeepAlive {
   final bool Function() _keepAlive;
   late final StreamSubscription<void> _stops;
 
-  /// The connected devices last reported, by id — what Disconnect-all is for,
-  /// held even when the keep-alive is off, and the last notice, so a peers
-  /// change that reports the same thing does not cross the channel again.
-  Map<String, String> _connected = const {};
-  bool _reported = false;
+  /// The last notice, so a peers change that reports the same thing does not
+  /// cross the channel again. Null is both "never reported" and "reporting
+  /// nothing", which is the same answer: the platform starts holding nothing.
+  SyncNotice? _last;
 
-  void _peersChanged() {
-    _connected = {
-      for (final peer in _hub.peers.value.values)
-        if (SyncPeers.connected(peer.status)) peer.deviceId: peer.name,
-    };
-    unawaited(_report());
-  }
+  /// The connected devices right now, by id — what Disconnect-all is for.
+  Map<String, String> get _connected => {
+        for (final peer in _hub.peers.value.values)
+          if (SyncPeers.connected(peer.status)) peer.deviceId: peer.name,
+      };
+
+  void _peersChanged() => unawaited(_report());
 
   /// Re-reads the peers and the setting. A change in what it answers is one
   /// call; the rest — the failing dial of a device the hold never covered, a
@@ -45,15 +44,11 @@ class SyncKeepAlive {
 
   Future<void> _report() async {
     final on = _keepAlive() && _connected.isNotEmpty;
-    final notice =
-        on ? SyncNotice(names: _connected.values.toList()) : null;
-    if (_reported && _last == notice) return;
-    _reported = true;
+    final notice = on ? SyncNotice(names: _connected.values.toList()) : null;
+    if (_last == notice) return;
     _last = notice;
     await _work.syncing(notice);
   }
-
-  SyncNotice? _last;
 
   /// The notification's Disconnect: the same call the Sync page's row makes,
   /// which is what drops the statuses and so releases the service. Asked
