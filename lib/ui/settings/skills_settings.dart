@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:fs_shim/fs.dart";
 
 import "../../core/platform/platform.dart" as platform;
+import "../../data/prompts/prompt_export.dart";
 import "../../data/prompts/skill_import.dart";
 import "../../domain/models.dart";
 import "../../domain/project.dart" show promptsDirUserWritable;
@@ -22,9 +23,35 @@ const _skillFiles = XTypeGroup(
   webWildCards: ["application/zip"],
 );
 
+/// What an exported skill is called, and where it goes. The save dialog on
+/// the desktops, a download on the web and the share sheet on Android are
+/// `BackupHandoff`'s — a skill rides the same route out a backup does, and
+/// every platform has it. Null is the user having cancelled a save; a
+/// refusal is said by the busy bar, which is where `whileBusy` lands it.
+Future<void> _saveExport(
+  WidgetRef ref,
+  CompletionKind kind,
+  String name, {
+  String? project,
+}) async {
+  final config = ref.read(appConfigProvider);
+  final bytes = await exportPromptBytes(config, kind, name, project: project);
+  if (bytes == null) {
+    throw const SkillImportException("its file could not be read");
+  }
+  await ref
+      .read(backupHandoffProvider)
+      .save(promptExportName(kind, name), bytes);
+}
+
 /// What the agent can be told to do by name. The list is the library's; the
 /// page's own question is where each one came from — a bundled skill is
 /// Entoli's and not deletable, the user's are imported here and are.
+///
+/// The import flow and the install-to combobox are the footer, fixed to the
+/// bottom of the page so they do not scroll with the list — the same shape
+/// the skill-install preview page pins its Install button in. Export rides
+/// every row, wherever the entry it names came from.
 ///
 /// [project] is whose set the page reads and whose directory it writes: null
 /// is the app-level page and the default project, a name is that project's
@@ -156,6 +183,10 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
       ? reloadAllPromptLibraries(ref)
       : ref.read(promptLibraryProvider(target).notifier).reload();
 
+  Future<void> _export(PromptDocument skill) =>
+      _guard(() => _saveExport(ref, CompletionKind.skill, skill.name,
+          project: widget.project));
+
   Future<void> _guard(Future<void> Function() work) =>
       whileBusy(context, _busy, work);
 
@@ -194,16 +225,23 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader("Skills", description: description),
-        for (final skill in skills) _row(skill, userSkills),
-        if (skills.isEmpty && userSkills != null && userSkills.isNotEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "Something in the skills directory is not loadable — a folder "
-              "with no SKILL.md in it.",
-            ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 8),
+            children: [
+              SectionHeader("Skills", description: description),
+              for (final skill in skills) _row(skill, userSkills),
+              if (skills.isEmpty && userSkills != null && userSkills.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    "Something in the skills directory is not loadable — a "
+                    "folder with no SKILL.md in it.",
+                  ),
+                ),
+            ],
           ),
+        ),
         if (_writable) ...[
           if (widget.project == null)
             Padding(
@@ -234,27 +272,40 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   /// project's own and can be removed, an inherited or bundled one is not
   /// here and says which, and while the scan is still out neither is drawn —
   /// a remove button that flashes in is a row lying twice in a second.
+  /// Export stands ahead of all of it, on every row: what the library serves
+  /// is what the user is reading, so it is what Export gives them.
   Widget _row(PromptDocument skill, Set<String>? userSkills) =>
       ListTile(
         dense: true,
         title: Text(skill.name),
         subtitle: skill.description == null ? null : Text(skill.description!),
-        trailing: switch (userSkills?.contains(skill.name)) {
-          // The scan is still out: neither button nor badge is drawn.
-          null => null,
-          // The project's own — but only where the directory is the user's to
-          // write into; a built-in's rows say what they are and stop there.
-          true when _writable => IconButton(
-              icon: const Icon(Icons.close),
-              tooltip: "Remove ${skill.name}",
-              onPressed: () => _delete(skill),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: "Export ${skill.name}",
+              onPressed: () => _export(skill),
             ),
-          false => Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Text(_originLabel(CompletionKind.skill, skill.name)),
-            ),
-          true => null,
-        },
+            switch (userSkills?.contains(skill.name)) {
+              // The scan is still out: neither button nor badge is drawn.
+              null => const SizedBox(width: 40),
+              // The project's own — but only where the directory is the user's
+              // to write into; a built-in's rows say what they are and stop
+              // there.
+              true when _writable => IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: "Remove ${skill.name}",
+                  onPressed: () => _delete(skill),
+                ),
+              false => Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Text(_originLabel(CompletionKind.skill, skill.name)),
+                ),
+              true => const SizedBox(width: 40),
+            },
+          ],
+        ),
       );
 
   /// Where an entry the project's directory does not hold came from: a preset

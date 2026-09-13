@@ -179,11 +179,16 @@ class _CategoryPage extends StatelessWidget {
 }
 
 /// What a category draws in either layout. Welcome is the tour, a pager with
-/// its own bar that cannot scroll in a list; everything else is its sections.
+/// its own bar that cannot scroll in a list, and Skills and Agents scroll
+/// their own list to keep their footers fixed to the bottom — everything
+/// else is its sections.
 Widget _categoryBody(SettingsCategory category, {Key? key}) =>
-    category == SettingsCategory.welcome
-        ? const WelcomeTour()
-        : ListView(key: key, children: _sectionsOf(category));
+    switch (category) {
+      SettingsCategory.welcome => const WelcomeTour(),
+      SettingsCategory.skills => const SkillsSection(),
+      SettingsCategory.agents => const AgentsSection(),
+      _ => ListView(key: key, children: _sectionsOf(category)),
+    };
 
 /// What is filed under a category, whether it is drawn beside the list or on a
 /// page of its own. [SettingsCategory.welcome] is not filed anywhere: the tour
@@ -237,8 +242,10 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // Says so and offers nothing where there is no clock to schedule with —
       // see the section itself.
       SettingsCategory.reminders => const [RemindersSection()],
-      SettingsCategory.skills => const [SkillsSection()],
-      SettingsCategory.agents => const [AgentsSection()],
+      // Rendered by [_categoryBody] whole rather than filed here, for the
+      // footers pinned to their bottoms.
+      SettingsCategory.skills => const [],
+      SettingsCategory.agents => const [],
       SettingsCategory.byteRepair => const [ByteRepairSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
