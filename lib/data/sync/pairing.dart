@@ -587,13 +587,12 @@ class SyncPairing {
     try {
       final sdp = await link.offer();
       final signaler = LanSignaler(client: _client);
-      final String answer;
-      try {
-        answer = await signaler.exchange(
-            hosts: hosts, ports: ports, code: code, token: token, offerSdp: sdp);
-      } finally {
-        signaler.close();
-      }
+      final answer = await signaler.exchange(
+          hosts: hosts,
+          ports: ports,
+          code: code,
+          token: token,
+          offerSdp: sdp);
       await link.acceptAnswer(answer);
       await _establish(
         link: await link.open(),
