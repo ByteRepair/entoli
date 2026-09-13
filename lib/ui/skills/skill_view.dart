@@ -123,9 +123,17 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
         padding: const EdgeInsets.all(16),
         children: [
           Text("${widget.origin} · ${widget.name}", style: theme.textTheme.bodySmall),
-          if (parsed?.description case final description?) ...[
-            const SizedBox(height: 4),
-            Text(description, style: theme.textTheme.bodyMedium),
+          if (parsed != null) ...[
+            if (parsed.description case final description?) ...[
+              const SizedBox(height: 4),
+              Text(description, style: theme.textTheme.bodyMedium),
+            ],
+            const SizedBox(height: 8),
+            for (final (label, value) in _specFields)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text("$label: $value", style: theme.textTheme.bodySmall),
+              ),
           ],
           if (_problems.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -181,6 +189,23 @@ class _SkillViewPageState extends ConsumerState<SkillViewPage> {
         ],
       ),
     );
+  }
+
+  /// The spec's optional fields the frontmatter carries, as label-value rows
+  /// under the description — the description itself sits above as prose, and
+  /// the `metadata:` map has its own section, being a map rather than a
+  /// scalar.
+  List<(String, String)> get _specFields {
+    final parsed = _parsed;
+    if (parsed == null) return const [];
+    final fields = <(String, String)>[];
+    final license = parsed.scalars["license"];
+    if (license != null) fields.add(("License", license));
+    final compatibility = parsed.scalars["compatibility"];
+    if (compatibility != null) fields.add(("Compatibility", compatibility));
+    final allowedTools = parsed.scalars["allowed-tools"];
+    if (allowedTools != null) fields.add(("Allowed tools", allowedTools));
+    return fields;
   }
 }
 

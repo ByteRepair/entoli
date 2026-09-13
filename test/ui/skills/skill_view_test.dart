@@ -33,7 +33,29 @@ void main() {
     expect(find.textContaining("Do letterbox."), findsOneWidget);
     expect(find.text("Metadata"), findsOneWidget);
     expect(find.textContaining("author: me"), findsOneWidget);
+    // No optional spec field is set, so no spec-field row is drawn.
+    expect(find.textContaining("License:"), findsNothing);
+    expect(find.textContaining("Compatibility:"), findsNothing);
+    expect(find.textContaining("Allowed tools:"), findsNothing);
     expect(find.textContaining("Not loaded — does not conform"), findsNothing);
+  });
+
+  testWidgets("the optional spec fields are shown where the frontmatter "
+      "carries them", (tester) async {
+    await io(tester, () async {
+      final dir = File(
+          "${app.config.promptsDir(CompletionKind.skill)}/letterbox/SKILL.md");
+      await dir.create(recursive: true);
+      await dir.writeAsString("---\nname: letterbox\ndescription: do letterbox\n"
+          "license: MIT\ncompatibility: Requires git\n"
+          "allowed-tools: Bash(git:*)\n---\n\nDo letterbox.\n");
+    });
+
+    await openSkill(tester, "letterbox");
+
+    expect(find.text("License: MIT"), findsOneWidget);
+    expect(find.text("Compatibility: Requires git"), findsOneWidget);
+    expect(find.text("Allowed tools: Bash(git:*)"), findsOneWidget);
   });
 
   testWidgets("a bundled skill's entries come from the embedded const",

@@ -310,7 +310,8 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     return ListTile(
       dense: true,
       title: Text(skill.name),
-      subtitle: skill.description == null ? null : Text(skill.description!),
+      // No subtitle: the description is the view page's content, and the row
+      // is the way in, not a preview of it.
       onTap: () => _open(skill.name),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
