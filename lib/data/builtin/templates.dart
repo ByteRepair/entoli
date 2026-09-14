@@ -6,6 +6,7 @@ import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
 import "../../domain/builtin_project.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart" show CompletionKind;
+import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/shell.dart" show CommandSandbox;
 import "../../domain/tone.dart";
@@ -383,6 +384,10 @@ String _toolFragments(AgentCapabilities caps) {
     if (caps.ask) "`$askToolName` to put a question to the\n   user",
     if (caps.webSearch) "`websearch` to search the web, `webfetch` to read a page",
     if (caps.artifact) "`artifact`\n   to publish an HTML page the user can view",
+    "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName`"
+        "\n   to work through a plan ($planFileName in the workspace)",
+    if (caps.ask && caps.artifact)
+      "`$presentPlanToolName`\n   to put the plan to the user for approval",
   ];
   if (acts.length == 1) return acts.single;
   final head = acts.sublist(0, acts.length - 1).join(", ");

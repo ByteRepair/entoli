@@ -10,6 +10,7 @@ import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
@@ -33,6 +34,7 @@ import "templates.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "memory_tools.dart";
+import "plan_tools.dart";
 import "websearch_tool.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -57,6 +59,7 @@ String? runningTool(String name) => switch (name) {
       webfetchToolName => "Fetching a page",
       taskToolName => "Working on a sub-task",
       artifactToolName => "Publishing the artifact",
+      presentPlanToolName => "Presenting the plan",
       _ => null,
     };
 
@@ -298,6 +301,12 @@ List<LlmTool> agentTools({
       if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
       if (caps.artifact) artifactTool,
+      if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
+      // Presenting parks the turn on the panel's answer, so it rides `ask`
+      // (a headless turn's takes fold out of caps) and the artifact's
+      // publish path; a sub-agent's missing `saveArtifact` withholds the
+      // rest, the way it withholds `artifact`.
+      if (caps.ask && caps.artifact) presentPlanTool,
       if (caps.createSkill) createSkillTool,
       if (offerMemory)
         ...[
@@ -875,6 +884,26 @@ class BuiltinAgent {
 
       if (call.name == artifactToolName && saveArtifact != null) {
         yield* _artifact(call);
+        continue;
+      }
+
+      if (call.name == planAddToolName) {
+        yield* _planAdd(call);
+        continue;
+      }
+
+      if (call.name == planNextToolName) {
+        yield* _planNext(call);
+        continue;
+      }
+
+      if (call.name == planDoneToolName) {
+        yield* _planDone(call);
+        continue;
+      }
+
+      if (call.name == presentPlanToolName && saveArtifact != null) {
+        yield* _presentPlan(call);
         continue;
       }
 
@@ -1535,6 +1564,207 @@ class BuiltinAgent {
           returnCode: 0,
           output: "Skill '$name' packaged. "
               "The user can review and install it from the card below.",
+        ));
+  }
+
+  /// The plan file: where the model works, so the model can read it and edit
+  /// it around the tools. Resolved like a file-tool path but written through
+  /// `fs` directly — the tools own the plan's lines, and an `edit` against
+  /// them would be two writers on one file.
+  String get _planPath => fs.path.join(workspace, planFileName);
+
+  Future<String?> _readPlan() async {
+    final file = fs.file(_planPath);
+    if (!await file.exists()) return null;
+    return file.readAsString();
+  }
+
+  /// Record a task. The call is reported with the task as its text, so the
+  /// chat's label reads the plan growing.
+  Stream<AgentEvent> _planAdd(LlmToolCall call) async* {
+    final task = stringArg(call.argumentsJson, "task");
+    if (task == null) {
+      yield* _reject(call,
+          'The $planAddToolName tool takes {"task": "..."}; that argument '
+          "was missing.");
+      return;
+    }
+    final section = stringArg(call.argumentsJson, "section");
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: task,
+    ));
+    final current = await _readPlan();
+    final updated = planAddTask(current, task, section: section);
+    await fs
+        .directory(fs.path.dirname(_planPath))
+        .create(recursive: true);
+    await fs.file(_planPath).writeAsString(updated);
+    final (done, total) = planProgress(updated);
+    yield ToolResultEvent(
+        ToolResult(callId: call.id, returnCode: 0, output: planAddResult(task, (done, total))));
+  }
+
+  /// Take the next task. Nothing to take is the answer, not a failure: the
+  /// plan being finished is exactly the moment the model calls present_plan.
+  Stream<AgentEvent> _planNext(LlmToolCall call) async* {
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+    ));
+    final plan = await _readPlan();
+    final next = planNext(plan);
+    if (next == null) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: 0,
+            output: await _planMissing(plan) ?? "All tasks done.",
+          ));
+      return;
+    }
+    final marked = planMark(plan, next.index, PlanTaskStatus.inProgress);
+    if (marked == null) {
+      yield ToolResultEvent(_ran(call, const ShellResult.failed(
+            "The task could not be marked in $planFileName; the file may "
+            "have changed. Read it and try again.")));
+      return;
+    }
+    await fs.file(_planPath).writeAsString(marked);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planNextResult(next, planProgress(marked)),
+        ));
+  }
+
+  /// Finish a task: by number or by enough of its text to identify it.
+  Stream<AgentEvent> _planDone(LlmToolCall call) async* {
+    final task = stringArg(call.argumentsJson, "task");
+    if (task == null) {
+      yield* _reject(call,
+          'The $planDoneToolName tool takes {"task": "..."} — the number '
+          "$planNextToolName reported, or the start of the task's text; that "
+          "argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: task,
+    ));
+    final plan = await _readPlan();
+    final missing = await _planMissing(plan);
+    if (missing != null) {
+      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      return;
+    }
+    final found = planFind(plan, task);
+    if (found == null) {
+      final candidates = planTasksFrom(plan)
+          .where((t) => t.text.toLowerCase().contains(task.trim().toLowerCase()))
+          .map((t) => "${t.index}. ${t.text}")
+          .toList();
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(candidates.isEmpty
+              ? "No task matches \"$task\". Call $planNextToolName to take "
+                  "the next one, or read $planFileName."
+              : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
+                  "Name it by number, or by more of its text.")));
+      return;
+    }
+    final marked = planMark(plan, found.index, PlanTaskStatus.done);
+    if (marked == null) {
+      yield ToolResultEvent(_ran(call, const ShellResult.failed(
+            "The task could not be marked in $planFileName; the file may "
+            "have changed. Read it and try again.")));
+      return;
+    }
+    await fs.file(_planPath).writeAsString(marked);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planDoneResult(found, planProgress(marked)),
+        ));
+  }
+
+  /// What a plan tool says when there is nothing to work from, or null where
+  /// the file is there with tasks in it.
+  Future<String?> _planMissing(String? plan) async {
+    if (plan == null) {
+      return "There is no $planFileName in the workspace yet. Record the "
+          "first task with $planAddToolName.";
+    }
+    return planTasksFrom(plan).isEmpty
+        ? "$planFileName holds no tasks. Add them with $planAddToolName."
+        : null;
+  }
+
+  /// The plan, put to the user: the plan's page published through the same
+  /// path the `artifact` tool takes, its card in the chat, and the Go /
+  /// changes question the panel asks — all one call, so the model cannot
+  /// show the plan without asking about it, or ask without showing it.
+  Stream<AgentEvent> _presentPlan(LlmToolCall call) async* {
+    final args = presentPlanArgsFrom(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call, presentPlanFormatError);
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: args.title ?? planFileName,
+    ));
+    final plan = await _readPlan();
+    final missing = await _planMissing(plan);
+    if (missing != null) {
+      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      return;
+    }
+    final html = planHtml(plan!, title: args.title);
+    final htmlPath = fs.path.join(workspace, planHtmlPath);
+    final dir = fs.path.dirname(htmlPath);
+    if (!await fs.directory(dir).exists()) {
+      await fs.directory(dir).create(recursive: true);
+    }
+    await fs.file(htmlPath).writeAsString(html);
+    String? artifactId;
+    final saved = await _guarded(() async {
+      artifactId = await saveArtifact!(
+          planHtmlPath, fs.path.basename(planHtmlPath),
+          artifactId: args.artifactId);
+      return const ShellResult(returnCode: 0, output: "");
+    });
+    final id = artifactId;
+    if (saved.returnCode != 0 || id == null) {
+      yield ToolResultEvent(_ran(call, saved));
+      return;
+    }
+    yield ArtifactEvent(
+        artifactId: id,
+        entryFile: fs.path.basename(planHtmlPath),
+        title: args.title ?? "Plan");
+    // Emitted before it is awaited, for the same reason an approval is: the
+    // panel is where the verdict comes from. The verdict is then the tool's
+    // result, so the model reads it as the outcome of presenting rather than
+    // as the user's prose.
+    final title = args.title ?? "";
+    final request = AskRequest(
+      id: call.id,
+      questions: [planApprovalQuestion(title)],
+      argumentsJson: call.argumentsJson,
+    );
+    yield QuestionRequestEvent(request);
+    final answers = await answer(request);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planVerdict(answers),
         ));
   }
 

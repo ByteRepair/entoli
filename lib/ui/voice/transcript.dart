@@ -2,6 +2,7 @@ import "../../domain/artifact.dart";
 import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
+import "../../domain/plan.dart";
 import "../../domain/speech_text.dart";
 
 /// Who a transcript line belongs to. Three rather than the issue's two: a turn
@@ -118,6 +119,10 @@ String? _doing(String tool) => switch (tool) {
       writeToolName => "Wrote a file",
       editToolName => "Edited a file",
       artifactToolName => "Made an artifact",
+      presentPlanToolName => "Presented the plan",
+      planAddToolName => null,
+      planNextToolName => null,
+      planDoneToolName => null,
       // The panel below is where a question belongs, not a line above it.
       askToolName => null,
       _ => "Used $tool",

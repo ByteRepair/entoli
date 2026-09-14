@@ -242,6 +242,18 @@ LlmCompletion askCall(Object arguments, {String id = "ask-1"}) => LlmCompletion(
       ),
     );
 
+/// One assistant turn that calls one of the plan tools.
+LlmCompletion planCall(String tool, Map<String, Object?> arguments,
+        {String id = "plan-1"}) =>
+    LlmCompletion(
+      message: LlmMessage(
+        role: LlmRole.assistant,
+        toolCalls: [
+          LlmToolCall(id: id, name: tool, argumentsJson: jsonEncode(arguments)),
+        ],
+      ),
+    );
+
 /// One assistant turn that says something and calls nothing.
 LlmCompletion saidOnly(String text, {String? finishReason}) => LlmCompletion(
       finishReason: finishReason,
