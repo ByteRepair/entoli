@@ -522,6 +522,46 @@ carries` rule. The install and the settings page's import and delete write
 through `withWritableDir`, because the skills directories are read-only — see
 the root notes, "On-disk layout".
 
+## The plan (PLAN.md)
+
+The plan is a `PLAN.md` in the chat's own workspace — the directory the model
+works in, so the model can read it and edit it around the tools, and the
+project workspace stays work another conversation picks up. The file is also
+the model's own writing: the tools are line edits over it, never a
+re-serialization, and the parser (`lib/domain/plan.dart`) is deliberately
+liberal — a bare bullet is a pending task — so a plan the model wrote by hand
+or an older skill produced still reads.
+
+Four tools. `plan_add` records a task (creating the file when there is none),
+one call per task; `plan_next` marks the first pending task in progress and
+answers its number; `plan_done` ticks one, by number or by enough of its text
+to identify it (ambiguous is refused with the candidates, not guessed). The
+trio rides the floor beside the file tools — no shell needed, so a browser has
+them — and is dropped for a sub-agent through the `oneShot` flag.
+
+`present_plan` is the end of planning, and it is the ask and artifact tools
+assembled rather than new machinery: it renders PLAN.md into a page
+(`planHtml`, model-written text escaped), publishes it through the same
+`saveArtifact` callback the `artifact` tool calls, emits the `ArtifactEvent`
+the chat draws the card from, and then raises the existing
+`QuestionRequestEvent` with one fixed question — Go, or request changes — on
+the `answer` completer. The panel takes the composer's place exactly as for
+`ask_user`, and a sync mirror renders it the same way — the questions travel
+as the request's document (`planApprovalQuestionsJson`), since the call's own
+arguments name a title, not a question. The verdict is the tool's result, so
+the projection words it with zero changes — unlike `ask_user`, nothing splits
+for it. The tool is offered where `AgentCapabilities.presentPlan` (`ask` &&
+`artifact`) holds: a headless turn folds `ask` out of its takes already (a
+Go/Deny nobody answers would park it on a completer), and a sub-agent's
+missing `saveArtifact` withholds it the way `artifact` is withheld. Nothing
+answered reads as "finish the turn", never as "start".
+
+The workflow is the coding skill's ("Plan first"), not the system prompt's —
+the prompt carries only the one tool-fragment line, the skill carries the
+plan-first rule and the do-not-execute-before-Go one. An update on a re-present
+is the artifact's `artifact_id`, so the card is one card growing, not a card
+per revision.
+
 ## Memory
 
 What the settings page calls Memory is two subsystems under one category:

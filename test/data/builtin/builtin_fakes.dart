@@ -215,7 +215,9 @@ LlmCompletion bashCall(
       ),
     );
 
-/// One assistant turn that calls a file tool — `read`, `write` or `edit`.
+/// One assistant turn that calls a tool by name with a map of arguments —
+/// the shape any structured tool call takes in a test. Named for the file
+/// tools because that is what most tests call, but not limited to them.
 LlmCompletion fileCall(String tool, Map<String, Object?> arguments,
         {String id = "file-1"}) =>
     LlmCompletion(

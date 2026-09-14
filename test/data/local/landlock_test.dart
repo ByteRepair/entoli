@@ -43,13 +43,17 @@ void main() {
           environment: {"PATH": "/usr/bin:/bin", "HOME": cache.path});
       final out = StringBuffer();
       final err = StringBuffer();
-      result.stdout
-          .transform(const SystemEncoding().decoder)
-          .listen(out.write);
-      result.stderr
-          .transform(const SystemEncoding().decoder)
-          .listen(err.write);
+      // Drained to completion rather than read after the exit code: the
+      // process's exit event is not ordered after the last pipe chunk
+      // through the event loop, and under load the tail of a pipe — the
+      // "Permission denied" line, the last echo — loses that race. Both
+      // futures together are the process being over.
+      final drained = Future.wait([
+        result.stdout.transform(const SystemEncoding().decoder).forEach(out.write),
+        result.stderr.transform(const SystemEncoding().decoder).forEach(err.write),
+      ]);
       final code = await result.exitCode;
+      await drained;
       return (code: code, out: out.toString(), err: err.toString());
     }
 
