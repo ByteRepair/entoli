@@ -12,6 +12,7 @@ import "profile.dart";
 import "project_settings.dart";
 import "temp_chat_ttl.dart";
 import "theme_colour.dart";
+import "tone.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
@@ -35,6 +36,8 @@ class AppSettings {
     this.approveMode = ApproveMode.ask,
     this.llmProviders = const [],
     this.profile,
+    this.tone = Tone.none,
+    this.citations = false,
     this.appIcon = AppIcon.cookie,
     this.appTheme = AppTheme.system,
     this.primaryColour = ThemeColour.indigo,
@@ -140,6 +143,15 @@ class AppSettings {
   /// The user's profile, injected at the end of the system prompt. App-level
   /// default; a project can override it. Null means nothing is injected.
   Profile? profile;
+
+  /// How the agent words its replies. App-level default; a project can
+  /// override it. [Tone.none] adds nothing to the prompt.
+  Tone tone;
+
+  /// Whether the agent numbers the web pages a reply drew on and lists them
+  /// at the end of it. It names what it used, never a search it was not
+  /// asked to make. App-level default; a project can override it.
+  bool citations;
 
   /// Which icon the app wears, in the app and on the Android home screen.
   /// App-level only: an icon is the app's, not a chat's.
@@ -365,6 +377,8 @@ class AppSettings {
         approveMode: _approveMode(json),
         llmProviders: _providers(json["llmProviders"]),
         profile: Profile.fromJson(json["profile"]),
+        tone: Tone.fromName(json["tone"] as String?),
+        citations: json["citations"] as bool? ?? false,
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
         appTheme: AppTheme.fromName(json["appTheme"] as String?),
         primaryColour: ThemeColour.fromName(json["primaryColour"] as String?),
@@ -460,6 +474,8 @@ class AppSettings {
         approveMode: approveMode,
         llmProviders: llmProviders,
         profile: profile,
+        tone: tone,
+        citations: citations,
         appIcon: appIcon,
         appTheme: appTheme,
         primaryColour: primaryColour,
@@ -519,6 +535,8 @@ class AppSettings {
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
+      if (tone != Tone.none) "tone": tone.name,
+      if (citations) "citations": citations,
       "appIcon": appIcon.name,
       "appTheme": appTheme.name,
       "primaryColour": primaryColour.name,

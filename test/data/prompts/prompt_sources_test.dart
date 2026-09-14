@@ -276,7 +276,12 @@ void main() {
     // The local three are pinned by name; the fetched set moves with the
     // fork's releases and is asserted structurally above. Every skill is
     // unscoped, so every project inherits the whole lot.
-    const localSkills = {"artifact", "deep-research", "skill-creator"};
+    const localSkills = {
+      "artifact",
+      "coding",
+      "deep-research",
+      "skill-creator",
+    };
 
     test("the default project offers the local skills and agents, no others "
         "missing", () async {

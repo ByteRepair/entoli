@@ -339,6 +339,9 @@ class ChatRepository {
       environment: projectSettings.environment ?? const {},
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
+      // The project's wording answers over the app's, like the step limit.
+      tone: projectSettings.tone ?? settings.tone,
+      citations: projectSettings.citations ?? settings.citations,
 
       // The answering member is the caller's fact, not the chat's — it is
       // about the message the turn runs, not the settings it runs under.

@@ -14,6 +14,7 @@ import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/shell_command_analysis.dart";
+import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
@@ -253,6 +254,8 @@ class BuiltinSession {
 LlmMessage agentSystemMessage({
   required String platform,
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   bool oneShot = false,
@@ -262,6 +265,8 @@ LlmMessage agentSystemMessage({
       text: systemPrompt(
         platform: platform,
         profile: profile,
+        tone: tone,
+        citations: citations,
         caps: caps,
         skills: skills,
         oneShot: oneShot,
@@ -334,6 +339,8 @@ class BuiltinAgent {
     this.skills = const [],
     this.webSearch,
     this.profile,
+    this.tone = Tone.none,
+    this.citations = false,
     this.saveArtifact,
     this.packageSkill,
     this.onShellOutput,
@@ -525,6 +532,15 @@ class BuiltinAgent {
   /// Null means nothing is added. Rewritten every turn with the rest of the
   /// system prompt.
   final Profile? profile;
+
+  /// How the turn words its replies, resolved with the profile. Rewritten
+  /// every turn with the rest of the system prompt; a sub-agent gets the
+  /// parent's, so a worker words its part the way the chat is set to.
+  final Tone tone;
+
+  /// Whether the turn numbers the web pages it drew on and lists them at the
+  /// end of the reply.
+  final bool citations;
 
   /// Publishes an artifact from a workspace path to the chat's `artifacts/`
   /// dir and returns the id. Null where the agent is a sub-agent: sub-agents run
@@ -750,6 +766,8 @@ class BuiltinAgent {
       agentSystemMessage(
         platform: shell.platformDescription,
         profile: profile,
+        tone: tone,
+        citations: citations,
         caps: caps,
         skills: skills,
         oneShot: oneShot,
