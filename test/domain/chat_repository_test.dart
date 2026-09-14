@@ -617,6 +617,22 @@ void main() {
       expect(chatMeta.permissions, isEmpty);
     });
 
+    test("pressing Always twice on the same head does not stack the rule",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      ToolApproval banner(String id) => ToolApproval(
+          id: id,
+          toolName: "bash",
+          argumentsText: "cd repo && git log");
+      await repo.respondApproval(chat.state.id, "a-1",
+          ApprovalResponse.alwaysAllowChat, approval: banner("a-1"));
+      await repo.respondApproval(chat.state.id, "a-2",
+          ApprovalResponse.alwaysAllowChat, approval: banner("a-2"));
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.permissions, hasLength(1));
+    });
+
     test("a plain allow writes nothing anywhere", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);

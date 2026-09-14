@@ -565,19 +565,36 @@ class ChatRepository {
 
   /// Writes [rule] onto the chat's `meta.json`, read fresh — the turn that is
   /// running may have written the TTL or the anchor since the UI read it.
+  /// An equivalent rule already there is not appended again: two banners
+  /// whose calls share a head derive the same rule, and pressing Always
+  /// twice should not stack copies.
   Future<void> _saveChatRule(String chatId, PermissionRule rule) async {
     final meta = await _store.loadMeta(chatId);
+    if (meta.permissions.any(_sameRule(rule))) return;
     await _store.saveMeta(chatId, meta..permissions = [...meta.permissions, rule]);
     _changes.add(MetaChanged(chatId, meta));
   }
 
   /// Writes [rule] onto the project's `project.json`, read fresh; null is the
-  /// default project's file.
+  /// default project's file. Same dedup as [_saveChatRule].
   Future<void> _saveProjectRule(String? project, PermissionRule rule) async {
     final settings = ProjectSettings.load(_config, project: project);
+    if (settings.permissions.any(_sameRule(rule))) return;
     settings.permissions = [...settings.permissions, rule];
     await settings.save(_config, project: project);
   }
+
+  /// What makes two rules the same for the dedup: everything persisted.
+  static bool Function(PermissionRule) _sameRule(PermissionRule rule) =>
+      (existing) =>
+          existing.tool == rule.tool &&
+          existing.pattern == rule.pattern &&
+          existing.decision == rule.decision &&
+          _sameStrings(existing.writes, rule.writes);
+
+  static bool _sameStrings(List<String> a, List<String> b) =>
+      a.length == b.length &&
+      [for (final x in a) b.contains(x)].every((v) => v);
 
   Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>
       _backend.respondQuestions(chatId, requestId, answers);
