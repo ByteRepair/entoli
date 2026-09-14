@@ -34,9 +34,11 @@ doing instead.
 
 ## Tests and CI
 
-This device may be a phone — do not run the project's test suite locally.
-Push the branch and let CI run it instead. Read CI's output the same way
-you would a local run: fix what it reports and push again.
+Run the project's test suite when this device can — if a test runner is here
+and running it is quick, a local run is the faster answer. Where it cannot
+(the platform note says what this device is), push the branch and let CI run
+it instead, then read CI's output the same way you would a local run: fix
+what it reports and push again.
 
 Do not wait for CI inside the turn: push, then finish the turn and report.
 

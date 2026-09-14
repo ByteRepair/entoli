@@ -4,7 +4,6 @@ import "dart:io";
 import "package:flutter_test/flutter_test.dart";
 
 import "package:agent_chat/core/config.dart";
-import "package:fs_shim/fs_io.dart" show fileSystemIo;
 import "package:agent_chat/data/local/file_chat_store.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_repository.dart";
@@ -12,9 +11,9 @@ import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/tone.dart";
 
 import "../fakes.dart";
+import "../harness.dart";
 
 void main() {
-  late Directory tmp;
   late AppConfig config;
   late FakeBackend backend;
 
@@ -22,14 +21,8 @@ void main() {
       ChatRepository(FileChatStore(config), backend, () => settings, config);
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync("tone_settings_test_");
-    config = AppConfig.forDirectory(tmp.path, fileSystemIo);
-    Directory(config.chatsDir()).createSync(recursive: true);
+    config = tempConfig("tone_settings_test_");
     backend = FakeBackend();
-  });
-
-  tearDown(() {
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
   /// A project whose directory exists, which saving its settings and running

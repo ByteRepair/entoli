@@ -42,10 +42,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _write ??= RenameWriter.fs(config.fs);
 
   DateTime? _dobValue;
-  Tone _tone = Tone.none;
-  bool _citations = false;
+  Tone? _tone;
+  bool? _citations;
   bool _loaded = false;
   bool _saving = false;
+
+  /// The app's resolved answers, read once for the project page's `Default`
+  /// entries to name.
+  Tone _appTone = Tone.none;
+  bool _appCitations = false;
 
   @override
   void initState() {
@@ -75,10 +80,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _tone = settings.tone;
       _citations = settings.citations;
     } else {
-      final project =
-          ref.read(projectSettingsProvider(widget.project));
-      _tone = project.tone ?? Tone.none;
-      _citations = project.citations ?? false;
+      final project = ref.read(projectSettingsProvider(widget.project));
+      _appTone = ref.read(appSettingsProvider).tone;
+      _appCitations = ref.read(appSettingsProvider).citations;
+      _tone = project.tone;
+      _citations = project.citations;
     }
     if (mounted) setState(() => _loaded = true);
   }
@@ -103,17 +109,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     await _writeInstructions(config, _instructionsPath(config), _instructions.text);
     if (widget.project == null) {
       final profile = _profile();
-      final appSettings = ref.read(appSettingsProvider.notifier);
-      await appSettings.setProfile(profile.isEmpty ? null : profile);
-      await appSettings.setTone(_tone);
-      await appSettings.setCitations(_citations);
+      // One write of settings.json: three separate setters would be three
+      // re-encodes and renames of the one file, the first two superseded.
+      await ref.read(appSettingsProvider.notifier).setReplyStyle(
+            profile: profile.isEmpty ? null : profile,
+            tone: _tone ?? Tone.none,
+            citations: _citations ?? false,
+          );
     } else {
-      final projectSettings =
-          ref.read(projectSettingsProvider(widget.project).notifier);
-      // Null where the app default stands, so a project with no answer of its
-      // own inherits again rather than pinning what it inherited.
-      await projectSettings.setTone(_tone == Tone.none ? null : _tone);
-      await projectSettings.setCitations(_citations ? true : null);
+      // One write of project.json. Null stays null, so a field left on
+      // Default inherits again rather than pinning what it inherited.
+      await ref
+          .read(projectSettingsProvider(widget.project).notifier)
+          .setReplyStyle(tone: _tone, citations: _citations);
     }
     if (mounted) setState(() => _saving = false);
     if (mounted) Navigator.of(context).pop();
@@ -142,8 +150,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _profession.clear();
     setState(() {
       _dobValue = null;
-      _tone = Tone.none;
-      _citations = false;
+      _tone = widget.project == null ? Tone.none : null;
+      _citations = widget.project == null ? false : null;
     });
   }
 
@@ -175,6 +183,45 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final global = widget.project == null;
+    // The reply-style rows: values at app level, overrides at a project's.
+    // The dropdown's own Default entry and reset button are the inherit
+    // affordance a project level needs, and nothing carries one here.
+    final toneRow = global
+        ? LabelledField(
+            label: "Tone",
+            child: DropdownButtonFormField<Tone>(
+              initialValue: _tone ?? Tone.none,
+              items: [
+                for (final tone in Tone.values)
+                  DropdownMenuItem(value: tone, child: Text(tone.label)),
+              ],
+              onChanged: (value) =>
+                  setState(() => _tone = value ?? Tone.none),
+            ),
+          )
+        : InheritableDropdown<Tone>(
+            label: "Tone",
+            value: _tone,
+            inherited: _appTone.label,
+            options: {for (final tone in Tone.values.skip(1)) tone: tone.label},
+            onChanged: (value) => setState(() => _tone = value),
+          );
+    final citationsRow = global
+        ? SwitchListTile(
+            title: const Text("Numbered references"),
+            subtitle: const Text(
+                "Number the web pages a reply used and list them at the end"),
+            value: _citations ?? false,
+            onChanged: (value) => setState(() => _citations = value),
+          )
+        : InheritableSwitch(
+            title: "Numbered references",
+            subtitle:
+                "Number the web pages a reply used and list them at the end",
+            value: _citations,
+            inherited: _appCitations,
+            onChanged: (value) => setState(() => _citations = value),
+          );
     return Scaffold(
       appBar: AppBar(
         title: Text(global ? "Profile" : "Project instructions"),
@@ -251,44 +298,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         ),
                   ),
                 ),
-                LabelledField(
-                  label: "Tone",
-                  child: DropdownButtonFormField<Tone>(
-                    initialValue: _tone,
-                    items: [
-                      for (final tone in Tone.values)
-                        DropdownMenuItem(value: tone, child: Text(Tone.labels[tone]!)),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _tone = value ?? Tone.none),
-                  ),
-                ),
-                SwitchListTile(
-                  title: const Text("Numbered references"),
-                  subtitle: const Text(
-                      "Number the web pages a reply used and list them at the end"),
-                  value: _citations,
-                  onChanged: (value) => setState(() => _citations = value),
-                ),
-                if (!global) ...[
-                  const SizedBox(height: 8),
-                  ListTile(
-                    title: const Text("Follow the app's answer"),
-                    trailing: Checkbox(
-                      value: _tone == Tone.none && !_citations,
-                      onChanged: (value) => setState(() {
-                        if (value == true) {
-                          _tone = Tone.none;
-                          _citations = false;
-                        }
-                      }),
-                    ),
-                    onTap: () => setState(() {
-                      _tone = Tone.none;
-                      _citations = false;
-                    }),
-                  ),
-                ],
+                toneRow,
+                citationsRow,
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(

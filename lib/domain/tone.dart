@@ -2,11 +2,17 @@
 /// into the system prompt by `profileSection`'s neighbour. `none` emits
 /// nothing, so the prompt and the warmed prefix over it keep the bytes they
 /// had — the same bargain an empty [Profile] makes.
+///
+/// Declaration order is the order the settings pages offer them in.
 enum Tone {
-  none,
-  direct,
-  kind,
-  formal;
+  none("Default"),
+  direct("Direct"),
+  kind("Kind"),
+  formal("Formal");
+
+  const Tone(this.label);
+
+  final String label;
 
   /// The sentence the prompt carries. Only [Tone.none] has none.
   String? get instruction => switch (this) {
@@ -19,21 +25,13 @@ enum Tone {
             "no slang or contractions.",
       };
 
-  /// What the settings pages call each one. Beside the enum so the project
-  /// page's inherited entry and the app page's dropdown name them the same.
-  static const labels = {
-    none: "Default",
-    direct: "Direct",
-    kind: "Kind",
-    formal: "Formal",
-  };
+  /// An unknown name is a file written by a later build, so it falls back
+  /// rather than failing the whole settings load.
+  static Tone fromName(String? name) =>
+      values.firstWhere((t) => t.name == name, orElse: () => none);
 
-  static Tone fromJson(Object? value) => switch (value) {
-        "direct" => direct,
-        "kind" => kind,
-        "formal" => formal,
-        _ => none,
-      };
-
-  String toJson() => name;
+  /// Null when the key is absent, so a nullable field reads as "inherit".
+  static Tone? fromNameNullable(String? name) => name == null
+      ? null
+      : values.cast<Tone?>().firstWhere((t) => t!.name == name, orElse: () => null);
 }

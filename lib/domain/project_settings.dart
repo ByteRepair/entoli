@@ -120,7 +120,7 @@ class ProjectSettings {
             json["omadaOrdering"] as String?),
         omadaMaxGenerations: json["omadaMaxGenerations"] as int?,
         turnMaxSteps: json["turnMaxSteps"] as int?,
-        tone: json["tone"] == null ? null : Tone.fromJson(json["tone"]),
+        tone: Tone.fromNameNullable(json["tone"] as String?),
         citations: json["citations"] as bool?,
         description: json["description"] as String?,
       );

@@ -377,7 +377,7 @@ class AppSettings {
         approveMode: _approveMode(json),
         llmProviders: _providers(json["llmProviders"]),
         profile: Profile.fromJson(json["profile"]),
-        tone: Tone.fromJson(json["tone"]),
+        tone: Tone.fromName(json["tone"] as String?),
         citations: json["citations"] as bool? ?? false,
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
         appTheme: AppTheme.fromName(json["appTheme"] as String?),

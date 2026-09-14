@@ -519,6 +519,20 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// Whether replies number the web pages they drew on, app-wide.
   Future<void> setCitations(bool value) => _update((s) => s.citations = value);
 
+  /// Profile, tone and citations in one write: the profile page saves all
+  /// three at once, and three `_update`s would be three full re-encodes and
+  /// three renames of the one `settings.json` where the first two are
+  /// superseded before they land.
+  Future<void> setReplyStyle({
+    Profile? profile,
+    Tone? tone,
+    bool? citations,
+  }) =>
+      _update((s) => s
+        ..profile = profile
+        ..tone = tone ?? s.tone
+        ..citations = citations ?? s.citations);
+
   /// Setting first, launcher second: a launcher that refuses still leaves the
   /// app showing what was picked.
   Future<void> setAppIcon(AppIcon icon) async {
@@ -1128,17 +1142,14 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     await next.save(_config, project: project);
   }
 
-  /// How this project's turns are worded. Null means the app default stands.
-  Future<void> setTone(Tone? value) async {
-    final next = state.copy()..tone = value;
-    state = next;
-    await next.save(_config, project: project);
-  }
-
-  /// Whether this project's turns number the web pages they used. Null means
-  /// the app default stands.
-  Future<void> setCitations(bool? value) async {
-    final next = state.copy()..citations = value;
+  /// How this project's turns are worded, and whether they number the web
+  /// pages they used. Null means the app default stands. One write: the
+  /// profile page saves both at once, and two writes of the one
+  /// `project.json` would supersede each other.
+  Future<void> setReplyStyle({Tone? tone, bool? citations}) async {
+    final next = state.copy()
+      ..tone = tone
+      ..citations = citations;
     state = next;
     await next.save(_config, project: project);
   }
