@@ -27,17 +27,15 @@ class WritableDirsSection extends StatefulWidget {
 class _WritableDirsSectionState extends State<WritableDirsSection> {
 
   Future<void> _edit({String? existing}) async {
-    final dir = await promptForPair(
+    final dir = await promptForText(
       context,
       title: existing == null ? "Add directory" : "Edit directory",
-      nameLabel: "Path",
-      valueLabel: "",
-      name: existing ?? "",
-      value: "",
+      initial: existing ?? "",
+      confirmLabel: "Save",
     );
     if (dir == null || !mounted) return;
     final next = [...widget.dirs]..remove(existing);
-    next.add(dir.name);
+    next.add(dir);
     await widget.onSaved(next);
   }
 

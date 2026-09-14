@@ -15,8 +15,8 @@ class ShellCommandAnalysis {
     required this.modelable,
     required this.unmodelableReasons,
     required this.escalationReasons,
-    List<String>? segments,
-  }) : _modelableSegments = segments;
+    required this.command,
+  });
 
   factory ShellCommandAnalysis.parse(String command, {bool isWindows = false}) {
     if (isWindows) {
@@ -24,6 +24,7 @@ class ShellCommandAnalysis {
         modelable: false,
         unmodelableReasons: const ["commands on this platform are not analyzed"],
         escalationReasons: const [],
+        command: command,
       );
     }
 
@@ -34,6 +35,7 @@ class ShellCommandAnalysis {
         modelable: false,
         unmodelableReasons: List.unmodifiable(reasons),
         escalationReasons: const [],
+        command: command,
       );
     }
     final parsed = _Pipeline._of(tokens);
@@ -91,6 +93,7 @@ class ShellCommandAnalysis {
               modelable: false,
               unmodelableReasons: List.unmodifiable(reasons),
               escalationReasons: const [],
+              command: command,
             );
           }
           final inside = _Pipeline._of(inner);
@@ -121,7 +124,7 @@ class ShellCommandAnalysis {
       modelable: true,
       unmodelableReasons: const [],
       escalationReasons: List.unmodifiable(escalations),
-      segments: _segmentsOf(command),
+      command: command,
     );
   }
 
@@ -164,13 +167,16 @@ class ShellCommandAnalysis {
   /// The top-level pieces the parse could see, where it got far enough to see
   /// them. Null where the tokenizer failed outright — an unterminated quote,
   /// a substitution never closed — there being nothing reliable to name.
-  List<String>? get modelableSegments =>
-      unmodelableReasons.isEmpty ? _modelableSegments : null;
+  /// Computed on first read: the segments are consumed by the refusal note
+  /// and by per-segment rule matching, never by a command that parsed clean.
+  List<String>? get modelableSegments {
+    if (unmodelableReasons.isNotEmpty) return null;
+    return _segments ??= _segmentsOf(command!);
+  }
 
-  /// Set by [parse] where the tokens were complete enough to read pipeline
-  /// boundaries from, alongside the reasons a later stage found. Null where
-  /// the tokenizer stopped early.
-  List<String>? _modelableSegments;
+  /// The command the parse ran over, kept for the lazy split above.
+  final String? command;
+  List<String>? _segments;
 }
 
 /// The top-level pieces [command] parses to, split on the operators the

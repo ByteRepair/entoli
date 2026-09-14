@@ -24,21 +24,6 @@ void main() {
     });
   });
 
-  group("bashCommandSegments", () {
-    test("a single command is itself", () {
-      expect(bashCommandSegments("ls -la"), ["ls -la"]);
-    });
-
-    test("operators split top-level pieces", () {
-      expect(bashCommandSegments("cd /x && git status; python3 run.py | wc -l"),
-          ["cd /x", "git status", "python3 run.py", "wc -l"]);
-    });
-
-    test("empty segments are dropped", () {
-      expect(bashCommandSegments("a;; && b"), ["a", "b"]);
-    });
-  });
-
   group("rulesDecide", () {
     final allowGit = PermissionRule(
         tool: "bash", pattern: "git status *", decision: PermissionDecision.allow);
@@ -53,34 +38,34 @@ void main() {
     test("a matching allow runs", () {
       expect(
           rulesDecide([allowGit], "bash", command: "git status --short"),
-          RuleOutcome.allow);
+          PermissionDecision.allow);
     });
 
     test("deny outranks allow, whatever the order", () {
       expect(rulesDecide([allowGit, denyGit], "bash", command: "git status"),
-          RuleOutcome.deny);
+          PermissionDecision.deny);
       expect(rulesDecide([denyGit, allowGit], "bash", command: "git status"),
-          RuleOutcome.deny);
+          PermissionDecision.deny);
     });
 
     test("an uncovered command asks", () {
       expect(rulesDecide([allowGit], "bash", command: "git push"),
-          RuleOutcome.ask);
-      expect(rulesDecide([], "bash", command: "anything"), RuleOutcome.ask);
+          null);
+      expect(rulesDecide([], "bash", command: "anything"), null);
     });
 
     test("a rule for another tool is skipped", () {
       expect(rulesDecide([allowWriteTmp], "bash", command: "cat /tmp/x"),
-          RuleOutcome.ask);
+          null);
     });
 
     test("a path rule matches the subtree of its directory", () {
       expect(
           rulesDecide([allowWriteTmp], "write", path: "/tmp/scratch/out.txt"),
-          RuleOutcome.allow);
+          PermissionDecision.allow);
       expect(
           rulesDecide([allowWriteTmp], "write", path: "/tmp/other/out.txt"),
-          RuleOutcome.ask);
+          null);
     });
 
     test("a webfetch rule matches the host and subdomains", () {
@@ -89,11 +74,11 @@ void main() {
       expect(
           rulesDecide([rule], "webfetch",
               url: "https://www.example.com/page?q=1"),
-          RuleOutcome.allow);
+          PermissionDecision.allow);
       expect(
           rulesDecide([rule], "webfetch",
               url: "https://notexample.com/page"),
-          RuleOutcome.ask);
+          null);
     });
   });
 
@@ -188,7 +173,7 @@ void main() {
       );
       // deny outranks allow regardless of tier; a chat allow only beats an
       // app-level ask or nothing.
-      expect(verdict, RuleOutcome.deny);
+      expect(verdict, PermissionDecision.deny);
     });
   });
 }

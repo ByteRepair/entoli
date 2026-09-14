@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   const char *workspace = NULL, *tmp = NULL, *home = NULL;
-  const char *extra[16] = {0};
+  const char *extra[argc];
   int extras = 0;
   int i = 2;
   while (i < argc && strcmp(argv[i], "--") != 0) {
@@ -153,7 +153,6 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--tmp")) tmp = argv[++i];
     else if (!strcmp(argv[i], "--home")) home = argv[++i];
     else if (!strcmp(argv[i], "--write")) {
-      if (extras >= 16) { fprintf(stderr, "too many --write dirs\n"); return 2; }
       extra[extras++] = argv[++i];
     }
     else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }

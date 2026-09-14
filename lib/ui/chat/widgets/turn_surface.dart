@@ -51,15 +51,12 @@ class TurnSurface extends StatelessWidget {
               onDeny: () => notifier.respondApproval(approval.id, ApprovalResponse.deny),
               onAlwaysAllowChat: !notifier.rulesWritable
                   ? null
-                  : () => notifier.respondApproval(
-                      approval.id, ApprovalResponse.alwaysAllowChat,
-                      approval: approval),
-              onAlwaysAllowProject: !notifier.rulesWritable ||
-                      view.chat?.state.project == null
+                  : () => notifier.respondApproval(approval.id,
+                      ApprovalResponse.alwaysAllowChat, approval: approval),
+              onAlwaysAllowProject: !notifier.rulesWritable
                   ? null
-                  : () => notifier.respondApproval(
-                      approval.id, ApprovalResponse.alwaysAllowProject,
-                      approval: approval),
+                  : () => notifier.respondApproval(approval.id,
+                      ApprovalResponse.alwaysAllowProject, approval: approval),
             ),
       ],
     );

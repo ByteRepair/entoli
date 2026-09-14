@@ -539,28 +539,26 @@ class ChatRepository {
   /// Answer an approval banner. An "always" answer derives the standing rule
   /// from the approval — the command's leading words, the file's directory, or
   /// the fetch's host — writes it to the tier the answer names, and forwards
-  /// [ApprovalResponse.allow] to the waiting turn, which reads the runtime
-  /// grant it is handed. The rule reaching the running turn is the backend's
-  /// half, through `grantRuntimeRule` on the agent it is driving.
+  /// the answer whole: the waiting turn derives the same rule for itself, so
+  /// the rest of it is covered before the persisted file is read again. The
+  /// project is the chat's own, read from the store — a UI snapshot may be
+  /// from before a move.
   Future<void> respondApproval(
     String chatId,
     String approvalId,
     ApprovalResponse r, {
     ToolApproval? approval,
-    String? project,
   }) async {
-    if (r == ApprovalResponse.alwaysAllowChat || r == ApprovalResponse.alwaysAllowProject) {
+    if (r == ApprovalResponse.alwaysAllowChat ||
+        r == ApprovalResponse.alwaysAllowProject) {
       final rule = ruleFromApproval(approval);
       if (rule != null) {
         if (r == ApprovalResponse.alwaysAllowChat) {
           await _saveChatRule(chatId, rule);
         } else {
-          await _saveProjectRule(project, rule);
+          await _saveProjectRule(await projectOf(chatId), rule);
         }
       }
-      await _backend.respondApproval(
-          chatId, approvalId, ApprovalResponse.allow);
-      return;
     }
     await _backend.respondApproval(chatId, approvalId, r);
   }

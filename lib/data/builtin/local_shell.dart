@@ -3,6 +3,7 @@ import "dart:convert";
 import "dart:io";
 
 import "package:flutter/foundation.dart";
+import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
 import "../../domain/file_tools.dart";
@@ -871,7 +872,7 @@ class ShellUnavailable implements Exception {
 /// carries no such words, so it reads `denied` and a read refused by the
 /// file's own Unix perms is not misreported as a write.
 final RegExp deniedPathPattern = RegExp(
-    r"""(?<write>cannot (?:open|touch|create regular file|create) )'?(?<path>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|(?<neutral>^|[\s:"'(])(?!cannot )'?(?<path2>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|PermissionError: \[Errno 13\] Permission denied: '?(?<pypath>[^'?:]*)'?:?""",
+    r"""(?<write>cannot (?:open|touch|create regular file|create) )'?(?<path>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|(?:^|[\s:"'(])(?!cannot )'?(?<path2>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|PermissionError: \[Errno 13\] Permission denied: '?(?<pypath>[^'?:]*)'?:?""",
     multiLine: true);
 
 /// What a `oneShot` command is: today's contract, a fresh subshell per
@@ -1081,11 +1082,9 @@ List<String> sandboxViolations(
   // inside its own directory names its files the way it got there.
   String resolve(String raw) {
     final path = raw.trim();
-    if (path.startsWith("/")) return path;
+    if (path.startsWith("/")) return p.normalize(path);
     final base = cwd.startsWith("/") ? cwd : workspace;
-    final joined =
-        "$base/${path.startsWith("./") ? path.substring(2) : path}";
-    return joined;
+    return p.normalize(p.join(base, path));
   }
 
   final found = <String, bool>{};

@@ -1,5 +1,6 @@
 import "models.dart" show ToolApproval;
 import "shell.dart" show pathInside;
+import "shell_command_analysis.dart" show ShellCommandAnalysis;
 
 /// How a chat handles a command before it runs.
 enum ApproveMode {
@@ -144,11 +145,6 @@ class PermissionRule {
         if (writes.isNotEmpty) "writes": writes,
       };
 
-  Map<String, dynamic> encode() => toJson();
-
-  factory PermissionRule.decode(Map<String, dynamic> json) =>
-      PermissionRule.fromJson(json);
-
   @override
   String toString() => "$decision $tool $pattern";
 }
@@ -159,22 +155,9 @@ List<PermissionRule> permissionRulesFromJson(List<dynamic>? json) {
   final rules = <PermissionRule>[];
   for (final entry in json ?? const []) {
     if (entry is! Map<String, dynamic>) continue;
-    final tool = entry["tool"] as String?;
-    final pattern = entry["pattern"] as String?;
-    if (tool == null || pattern == null || pattern.isEmpty) continue;
-    rules.add(PermissionRule(
-      tool: tool,
-      pattern: pattern,
-      decision: switch (entry["decision"] as String?) {
-        "deny" => PermissionDecision.deny,
-        "allow" => PermissionDecision.allow,
-        _ => PermissionDecision.ask,
-      },
-      writes: [
-        for (final w in (entry["writes"] as List<dynamic>? ?? const []))
-          if (w is String) w,
-      ],
-    ));
+    if (entry["tool"] is! String || entry["pattern"] is! String) continue;
+    if ((entry["pattern"] as String).isEmpty) continue;
+    rules.add(PermissionRule.fromJson(entry));
   }
   return rules;
 }
@@ -182,110 +165,89 @@ List<PermissionRule> permissionRulesFromJson(List<dynamic>? json) {
 List<Map<String, dynamic>> permissionRulesToJson(List<PermissionRule> rules) =>
     [for (final r in rules) r.toJson()];
 
-/// Splits a bash command into the segments rules are matched against: the
-/// pieces a top-level `|`, `;`, `&&`, `||` or newline separates, in order.
-/// A command of one segment is itself. Substitution bodies are walked as
-/// segments too, so a rule cannot allow a command into an inner command the
-/// rule does not cover.
-List<String> bashCommandSegments(String command) => [
-      for (final piece in command.split(RegExp(r"\|\||&&|[;|\n]")))
-        if (piece.trim().isNotEmpty) piece.trim(),
-    ];
-
 /// Whether [text] matches [glob], where `*` spans any run of characters
 /// except a shell operator and `**` spans anything. Anchored at both ends.
+/// The compiled form is cached per glob — the patterns are few and repeat
+/// for the life of the process, where a regex build per match attempt would
+/// be the cost of every command.
+final _globCache = <String, RegExp>{};
+
 bool globMatch(String glob, String text) {
-  final escaped = StringBuffer("^");
-  for (var i = 0; i < glob.length; i++) {
-    final c = glob[i];
-    if (c == "*" && glob.startsWith("**", i)) {
-      escaped.write(".*");
-      i++;
-    } else if (c == "*") {
-      escaped.write("[^;|&]*");
-    } else {
-      escaped.write(RegExp.escape(c));
-    }
-  }
-  escaped.write(r"$");
-  return RegExp(escaped.toString(), caseSensitive: false).hasMatch(text.trim());
-}
-
-/// The verdict a rule set makes of one tool call.
-enum RuleOutcome {
-  /// A matching allow rule covers the call.
-  allow,
-
-  /// A matching ask rule, or no rule at all — the caller escalates.
-  ask,
-
-  /// A matching deny rule refuses the call.
-  deny,
+  final pattern = _globCache.putIfAbsent(
+      glob,
+      () => RegExp(
+          "^${RegExp.escape(glob).replaceAllMapped(RegExp(r"\\\*\\\*|\\\*"), (m) => m[0]!.length == 4 ? ".*" : "[^;|&]*")}\$",
+          caseSensitive: false));
+  return pattern.hasMatch(text.trim());
 }
 
 /// What the rules say about one tool call, deny first — a deny is the user's
 /// explicit no, an ask their "always show me", an allow the standing yes.
-/// The tiers arrive merged, chat first, so a later same-tool rule loses to an
-/// earlier one at the same strength.
-RuleOutcome rulesDecide(
+/// Null where no rule matches, which the caller escalates. The tiers arrive
+/// merged, chat first; `PermissionDecision`'s declaration order is the
+/// strength order, so the stronger rule wins whatever tier wrote it.
+///
+/// A `bash` command is matched segment by segment — [segments] are the
+/// pieces a top-level operator splits it into, from the parse — and every
+/// one must find an allow: a compound command whose tail no rule covers is
+/// not allowed by its head. [command] is the whole string, the fallback
+/// where no parse is offered.
+PermissionDecision? rulesDecide(
   List<PermissionRule> rules,
   String toolName, {
   String? command,
+  List<String>? segments,
   String? path,
   String? url,
 }) {
-  RuleOutcome? verdict;
+  // The subject is the call's, not the rule's: read once, above the loop.
+  if (toolName == "bash" && segments != null && segments.isNotEmpty) {
+    PermissionDecision? verdict;
+    for (final segment in segments) {
+      final segmentVerdict = _strongest(rules, "bash", segment);
+      if (segmentVerdict == null) return null;
+      verdict = _stronger(verdict, segmentVerdict);
+    }
+    return verdict;
+  }
+  final subject = switch (toolName) {
+    "bash" => command,
+    "webfetch" => _hostOf(url),
+    _ => path,
+  };
+  if (subject == null) return null;
+  return _strongest(rules, toolName, subject);
+}
+
+/// The strongest verdict [rules] makes of one subject, or null where none
+/// matches. `PermissionDecision`'s declaration order is the strength order.
+PermissionDecision? _strongest(
+    List<PermissionRule> rules, String toolName, String subject) {
+  PermissionDecision? verdict;
   for (final rule in rules) {
     if (rule.tool != "*" && rule.tool != toolName) continue;
-    final subject = switch (toolName) {
-      "bash" => command,
-      "webfetch" => _hostOf(url),
-      _ => path,
-    };
-    if (subject == null) continue;
     if (!_ruleMatches(rule, toolName, subject)) continue;
-    // Deny outranks ask outranks allow, whatever tier the rules came from.
-    final strength = switch (rule.decision) {
-      PermissionDecision.deny => 2,
-      PermissionDecision.ask => 1,
-      PermissionDecision.allow => 0,
-    };
-    final incumbent = switch (verdict) {
-      null => -1,
-      RuleOutcome.deny => 2,
-      RuleOutcome.ask => 1,
-      RuleOutcome.allow => 0,
-    };
-    if (strength > incumbent) {
-      verdict = switch (rule.decision) {
-        PermissionDecision.deny => RuleOutcome.deny,
-        PermissionDecision.ask => RuleOutcome.ask,
-        PermissionDecision.allow => RuleOutcome.allow,
-      };
-    }
+    verdict = _stronger(verdict, rule.decision);
   }
-  return verdict ?? RuleOutcome.ask;
+  return verdict;
 }
 
-bool _ruleMatches(PermissionRule rule, String toolName, String subject) {
-  final matched = switch (toolName) {
-    "bash" => globMatch(rule.pattern, subject),
-    "webfetch" => _hostMatch(rule.pattern, subject),
-    _ => pathInside(subject, rule.pattern) || globMatch(rule.pattern, subject),
-  };
-  if (!matched) return false;
-  return true;
-}
+PermissionDecision? _stronger(PermissionDecision? a, PermissionDecision b) =>
+    a == null || b.index > a.index ? b : a;
 
-/// The host of [url], read out of the scheme-less remainder. Null where the
-/// string names none.
+bool _ruleMatches(PermissionRule rule, String toolName, String subject) =>
+    switch (toolName) {
+      "bash" => globMatch(rule.pattern, subject),
+      "webfetch" => _hostMatch(rule.pattern, subject),
+      _ => pathInside(subject, rule.pattern) || globMatch(rule.pattern, subject),
+    };
+
+/// The host of [url], as the fetch itself would parse it. Null where the
+/// string names none — a scheme-less or malformed URL matches nothing.
 String? _hostOf(String? url) {
   if (url == null || url.isEmpty) return null;
-  final rest = url.startsWith("http://") || url.startsWith("https://")
-      ? url.substring(url.indexOf("://") + 3)
-      : url;
-  final end = rest.indexOf(RegExp(r"[/:?#]"));
-  return (end < 0 ? rest : rest.substring(0, end)).toLowerCase();
+  final host = Uri.tryParse(url)?.host;
+  return host == null || host.isEmpty ? null : host;
 }
 
 /// A host pattern matches itself and its subdomains: `example.com` covers
@@ -338,16 +300,14 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
   }
 }
 
-/// The matchable prefix of one command segment: its words up to the first
-/// shell operator or substitution, with ` *` appended so the rule covers the
-/// arguments the same command may carry next time. `git checkout -b foo` =>
-/// The matchable prefix of one command segment: its first two words — the
-/// command and its subcommand — with ` *` appended, so the rule covers the
-/// arguments the same command may carry next time. `git checkout -b foo` =>
-/// `git checkout *`; `ls -la` => `ls -la *`.
+/// The matchable prefix of a command: its first two words — the command and
+/// its subcommand — with ` *` appended, so the rule covers the arguments the
+/// same command may carry next time. `git checkout -b foo` => `git checkout
+/// *`; `ls -la` => `ls -la *`. The head is the parse's first segment, so a
+/// quoted operator does not cut it mid-quote.
 String _commandPrefix(String command) {
-  final cut = RegExp(r"[\n|;&`$<>]").firstMatch(command);
-  final head = (cut == null ? command : command.substring(0, cut.start)).trim();
+  final head = ShellCommandAnalysis.parse(command).modelableSegments?.first ??
+      command;
   final words = head.split(RegExp(r"\s+"));
   final prefix = words.length <= 2 ? head : words.take(2).join(" ");
   if (prefix.isEmpty) return command;

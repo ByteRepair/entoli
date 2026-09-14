@@ -915,8 +915,7 @@ class BuiltinAgent {
       ));
 
       yield* _runGated(call, call.argumentsJson, "bash",
-          () => _execute(call, command),
-          argumentsText: command, command: command);
+          () => _execute(call, command), argumentsText: command);
       var result = _commandResult!;
       // The sandbox's answer rides between the result and its report: a
       // denied write is offered back once, the rerun's outcome replacing
@@ -1581,45 +1580,51 @@ class BuiltinAgent {
     String toolName,
     Future<ShellResult> Function() run, {
     String? argumentsText,
-    String? command,
   }) async* {
+    // A bash command is judged segment by segment: an allow that covers the
+    // head but not the tail escalates the whole, so a compound command's
+    // uncovered piece never rides a rule through. The parse is the one the
+    // veto runs too — computed once here and handed down.
+    final analysis = toolName == "bash"
+        ? ShellCommandAnalysis.parse(argumentsText ?? "",
+            isWindows: platformIsWindows)
+        : null;
     final verdict = rulesDecide(
       [..._runtimeRules, ...permissions],
       toolName,
-      command: command ?? argumentsText,
-      path: toolName == readToolName || toolName == writeToolName ||
+      command: argumentsText,
+      path: toolName == readToolName ||
+              toolName == writeToolName ||
               toolName == editToolName
           ? argumentsText
           : null,
       url: toolName == webfetchToolName ? argumentsText : null,
+      segments: analysis?.modelableSegments,
     );
     switch (verdict) {
-      case RuleOutcome.deny:
+      case PermissionDecision.deny:
         _commandResult = const ShellResult.failed(
             "Denied by a permission rule you set. Do not retry this command; "
             "tell the user what you were trying to do and let them decide.");
         return;
-      case RuleOutcome.allow:
+      case PermissionDecision.allow:
         // An allow rule is a standing decision, but only for commands the
         // parse can vouch for: a compound command whose later segments the
         // rule does not cover runs with them unanswered. Findings here are a
         // banner, in every mode but never — where nobody is watching.
-        if (toolName == "bash") {
-          final note = ShellCommandAnalysis.parse(
-                  command ?? "", isWindows: platformIsWindows)
-              .escalationNote;
-          if (note != null) {
-            if (approveMode == ApproveMode.never) {
-              _commandResult = ShellResult.failed(note);
-              return;
-            }
-            yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+        final note = analysis?.escalationNote;
+        if (note != null) {
+          if (approveMode == ApproveMode.never) {
+            _commandResult = ShellResult.failed(note);
             return;
           }
+          yield* _askAndExecute(call, arguments, toolName, run, argumentsText);
+          return;
         }
         _commandResult = await run();
         return;
-      case RuleOutcome.ask:
+      case PermissionDecision.ask:
+      case null:
         break;
     }
     switch (approveMode) {
@@ -1684,7 +1689,18 @@ class BuiltinAgent {
       argumentsText: argumentsText,
     );
     yield ApprovalRequestEvent(approval);
-    final allowed = await approve(approval) == ApprovalResponse.allow;
+    final answer = await approve(approval);
+    // An "always" answer is the standing rule arriving: it applies to the
+    // rest of this turn at once, ahead of the persisted copy the next turn
+    // reads. The approval is in hand, so the derivation costs nothing here.
+    if (answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject) {
+      final rule = ruleFromApproval(approval);
+      if (rule != null) grantRuntimeRule(rule);
+    }
+    final allowed = answer == ApprovalResponse.allow ||
+        answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject;
     _humanDecided = true;
     _commandResult = allowed
         ? await run()
@@ -1739,7 +1755,7 @@ class BuiltinAgent {
   bool _humanDecided = false;
 
   Future<ShellResult> _execute(LlmToolCall call, String command,
-      {CommandSandbox? forceSandbox, bool unconfined = false}) async {
+      {bool unconfined = false}) async {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
     }
@@ -1769,8 +1785,7 @@ class BuiltinAgent {
     // banner, not the mode, is what carries that — auto mode reaches the
     // banner through the classifier's ask — so the gate reads the flag the
     // run itself sets.
-    final sandbox =
-        unconfined ? null : (forceSandbox ?? sandboxFor());
+    final sandbox = unconfined ? null : sandboxFor();
     if (sandbox != null && !_humanDecided) {
       final analysis =
           ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
@@ -1797,9 +1812,6 @@ class BuiltinAgent {
     }
   }
 
-  /// One re-prompt per call this turn, so a denial cannot loop the banner.
-  final Set<String> _rePrompted = {};
-
   /// After a command the confinement denied: one offer to rerun it, unconfined
   /// or with the denied directory joining the grant, rather than leaving the
   /// denial for the model to discover. Off under [sandboxReprompt] false, on a
@@ -1818,25 +1830,18 @@ class BuiltinAgent {
     if (result.violations.isEmpty ||
         !sandboxReprompt ||
         _humanDecided ||
-        approveMode == ApproveMode.never ||
-        _rePrompted.contains(call.id)) {
+        approveMode == ApproveMode.never) {
       return;
     }
-    _rePrompted.add(call.id);
     // The rerun rides the ordinary gated path — a denial the user denies here
     // is the answer, not a loop. _askAndExecute sets _humanDecided, so this
     // rerun's own result carries no second re-prompt, and its outcome is in
     // _commandResult when the events are done: the caller reads it there.
-    Future<ShellResult> run() => _execute(
-        call,
-        command,
-        // A write denial is rerun unconfined — the human read the command and
-        // answered — and a read denial rerun confined, there being nothing a
-        // grant could widen: a read refusal is the file's own perms.
-        unconfined: result.violations.any((v) => v.startsWith("writing ")),
-        forceSandbox: result.violations.any((v) => v.startsWith("writing "))
-            ? null
-            : sandboxFor());
+    // A write denial is rerun unconfined — the human read the command and
+    // answered — and a read denial rerun confined, there being nothing a
+    // grant could widen: a read refusal is the file's own perms.
+    final writeDenied = result.violations.any((v) => v.startsWith("writing "));
+    Future<ShellResult> run() => _execute(call, command, unconfined: writeDenied);
     yield* _askAndExecute(
       call,
       call.argumentsJson,

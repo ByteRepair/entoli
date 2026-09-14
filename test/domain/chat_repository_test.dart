@@ -587,8 +587,10 @@ void main() {
       expect(meta.permissions.single.tool, "bash");
       expect(meta.permissions.single.pattern, "git checkout *");
       expect(meta.permissions.single.decision, PermissionDecision.allow);
-      // The waiting turn is answered as an allow, whatever wrote the rule.
-      expect(backend.approvals.single.response, ApprovalResponse.allow);
+      // The answer travels whole: the waiting turn derives the same rule
+      // from the approval it holds, so the rest of the turn is covered too.
+      expect(
+          backend.approvals.single.response, ApprovalResponse.alwaysAllowChat);
     });
 
     test("\"Allow in Project\" writes the rule on the project's project.json",

@@ -450,7 +450,8 @@ abstract class AgentBackend {
 
   Future<void> abort(String chatId);
 
-  Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse response);
+  Future<void> respondApproval(
+      String chatId, String approvalId, ApprovalResponse response);
 
   /// Answer the questions of [requestId]: one entry per question, in the order
   /// they were asked, null where the user answered nothing.

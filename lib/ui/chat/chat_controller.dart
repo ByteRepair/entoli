@@ -1236,9 +1236,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     ToolApproval? approval,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
-    final project = state.chat?.state.project;
-    await repo.respondApproval(chatId, approvalId, r,
-        approval: approval, project: project);
+    await repo.respondApproval(chatId, approvalId, r, approval: approval);
     state = state.copyWith(
         approvals: _withoutApproval(state.approvals, approvalId));
   }
