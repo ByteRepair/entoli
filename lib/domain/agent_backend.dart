@@ -7,6 +7,7 @@ import "../domain/builtin_project.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
+import "../domain/tone.dart";
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
@@ -310,6 +311,14 @@ class TurnSettings {
 
   final Profile? profile;
 
+  /// How this turn's replies are worded. The project's answer over the app's;
+  /// [Tone.none] adds nothing to the prompt.
+  final Tone tone;
+
+  /// Whether this turn numbers the web pages it drew on and lists them at the
+  /// end of the reply. The project's answer over the app's.
+  final bool citations;
+
   /// Whether the project's workspace is shared between its chats. When false,
   /// the chat's own workspace is also the `HOME` of its commands, a `project:`
   /// path resolves inside it, and the prompt says nothing of a shared one.
@@ -372,6 +381,8 @@ class TurnSettings {
     this.omadaMember,
     this.omada = false,
     this.turnMaxSteps,
+    this.tone = Tone.none,
+    this.citations = false,
   });
 }
 

@@ -242,7 +242,9 @@ Wait for it.
 
 ## Phase 5 — Return
 
-Return the final report to the user as a cited report, not raw JSON. Render it as:
+Return the final report to the user as a cited report, not raw JSON. Number
+the sources in the text and list every one cited at the end of the report,
+numbered to match — always, whatever the reply settings say. Render it as:
 
 ```
 # Research: <question>
@@ -263,6 +265,9 @@ Return the final report to the user as a cited report, not raw JSON. Render it a
 
 ## Open questions
 <openQuestions>
+
+## References
+<every source cited above, numbered, one per line: title — url>
 
 ## Stats
 angles: N · sources fetched: N · claims extracted: N · verified: N ·

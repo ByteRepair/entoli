@@ -48,6 +48,7 @@ import "data/sync/sync_hub.dart";
 import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/theme_colour.dart";
+import "domain/tone.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model.dart"
@@ -511,6 +512,26 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// The user's profile, injected into the system prompt. Null clears it.
   Future<void> setProfile(Profile? profile) =>
       _update((s) => s.profile = profile);
+
+  /// How the agent words its replies, app-wide.
+  Future<void> setTone(Tone value) => _update((s) => s.tone = value);
+
+  /// Whether replies number the web pages they drew on, app-wide.
+  Future<void> setCitations(bool value) => _update((s) => s.citations = value);
+
+  /// Profile, tone and citations in one write: the profile page saves all
+  /// three at once, and three `_update`s would be three full re-encodes and
+  /// three renames of the one `settings.json` where the first two are
+  /// superseded before they land.
+  Future<void> setReplyStyle({
+    Profile? profile,
+    Tone? tone,
+    bool? citations,
+  }) =>
+      _update((s) => s
+        ..profile = profile
+        ..tone = tone ?? s.tone
+        ..citations = citations ?? s.citations);
 
   /// Setting first, launcher second: a launcher that refuses still leaves the
   /// app showing what was picked.
@@ -1117,6 +1138,18 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// default stands.
   Future<void> setTurnMaxSteps(int? value) async {
     final next = state.copy()..turnMaxSteps = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// How this project's turns are worded, and whether they number the web
+  /// pages they used. Null means the app default stands. One write: the
+  /// profile page saves both at once, and two writes of the one
+  /// `project.json` would supersede each other.
+  Future<void> setReplyStyle({Tone? tone, bool? citations}) async {
+    final next = state.copy()
+      ..tone = tone
+      ..citations = citations;
     state = next;
     await next.save(_config, project: project);
   }

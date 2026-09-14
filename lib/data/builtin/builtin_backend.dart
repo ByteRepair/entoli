@@ -241,6 +241,8 @@ class BuiltinBackend implements AgentBackend {
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
         project: project,
+        tone: settings.tone,
+        citations: settings.citations,
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
@@ -339,6 +341,8 @@ class BuiltinBackend implements AgentBackend {
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
         profile: settings.profile,
+        tone: settings.tone,
+        citations: settings.citations,
         rateLimitGate: rateLimitGate,
         // A bundled turn's note is its whole instruction half, so the nested
         // walk on a read — the one memory answer the agent itself consults —
