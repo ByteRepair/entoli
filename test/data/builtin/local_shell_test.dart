@@ -814,6 +814,24 @@ group("sandbox violation detection", () {
         sandbox: const CommandSandbox(workspace: "/home/u/ws"));
     expect(violations, ["denied /etc/shadow"]);
   });
+
+  test("curly-quoted denials are matched", () {
+    // coreutils picks its quote marks by locale; mkdir on this machine
+    // prints the curly pair, and a denial they hide is a denial nothing
+    // reports.
+    final violations = violationsOf(
+        "mkdir: cannot create directory \u2018/mnt/entoli-test\u2019: "
+        "Permission denied",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
+    expect(violations, ["writing /mnt/entoli-test"]);
+  });
+
+  test("mkdir's own wording is worded writing", () {
+    final violations = violationsOf(
+        "mkdir: cannot create directory '/home/u/other': Permission denied",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
+    expect(violations, ["writing /home/u/other"]);
+  });
 });
 }
 
@@ -823,3 +841,5 @@ List<String> violationsOf(
     String cwd = "/",
   }) =>
       sandboxViolations(text, cwd, sandbox);
+
+extension on dynamic {}

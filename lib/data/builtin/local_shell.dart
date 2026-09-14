@@ -866,13 +866,15 @@ class ShellUnavailable implements Exception {
 /// report of what the sandbox took away, so all three wordings are matched.
 /// The path may be relative (`config.json`) — a command working inside its
 /// cwd — and is joined against it by the caller before the granted set is
-/// asked. The `writeWords` group is the tool's own name for a write —
-/// `cannot touch`, `cannot create`, `for writing` — and is what says a match
-/// may be worded `writing` rather than neutrally; the shell's redirect shape
-/// carries no such words, so it reads `denied` and a read refused by the
-/// file's own Unix perms is not misreported as a write.
+/// asked. Both straight and curly quote marks are accepted around the path:
+/// coreutils picks by locale, and `mkdir` on this machine prints the curly
+/// pair. The `writeWords` group is the tool's own name for a write —
+/// `cannot touch`, `cannot create` — and is what says a match may be worded
+/// `writing` rather than neutrally; the shell's redirect shape carries no
+/// such words, so it reads `denied` and a read refused by the file's own
+/// Unix perms is not misreported as a write.
 final RegExp deniedPathPattern = RegExp(
-    r"""(?<write>cannot (?:open|touch|create regular file|create) )'?(?<path>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|(?:^|[\s:"'(])(?!cannot )'?(?<path2>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|PermissionError: \[Errno 13\] Permission denied: '?(?<pypath>[^'?:]*)'?:?""",
+    r"""(?<write>cannot (?:open|touch|create regular file|create(?: directory)?) )['\u2018]?(?<path>(?:/|[\w.@+-])[\w.@+/ -]*?)['\u2019]?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|(?:^|[\s:"'(\u2018\u2019])(?!cannot )['\u2018]?(?<path2>(?:/|[\w.@+-])[\w.@+/ -]*?)['\u2019]?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|PermissionError: \[Errno 13\] Permission denied: ['\u2018]?(?<pypath>[^'?\u2019:]*)['\u2019]?:?""",
     multiLine: true);
 
 /// What a `oneShot` command is: today's contract, a fresh subshell per
