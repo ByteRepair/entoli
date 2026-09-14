@@ -153,6 +153,8 @@ LocalPrefill? createLocalPrefill(
            agentSystemMessage(
              platform: shell.platformDescription,
              profile: now.profile,
+             tone: now.tone,
+             citations: now.citations,
              caps: caps,
              // The same skills a turn's prompt lists, off the same library the
              // backend holds — a warm-up built without them caches a prefix no

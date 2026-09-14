@@ -8,6 +8,7 @@ import "../../domain/file_tools.dart";
 import "../../domain/models.dart" show CompletionKind;
 import "../../domain/profile.dart";
 import "../../domain/shell.dart" show CommandSandbox;
+import "../../domain/tone.dart";
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
 import "task_tool.dart";
@@ -111,6 +112,8 @@ class AgentCapabilities {
 String systemPrompt({
   required String platform,
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   bool oneShot = false,
@@ -119,11 +122,19 @@ String systemPrompt({
         ? _withShell(
             platform: platform,
             profile: profile,
+            tone: tone,
+            citations: citations,
             caps: caps,
             skills: skills,
             oneShot: oneShot,
           )
-        : _withoutShell(profile: profile, caps: caps, skills: skills);
+        : _withoutShell(
+            profile: profile,
+            tone: tone,
+            citations: citations,
+            caps: caps,
+            skills: skills,
+          );
 
 /// The half that changes: where this conversation's files are, and whatever an
 /// `@agent` mention added. Its own system message so the body above it is
@@ -295,6 +306,8 @@ by handle is the way.""";
 /// same termination signal the shell path uses.
 String _withoutShell({
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
 }) {
@@ -306,6 +319,7 @@ String _withoutShell({
   final skillsText = skillsSection(skills);
   final sections = <String>[
     _files,
+    _style,
     if (caps.ask) _asking,
     if (caps.artifact) _artifacts,
     if (skillsText.isNotEmpty) skillsText,
@@ -313,7 +327,7 @@ String _withoutShell({
   return "You are a helpful assistant.\n\n"
       "${_substitute(_systemProse("browser")!, {"artifact": artifact})}\n\n"
       "$sections\n"
-      "${profileSection(profile)}";
+      "${profileSection(profile)}${styleSection(tone, citations)}";
 }
 
 /// The skills the model may load itself, as the system prompt lists them.
@@ -354,6 +368,10 @@ final String _files = "\n${_systemProse("files")}";
 /// The one thing both prompts say about artifacts, because the viewer is
 /// available with or without a shell — a browser can still open a page.
 final String _artifacts = "\n${_systemProse("artifacts")}";
+
+/// The one thing both prompts say about how replies are worded and which tool
+/// reaches for a file, because neither depends on what the turn can run.
+final String _style = "\n${_systemProse("style")}";
 
 /// The step-2 sentence's list of what a call is for, one fragment per tool
 /// the turn is offered, in the order the sentence reads them.
@@ -401,6 +419,7 @@ String _shellSections({
     ?webSearch,
     if (skillsText.isNotEmpty) skillsText,
     _files,
+    _style,
     ?artifacts,
     _systemProse("finish")!,
     ?ask,
@@ -411,6 +430,8 @@ String _shellSections({
 String _withShell({
   required String platform,
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   bool oneShot = false,
@@ -427,7 +448,8 @@ String _withShell({
     "shell": oneShot ? _oneShotShell : _persistentShell,
     "sections": sections,
   }) +
-      profileSection(profile);
+      profileSection(profile) +
+      styleSection(tone, citations);
 }
 
 /// The current moment, put at the top of a user turn so the model can date its
@@ -559,4 +581,21 @@ String profileSection(Profile? profile) {
   final buf = StringBuffer("\n## About the user\n\n");
   if (labelled.isNotEmpty) buf.writeln(labelled.join("\n"));
   return buf.toString();
+}
+
+/// How the turn words its replies: the resolved tone's sentence, and the
+/// citations rule where it is on. Empty where neither is set, so a turn under
+/// no preference gets the same system prompt as before. Beside
+/// [profileSection] rather than in the section list, because both change with
+/// the settings a turn runs under rather than with what it is offered.
+String styleSection(Tone tone, bool citations) {
+  final lines = [
+    ?tone.instruction,
+    if (citations)
+      "When a reply draws on web pages, number them in the text and list the "
+      "pages at the end of the reply, numbered to match — what was used, not "
+      "a search for more.",
+  ];
+  if (lines.isEmpty) return "";
+  return "\n## How to reply\n\n${lines.join("\n\n")}\n";
 }

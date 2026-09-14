@@ -4,6 +4,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/config.dart";
 import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/profile.dart";
+import "../../domain/tone.dart";
 import "../../providers.dart";
 import "../widgets/resettable_field.dart";
 
@@ -41,6 +42,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _write ??= RenameWriter.fs(config.fs);
 
   DateTime? _dobValue;
+  Tone _tone = Tone.none;
+  bool _citations = false;
   bool _loaded = false;
   bool _saving = false;
 
@@ -60,7 +63,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       // A file that will not read is shown as empty; saving overwrites it.
     }
     if (widget.project == null) {
-      final profile = ref.read(appSettingsProvider).profile;
+      final settings = ref.read(appSettingsProvider);
+      final profile = settings.profile;
       if (profile != null) {
         _name.text = profile.name ?? "";
         _dob.text = profile.dateOfBirth ?? "";
@@ -68,6 +72,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         _profession.text = profile.profession ?? "";
         _dobValue = _parseDate(profile.dateOfBirth);
       }
+      _tone = settings.tone;
+      _citations = settings.citations;
+    } else {
+      final project =
+          ref.read(projectSettingsProvider(widget.project));
+      _tone = project.tone ?? Tone.none;
+      _citations = project.citations ?? false;
     }
     if (mounted) setState(() => _loaded = true);
   }
@@ -92,9 +103,17 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     await _writeInstructions(config, _instructionsPath(config), _instructions.text);
     if (widget.project == null) {
       final profile = _profile();
-      await ref
-          .read(appSettingsProvider.notifier)
-          .setProfile(profile.isEmpty ? null : profile);
+      final appSettings = ref.read(appSettingsProvider.notifier);
+      await appSettings.setProfile(profile.isEmpty ? null : profile);
+      await appSettings.setTone(_tone);
+      await appSettings.setCitations(_citations);
+    } else {
+      final projectSettings =
+          ref.read(projectSettingsProvider(widget.project).notifier);
+      // Null where the app default stands, so a project with no answer of its
+      // own inherits again rather than pinning what it inherited.
+      await projectSettings.setTone(_tone == Tone.none ? null : _tone);
+      await projectSettings.setCitations(_citations ? true : null);
     }
     if (mounted) setState(() => _saving = false);
     if (mounted) Navigator.of(context).pop();
@@ -121,7 +140,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _dob.clear();
     _religion.clear();
     _profession.clear();
-    setState(() => _dobValue = null);
+    setState(() {
+      _dobValue = null;
+      _tone = Tone.none;
+      _citations = false;
+    });
   }
 
   Future<void> _pickDate() async {
@@ -215,6 +238,57 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     label: "Profession",
                     child: TextField(controller: _profession),
                   ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text(
+                    global
+                        ? "How replies are worded, in every turn. A project "
+                            "can give its own answers below."
+                        : "How this project's replies are worded, in place of "
+                            "the app's answer.",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+                LabelledField(
+                  label: "Tone",
+                  child: DropdownButtonFormField<Tone>(
+                    initialValue: _tone,
+                    items: [
+                      for (final tone in Tone.values)
+                        DropdownMenuItem(value: tone, child: Text(Tone.labels[tone]!)),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _tone = value ?? Tone.none),
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text("Numbered references"),
+                  subtitle: const Text(
+                      "Number the web pages a reply used and list them at the end"),
+                  value: _citations,
+                  onChanged: (value) => setState(() => _citations = value),
+                ),
+                if (!global) ...[
+                  const SizedBox(height: 8),
+                  ListTile(
+                    title: const Text("Follow the app's answer"),
+                    trailing: Checkbox(
+                      value: _tone == Tone.none && !_citations,
+                      onChanged: (value) => setState(() {
+                        if (value == true) {
+                          _tone = Tone.none;
+                          _citations = false;
+                        }
+                      }),
+                    ),
+                    onTap: () => setState(() {
+                      _tone = Tone.none;
+                      _citations = false;
+                    }),
+                  ),
+                ],
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(

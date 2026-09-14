@@ -48,6 +48,7 @@ import "data/sync/sync_hub.dart";
 import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/theme_colour.dart";
+import "domain/tone.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model.dart"
@@ -511,6 +512,12 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// The user's profile, injected into the system prompt. Null clears it.
   Future<void> setProfile(Profile? profile) =>
       _update((s) => s.profile = profile);
+
+  /// How the agent words its replies, app-wide.
+  Future<void> setTone(Tone value) => _update((s) => s.tone = value);
+
+  /// Whether replies number the web pages they drew on, app-wide.
+  Future<void> setCitations(bool value) => _update((s) => s.citations = value);
 
   /// Setting first, launcher second: a launcher that refuses still leaves the
   /// app showing what was picked.
@@ -1117,6 +1124,21 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// default stands.
   Future<void> setTurnMaxSteps(int? value) async {
     final next = state.copy()..turnMaxSteps = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// How this project's turns are worded. Null means the app default stands.
+  Future<void> setTone(Tone? value) async {
+    final next = state.copy()..tone = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Whether this project's turns number the web pages they used. Null means
+  /// the app default stands.
+  Future<void> setCitations(bool? value) async {
+    final next = state.copy()..citations = value;
     state = next;
     await next.save(_config, project: project);
   }
