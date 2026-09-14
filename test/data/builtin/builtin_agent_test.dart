@@ -1479,7 +1479,7 @@ void main() {
 
     test("plan_add writes the plan and reports the counts", () async {
       final client = FakeLlmClient([
-        [planCall(planAddToolName, {"task": "add parser"})],
+        [fileCall(planAddToolName, {"task": "add parser"})],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1490,13 +1490,13 @@ void main() {
       final result = events.whereType<ToolResultEvent>().single.result;
       expect(result.returnCode, 0);
       expect(result.output, contains("add parser"));
-      expect(client.sent[1].firstWhere((m) => m.toolCallId == "plan-1").text,
+      expect(client.sent[1].firstWhere((m) => m.toolCallId == "file-1").text,
           contains("add parser"));
     });
 
     test("plan_add files under the section it names", () async {
       final client = FakeLlmClient([
-        [planCall(planAddToolName, {"task": "clone", "section": "Setup"})],
+        [fileCall(planAddToolName, {"task": "clone", "section": "Setup"})],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1510,13 +1510,7 @@ void main() {
 
     test("plan_next marks the task and hands the number to the model", () async {
       final client = FakeLlmClient([
-        [
-          const LlmCompletion(
-            message: LlmMessage(role: LlmRole.assistant, toolCalls: [
-              LlmToolCall(id: "n1", name: planNextToolName, argumentsJson: "{}"),
-            ]),
-          ),
-        ],
+        [fileCall(planNextToolName, {}, id: "n1")],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1533,13 +1527,7 @@ void main() {
 
     test("plan_next with nothing left says so", () async {
       final client = FakeLlmClient([
-        [
-          const LlmCompletion(
-            message: LlmMessage(role: LlmRole.assistant, toolCalls: [
-              LlmToolCall(id: "n2", name: planNextToolName, argumentsJson: "{}"),
-            ]),
-          ),
-        ],
+        [fileCall(planNextToolName, {}, id: "n2")],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1552,7 +1540,7 @@ void main() {
 
     test("plan_done by number", () async {
       final client = FakeLlmClient([
-        [planCall(planDoneToolName, {"task": "2"})],
+        [fileCall(planDoneToolName, {"task": "2"})],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1567,7 +1555,7 @@ void main() {
 
     test("plan_done by text", () async {
       final client = FakeLlmClient([
-        [planCall(planDoneToolName, {"task": "read"})],
+        [fileCall(planDoneToolName, {"task": "read"})],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1581,7 +1569,7 @@ void main() {
 
     test("plan_done refuses an ambiguous name rather than guessing", () async {
       final client = FakeLlmClient([
-        [planCall(planDoneToolName, {"task": "wri"})],
+        [fileCall(planDoneToolName, {"task": "wri"})],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1598,14 +1586,8 @@ void main() {
 
     test("plan tools without a plan say so and point at plan_add", () async {
       final client = FakeLlmClient([
-        [
-          const LlmCompletion(
-            message: LlmMessage(role: LlmRole.assistant, toolCalls: [
-              LlmToolCall(id: "n3", name: planNextToolName, argumentsJson: "{}"),
-            ]),
-          ),
-        ],
-        [planCall(planDoneToolName, {"task": "1"})],
+        [fileCall(planNextToolName, {}, id: "n3")],
+        [fileCall(planDoneToolName, {"task": "1"})],
         [finish],
       ]);
       final (agent, workspace) = planAgent(client);
@@ -1620,7 +1602,7 @@ void main() {
     test("present_plan publishes the plan, shows the card, and asks", () async {
       final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
-        [planCall(presentPlanToolName, {"title": "The work"}, id: "pp-1")],
+        [fileCall(presentPlanToolName, {"title": "The work"}, id: "pp-1")],
         [finish],
       ]);
       final (agent, workspace) = planAgent(
@@ -1662,7 +1644,7 @@ void main() {
     test("present_plan updates the same artifact on a re-present", () async {
       final saved = <({String path, String? entryFile, String? artifactId})>[];
       final client = FakeLlmClient([
-        [planCall(presentPlanToolName, {"artifact_id": "art-5"}, id: "pp-2")],
+        [fileCall(presentPlanToolName, {"artifact_id": "art-5"}, id: "pp-2")],
         [finish],
       ]);
       final (agent, workspace) = planAgent(
@@ -1684,7 +1666,7 @@ void main() {
 
     test("a request for changes tells the model to revise, not to start", () async {
       final client = FakeLlmClient([
-        [planCall(presentPlanToolName, {}, id: "pp-3")],
+        [fileCall(presentPlanToolName, {}, id: "pp-3")],
         [finish],
       ]);
       final (agent, workspace) = planAgent(
@@ -1702,7 +1684,7 @@ void main() {
 
     test("nothing answered stops the turn rather than starting the work", () async {
       final client = FakeLlmClient([
-        [planCall(presentPlanToolName, {}, id: "pp-4")],
+        [fileCall(presentPlanToolName, {}, id: "pp-4")],
         [finish],
       ]);
       final (agent, workspace) = planAgent(
@@ -1718,7 +1700,7 @@ void main() {
 
     test("present_plan with nothing to show is refused", () async {
       final client = FakeLlmClient([
-        [planCall(presentPlanToolName, {}, id: "pp-5")],
+        [fileCall(presentPlanToolName, {}, id: "pp-5")],
         [finish],
       ]);
       final (agent, _) = planAgent(

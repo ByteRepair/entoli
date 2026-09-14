@@ -1,5 +1,6 @@
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/plan.dart";
 
 void main() {
@@ -121,6 +122,15 @@ Some prose, with a list that is not the plan:
     });
   });
 
+  group("planCandidates", () {
+    test("the substring fallback beside planFind", () {
+      const plan = "- [ ] re-read the code\n- [ ] add parser\n";
+      expect(planCandidates(plan, "read").map((t) => t.index), [1]);
+      expect(planCandidates(plan, "nothing"), isEmpty);
+      expect(planCandidates(plan, "  "), isEmpty);
+    });
+  });
+
   group("planNext and planProgress", () {
     test("the first pending task, and the counts", () {
       const plan = "- [x] one\n- [~] two\n- [ ] three\n- [ ] four\n";
@@ -142,25 +152,25 @@ Some prose, with a list that is not the plan:
 
   group("the verdict", () {
     test("go tells the model to start", () {
-      expect(planVerdict(["go"]), contains("Approved"));
-      expect(planVerdict(["go"]), contains(planNextToolName));
+      expect(planVerdict("go"), contains("Approved"));
+      expect(planVerdict("go"), contains(planNextToolName));
     });
 
     test("changes tells the model to revise and re-present", () {
-      expect(planVerdict(["changes"]), contains("Do not start executing"));
-      expect(planVerdict(["changes"]), contains("artifact_id"));
+      expect(planVerdict("changes"), contains("Do not start executing"));
+      expect(planVerdict("changes"), contains("artifact_id"));
     });
 
     test("nothing answered stops the turn rather than starting the work", () {
-      expect(planVerdict([null]), contains("Finish the turn"));
-      expect(planVerdict(const []), contains("Finish the turn"));
+      expect(planVerdict(null), contains("Finish the turn"));
     });
   });
 
   group("presentPlanArgsFrom", () {
     test("everything is optional", () {
-      expect(presentPlanArgsFrom("{}"),
-          isA<PresentPlanArgs>().having((a) => a.title, "title", isNull));
+      final empty = presentPlanArgsFrom("{}")!;
+      expect(empty.title, isNull);
+      expect(empty.artifactId, isNull);
       expect(presentPlanArgsFrom(null), isNull);
       expect(presentPlanArgsFrom("[]"), isNull);
       final args = presentPlanArgsFrom('{"title": "T", "artifact_id": "a1"}')!;
@@ -212,6 +222,14 @@ Some prose, with a list that is not the plan:
       expect(q.question, contains("The work"));
       expect(q.options.map((o) => o.label), ["Go", "Request changes"]);
       expect(q.options.map((o) => o.answer), ["go", "changes"]);
+    });
+
+    test("the questions document round-trips through askQuestionsFrom", () {
+      final questions = askQuestionsFrom(planApprovalQuestionsJson("The work"));
+      expect(questions, hasLength(1));
+      expect(questions.single.options.map((o) => o.answer), ["go", "changes"]);
+      expect(questions.single.question, contains("The work"));
+      expect(askQuestionsFrom(planApprovalQuestionsJson(null)), hasLength(1));
     });
   });
 }

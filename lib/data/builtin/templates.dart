@@ -97,6 +97,12 @@ class AgentCapabilities {
         artifact: false,
         createSkill: false,
       );
+
+  /// Whether `present_plan` is offered: the one tool that both parks the turn
+  /// on an answer (`ask`) and publishes a card (`artifact`), so it rides the
+  /// pair rather than adding a capability of its own. One spelling of the
+  /// predicate, for the tool list, the prompt, and the dispatch to read.
+  bool get presentPlan => ask && artifact;
 }
 
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
@@ -317,6 +323,18 @@ String _withoutShell({
   final artifact = caps.artifact
       ? ", and `artifact` to publish an HTML page the user can\nview"
       : "";
+  // The browser turn is offered the plan tools the same list the shell turn
+  // is, so its prompt names them the same way the step-2 sentence does:
+  // appended to the files sentence, where the browser names what reaches a
+  // file. The trio is never withheld here — `oneShot` is a sub-agent's fact,
+  // and a sub-agent always has a shell — so only the presenter is gated.
+  final plan = caps.presentPlan
+      ? "\n\n`$presentPlanToolName` puts a plan ($planFileName in the "
+          "workspace) to the user for\napproval: it publishes the plan as a "
+          "card and asks Go or request changes.\n"
+          "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName` work "
+          "through it."
+      : "";
   final skillsText = skillsSection(skills);
   final sections = <String>[
     _files,
@@ -326,7 +344,7 @@ String _withoutShell({
     if (skillsText.isNotEmpty) skillsText,
   ].join("\n");
   return "You are a helpful assistant.\n\n"
-      "${_substitute(_systemProse("browser")!, {"artifact": artifact})}\n\n"
+      "${_substitute(_systemProse("browser")!, {"artifact": artifact})}$plan\n\n"
       "$sections\n"
       "${profileSection(profile)}${styleSection(tone, citations)}";
 }
@@ -375,8 +393,10 @@ final String _artifacts = "\n${_systemProse("artifacts")}";
 final String _style = "\n${_systemProse("style")}";
 
 /// The step-2 sentence's list of what a call is for, one fragment per tool
-/// the turn is offered, in the order the sentence reads them.
-String _toolFragments(AgentCapabilities caps) {
+/// the turn is offered, in the order the sentence reads them. [oneShot] is
+/// the same fact the tool list reads — a sub-agent's — so a prompt names no
+/// tool the list does not carry.
+String _toolFragments(AgentCapabilities caps, {bool oneShot = false}) {
   final acts = [
     "`bash` to run a command",
     "`read`/`write`/`edit`\n   to work with files in the workspace",
@@ -384,9 +404,10 @@ String _toolFragments(AgentCapabilities caps) {
     if (caps.ask) "`$askToolName` to put a question to the\n   user",
     if (caps.webSearch) "`websearch` to search the web, `webfetch` to read a page",
     if (caps.artifact) "`artifact`\n   to publish an HTML page the user can view",
-    "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName`"
-        "\n   to work through a plan ($planFileName in the workspace)",
-    if (caps.ask && caps.artifact)
+    if (!oneShot)
+      "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName`"
+          "\n   to work through a plan ($planFileName in the workspace)",
+    if (caps.presentPlan)
       "`$presentPlanToolName`\n   to put the plan to the user for approval",
   ];
   if (acts.length == 1) return acts.single;
@@ -449,7 +470,7 @@ String _withShell({
   );
   final prose = _systemProse("shell")!;
   return _substitute(prose, {
-    "tools": _toolFragments(caps),
+    "tools": _toolFragments(caps, oneShot: oneShot),
     "shell": oneShot ? _oneShotShell : _persistentShell,
     "sections": sections,
   }) +

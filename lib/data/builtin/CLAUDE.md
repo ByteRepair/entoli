@@ -546,13 +546,15 @@ assembled rather than new machinery: it renders PLAN.md into a page
 the chat draws the card from, and then raises the existing
 `QuestionRequestEvent` with one fixed question — Go, or request changes — on
 the `answer` completer. The panel takes the composer's place exactly as for
-`ask_user`, and a sync mirror renders it the same way, since it is an ask
-request. The verdict is the tool's result, so the projection words it with
-zero changes — unlike `ask_user`, nothing splits for it. The tool is offered
-only where `ask` and `artifact` both are: a headless turn folds `ask` out of
-its takes already (a Go/Deny nobody answers would park it on a completer),
-and a sub-agent's missing `saveArtifact` withholds it the way `artifact` is
-withheld. Nothing answered reads as "finish the turn", never as "start".
+`ask_user`, and a sync mirror renders it the same way — the questions travel
+as the request's document (`planApprovalQuestionsJson`), since the call's own
+arguments name a title, not a question. The verdict is the tool's result, so
+the projection words it with zero changes — unlike `ask_user`, nothing splits
+for it. The tool is offered where `AgentCapabilities.presentPlan` (`ask` &&
+`artifact`) holds: a headless turn folds `ask` out of its takes already (a
+Go/Deny nobody answers would park it on a completer), and a sub-agent's
+missing `saveArtifact` withholds it the way `artifact` is withheld. Nothing
+answered reads as "finish the turn", never as "start".
 
 The workflow is the coding skill's ("Plan first"), not the system prompt's —
 the prompt carries only the one tool-fragment line, the skill carries the

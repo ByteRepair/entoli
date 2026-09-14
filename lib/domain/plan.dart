@@ -20,9 +20,6 @@ const planFileName = "PLAN.md";
 /// workspace. A dot-name so the plan page reads as machinery beside work.
 const planHtmlPath = ".plan/plan.html";
 
-/// How the tools' first line of a new plan reads.
-const planHeading = "# Plan";
-
 /// The section a task goes to when the model did not name one.
 const planDefaultSection = "Tasks";
 
@@ -38,6 +35,14 @@ class PlanTask {
 }
 
 enum PlanTaskStatus { pending, inProgress, done }
+
+/// Both compiled once: `_taskLine` runs once per line of the plan file, and
+/// a parse runs several times per tool call — the pattern
+/// `workspace.dart` names ("Both compiled once").
+final _bullet = RegExp(r"^\s*[-*]\s+(.*)$");
+final _marker = RegExp(r"^\[([ xX~])\]\s*(.*)$");
+final _markerOnly = RegExp(r"\[[ xX~]\]");
+final _hashes = RegExp(r"^#+\s*");
 
 /// The tasks of a plan file's text, in file order, numbering from 1.
 ///
@@ -59,10 +64,10 @@ List<PlanTask> planTasksFrom(String? text) {
 }
 
 ({PlanTaskStatus status, String? text})? _taskLine(String line) {
-  final bullet = RegExp(r"^\s*[-*]\s+(.*)$").firstMatch(line);
+  final bullet = _bullet.firstMatch(line);
   if (bullet == null) return null;
   final rest = bullet.group(1)!.trimLeft();
-  final marked = RegExp(r"^\[([ xX~])\]\s*(.*)$").firstMatch(rest);
+  final marked = _marker.firstMatch(rest);
   if (marked != null) {
     final marker = marked.group(1)!;
     final status = switch (marker) {
@@ -98,14 +103,23 @@ PlanTask? planFind(String? text, String task) {
   final tasks = planTasksFrom(text);
   final trimmed = task.trim();
   if (trimmed.isEmpty) return null;
-  if (RegExp(r"^(\d+)$").hasMatch(trimmed)) {
-    final n = int.tryParse(trimmed);
-    return n == null || n < 1 || n > tasks.length ? null : tasks[n - 1];
-  }
+  final n = int.tryParse(trimmed);
+  if (n != null) return n < 1 || n > tasks.length ? null : tasks[n - 1];
   final needle = trimmed.toLowerCase();
   final hits =
       tasks.where((t) => t.text.toLowerCase().startsWith(needle)).toList();
   return hits.length == 1 ? hits.single : null;
+}
+
+/// The tasks whose text holds [task], case-insensitively — what a refusal
+/// names when [planFind] matched nothing. The matcher's fallback, beside the
+/// matcher, so the two cannot drift apart.
+List<PlanTask> planCandidates(String? text, String task) {
+  final needle = task.trim().toLowerCase();
+  if (needle.isEmpty) return const [];
+  return planTasksFrom(text)
+      .where((t) => t.text.toLowerCase().contains(needle))
+      .toList();
 }
 
 /// Add [task] to the end of [section], creating the heading where neither the
@@ -117,7 +131,7 @@ String planAddTask(String? text, String task, {String? section}) {
   final heading = named.isEmpty ? planDefaultSection : named;
   final line = "- [ ] ${task.trim()}";
   if (body.trim().isEmpty) {
-    return "$planHeading\n\n## $heading\n\n$line\n";
+    return "# Plan\n\n## $heading\n\n$line\n";
   }
   final lines = body.split("\n");
   var at = -1;
@@ -140,11 +154,10 @@ String planAddTask(String? text, String task, {String? section}) {
   if (at < 0) {
     return "${body.trimRight()}\n\n## $heading\n\n$line\n";
   }
-  final insertAt = at.clamp(0, lines.length);
   return [
-    ...lines.sublist(0, insertAt),
+    ...lines.sublist(0, at),
     line,
-    ...lines.sublist(insertAt),
+    ...lines.sublist(at),
   ].join("\n");
 }
 
@@ -164,7 +177,7 @@ String? planMark(String? text, int index, PlanTaskStatus status) {
       PlanTaskStatus.inProgress => "[~]",
       PlanTaskStatus.done => "[x]",
     };
-    lines[i] = lines[i].replaceFirst(RegExp(r"\[[ xX~]\]"), marker);
+    lines[i] = lines[i].replaceFirst(_markerOnly, marker);
     return lines.join("\n");
   }
   return null;
@@ -187,10 +200,11 @@ String planDoneResult(PlanTask task, (int done, int total) progress) =>
     "Task ${task.index} done: ${task.text}. ${progress.$1} of ${progress.$2} "
     "tasks done.";
 
-/// What `present_plan` puts to the user: one question, the plan on the card
-/// beside it, and the answer a verdict.
-AskQuestion planApprovalQuestion(String title) => AskQuestion(
-      question: title.isEmpty
+/// The verdict `present_plan` asks with: one question, fixed, the plan on the
+/// card beside it. The user's two answers are machine-readable so the verdict
+/// reads as an outcome of presenting rather than as the user's prose.
+AskQuestion planApprovalQuestion(String? title) => AskQuestion(
+      question: title == null || title.isEmpty
           ? "Approve this plan?"
           : "Approve the plan \"$title\"?",
       summary: "The plan is on the card beside this message. Go starts the "
@@ -204,10 +218,34 @@ AskQuestion planApprovalQuestion(String title) => AskQuestion(
       ],
     );
 
-/// What `present_plan` reports, from the answers the panel handed back. The
-/// verdict rides in the tool result, so the projection words it the same way
-/// whether the turn is running now or being read back out of the log.
-String planVerdict(List<String?> answers) => switch (answers.firstOrNull) {
+/// The question as another device reads it off a `present_plan` call's
+/// arguments, in the one shape `askQuestionsFrom` round-trips. The call's
+/// arguments are not questions — they name a title and an artifact id — so
+/// the questions, not the tool args, are what travels as
+/// `AskRequest.argumentsJson`.
+String planApprovalQuestionsJson(String? title) => const JsonEncoder()
+    .convert({
+      "questions": [
+        for (final question in [planApprovalQuestion(title)])
+          {
+            "question": question.question,
+            "summary": question.summary,
+            "options": [
+              for (final option in question.options)
+                {
+                  "label": option.label,
+                  "value": option.answer,
+                  if (option.detail != null) "detail": option.detail,
+                },
+            ],
+          },
+      ],
+    });
+
+/// What `present_plan` reports, from the verdict the panel handed back. It
+/// rides in the tool result, so the projection words it the same way whether
+/// the turn is running now or being read back out of the log.
+String planVerdict(String? verdict) => switch (verdict) {
       "go" =>
         "Approved: the user pressed Go. Start working through the plan with "
         "$planNextToolName and $planDoneToolName, one task at a time.",
@@ -221,41 +259,31 @@ String planVerdict(List<String?> answers) => switch (answers.firstOrNull) {
         "the plan.",
     };
 
-/// What `present_plan` is told when its arguments were not its own.
-const presentPlanFormatError =
-    'The $presentPlanToolName tool takes no required arguments; "title" and '
-    '"artifact_id" are optional strings.';
-
 /// A `present_plan` call's arguments: everything is optional, so only a body
-/// that is not an object at all fails.
-class PresentPlanArgs {
-  const PresentPlanArgs({this.title, this.artifactId});
-
-  final String? title;
-  final String? artifactId;
-}
-
-PresentPlanArgs? presentPlanArgsFrom(String? json) {
-  final decoded = decodeArgs(json);
-  if (decoded == null) return null;
-  String? of(String key) {
-    final value = decoded[key];
-    return value is String && value.isNotEmpty ? value : null;
-  }
-
-  return PresentPlanArgs(title: of("title"), artifactId: of("artifact_id"));
+/// that is not an object at all fails. [title] is the plan's name on the card
+/// and the question; [artifactId] updates the plan already on the screen
+/// rather than publishing a second card.
+({String? title, String? artifactId})? presentPlanArgsFrom(String? json) {
+  if (decodeArgs(json) == null) return null;
+  return (
+    title: stringArg(json, "title"),
+    artifactId: stringArg(json, "artifact_id"),
+  );
 }
 
 /// The page `present_plan` publishes: the plan as one self-contained HTML
 /// file for the artifact viewer. The base stylesheet the store injects at
-/// publish time styles the elements; [planPageCss] rides under it. Nothing
+/// publish time styles the elements; [_planPageCss] rides under it. Nothing
 /// model-written reaches the page unescaped — the plan is the model's prose,
 /// and the page opens in the app's viewer.
 String planHtml(String plan, {String? title}) {
   final heading = title == null || title.trim().isEmpty ? "Plan" : title.trim();
-  final (done, total) = planProgress(plan);
+  // One parse: the sections carry every task, and the progress line is
+  // counted off them rather than read back out of the text.
+  final sections = _sections(plan);
+  final tasks = [for (final section in sections) ...section.tasks];
   final body = [
-    for (final section in _sections(plan)) ...[
+    for (final section in sections) ...[
       "<h2>${_escape(section.heading)}</h2>",
       "<ul>",
       for (final task in section.tasks)
@@ -263,19 +291,19 @@ String planHtml(String plan, {String? title}) {
             "${_statusLabel(task.status)}</span>${_escape(task.text)}</li>",
       "</ul>",
     ],
-    if (total == 0) "<p>No tasks in the plan yet.</p>",
+    if (tasks.isEmpty) "<p>No tasks in the plan yet.</p>",
   ].join("\n");
   return """<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>${_escape(heading)}</title>
-$planPageCss
+$_planPageCss
 </head>
 <body>
 <main>
 <h1>${_escape(heading)}</h1>
-<p class="progress">$done of $total tasks done</p>
+<p class="progress">${tasks.where((t) => t.status == PlanTaskStatus.done).length} of ${tasks.length} tasks done</p>
 $body
 </main>
 </body>
@@ -289,14 +317,13 @@ final class _PlanSection {
 }
 
 /// The plan's task lines, grouped under the headings they sat under. A task
-/// written before any heading sits under the default one. The plan's own
-/// first `#` heading — where the tools put `# Plan` — names the artifact's
-/// `h1` already, so it opens a section only when a second one never comes;
-/// `##` and deeper are section boundaries.
+/// written before any heading sits under the default one; the tools' own
+/// first line, `# Plan`, is skipped rather than shown as a section of
+/// itself. A heading nobody wrote tasks under produces nothing, so prose
+/// plans without tasks do not render phantom sections.
 List<_PlanSection> _sections(String plan) {
   final sections = <_PlanSection>[];
   var current = _PlanSection(planDefaultSection, []);
-  var titleSeen = false;
   var number = 0;
   void close() {
     if (current.tasks.isNotEmpty) sections.add(current);
@@ -305,12 +332,8 @@ List<_PlanSection> _sections(String plan) {
   for (final line in plan.split("\n")) {
     final trimmed = line.trim();
     if (trimmed.startsWith("#")) {
-      final heading = trimmed.replaceFirst(RegExp(r"^#+\s*"), "").trim();
+      final heading = trimmed.replaceFirst(_hashes, "").trim();
       if (heading.isEmpty) continue;
-      if (!titleSeen && trimmed.startsWith("# ")) {
-        titleSeen = true;
-        continue;
-      }
       close();
       current = _PlanSection(heading, []);
       continue;
@@ -340,7 +363,7 @@ String _statusLabel(PlanTaskStatus status) => switch (status) {
 
 /// The plan page's own styles, after the base stylesheet the viewer injects:
 /// the base styles elements, so the chips ride on it rather than fight it.
-const planPageCss = """
+const _planPageCss = """
 <style>
 .progress {
   font-size: 0.9rem;
