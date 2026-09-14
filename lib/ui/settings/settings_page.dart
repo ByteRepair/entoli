@@ -24,6 +24,7 @@ import "../widgets/app_mark.dart";
 import "../widgets/dialogs.dart";
 import "../widgets/editable_row.dart";
 import "../widgets/environment_section.dart";
+import "permissions_section.dart";
 import "../widgets/formatting.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/provider_dialog.dart";
@@ -686,6 +687,15 @@ class _AgentSection extends ConsumerWidget {
         ),
         const _RetryTurnsField(),
         const _MaxStepsField(),
+        Divider(),
+        PermissionsSection(
+          rules: settings.permissions,
+          description: "Standing rules, consulted before the classifier and "
+              "the banner. A deny outranks an ask, which outranks an allow; a "
+              "command with segments a rule does not cover still waits.",
+          onSaved: (rules) =>
+              ref.read(appSettingsProvider.notifier).setPermissions(rules),
+        ),
       ],
     );
   }

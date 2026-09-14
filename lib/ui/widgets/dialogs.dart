@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 
+import "../../domain/permission.dart";
 import "../../domain/project.dart";
 import "text_input.dart";
 
@@ -233,4 +234,99 @@ Future<bool> confirm(
     ),
   );
   return answer ?? false;
+}
+
+/// Ask for one permission rule: the tool it names, the pattern it matches on,
+/// the decision it takes and — for bash rules — the directories it grants the
+/// sandbox beside the workspace. Returns null if dismissed or the pattern was
+/// left blank.
+Future<PermissionRule?> promptForDecision(
+  BuildContext context, {
+  required String title,
+  required String tool,
+  required String pattern,
+  required PermissionDecision decision,
+  String writes = "",
+}) {
+  final toolField = TextEditingController(text: tool);
+  final patternField = TextEditingController(text: pattern);
+  final writesField = TextEditingController(text: writes);
+  var picked = decision;
+
+  PermissionRule? submit() {
+    final subject = patternField.text.trim();
+    if (subject.isEmpty) return null;
+    return PermissionRule(
+      tool: toolField.text.trim(),
+      pattern: subject,
+      decision: picked,
+      writes: [
+        for (final dir in writesField.text.split(","))
+          if (dir.trim().isNotEmpty) dir.trim(),
+      ],
+    );
+  }
+
+  return showDialog<PermissionRule>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: toolField.text,
+              decoration: const InputDecoration(labelText: "Tool"),
+              items: [
+                for (final t in ["bash", "read", "write", "edit", "webfetch", "*"])
+                  DropdownMenuItem(value: t, child: Text(t)),
+              ],
+              onChanged: (value) =>
+                  setState(() => toolField.text = value ?? "bash"),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: patternField,
+              autofocus: pattern.isEmpty,
+              decoration: const InputDecoration(
+                labelText: "Pattern",
+                hintText: "git status *  ·  ~/Projects/x  ·  example.com",
+              ),
+              onSubmitted: (_) => Navigator.pop(context, submit()),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<PermissionDecision>(
+              initialValue: picked,
+              decoration: const InputDecoration(labelText: "Decision"),
+              items: const [
+                DropdownMenuItem(
+                    value: PermissionDecision.allow, child: Text("Allow")),
+                DropdownMenuItem(
+                    value: PermissionDecision.ask, child: Text("Ask")),
+                DropdownMenuItem(
+                    value: PermissionDecision.deny, child: Text("Deny")),
+              ],
+              onChanged: (value) =>
+                  setState(() => picked = value ?? PermissionDecision.allow),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: writesField,
+              decoration: const InputDecoration(
+                labelText: "Extra writable dirs (bash, comma-separated)",
+              ),
+              onSubmitted: (_) => Navigator.pop(context, submit()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, submit()),
+              child: const Text("Save")),
+        ],
+      ),
+    ),
+  );
 }

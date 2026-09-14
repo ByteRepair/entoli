@@ -58,6 +58,7 @@ class LandlockSandboxHelper implements SandboxHelper {
       "--workspace", sandbox.workspace,
       if (sandbox.tmp != null) ...["--tmp", sandbox.tmp!],
       if (sandbox.home != null) ...["--home", sandbox.home!],
+      for (final dir in sandbox.extraWrites) ...["--write", dir],
       "--",
     ];
   }
@@ -98,7 +99,8 @@ class LandlockSandboxHelper implements SandboxHelper {
 const helperSource = r"""
 /* entoli-landlock: run a command confined by Landlock — read everywhere,
  * write only the paths given. Usage:
- *   entoli-landlock exec --workspace DIR [--tmp DIR] [--home DIR] -- CMD...
+ *   entoli-landlock exec --workspace DIR [--tmp DIR] [--home DIR]
+ *                    [--write DIR]... -- CMD...
  * Exit 91 where Landlock cannot be set up; the caller fails closed.
  */
 #define _GNU_SOURCE
@@ -142,12 +144,18 @@ int main(int argc, char **argv) {
     return 2;
   }
   const char *workspace = NULL, *tmp = NULL, *home = NULL;
+  const char *extra[16] = {0};
+  int extras = 0;
   int i = 2;
   while (i < argc && strcmp(argv[i], "--") != 0) {
     if (i + 1 >= argc) { fprintf(stderr, "missing value for %s\n", argv[i]); return 2; }
     if (!strcmp(argv[i], "--workspace")) workspace = argv[++i];
     else if (!strcmp(argv[i], "--tmp")) tmp = argv[++i];
     else if (!strcmp(argv[i], "--home")) home = argv[++i];
+    else if (!strcmp(argv[i], "--write")) {
+      if (extras >= 16) { fprintf(stderr, "too many --write dirs\n"); return 2; }
+      extra[extras++] = argv[++i];
+    }
     else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
     i++;
   }
@@ -229,6 +237,15 @@ int main(int argc, char **argv) {
   if (home && add_rule(ruleset_fd, home, read_rights) != 0) {
     fprintf(stderr, "entoli-landlock: rule %s: %s\n", home, strerror(errno));
     return 91;
+  }
+  /* The extra writable roots — the directories a permission rule or the
+   * project's settings name as part of the work. Granted the full write set,
+   * the workspace's own. */
+  for (int e = 0; e < extras; e++) {
+    if (add_rule(ruleset_fd, extra[e], write_rights) != 0) {
+      fprintf(stderr, "entoli-landlock: rule %s: %s\n", extra[e], strerror(errno));
+      return 91;
+    }
   }
 
   /* No-new-privs is required before restrict_self, and is its own guarantee:

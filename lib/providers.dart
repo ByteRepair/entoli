@@ -454,6 +454,14 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setApproveMode(ApproveMode value) =>
       _update((s) => s.approveMode = value);
 
+  /// The app's standing permission rules, saved whole.
+  Future<void> setPermissions(List<PermissionRule> value) =>
+      _update((s) => s.permissions = value);
+
+  /// Whether a sandbox-denied write is offered back as an approval.
+  Future<void> setSandboxReprompt(bool value) =>
+      _update((s) => s.sandboxReprompt = value);
+
   /// How many times a retryable turn failure is carried on automatically.
   Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
 
@@ -1125,6 +1133,29 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   /// ones stand alone.
   Future<void> setEnvironment(Map<String, String>? environment) async {
     final next = state.copy()..environment = environment;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The project's standing permission rules, saved whole.
+  Future<void> setProjectPermissions(List<PermissionRule> value) async {
+    final next = state.copy()..permissions = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The machine directories this project's commands may write to, beside
+  /// the workspace the sandbox grants.
+  Future<void> setWritableDirs(List<String> value) async {
+    final next = state.copy()..writableDirs = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// Whether a sandbox-denied write is offered back as an approval. Null
+  /// inherits the app default.
+  Future<void> setProjectSandboxReprompt(bool? value) async {
+    final next = state.copy()..sandboxReprompt = value;
     state = next;
     await next.save(_config, project: project);
   }

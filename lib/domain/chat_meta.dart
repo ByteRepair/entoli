@@ -12,12 +12,17 @@ class ChatMeta {
       this.provider,
       this.approveMode,
       this.tempChatTtl,
+      this.permissions = const [],
       this.memoryOff,
       this.headless});
 
   String? model;
   String? provider;
   ApproveMode? approveMode;
+
+  /// This chat's own standing rules, in front of the project's and the app's.
+  /// What "Allow in Chat" on a banner writes.
+  List<PermissionRule> permissions;
 
   /// How long this chat lives once its TTL is enabled. Null means inherit the
   /// project (if set) or app default.
@@ -40,6 +45,7 @@ class ChatMeta {
         model: json["model"] as String?,
         provider: json["provider"] as String?,
         approveMode: _approveMode(json),
+        permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
         tempChatTtl: TempChatTtl.fromNameNullable(json["tempChatTtl"] as String?),
         memoryOff: json["memoryOff"] as bool?,
         headless: json["headless"] as bool?,
@@ -70,6 +76,7 @@ class ChatMeta {
         model: model,
         provider: provider,
         approveMode: approveMode,
+        permissions: permissions,
         tempChatTtl: tempChatTtl,
         memoryOff: memoryOff,
         headless: headless,
@@ -83,6 +90,8 @@ class ChatMeta {
         if (model != null) "model": model,
         if (provider != null) "provider": provider,
         if (approveMode != null) "approveMode": approveMode!.name,
+        if (permissions.isNotEmpty)
+          "permissions": permissionRulesToJson(permissions),
         if (tempChatTtl != null) "tempChatTtl": tempChatTtl!.name,
         if (memoryOff != null) "memoryOff": memoryOff,
         if (headless != null) "headless": headless,

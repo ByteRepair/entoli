@@ -13,7 +13,9 @@ import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/profile.dart";
+import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/prompt_library.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 
 import "../fakes.dart";
@@ -563,6 +565,68 @@ void main() {
       await pumpEventQueue();
 
       expect(seen.whereType<Deleted>().single.chatId, chat.state.id);
+    });
+  });
+
+    group("a rule written from a banner answer", () {
+    test("\"Allow in Chat\" writes the derived rule on the chat's meta.json",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "approval-1",
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+            id: "approval-1",
+            toolName: "bash",
+            argumentsText: "git checkout -b foo"),
+      );
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.permissions, hasLength(1));
+      expect(meta.permissions.single.tool, "bash");
+      expect(meta.permissions.single.pattern, "git checkout *");
+      expect(meta.permissions.single.decision, PermissionDecision.allow);
+      // The waiting turn is answered as an allow, whatever wrote the rule.
+      expect(backend.approvals.single.response, ApprovalResponse.allow);
+    });
+
+    test("\"Allow in Project\" writes the rule on the project's project.json",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "approval-2",
+        ApprovalResponse.alwaysAllowProject,
+        approval: ToolApproval(
+            id: "approval-2",
+            toolName: "webfetch",
+            argumentsText: "https://docs.example.com/guide"),
+      );
+      final settings = ProjectSettings.load(
+          config,
+          project: chat.state.project);
+      expect(settings.permissions, hasLength(1));
+      expect(settings.permissions.single.tool, "webfetch");
+      expect(settings.permissions.single.pattern, "example.com");
+      final chatMeta =
+          await repo.loadMeta(chat.state.id);
+      expect(chatMeta.permissions, isEmpty);
+    });
+
+    test("a plain allow writes nothing anywhere", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(chat.state.id, "approval-3",
+          ApprovalResponse.allow,
+          approval: ToolApproval(
+              id: "approval-3",
+              toolName: "bash",
+              argumentsText: "python3 run.py"));
+      final chatMeta =
+          await repo.loadMeta(chat.state.id);
+      expect(chatMeta.permissions, isEmpty);
     });
   });
 }

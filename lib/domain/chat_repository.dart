@@ -12,6 +12,7 @@ import "../domain/chat_meta.dart";
 import "../domain/chat_store.dart";
 import "../domain/chat_title.dart";
 import "../domain/models.dart";
+import "../domain/permission.dart";
 import "../domain/project.dart";
 import "../domain/project_settings.dart";
 import "../domain/prompt_library.dart";
@@ -337,6 +338,22 @@ class ChatRepository {
       includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
+      // Chat rules first, then project, then app: a later rule wins only by
+      // strength (deny over ask over allow), and the tiers break the tie.
+      permissions: [
+        ...meta.permissions,
+        ...projectSettings.permissions,
+        ...settings.permissions,
+      ],
+      // The project's writable roots, plus what the chat's and the project's
+      // rules themselves grant — a rule that allows writing somewhere carries
+      // the sandbox grant with it.
+      writableDirs: [
+        ...projectSettings.writableDirs,
+        for (final rule in [...meta.permissions, ...projectSettings.permissions])
+          ...rule.writes,
+      ],
+      sandboxReprompt: projectSettings.sandboxReprompt,
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
 
@@ -519,8 +536,50 @@ class ChatRepository {
   Future<ChatState> unpinChat(String chatId, ChatState state) =>
       saveState(state.copyWith(pinned: false));
 
-  Future<void> respondApproval(String chatId, String approvalId, ApprovalResponse r) =>
-      _backend.respondApproval(chatId, approvalId, r);
+  /// Answer an approval banner. An "always" answer derives the standing rule
+  /// from the approval — the command's leading words, the file's directory, or
+  /// the fetch's host — writes it to the tier the answer names, and forwards
+  /// [ApprovalResponse.allow] to the waiting turn, which reads the runtime
+  /// grant it is handed. The rule reaching the running turn is the backend's
+  /// half, through `grantRuntimeRule` on the agent it is driving.
+  Future<void> respondApproval(
+    String chatId,
+    String approvalId,
+    ApprovalResponse r, {
+    ToolApproval? approval,
+    String? project,
+  }) async {
+    if (r == ApprovalResponse.alwaysAllowChat || r == ApprovalResponse.alwaysAllowProject) {
+      final rule = ruleFromApproval(approval);
+      if (rule != null) {
+        if (r == ApprovalResponse.alwaysAllowChat) {
+          await _saveChatRule(chatId, rule);
+        } else {
+          await _saveProjectRule(project, rule);
+        }
+      }
+      await _backend.respondApproval(
+          chatId, approvalId, ApprovalResponse.allow);
+      return;
+    }
+    await _backend.respondApproval(chatId, approvalId, r);
+  }
+
+  /// Writes [rule] onto the chat's `meta.json`, read fresh — the turn that is
+  /// running may have written the TTL or the anchor since the UI read it.
+  Future<void> _saveChatRule(String chatId, PermissionRule rule) async {
+    final meta = await _store.loadMeta(chatId);
+    await _store.saveMeta(chatId, meta..permissions = [...meta.permissions, rule]);
+    _changes.add(MetaChanged(chatId, meta));
+  }
+
+  /// Writes [rule] onto the project's `project.json`, read fresh; null is the
+  /// default project's file.
+  Future<void> _saveProjectRule(String? project, PermissionRule rule) async {
+    final settings = ProjectSettings.load(_config, project: project);
+    settings.permissions = [...settings.permissions, rule];
+    await settings.save(_config, project: project);
+  }
 
   Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>
       _backend.respondQuestions(chatId, requestId, answers);

@@ -258,6 +258,24 @@ the banner), `auto` (a classifier model decides allow/ask/deny per command),
 `never` (run everything). An older file's `approveCommands` bool migrates:
 `true` → `ask`, `false` → `never`.
 
+Before the mode, the **rules** decide. `PermissionRule` (`lib/domain/permission.dart`)
+names a tool, a pattern and a decision, and the tiers merge chat over project
+over app (`meta.json`'s `permissions`, `project.json`'s, `settings.json`'s);
+deny outranks ask outranks allow whatever tier wrote it. For `bash` the
+pattern is a glob matched per segment — the pieces a top-level `|;&&` splits
+the command into — so a compound command must find an allow for every segment,
+and a command the parse cannot model is escalated to the banner even under an
+allow rule (refused in `never`, where nobody can answer). A rule-allow carries
+`writes`, the directories the sandbox grants beside the workspace — the same
+`writableDirs` a project sets — so an allow is one answer to "may it run *and*
+write there". What the sandbox denied while a command ran rides the result as
+`violations`, and — where `sandboxReprompt` is on and no human decided
+already — one offer to rerun is made: unconfined for a denied write, or with
+the denied directory joining the grant. The two "always" banner answers write
+the derived rule: `ruleFromApproval` reads the command's leading words, the
+file's directory or the fetch's host, and the repository persists it to the
+tier the answer named.
+
 In `auto` mode, a `PermissionClassifier` (the `LlmClassifier` impl, or
 `NoClassifier` when no classifier model is configured) is asked before each
 `bash` and `webfetch` call. `allow` runs silently, `deny` refuses with a
@@ -280,6 +298,15 @@ when the event is forwarded, not when it is awaited, and an answer completes it
 in place rather than removing it — a user who clicks faster than the loop asks
 would otherwise leave it waiting on a completer nobody holds. A turn that ends
 with one outstanding denies it.
+
+`ApprovalBanner` carries four actions: Deny, Allow, **Allow in Chat** and
+**Allow in Project** — the prompt is where the decision lives, since nobody
+opens a settings page to pre-approve each chat. The two always-answers write
+the derived rule (see "Approvals" above) and hand a runtime copy to the
+running turn, so the rest of it is covered before the persisted file is read
+again. They are offered where rules are writable — not a mirrored chat, where
+the banner is being answered from the other device and the home device's
+banner asks the question.
 
 `ApprovalBanner` shows **the call, not the tool**. It named the tool and put the
 arguments JSON under it at two lines and an ellipsis, which is a consent dialog

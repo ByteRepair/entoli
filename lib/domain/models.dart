@@ -332,7 +332,19 @@ abstract class ToolApproval with _$ToolApproval {
   factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);
 }
 
-enum ApprovalResponse { allow, deny }
+enum ApprovalResponse {
+  allow,
+
+  deny,
+
+  /// Allow, and write the rule on the chat's `meta.json` so the same call
+  /// runs unasked for the rest of this chat. Read back by the backend as
+  /// [allow], the persisted rule being the durable half.
+  alwaysAllowChat,
+
+  /// Allow, and write the rule on the project's `project.json`.
+  alwaysAllowProject,
+}
 
 /// A model the user can pick in settings.
 @freezed

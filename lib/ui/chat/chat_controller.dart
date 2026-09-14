@@ -130,14 +130,24 @@ abstract interface class TurnDriver {
   Future<void> send(String text, {List<Attachment> attachments});
   Future<void> resume();
   Future<void> abort();
-  Future<void> respondApproval(String approvalId, ApprovalResponse r);
+  Future<void> respondApproval(String approvalId, ApprovalResponse r,
+      {ToolApproval? approval});
   Future<void> answerQuestions(String requestId, List<String?> answers);
+
+  /// Whether an approval answer may write a standing rule here. False for a
+  /// mirrored chat: the banner is being answered from the other device, and
+  /// the rule is the home device's to write — its banner asks the question,
+  /// so offering it twice would be two answers to one call.
+  bool get rulesWritable => true;
 }
 
 /// Drives a single chat: loads from store, sends prompts, accumulates streamed
 /// events into messages, and appends them to the chat's log as they arrive.
 class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   ChatController(this.chatId);
+
+  @override
+  bool get rulesWritable => true;
 
   final String chatId;
   final _uuid = const Uuid();
@@ -1220,9 +1230,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   }
 
   @override
-  Future<void> respondApproval(String approvalId, ApprovalResponse r) async {
+  Future<void> respondApproval(
+    String approvalId,
+    ApprovalResponse r, {
+    ToolApproval? approval,
+  }) async {
     final repo = ref.read(chatRepositoryProvider);
-    await repo.respondApproval(chatId, approvalId, r);
+    final project = state.chat?.state.project;
+    await repo.respondApproval(chatId, approvalId, r,
+        approval: approval, project: project);
     state = state.copyWith(
         approvals: _withoutApproval(state.approvals, approvalId));
   }

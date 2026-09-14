@@ -754,4 +754,72 @@ void main() {
           reason: "out=${result.output} viol=${result.violations}");
     });
   });
+
+group("sandbox violation detection", () {
+  test("the shell's absolute-path denial is matched", () {
+    final violations = violationsOf(
+        "sh: 1: cannot create /etc/hosts: Permission denied",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
+    expect(violations, ["writing /etc/hosts"]);
+  });
+
+  test("a relative denial is joined against the command's cwd", () {
+    final violations = violationsOf(
+        "touch: cannot touch 'config.json': Permission denied",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"),
+        cwd: "/home/yiannis/Projects/repo");
+    expect(violations, ["writing /home/yiannis/Projects/repo/config.json"]);
+  });
+
+  test("a denial inside the workspace is not a violation", () {
+    final violations = violationsOf(
+        "touch: cannot touch 'local.txt': Permission denied",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"),
+        cwd: "/home/u/ws/repo");
+    expect(violations, isEmpty);
+  });
+
+  test("a denial inside an extra write root is not a violation", () {
+    final violations = violationsOf(
+        "sh: 1: /mnt/data/out.txt: Permission denied",
+        sandbox: const CommandSandbox(
+            workspace: "/home/u/ws", extraWrites: ["/mnt/data"]),
+        cwd: "/home/u/ws");
+    expect(violations, isEmpty);
+  });
+
+  test("Python's PermissionError wording is matched", () {
+    final violations = violationsOf(
+        "PermissionError: [Errno 13] Permission denied: '/etc/hosts'",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
+    expect(violations, ["writing /etc/hosts"]);
+  });
+
+  test("Python's relative path denial is joined against the cwd", () {
+    final violations = violationsOf(
+        "PermissionError: [Errno 13] Permission denied: 'config.json'",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"),
+        cwd: "/home/yiannis/Projects/repo");
+    expect(violations, ["writing /home/yiannis/Projects/repo/config.json"]);
+  });
+
+  test("/dev/null is never a violation", () {
+    final violations = violationsOf("sh: /dev/null: Permission denied",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
+    expect(violations, isEmpty);
+  });
+
+  test("a read refusal worded neutrally reads denied, not writing", () {
+    final violations = violationsOf("cat: /etc/shadow: Permission denied",
+        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
+    expect(violations, ["denied /etc/shadow"]);
+  });
+});
 }
+
+List<String> violationsOf(
+    String text, {
+    required CommandSandbox sandbox,
+    String cwd = "/",
+  }) =>
+      sandboxViolations(text, cwd, sandbox);

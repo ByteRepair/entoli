@@ -156,6 +156,42 @@ void main() {
     expect(note, contains("/etc/passwd"));
     expect(note, contains("sandbox"));
   });
+
+  test("an extra write root is granted and enforced", () async {
+    if (!landlockUsable) return;
+    final extra = Directory(p.join(cache.path, "extra"))..createSync();
+    final home = Directory(p.join(cache.path, "home"))..createSync();
+    final s = CommandSandbox(
+        workspace: p.join(cache.path, "ws"),
+        tmp: tmp.path,
+        home: home.path,
+        extraWrites: [extra.path]);
+    final prefix = await helper.prefixFor(s);
+    expect(prefix, contains("--write"));
+    expect(prefix![prefix.indexOf("--write") + 1], extra.path);
+    // Inside the extra root: granted.
+    final granted = await Process.start(prefix.first,
+        [...prefix.skip(1), "/bin/sh", "-c", "touch ${extra.path}/ok.txt"],
+        workingDirectory: s.workspace,
+        environment: {"PATH": "/usr/bin:/bin"});
+    expect(await granted.exitCode, 0,
+        reason: "the extra write root is granted like the workspace");
+    expect(File("${extra.path}/ok.txt").existsSync(), isTrue);
+    // Outside it, still refused.
+    final refused = await Process.start(prefix.first,
+        [...prefix.skip(1), "/bin/sh", "-c", "touch ${home.path}/no.txt"],
+        workingDirectory: s.workspace,
+        environment: {"PATH": "/usr/bin:/bin"});
+    expect(await refused.exitCode, isNot(0),
+        reason: "the extra root does not widen anything past itself");
+  });
+
+  test("a sandbox without extra writes carries no --write", () async {
+    if (!landlockUsable) return;
+    final prefix = await helper.prefixFor(CommandSandbox(
+        workspace: p.join(cache.path, "ws"), tmp: tmp.path));
+    expect(prefix, isNot(contains("--write")));
+  });
 }
 
 /// Whether the helper is there on this machine. Set by `setUpAll`'s first

@@ -12,17 +12,34 @@ import "../../fonts.dart";
 /// what the panel below shows, verbatim and in the bundled mono face. It comes
 /// worded from the agent as `argumentsText`, the same way `ToolLabel` takes it;
 /// the raw JSON is the fallback for a tool that words nothing.
+///
+/// Two answers write a rule as well as allowing: **Allow in Chat** onto the
+/// chat's `meta.json`, **Allow in Project** onto the project's
+/// `project.json`. They are here rather than in a settings page because the
+/// prompt is where the decision lives — nobody opens settings to pre-approve
+/// each chat — and the rule they write is derived from the call being shown,
+/// so agreeing to it and recording it are one act.
 class ApprovalBanner extends StatelessWidget {
   const ApprovalBanner({
     super.key,
     required this.approval,
     required this.onAllow,
     required this.onDeny,
+    this.onAlwaysAllowChat,
+    this.onAlwaysAllowProject,
   });
 
   final ToolApproval approval;
   final VoidCallback onAllow;
   final VoidCallback onDeny;
+
+  /// Writes the derived rule on the chat's `meta.json`. Null where this
+  /// banner is drawn for a mirrored chat — the home device writes the rule.
+  final VoidCallback? onAlwaysAllowChat;
+
+  /// Writes the derived rule on the project's `project.json`. Null for a
+  /// mirrored chat, and where no project is resolved.
+  final VoidCallback? onAlwaysAllowProject;
 
   /// Past this the panel scrolls. A command long enough to need it is rare and
   /// a banner tall enough to bury the conversation behind it is worse.
@@ -87,7 +104,16 @@ class ApprovalBanner extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton(onPressed: onDeny, child: const Text("Deny")),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              if (onAlwaysAllowChat != null)
+                TextButton(
+                    onPressed: onAlwaysAllowChat,
+                    child: const Text("Always in chat")),
+              if (onAlwaysAllowProject != null)
+                TextButton(
+                    onPressed: onAlwaysAllowProject,
+                    child: const Text("Always in project")),
+              const SizedBox(width: 4),
               FilledButton(onPressed: onAllow, child: const Text("Allow")),
             ],
           ),

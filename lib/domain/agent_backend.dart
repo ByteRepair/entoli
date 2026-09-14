@@ -355,6 +355,19 @@ class TurnSettings {
   /// is the floor this can only name a value for, not widen.
   final int? turnMaxSteps;
 
+  /// The turn's standing permission rules, merged chat first, then project,
+  /// then app — consulted before the classifier and the banner in every mode.
+  final List<PermissionRule> permissions;
+
+  /// Directories this turn's sandboxed commands may additionally write to,
+  /// beside the workspace: the rules' own writes plus the project's
+  /// writableDirs, composed by the repository.
+  final List<String> writableDirs;
+
+  /// Whether a command the sandbox denied writes to is offered back as an
+  /// approval. Null means the app default decides.
+  final bool? sandboxReprompt;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -372,6 +385,9 @@ class TurnSettings {
     this.omadaMember,
     this.omada = false,
     this.turnMaxSteps,
+    this.permissions = const [],
+    this.writableDirs = const [],
+    this.sandboxReprompt,
   });
 }
 

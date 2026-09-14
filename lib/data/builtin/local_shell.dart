@@ -859,16 +859,19 @@ class ShellUnavailable implements Exception {
 }
 
 /// The line a refused write prints: either the shell's own (`sh: /path:
-/// Permission denied`) or the tool's (`tool: cannot open '/path' for
-/// writing: Permission denied`). A build's errors are the model's only
-/// report of what the sandbox took away, so both wordings are matched. The
-/// [writeWords] group is the tool's own name for a write — `cannot touch`,
-/// `cannot create`, `for writing` — and is what says a match may be worded
-/// `writing` rather than neutrally; the shell's redirect shape carries no
-/// such words, so it reads `denied` and a read refused by the file's own
-/// Unix perms is not misreported as a write.
+/// Permission denied`), the tool's (`tool: cannot open '/path' for
+/// writing: Permission denied`), or Python's (`PermissionError: [Errno 13]
+/// Permission denied: '/path'`). A build's errors are the model's only
+/// report of what the sandbox took away, so all three wordings are matched.
+/// The path may be relative (`config.json`) — a command working inside its
+/// cwd — and is joined against it by the caller before the granted set is
+/// asked. The `writeWords` group is the tool's own name for a write —
+/// `cannot touch`, `cannot create`, `for writing` — and is what says a match
+/// may be worded `writing` rather than neutrally; the shell's redirect shape
+/// carries no such words, so it reads `denied` and a read refused by the
+/// file's own Unix perms is not misreported as a write.
 final RegExp deniedPathPattern = RegExp(
-    r"""(?:^|[\s:"'(])(?:(?<write>cannot (?:open|touch|create regular file|create) )?|[\s:"(])'?(/[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)""",
+    r"""(?<write>cannot (?:open|touch|create regular file|create) )'?(?<path>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|(?<neutral>^|[\s:"'(])(?!cannot )'?(?<path2>(?:/|[\w.@+-])[\w.@+/ -]*?)'?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)|PermissionError: \[Errno 13\] Permission denied: '?(?<pypath>[^'?:]*)'?:?""",
     multiLine: true);
 
 /// What a `oneShot` command is: today's contract, a fresh subshell per
@@ -991,38 +994,8 @@ class _OneShotRun implements ShellRun {
     }
   }
 
-  /// What the confinement denied, read out of the command's own output: a
-  /// write the kernel refused prints its EACCES, and the line names the path.
-  /// Only lines naming a path outside what the sandbox granted are collected
-  /// — a permission error on a workspace file is the command's own business,
-  /// not the sandbox's — and the count is capped, so one bad loop cannot
-  /// bury the tool result in copies of the same refusal.
-  List<String> _violations(String text) {
-    if (sandbox == null) return const [];
-    final workspace = sandbox!.workspace;
-    final tmp = sandbox!.tmp;
-    // The path and whether the line worded a write. A read refusal carries
-    // no write words and reads neutrally, so a `cat` denied by the file's
-    // own Unix perms is not misreported as a write this sandbox did not
-    // take away.
-    final found = <String, bool>{};
-    for (final match in deniedPathPattern.allMatches(text)) {
-      final path = match.group(2);
-      if (path == null || path.isEmpty) continue;
-      if (pathInside(path, workspace) || tmp != null && pathInside(path, tmp)) {
-        continue;
-      }
-      if (path == "/dev/null") continue;
-      final isWrite = match.namedGroup("write") != null ||
-          match.namedGroup("forwriting") != null;
-      found[path] = (found[path] ?? false) || isWrite;
-      if (found.length >= 5) break;
-    }
-    return [
-      for (final entry in found.entries)
-        entry.value ? "writing ${entry.key}" : "denied ${entry.key}"
-    ];
-  }
+  List<String> _violations(String text) =>
+      sandboxViolations(text, cwd, sandbox);
 
   /// `exec 2>&1` redirects the shell's own error output and everything it goes
   /// on to spawn, which is what makes the transcript read in order.
@@ -1084,4 +1057,63 @@ class _OneShotRun implements ShellRun {
     _emitted = _liveTail(_emitted ?? "", chunk);
     notifier.value = _emitted;
   }
+}
+
+/// What the confinement denied, read out of the command's own output: a
+/// write the kernel refused prints its EACCES, and the line names the path.
+/// Only lines naming a path outside what the sandbox granted are collected
+/// — a permission error on a workspace file is the command's own business,
+/// not the sandbox's — and the count is capped, so one bad loop cannot
+/// bury the tool result in copies of the same refusal.
+List<String> sandboxViolations(
+    String text,
+    String cwd,
+    CommandSandbox? sandbox,
+) {
+  if (sandbox == null) return const [];
+  final workspace = sandbox.workspace;
+  final tmp = sandbox.tmp;
+  final extras = sandbox.extraWrites;
+  // A read refusal carries no write words and reads neutrally, so a `cat`
+  // denied by the file's own Unix perms is not misreported as a write this
+  // sandbox did not take away. A relative path is joined against the
+  // command's cwd before the granted set is asked — a command working
+  // inside its own directory names its files the way it got there.
+  String resolve(String raw) {
+    final path = raw.trim();
+    if (path.startsWith("/")) return path;
+    final base = cwd.startsWith("/") ? cwd : workspace;
+    final joined =
+        "$base/${path.startsWith("./") ? path.substring(2) : path}";
+    return joined;
+  }
+
+  final found = <String, bool>{};
+  for (final match in deniedPathPattern.allMatches(text)) {
+    // One path per alternative, named rather than numbered: the three
+    // alternatives carry different groups and the numbered ones would shift
+    // with the next addition.
+    final raw =
+        match.namedGroup("path") ??
+            match.namedGroup("path2") ??
+            match.namedGroup("pypath");
+    final pyErr = match.namedGroup("pypath") != null;
+    if (raw == null || raw.isEmpty) continue;
+    final path = resolve(raw);
+    if (pathInside(path, workspace) ||
+        tmp != null && pathInside(path, tmp) ||
+        extras.any((dir) => pathInside(path, dir))) {
+      continue;
+    }
+    if (path == "/dev/null") continue;
+    final isWrite = pyErr ||
+        match.namedGroup("write") != null ||
+        match.namedGroup("forwriting") != null;
+    found[path] = (found[path] ?? false) || isWrite;
+    if (found.length >= 5) break;
+  }
+  return [
+    for (final entry in found.entries)
+      entry.value ? "writing ${entry.key}" : "denied ${entry.key}"
+  ];
 }

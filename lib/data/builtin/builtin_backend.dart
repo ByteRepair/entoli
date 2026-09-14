@@ -98,6 +98,12 @@ class BuiltinBackend implements AgentBackend {
   @override
   ValueListenable<Set<String>> get runningTurns => _running;
 
+  /// The agents this backend is driving, by chat — read on a banner answer to
+  /// hand the runtime grant to the turn that raised it, so an "Allow in Chat"
+  /// pressed mid-turn covers the rest of this turn before the next one reads
+  /// the persisted rule off disk.
+  final Map<String, List<BuiltinAgent>> _liveAgents = {};
+
   final Map<String, BuiltinSession> _sessions = {};
   final _RunningTurns _running = _RunningTurns();
   final Map<String, StreamController<AgentEvent>> _controllers = {};
@@ -175,6 +181,9 @@ class BuiltinBackend implements AgentBackend {
     // round runs several turns of one chat, and a chat-keyed map would drop
     // the earlier kill.
     final stopKey = _running.add(chatId, () async {});
+    // Read in the finally below, which runs on the bypass path too, where no
+    // agent exists to drop.
+    BuiltinAgent? liveAgent;
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
@@ -240,6 +249,8 @@ class BuiltinBackend implements AgentBackend {
         log: subAgentLog,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        permissions: settings.permissions,
+        writableDirs: settings.writableDirs,
         project: project,
       );
       final classifier =
@@ -380,6 +391,8 @@ class BuiltinBackend implements AgentBackend {
       );
       // The real kill replaces the placeholder.
       _running.replace(stopKey, agent.cancel);
+      liveAgent = agent;
+      _liveAgents.putIfAbsent(chatId, () => []).add(agent);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
       // of, so they come off the message that started it. A member turn is
@@ -451,6 +464,7 @@ class BuiltinBackend implements AgentBackend {
       // Android's hold on the process, and the listener is still writing the
       // turn's closing records when the agent itself has stopped.
       _running.removeKey(stopKey);
+      if (liveAgent != null) _liveAgents[chatId]?.remove(liveAgent);
     }
   }
 
@@ -971,6 +985,21 @@ class BuiltinBackend implements AgentBackend {
     // completer nobody will ever complete. `_clearApprovals` does the removing.
     final completer = _pending[approvalId];
     if (completer != null && !completer.isCompleted) completer.complete(response);
+    // An "always" answer is also this turn's grant: the rule reaches the
+    // running agent ahead of the persisted copy the next turn reads, so the
+    // rest of this turn is covered even before the settings file lands.
+    if (response == ApprovalResponse.alwaysAllowChat ||
+        response == ApprovalResponse.alwaysAllowProject) {
+      final approval = (_approvals[chatId] ?? const <ToolApproval>[])
+          .where((a) => a.id == approvalId)
+          .firstOrNull;
+      final rule = ruleFromApproval(approval);
+      if (rule != null) {
+        for (final agent in _liveAgents[chatId] ?? const <BuiltinAgent>[]) {
+          agent.grantRuntimeRule(rule);
+        }
+      }
+    }
   }
 
   @override

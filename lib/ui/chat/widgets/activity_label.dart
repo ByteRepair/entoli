@@ -55,7 +55,9 @@ class ToolLabel extends StatelessWidget {
   /// — the spinner below the message handles the no-text-yet case.
   final bool running;
 
-  bool get _failed => (result?.returnCode ?? 0) != 0;
+  bool get _failed =>
+      (result?.returnCode ?? 0) != 0 ||
+      (result?.violations.isNotEmpty ?? false);
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +86,15 @@ class ToolLabel extends StatelessWidget {
         context,
         title: name ?? "Tool",
         mono: true,
-        sections: _runSections(call!, result),
+        sections: [
+          ..._runSections(call!, result),
+          if (result != null && result!.violations.isNotEmpty)
+            (
+              label: "Sandbox",
+              body: result!.violations.join("\n"),
+              isError: true,
+            ),
+        ],
       ),
     );
   }

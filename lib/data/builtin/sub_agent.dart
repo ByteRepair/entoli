@@ -42,6 +42,8 @@ class SubAgentRunner {
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
     this.project,
+    this.permissions = const [],
+    this.writableDirs = const [],
   });
 
   final LlmClient client;
@@ -66,6 +68,16 @@ class SubAgentRunner {
   /// nothing of one where it is not — the parent's [projectWorkspace] is the
   /// chat's own there, and claiming it is shared would be a lie.
   final bool sharedWorkspace;
+
+  /// The turn's rules and writable roots, handed down so a sub-agent's
+  /// commands gate the same way. A sub-agent has no banner — nobody is there
+  /// to answer one — so only rule-allow and rule-deny reach its commands;
+  /// an ask-shaped call is refused.
+  final List<PermissionRule> permissions;
+
+  /// What the sub-agent's sandboxed commands may write to beside the
+  /// workspace, the parent's grant carried down.
+  final List<String> writableDirs;
 
   /// The project this sub-agent's turn is in, inherited from the parent so the
   /// shell driver resolves the same rootfs instance.
@@ -150,6 +162,8 @@ class SubAgentRunner {
       caps: caps.unattended,
       sharedWorkspace: sharedWorkspace,
       project: project,
+      permissions: permissions,
+      writableDirs: writableDirs,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
     );

@@ -84,6 +84,7 @@ class CommandSandbox {
     required this.workspace,
     this.tmp,
     this.home,
+    this.extraWrites = const [],
   });
 
   /// The one directory writes are granted, at its host path.
@@ -96,6 +97,11 @@ class CommandSandbox {
   /// The `HOME` the command sees, where that differs from the workspace — a
   /// desktop command's own home, which is read freely and written never.
   final String? home;
+
+  /// Directories beyond [workspace] and [tmp] the command may write to — the
+  /// machine paths a permission rule or a project names as part of its work.
+  /// Granted the full write set the workspace gets.
+  final List<String> extraWrites;
 
   /// The sentence the tool result carries when this sandbox denied something.
   static String violationsNote(List<String> violations) =>
