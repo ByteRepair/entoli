@@ -124,6 +124,23 @@ void main() {
       expect(ruleFromApproval(ToolApproval(id: "a", toolName: "bash")), isNull);
       expect(ruleFromApproval(null), isNull);
     });
+
+    test("a re-prompt's denied writes join the derived rule", () {
+      final rule = ruleFromApproval(
+          ToolApproval(
+              id: "a",
+              toolName: "bash",
+              argumentsText: "python3 build.py"),
+          deniedWrites: const ["/home/yiannis/Projects/x"]);
+      expect(rule!.writes, ["/home/yiannis/Projects/x"]);
+      expect(rule.decision, PermissionDecision.allow);
+    });
+
+    test("a plain banner derivation carries no writes", () {
+      final rule = ruleFromApproval(ToolApproval(
+          id: "a", toolName: "bash", argumentsText: "python3 build.py"));
+      expect(rule!.writes, isEmpty);
+    });
   });
 
   group("JSON round trip", () {

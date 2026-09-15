@@ -598,7 +598,40 @@ class _ProjectPermissionsPage extends ConsumerWidget {
               .read(projectSettingsProvider(project).notifier)
               .setWritableDirs(dirs),
         ),
+        const Divider(),
+        _SandboxRepromptRow(project: project),
       ]),
+    );
+  }
+}
+
+/// Whether a sandbox-denied write is offered back here, over the app
+/// default. Null inherits; the row says what the effective answer is and a
+/// switch puts this project's own in place — the same
+/// inherit-then-override shape the TTL row keeps.
+class _SandboxRepromptRow extends ConsumerWidget {
+  const _SandboxRepromptRow({required this.project});
+
+  final String project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final override = ref.watch(
+        projectSettingsProvider(project).select((s) => s.sandboxReprompt));
+    final appDefault = ref.watch(
+        appSettingsProvider.select((s) => s.sandboxReprompt));
+    return SwitchListTile(
+      title: const Text("Offer to rerun sandbox-denied commands"),
+      subtitle: Text(override == null
+          ? "Default (${appDefault ? "on" : "off"}). A switch here overrides "
+              "the app default for this project's chats."
+          : override
+              ? "On for this project's chats."
+              : "Off for this project's chats."),
+      value: override ?? appDefault,
+      onChanged: (value) => ref
+          .read(projectSettingsProvider(project).notifier)
+          .setProjectSandboxReprompt(value),
     );
   }
 }

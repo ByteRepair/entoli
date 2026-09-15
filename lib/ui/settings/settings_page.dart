@@ -696,6 +696,18 @@ class _AgentSection extends ConsumerWidget {
           onSaved: (rules) =>
               ref.read(appSettingsProvider.notifier).setPermissions(rules),
         ),
+        SwitchListTile(
+          title: const Text("Offer to rerun sandbox-denied commands"),
+          subtitle: const Text(
+              "When the sandbox denies a write, one banner offers to rerun it "
+              "unconfined, or to widen the grant to the denied directory. "
+              "Off, the denial is reported to the model and the turn moves "
+              "on."),
+          value: settings.sandboxReprompt,
+          onChanged: (value) => ref
+              .read(appSettingsProvider.notifier)
+              .setSandboxReprompt(value),
+        ),
       ],
     );
   }

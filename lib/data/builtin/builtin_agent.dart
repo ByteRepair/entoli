@@ -382,6 +382,11 @@ class BuiltinAgent {
   /// turn is still running under.
   void grantRuntimeRule(PermissionRule rule) => _runtimeRules.insert(0, rule);
 
+  /// The directories a re-prompt banner is agreeing to, keyed by call id and
+  /// cleared when the answer derives the rule — the writes join it, so the
+  /// sandbox's grant widens with the allow instead of the pair fighting.
+  final Map<String, List<String>> _deniedWrites = {};
+
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
   /// and the sandbox is only ever offered where the machine itself is the
@@ -1695,7 +1700,8 @@ class BuiltinAgent {
     // reads. The approval is in hand, so the derivation costs nothing here.
     if (answer == ApprovalResponse.alwaysAllowChat ||
         answer == ApprovalResponse.alwaysAllowProject) {
-      final rule = ruleFromApproval(approval);
+      final rule = ruleFromApproval(approval,
+          deniedWrites: _deniedWrites.remove(approval.id) ?? const []);
       if (rule != null) grantRuntimeRule(rule);
     }
     final allowed = answer == ApprovalResponse.allow ||
@@ -1841,6 +1847,15 @@ class BuiltinAgent {
     // answered — and a read denial rerun confined, there being nothing a
     // grant could widen: a read refusal is the file's own perms.
     final writeDenied = result.violations.any((v) => v.startsWith("writing "));
+    // The re-prompt's "always" answer carries the denied directories into
+    // the derived rule: the user is agreeing to the write, and a rule that
+    // allows the command but leaves the kernel refusing it would re-prompt
+    // forever. Cleared with the banner it belongs to.
+    _deniedWrites[call.id] = [
+      for (final violation in result.violations)
+        if (violation.startsWith("writing "))
+          violation.substring("writing ".length),
+    ];
     Future<ShellResult> run() => _execute(call, command, unconfined: writeDenied);
     yield* _askAndExecute(
       call,

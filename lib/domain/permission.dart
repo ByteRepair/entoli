@@ -262,7 +262,15 @@ bool _hostMatch(String pattern, String host) {
 /// over its leading words up to the first operator (`git checkout *`), a file
 /// tool's path becomes its directory's scope, a fetch URL becomes the host.
 /// Null where the call carries nothing matchable.
-PermissionRule? ruleFromApproval(ToolApproval? approval) {
+///
+/// [deniedWrites] is what the sandbox refused while the banner was up, the
+/// re-prompt's own wordings (`writing <path>`): an "always" answer to one of
+/// those banners is agreeing to the *write*, so the paths join the rule and
+/// the sandbox's grant widens with it. Without them the rule allows the
+/// command and leaves the kernel refusing it — an allow that re-prompts
+/// forever. Empty everywhere else.
+PermissionRule? ruleFromApproval(ToolApproval? approval,
+    {List<String> deniedWrites = const []}) {
   if (approval == null) return null;
   switch (approval.toolName) {
     case "bash":
@@ -272,6 +280,7 @@ PermissionRule? ruleFromApproval(ToolApproval? approval) {
         tool: "bash",
         pattern: _commandPrefix(command.trim()),
         decision: PermissionDecision.allow,
+        writes: [for (final w in deniedWrites) w],
       );
     case "read" || "write" || "edit":
       final path = approval.argumentsText ?? "";
