@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/ui/app_shell.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
@@ -13,9 +14,13 @@ void main() {
   setUp(() => app = TestApp.create());
   tearDown(() => app.dispose());
 
+  // The tour opens over the shell on a first run; every test here is about the
+  // shell, so they all arrive past it.
   Future<void> pumpAt(WidgetTester tester, Size size) async {
     useWindow(tester, size);
+    await io(tester, () => app.seedSettings(AppSettings(welcomeSeen: true)));
     await app.pump(tester, const AppShell());
+    await tester.pump();
   }
 
   testWidgets("wide, the sidebar sits beside the chat", (tester) async {
@@ -43,7 +48,12 @@ void main() {
 
   testWidgets("a chat picked in the drawer closes it and opens in the pane",
       (tester) async {
-    await io(tester, () => app.seedChat(title: "old chat"));
+    // Settings first: the chat's create reads the settings, which builds the
+    // notifier against whatever is on disk at that moment.
+    await io(tester, () async {
+      await app.seedSettings(AppSettings(welcomeSeen: true));
+      await app.seedChat(title: "old chat");
+    });
     await pumpAt(tester, const Size(500, 900));
 
     await tester.tap(find.byIcon(Icons.menu));

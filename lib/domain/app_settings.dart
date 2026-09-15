@@ -9,8 +9,10 @@ import "llm_provider.dart";
 import "local_llm.dart";
 import "permission.dart";
 import "profile.dart";
+import "project_settings.dart";
 import "temp_chat_ttl.dart";
 import "theme_colour.dart";
+import "tone.dart";
 
 /// Persisted app-level settings (default model for new chats, etc.).
 class AppSettings {
@@ -34,6 +36,8 @@ class AppSettings {
     this.approveMode = ApproveMode.ask,
     this.llmProviders = const [],
     this.profile,
+    this.tone = Tone.none,
+    this.citations = false,
     this.appIcon = AppIcon.cookie,
     this.appTheme = AppTheme.system,
     this.primaryColour = ThemeColour.indigo,
@@ -57,10 +61,15 @@ class AppSettings {
     this.localModelKvCachePrompts,
     this.deviceName,
     this.syncRelayUrl,
+    this.syncKeepAlive = false,
     this.turnUrl,
     this.turnUsername,
-    this.turnPassword,
     this.turnRetries = defaultTurnRetries,
+    this.omadaByDefault = false,
+    this.omadaMaxGenerations = defaultOmadaMaxGenerations,
+    this.omadaOrdering,
+    this.turnMaxSteps,
+    this.welcomeSeen = false,
   });
 
   String? defaultModelId;
@@ -134,6 +143,15 @@ class AppSettings {
   /// The user's profile, injected at the end of the system prompt. App-level
   /// default; a project can override it. Null means nothing is injected.
   Profile? profile;
+
+  /// How the agent words its replies. App-level default; a project can
+  /// override it. [Tone.none] adds nothing to the prompt.
+  Tone tone;
+
+  /// Whether the agent numbers the web pages a reply drew on and lists them
+  /// at the end of it. It names what it used, never a search it was not
+  /// asked to make. App-level default; a project can override it.
+  bool citations;
 
   /// Which icon the app wears, in the app and on the Android home screen.
   /// App-level only: an icon is the app's, not a chat's.
@@ -251,20 +269,56 @@ class AppSettings {
   /// Empty or null means relay is off and only LAN / manual paste work.
   String? syncRelayUrl;
 
+  /// Whether a connected peer holds the process open off screen, as a
+  /// foreground service with a notification naming the connected devices and
+  /// a Disconnect action. Off by default: the cost is a wake lock and a
+  /// persistent notification for as long as a device is connected. Android
+  /// only; a no-op everywhere a foreground service cannot be started.
+  bool syncKeepAlive;
+
   /// TURN server URL for NAT traversal. Bring-your-own; STUN defaults are
   /// public. Null means no TURN, so symmetric-NAT pairs fail honestly.
   String? turnUrl;
 
   /// TURN credentials, stored beside the URL. Null where the TURN server
-  /// needs none (rare) or none is configured.
+  /// needs none (rare) or none is configured. The password is not here: it is
+  /// a secret, and lives in the [AppSecrets] store beside the sync identity.
   String? turnUsername;
-  String? turnPassword;
 
   /// How many times a turn that died on a retryable error — a connection that
   /// dropped, a provider hiccup — is carried on automatically before it is
   /// left failed. `0` is off: the turn stops where it failed and the Continue
   /// bar is the only way on. App-level, like the model default it sits beside.
   int turnRetries;
+
+  /// Whether a new project starts with Omada on, so the user who wants a
+  /// workspace of teams does not flip the toggle per project. Baked into the
+  /// project at creation; existing projects and the built-ins are untouched.
+  bool omadaByDefault;
+
+  /// How many handoff generations one Omada round may run — dispatch waves,
+  /// not turns: a three-member fan-out is one generation. The user's message
+  /// is generation one and uncapped; this bounds the waves that follow, and
+  /// the user speaking resets the count. A project's
+  /// `ProjectSettings.omadaMaxGenerations` overrides it per project.
+  int omadaMaxGenerations;
+
+  /// The room's scheduling default for a project that picked none of its own:
+  /// sequential runs the schedule one turn at a time, parallel answers with
+  /// one turn per member at once. `ProjectSettings.omadaOrdering` overrides
+  /// it per project; the enum lives with the project settings, which is
+  /// where a per-project answer was first written.
+  OmadaOrdering? omadaOrdering;
+
+  /// How many model calls one turn may make before it stops for the user —
+  /// the step limit the backend runs under. Null is the backend's own
+  /// default; the value rides every turn, an Omada member turn included,
+  /// and the round's own bound is `omadaMaxGenerations` beside it.
+  int? turnMaxSteps;
+
+  /// Whether the welcome tour has been finished. It is what first launch reads
+  /// to decide whether to push the tour, and what its Done writes.
+  bool welcomeSeen;
 
   /// The default when nothing is set: five carry-ons per failure. A named
   /// constant so the settings page's switch — which turns the feature on at
@@ -273,6 +327,16 @@ class AppSettings {
 
   /// The most the setting may say, and the slider's top.
   static const maxTurnRetries = 10;
+
+  /// The default and the stops of the max-generations slider. Ten waves of
+  /// agent-to-agent work before the round stops for the user.
+  static const defaultOmadaMaxGenerations = 10;
+  static const omadaGenerationStops = [5, 10, 20, 40, 60, 80, 100];
+
+  /// The stops of the max-steps dropdown, and the backend default the
+  /// "Default" entry names.
+  static const turnStepStops = [20, 40, 60, 80, 100, 150];
+  static const defaultTurnMaxSteps = 40;
 
   /// The default when nothing is set: on, at ten prefixes. A named constant so
   /// the UI's "Default (10)" label and the provider's effective count are one
@@ -313,6 +377,8 @@ class AppSettings {
         approveMode: _approveMode(json),
         llmProviders: _providers(json["llmProviders"]),
         profile: Profile.fromJson(json["profile"]),
+        tone: Tone.fromName(json["tone"] as String?),
+        citations: json["citations"] as bool? ?? false,
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
         appTheme: AppTheme.fromName(json["appTheme"] as String?),
         primaryColour: ThemeColour.fromName(json["primaryColour"] as String?),
@@ -341,11 +407,18 @@ class AppSettings {
             json["localModelKvCacheChats"]) as int?,
         deviceName: _orNull(json["deviceName"] as String?),
         syncRelayUrl: _orNull(json["syncRelayUrl"] as String?),
+        syncKeepAlive: json["syncKeepAlive"] as bool? ?? false,
         turnUrl: _orNull(json["turnUrl"] as String?),
         turnUsername: _orNull(json["turnUsername"] as String?),
-        turnPassword: _orNull(json["turnPassword"] as String?),
         turnRetries:
             (json["turnRetries"] as int? ?? defaultTurnRetries).clamp(0, maxTurnRetries),
+        omadaByDefault: json["omadaByDefault"] as bool? ?? false,
+        omadaMaxGenerations:
+            (json["omadaMaxGenerations"] as int? ?? defaultOmadaMaxGenerations),
+        omadaOrdering: OmadaOrdering.fromNameNullable(
+            json["omadaOrdering"] as String?),
+        turnMaxSteps: json["turnMaxSteps"] as int?,
+        welcomeSeen: json["welcomeSeen"] as bool? ?? false,
       );
     } catch (_) {
       return AppSettings();
@@ -401,6 +474,8 @@ class AppSettings {
         approveMode: approveMode,
         llmProviders: llmProviders,
         profile: profile,
+        tone: tone,
+        citations: citations,
         appIcon: appIcon,
         appTheme: appTheme,
         primaryColour: primaryColour,
@@ -424,10 +499,15 @@ class AppSettings {
         localModelKvCachePrompts: localModelKvCachePrompts,
         deviceName: deviceName,
         syncRelayUrl: syncRelayUrl,
+        syncKeepAlive: syncKeepAlive,
         turnUrl: turnUrl,
         turnUsername: turnUsername,
-        turnPassword: turnPassword,
         turnRetries: turnRetries,
+        omadaByDefault: omadaByDefault,
+        omadaMaxGenerations: omadaMaxGenerations,
+        omadaOrdering: omadaOrdering,
+        turnMaxSteps: turnMaxSteps,
+        welcomeSeen: welcomeSeen,
       );
 
   Future<void> save(AppConfig config) async {
@@ -455,6 +535,8 @@ class AppSettings {
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),
+      if (tone != Tone.none) "tone": tone.name,
+      if (citations) "citations": citations,
       "appIcon": appIcon.name,
       "appTheme": appTheme.name,
       "primaryColour": primaryColour.name,
@@ -480,12 +562,18 @@ class AppSettings {
         "localModelKvCachePrompts": localModelKvCachePrompts,
       if (deviceName != null) "deviceName": deviceName,
       if (syncRelayUrl != null) "syncRelayUrl": syncRelayUrl,
+      if (syncKeepAlive) "syncKeepAlive": syncKeepAlive,
       if (turnUrl != null) "turnUrl": turnUrl,
       if (turnUsername != null) "turnUsername": turnUsername,
-      if (turnPassword != null) "turnPassword": turnPassword,
       // Written only when not the default, for the same reason the memory
       // gates are: a file that predates it says nothing and gets the default.
       if (turnRetries != defaultTurnRetries) "turnRetries": turnRetries,
+      if (omadaByDefault) "omadaByDefault": omadaByDefault,
+      if (omadaMaxGenerations != defaultOmadaMaxGenerations)
+        "omadaMaxGenerations": omadaMaxGenerations,
+      if (omadaOrdering != null) "omadaOrdering": omadaOrdering!.name,
+      if (turnMaxSteps != null) "turnMaxSteps": turnMaxSteps,
+      if (welcomeSeen) "welcomeSeen": welcomeSeen,
     }));
   }
 }

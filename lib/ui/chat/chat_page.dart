@@ -15,6 +15,7 @@ import "../sidebar/sidebar.dart";
 import "../voice/read_aloud.dart";
 import "../voice/voice_page.dart";
 import "../widgets/app_mark.dart";
+import "../widgets/chip_row.dart";
 import "../widgets/completion_field.dart";
 import "../widgets/nav_drawer.dart";
 import "../widgets/nothing.dart";
@@ -24,7 +25,9 @@ import "chat_controller.dart";
 import "mirror_controller.dart";
 import "widgets/composer.dart";
 import "widgets/activity_label.dart";
+import "widgets/synced_device_cards.dart";
 import "widgets/message_bubble.dart";
+import "widgets/omada_separator.dart";
 import "widgets/needs_setup_bar.dart";
 import "widgets/turn_surface.dart";
 import "widgets/view_only_bar.dart";
@@ -148,7 +151,7 @@ class _NewChatState extends ConsumerState<_NewChat> {
     if (ref.watch(setupCompleteProvider(project))) {
       return Composer(
         controller: _controller,
-        isRunning: false,
+        agentSpeaking: false,
         onSend: _send,
         onAbort: () {},
         project: project,
@@ -181,6 +184,11 @@ class _NewChatState extends ConsumerState<_NewChat> {
           child: _EmptyChat(
             project: ref.watch(selectedProjectProvider),
             controller: _controller,
+            // The paired devices' cards are the new-chat screen's own — a
+            // chat that exists with nothing said in it yet is mid-turn at
+            // worst, and a list of other devices under its question would
+            // say nothing true about it.
+            showSyncedCards: true,
           ),
         ),
       );
@@ -191,10 +199,17 @@ class _NewChatState extends ConsumerState<_NewChat> {
 /// a built-in is always on offer, so the row is never empty. The default
 /// project is nothing selected, so it has no badge — see "The chat page" in
 /// CLAUDE.md.
+///
+/// The row is a [ChipRow], so it animates both ways a badge moves: picking
+/// one grows the check, and the `AnimatedSize` inside each entry turns that
+/// into a width change whose re-flow every other badge glides along with —
+/// one pushed onto a new line travels there rather than teleports — and a
+/// project made or deleted elsewhere grows in or shrinks out.
 class _ProjectBadges extends ConsumerWidget {
-  const _ProjectBadges({required this.selected});
+  const _ProjectBadges({required this.selected, required this.settled});
 
   final String? selected;
+  final bool settled;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -204,32 +219,42 @@ class _ProjectBadges extends ConsumerWidget {
     final projects = everyProject(named).whereType<String>().toList();
     return Padding(
       padding: const EdgeInsets.only(top: 20),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 8,
-        runSpacing: 8,
-        children: [
+      child: ChipRow(
+        settled: settled,
+        entries: [
           for (final project in projects)
-            ChoiceChip(
-              // The icon rides in the label rather than the avatar slot:
-              // Material's ChoiceChip paints the selected check over the
-              // avatar, so an icon there disappears under the tick when
-              // picked. In the label it sits beside the text, and the check
-              // keeps the leading slot to itself the way it had before the
-              // icon was added.
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (projectIcon(project) case final icon?)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Icon(icon, size: 18),
-                    ),
-                  Text(projectLabel(project)),
-                ],
+            ChipRowEntry(
+              key: ValueKey(project),
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                child: ChoiceChip(
+                  // The icon rides in the label rather than the avatar slot:
+                  // Material's ChoiceChip paints the selected check over the
+                  // avatar, so an icon there disappears under the tick when
+                  // picked. In the label it sits beside the text, and the check
+                  // keeps the leading slot to itself the way it had before the
+                  // icon was added.
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (projectIcon(project) case final icon?)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(icon, size: 18),
+                        ),
+                       Text(
+                         projectLabel(project),
+                         style: projectLabelStyle(
+                           ref.watch(omadaOnProvider(project)),
+                         ),
+                       ),
+                    ],
+                  ),
+                  selected: project == selected,
+                  onSelected: (on) => selectProject(ref, on ? project : null),
+                ),
               ),
-              selected: project == selected,
-              onSelected: (on) => selectProject(ref, on ? project : null),
             ),
         ],
       ),
@@ -241,8 +266,15 @@ class _ProjectBadges extends ConsumerWidget {
 /// on. The mark, the question, the project it would happen in, and what the
 /// composer's `/` and `@` menus hold — which is the only place those are named
 /// before the user has typed the character that opens them.
+///
+/// Its rows are `settled`, so what the user arrives on is static and every
+/// change from their first interaction on animates.
 class _EmptyChat extends ConsumerWidget {
-  const _EmptyChat({required this.project, required this.controller});
+  const _EmptyChat({
+    required this.project,
+    required this.controller,
+    this.showSyncedCards = false,
+  });
 
   /// The project this chat is in, or on the new-chat screen the one the next
   /// chat goes to. Either way it is the badge picked out.
@@ -252,9 +284,9 @@ class _EmptyChat extends ConsumerWidget {
   /// where a trigger lands and why it does not ask for the focus.
   final TextEditingController controller;
 
-  /// Enough to say what is on offer. Everything the user has written is a menu,
-  /// and `/` is what opens the menu.
-  static const _most = 6;
+  /// The paired devices' cards, which only the new-chat screen asks for —
+  /// see its own call for why.
+  final bool showSyncedCards;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -263,7 +295,7 @@ class _EmptyChat extends ConsumerWidget {
       for (final kind in CompletionKind.values)
         for (final option in ref.watch(completionsProvider((project: project, kind: kind))))
           (kind: kind, option: option),
-    ].take(_most).toList();
+    ];
 
     return Center(
       child: SingleChildScrollView(
@@ -273,42 +305,132 @@ class _EmptyChat extends ConsumerWidget {
           children: [
             const AppMark(size: 56),
             const SizedBox(height: 20),
-            Text(
-              emptyChatQuestionFor(project),
-              textAlign: TextAlign.center,
+            // A project whose description is the empty string asks nothing:
+            // the sweep is handed the empty string and eats its own tail
+            // away, rather than the widget leaving the tree and the next
+            // question's arrival being a mount instead of a change.
+            _QuestionSweep(
+              text: ref.watch(emptyChatQuestionProvider(project)),
               style: theme.textTheme.titleMedium,
             ),
-            _ProjectBadges(selected: project),
+            _ProjectBadges(selected: project, settled: true),
             const SizedBox(height: 20),
-            if (starters.isEmpty)
-              Text(
-                "Type / for commands, @ for agents.",
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              )
-            else
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final starter in starters)
-                    ActionChip(
-                      label: Text("${starter.kind.trigger}${starter.option.name}"),
-                      labelStyle:
-                          theme.textTheme.bodySmall?.copyWith(fontFamily: monoFamily),
-                      // Null rather than the empty string: `Chip` builds a
-                      // `Tooltip` for whatever it is given, and an empty one is
-                      // a blank box on a long press.
-                      tooltip: starter.option.description,
-                      onPressed: () =>
-                          insertCompletion(controller, starter.kind, starter.option.name),
-                    ),
-                ],
-              ),
+            ChipRow(
+              settled: true,
+              entries: starters.isEmpty
+                  ? [
+                      // Nothing to offer is said as an entry of the same row,
+                      // so a library emptying or filling animates it the way
+                      // any chip arrives and leaves.
+                      ChipRowEntry(
+                        key: const ValueKey("empty"),
+                        child: Text(
+                          "Type / for commands, @ for agents.",
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ]
+                  : [
+                      for (final starter in starters)
+                        ChipRowEntry(
+                          key: ValueKey(
+                              "${starter.kind.trigger}${starter.option.name}"),
+                          child: ActionChip(
+                            label: Text(
+                                "${starter.kind.trigger}${starter.option.name}"),
+                            labelStyle: theme.textTheme.bodySmall
+                                ?.copyWith(fontFamily: monoFamily),
+                            // Null rather than the empty string: `Chip` builds
+                            // a `Tooltip` for whatever it is given, and an
+                            // empty one is a blank box on a long press.
+                            tooltip: starter.option.description,
+                            onPressed: () => insertCompletion(
+                                controller, starter.kind, starter.option.name),
+                          ),
+                        ),
+                    ],
+            ),
+            if (showSyncedCards) ...[
+              const SizedBox(height: 20),
+              const SyncedDeviceCards(),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The empty-chat screen's question, which changes with the project by
+/// sweeping rather than by snapping or fading: the new text takes over from
+/// the first character and the change front moves progressively towards the
+/// end, so the left of the line already reads the new question while the
+/// tail is still the old one. The front runs the longer string's length, so
+/// a shorter new question sees the old one's tail eaten past its own end
+/// rather than left standing behind the front.
+///
+/// The tween carries the strings, so a change mid-sweep retargets from the
+/// hybrid on screen — the framework's own interruptible path — rather than
+/// restarting. Constant speed: a fade would rush the left end and hide the
+/// sweep the motion is.
+class _QuestionSweep extends ImplicitlyAnimatedWidget {
+  const _QuestionSweep({
+    required this.text,
+    required this.style,
+  }) : super(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.linear,
+        );
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  ImplicitlyAnimatedWidgetState<_QuestionSweep> createState() =>
+      _QuestionSweepState();
+}
+
+/// The sweep as a tween: at [t] the front sits [t] of the way along the
+/// longer of the two strings, left of it the new question, right of it the
+/// old one. Larping the strings rather than animating a bare scalar is what
+/// lets the framework retarget from the hybrid mid-sweep — the alternative
+/// was bookkeeping in the builder to recover what the tween never carried.
+class _SweepTween extends Tween<String> {
+  _SweepTween({super.begin, super.end});
+
+  @override
+  String lerp(double t) {
+    final target = end ?? "";
+    final from = begin ?? "";
+    final n = math.max(target.length, from.length);
+    final k = (t * n).round().clamp(0, n);
+    return target.substring(0, math.min(k, target.length)) +
+        from.substring(math.min(k, from.length));
+  }
+}
+
+class _QuestionSweepState extends AnimatedWidgetBaseState<_QuestionSweep> {
+  late _SweepTween _tween;
+
+  @override
+  void initState() {
+    _tween = _SweepTween(begin: widget.text, end: widget.text);
+    super.initState();
+  }
+
+  @override
+  void forEachTween(TweenVisitor<dynamic> visitor) {
+    _tween = visitor(_tween, widget.text,
+        (value) => _SweepTween(begin: value as String)) as _SweepTween;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _tween.evaluate(animation),
+      textAlign: TextAlign.center,
+      style: widget.style,
     );
   }
 }
@@ -359,13 +481,64 @@ class _ChatBody extends ConsumerStatefulWidget {
   ConsumerState<_ChatBody> createState() => _ChatBodyState();
 }
 
+/// One row of the conversation: a message, or a line saying the room's mode
+/// changed before it. Each row owns its own alignment — the bubble aligns
+/// itself, the separator is full width — so the list renders entries and
+/// nothing wraps anything.
+sealed class ConversationEntry {
+  const ConversationEntry();
+}
+
+class MessageEntry extends ConversationEntry {
+  const MessageEntry(this.message,
+      {required this.inOmadaSection, required this.last});
+
+  final Message message;
+
+  /// The reply sits in a section of the conversation where Omada is on: an
+  /// unnamed reply is the main agent's, and names itself "Entoli".
+  final bool inOmadaSection;
+
+  /// The newest message of the thread, which is the one a running turn
+  /// appends to — the spinner and the caret live on it.
+  final bool last;
+}
+
+class SectionEntry extends ConversationEntry {
+  const SectionEntry(this.omada);
+
+  /// The mode the room entered at this boundary.
+  final bool omada;
+}
+
+/// The conversation as rows, walked off the thread in order. A turn opener
+/// carrying a mode that differs from the running one emits a [SectionEntry]
+/// first — both flips are rows, the off-flip bounding an on-section — and
+/// every message carries whether it sits in an on-section, which is what
+/// names the main agent "Entoli" there.
+List<ConversationEntry> entriesOf(Chat chat) {
+  final entries = <ConversationEntry>[];
+  var on = false;
+  for (final (index, m) in chat.messages.indexed) {
+    final opener = m.omadaOn;
+    if (opener != null && opener != on) {
+      on = opener;
+      entries.add(SectionEntry(on));
+    }
+    entries.add(MessageEntry(m,
+        inOmadaSection: on, last: index == chat.messages.length - 1));
+  }
+  return entries;
+}
+
 class _ChatBodyState extends ConsumerState<_ChatBody> {
   /// How far off the end still counts as reading the latest: inside it a turn
   /// keeps the view pinned, outside it the jump button appears.
   static const _slack = 200.0;
 
   final TextEditingController _controller = TextEditingController();
-  final ScrollController _scroll = ScrollController();
+  late final ScrollController _scroll = ScrollController();
+  late final ScrollFollow _follow = ScrollFollow(_scroll);
 
   /// A notifier rather than a field: only the jump button reads it, and a
   /// `setState` mid-drag would rebuild every visible bubble to swap it.
@@ -425,9 +598,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   /// Streaming fires this every frame, so it jumps rather than starting a new
   /// 100ms animation each time.
-  void _scrollToBottom() => _afterLayout((position) {
-        if (position.nearBottom(_slack)) _scroll.jumpTo(position.maxScrollExtent);
-      });
+  void _scrollToBottom() => _follow.jumpIfFollowing();
 
   /// Land at the end, and keep landing until the end stops moving. A builder
   /// lays out only what shows, so the extent any one frame reports is an
@@ -441,6 +612,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         _scroll.jumpTo(position.maxScrollExtent);
         if (tries > 0) _settleAtBottom(tries - 1);
       });
+
+  /// What the list does on the way past, and what [ScrollFollow] answers for:
+  /// a gesture away from the end stops the turn following the reader down, and
+  /// arriving at the end starts it again.
+  bool _onScroll(ScrollNotification n) => _follow.onNotification(n);
 
   /// Ask whether to keep an expired temporary chat (turning its TTL off) or
   /// delete it. The sweep handles non-open chats silently; this is the one
@@ -691,19 +867,19 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         mainAxisSize: MainAxisSize.min,
         children: [
           TurnSurface(view: view, notifier: driver),
-          if (view.questions.isEmpty)
-            Composer(
-              controller: _controller,
-              isRunning: view.isRunning,
-              onSend: (text, attachments) =>
-                  driver.send(text, attachments: attachments),
-              onAbort: driver.abort,
-              project: project,
-              onVoice: onVoice,
-              workspace: workspace,
-            )
-          else
-            TurnQuestions(view: view, notifier: driver),
+          switch (view.roomPhase) {
+            RoomPhase.waitingOnYou => TurnQuestions(view: view, notifier: driver),
+            _ => Composer(
+                controller: _controller,
+                agentSpeaking: view.roomPhase == RoomPhase.agentSpeaking,
+                onSend: (text, attachments) =>
+                    driver.send(text, attachments: attachments),
+                onAbort: driver.abort,
+                project: project,
+                onVoice: onVoice,
+                workspace: workspace,
+              ),
+          },
         ],
       );
 
@@ -712,41 +888,54 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final speechReady = ref.watch(speechReadyProvider);
     final reading = ref.watch(readAloudProvider);
     if (chat.messages.isEmpty) return whenEmpty;
+    final entries = entriesOf(chat);
     return Stack(
       children: [
-        ListView.builder(
-          controller: _scroll,
-          itemCount: chat.messages.length,
-          itemBuilder: (context, i) {
-            final m = chat.messages[i];
-            // A mirror has no editing controller: the log belongs to the home
-            // device, so the whole row of things to do to a message is out.
-            final mutable = editing != null && !view.isRunning;
-            return MessageBubble(
-              chatId: widget.chatId,
-              message: m,
-              isWaiting: view.isRunning && i == chat.messages.length - 1,
-              waitingNotice: view.retry,
-              waitingStatus: view.status,
-              onTapLink: (href) {
-                final uri = Uri.tryParse(href);
-                if (uri != null) {
-                  ref.read(linkOpenerProvider).open(context, uri);
-                }
-              },
-              threads: editing == null ? null : chat.branches[m.id],
-              onThreadStep: mutable ? (step) => editing.stepThread(m.id, step) : null,
-              onDelete: mutable ? () => editing.deleteThread(m.id) : null,
-              onEdit: mutable && m.role == MessageRole.user
-                  ? (text) => editing.editAndResend(m.id, text)
-                  : null,
-              onRegenerate: mutable ? () => editing.regenerate(m.id) : null,
-              onSpeak: speechReady && m.hasText
-                  ? () => readAloud(context, ref, m.id, m.plainText)
-                  : null,
-              isSpeaking: reading == m.id,
-            );
-          },
+        NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: ListView.builder(
+            controller: _scroll,
+            itemCount: entries.length,
+            itemBuilder: (context, i) => switch (entries[i]) {
+              SectionEntry(:final omada) => OmadaSeparator(omada: omada),
+              MessageEntry(:final message, :final inOmadaSection, :final last) =>
+                Builder(builder: (context) {
+                  // A mirror has no editing controller: the log belongs to
+                  // the home device, so the whole row of things to do to a
+                  // message is out — and while a turn runs, the controller
+                  // refuses them all.
+                  final mutable = editing != null && !view.isRunning;
+                  return MessageBubble(
+                    chatId: widget.chatId,
+                    message: message,
+                    author: message.author,
+                    entoli: inOmadaSection,
+                    isWaiting: view.isRunning && last,
+                    waitingNotice: view.retry,
+                    waitingStatus: view.status,
+                    shellOutput: view.shellOutput,
+                    onTapLink: (href) {
+                      final uri = Uri.tryParse(href);
+                      if (uri != null) {
+                        ref.read(linkOpenerProvider).open(context, uri);
+                      }
+                    },
+                    threads: editing == null ? null : chat.branches[message.id],
+                    onThreadStep:
+                        mutable ? (step) => editing.stepThread(message.id, step) : null,
+                    onDelete: mutable ? () => editing.deleteThread(message.id) : null,
+                    onEdit: mutable && message.role == MessageRole.user
+                        ? (text) => editing.editAndResend(message.id, text)
+                        : null,
+                    onRegenerate: mutable ? () => editing.regenerate(message.id) : null,
+                    onSpeak: speechReady && message.hasText
+                        ? () => readAloud(context, ref, message.id, message.plainText)
+                        : null,
+                    isSpeaking: reading == message.id,
+                  );
+                }),
+            },
+          ),
         ),
         // Only once the reader has left the end: up there a turn no longer
         // follows itself, and this is the way back.

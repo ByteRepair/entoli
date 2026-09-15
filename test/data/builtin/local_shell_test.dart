@@ -4,6 +4,7 @@ import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
 import "package:agent_chat/data/builtin/local_shell.dart";
+import "package:agent_chat/data/local/landlock.dart";
 import "package:agent_chat/domain/shell.dart";
 
 List<String> _hostCommand(String _, String _) => const ["/bin/sh"];
@@ -24,14 +25,10 @@ void main() {
 
   Future<dynamic> run(String command,
           {Duration timeout = const Duration(seconds: 10),
-          Map<String, String> env = const {},
-          bool sharedHome = true}) =>
+          Map<String, String> env = const {}}) =>
       LocalShell(environment: () => env)
           .start(command,
-              cwd: workspace.path,
-              home: home.path,
-              timeout: timeout,
-              sharedHome: sharedHome)
+              cwd: workspace.path, home: home.path, timeout: timeout)
           .result;
 
   test("reports what the command printed and the code it exited with", () async {
@@ -62,16 +59,10 @@ void main() {
     expect(result.output.trim(), "abc123");
   });
 
-  test("a shared home leaves the machine's own HOME", () async {
+  test("the machine's own HOME stands: the workspace is not it", () async {
     final result = await run(r'echo "$HOME"');
 
     expect(result.output.trim(), isNot(home.path));
-  });
-
-  test("a home that is not shared becomes HOME", () async {
-    final result = await run(r'echo "$HOME"', sharedHome: false);
-
-    expect(result.output.trim(), home.path);
   });
 
   test("nothing waits for a keypress", () async {
@@ -145,7 +136,7 @@ void main() {
     expect(result.output, contains("not found"));
   });
 
-  test("off a guest, home is left as the machine's own", () async {
+  test("the machine's own HOME stands, not the workspace's", () async {
     final result = await run(r'echo "$HOME"');
 
     expect(result.output.trim(), Platform.environment["HOME"]);
@@ -261,6 +252,98 @@ void main() {
     });
   });
 
+  group("the live view of a running command", () {
+    test("grows as the command prints", () async {
+      final shell = LocalShell();
+      final run = shell.start(
+          "echo one; sleep 1; echo two; sleep 1; echo three",
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10));
+      final output = run.output!;
+
+      // The first line has printed while the command is still running.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final early = output.value ?? "";
+      expect(early, contains("one"));
+      expect(early, isNot(contains("three")));
+
+      final result = await run.result;
+      expect((output.value ?? ""), contains("three"));
+      expect(result.output, "one\ntwo\nthree\n");
+      shell.closeSession(workspace.path);
+    });
+
+    test("never shows the sentinel, and the result is the whole output",
+        () async {
+      final result = await run("echo one; echo two");
+
+      // The result is the whole of what the command printed, sentinel
+      // stripped, as it ever was.
+      expect(result.output, "one\ntwo\n");
+    });
+
+    test("a command the shell interrupted leaves the tail where it stopped",
+        () async {
+      final run = LocalShell()
+          .start("echo started; sleep 30",
+              cwd: workspace.path,
+              home: home.path,
+              timeout: const Duration(seconds: 30));
+      final output = run.output!;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await run.kill();
+      await run.result;
+
+      expect(output.value ?? "", contains("started"));
+    });
+
+    test("holds a fragment that could be a sentinel out of the live view",
+        () async {
+      // The sentinel's head is `\n@@E`; a command printing that fragment
+      // leaves the live view holding it back until the next chunk proves it
+      // was ordinary output. What proves it here is the final result: the
+      // parse swallowed nothing, and what was published never showed a whole
+      // sentinel line.
+      final result = await run(r'echo "before"; printf "\n@@E"; echo "after"');
+
+      expect(result.output, "before\n\n@@Eafter\n");
+    });
+
+    test("the tail is bounded, and the whole is still in the result", () async {
+      final shell = LocalShell();
+      final run = shell.start(
+          "seq 1 10000",
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 30));
+      final output = run.output!;
+      final result = await run.result;
+
+      expect(output.value!.length, lessThanOrEqualTo(8192));
+      expect(result.output.length, greaterThan(40000));
+      shell.closeSession(workspace.path);
+    });
+
+    test("a one-shot run streams its output the same way", () async {
+      final shell = LocalShell();
+      final run = shell.start(
+          "echo one; sleep 1; echo two",
+          cwd: workspace.path,
+          home: home.path,
+          timeout: const Duration(seconds: 10),
+          oneShot: true);
+      final output = run.output!;
+
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(output.value ?? "", contains("one"));
+
+      final result = await run.result;
+      expect((output.value ?? ""), contains("two"));
+      expect(result.output, "one\ntwo\n");
+    });
+  });
+
   // The cwd is a directory the app lays out, and it may not be there when a
   // command is first asked to stand in it: a project workspace before any chat
   // exists (a built-in project's setup runs in one) or one deleted from the
@@ -329,6 +412,22 @@ void main() {
     expect(driver!.commandFor("", ""), ["/bin/sh"]);
     expect(driver.projectHome, isFalse);
     expect(LocalShell.hostDriver(shell: () => null), isNull);
+  });
+
+  test("what the home is is one answer: what composeEnvironment sets", () {
+    final host = LocalShell(driver: ({String? project}) => LocalShell.hostDriver(
+        shell: () => "/bin/sh"));
+    expect(host.homeFor(home.path), Platform.environment["HOME"]);
+    expect(host.machineHome, Platform.environment["HOME"]);
+
+    final guest = LocalShell(
+        driver: ({String? project}) => ShellDriver(
+            commandFor: _hostCommand,
+            environment: const {},
+            projectHome: true,
+            guestRoot: "/root",
+            description: "guest"));
+    expect(guest.homeFor(home.path), "/root");
   });
 
   group("inside a guest", () {
@@ -438,7 +537,6 @@ void main() {
         defaults: const {"PAGER": "cat", "TERM": "dumb"},
         driver: host,
         home: "/home",
-        sharedHome: true,
         app: const {},
       );
 
@@ -452,7 +550,6 @@ void main() {
         defaults: const {},
         driver: host,
         home: "/home",
-        sharedHome: true,
         app: const {"PAGER": "most", "OWN": "app"},
         project: const {"OWN": "project"},
       );
@@ -461,42 +558,23 @@ void main() {
       expect(env["OWN"], "project");
     });
 
-    test("HOME is the workspace where the driver reaches a guest, and where "
-        "the home is not shared", () {
+    test("HOME is the workspace where the driver takes one, and the machine's "
+        "own where it does not", () {
       final guest = ShellDriver(
         commandFor: _hostCommand,
         environment: const {},
         projectHome: true,
         description: "guest",
       );
-      // A guest takes the workspace for its home, shared or not.
       expect(
-          LocalShell.composeEnvironment(
-              defaults: const {},
-              driver: guest,
-              home: "/workspace",
-              sharedHome: true,
-              app: const {})["HOME"],
+          LocalShell.composeEnvironment(defaults: const {}, driver: guest,
+              home: "/workspace", app: const {})["HOME"],
           "/workspace");
-      // On the machine itself a shared home keeps the machine's own.
       expect(
-          LocalShell.composeEnvironment(
-              defaults: const {},
-              driver: host,
-              home: "/workspace",
-              sharedHome: true,
-              app: const {})
+          LocalShell.composeEnvironment(defaults: const {}, driver: host,
+              home: "/workspace", app: const {})
               .containsKey("HOME"),
           isFalse);
-      // and an unshared one is the chat's own.
-      expect(
-          LocalShell.composeEnvironment(
-              defaults: const {},
-              driver: host,
-              home: "/workspace",
-              sharedHome: false,
-              app: const {})["HOME"],
-          "/workspace");
     });
 
     test("a variable the store puts in the command environment survives the "
@@ -507,7 +585,6 @@ void main() {
         defaults: const {},
         driver: host,
         home: "/home",
-        sharedHome: true,
         app: const {"ENV_INSTALL_DIR": "/somewhere/else"},
         project: const {"ENV_INSTALL_DIR": "/cache/byte-repair/bin"},
       );
@@ -550,6 +627,131 @@ void main() {
 
       expect(result.returnCode, -1);
       expect(result.exceptionInfo, contains("No shell"));
+    });
+  });
+
+  group("a sandboxed command", () {
+    // Landlock is where the deny is decided, so these run the real helper;
+    // a machine without it skips the confined assertions and keeps the
+    // fail-closed one, which is the contract everywhere.
+    late LandlockSandboxHelper helper;
+    setUp(() {
+      helper = LandlockSandboxHelper(
+          cacheDir: Directory.systemTemp.createTempSync("agent_chat_ll_").path);
+    });
+
+    test("runs confined and collects what was denied", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final outside = p.join(home.path, "outside.txt");
+      File(outside).writeAsStringSync("keep\n");
+      final result = await shell
+          .start("echo try > $outside",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      if (Platform.isLinux && await helper.prefixFor(sandbox) != null) {
+        expect(result.returnCode, isNot(0),
+            reason: "out=${result.output} info=${result.exceptionInfo} "
+                "viol=${result.violations}");
+        expect(result.violations, isNotEmpty,
+            reason: "rc=${result.returnCode} out=${result.output} "
+                "info=${result.exceptionInfo}");
+        expect(result.violations.first, contains("outside.txt"));
+        expect(File(outside).readAsStringSync(), "keep\n");
+      } else {
+        // Fail closed: no sandbox, no run.
+        expect(result.returnCode, -1);
+        expect(result.exceptionInfo, contains("sandbox"));
+      }
+    });
+
+    test("a read runs confined without a violation", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      final available = Platform.isLinux && await helper.prefixFor(sandbox) != null;
+      if (!available) return;
+      final result = await shell
+          .start("echo confined",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.output, "confined\n");
+      expect(result.violations, isEmpty);
+    });
+
+    test("does not touch the session shell's state", () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      await shell
+          .start("export SANDBOXED=yes",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 5), sandbox: sandbox)
+          .result;
+      final after = await shell
+          .start(r"echo ${SANDBOXED:-unset}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 5))
+          .result;
+      expect(after.output.trim(), "unset",
+          reason: "the sandboxed run was its own subshell; the session's "
+              "environment carries nothing from it");
+    });
+
+    test("a tmp the command was never told about is made and named", () async {
+      // The sandbox grants a scratch directory beside the workspace, and the
+      // command learns of it the only way a process can: TMPDIR, set for the
+      // confined run alone. Nothing created the directory by hand here — the
+      // spawn makes it, because the helper refuses a grant to a directory
+      // that is not there.
+      final sandbox = CommandSandbox(
+          workspace: workspace.path,
+          tmp: p.join(workspace.path, ".entoli-tmp"));
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      final result = await shell
+          .start(r'echo "TMPDIR=$TMPDIR"; mktemp XXXXXX >/dev/null && echo done',
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.returnCode, 0,
+          reason: "out=${result.output} info=${result.exceptionInfo} "
+              "viol=${result.violations}");
+      expect(result.output, contains('TMPDIR=${sandbox.tmp}'),
+          reason: "the command learns the scratch the sandbox granted it");
+      expect(Directory(sandbox.tmp!).existsSync(), isTrue,
+          reason: "the tmp is made for the confined run");
+    });
+
+    test("a read denial is worded neutrally, a write denial as a write",
+        () async {
+      final sandbox = CommandSandbox(workspace: workspace.path);
+      final driver = LocalShell.hostDriver(sandboxHelper: helper);
+      final shell = LocalShell(driver: ({String? project}) => driver);
+      if (!Platform.isLinux || await helper.prefixFor(sandbox) == null) return;
+      final denied = File(p.join(home.path, "denied.txt"));
+      // Outside the workspace: the kernel refuses both, with the two
+      // wordings a transcript shows — the shell's own for the write, the
+      // tool's for the read the file's own perms give. Only the second
+      // carries the tool's write words, so only it is worded `writing`.
+      denied.writeAsStringSync("keep\n");
+      Process.runSync("chmod", ["000", denied.path]);
+      addTearDown(() => Process.runSync("chmod", ["644", denied.path]));
+      final result = await shell
+          .start(
+              "cat ${denied.path} ; touch ${p.join(home.path, "w.txt")}",
+              cwd: workspace.path, home: home.path,
+              timeout: const Duration(seconds: 10), sandbox: sandbox)
+          .result;
+      expect(result.violations, contains("writing ${p.join(home.path, "w.txt")}"),
+          reason: "out=${result.output} viol=${result.violations}");
+      expect(result.violations, contains("denied ${denied.path}"),
+          reason: "out=${result.output} viol=${result.violations}");
     });
   });
 }

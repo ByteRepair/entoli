@@ -5,6 +5,7 @@ import "package:flutter/rendering.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
 import "../../../domain/ask.dart";
+import "../../../domain/formatted_text.dart";
 import "../../../domain/models.dart";
 import "../../../domain/shell.dart";
 import "../../widgets/action_icon.dart";
@@ -22,9 +23,12 @@ class MessageBubble extends StatefulWidget {
     super.key,
     required this.chatId,
     required this.message,
+    this.author,
+    this.entoli = false,
     this.isWaiting = false,
     this.waitingNotice,
     this.waitingStatus,
+    this.shellOutput,
     this.threads,
     this.onThreadStep,
     this.onDelete,
@@ -40,6 +44,15 @@ class MessageBubble extends StatefulWidget {
 
   final Message message;
 
+  /// The addressed member to name over the reply, the way a prompt shows
+  /// "You". Null draws nothing. See [Message.author].
+  final String? author;
+
+  /// The reply is in a section of the conversation where Omada is on: an
+  /// unnamed reply is the main agent's, and says so — "Entoli" — the same
+  /// slot a member's name uses. Direct chats and off-sections show nothing.
+  final bool entoli;
+
   /// This message is the one being generated right now.
   final bool isWaiting;
 
@@ -51,6 +64,14 @@ class MessageBubble extends StatefulWidget {
   /// the spinner like [waitingNotice] and in the ordinary muted colour, because
   /// it is the answer to "is this alive" rather than a problem.
   final String? waitingStatus;
+
+  /// What a running command has printed so far, shown as a live block under
+  /// the tool label (an agent's `bash` call) or under the spinner (the user's
+  /// own `!` command, whose reply is still empty). Trailing state like
+  /// [waitingStatus]: it is gone the moment the call's result lands, which is
+  /// the point at which the conversation's own output takes over — the label's
+  /// drawer, or the `!` bubble.
+  final String? shellOutput;
 
   /// The threads written where this message is, oldest first and including it.
   /// Null where nothing was branched here, which shows no counter and no
@@ -96,6 +117,12 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// one opacity, and the pointer crosses a message twice on its way past.
   final ValueNotifier<bool> _shown = ValueNotifier(false);
 
+  /// One container delegate for the whole message, held across rebuilds: a
+  /// streamed delta rebuilds the message every frame, and a delegate per
+  /// build would drop the selection under the drag that is making it. See
+  /// [_RenderedSelection] for what it answers.
+  _RenderedSelection? _selection;
+
   void _show({bool? hovered, bool? tapped}) {
     _hovered = hovered ?? _hovered;
     _tapped = tapped ?? _tapped;
@@ -117,6 +144,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   @override
   void dispose() {
     _shown.dispose();
+    _selection?.dispose();
     super.dispose();
   }
 
@@ -148,8 +176,17 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (ok) widget.onDelete!();
   }
 
-  Future<void> _copy() =>
-      copyToClipboard(context, widget.message.plainText, said: "Message copied");
+  Future<void> _copy() => copyToClipboard(
+        context,
+        // What the message reads, not what conv.jsonl keeps: the formatted
+        // text is what a reader would paste into another document. Raw
+        // markdown is the button beside it.
+        formattedTextOf(widget.message.plainText),
+        said: "Message copied",
+      );
+
+  Future<void> _copyRaw() =>
+      copyToClipboard(context, widget.message.plainText, said: "Markdown copied");
 
   /// The turn's last round failed, which is what Retry answers: within a round
   /// nothing follows an error, so a turn that ended on one has it trailing,
@@ -188,7 +225,8 @@ class _MessageBubbleState extends State<MessageBubble> {
               ? theme.colorScheme.primaryContainer
               : theme.colorScheme.surfaceContainerHighest
         ),
-      MessageRole.assistant => (null, null),
+      MessageRole.assistant =>
+        (widget.author ?? (widget.entoli ? "Entoli" : null), null),
       MessageRole.tool => ("Tool", theme.colorScheme.tertiaryContainer),
       MessageRole.system => ("System", theme.colorScheme.tertiaryContainer),
     };
@@ -228,12 +266,19 @@ class _MessageBubbleState extends State<MessageBubble> {
                     ),
                   // One region for the whole reply, so a drag runs from the
                   // first paragraph to the last rather than stopping at the
-                  // bubble — or the tool label — it started in.
+                  // bubble — or the tool label — it started in. The container
+                  // inside is the one selection container between that region
+                  // and the fragments, so what a selection copies is decided
+                  // in one place, [_RenderedSelection] below; the labels
+                  // inside stay disabled.
                   SelectionArea(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: align,
-                      children: _rows(context, bg),
+                    child: SelectionContainer(
+                      delegate: _selection ??= _RenderedSelection(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: align,
+                        children: _rows(context, bg),
+                      ),
                     ),
                   ),
                 ],
@@ -263,9 +308,14 @@ class _MessageBubbleState extends State<MessageBubble> {
               _step(Icons.chevron_left, "Previous thread", -1),
               _step(Icons.chevron_right, "Next thread", 1),
             ],
-            if (widget.message.hasText)
+            if (widget.message.hasText) ...[
               ActionIcon(
                   icon: Icons.copy_outlined, tooltip: "Copy message", onPressed: _copy),
+              ActionIcon(
+                  icon: Icons.code,
+                  tooltip: "Copy raw markdown",
+                  onPressed: _copyRaw),
+            ],
             if (widget.onSpeak != null)
               ActionIcon(
                 icon: widget.isSpeaking
@@ -364,6 +414,11 @@ class _MessageBubbleState extends State<MessageBubble> {
           notice: widget.waitingNotice,
           status: widget.waitingStatus,
         ),
+      // Trailing like the spinner above: gone the moment the call's result
+      // lands or the turn ends, since the conversation's own output is what
+      // takes over from there.
+      if (widget.isWaiting && widget.shellOutput != null)
+        LiveShellOutput(code: widget.shellOutput!),
       // A failed turn is a dead end without this; the same action is under the
       // message, but it should not have to be uncovered.
       if (_hasError && !widget.isWaiting && widget.onRegenerate != null)
@@ -446,7 +501,8 @@ class _MessageBubbleState extends State<MessageBubble> {
             "task" => TaskLabel(call: toolCall, result: results[toolCall.id]),
             "websearch" => WebSearchLabel(call: toolCall, result: results[toolCall.id]),
             "webfetch" => WebFetchLabel(call: toolCall, result: results[toolCall.id]),
-            _ => ToolLabel(call: toolCall, result: results[toolCall.id]),
+            _ => DiffTextLabel.forRun(toolCall, results[toolCall.id]) ??
+                ToolLabel(call: toolCall, result: results[toolCall.id]),
           }));
         case ToolResultPart(:final result):
           // Already drawn by the call it answers, unless the call is gone. An
@@ -568,26 +624,9 @@ class _MessageText extends StatefulWidget {
 class _MessageTextState extends State<_MessageText> {
   MarkdownStyleSheet? _styleSheet;
 
-  /// Built by the branch that has a source to hand back, and left null by the
-  /// other — a reply streams for the whole of a turn and never renders while it
-  /// does, so this is a delegate per finished text rather than per delta.
-  _MarkdownSource? _selection;
-
   /// Raw while the reply streams or when it is an error: there is no markdown
   /// to render yet, and an error is not the model's prose.
   bool get _rendered => !widget.isWaiting && !widget.isError;
-
-  @override
-  void didUpdateWidget(_MessageText old) {
-    super.didUpdateWidget(old);
-    _selection?.source = widget.text;
-  }
-
-  @override
-  void dispose() {
-    _selection?.dispose();
-    super.dispose();
-  }
 
   @override
   void didChangeDependencies() {
@@ -625,37 +664,75 @@ class _MessageTextState extends State<_MessageText> {
         style: style,
       );
     }
-    return SelectionContainer(
-      delegate: _selection ??= _MarkdownSource(widget.text),
-      // `selectable` builds a `SelectableText` per element, which is what made
-      // a selection stop at the paragraph it started in. Plain `Text.rich`
-      // joins the region above instead.
-      child: MarkdownBody(
-        data: widget.text,
-        styleSheet: _styleSheet,
-        builders: codeBlockBuilders,
-        onTapLink: (text, href, title) {
-          if (href != null) widget.onTapLink?.call(href);
-        },
+    // No `selectable`, and no container of its own: the fragments register
+    // with the message's own container above, which is what makes a drag run
+    // from the first paragraph to the last — `selectable` builds a
+    // `SelectableText` per element, each a selection region to itself, which
+    // is what made a selection stop at the paragraph it started in. The
+    // bullets are chrome, like a code block's bar: on screen, but not part of
+    // what a drag picks up, so what a selection copies reads as the list's
+    // items rather than `•Item`.
+    return MarkdownBody(
+      data: widget.text,
+      styleSheet: _styleSheet,
+      builders: codeBlockBuilders,
+      bulletBuilder: (parameters) => SelectionContainer.disabled(
+        child: Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Text(
+            "•",
+            style: _styleSheet?.listBullet ?? Theme.of(context).textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+        ),
       ),
+      onTapLink: (text, href, title) {
+        if (href != null) widget.onTapLink?.call(href);
+      },
     );
   }
 }
 
-/// What a selection of rendered markdown copies as. The renderer keeps no
-/// source offsets, so there is nothing to map a partial selection back through
-/// — anything selected inside a part copies the whole of that part's markdown,
-/// which is what makes the clipboard hold `**bold**` rather than `bold`.
-class _MarkdownSource extends StaticSelectionContainerDelegate {
-  _MarkdownSource(this.source);
-
-  String source;
-
-  // `super` walks every selectable and concatenates what each holds, only for
-  // the answer to be thrown away; the geometry already knows.
+/// What a selection of the message copies as: the rendered text, the words on
+/// screen. One container between the region and every fragment — heading,
+/// paragraph, list item, code block — so the drag, the handles and the edges
+/// are the framework's own, and copy answers from the same fragments the
+/// highlight is drawn from.
+///
+/// The one override is what Ctrl+C, the context menu and the mobile toolbar
+/// all read. The base answer concatenates the fragments with nothing between
+/// them, and a heading and its paragraph are separate fragments because the
+/// gaps live in widgets, not in text — so blocks are joined with a newline
+/// where they do not share a line. A fragment with no selection, and a
+/// selection collapsed to a point, answer nothing: an empty clipboard is a
+/// copy that reports success over nothing.
+class _RenderedSelection extends StaticSelectionContainerDelegate {
   @override
-  SelectedContent? getSelectedContent() =>
-      value.hasSelection ? SelectedContent(plainText: source) : null;
+  SelectedContent? getSelectedContent() {
+    final buffer = StringBuffer();
+    // The box of what has been selected so far, in container coordinates: a
+    // fragment that does not overlap it vertically is on a rendered line of
+    // its own, and one newline separates it from what went before. It is
+    // never null where it is read: every fragment that writes text sets it,
+    // and the newline is asked only once something has.
+    Rect covered = Rect.zero;
+    for (final Selectable selectable in selectables) {
+      final SelectedContent? selected = selectable.getSelectedContent();
+      if (selected == null) continue;
+      final Rect box = MatrixUtils.transformRect(
+        selectable.getTransformTo(null),
+        selectable.boundingBoxes.first,
+      );
+      if (buffer.isNotEmpty &&
+          (box.top > covered.bottom || box.bottom < covered.top)) {
+        buffer.write("\n");
+      }
+      buffer.write(selected.plainText);
+      covered = covered.expandToInclude(box);
+    }
+    if (buffer.isEmpty) return null;
+    return SelectedContent(plainText: buffer.toString());
+  }
 }
 
 /// Sits at the end of the text while it is still arriving. [_Spinner] answers

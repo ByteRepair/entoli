@@ -31,7 +31,7 @@ class Composer extends ConsumerStatefulWidget {
   const Composer({
     super.key,
     required this.controller,
-    required this.isRunning,
+    required this.agentSpeaking,
     required this.onSend,
     required this.onAbort,
     this.project,
@@ -40,7 +40,10 @@ class Composer extends ConsumerStatefulWidget {
   });
 
   final TextEditingController controller;
-  final bool isRunning;
+
+  /// The main agent is speaking: Send becomes Stop and the voice button
+  /// stands down.
+  final bool agentSpeaking;
   final SendCallback onSend;
   final VoidCallback onAbort;
 
@@ -212,26 +215,32 @@ class _ComposerState extends ConsumerState<Composer> {
                     builder: (context, canSend, child) => AnimatedSize(
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOut,
-                      child: widget.onVoice == null || widget.isRunning || canSend
+                      child: widget.onVoice == null || widget.agentSpeaking || canSend
                           ? const SizedBox.shrink()
                           : child,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  widget.isRunning
-                      ? IconButton.filled(
-                          onPressed: widget.onAbort,
-                          icon: const Icon(Icons.stop),
-                          tooltip: "Stop",
-                        )
-                      : ValueListenableBuilder<bool>(
-                          valueListenable: _canSend,
-                          builder: (context, canSend, _) => IconButton.filled(
+                  // Empty field while the agent speaks is Stop; anything
+                  // typed is Send, which queues what is said for the
+                  // settle — the room's rule is the controller's, and the
+                  // button only names which of the two is on offer.
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _canSend,
+                    builder: (context, canSend, _) => widget.agentSpeaking &&
+                            !canSend
+                        ? IconButton.filled(
+                            onPressed: widget.onAbort,
+                            icon: const Icon(Icons.stop),
+                            tooltip: "Stop",
+                          )
+                        : IconButton.filled(
                             onPressed: canSend ? _submit : null,
-                            icon: Icon(_shell ? Icons.play_arrow : Icons.send),
+                            icon:
+                                Icon(_shell ? Icons.play_arrow : Icons.send),
                             tooltip: _shell ? "Run" : "Send",
                           ),
-                        ),
+                  ),
                 ],
               ),
             ],

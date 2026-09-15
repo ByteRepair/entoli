@@ -1,9 +1,10 @@
 # Shared UI
 
-`lib/ui/widgets/` holds what more than one page needs: `ModelPicker` and
-`OptionalModelPicker` (one field over every configured model, differing only in
-what the entry storing null means, and sharing the loading and failure states
-every page would otherwise spell out), the `Default`-plus-reset pairing,
+`lib/ui/widgets/` holds what more than one page needs: `ModelPicker` (one field
+over every configured model, whose entry storing null means what [nullLabel]
+says — None where nothing exists, Off where a feature is optional — and
+sharing the loading and failure states every page would otherwise spell out),
+the `Default`-plus-reset pairing,
 `LabelledField` (a field under its caption) and
 `InheritableDropdown` over both (whose first entry stores null and names what
 null resolves to), the `promptForText` / `promptForPair` / `confirm` /
@@ -12,6 +13,18 @@ null resolves to), the `promptForText` / `promptForPair` / `confirm` /
 `AttachmentStrip`, `EmptyPane`, `Nothing`, `TempChatTtlField`,
 `CompletionField`,
 `text_input.dart` — the sections below — and `catalog.dart`.
+
+`scrolling.dart` is the shared scroll rule, and it is two things. `nearBottom`
+asks whether the view is close enough to the end to count as reading the
+latest — the slack is the caller's, since a conversation and a five-line
+transcript disagree about how close that is. `ScrollFollow` is whether a list
+keeps itself at the end while new content lands on it, and the answer is the
+user's, not the position's: a gesture toward the older messages detaches,
+reaching the end again by any means attaches, and the caller's
+`NotificationListener` is what tells it which happened. The chat page and the
+voice transcript window both run one; the chat page's jump button and the
+`_settleAtBottom` that lands a chat at its end are its callers' halves, not
+parts of the class.
 
 `CompletionField` is the field a prompt is written in: the menu of `/skills`
 and `@agents` that matches what has been typed, the arrows and tab and return
@@ -72,6 +85,38 @@ to agree on that, and a code block's bar now uses the same button. Its null
 list. `copyToClipboard` is the other half of the same pairing: copying looks
 identical afterwards whatever did it, so what was taken is said in a snack bar
 from one place rather than each caller's own.
+
+`floating_position.dart` and `chip_row.dart` are the empty-chat screen's two
+animation mechanisms, and anything else that wants the same motion reaches for
+them rather than re-deriving it. `FloatingPosition` is a child of a `Wrap`
+whose painted position glides to wherever the wrap next puts it, because the
+wrap moves children by rewriting `WrapParentData.offset` after `layout()` and
+asks nothing of a child whose constraints did not change — so the render
+object asks for its own paint on every layout, where the new slot is already
+written, and paints at the offset it is catching up to. One fixed deadline per
+run, each frame closing the same eased share of what remains: a target that
+keeps moving (a neighbour's slot growing frame by frame) is chased smoothly
+and landed on exactly, not crawled after, and one pushed onto the next line
+travels there instead of teleporting. Hit-testing and paint transforms follow
+the painted offset, so a tap lands where the chip is shown.
+
+`ChipRow` is the row over it: a centred `Wrap` that animates a change of set
+per entry rather than swapping the row whole. It diffs the desired entries
+against what is on screen, holds a removed entry for the 180 ms its shrink
+runs (by identity, so a key back mid-exit revives it in place rather than
+being vanished by a removal scheduled for the instance it replaced), and
+grows every kept or arriving entry's slot through `_EnterExit` — the slot's
+width and the child's scale and opacity are the one tween, so painted size
+always equals slot size and what appears from nothing is the chip itself.
+A row is grown into on first build, not shown settled; the empty-state line
+of the empty chat is an entry of it like any other. `settled` is the caller's
+say-so otherwise: it is snapshot at the row's own first build, so the entries
+the row is created with are shown at full size and everything arriving after
+animates — how a screen the user arrives on opens without motion while every
+change after it keeps the one rule. The row's own height is part of the same
+motion: an `AnimatedSize` over the `Wrap` glides a change of line count — a
+badge pushed onto a new line, or a line collapsing — where the column below
+used to snap with it.
 
 `showAnchoredMenu` is a menu under a button, as a **route**. A `MenuAnchor`
 draws into an overlay instead, and an overlay is not popped by anything: the

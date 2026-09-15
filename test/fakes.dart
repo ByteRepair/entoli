@@ -1,6 +1,7 @@
 import "dart:async";
 import "dart:convert";
 
+import "package:archive/archive.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/widgets.dart";
 
@@ -75,6 +76,26 @@ const testModels = [
   ModelOption(providerId: "anthropic", modelId: "claude-haiku-3", label: "Claude Haiku 3"),
 ];
 
+/// The models [testProvider] is answered with, labelled the way the real
+/// registry labels them: `<provider display name> · <model id>`.
+const testProviderModelIds = ["qwen-2.5", "claude-sonnet-4", "llama-3", "claude-haiku-3"];
+final testProviderModels = [
+  for (final id in testProviderModelIds)
+    ModelOption(providerId: testProviderId, modelId: id, label: "Test · $id"),
+];
+
+/// The provider the model-picker tests configure: one entry with both defaults
+/// named, so the injected "Default" entry has something to point at.
+const testProviderId = "test";
+const testProvider = LlmProviderConfig(
+  id: testProviderId,
+  label: "Test",
+  api: LlmApi.openai,
+  baseUrl: "https://test.example/v1",
+  defaultModelId: "glm-5.3-flash",
+  defaultLightModelId: "nemotron-3-nano:30b",
+);
+
 /// A library whose skills include two names sharing a prefix, so tests can
 /// assert the menu filters, and whose entries are deliberately out of order.
 PromptLibrary testLibrary() => PromptLibrary([
@@ -124,6 +145,7 @@ class FakeBackgroundWork implements BackgroundWork {
   final List<bool> listened = [];
   final List<DownloadNotice?> downloads = [];
   final List<String?> prefills = [];
+  final List<SyncNotice?> synced = [];
   final _stops = StreamController<BackgroundJob>.broadcast();
 
   @override
@@ -137,6 +159,9 @@ class FakeBackgroundWork implements BackgroundWork {
 
   @override
   Future<void> prefilling(String? model) async => prefills.add(model);
+
+  @override
+  Future<void> syncing(SyncNotice? notice) async => synced.add(notice);
 
   @override
   Stream<BackgroundJob> get stopRequests => _stops.stream;
@@ -252,10 +277,17 @@ class FakeAssistantLaunch implements AssistantLaunch {
 /// to control. [fire] and [tap] are the two things Android does on its own:
 /// an alarm going off, and a notification being tapped.
 class FakeReminderAlarms implements ReminderAlarms {
-  FakeReminderAlarms({this.available = true});
+  FakeReminderAlarms({this.available = true, this.schedulesOverride});
 
   @override
   final bool available;
+
+  /// Set where a test wants the "fires with the app closed" answer rather
+  /// than the default one [available] gives, which is Android's.
+  final bool? schedulesOverride;
+
+  @override
+  bool get schedules => schedulesOverride ?? available;
 
   var exact = true;
   var notifications = true;
@@ -461,14 +493,14 @@ class FakeBackend implements AgentBackend {
     );
   }
 
-  final List<({String prompt, String model, String provider})> questions = [];
+  final List<({String prompt, String? model, String? provider})> questions = [];
 
   /// What `ask` answers. Null is a model that could not answer.
   String? scriptedAnswer;
 
   @override
   Future<String?> ask(String prompt,
-      {required String model, required String provider}) async {
+      {required String? model, required String? provider}) async {
     questions.add((prompt: prompt, model: model, provider: provider));
     return scriptedAnswer;
   }
@@ -690,6 +722,29 @@ class FakeChatStore implements ChatStore {
       _artifacts[chatId]?[artifactId]?[relativePath];
 
   @override
+  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
+      {String? project}) async {
+    final files = _artifacts[chatId]?[artifactId];
+    if (files == null || files.isEmpty) return null;
+    final archive = Archive();
+    for (final MapEntry(key: name, value: bytes) in files.entries) {
+      archive.add(ArchiveFile.bytes(name, bytes));
+    }
+    return ZipEncoder().encodeBytes(archive, autoClose: true);
+  }
+
+  /// Puts files into a staged artifact, the way the backend's publish does —
+  /// what a sync test wants on the far side of the wire is the content the
+  /// artifact holds, and `createArtifact` copies a source directory a test
+  /// building a wire case has no reason to make.
+  void stageArtifact(
+          String chatId, String artifactId, Map<String, List<int>> files) =>
+      _artifacts.putIfAbsent(chatId, () => {})[artifactId] = {
+        for (final MapEntry(key: name, value: bytes) in files.entries)
+          name: Uint8List.fromList(bytes),
+      };
+
+  @override
   Future<String> artifactPath(String chatId, String artifactId, {String? project}) async =>
       "/tmp/test/$chatId/artifacts/$artifactId";
 
@@ -712,15 +767,15 @@ class FakeChatStore implements ChatStore {
 /// and [spoken] is what the reply came out as, which is the pair every voice
 /// test is written against.
 class FakeVoice extends Voice {
-  FakeVoice({this.available = true, this.downloadsModels = true});
+  FakeVoice({this.available = true, this.hasSystemEngines = true});
 
   @override
   final bool available;
 
-  /// False is Android, where the engines are the system's: no catalog to draw,
-  /// and the pickers offer the sentinels or nothing.
+  /// False is a browser: no engines to be missing, so no missing-engine block.
+  /// True is Android, where the catalog draws beside them.
   @override
-  final bool downloadsModels;
+  final bool hasSystemEngines;
 
   /// Set to make [start] throw, which is a model that will not load or a
   /// microphone the user said no to.

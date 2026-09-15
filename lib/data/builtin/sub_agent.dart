@@ -9,6 +9,7 @@ import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
 import "../../domain/sub_agent_log.dart";
+import "../../domain/tone.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
 import "builtin_agent.dart";
@@ -17,15 +18,12 @@ import "llm/rate_limit_gate.dart";
 import "projection.dart";
 import "templates.dart";
 
-/// Spawns sub-agents for `task` tool calls. Each sub-agent gets a fresh
-/// [BuiltinSession], the named `@agent`'s body as its system-prompt overlay,
-/// and runs to completion headless — no `ask_user`, no `task` (sub-agents do
-/// not spawn their own sub-agents), no per-command approval banners. Its
-/// commands run one-shot over the parent's shell: a fresh subshell per
-/// command, since a fan-out of workers wants concurrency, not a shell they
-/// all `cd` around. The parent's approval setting gates the parent's own
-/// commands; a sub-agent's commands run autonomously, which is what makes a
-/// 75-vote fan-out usable.
+/// Spawns sub-agents for `task` tool calls — the main agent scheduling
+/// delegated participant turns, each with its own [BuiltinSession] and a
+/// transcript of its own under `subagents/`. What makes a sub-agent sub is
+/// the reply route: it runs to completion headless and never addresses the
+/// room — its final text returns as the tool result, readable by the main
+/// agent alone. See "Sub-agents" in `CLAUDE.md` for the rest.
 class SubAgentRunner {
   SubAgentRunner({
     required this.client,
@@ -45,6 +43,8 @@ class SubAgentRunner {
     this.caps = AgentCapabilities.full,
     this.sharedWorkspace = true,
     this.project,
+    this.tone = Tone.none,
+    this.citations = false,
   });
 
   final LlmClient client;
@@ -73,6 +73,14 @@ class SubAgentRunner {
   /// The project this sub-agent's turn is in, inherited from the parent so the
   /// shell driver resolves the same rootfs instance.
   final String? project;
+
+  /// How the parent's replies are worded, inherited so a worker's part reads
+  /// as the same voice the chat is set to.
+  final Tone tone;
+
+  /// Whether the parent's turn numbers the web pages it used, inherited the
+  /// same way.
+  final bool citations;
 
   /// Shared with the parent agent and every sibling sub-agent, so the fan-out
   /// bounds in-flight requests and coordinates 429 backoff as one. Null where
@@ -153,6 +161,8 @@ class SubAgentRunner {
       caps: caps.unattended,
       sharedWorkspace: sharedWorkspace,
       project: project,
+      tone: tone,
+      citations: citations,
       webSearch: webSearch,
       rateLimitGate: rateLimitGate,
     );
@@ -183,6 +193,7 @@ class SubAgentRunner {
           case SubAgentEndEvent():
           case RetryEvent():
           case StatusEvent():
+          case ShellOutputEvent():
           case StepLimitEvent():
           case InfoEvent():
           case DoneEvent():

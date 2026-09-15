@@ -16,6 +16,7 @@ import "data/prompts/bundled_skills.dart";
 import "data/sync/file_devices.dart";
 import "data/sync/sync_hub.dart";
 import "domain/app_restart.dart";
+import "domain/app_secrets.dart";
 import "domain/models.dart" show CompletionKind;
 import "domain/project.dart" show everyProject;
 import "domain/prompt_library.dart";
@@ -24,6 +25,7 @@ import "domain/voice_model.dart" show nativeRecognition, nativeSpeech;
 import "providers.dart";
 import "ui/chat/remote_turns.dart";
 import "ui/app_shell.dart";
+import "ui/welcome_gate.dart";
 import "ui/chat/chat_controller.dart";
 import "ui/chat/reminder_turn_driver.dart";
 import "ui/assistant/incoming_assistant.dart";
@@ -40,6 +42,7 @@ void main() async {
   registerBundledFontLicences();
   registerBundledSkillLicences();
   platform.registerVoiceLicences();
+  platform.registerRecorder();
   await platform.persist();
   // Built here rather than by the root, so the platform's splash covers the
   // first read of the data directory instead of a blank frame.
@@ -67,11 +70,25 @@ class AppSession {
     // A third round trip on the same channel, and the only thing that decides
     // which rootfs a download fetches.
     final abi = platform.deviceAbi();
-    // Started with them and awaited below: an asset read off a disk, or a fetch
+    // Started here and awaited below: an asset read off a disk, or a fetch
     // in a browser, and nothing between wants it.
     final version = platform.appVersion();
+    // Started here and awaited below: the login shell's PATH, captured once
+    // per app run. It is a shell round trip that sources the user's whole
+    // profile, so the earlier it starts the more of the startup work above it
+    // overlaps — the driver is resolved synchronously per command, so it
+    // cannot be asked for there. Null where there is nothing to ask, which
+    // leaves the inherited PATH standing.
+    final loginPath = platform.captureLoginPath();
     final accent = systemAccent();
     final config = await AppConfig.load(platform.createFileSystem(), await platform.dataDir());
+    // Started here and awaited before the identity load below: the keyring
+    // probe is decided once, so the identity's own first read must not race
+    // this one, and the mirror the registry reads keys through is filled by
+    // the time the container reads the model list.
+    final secretStore = platform.createSecretStore(config);
+    final secrets = AppSecrets(secretStore);
+    final secretsLoaded = secrets.load();
     // Before the library is built: the bundled skills are written from
     // embedded code to a real directory for bash access, and self-healed.
     await installBundledSkills(config);
@@ -114,9 +131,11 @@ class AppSession {
     // directory both the store that fills it and the turns' driver that
     // injects it on PATH are built from.
     final byteRepairBin = platform.byteRepairBinDir(cache);
+    // The backend captures the closure; nothing reads the mirror until the
+    // container does, so the load only has to be in before that.
     final backend = platform.createBackend(config, libraries, store,
         tools: toolset, rootfs: rootfs, abi: await abi, localLlm: server, kvCache: kvCache,
-        byteRepairBinDir: byteRepairBin);
+        byteRepairBinDir: byteRepairBin, secrets: secrets, loginPath: await loginPath);
     // One instance, shared: the prefill's notification and every other
     // foreground hold go through the same service.
     final foreground = ForegroundService();
@@ -142,16 +161,22 @@ class AppSession {
     // other.
     final scans = await Future.wait([rootfs.installed(), localModels.installed()]);
     final reminders = await FileReminderStore(config).load();
+    // Started before the identity load and awaited below, so the session-bus
+    // connect on Linux overlaps it rather than serialising behind it; nothing
+    // between depends on the answer.
+    final alarms = platform.createReminderAlarms();
     // Sync: identity from the keyring (or file fallback), registry on disk.
-    // The hub reads settings from the container; the closure below defers
-    // that read until after the container exists — the same pattern the
+    // The hub reads settings from the container; the closures below defer
+    // those reads until after the container exists — the same pattern the
     // repository uses with `() => ref.read(appSettingsProvider)`.
-    final secretStore = platform.createSecretStore(config);
     // Started alongside the identity load: on Android the hostname is a
     // method-channel round-trip and the identity is keyring/file I/O, so the
     // two are independent and overlap rather than serialise on the startup
     // path.
     final hostname = platform.deviceHostname();
+    // The one await of the store's own I/O: the identity is the next reader,
+    // and the keyring probe must not be raced by a second first read.
+    await secretsLoaded;
     final identity = await SyncIdentity.load(secretStore);
     final registry = FileDeviceRegistry(config, secretStore);
     // Assigned two statements down, and read only from a running app — the
@@ -161,6 +186,7 @@ class AppSession {
       identity: identity,
       registry: registry,
       settings: () => settingsHome.read(appSettingsProvider),
+      turnPassword: () => secrets.turnPassword,
       lanSignaling: platform.createLanSignaling,
       hostname: await hostname,
     );
@@ -170,6 +196,7 @@ class AppSession {
         agentBackendProvider.overrideWithValue(backend),
         shellProvider.overrideWithValue(backend.shell),
         appConfigProvider.overrideWithValue(config),
+        appSecretsProvider.overrideWithValue(secrets),
         attachmentPickerProvider.overrideWithValue(const FileSelectorPicker()),
         // Seed every project's library at startup: each family member gets its
         // own seeded library, so nothing downstream waits on disk.
@@ -177,11 +204,12 @@ class AppSession {
             (project) => PromptLibraryNotifier(project, libraries[project])),
         launcherIconsProvider.overrideWithValue(const LauncherAliases()),
         systemAccentProvider.overrideWithValue(await accent),
-        linkOpenerProvider.overrideWithValue(PlatformLinkOpener(store)),
+        linkOpenerProvider
+            .overrideWithValue(PlatformLinkOpener(store, syncHub)),
         backgroundWorkProvider.overrideWithValue(foreground),
         fileHandoffProvider.overrideWithValue(handoff),
         assistantLaunchProvider.overrideWithValue(platform.createAssistantLaunch()),
-        reminderAlarmsProvider.overrideWithValue(platform.createReminderAlarms()),
+        reminderAlarmsProvider.overrideWithValue(await alarms),
         remindersProvider.overrideWith(() => Reminders(reminders)),
         reminderTurnDriverProvider
             .overrideWith((ref) => ChatControllerReminderTurnDriver(ref)),
@@ -218,6 +246,10 @@ class AppSession {
     await syncHub.ensureReady();
     container.read(availableModelsProvider);
     container.read(turnKeepAliveProvider);
+    // And for sync, behind the keep-alive setting: it holds the process open
+    // while a paired device is connected, which is what keeps the channel
+    // through the screen going dark.
+    container.read(syncKeepAliveProvider);
     // The same again for sync: it holds a controller open per chat a paired
     // device is watching, so a turn is visible there, and runs a teleported
     // prompt here.
@@ -397,14 +429,17 @@ class _AgentChatAppState extends ConsumerState<AgentChatApp> {
       theme: entoliTheme(Brightness.light, look),
       darkTheme: entoliTheme(Brightness.dark, look),
       themeMode: mode,
-      // All three wrapped rather than folded into the shell: what another app
+      // All four wrapped rather than folded into the shell: what another app
       // shared has to be offered a workspace over whatever is on screen and the
       // assistant gesture has to open a chat over it, both of which want a
-      // Navigator that only exists below here; and the keyboard is the app's to
-      // answer for, over whichever field had it.
+      // Navigator that only exists below here; the first run is met with the
+      // welcome tour over the same, under whatever those two arrive with; and
+      // the keyboard is the app's to answer for, over whichever field had it.
       home: const FocusFollowsKeyboard(
         child: IncomingAssistant(
-          child: IncomingShares(child: IncomingReminderOpen(child: AppShell())),
+          child: IncomingShares(
+            child: IncomingReminderOpen(child: WelcomeGate(child: AppShell())),
+          ),
         ),
       ),
     );

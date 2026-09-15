@@ -10,6 +10,7 @@ import "../../domain/models.dart";
 import "../../providers.dart";
 import "../chat/widgets/reply_style.dart";
 import "../widgets/dialogs.dart";
+import "../widgets/install_destination.dart";
 
 /// A full page that shows a skill the model drafted and packaged, with an
 /// Install button. Pushed from [SkillInstallLabel]'s tap; back gesture closes.
@@ -33,6 +34,10 @@ class _SkillInstallPreviewPageState
   SkillPackage? _package;
   bool _loading = true;
   bool _installing = false;
+
+  /// Where Install puts the skill: null is the default project, the way a
+  /// project is named everywhere. The dropdown below the preview picks it.
+  String? _destination;
 
   @override
   void initState() {
@@ -67,15 +72,16 @@ class _SkillInstallPreviewPageState
     final pkg = _package;
     if (pkg == null) return;
     setState(() => _installing = true);
+    final target = _destination;
     final config = ref.read(appConfigProvider);
-    final skillsDir = config.promptsDir(CompletionKind.skill);
+    final skillsDir = config.promptsDir(CompletionKind.skill, project: target);
     final replacing =
-        await config.fs.directory(skillDirectory(config, pkg.name)).exists();
+        await config.fs.directory(skillDirectory(config, pkg.name, project: target)).exists();
     if (mounted && replacing) {
       final confirmed = await confirm(
         context,
         title: "Replace ${pkg.name}?",
-        message: "A skill with that name is already installed. Installing "
+        message: "A skill with that name is already installed there. Installing "
             "this one replaces it, files included.",
         confirmLabel: "Replace",
       );
@@ -85,13 +91,13 @@ class _SkillInstallPreviewPageState
       }
     }
     await platform.withWritableDir(skillsDir, () async {
-      await installSkillPackage(config, pkg);
+      await installSkillPackage(config, pkg, project: target);
     });
     await reloadAllPromptLibraries(ref);
     if (mounted) {
       setState(() => _installing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Installed ${pkg.name}.")),
+        SnackBar(content: Text(installedSnack("Installed", pkg.name, target))),
       );
       Navigator.of(context).pop();
     }
@@ -181,6 +187,11 @@ class _SkillInstallPreviewPageState
               ),
             ),
         ],
+        const SizedBox(height: 24),
+        InstallDestination(
+          value: _destination,
+          onChanged: (value) => setState(() => _destination = value),
+        ),
       ],
     );
   }

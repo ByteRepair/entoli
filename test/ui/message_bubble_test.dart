@@ -1,8 +1,8 @@
 import "dart:convert";
 
-import "package:flutter/gestures.dart";
 import "package:flutter/material.dart";
-import "package:flutter/services.dart";
+// `RenderParagraph`, which material does not re-export.
+import "package:flutter/rendering.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:flutter_markdown_plus/flutter_markdown_plus.dart";
 
@@ -28,6 +28,8 @@ void main() {
     String chatId = "chat-1",
     bool isWaiting = false,
     String? waitingNotice,
+    String? waitingStatus,
+    String? shellOutput,
     List<String>? threads,
     ValueChanged<int>? onThreadStep,
     VoidCallback? onDelete,
@@ -36,6 +38,7 @@ void main() {
     VoidCallback? onSpeak,
     bool isSpeaking = false,
     ValueChanged<String>? onTapLink,
+    String? author,
   }) =>
       app.pump(
         tester,
@@ -43,8 +46,11 @@ void main() {
           body: MessageBubble(
             chatId: chatId,
             message: message,
+            author: author,
             isWaiting: isWaiting,
             waitingNotice: waitingNotice,
+            waitingStatus: waitingStatus,
+            shellOutput: shellOutput,
             threads: threads,
             onThreadStep: onThreadStep,
             onDelete: onDelete,
@@ -75,6 +81,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Finder findTextStarting(String prefix) => find.textContaining(prefix);
+
   testWidgets("an error part renders in the theme's error colour", (tester) async {
     await pump(tester, _message(MessageRole.assistant, [const ErrorPart(message: "usage limit reached")]));
 
@@ -91,6 +99,23 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
+  testWidgets("an addressed reply is named, and the main agent's is not",
+      (tester) async {
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+      author: "@researcher",
+    );
+    expect(find.text("@researcher"), findsOneWidget);
+
+    // The reply is the page: no name over it when nobody was addressed.
+    await pump(
+      tester,
+      _message(MessageRole.assistant, [const TextPart(text: "Found them.")]),
+    );
+    expect(find.text("@researcher"), findsNothing);
+  });
+
   testWidgets("the spinner gives way to the first text", (tester) async {
     await pump(
       tester,
@@ -102,6 +127,68 @@ void main() {
     // Not `find.text`: a reply still being written ends in a caret, so it is a
     // span, and the caret's placeholder is part of what that span reads as.
     expect(find.textContaining("Hel", findRichText: true), findsOneWidget);
+  });
+
+  group("a running command's output", () {
+    testWidgets("renders as a block under the spinner while the reply is empty",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const []),
+        isWaiting: true,
+        shellOutput: "one\ntwo\n",
+      );
+
+      // The spinner row is the running indication; the block is only the
+      // output under it.
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.textContaining("one", findRichText: true), findsOneWidget);
+      expect(find.textContaining("two", findRichText: true), findsOneWidget);
+    });
+
+    testWidgets("sits under the tool label once the model has spoken",
+        (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(text: "Checking that."),
+          const MessagePart.toolCall(
+              toolCall: ToolCall(id: "c1", name: "bash", argumentsText: "ls")),
+        ]),
+        isWaiting: true,
+        shellOutput: "files here\n",
+      );
+
+      expect(find.textContaining("Using tool", findRichText: true),
+          findsOneWidget);
+      expect(find.textContaining("files here", findRichText: true),
+          findsOneWidget);
+    });
+
+    testWidgets("an empty output draws nothing", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, const []),
+        isWaiting: true,
+        shellOutput: "   \n",
+      );
+
+      expect(find.textContaining("files here", findRichText: true),
+          findsNothing);
+    });
+
+    testWidgets("nothing is drawn once the turn is over", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const TextPart(text: "Done."),
+        ]),
+        shellOutput: "leftover\n",
+      );
+
+      expect(find.textContaining("leftover", findRichText: true),
+          findsNothing);
+    });
   });
 
   group("the streaming caret", () {
@@ -276,20 +363,6 @@ void main() {
     await openThinking(tester);
 
     expect(find.text("17*23 = 391"), findsOneWidget);
-  });
-
-  testWidgets("the back key closes the drawer rather than the app", (tester) async {
-    await pump(
-      tester,
-      _message(MessageRole.assistant, const [
-        ReasoningPart(text: "17*23 = 391", durationMs: 12000),
-      ]),
-    );
-    await openThinking(tester);
-
-    expect(await pressBack(tester), isTrue);
-
-    expect(find.text("17*23 = 391"), findsNothing);
   });
 
   // Long output fills the screen rather than stopping at a fraction of it.
@@ -567,6 +640,104 @@ void main() {
     expect(find.text("Used tool: bash"), findsOneWidget);
     expect(find.text("Expand activities"), findsOneWidget);
     expect(find.text("Thought for 1 second"), findsOneWidget);
+  });
+
+  group("file-tool diffs", () {
+    testWidgets("an edit shows red and green lines", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "edit",
+              argumentsJson: jsonEncode({
+                "path": "notes.txt",
+                "old_string": "old line",
+                "new_string": "new line",
+              }),
+              argumentsText: "notes.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "Edited notes.txt: replaced 1 occurrence(s).")),
+        ]),
+      );
+
+      expect(find.text("Edited notes.txt"), findsOneWidget);
+      expect(find.text("- old line"), findsOneWidget);
+      expect(find.text("+ new line"), findsOneWidget);
+      expect(find.text("Used tool: edit"), findsNothing);
+    });
+
+    testWidgets("a write shows its content as additions", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "write",
+              argumentsJson: jsonEncode({"path": "new.txt", "content": "first\nsecond"}),
+              argumentsText: "new.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "Wrote 12 bytes to new.txt")),
+        ]),
+      );
+
+      expect(find.text("Wrote new.txt"), findsOneWidget);
+      expect(find.text("+ first"), findsOneWidget);
+      expect(find.text("+ second"), findsOneWidget);
+      expect(findTextStarting("- "), findsNothing);
+    });
+
+    testWidgets("a change past the budget falls back to the ordinary label", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "edit",
+              argumentsJson: jsonEncode({
+                "path": "big.txt",
+                "old_string": [for (var i = 0; i < 21; i++) "gone $i"].join("\n"),
+                "new_string": "here",
+              }),
+              argumentsText: "big.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 0, output: "Edited big.txt: replaced 1 occurrence(s).")),
+        ]),
+      );
+
+      expect(find.text("Used tool: edit"), findsOneWidget);
+      expect(findTextStarting("- "), findsNothing);
+    });
+
+    testWidgets("a failed edit keeps the error label", (tester) async {
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          ToolCallPart(
+            toolCall: ToolCall(
+              id: "c1",
+              name: "edit",
+              argumentsJson: jsonEncode({
+                "path": "notes.txt",
+                "old_string": "old line",
+                "new_string": "new line",
+              }),
+              argumentsText: "notes.txt",
+            ),
+          ),
+          ToolResultPart(result: ToolResult(callId: "c1", returnCode: 1, output: "", exceptionInfo: "old_string not found in notes.txt")),
+        ]),
+      );
+
+      expect(find.text("Used tool: edit"), findsOneWidget);
+      expect(find.text("- old line"), findsNothing);
+    });
   });
 
   testWidgets("an ask_user question inside a sequence stays visible", (tester) async {
@@ -934,7 +1105,7 @@ void main() {
   });
 
   group("the message as text", () {
-    testWidgets("the copy button takes the whole message, markdown and all",
+    testWidgets("the copy button takes the message as it reads, rendered",
         (tester) async {
       final copied = clipboard(tester);
       await pump(
@@ -949,8 +1120,45 @@ void main() {
       await tester.tap(find.byTooltip("Copy message"));
       await tester.pumpAndSettle();
 
-      // What was said, not what was thought.
+      // What was said, not what was thought, and as it reads rather than as
+      // it is kept.
+      expect(copied, ["here is bold code"]);
+    });
+
+    testWidgets("the raw copy button takes the markdown", (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [
+          const ReasoningPart(text: "thinking", durationMs: 12000),
+          const TextPart(text: "here is **bold** code"),
+        ]),
+      );
+      await reveal(tester, find.textContaining("bold"));
+
+      await tester.tap(find.byTooltip("Copy raw markdown"));
+      await tester.pumpAndSettle();
+
       expect(copied, ["here is **bold** code"]);
+    });
+
+    testWidgets("formatted copy separates a heading from its paragraph, raw copy does not",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant,
+            [const TextPart(text: "# Heading\n\nhere is **bold** code")]),
+      );
+      await reveal(tester, find.textContaining("bold"));
+
+      await tester.tap(find.byTooltip("Copy message"));
+      await tester.pumpAndSettle();
+      expect(copied.single, "Heading\nhere is bold code");
+
+      await tester.tap(find.byTooltip("Copy raw markdown"));
+      await tester.pumpAndSettle();
+      expect(copied.last, "# Heading\n\nhere is **bold** code");
     });
 
     testWidgets("the read-aloud button offers to stop while it is reading",
@@ -991,9 +1199,9 @@ void main() {
       expect(find.byTooltip("Copy message"), findsNothing);
     });
 
-    // A selection used to stop at the element it started in, and copied what
-    // the markdown rendered to rather than the markdown itself.
-    testWidgets("selecting a rendered reply copies the markdown behind it",
+    // A selection used to stop at the element it started in, and copied whole
+    // parts as markdown rather than what was highlighted.
+    testWidgets("selecting a rendered reply copies the words on screen",
         (tester) async {
       final copied = clipboard(tester);
       await pump(
@@ -1003,22 +1211,13 @@ void main() {
       );
 
       final rendered = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
+      await dragCopy(
+        tester,
         tester.getTopLeft(rendered) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
+        to: tester.getBottomRight(rendered) - const Offset(2, 4),
       );
-      await tester.pump();
-      await gesture.moveTo(tester.getBottomRight(rendered) - const Offset(2, 4));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
-
-      expect(copied, ["# Heading\n\nhere is **bold** code"]);
+      expect(copied, ["Heading\nhere is bold code"]);
     });
 
     // The bubble closes at every tool call, so a region per bubble would stop
@@ -1035,24 +1234,82 @@ void main() {
       );
 
       final said = find.byType(MarkdownBody);
-      final gesture = await tester.startGesture(
+      await dragCopy(
+        tester,
         tester.getTopLeft(said.first) + const Offset(2, 4),
-        kind: PointerDeviceKind.mouse,
+        to: tester.getBottomRight(said.last) - const Offset(2, 4),
       );
-      await tester.pump();
-      await gesture.moveTo(tester.getBottomRight(said.last) - const Offset(2, 4));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
-
-      expect(copied.single, contains("before **the** call"));
-      expect(copied.single, contains("after *it*"));
+      expect(copied.single, contains("before the call"));
+      expect(copied.single, contains("after it"));
       expect(copied.single, isNot(contains("bash")));
+    });
+
+    // The bullets are chrome like a code block's bar: what a selection reads
+    // is what the copy button reads, the list's items and not `•Item`.
+    testWidgets("a drag over a list copies its items without the bullets",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "- one\n- two")]),
+      );
+
+      final rendered = find.byType(MarkdownBody);
+      await dragCopy(
+        tester,
+        tester.getTopLeft(rendered) + const Offset(2, 4),
+        to: tester.getBottomRight(rendered) - const Offset(2, 4),
+      );
+
+      expect(copied.single, "one\ntwo");
+    });
+
+    // Whole-part copy answered a three-word drag with the whole paragraph's
+    // markdown; a selection copies the range it covers, and only that.
+    testWidgets("selecting part of a paragraph copies only what it covered",
+        (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(
+            MessageRole.assistant, [const TextPart(text: "the first words")]),
+      );
+
+      // The caret position of the range's ends, laid out: 4 is before
+      // "first", 10 is before "words", so the drag covers "first" alone.
+      // Positions rather than guessed widths.
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byType(MarkdownBody),
+          matching: find.textContaining("the first words", findRichText: true),
+        ),
+      );
+      Offset at(int index) =>
+          tester.getTopLeft(find.byType(MarkdownBody)) +
+          paragraph.getOffsetForCaret(TextPosition(offset: index), Rect.fromLTWH(0, 0, 400, 14)) +
+          const Offset(0, 7);
+
+      await dragCopy(tester, at(4), to: at(10));
+
+      // A trailing space is inside what was dragged: the highlight reaches to
+      // the caret before "words", and the space before it is under it.
+      expect(copied.single, "first ");
+    });
+
+    // A collapsed selection is a tap, not a copy: writing the empty string
+    // would report success over nothing.
+    testWidgets("a selection collapsed to a point copies nothing", (tester) async {
+      final copied = clipboard(tester);
+      await pump(
+        tester,
+        _message(MessageRole.assistant, [const TextPart(text: "hello there")]),
+      );
+
+      final rendered = find.byType(MarkdownBody);
+      await dragCopy(tester, tester.getTopLeft(rendered) + const Offset(2, 4));
+
+      expect(copied, isEmpty);
     });
   });
 

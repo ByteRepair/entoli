@@ -28,8 +28,9 @@ void main() {
 
   /// Nothing in this file is about attachment bytes except the two tests that
   /// pass a loader of their own.
-  Future<List<LlmMessage>> project(List<Message> messages, {bool first = true}) =>
-      projectionOf(messages, first: first, load: noResources);
+  Future<List<LlmMessage>> project(List<Message> messages,
+          {bool first = true, String? viewer}) =>
+      projectionOf(messages, first: first, load: noResources, viewer: viewer);
 
   setUp(() => next = 0);
 
@@ -325,11 +326,90 @@ void main() {
     expect(projected.last.toolCalls, isEmpty);
     expect(projected.last.text, contains("echo hello"));
     expect(projected.last.text, contains('"returncode": 0'));
+    // Real newlines, not the literal `\n` the text once carried: the
+    // transcript is prose the model reads, not an escaped string.
+    expect(projected.last.text, contains("me to:\n\necho hello\n\n"));
   });
 
   test("a message with nothing in it contributes nothing", () async {
     expect(
         await project([asked("   ".trim()), said(MessageRole.assistant, const [])]),
         isEmpty);
+  });
+
+  group("per viewer", () {
+    Message authoredReply(String by, [List<MessagePart>? parts]) => Message(
+        id: "m${next++}",
+        role: MessageRole.assistant,
+        createdAt: at,
+        parts: parts ?? const [MessagePart.text(text: "the logs say 404")],
+        author: by);
+
+    test("another member's reply reads as a labeled message, not as the viewer's own",
+        () async {
+      final projected = await project([
+        asked("check the logs"),
+        authoredReply("@researcher"),
+      ], viewer: "reviewer");
+
+      expect(projected.map((m) => m.role), [LlmRole.user, LlmRole.user]);
+      expect(projected.last.text, contains("Message from researcher"));
+      expect(projected.last.text, contains("not the user"));
+      expect(projected.last.text, contains("the logs say 404"));
+    });
+
+    test("the viewer's own reply reads as theirs, assistant as always",
+        () async {
+      final projected = await project([
+        asked("check the logs"),
+        authoredReply("@reviewer"),
+      ], viewer: "reviewer");
+
+      expect(projected.map((m) => m.role), [LlmRole.user, LlmRole.assistant]);
+    });
+
+    test("the main agent's unnamed replies reach a member as labeled too",
+        () async {
+      final projected = await project([
+        asked("what happened?"),
+        said(MessageRole.assistant, const [MessagePart.text(text: "I looked.")]),
+      ], viewer: "researcher");
+
+      expect(projected.map((m) => m.role), [LlmRole.user, LlmRole.user]);
+      expect(projected.last.text, isNot(contains("@researcher")));
+      // The unnamed reply is the house's — the wording says who wrote it
+      // without naming a member handle.
+      expect(projected.last.text, contains("another agent"));
+    });
+
+    test("a conversation with no authors is worded for the house exactly as before",
+        () async {
+      final messages = [
+        asked("what is 2+2?"),
+        said(MessageRole.assistant, const [MessagePart.text(text: "four")]),
+      ];
+      final forHouse = await project(messages);
+      expect(forHouse.map((m) => m.role), [LlmRole.user, LlmRole.assistant]);
+      // The house is unnamed and the reply is unnamed: the same viewer, so
+      // the reply is the house's own, whatever the date — the wording the
+      // cache warms on. `first` rides along unchanged too.
+      expect((await project(messages)).map((m) => m.text),
+          forHouse.map((m) => m.text));
+    });
+
+    test("a peer reply's tool calls do not reach the other viewer", () async {
+      final projected = await project([
+        asked("check the logs"),
+        authoredReply("@researcher", [
+          const MessagePart.text(text: "found it"),
+          call("c1", "bash", '{"command":"grep"}'),
+          ran("c1", "logs"),
+        ]),
+      ], viewer: "@reviewer");
+
+      expect(projected, hasLength(2));
+      expect(projected.last.toolCalls, isEmpty);
+      expect(projected.last.text, contains("found it"));
+    });
   });
 }

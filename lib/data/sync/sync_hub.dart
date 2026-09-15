@@ -7,22 +7,24 @@ import "package:http/http.dart" as http;
 
 import "../../core/log.dart";
 import "../../domain/app_settings.dart";
-import "../../domain/chat_log.dart" show ChatRecord;
+import "../../domain/chat_log.dart" show ChatRecord, PartRecord;
 import "../../domain/chat_meta.dart";
 import "../../domain/chat_repository.dart";
-import "../../domain/models.dart" show ChatState, ToolApproval;
+import "../../domain/models.dart"
+    show ArtifactPart, ChatState, ToolApproval;
 import "../../domain/sync/devices.dart";
 import "../../domain/sync/identity.dart";
 import "../../domain/sync/lan_signaling.dart";
 import "../../domain/sync/protocol.dart";
 import "../../domain/sync/relay_signaling.dart";
+import "artifact_bytes.dart" show ArtifactBytes;
 import "channel.dart";
 import "pairing.dart";
 import "peers.dart";
 import "sync_byte_cache.dart";
 
 // The two extracted pieces' types are part of what a `SyncHub` hands out.
-export "peers.dart" show PeerState, PeerStatus;
+export "peers.dart" show PeerState, PeerStatus, SyncPeers;
 export "pairing.dart" show PairingActivity, PairingStage;
 export "signaling/pairing_payload.dart"
     show PairingOffer, generatePairingCode, generatePsk;
@@ -116,11 +118,12 @@ class RemoteChatEntry {
 /// ones it watches elsewhere. Both at once, always — and in one file, because
 /// they are the two ends of the same twelve messages. See this directory's
 /// CLAUDE.md for why that is not two files.
-class SyncHub {
+class SyncHub implements ArtifactBytes {
   SyncHub({
     required this.identity,
     required this.registry,
     required AppSettings Function() settings,
+    String? Function()? turnPassword,
     required LanSignaling? Function() lanSignaling,
     String? hostname,
     http.Client? client,
@@ -130,6 +133,7 @@ class SyncHub {
       identity: identity,
       registry: registry,
       settings: settings,
+      turnPassword: turnPassword,
       peers: _peers,
       lanSignaling: lanSignaling,
       onMessage: _dispatch,
@@ -335,6 +339,13 @@ class SyncHub {
           ..meta = meta);
       case SyncRecordAppend(:final chatId, :final records):
         _onMirror(peer, chatId, (mirror) => mirror.records.addAll(records));
+        // A re-publish names its artifact again; a zip fetched before that
+        // is stale, and this is where a mirror can tell.
+        for (final record in records) {
+          if (record case PartRecord(part: ArtifactPart(:final artifactId))) {
+            byteCache.dropResource(chatId, "$_artifactPrefix$artifactId");
+          }
+        }
       case SyncStateDiff(:final chatId, :final state):
         _onMirror(peer, chatId, (mirror) => mirror.state = state);
       case SyncMetaPatch(:final chatId, :final meta):
@@ -747,15 +758,33 @@ class SyncHub {
 
   // ------------------------------------------------------------ resources
 
-  /// Streams an attachment to a subscribing peer, base64 inside control
+  /// The synthetic resource namespace an artifact travels under: one zip of
+  /// the artifact's files, requested like any attachment and opened on the
+  /// asking side by that platform's own viewer. The `/` is what keeps the
+  /// name out of `resourceName`'s alphabet — a user attachment can never
+  /// land here by accident.
+  static const _artifactPrefix = ".artifacts/";
+
+  /// An artifact of a mirrored chat: from the cache, or as one zip over the
+  /// ordinary resource channel and into it. Same steps as [resourceBytes].
+  @override
+  Future<Uint8List?> artifactBytes(String chatId, String artifactId) =>
+      resourceBytes(chatId, "$_artifactPrefix$artifactId");
+
+  /// Streams a resource to a subscribing peer, base64 inside control
   /// frames — correlation stays trivial and every frame rides the same AEAD
   /// as the rest of the traffic. Binary framing can come later without a
-  /// protocol change: the type byte already separates the streams.
+  /// protocol change: the type byte already separates the streams. A name
+  /// under [_artifactPrefix] is an artifact rather than an attachment, and
+  /// goes out as one zip of its files.
   Future<void> _serveResource(
       LivePeer peer, String id, String chatId, String resource) async {
     Uint8List? bytes;
     if (peer.subscriptions.contains(chatId)) {
-      bytes = await _repo?.readResource(chatId, resource);
+      bytes = resource.startsWith(_artifactPrefix)
+          ? await _repo?.readArtifactZip(
+              chatId, resource.substring(_artifactPrefix.length))
+          : await _repo?.readResource(chatId, resource);
     }
     if (bytes == null || bytes.isEmpty) {
       await peer.send(SyncMessage.resourceChunk(id: id, bytesB64: "", done: true));

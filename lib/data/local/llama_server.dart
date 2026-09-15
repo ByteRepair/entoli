@@ -177,9 +177,8 @@ int? bigCoreCount(List<int> ceilings) {
 ///
 /// Linux rather than Android, and it needs no guard for it: this is only ever
 /// reached from [LlamaServerPool], which `platformLocalLlm` builds on Android
-/// alone, and a desktop Linux that got here through a hand-built binary would
-/// be answering about its own cores, which is the right answer there too.
-/// Anywhere else the files are missing and the list is empty.
+/// and Linux, and a desktop Linux answering about its own cores is the right
+/// answer there too. Anywhere else the files are missing and the list is empty.
 ///
 /// Every core has to answer or none of them do. A core the kernel says nothing
 /// about is one the others cannot be ranked against, and half a list read as a

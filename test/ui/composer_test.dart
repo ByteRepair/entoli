@@ -35,7 +35,7 @@ void main() {
           Scaffold(
             body: Composer(
               controller: controller,
-              isRunning: false,
+              agentSpeaking: false,
               onSend: (text, attachments) {
                 sent.add(text);
                 sentAttachments.add(attachments);

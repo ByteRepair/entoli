@@ -59,7 +59,8 @@ Future<({String? project})?> pickProject(
 Widget _indentable(int maxLines, TextEditingController controller, Widget field) =>
     maxLines == 1 ? field : TabIndents(controller: controller, child: field);
 
-/// Ask for a line (or a few) of text. Returns null if dismissed or left blank.
+/// Ask for a line (or a few) of text. Returns null if dismissed or, unless
+/// [allowBlank], left blank — a blank answer names nothing.
 Future<String?> promptForText(
   BuildContext context, {
   required String title,
@@ -67,11 +68,12 @@ Future<String?> promptForText(
   required String confirmLabel,
   String? hint,
   int maxLines = 1,
+  bool allowBlank = false,
 }) {
   final controller = TextEditingController(text: initial);
   String? submit() {
     final text = controller.text.trim();
-    return text.isEmpty ? null : text;
+    return (text.isEmpty && !allowBlank) ? null : text;
   }
 
   return showDialog<String>(
@@ -97,6 +99,62 @@ Future<String?> promptForText(
           child: Text(confirmLabel),
         ),
       ],
+    ),
+  );
+}
+
+/// Ask for a new project's name and whether it is a team. Returns null if
+/// dismissed, or if the name is not one — [projectNameFrom]'s answer is the
+/// only thing that leaves. The switch starts where the app default says a
+/// project should.
+Future<({String name, bool omada})?> promptNewProject(
+    BuildContext context,
+    {required bool omadaByDefault}) {
+  final controller = TextEditingController();
+  var omada = omadaByDefault;
+  ({String name, bool omada})? submit() {
+    final name = projectNameFrom(controller.text);
+    return name == null ? null : (name: name, omada: omada);
+  }
+
+  return showDialog<({String name, bool omada})>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text("New project"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: "Project name"),
+              onSubmitted: (_) {
+                final answer = submit();
+                if (answer != null) Navigator.pop(context, answer);
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text("Team chats (Omada)"),
+              subtitle: const Text(
+                  "Several named agents take part in this project's chats."),
+              value: omada,
+              onChanged: (value) => setState(() => omada = value),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          FilledButton(
+            onPressed: () {
+              final answer = submit();
+              if (answer != null) Navigator.pop(context, answer);
+            },
+            child: const Text("Create"),
+          ),
+        ],
+      ),
     ),
   );
 }

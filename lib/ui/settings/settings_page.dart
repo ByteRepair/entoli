@@ -9,6 +9,8 @@ import "../../data/backup.dart";
 import "../../core/platform/platform.dart" as platform;
 import "../../domain/llm_provider.dart";
 import "../../domain/permission.dart";
+import "../../domain/project_settings.dart"
+    show OmadaOrdering, omadaOrderingLabels, omadaOrderingDescriptions;
 import "../../domain/temp_chat_ttl.dart";
 import "../../domain/app_settings.dart";
 import "../../providers.dart";
@@ -31,45 +33,65 @@ import "../widgets/section_header.dart";
 import "agents_settings.dart";
 import "assistant_settings.dart";
 import "byte_repair_settings.dart";
+import "llm_settings.dart";
 import "local_model_settings.dart";
+import "memory_settings.dart";
 import "privacy_policy_page.dart";
 import "reminders.dart";
 import "skills_settings.dart";
 import "sync_settings.dart";
 import "terminal_settings.dart";
 import "voice_settings.dart";
+import "welcome_page.dart";
 
-/// The page's categories, in the order they are offered. Everything an
-/// endpoint is is Providers, everything a model is asked to do is LLMs, General
-/// is the app itself, Data is all of it at once — the chats, the settings and
-/// the workspaces as one file to keep — and About is the app rather than
-/// anything it does, which is why it is last.
+/// The page's categories, in the order they are offered and the groups they
+/// are offered in. General, Providers, On-device and LLMs are the app and the
+/// plumbing that answers a chat — everything an endpoint is, where a model can
+/// run without a network, and everything a model is asked to do; Memory, Voice
+/// and Reminders are what a conversation does beyond the text; Agents and
+/// Skills are what a message addresses by name; Terminal and Byte Repair are
+/// where commands run; Sync and Data are the device and all of it at once —
+/// the chats, the settings and the workspaces as one file to keep; and
+/// Welcome and About are the app rather than anything it does, which is why
+/// they are last.
 enum SettingsCategory {
   general("General", Icons.tune),
-  terminal("Terminal", Icons.terminal),
+  providers("Providers", Icons.cloud_outlined),
   onDevice("On-device", Icons.memory),
+  llms("LLMs", Icons.auto_awesome_outlined),
+  memory("Memory", Icons.psychology, dividerAbove: true),
   voice("Voice", Icons.graphic_eq),
   reminders("Reminders", Icons.alarm),
+  agents("Agents", Icons.person_outline, dividerAbove: true),
   skills("Skills", Icons.extension),
-  agents("Agents", Icons.person_outline),
+  terminal("Terminal", Icons.terminal, dividerAbove: true),
   byteRepair("Byte Repair", Icons.verified_user),
-  sync("Sync", Icons.sync),
-  providers("Providers", Icons.cloud_outlined),
-  llms("LLMs", Icons.auto_awesome_outlined),
-  memory("Memory", Icons.psychology),
+  sync("Sync", Icons.sync, dividerAbove: true),
   data("Data", Icons.inventory_2_outlined),
+  welcome("Welcome", Icons.waving_hand, dividerAbove: true),
   about("About", Icons.info_outline);
 
-  const SettingsCategory(this.label, this.icon);
+  const SettingsCategory(this.label, this.icon, {this.dividerAbove = false});
 
   final String label;
   final IconData icon;
+
+  /// A divider drawn above the category's tile, where one group of categories
+  /// ends and another begins.
+  final bool dividerAbove;
 }
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, this.initialCategory});
+  const SettingsPage({super.key, this.initialCategory, this.focus = false});
 
   final SettingsCategory? initialCategory;
+
+  /// Pushed for one category — the welcome tour's setup rows, the Byte Repair
+  /// bar — rather than arrived at through the settings list. That category is
+  /// the whole page on a wide window too, with nothing behind it: back leaves
+  /// settings rather than a list it skipped, and the panel is not drawn
+  /// beside what it was not used to pick.
+  final bool focus;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -93,6 +115,15 @@ class _SettingsPageState extends State<SettingsPage> {
     // The page is the whole window, so its width is the window's — no
     // `LayoutBuilder`, which would run the Scaffold's build during layout.
     final wide = MediaQuery.sizeOf(context).width >= navBreakpoint;
+    // One rule, not two: a named category is the whole page unless the window
+    // is wide enough for the panel and nobody asked to focus. Narrow has no
+    // panel for a preselected category to sit beside, so there it is the page
+    // whatever the caller asked for.
+    final fullPage =
+        widget.initialCategory != null && (widget.focus || !wide);
+    if (fullPage) {
+      return _categoryScaffold(widget.initialCategory!);
+    }
     final categories = _Categories(
       // Nothing is selected where the list is the whole page: a category there
       // is somewhere to go rather than what is showing beside it.
@@ -101,21 +132,28 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     final bar = AppBar(title: const Text("Settings"));
 
-    if (!wide) return Scaffold(appBar: bar, body: categories);
+    if (!wide) {
+      return Scaffold(appBar: bar, body: categories);
+    }
     return Scaffold(
       appBar: bar,
       body: Row(
         children: [
           SizedBox(width: navPanelWidth, child: categories),
           const VerticalDivider(width: 1),
-          Expanded(
-            child: ListView(key: ValueKey(_category), children: _sectionsOf(_category)),
-          ),
+          Expanded(child: _categoryBody(_category, key: ValueKey(_category))),
         ],
       ),
     );
   }
 }
+
+/// A category as the whole page: the bar holds nothing but its name, and
+/// leaving it is the back gesture.
+Scaffold _categoryScaffold(SettingsCategory category) => Scaffold(
+      appBar: AppBar(title: Text(category.label)),
+      body: _categoryBody(category),
+    );
 
 /// One category as a page over the list, which is what a narrow window gets in
 /// place of the panel. Leaving it is the back gesture, so the bar holds nothing
@@ -136,15 +174,25 @@ class _CategoryPage extends StatelessWidget {
         }
       });
     }
-    return Scaffold(
-      appBar: AppBar(title: Text(category.label)),
-      body: ListView(children: _sectionsOf(category)),
-    );
+    return _categoryScaffold(category);
   }
 }
 
+/// What a category draws in either layout. Welcome is the tour, a pager with
+/// its own bar that cannot scroll in a list, and Skills and Agents scroll
+/// their own list to keep their footers fixed to the bottom — everything
+/// else is its sections.
+Widget _categoryBody(SettingsCategory category, {Key? key}) =>
+    switch (category) {
+      SettingsCategory.welcome => const WelcomeTour(),
+      SettingsCategory.skills => const SkillsSection(),
+      SettingsCategory.agents => const AgentsSection(),
+      _ => ListView(key: key, children: _sectionsOf(category)),
+    };
+
 /// What is filed under a category, whether it is drawn beside the list or on a
-/// page of its own.
+/// page of its own. [SettingsCategory.welcome] is not filed anywhere: the tour
+/// is a body of its own, which [_categoryBody] renders whole.
 List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
       // The agent's own settings are here rather than under LLMs: the mode is a
       // behaviour, and the classifier picker travels with it because auto mode
@@ -153,6 +201,8 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           _AppearanceSection(),
           Divider(),
           _AgentSection(),
+          Divider(),
+          _OmadaSection(),
           Divider(),
           _TempChatSection(),
           Divider(),
@@ -185,29 +235,33 @@ List<Widget> _sectionsOf(SettingsCategory category) => switch (category) {
           VoiceSection(),
           Divider(),
           AssistantSection(),
-          // Draws its own dividers, since on Android there is no catalog and a
-          // divider with nothing under it is a line across the bottom of the
-          // page.
+          // Draws its own dividers, so a platform drawing no catalog is not
+          // left a line across the bottom of the page.
           VoiceCatalogSections(),
         ],
       // Says so and offers nothing where there is no clock to schedule with —
       // see the section itself.
       SettingsCategory.reminders => const [RemindersSection()],
-      SettingsCategory.skills => const [SkillsSection()],
-      SettingsCategory.agents => const [AgentsSection()],
+      // Rendered by [_categoryBody] whole rather than filed here, for the
+      // footers pinned to their bottoms.
+      SettingsCategory.skills => const [],
+      SettingsCategory.agents => const [],
       SettingsCategory.byteRepair => const [ByteRepairSection()],
       SettingsCategory.sync => const [SyncSection()],
       SettingsCategory.providers => const [_ProvidersEditor()],
-      SettingsCategory.llms => const [_DefaultsSection()],
+      SettingsCategory.llms => const [DefaultsSection()],
       // The two things the agent carries between conversations: the files the
       // user writes (instructions) and the ones it writes (memories).
       SettingsCategory.memory => const [
-          _InstructionsSection(),
+          InstructionsSection(),
           Divider(),
-          _AutoMemorySection(),
+          AutoMemorySection(),
         ],
       SettingsCategory.data => const [_BackupSection()],
       SettingsCategory.about => const [_AboutSection()],
+      // Rendered by [_categoryBody] rather than filed here: the tour is a
+      // pager with its own bar, not a list of sections.
+      SettingsCategory.welcome => const [],
     };
 
 /// The categories as a list: beside the page where there is room for one, and
@@ -224,7 +278,8 @@ class _Categories extends StatelessWidget {
         child: SafeArea(
           child: ListView(
             children: [
-              for (final category in SettingsCategory.values)
+              for (final category in SettingsCategory.values) ...[
+                if (category.dividerAbove) const Divider(),
                 ListTile(
                   selected: category == selected,
                   leading: Icon(category.icon),
@@ -232,6 +287,7 @@ class _Categories extends StatelessWidget {
                   trailing: selected == null ? const Icon(Icons.chevron_right) : null,
                   onTap: () => onSelect(category),
                 ),
+              ],
             ],
           ),
         ),
@@ -565,50 +621,6 @@ class _IconChoice extends StatelessWidget {
       );
 }
 
-/// What a new chat gets. A live reference, not a snapshot: retargeting it
-/// retargets every chat that pinned nothing.
-class _DefaultsSection extends ConsumerWidget {
-  const _DefaultsSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader("New chats"),
-        // Nothing above the app level to inherit from: Default means whatever
-        // the backend picks.
-        LabelledField(
-          label: "LLM",
-          child: ModelPicker(
-            choice: (
-              providerId: settings.defaultProviderId,
-              modelId: settings.defaultModelId,
-            ),
-            onChanged: (choice) =>
-                ref.read(appSettingsProvider.notifier).setDefault(choice),
-          ),
-        ),
-        LabelledField(
-          label: "Title LLM",
-          child: OptionalModelPicker(
-            offLabel: "Off",
-            helperText: "Names a chat from its first message. Off, chats stay "
-                "\"New chat\" until you rename them.",
-            choice: (
-              providerId: settings.titleProviderId,
-              modelId: settings.titleModelId,
-            ),
-            onChanged: (choice) =>
-                ref.read(appSettingsProvider.notifier).setTitleModel(choice),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// The endpoints the agent calls and how it gates commands.
 class _AgentSection extends ConsumerWidget {
   const _AgentSection();
@@ -631,8 +643,15 @@ class _AgentSection extends ConsumerWidget {
             initialValue: settings.approveMode,
             isExpanded: true,
             decoration: InputDecoration(
-              helperText: settings.approveMode == ApproveMode.auto && noClassifier
-                  ? "No classifier model set — auto mode will ask for every command."
+              helperText: settings.approveMode == ApproveMode.auto
+                  ? noClassifier
+                      ? "No classifier model set — auto mode will ask for "
+                          "every command."
+                      : "The classifier can also refuse a command outright, "
+                          "without asking you. Reads and writes inside the "
+                          "chat's workspace pass; anything past it waits for "
+                          "you. After several escalations in a turn, the rest "
+                          "of the turn asks."
                   : null,
             ),
             items: [
@@ -652,10 +671,11 @@ class _AgentSection extends ConsumerWidget {
         ),
         LabelledField(
           label: "Classifier LLM",
-          child: OptionalModelPicker(
-            offLabel: "Off",
-            helperText: "Classifies commands as safe, dangerous, or uncertain. "
-                "Off, auto mode asks for every command.",
+          child: ModelPicker(
+            nullLabel: "Off",
+            defaultOf: LlmProviderConfig.lightDefaultOf,
+            helperOffText: "Classifies commands as safe, dangerous, or "
+                "uncertain. Off, auto mode asks for every command.",
             choice: (
               providerId: settings.classifierProviderId,
               modelId: settings.classifierModelId,
@@ -665,7 +685,30 @@ class _AgentSection extends ConsumerWidget {
           ),
         ),
         const _RetryTurnsField(),
+        const _MaxStepsField(),
       ],
+    );
+  }
+}
+
+/// The most model calls one direct turn may make before it stops for the
+/// user. Null is the backend's own default; Omada member turns run under it
+/// too — the value rides every turn — and the round's own bound is the
+/// generations cap beside it.
+class _MaxStepsField extends ConsumerWidget {
+  const _MaxStepsField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final steps = ref.watch(
+        appSettingsProvider.select((s) => s.turnMaxSteps));
+    return InheritableSlider(
+      label: "Max steps per turn",
+      value: steps,
+      stops: AppSettings.turnStepStops,
+      inherited: AppSettings.defaultTurnMaxSteps,
+      onChanged: (v) =>
+          ref.read(appSettingsProvider.notifier).setTurnMaxSteps(v),
     );
   }
 }
@@ -687,7 +730,8 @@ class _RetryTurnsField extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SwitchListTile(
-            contentPadding: EdgeInsets.zero,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text("Automatic retry"),
             value: on,
             onChanged: (value) => ref
                 .read(appSettingsProvider.notifier)
@@ -717,148 +761,68 @@ class _RetryTurnsField extends ConsumerWidget {
   }
 }
 
-/// Whether the agent reads AGENTS.md at all, and the sub-gates of a file it
-/// does read: the imports it follows, the nested ones a read pulls in, and
-/// the patterns that keep a file out.
-class _InstructionsSection extends ConsumerWidget {
-  const _InstructionsSection();
-
-  Future<void> _editExcludes(BuildContext context, WidgetRef ref) async {
-    final text = await promptForText(
-      context,
-      title: "Excluded files",
-      initial: ref.read(appSettingsProvider).instructionExcludes.join("\n"),
-      confirmLabel: "Save",
-      hint: "One glob per line. ** spans directories, * and ? do not; a "
-          "pattern without a / matches a file name.",
-      maxLines: 5,
-    );
-    if (text == null) return;
-    final patterns = [
-      for (final line in text.split("\n"))
-        if (line.trim().isNotEmpty) line.trim(),
-    ];
-    await ref
-        .read(appSettingsProvider.notifier)
-        .setInstructionExcludes(patterns);
-  }
+/// The room the settings page has for Omada at app level: what a new project
+/// starts as, how deep its agent rounds may go, and the scheduling a project
+/// that never chose runs under. A project's own page overrides the last two.
+class _OmadaSection extends ConsumerWidget {
+  const _OmadaSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
-    final excludes = settings.instructionExcludes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader(
-          "Instructions",
-          description: "The AGENTS.md files are read into every turn: yours, "
-              "at the root of your data directory, and the project's, in its "
-              "workspace: rules the user wrote down once. The rows below reach "
-              "further than those two, or keep one of them out.",
+          "Omada",
+          description: "Team chats: several named agents take part in a "
+              "project's replies, alongside the main one.",
         ),
         SwitchListTile(
-          title: const Text("Follow @file imports"),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: const Text("On by default for new projects"),
           subtitle: const Text(
-              "An @path inside an AGENTS.md pulls in the file it names."),
-          value: settings.instructionImports,
+              "The new-project dialog starts with team chats switched on. "
+              "Existing projects are untouched."),
+          value: settings.omadaByDefault,
           onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setInstructionImports(value),
+              ref.read(appSettingsProvider.notifier).setOmadaByDefault(value),
         ),
-        SwitchListTile(
-          title: const Text("Nested AGENTS.md"),
-          subtitle: const Text(
-              "Reading a file pulls in a subdirectory's own AGENTS.md."),
-          value: settings.nestedInstructions,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setNestedInstructions(value),
+        InheritableDropdown<OmadaOrdering>(
+          label: "Default round order",
+          value: settings.omadaOrdering,
+          inherited: omadaOrderingLabels[OmadaOrdering.sequential],
+          options: omadaOrderingLabels,
+          onChanged: (v) =>
+              ref.read(appSettingsProvider.notifier).setOmadaOrdering(v),
         ),
-        EditableRow(
-          title: "Excluded files",
-          subtitle: excludes.isEmpty ? "None" : excludes.join("\n"),
-          removeLabel: "Clear exclusions",
-          onTap: () => _editExcludes(context, ref),
-          onRemove: () => ref
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+              omadaOrderingDescriptions[
+                  settings.omadaOrdering ?? OmadaOrdering.sequential]!,
+              style: Theme.of(context).textTheme.bodySmall),
+        ),
+        InheritableSlider(
+          label: "Max generations per round",
+          value: settings.omadaMaxGenerations,
+          stops: AppSettings.omadaGenerationStops,
+          inherited: AppSettings.defaultOmadaMaxGenerations,
+          onChanged: (v) => ref
               .read(appSettingsProvider.notifier)
-              .setInstructionExcludes(const []),
+              .setOmadaMaxGenerations(
+                  v ?? AppSettings.defaultOmadaMaxGenerations),
         ),
-      ],
-    );
-  }
-}
-
-/// Whether the auto-memory subsystem runs: the master gate, its three sub-gates
-/// and the background model that writes memories.
-class _AutoMemorySection extends ConsumerWidget {
-  const _AutoMemorySection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
-    final on = settings.autoMemory;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          "Auto memory",
-          description: "A per-project store of short facts the agent reads into "
-              "relevant turns and writes from finished ones.",
-        ),
-        SwitchListTile(
-          title: const Text("Keep memories"),
-          subtitle: const Text(
-              "Off, the agent keeps no memories and recalls none."),
-          value: on,
-          onChanged: (value) =>
-              ref.read(appSettingsProvider.notifier).setAutoMemory(value),
-        ),
-        SwitchListTile(
-          title: const Text("Recall relevant memories"),
-          subtitle: const Text(
-              "Each turn is offered the memories its prompt is about."),
-          value: on && settings.memoryRecall,
-          onChanged: on
-              ? (value) => ref.read(appSettingsProvider.notifier).setMemoryRecall(value)
-              : null,
-        ),
-        SwitchListTile(
-          title: const Text("Write memories after a turn"),
-          subtitle: const Text(
-              "A background model keeps the facts a finished turn leaves "
-              "behind. Needs a model below."),
-          value: on && settings.memoryExtraction,
-          onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryExtraction(value)
-              : null,
-        ),
-        SwitchListTile(
-          title: const Text("Memory tools"),
-          subtitle: const Text(
-              "The agent can save a memory it judges worth keeping, and "
-              "search the store while a turn runs."),
-          value: on && settings.memoryAgentTool,
-          onChanged: on
-              ? (value) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryAgentTool(value)
-              : null,
-        ),
-        if (on)
-          LabelledField(
-            label: "Memory LLM",
-            child: OptionalModelPicker(
-              offLabel: "Off",
-              helperText: "What writes memories in the background. Off, "
-                  "extraction is inert and the store only ever holds what the "
-                  "agent or you saved.",
-              choice: (
-                providerId: settings.memoryProviderId,
-                modelId: settings.memoryModelId,
-              ),
-              onChanged: (choice) =>
-                  ref.read(appSettingsProvider.notifier).setMemoryModel(choice),
-            ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            "How many waves of agent-to-agent work one round may run before "
+            "it stops for you — your message starts the round, and a member "
+            "handing off to another starts the next wave. A project can set "
+            "its own.",
+            style: Theme.of(context).textTheme.bodySmall,
           ),
+        ),
       ],
     );
   }
@@ -899,6 +863,90 @@ class _TempChatSection extends ConsumerWidget {
   }
 }
 
+/// The nudge an empty Providers page stands in for: a recommended provider,
+/// the reason for it, and the two ways to act on it — signing up, or pasting
+/// a key already in hand. Gone the moment a provider of any kind is configured.
+class _RecommendedProvider extends ConsumerStatefulWidget {
+  const _RecommendedProvider();
+
+  @override
+  ConsumerState<_RecommendedProvider> createState() =>
+      _RecommendedProviderState();
+}
+
+class _RecommendedProviderState extends ConsumerState<_RecommendedProvider> {
+  static final _signUp = Uri.parse("https://signin.ollama.com/sign-up");
+  static final _privacy = Uri.parse("https://ollama.com/privacy");
+
+  static final _ollamaCloud =
+      llmProviderPresets.firstWhere((p) => p.id == "ollama-cloud");
+
+  final _apiKey = TextEditingController();
+
+  @override
+  void dispose() {
+    _apiKey.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addWithKey() async {
+    final key = _apiKey.text.trim();
+    if (key.isEmpty) return;
+    // Notifier first: adding the provider unmounts this card on the next
+    // frame, and the save must outlive it rather than resume on a defunct
+    // ref. The key goes to the store (setKey), never onto the config.
+    final notifier = ref.read(appSettingsProvider.notifier);
+    await notifier.upsertProvider(_ollamaCloud, setKey: key);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasKey = _apiKey.text.trim().isNotEmpty;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Entoli works with both privacy-respecting and other providers. "
+              "We recommend Ollama Cloud: it does not keep or train on your "
+              "prompts and outputs.",
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () =>
+                  ref.read(linkOpenerProvider).open(context, _signUp),
+              child: const Text("Sign up"),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () =>
+                  ref.read(linkOpenerProvider).open(context, _privacy),
+              child: const Text("Ollama Cloud privacy policy"),
+            ),
+            const Divider(height: 32),
+            const Text("Already have a key?"),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _apiKey,
+              obscureText: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: "Ollama API key"),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: hasKey ? _addWithKey : null,
+              child: const Text("Add Ollama Cloud"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProvidersEditor extends ConsumerWidget {
   const _ProvidersEditor();
 
@@ -911,13 +959,22 @@ class _ProvidersEditor extends ConsumerWidget {
     LlmProviderConfig? initial,
     String title = "Add provider",
   }) async {
-    final saved = await promptForProvider(context, initial: initial, title: title);
+    // Notifier first: this page can go away while the dialog is open, and the
+    // save must outlive it rather than resume on a defunct ref.
+    final notifier = ref.read(appSettingsProvider.notifier);
+    final secrets = ref.read(appSecretsProvider);
+    final saved = await promptForProvider(
+      context,
+      initial: initial,
+      storedKey: initial == null ? null : secrets.providerKey(initial.id),
+      encrypted: secrets.encrypted,
+      title: title,
+    );
     if (saved == null) return;
-    final providers = [
-      ...ref.read(appSettingsProvider).llmProviders.where((p) => p.id != saved.id),
-      saved,
-    ];
-    await ref.read(appSettingsProvider.notifier).setProviders(providers);
+    // A renamed provider is a move: the stored key follows the new id and the
+    // old entry goes, in the same upsert — the notifier owns both stores.
+    await notifier.upsertProvider(saved.config,
+        fromId: initial?.id, setKey: saved.setKey);
   }
 
   Future<void> _remove(WidgetRef ref, LlmProviderConfig provider) async {
@@ -934,6 +991,7 @@ class _ProvidersEditor extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (providers.isEmpty) const _RecommendedProvider(),
         SectionHeader(
           "Providers",
           description: providers.isEmpty
@@ -944,7 +1002,8 @@ class _ProvidersEditor extends ConsumerWidget {
         for (final provider in providers)
           EditableRow(
             title: provider.displayName,
-            subtitle: _describe(provider),
+            subtitle: _describe(provider,
+                storedKey: ref.read(appSecretsProvider).providerKey(provider.id)),
             removeLabel: "Remove ${provider.id}",
             onTap: () => _upsert(context, ref,
                 initial: provider, title: "Edit ${provider.displayName}"),
@@ -981,9 +1040,9 @@ class _ProvidersEditor extends ConsumerWidget {
     if (context.mounted) chosen?.call();
   }
 
-  String _describe(LlmProviderConfig provider) {
-    final key = provider.apiKey.isNotEmpty
-        ? "key set"
+  String _describe(LlmProviderConfig provider, {String? storedKey}) {
+    final key = storedKey != null
+        ? "key stored"
         : provider.apiKeyEnv != null
             ? "\$${provider.apiKeyEnv}"
             : "no key";

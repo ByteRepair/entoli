@@ -21,6 +21,7 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$here/versions.sh"
+source "$here/../fetch.sh"
 
 abi=${1:?usage: build.sh <abi>}
 work=${WORK_DIR:-$here/build}
@@ -66,15 +67,6 @@ llama_abis=${LLAMA_ABIS:-arm64-v8a}
 if [[ " $llama_abis " == *" $abi "* ]]; then llama=yes; else llama=no; fi
 
 mkdir -p "$work" "$out"
-
-fetch() {
-  local url=$1 file=$2 sha=$3
-  if [ ! -f "$work/$file" ]; then
-    curl -fsSL --retry 3 -o "$work/$file.part" "$url"
-    mv "$work/$file.part" "$work/$file"
-  fi
-  echo "$sha  $work/$file" | sha256sum -c - >/dev/null
-}
 
 echo "==> fetching sources"
 fetch "$TALLOC_URL" "talloc.tar.gz" "$TALLOC_SHA256"
@@ -241,8 +233,13 @@ else
       -DSPIRV-Headers_DIR="$spirv/share/cmake/SPIRV-Headers"
       # The server downloads models when it is told to; this app does its own
       # downloading, and linking curl here would mean cross-compiling it a second
-      # time for a feature nothing reaches.
+      # time for a feature nothing reaches. LLAMA_OPENSSL is pinned OFF beside
+      # it — the option defaults ON, and the NDK today has no OpenSSL for
+      # find_package to find, which is OFF by accident; a future NDK that ships
+      # it would link libssl into the APK for the staging check's sysroot
+      # half to wave through, and the failure would land on a phone.
       -DLLAMA_CURL=OFF
+      -DLLAMA_OPENSSL=OFF
       -DLLAMA_BUILD_SERVER=ON
       -DLLAMA_BUILD_TESTS=OFF
       -DLLAMA_BUILD_EXAMPLES=OFF

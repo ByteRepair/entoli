@@ -49,6 +49,35 @@ void main() {
     expect(projectLabel("work"), "work");
   });
 
+  group("the empty-chat question", () {
+    // The default project and the user's projects have no shipped question;
+    // what they show is the description they set, or the app default.
+    test("the default question is what nothing set asks", () {
+      expect(emptyChatQuestionFor(null, description: null),
+          defaultEmptyChatQuestion);
+      expect(emptyChatQuestionFor("work", description: null),
+          defaultEmptyChatQuestion);
+    });
+
+    // Where a project sets one, it is the answer — the badge's own text,
+    // swept in by the screen's animation. The default project is gated at
+    // the provider, which reads no description for it; the function itself
+    // answers for any project that is not a built-in.
+    test("a project's description is what it set", () {
+      expect(emptyChatQuestionFor("work", description: "What are we building?"),
+          "What are we building?");
+      expect(
+          emptyChatQuestionFor(null, description: "What are we building?"),
+          "What are we building?");
+    });
+
+    // Empty is the screen asking nothing, distinct from unset.
+    test("empty asks nothing and null falls back", () {
+      expect(emptyChatQuestionFor("work", description: ""), isNull);
+      expect(emptyChatQuestionFor("work", description: "  "), isNull);
+    });
+  });
+
   group("the built-in projects", () {
     // The built-in projects, in the order the menus offer them: the anonymous
     // one first, then Byte Repair. Each is a directory under projects/ like

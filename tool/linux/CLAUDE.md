@@ -25,7 +25,21 @@ lets any such copy claim the window.
 
 **Nothing of GTK is bundled.** The AppImage carries the Flutter engine and the
 plugins and links against the system's GTK 3, exactly as the bundle already
-did.
+did. One native addition the bundle does carry, where it was staged:
+**llama.cpp's server**, built by `tool/linux/build-llama.sh` into
+`build/llama/` and installed by `linux/CMakeLists.txt` into the bundle's
+`lib/` beside the engine — the same directory the launcher's rpath already
+resolves, and the one place `platformLocalLlm` looks beside the executable. A
+build that skipped the script ships without it, and the On-device page says
+that rather than hiding the category. The app is built after the script runs,
+so a bundle either carries the server whole or not at all.
+
+**The session bus is a runtime dependency.** The reminders feature posts its
+notifications over `org.freedesktop.Notifications` on it
+(`lib/data/local/linux_reminder_alarms.dart`), and the sync keyring reaches
+the Secret Service through the same bus. A session without a bus — headless, a
+minimal window manager, the dev toolbox — leaves reminders saying so in the
+settings page and the keyring on its file fallback; nothing crashes over it.
 
 `appimagetool` is pinned to a release rather than tracking `continuous`, and to
 a SHA-256 beside it: it builds the file the release is attested by, and a

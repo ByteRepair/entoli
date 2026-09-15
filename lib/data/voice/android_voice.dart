@@ -5,26 +5,37 @@ import "package:flutter/services.dart";
 import "../../domain/loudness.dart";
 import "../../domain/voice.dart";
 import "../../domain/voice_model.dart";
+import "../../domain/voice_model_store.dart";
+import "sherpa_voice.dart";
 import "voice_strategies.dart";
 
-/// Voice mode on Android, and the whole of it: the device's own `TextToSpeech`
-/// and `SpeechRecognizer`, and nothing that has to be downloaded.
+/// Voice mode on Android: the device's own `TextToSpeech` and
+/// `SpeechRecognizer` where their sentinel is what was picked, and sherpa-onnx
+/// where a downloaded model was — the same halves the desktops use, composed
+/// through a [SherpaVoice] this holds, since sherpa's native code ships in the
+/// APK.
 ///
-/// sherpa-onnx is not here, deliberately. It ran on the CPU — onnxruntime's
-/// Android build has no GPU execution provider and the only accelerator route
-/// it has is deprecated — while the system engines run on whatever the phone
-/// has, which on most of them is the NPU. Keeping it would have been 75 MB of
-/// native code for a slower answer. It stays on the desktops, which have no
-/// system engine to ask. See "The Android system engines" in CLAUDE.md.
+/// The system engines stay the default where they exist: nothing to download,
+/// and they run on whatever silicon the phone has. The fallback exists because
+/// a recognizer the user never made the system default binds with no
+/// microphone capability — the session opens and no audio ever arrives — and a
+/// phone whose only recognizer is in that position (a de-Googled one, or
+/// Google's under GrapheneOS's sandbox) hears nothing, whatever the app does.
+/// See "The Android system engines" in CLAUDE.md.
 ///
-/// So [start] only ever composes native strategies, and a pick that is not a
-/// sentinel is a bug rather than a case: nothing offers one here, since the
-/// catalog is not drawn on this platform.
+/// Each half routes on its own pick, so the four pairings all work: system
+/// listening and speaking, a downloaded recognizer over the system's voice,
+/// and the reverse.
 class AndroidVoice extends Voice {
-  const AndroidVoice();
+  AndroidVoice(VoiceModelStore store, String cacheDir)
+      : _sherpa = SherpaVoice(store, cacheDir);
+
+  /// The sherpa halves, composed where a pick names a downloaded model rather
+  /// than a system engine.
+  final SherpaVoice _sherpa;
 
   @override
-  bool get downloadsModels => false;
+  bool get hasSystemEngines => true;
 
   @override
   Future<NativeVoiceEngines> systemEngines() async {
@@ -74,23 +85,30 @@ class AndroidVoice extends Voice {
     int speaker = 0,
     String? language,
   }) async {
-    if (!speech.isNative || (recognition != null && !recognition.isNative)) {
-      throw StateError("Android runs the system voice engines, not a model.");
-    }
     Listener? listener;
     if (recognition != null) {
-      // Asked for even where nothing is about to listen: the grant is what
-      // makes the Talk button work, and a permission sheet on the first press
-      // is one nobody expected.
-      (await openMicrophone()).dispose();
-      listener = AndroidSpeechRecognizer(language: language);
+      if (recognition.isNative) {
+        // Asked for even where nothing is about to listen: the grant is what
+        // makes the Talk button work, and a permission sheet on the first press
+        // is one nobody expected.
+        (await openMicrophone()).dispose();
+        listener = AndroidSpeechRecognizer(language: language);
+      } else {
+        listener = await _sherpa.sherpaListener(recognition);
+      }
     }
     // `speaker` is the sherpa catalog's idea of which voice in a model file to
     // use, and the system synthesiser has no such thing — the voice is the
-    // user's, set in the OS. So the settings page draws no picker for it here
-    // and nothing is passed on. The language is the picker it draws instead.
-    return ComposedVoiceSession(
-        listener, AndroidTextToSpeech(language: language));
+    // user's, set in the OS. So the settings page draws no picker for it on the
+    // native half and nothing is passed on. The language is the picker it
+    // draws instead — and is likewise the native synthesiser's: a downloaded
+    // model speaks the language it was trained on.
+    return composeSession(
+      listener,
+      speech.isNative
+          ? Future.value(AndroidTextToSpeech(language: language))
+          : _sherpa.sherpaSpeaker(speech, speaker),
+    );
   }
 }
 

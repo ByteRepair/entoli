@@ -14,6 +14,7 @@ import "../../data/local/file_chat_store.dart";
 import "../../data/local/byte_repair_store.dart" show ByteRepairStore;
 import "../../data/prompts/prompt_sources.dart";
 import "../../domain/app_settings.dart";
+import "../../domain/app_secrets.dart";
 import "../../domain/background_work.dart";
 import "../../domain/assistant_launch.dart";
 import "../../domain/backup_handoff.dart";
@@ -59,6 +60,8 @@ BuiltinBackend createBackend(
   required LocalLlm localLlm,
   LocalKvCache? kvCache,
   String? byteRepairBinDir,
+  required AppSecrets secrets,
+  String? loginPath,
 }) {
   AppSettings settings() => AppSettings.load(config);
   final backend = BuiltinBackend(
@@ -83,6 +86,7 @@ BuiltinBackend createBackend(
         project: project,
         config: config,
         byteRepairBinDir: byteRepairBinDir,
+        loginPath: loginPath,
       ),
       // iOS resolves its own shell (IshShell, not LocalShell) from these —
       // the driver callback above is exec-based and iOS denies a child process.
@@ -97,7 +101,14 @@ BuiltinBackend createBackend(
       // Settings wins, but a key already exported is found without having to
       // be pasted in.
       lookupEnv: (name) => settings().environment[name] ?? processEnv(name),
+      // The stored keys are the middle of the order in the registry: pasted
+      // config wins over them, they win over a named variable.
+      lookupKey: secrets.providerKey,
     ),
+    // Read fresh per turn rather than captured: the slider is a setting, and
+    // an edit reaches the next turn the way the environment does.
+    options: BuiltinOptions(
+        stepLimit: settings().turnMaxSteps ?? AppSettings.defaultTurnMaxSteps),
   );
   for (final entry in libraries.entries) {
     backend.setLibrary(entry.key, entry.value);
@@ -135,7 +146,10 @@ LocalPrefill? createLocalPrefill(
       // What a default top-level turn is offered: the device's facts, no
       // project's takes, nothing headless. A turn a built-in project narrows
       // misses the warmed prefix rather than the cache serving a list no turn
-      // sends.
+      // sends. The tone and citations answers are the app's for the same
+      // reason: a project that pins its own in `project.json` sends a body
+      // that differs here, and misses the prefix too — the app-level answer
+      // is the one every chat shares.
       final caps = AgentCapabilities.forTurn(
         commands: shell.canRunCommands,
         webSearch: backend.webSearch.available,
@@ -147,6 +161,8 @@ LocalPrefill? createLocalPrefill(
            agentSystemMessage(
              platform: shell.platformDescription,
              profile: now.profile,
+             tone: now.tone,
+             citations: now.citations,
              caps: caps,
              // The same skills a turn's prompt lists, off the same library the
              // backend holds — a warm-up built without them caches a prefix no
@@ -291,6 +307,10 @@ Future<String> cacheDir() => platformCacheDir();
 /// Silero's detector where there is one and nothing in a browser.
 void registerVoiceLicences() => platformRegisterVoiceLicences();
 
+/// The recorder voice mode's microphone runs on, where the platform has one
+/// of its own to register.
+void registerRecorder() => platformRegisterRecorder();
+
 /// The downloaded voice models, and what runs them. Two rather than one because
 /// settings manages models with nothing listening, and a session needs the
 /// store to find what it has been told to load.
@@ -332,9 +352,9 @@ BackupHandoff createBackupHandoff(AppConfig config, FileHandoff handoff) =>
 /// handler inert.
 AssistantLaunch createAssistantLaunch() => platformAssistantLaunch();
 
-/// The system clock a reminder is set against: AlarmManager on Android,
-/// nothing anywhere else yet.
-ReminderAlarms createReminderAlarms() => platformReminderAlarms();
+/// The system clock a reminder is set against: AlarmManager on Android, the
+/// session bus's notifications on Linux, nothing anywhere else.
+Future<ReminderAlarms> createReminderAlarms() => platformReminderAlarms();
 
 /// The presets, and the user's own beside them. Their directory is on the
 /// config's filesystem, so it exists on every platform now. The bundled
@@ -353,6 +373,13 @@ List<PromptSource> createPromptSources(AppConfig config, {String? project}) => [
 /// this is the system device name, read through a method channel; on Linux the
 /// hostname; null where the platform has none of its own (the web).
 Future<String?> deviceHostname() => platformHostname();
+
+/// The user's login shell's PATH, or null where there is nothing to ask — a
+/// platform with no shell behind its commands, or a login shell this build
+/// does not know how to read. Answered once per app run by `main.dart`, and
+/// the answer reaches every command's driver after it; the capture is a
+/// subprocess round trip, so it is never asked for where a driver is built.
+Future<String?> captureLoginPath() => platformCaptureLoginPath();
 
 /// Makes the skill directories read-only so a model running `bash` cannot
 /// unintentionally write to them. No-op on the web (no bash). See

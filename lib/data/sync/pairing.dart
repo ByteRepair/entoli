@@ -67,6 +67,7 @@ class SyncPairing {
     required this.identity,
     required this.registry,
     required this._settings,
+    String? Function()? turnPassword,
     required this._peers,
     required LanSignaling? Function() lanSignaling,
     required this.onMessage,
@@ -75,12 +76,18 @@ class SyncPairing {
     this._hostname,
     http.Client? client,
     RelayDial? relayDial,
-  })  : _lanFactory = lanSignaling,
+  })  : _turnPassword = turnPassword ?? (() => null),
+        _lanFactory = lanSignaling,
         _relayDial = relayDial ?? RelaySignaler.connect,
         _client = client ?? http.Client();
 
   final SyncIdentity identity;
   final DeviceRegistry registry;
+
+  /// The TURN credential, read from the secret store through the closure
+  /// rather than from settings — where it no longer lives. Read per ICE
+  /// config, the way the URL and username are: an edit reaches the next dial.
+  final String? Function() _turnPassword;
   final AppSettings Function() _settings;
   final SyncPeers _peers;
 
@@ -430,7 +437,7 @@ class SyncPairing {
       servers.add({
         "urls": turn,
         "username": ?_settings().turnUsername,
-        "credential": ?_settings().turnPassword,
+        "credential": ?_turnPassword(),
       });
     }
     return servers;
@@ -580,13 +587,12 @@ class SyncPairing {
     try {
       final sdp = await link.offer();
       final signaler = LanSignaler(client: _client);
-      final String answer;
-      try {
-        answer = await signaler.exchange(
-            hosts: hosts, ports: ports, code: code, token: token, offerSdp: sdp);
-      } finally {
-        signaler.close();
-      }
+      final answer = await signaler.exchange(
+          hosts: hosts,
+          ports: ports,
+          code: code,
+          token: token,
+          offerSdp: sdp);
       await link.acceptAnswer(answer);
       await _establish(
         link: await link.open(),

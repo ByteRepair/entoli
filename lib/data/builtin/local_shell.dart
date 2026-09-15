@@ -124,9 +124,30 @@ class LocalShell extends Shell {
   /// Where this shell reaches a guest or Android: the home is one directory
   /// every project would share, so a command gets the project workspace as
   /// its `HOME` and one project is one environment. On a desktop it is false,
-  /// where a turn's `sharedHome` answers for the home instead.
+  /// where the machine user's own `HOME` stands.
   @override
   bool get projectHome => _driver()?.projectHome ?? false;
+
+  /// One expression, beside the shell that reads it: `io/platform.dart`'s
+  /// `_home` composes the data and cache directories from the same answer.
+  static String? machineHomeDir() =>
+      Platform.environment["HOME"] ?? Platform.environment["USERPROFILE"];
+
+  /// The machine user's own home directory; null where there is no real user
+  /// home (the web, Android's app-private storage).
+  @override
+  String? get machineHome => machineHomeDir();
+
+  /// What `HOME` is for a command here: the workspace the driver takes where
+  /// it takes one, the machine user's own otherwise. One answer, so the
+  /// prompt, the file tools and [composeEnvironment] cannot disagree.
+  @override
+  String? homeFor(String home) {
+    final driver = _driver();
+    return (driver?.projectHome ?? false)
+        ? driver?.guestRoot ?? home
+        : machineHome;
+  }
 
   /// Where the project workspace appears inside the guest, or null on the
   /// machine itself. The file tools translate paths under it back to the
@@ -151,32 +172,63 @@ class LocalShell extends Shell {
     String? Function()? shell,
     bool projectHome = false,
     Map<String, String>? environment,
+    SandboxHelper? sandboxHelper,
+    String? loginPath,
   }) {
     final path = (shell ?? (() => shellPath))();
     if (path == null) return null;
+    // The login shell's PATH is the base of the command environment, under
+    // anything the caller layers on: a user-set `PATH` in the settings or a
+    // project's bin directory still wins, which is the layering
+    // [composeEnvironment] keeps.
+    final environment0 = loginPath == null
+        ? environment
+        : {"PATH": loginPath, ...?environment};
     final where = "${Platform.operatingSystem} ${Platform.operatingSystemVersion}, "
         "commands run under $path";
     final bundled = tools?.names;
     if (bundled != null) {
       return _host(path, tools, "$where, with $bundled bundled with the app",
-          projectHome: projectHome, environment: environment);
+          projectHome: projectHome, environment: environment0,
+          sandboxHelper: sandboxHelper);
     }
     final description = Platform.isAndroid && tools?.proot != null
         ? "$where. There is no git and no package manager here; installing "
             "a Linux from the Terminal settings gives you both"
         : where;
     return _host(path, tools, description,
-        projectHome: projectHome, environment: environment);
+        projectHome: projectHome, environment: environment0,
+        sandboxHelper: sandboxHelper);
   }
 
   static ShellDriver _host(String path, Toolset? tools, String description,
-          {bool projectHome = false, Map<String, String>? environment}) =>
+          {bool projectHome = false, Map<String, String>? environment,
+          SandboxHelper? sandboxHelper}) =>
       ShellDriver(
         commandFor: (_, _) => [path],
         environment: {...?environment, ...?tools?.environment},
         projectHome: projectHome,
         description: description,
+        sandboxHelper: sandboxHelper,
       );
+
+  @override
+  SandboxHelper? get driverSandboxHelper {
+    final helper = _driver()?.sandboxHelper;
+    return helper;
+  }
+
+  @override
+  String? tmpDirFor(String workspace) {
+    // The chat workspace's own scratch directory: inside the granted set a
+    // sandbox names, beside the files the command is there to touch. A
+    // directory per chat rather than one shared tmp, so two chats' scratch
+    // never meet.
+    return Directory("$workspace/.entoli-tmp").path;
+  }
+
+  @override
+  bool get platformIsWindows => Platform.isWindows;
 
   @override
   ValueListenable<String?>? sessionCwd(String cwd) {
@@ -196,11 +248,18 @@ class LocalShell extends Shell {
       required String home,
       required Duration timeout,
       Map<String, String>? environment,
-      bool sharedHome = true,
       bool oneShot = false,
       bool restart = false,
-      String? project}) {
-    if (oneShot) {
+      String? project,
+      CommandSandbox? sandbox}) {
+    // A sandboxed command runs in a confined subshell of its own, whatever
+    // the caller asked for: the session shell is the conversation's shared
+    // state, and a boundary asked for per command cannot be attached to it
+    // and dropped for the next — a `cd` into the workspace would stand in a
+    // shell whose exports, aliases and functions the next command inherits
+    // unconfined. The confinement is per run, so the run is.
+    final confined = sandbox != null || oneShot;
+    if (confined) {
       final driver = _driver(project: project);
       return _OneShotRun(
         // The driver's shell, built for this chat's cwd and home, or nothing
@@ -210,19 +269,15 @@ class LocalShell extends Shell {
         cwd: cwd,
         timeout: timeout,
         environment: _compose(
-            home: home,
-            driver: driver,
-            sharedHome: sharedHome,
-            environment: environment),
+            home: home, driver: driver, environment: environment),
         includeParentEnvironment: driver?.includeParentEnvironment ?? true,
+        sandbox: sandbox,
+        sandboxHelper: driver?.sandboxHelper,
       );
     }
     return _sessions
         .putIfAbsent(cwd, () => _Session(this, cwd, home, project: project))
-        .start(command, timeout,
-            environment: environment,
-            sharedHome: sharedHome,
-            restart: restart);
+        .start(command, timeout, environment: environment, restart: restart);
   }
 
   /// What a command runs under, with the layers in the order they win. The
@@ -236,19 +291,15 @@ class LocalShell extends Shell {
     required Map<String, String> defaults,
     ShellDriver? driver,
     required String home,
-    required bool sharedHome,
     required Map<String, String> app,
     Map<String, String>? project,
   }) =>
       {
         ...defaults,
         ...?driver?.environment,
-        // A guest's home is at [guestRoot] (e.g. `/root`), not the host path;
-        // Android's own home is a shared app user's, so the project workspace
-        // takes it; a home that is not shared is the chat's own. Where the home
-        // is shared on a desktop, the machine's own `HOME` stands.
-        if ((driver?.projectHome ?? false) || !sharedHome)
-          "HOME": driver?.guestRoot ?? home,
+        // The home is the workspace where the driver takes one — a guest's at
+        // [guestRoot], not the host path — and the machine's own otherwise.
+        if (driver?.projectHome ?? false) "HOME": driver?.guestRoot ?? home,
         ...app,
         ...?project,
       };
@@ -256,14 +307,12 @@ class LocalShell extends Shell {
   Map<String, String> _compose({
     required String home,
     required ShellDriver? driver,
-    required bool sharedHome,
     Map<String, String>? environment,
   }) =>
       composeEnvironment(
         defaults: _defaults,
         driver: driver,
         home: home,
-        sharedHome: sharedHome,
         app: _environment(),
         project: environment,
       );
@@ -333,6 +382,29 @@ void _signalGroup(Process process, bool ownsGroup, ProcessSignal signal) {
   process.kill(signal);
 }
 
+/// How much of a running command's output the live view holds. A tail, not the
+/// whole: the block on screen is the last of what has printed, and the final
+/// result already carries the whole.
+const _liveWindow = 8192;
+
+/// The live tail after [piece] lands on [prior]: newlines dropped, bounded to
+/// [_liveWindow]. What a running command's block shows; both run shapes keep
+/// one.
+String _liveTail(String prior, String piece) {
+  var out = prior + piece.replaceAll("\n", "");
+  if (out.length > _liveWindow) {
+    out = out.substring(out.length - _liveWindow);
+  }
+  return out;
+}
+
+/// The head of the sentinel that ends a run, before the token. What the live
+/// view holds back while it may still be forming — an `@@E` arriving with the
+/// rest of its line in the next chunk is held, not shown, and published the
+/// moment the next chunk proves it was ordinary output after all. The
+/// sentinel proper is consumed by the parse before the watch can report it.
+const _markerPrefix = "\n@@E";
+
 /// One persistent shell: the process, its queue, and the run waiting on it.
 /// Commands are written one at a time — a turn runs its commands in order and
 /// only one turn runs in a chat at a time — so there is at most one run to
@@ -394,15 +466,10 @@ class _Session {
   static const _grace = Duration(seconds: 1);
 
   ShellRun start(String command, Duration timeout,
-       {Map<String, String>? environment,
-       bool sharedHome = true,
-       bool restart = false}) {
+       {Map<String, String>? environment, bool restart = false}) {
     final run = _SessionRun(_RunState(timeout), this);
-    _queue = _queue.then((_) =>
-        _execute(run, command, timeout,
-            environment: environment,
-            sharedHome: sharedHome,
-            restart: restart));
+    _queue = _queue.then((_) => _execute(run, command, timeout,
+        environment: environment, restart: restart));
     return run;
   }
 
@@ -411,7 +478,6 @@ class _Session {
     String command,
     Duration timeout, {
     Map<String, String>? environment,
-    bool sharedHome = true,
     bool restart = false,
   }) async {
     final driver = _shell._driver(project: _project);
@@ -422,10 +488,7 @@ class _Session {
       return;
     }
     final env = _shell._compose(
-        home: _home,
-        driver: driver,
-        sharedHome: sharedHome,
-        environment: environment);
+        home: _home, driver: driver, environment: environment);
     final fp = _fingerprint(command0, env);
     if (restart || _fp != fp) {
       try {
@@ -508,6 +571,7 @@ class _Session {
     final run = _current;
     if (run == null) return;
     run.chunks.add(chunk);
+    run.publish(chunk, marker: _marker);
     // The marker is short and can only be at the end, so the end is all that
     // is looked at; the whole is joined once, when a marker is found.
     if (!run.tail(_marker.length + 8).contains(_marker)) return;
@@ -655,6 +719,12 @@ class _RunState {
   final List<String> chunks = [];
   final Completer<ShellResult> done = Completer();
 
+  /// What the live view of this run has been told so far, and the fragment
+  /// where the sentinel may still be forming. Only the tail is kept: the whole
+  /// output is in [chunks] and stays there for the final result.
+  String _emitted = "";
+  String _held = "";
+
   /// The last [length] of what has come in, without joining the lot.
   String tail(int length) {
     var out = "";
@@ -672,6 +742,40 @@ class _RunState {
   }
 
   String get output => chunks.join("");
+
+  /// What the live view of this run says now: the tail of the output, with
+  /// any fragment at its end that could be the sentinel's head held back
+  /// until the next chunk settles what it was. Newlines are dropped here so
+  /// the hold-back can search for `"\n@@E"` on what may still have them — the
+  /// search runs before the strip, and the held fragment rides along to the
+  /// next chunk rather than being published.
+  ///
+  /// Gated on [watched]: an output nobody reads pays nothing per chunk.
+  /// Trimmed to [_liveWindow] from the head.
+  void publish(String chunk, {required String marker}) {
+    if (!watched) return;
+    final joined = _held + chunk;
+    _held = "";
+    final cut = joined.lastIndexOf(_markerPrefix);
+    String remainder;
+    if (cut == -1) {
+      remainder = joined;
+    } else {
+      _held = joined.substring(cut + 1); // the sentinel head has no newline
+      remainder = joined.substring(0, cut);
+    }
+    if (remainder.isNotEmpty) {
+      _emitted = _liveTail(_emitted, remainder.replaceAll(marker, ""));
+    }
+    liveOutput.value = _emitted.isEmpty ? null : _emitted;
+  }
+
+  /// Whether anyone is reading [liveOutput]. A run nobody watches — a
+  /// sub-agent's, any run before a watch lands — keeps publishing off.
+  bool watched = false;
+
+  /// Where each live update is read from. Created with the run.
+  final ValueNotifier<String?> liveOutput = ValueNotifier(null);
 
   /// Guarded: a stop, a close and the sentinel all race for the same run.
   void complete(ShellResult result) {
@@ -692,10 +796,42 @@ class _SessionRun implements ShellRun {
   Future<ShellResult> get result => state.done.future;
 
   @override
+  ValueListenable<String?>? get output {
+    // Asking is the watch: before this the session's chunks pay nothing for a
+    // view nobody reads.
+    state.watched = true;
+    return state.liveOutput;
+  }
+
+  @override
   Future<void> kill() async {
     _session._interrupt(state, byTimeout: false);
   }
 }
+
+/// The failure a one-shot run's spawn carries when a sandbox was asked for
+/// and could not be built. Thrown rather than returned so [result] completes
+/// as a failed command; `_run` catches it as its own case so the fail-closed
+/// reason reaches the model un-mangled.
+class ShellUnavailable implements Exception {
+  const ShellUnavailable(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// The line a refused write prints: either the shell's own (`sh: /path:
+/// Permission denied`) or the tool's (`tool: cannot open '/path' for
+/// writing: Permission denied`). A build's errors are the model's only
+/// report of what the sandbox took away, so both wordings are matched. The
+/// [writeWords] group is the tool's own name for a write — `cannot touch`,
+/// `cannot create`, `for writing` — and is what says a match may be worded
+/// `writing` rather than neutrally; the shell's redirect shape carries no
+/// such words, so it reads `denied` and a read refused by the file's own
+/// Unix perms is not misreported as a write.
+final RegExp deniedPathPattern = RegExp(
+    r"""(?:^|[\s:"'(])(?:(?<write>cannot (?:open|touch|create regular file|create) )?|[\s:"(])'?(/[\w.@+/ -]*?)'?(?<forwriting>\s*for writing)?(?:\s*in)?\s*: (?:Permission denied|Read-only file system)""",
+    multiLine: true);
 
 /// What a `oneShot` command is: today's contract, a fresh subshell per
 /// command, kept for sub-agents and for the platforms a persistent shell
@@ -708,6 +844,8 @@ class _OneShotRun implements ShellRun {
     required this.timeout,
     required this.environment,
     this.includeParentEnvironment = true,
+    this.sandbox,
+    this.sandboxHelper,
   }) {
     result = _run();
   }
@@ -723,12 +861,29 @@ class _OneShotRun implements ShellRun {
   final Map<String, String> environment;
   final bool includeParentEnvironment;
 
+  /// The confinement this one command runs under, with the helper that
+  /// applies it. Both null where there is nothing to apply — the common case,
+  /// and the only one a platform without confinement is ever handed.
+  final CommandSandbox? sandbox;
+  final SandboxHelper? sandboxHelper;
+
   @override
   late final Future<ShellResult> result;
 
   Process? _process;
   bool _ownsGroup = false;
   bool _killed = false;
+
+  /// The live tail of the output, created by the first read of [output] and
+  /// kept by [_run]'s read loop only from then on — a one-shot run is a
+  /// sub-agent's command, and nobody asks for its output today.
+  ValueNotifier<String?>? _notifier;
+
+  String? _emitted;
+
+  @override
+  ValueListenable<String?>? get output =>
+      _notifier ??= ValueNotifier<String?>(null);
 
   @override
   Future<void> kill() async {
@@ -751,7 +906,10 @@ class _OneShotRun implements ShellRun {
       // with its progress is the whole value of reading them.
       final reading = process.stdout
           .transform(const Utf8Decoder(allowMalformed: true))
-          .listen(output.write);
+          .listen((chunk) {
+        output.write(chunk);
+        _publish(chunk);
+      });
       // Asked for here rather than below: `asFuture` replaces the done handler,
       // so one asked for after the pipe has closed never completes at all.
       final drained = reading.asFuture<void>();
@@ -767,15 +925,24 @@ class _OneShotRun implements ShellRun {
           returnCode: -1,
           output: output.toString(),
           exceptionInfo: "The command was interrupted and killed.",
+          violations: _violations(output.toString()),
         );
       }
-      if (timer.isActive) return ShellResult(returnCode: code, output: output.toString());
+      if (timer.isActive) {
+        return ShellResult(returnCode: code, output: output.toString(),
+            violations: _violations(output.toString()));
+      }
       return ShellResult(
         returnCode: -1,
         output: output.toString(),
         exceptionInfo: "The command timed out after ${timeout.inSeconds}s and was killed. "
             "Anything it printed before that is above.",
+        violations: _violations(output.toString()),
       );
+    } on ShellUnavailable catch (e) {
+      // Fail-closed has its own words: a confinement that did not happen is
+      // not a spawn error, and the reason is what the model rewrites around.
+      return ShellResult.failed(e.message, output: output.toString());
     } catch (e) {
       return ShellResult.failed(
         "An error occurred while executing the command: $e",
@@ -786,15 +953,77 @@ class _OneShotRun implements ShellRun {
     }
   }
 
+  /// What the confinement denied, read out of the command's own output: a
+  /// write the kernel refused prints its EACCES, and the line names the path.
+  /// Only lines naming a path outside what the sandbox granted are collected
+  /// — a permission error on a workspace file is the command's own business,
+  /// not the sandbox's — and the count is capped, so one bad loop cannot
+  /// bury the tool result in copies of the same refusal.
+  List<String> _violations(String text) {
+    if (sandbox == null) return const [];
+    final workspace = sandbox!.workspace;
+    final tmp = sandbox!.tmp;
+    // The path and whether the line worded a write. A read refusal carries
+    // no write words and reads neutrally, so a `cat` denied by the file's
+    // own Unix perms is not misreported as a write this sandbox did not
+    // take away.
+    final found = <String, bool>{};
+    for (final match in deniedPathPattern.allMatches(text)) {
+      final path = match.group(2);
+      if (path == null || path.isEmpty) continue;
+      if (pathInside(path, workspace) || tmp != null && pathInside(path, tmp)) {
+        continue;
+      }
+      if (path == "/dev/null") continue;
+      final isWrite = match.namedGroup("write") != null ||
+          match.namedGroup("forwriting") != null;
+      found[path] = (found[path] ?? false) || isWrite;
+      if (found.length >= 5) break;
+    }
+    return [
+      for (final entry in found.entries)
+        entry.value ? "writing ${entry.key}" : "denied ${entry.key}"
+    ];
+  }
+
   /// `exec 2>&1` redirects the shell's own error output and everything it goes
   /// on to spawn, which is what makes the transcript read in order.
   ///
   /// Whether `setsid` exists is learned by trying it rather than by probing
   /// first: a failed spawn says the same thing without costing a subprocess.
   Future<Process> _spawn() async {
-    final argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
+    var argv = [...command.skip(1), "-c", "exec 2>&1\n$script"];
+    var head = command.first;
+    // The sandboxed shape: the helper's prefix goes ahead of the shell, so
+    // the subshell and everything it execs is confined from its first
+    // instruction. A sandbox asked for and not built is a command not run —
+    // the same fail-closed answer the session path gives.
+    var confined = environment;
+    if (sandbox != null) {
+      final prefix =
+          sandboxHelper == null ? null : await sandboxHelper!.prefixFor(sandbox!);
+      if (prefix == null) {
+        throw const ShellUnavailable("No sandbox is available on this machine "
+            "to run this command confined, so it was not run. Landlock needs "
+            "Linux 5.13 or newer and a C compiler.");
+      }
+      // The helper refuses a grant to a directory that is not there, so the
+      // tmp the ruleset names is made before the spawn. It is inside the
+      // workspace, so making it costs nothing the sandbox has not already
+      // granted.
+      final tmp = sandbox!.tmp;
+      if (tmp != null) {
+        Directory(tmp).createSync(recursive: true);
+        confined = {...environment, "TMPDIR": tmp};
+      }
+      // The helper's prefix, then the driver's whole shell argv: the shell is
+      // confined from its first instruction and `-c` with the script goes on
+      // the end of it, the shape the helper's usage line takes.
+      head = prefix.first;
+      argv = [...prefix.skip(1), ...command, "-c", "exec 2>&1\n$script"];
+    }
     final started = await LocalShell._spawnInGroup(
-        [command.first, ...argv], cwd, environment,
+        [head, ...argv], cwd, confined,
         includeParentEnvironment: includeParentEnvironment);
     _ownsGroup = started.ownsGroup;
     return started.process;
@@ -806,5 +1035,15 @@ class _OneShotRun implements ShellRun {
     final process = _process;
     if (process == null) return;
     _signalGroup(process, _ownsGroup, ProcessSignal.sigkill);
+  }
+
+  /// The one-shot run has no sentinel — the subshell is gone when the command
+  /// is — so what reaches the live view is [_liveTail]'s answer alone. A run
+  /// nobody reads has no notifier and keeps nothing per chunk.
+  void _publish(String chunk) {
+    final notifier = _notifier;
+    if (notifier == null) return;
+    _emitted = _liveTail(_emitted ?? "", chunk);
+    notifier.value = _emitted;
   }
 }

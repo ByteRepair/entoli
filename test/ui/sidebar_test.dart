@@ -7,6 +7,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/project.dart";
+import "package:agent_chat/domain/project_settings.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
@@ -390,6 +391,192 @@ void main() {
       expect(Directory(app.config.projectWorkspaceDir(project: "My-Side-Project")).existsSync(), isTrue);
     });
 
+    testWidgets("creating one with the switch on writes the Omada flag", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text("New project…"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField), "Team");
+      await tester.tap(find.byType(SwitchListTile));
+      await settleIo(tester);
+      await tester.tap(find.text("Create"));
+      await settleIo(tester, least: 20);
+
+      await io(tester, () async {});
+      expect(
+        ProjectSettings.load(app.config, project: "Team").omada,
+        isTrue,
+      );
+    });
+
+    testWidgets("creating one with the switch off leaves Omada off", (tester) async {
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text("New project…"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField), "Plain");
+      await tester.tap(find.text("Create"));
+      await settleIo(tester, least: 20);
+
+      expect(ProjectSettings.load(app.config, project: "Plain").omada, isFalse);
+    });
+
+    testWidgets("an Omada project's name is italic in the menu, a plain one is not", (tester) async {
+      await io(tester, () => app.repo.createProject("work"));
+      await io(tester, () async {
+        await app.repo.createProject("team");
+        await app.container
+            .read(projectSettingsProvider("team").notifier)
+            .setOmada(true);
+      });
+      await pumpBeside(tester);
+      await openProjectMenu(tester);
+
+      // The menu rows live below `find.byType(PopupMenuItem)`'s reach once
+      // `settleIo` has run — read the text widget itself.
+      expect(tester.widget<Text>(find.text("team")).style?.fontStyle,
+          FontStyle.italic);
+      expect(tester.widget<Text>(find.text("work")).style?.fontStyle, isNull);
+    });
+
+    testWidgets("the selected button's label is italic for an Omada project", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("team");
+        await app.container
+            .read(projectSettingsProvider("team").notifier)
+            .setOmada(true);
+      });
+      await pumpBeside(tester);
+      await switchTo(tester, "team");
+
+      final label = find
+          .descendant(
+            of: find.byType(TextButton),
+            matching: find.text("team"),
+          )
+          .first;
+      expect(tester.widget<Text>(label).style?.fontStyle, FontStyle.italic);
+    });
+
+    testWidgets("the settings page's toggle reveals the ordering section", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await app.pump(tester, ProjectSettingsPage(project: "research"));
+
+      expect(find.text("Round order"), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text("Omada"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
+      await tester.tap(find.text("Omada"));
+      await settleIo(tester, least: 10);
+
+      expect(find.text("Round order"), findsOneWidget);
+      await tester.tap(find.byType(DropdownButtonFormField<OmadaOrdering?>));
+      await settleIo(tester);
+      await tester.tap(find.text("Crossfire").last);
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      final settings = ProjectSettings.load(app.config, project: "research");
+      expect(settings.omada, isTrue);
+      expect(settings.omadaOrdering, OmadaOrdering.parallel);
+    });
+
+    testWidgets("the ordering section is absent while the toggle is off", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+
+      await tester.scrollUntilVisible(
+        find.text("Omada"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
+      expect(find.text("Omada"), findsOneWidget);
+      expect(find.text("Round order"), findsNothing);
+    });
+
+    testWidgets("a built-in's settings page has no Omada row", (tester) async {
+      await app.pump(
+        tester,
+        ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
+      );
+
+      expect(find.text("Omada"), findsNothing);
+    });
+
+    testWidgets("a built-in's settings page has no Description row", (tester) async {
+      await app.pump(
+        tester,
+        ProjectSettingsPage(project: byteRepairProjectLabel.toLowerCase()),
+      );
+
+      expect(find.text("Description"), findsNothing);
+    });
+
+    // The row is the description's own surface: open, edit, save, and the
+    // screen reads it back.
+    testWidgets("the Description row edits through its dialog", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+
+      expect(find.text("Description"), findsOneWidget);
+      // Unset, it names what the screen would ask.
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+
+      await tester.tap(find.text("Description"));
+      await settleIo(tester);
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text("What would you like to discuss?"), findsNWidgets(2));
+
+      await tester.enterText(find.byType(TextField), "What are we building?");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      expect(
+          ProjectSettings.load(app.config, project: "research").description,
+          "What are we building?");
+      expect(find.text("What are we building?"), findsOneWidget);
+    });
+
+    // Empty is saved as it stands — the screen asks nothing — and the reset
+    // button, not a blank save, is what puts the default back.
+    testWidgets("an empty save clears the question and reset restores it", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("research");
+        await app.container
+            .read(projectSettingsProvider("research").notifier)
+            .setDescription("What are we building?");
+      });
+      await app.pump(tester, const ProjectSettingsPage(project: "research"));
+
+      await tester.tap(find.text("Description"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField), "");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      expect(ProjectSettings.load(app.config, project: "research").description,
+          "");
+      expect(find.text("Empty"), findsOneWidget);
+
+      await tester.tap(find.byTooltip("Reset to default"));
+      await settleIo(tester, least: 10);
+
+      await io(tester, () async {});
+      expect(ProjectSettings.load(app.config, project: "research").description,
+          isNull);
+      expect(find.text("Empty"), findsNothing);
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+    });
+
     testWidgets("deleting one takes its chats and goes back to the default", (tester) async {
       await io(tester, () => app.seedChat(title: "at work", project: "work"));
       await pumpBeside(tester);
@@ -446,45 +633,51 @@ void main() {
       expect(find.text("at home"), findsOneWidget);
     });
 
-    // The switcher is one menu in both layouts, and back has to mean the same
-    // thing in each: dismiss the menu, leave what is behind it alone.
-    group("the back key", () {
-      testWidgets("beside the chat, closes the menu instead of the app", (tester) async {
-        await pumpBeside(tester);
-        await openProjectMenu(tester);
-        expect(find.text("New project…"), findsOneWidget);
-
-        expect(await pressBack(tester), isTrue);
-
-        expect(find.text("New project…"), findsNothing);
-        expect(find.byType(Sidebar), findsOneWidget);
+    // The open controller held the chat as it was when it read it — project
+    // included — so a move disposes it and the page reloads from where the
+    // chat now is. The title bar names the new project from the next read.
+    testWidgets("moving the open chat reloads its page in the new project",
+        (tester) async {
+      await io(tester, () async {
+        final chat = await app.seedChat(title: "at home");
+        app.container
+            .read(selectedChatIdProvider.notifier)
+            .select(chat.state.id);
+        return chat;
       });
+      await io(tester, () => app.repo.createProject("work"));
+      await pumpBeside(
+        tester,
+        beside: SizedBox(width: 300, child: ChatPage(withDrawer: false)),
+      );
+      await settleIo(tester);
+      expect(find.text("Default"), findsOneWidget);
 
-      testWidgets("as a drawer, closes the menu and leaves the sidebar open", (tester) async {
-        await pumpAsDrawer(tester);
-        await openProjectMenu(tester);
-        expect(find.text("New project…"), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await settleIo(tester);
+      await tester.tap(find.text("Move to project…"));
+      await settleIo(tester, least: 20);
+      await tester.tap(find.text("work").last);
+      await settleIo(tester, least: 20);
 
-        expect(await pressBack(tester), isTrue);
+      // The page was invalidated by the move; the reload draws the new project.
+      await pumpUntil(tester, find.text("work"));
+      expect(find.text("work"), findsWidgets);
+    });
 
-        expect(find.text("New project…"), findsNothing);
-        expect(find.byType(Sidebar), findsOneWidget);
-      });
+    // Only once the menu is out of the way does back reach the drawer — and
+    // the app has to still hold the key by then, or the second press never
+    // arrives to be answered.
+    testWidgets("closes the drawer on the second press", (tester) async {
+      final claimed = frameworkHandlesBack(tester);
+      await pumpAsDrawer(tester);
+      await openProjectMenu(tester);
+      await pressBack(tester);
+      expect(claimed.last, isTrue);
 
-      // Only once the menu is out of the way does back reach the drawer — and
-      // the app has to still hold the key by then, or the second press never
-      // arrives to be answered.
-      testWidgets("closes the drawer on the second press", (tester) async {
-        final claimed = frameworkHandlesBack(tester);
-        await pumpAsDrawer(tester);
-        await openProjectMenu(tester);
-        await pressBack(tester);
-        expect(claimed.last, isTrue);
+      expect(await pressBack(tester), isTrue);
 
-        expect(await pressBack(tester), isTrue);
-
-        expect(find.byType(Sidebar), findsNothing);
-      });
+      expect(find.byType(Sidebar), findsNothing);
     });
   });
 

@@ -12,6 +12,7 @@ import "data/local/file_reminder_store.dart";
 import "domain/app_icon.dart";
 import "domain/agent_backend.dart";
 import "domain/app_restart.dart";
+import "domain/app_secrets.dart";
 import "domain/app_settings.dart";
 import "domain/app_theme.dart";
 import "domain/assistant_launch.dart";
@@ -35,7 +36,7 @@ import "domain/models.dart";
 import "domain/permission.dart";
 import "domain/profile.dart";
 import "domain/project_settings.dart";
-import "domain/project.dart" show everyProject;
+import "domain/project.dart" show emptyChatQuestionFor, everyProject;
 import "domain/prompt_library.dart";
 import "domain/reminder.dart";
 import "domain/reminder_alarms.dart";
@@ -44,8 +45,10 @@ import "domain/reminder_scheduler.dart";
 import "domain/rootfs_store.dart";
 import "domain/shell.dart";
 import "data/sync/sync_hub.dart";
+import "data/sync/sync_keep_alive.dart";
 import "domain/temp_chat_ttl.dart";
 import "domain/theme_colour.dart";
+import "domain/tone.dart";
 import "domain/turn_keep_alive.dart";
 import "domain/voice.dart";
 import "domain/voice_model.dart"
@@ -96,6 +99,9 @@ class InstalledVoiceModels extends Notifier<Set<String>> {
 
   /// The sentinels this device can honour. Held rather than folded into the
   /// seed, because a re-scan reads the store and would otherwise drop them.
+  /// What a device with no engines answers is an empty set — see
+  /// [Voice.hasSystemEngines] for the platform question the missing-engine
+  /// block is drawn from instead.
   final Set<String> system;
 
   @override
@@ -404,7 +410,7 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     // The device's own engines are the default where it has them — voice mode
     // works the moment the app is installed, with nothing to download. Each
     // side is defaulted on its own, so a phone with a synthesiser and no
-    // recognition service gets the half it can do and leaves the other
+    // recognition pick gets the half it can do and leaves the other
     // unpicked, rather than a pick that fails when it is pressed.
     //
     // A settings file that already names a model, sherpa or native, is left as
@@ -437,6 +443,11 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ..titleProviderId = choice.providerId
     ..titleModelId = choice.modelId);
 
+  /// What classifies commands when auto mode is on, or nothing at all.
+  Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
+    ..classifierProviderId = choice.providerId
+    ..classifierModelId = choice.modelId);
+
   /// Read when a command runs, so an edit reaches the next one.
   Future<void> setEnvironment(Map<String, String> env) =>
       _update((s) => s.environment = Map.unmodifiable(env));
@@ -447,10 +458,21 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// How many times a retryable turn failure is carried on automatically.
   Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
 
-  /// What classifies commands when auto mode is on, or nothing at all.
-  Future<void> setClassifierModel(ModelChoice choice) => _update((s) => s
-    ..classifierProviderId = choice.providerId
-    ..classifierModelId = choice.modelId);
+  /// Whether a new project starts with Omada on.
+  Future<void> setOmadaByDefault(bool value) =>
+      _update((s) => s.omadaByDefault = value);
+
+  /// How many handoff generations one Omada round may run, app-wide.
+  Future<void> setOmadaMaxGenerations(int value) =>
+      _update((s) => s.omadaMaxGenerations = value);
+
+  /// The room's scheduling default for projects that picked none of their own.
+  Future<void> setOmadaOrdering(OmadaOrdering? value) =>
+      _update((s) => s.omadaOrdering = value);
+
+  /// The step limit a direct turn runs under; null is the backend's default.
+  Future<void> setTurnMaxSteps(int? value) =>
+      _update((s) => s.turnMaxSteps = value);
 
   /// Whether `@path` references inside an AGENTS.md pull in more files. The
   Future<void> setInstructionImports(bool value) =>
@@ -490,6 +512,26 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   /// The user's profile, injected into the system prompt. Null clears it.
   Future<void> setProfile(Profile? profile) =>
       _update((s) => s.profile = profile);
+
+  /// How the agent words its replies, app-wide.
+  Future<void> setTone(Tone value) => _update((s) => s.tone = value);
+
+  /// Whether replies number the web pages they drew on, app-wide.
+  Future<void> setCitations(bool value) => _update((s) => s.citations = value);
+
+  /// Profile, tone and citations in one write: the profile page saves all
+  /// three at once, and three `_update`s would be three full re-encodes and
+  /// three renames of the one `settings.json` where the first two are
+  /// superseded before they land.
+  Future<void> setReplyStyle({
+    Profile? profile,
+    Tone? tone,
+    bool? citations,
+  }) =>
+      _update((s) => s
+        ..profile = profile
+        ..tone = tone ?? s.tone
+        ..citations = citations ?? s.citations);
 
   /// Setting first, launcher second: a launcher that refuses still leaves the
   /// app showing what was picked.
@@ -584,12 +626,16 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setSyncRelayUrl(String? url) =>
       _update((s) => s.syncRelayUrl = url);
 
+  Future<void> setSyncKeepAlive(bool on) =>
+      _update((s) => s.syncKeepAlive = on);
+
   Future<void> setTurnUrl(String? url) => _update((s) => s.turnUrl = url);
 
-  Future<void> setTurnCredentials(String? username, String? password) =>
-      _update((s) => s
-        ..turnUsername = username
-        ..turnPassword = password);
+  /// The TURN username is not a secret: it stays in `settings.json` beside the
+  /// URL and the retries. The password goes to [setTurnPassword], in the
+  /// secret store.
+  Future<void> setTurnUsername(String? username) =>
+      _update((s) => s.turnUsername = username);
 
   /// Stored, and then the model list is rebuilt. One field at a time and never
   /// a sibling: threading the others through every setter is what lets a value
@@ -613,12 +659,82 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(chatListProvider);
   }
 
-  /// The endpoints the agent can call. The model list is rebuilt from them, so
-  /// it is invalidated here rather than left showing the old one.
+  /// The endpoints the agent can call, replacing any entry that shares an id.
+  /// The model list is rebuilt from them, so it is invalidated here rather
+  /// than left showing the old one.
+  ///
+  /// [setKey] is what happens to the stored key: null leaves it as it is (the
+  /// keep-empty-field case in the dialog), `""` clears it, a string stores it.
+  /// The config written here never carries one — `apiKey` on it is the dialog's
+  /// in-memory copy, and the store is where the material goes.
+  ///
+  /// The first provider ever configured becomes what every still-unset role
+  /// resolves to — the same `_update` as the save, so it cannot land half
+  /// done — until the user picks something themselves. A role the user has
+  /// already picked is left where it is; importing a backup and other bulk
+  /// writes stay on [setProviders], which adopts nothing.
+  /// The endpoints the agent can call, replacing any entry that shares an id.
+  /// The model list is rebuilt from them, so it is invalidated here rather
+  /// than left showing the old one.
+  ///
+  /// [setKey] is the key decision in the dialog's own encoding — null leaves
+  /// the stored key, `""` clears it, a string stores it — and [fromId] names
+  /// the entry this replaces where a rename moved its id: the stored key
+  /// follows the new id and the old entry goes, all before the state change
+  /// whose rebuild reads the store.
+  ///
+  /// The first provider ever configured becomes what every still-unset role
+  /// resolves to — the same `_update` as the save, so it cannot land half
+  /// done — until the user picks something themselves. A role the user has
+  /// already picked is left where it is; importing a backup and other bulk
+  /// writes stay on [setProviders], which adopts nothing.
+  Future<void> upsertProvider(LlmProviderConfig provider,
+      {String? fromId, String? setKey}) async {
+    // The key first: the settings state change below is what rebuilds the
+    // section drawing the row, and the row reads the store — so the key has
+    // to be in it before that rebuild runs.
+    final secrets = ref.read(appSecretsProvider);
+    if (fromId != null && fromId != provider.id) {
+      await secrets.setProviderKey(provider.id, setKey ?? secrets.providerKey(fromId));
+      await secrets.setProviderKey(fromId, null);
+    } else if (setKey != null) {
+      await secrets.setProviderKey(provider.id, setKey.isEmpty ? null : setKey);
+    }
+    final existing = state.llmProviders;
+    final isNew = existing.every((p) => p.id != provider.id && p.id != fromId);
+    await _update((s) => s
+      ..llmProviders = List.unmodifiable([
+        ...existing.where((p) => p.id != provider.id && p.id != fromId), provider
+      ])
+      ..defaultProviderId = s.defaultProviderId ?? (isNew ? provider.id : null)
+      ..titleProviderId = s.titleProviderId ?? (isNew ? provider.id : null)
+      ..memoryProviderId = s.memoryProviderId ?? (isNew ? provider.id : null)
+      ..classifierProviderId =
+          s.classifierProviderId ?? (isNew ? provider.id : null));
+    ref.invalidate(availableModelsProvider);
+  }
+
+  /// The endpoints the agent can call, written as given. The model list is
+  /// rebuilt from them, so it is invalidated here rather than left showing
+  /// the old one. Bulk and removal writes: no adoption. A provider removed
+  /// here takes its stored key with it — nothing else would ever delete it,
+  /// and an entry nobody names is a secret kept for no one.
   Future<void> setProviders(List<LlmProviderConfig> providers) async {
+    final removed =
+        state.llmProviders.map((p) => p.id).toSet()
+          ..removeAll(providers.map((p) => p.id));
+    // Deleted before the state change, for the same reason the upsert stores
+    // first: the rebuild the state change starts reads the store.
+    final secrets = ref.read(appSecretsProvider);
+    for (final id in removed) {
+      await secrets.setProviderKey(id, null);
+    }
     await _update((s) => s.llmProviders = List.unmodifiable(providers));
     ref.invalidate(availableModelsProvider);
   }
+
+  /// Whether the welcome tour has been finished, written by its Done.
+  Future<void> setWelcomeSeen(bool seen) => _update((s) => s.welcomeSeen = seen);
 
   /// Change a copy and publish it: the notifier compares by identity, so
   /// editing in place would save the file and update nothing on screen.
@@ -652,6 +768,12 @@ final paletteAccentProvider = Provider<int?>((ref) =>
 
 final linkOpenerProvider =
     Provider<LinkOpener>((ref) => throw UnimplementedError());
+
+/// The provider API keys and the TURN password. Overridden in `main` with the
+/// one built over the platform's secret store; faked in tests over a
+/// `FakeSecretStore`.
+final appSecretsProvider =
+    Provider<AppSecrets>((ref) => throw UnimplementedError());
 
 final backgroundWorkProvider =
     Provider<BackgroundWork>((ref) => throw UnimplementedError());
@@ -728,6 +850,23 @@ final downloadHoldProvider =
 final turnKeepAliveProvider = Provider<TurnKeepAlive>((ref) {
   final keepAlive = TurnKeepAlive(
       ref.watch(agentBackendProvider), ref.watch(backgroundWorkProvider));
+  ref.onDispose(keepAlive.dispose);
+  return keepAlive;
+});
+
+final syncKeepAliveProvider = Provider<SyncKeepAlive>((ref) {
+  final keepAlive = SyncKeepAlive(
+    ref.watch(syncHubProvider),
+    ref.watch(backgroundWorkProvider),
+    keepAlive: () => ref.read(appSettingsProvider).syncKeepAlive,
+  );
+  // The keep-alive only hears of the setting when a status moves; the switch
+  // itself has to act at once, which is what this listen is for. The
+  // subscription dies with the container, as the keep-alive's own does.
+  ref.listen(
+    appSettingsProvider.select((s) => s.syncKeepAlive),
+    (_, _) => keepAlive.refresh(),
+  );
   ref.onDispose(keepAlive.dispose);
   return keepAlive;
 });
@@ -928,6 +1067,31 @@ final projectSettingsProvider =
     NotifierProvider.family<ProjectSettingsNotifier, ProjectSettings, String?>(
         ProjectSettingsNotifier.new);
 
+/// Whether Omada runs in [project]: a built-in's answer is its spec, a user
+/// project's is the toggle in its `project.json`, and the default project's
+/// is false — it has no settings page for one. The read every surface makes,
+/// so a toggle landing re-renders each of them.
+final omadaOnProvider = Provider.family<bool, String?>((ref, project) {
+  final spec = builtinProjectOf(project);
+  if (spec != null) return spec.omada;
+  if (project == null) return false;
+  return ref.watch(projectSettingsProvider(project).select((s) => s.omada));
+});
+
+/// What the new-chat screen asks over [project]'s badge: the project's own
+/// description where it set one, a built-in's shipped question, or the
+/// app-wide default — or nothing, where the project set an empty one. The
+/// read the screen makes, so an edit landing re-sweeps the headline. Null
+/// and empty mean the same thing here — nothing to ask — so the answer is
+/// the one string the sweep takes.
+final emptyChatQuestionProvider =
+    Provider.family<String, String?>((ref, project) {
+  final description = project == null
+      ? null
+      : ref.watch(projectSettingsProvider(project).select((s) => s.description));
+  return emptyChatQuestionFor(project, description: description) ?? "";
+});
+
 class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
   ProjectSettingsNotifier(this.project);
 
@@ -948,10 +1112,60 @@ class ProjectSettingsNotifier extends Notifier<ProjectSettings> {
     await next.save(_config, project: project);
   }
 
+  /// Whether this project's chats can carry several agents in one round.
+  Future<void> setOmada(bool value) async {
+    final next = state.copy()..omada = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// The project's default for how its rounds run. Null is sequential.
+  Future<void> setOmadaOrdering(OmadaOrdering? value) async {
+    final next = state.copy()..omadaOrdering = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// How many handoff generations a round may run here. Null means the app
+  /// default stands.
+  Future<void> setOmadaMaxGenerations(int? value) async {
+    final next = state.copy()..omadaMaxGenerations = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// How many model calls a direct turn may make here. Null means the app
+  /// default stands.
+  Future<void> setTurnMaxSteps(int? value) async {
+    final next = state.copy()..turnMaxSteps = value;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// How this project's turns are worded, and whether they number the web
+  /// pages they used. Null means the app default stands. One write: the
+  /// profile page saves both at once, and two writes of the one
+  /// `project.json` would supersede each other.
+  Future<void> setReplyStyle({Tone? tone, bool? citations}) async {
+    final next = state.copy()
+      ..tone = tone
+      ..citations = citations;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
   /// The project's own command variables. Null means none, and the app-level
   /// ones stand alone.
   Future<void> setEnvironment(Map<String, String>? environment) async {
     final next = state.copy()..environment = environment;
+    state = next;
+    await next.save(_config, project: project);
+  }
+
+  /// What the new-chat screen asks over this project's badge. Null is the
+  /// app default; empty is the screen asking nothing.
+  Future<void> setDescription(String? value) async {
+    final next = state.copy()..description = value;
     state = next;
     await next.save(_config, project: project);
   }

@@ -661,6 +661,9 @@ class _ChatTile extends ConsumerWidget {
     );
     if (picked == null || picked.project == chat.project) return;
     await repo.moveChat(chat.id, picked.project);
+    // The open controller holds the chat it read when it was built — project
+    // included — so it is disposed and re-read from where the chat now is.
+    ref.invalidate(chatControllerProvider(chat.id));
     ref.read(selectedProjectProvider.notifier).select(picked.project);
     ref.invalidate(chatListProvider);
   }
@@ -724,18 +727,17 @@ class _ProjectMenu extends ConsumerWidget {
   const _ProjectMenu();
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final typed = await promptForText(
-      context,
-      title: "New project",
-      initial: "",
-      hint: "Project name",
-      confirmLabel: "Create",
-    );
-    final name = typed == null ? null : projectNameFrom(typed);
+    final name = await promptNewProject(context,
+        omadaByDefault: ref.read(appSettingsProvider).omadaByDefault);
     if (name == null) return;
-    await ref.read(chatRepositoryProvider).createProject(name);
+    await ref.read(chatRepositoryProvider).createProject(name.name);
+    if (name.omada) {
+      await ref
+          .read(projectSettingsProvider(name.name).notifier)
+          .setOmada(true);
+    }
     ref.invalidate(projectListProvider);
-    selectProject(ref, name);
+    selectProject(ref, name.name);
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref, String project) =>
@@ -766,7 +768,13 @@ class _ProjectMenu extends ConsumerWidget {
           label: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ).merge(
+              projectLabelStyle(
+                  remote == null && ref.watch(omadaOnProvider(project))),
+            ),
           ),
           onPressed: () => _open(context, ref, projects),
         ),
@@ -779,6 +787,7 @@ class _ProjectMenu extends ConsumerWidget {
   PopupMenuItem<VoidCallback> _row(
           {required bool checked,
           required String label,
+          bool omada = false,
           IconData? icon,
           required VoidCallback pick}) =>
       PopupMenuItem(
@@ -795,7 +804,15 @@ class _ProjectMenu extends ConsumerWidget {
             else
               const SizedBox(width: 18),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                // Omada is a fact about the project the menu says once, in
+                // the style rather than in new geometry.
+                style: projectLabelStyle(omada),
+              ),
+            ),
           ],
         ),
       );
@@ -810,6 +827,7 @@ class _ProjectMenu extends ConsumerWidget {
         _row(
           checked: remote == null && project == selected,
           label: projectLabel(project),
+          omada: ref.read(omadaOnProvider(project)),
           icon: projectIcon(project),
           pick: () => selectProject(ref, project),
         ),

@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter_test/flutter_test.dart";
@@ -9,6 +10,7 @@ import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_repository.dart";
+import "package:agent_chat/domain/builtin_project.dart" show AgentCapability;
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/profile.dart";
 import "package:agent_chat/domain/prompt_library.dart";
@@ -239,13 +241,38 @@ void main() {
       expect(settings.profile, isNull);
       // Auto-memory is on in the app, but the built-in says off.
       expect(settings.memory.autoMemory, isFalse);
-      // No shared workspace: the chat's own is its HOME too.
       expect(settings.sharedWorkspace, isFalse);
       // A watched turn: nothing is taken away beyond the built-in's (none).
       expect(settings.disabled, isEmpty);
       // The built-in ships its own note; the user's files are not read.
       expect(settings.bundledInstructions, contains("anonymous chat"));
       expect(settings.includesUserInstructions, isFalse);
+    });
+
+    test("an Omada-on project drops the task tool; an off one keeps it", () async {
+      await repoWith(AppSettings()).createProject("team");
+      Directory(config.projectDir(project: "team"))
+          .createSync(recursive: true);
+      // What the project settings page writes when Omada is flipped on.
+      File(config
+              .projectSettingsFile(project: "team"))
+          .writeAsStringSync('{"omada": true}');
+      await config.documents
+          .hydrate([config.projectSettingsFile(project: "team")]);
+      final repo = repoWith(AppSettings());
+      final on = await repo.createChat(project: "team");
+      await writeChatVia(repo, on);
+      await repo.sendPrompt(on.state.id, userMessage("hi")).toList();
+      final onSettings = backend.prompts.last.settings;
+      expect(onSettings.omada, isTrue);
+      expect(onSettings.disabled, contains(AgentCapability.task));
+
+      final off = await repo.createChat();
+      await writeChatVia(repo, off);
+      await repo.sendPrompt(off.state.id, userMessage("hi")).toList();
+      final offSettings = backend.prompts.last.settings;
+      expect(offSettings.omada, isFalse);
+      expect(offSettings.disabled, isEmpty);
     });
 
     // A draft is not on disk, so it answers for its own project: the same
@@ -293,6 +320,41 @@ void main() {
 
       expect(backend.closedShells, [(chat.state.id, null)]);
       expect(backend.disposed, isEmpty);
+    });
+
+    // A chat moved out of Byte Repair runs its next turn under the project it
+    // went to: the note is resolved per turn from where the chat now is, so
+    // nothing of the built-in travels with the chat.
+    test("a moved chat's next turn leaves the built-in's note behind", () async {
+      final repo = repoWith(AppSettings(profile: const Profile(name: "Tea Fan")));
+      final chat = await repo.createChat(project: "byte-repair");
+      await writeChatVia(repo, chat);
+
+      await repo.moveChat(chat.state.id, "work");
+      await repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+
+      final settings = backend.prompts.single.settings;
+      expect(settings.project, "work");
+      expect(settings.bundledInstructions, isNull);
+    });
+
+    // A turn still running holds the directories that are about to move; the
+    // next command it ran would quietly remake them under the project it left.
+    test("a move ends a running turn before it moves anything", () async {
+      final repo = repoWith(AppSettings(defaultProviderId: "anthropic"));
+      final chat = await repo.createChat();
+      await writeChatVia(repo, chat);
+      backend.hold = Completer<void>();
+      final turn = repo.sendPrompt(chat.state.id, userMessage("hi")).toList();
+      await pumpEventQueue();
+
+      await repo.moveChat(chat.state.id, "work");
+      backend.hold!.complete();
+      await turn;
+
+      expect(backend.aborted, [chat.state.id]);
+      expect(backend.closedShells, [(chat.state.id, null)]);
+      expect(backend.runningTurns.value, isEmpty);
     });
   });
 

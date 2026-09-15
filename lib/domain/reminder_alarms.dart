@@ -1,5 +1,5 @@
 /// The system clock a reminder is set against: AlarmManager on Android,
-/// nothing anywhere else yet. The scheduler drives this port; it never runs a
+/// nothing anywhere else. The scheduler drives this port; it never runs a
 /// prompt itself — Kotlin only ever nudges, and Dart decides what is due.
 ///
 /// Two routes in, the shape [AssistantLaunch] has for the assistant gesture:
@@ -16,6 +16,13 @@ abstract interface class ReminderAlarms {
   static const turnFailureChannel = "turns";
 
   bool get available;
+
+  /// Whether the system clock fires a reminder with the process dead —
+  /// AlarmManager on Android and nowhere else. Where it is false the
+  /// reminders page says so rather than promising a fire the app's own timer
+  /// cannot make: a desktop still notifies what a reminder did, but only one
+  /// that fired while it was running.
+  bool get schedules;
 
   /// Whether exact alarms are permitted right now. False is common on
   /// Android 14+, where the permission is denied by default; the scheduler's
@@ -82,6 +89,9 @@ class UnavailableReminderAlarms implements ReminderAlarms {
 
   @override
   bool get available => false;
+
+  @override
+  bool get schedules => false;
 
   @override
   Future<bool> exactAllowed() async => false;

@@ -207,8 +207,8 @@ const localModelCatalog = <LocalModel>[
     contextLength: 262144,
     kvBytesPerToken: 49152,
     licence: "Apache-2.0",
-    note: "Small enough to be a check that the NPU works at all, and too small "
-        "to be much good at the agent's own job.",
+    note: "Small enough to be a check that an accelerator works at all, and "
+        "too small to be much good at the agent's own job.",
   ),
 ];
 

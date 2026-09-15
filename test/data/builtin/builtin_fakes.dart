@@ -7,6 +7,7 @@ import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/shell.dart";
 import "package:agent_chat/domain/web_search.dart";
+import "package:flutter/foundation.dart" show ValueListenable;
 
 /// A model that says whatever the test scripted, one list of chunks per call.
 class FakeLlmClient implements LlmClient {
@@ -118,9 +119,6 @@ class FakeShell extends Shell {
   /// The `HOME` each of [ran] was given, in step with it.
   final List<String> homes = [];
 
-  /// Whether each of [ran] was given a home to keep, in step with it.
-  final List<bool> sharedHomes = [];
-
   /// The timeout each of [ran] was given, in step with it.
   final List<Duration> timeouts = [];
 
@@ -132,6 +130,9 @@ class FakeShell extends Shell {
 
   /// Whether each of [ran] asked for a restart, in step with it.
   final List<bool> restarts = [];
+
+  /// The sandbox each of [ran] was handed, in step with it.
+  final List<CommandSandbox?> sandboxes = [];
 
   final List<String> killed = [];
 
@@ -156,18 +157,18 @@ class FakeShell extends Shell {
       required String home,
       required Duration timeout,
       Map<String, String>? environment,
-      bool sharedHome = true,
       bool oneShot = false,
       bool restart = false,
-      String? project}) {
+      String? project,
+      CommandSandbox? sandbox}) {
     ran.add(command);
     cwds.add(cwd);
     homes.add(home);
-    sharedHomes.add(sharedHome);
     timeouts.add(timeout);
     environments.add(environment);
     oneShots.add(oneShot);
     restarts.add(restart);
+    sandboxes.add(sandbox);
     return _FakeRun(this, command);
   }
 }
@@ -183,6 +184,9 @@ class _FakeRun implements ShellRun {
 
   @override
   Future<ShellResult> get result => _done.future;
+
+  @override
+  ValueListenable<String?>? get output => null;
 
   @override
   Future<void> kill() async {
@@ -211,7 +215,9 @@ LlmCompletion bashCall(
       ),
     );
 
-/// One assistant turn that calls a file tool — `read`, `write` or `edit`.
+/// One assistant turn that calls a tool by name with a map of arguments —
+/// the shape any structured tool call takes in a test. Named for the file
+/// tools because that is what most tests call, but not limited to them.
 LlmCompletion fileCall(String tool, Map<String, Object?> arguments,
         {String id = "file-1"}) =>
     LlmCompletion(

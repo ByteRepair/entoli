@@ -1,6 +1,7 @@
 import "dart:async";
 
 import "package:fs_shim/fs.dart";
+import "package:flutter/foundation.dart" show visibleForTesting;
 import "package:uuid/uuid.dart";
 
 import "../../domain/agent_backend.dart";
@@ -9,9 +10,12 @@ import "../../domain/ask.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
+import "../../domain/plan.dart";
 import "../../domain/profile.dart";
 import "../../domain/prompt_library.dart";
 import "../../domain/shell.dart";
+import "../../domain/shell_command_analysis.dart";
+import "../../domain/tone.dart";
 import "../../domain/tool_arg.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/web_search.dart";
@@ -20,6 +24,7 @@ import "artifact_tool.dart";
 import "file_tools.dart" as file_tool_defs;
 import "llm/llm_client.dart";
 import "llm/rate_limit_gate.dart";
+import "../prompts/skill_import.dart" show SkillImportException;
 import "skill_create_tool.dart";
 import "skill_tool.dart";
 import "sub_agent.dart";
@@ -29,6 +34,7 @@ import "templates.dart";
 import "memory/instructions.dart";
 import "memory/store.dart";
 import "memory_tools.dart";
+import "plan_tools.dart";
 import "websearch_tool.dart";
 
 /// What the spinner says while the model reads the prompt.
@@ -53,6 +59,7 @@ String? runningTool(String name) => switch (name) {
       webfetchToolName => "Fetching a page",
       taskToolName => "Working on a sub-task",
       artifactToolName => "Publishing the artifact",
+      presentPlanToolName => "Presenting the plan",
       _ => null,
     };
 
@@ -171,6 +178,21 @@ class BuiltinOptions {
         maxConcurrentLlmRequests: maxConcurrentLlmRequests,
         rateLimitRetryBudget: rateLimitRetryBudget,
       );
+
+  /// The same options under a turn's own step limit. Null leaves what this
+  /// holds — the backend's answer, which the turn can only name a value for,
+  /// not widen past.
+  BuiltinOptions copyWithStepLimit(int? stepLimit) => stepLimit == null
+      ? this
+      : BuiltinOptions(
+          stepLimit: stepLimit,
+          commandTimeout: commandTimeout,
+          maxAttempts: maxAttempts,
+          retryBackoff: retryBackoff,
+          maxConcurrentSubAgents: maxConcurrentSubAgents,
+          maxConcurrentLlmRequests: maxConcurrentLlmRequests,
+          rateLimitRetryBudget: rateLimitRetryBudget,
+        );
 }
 
 /// A chat's conversation as the model sees it. Held per chat and outliving a
@@ -235,6 +257,8 @@ class BuiltinSession {
 LlmMessage agentSystemMessage({
   required String platform,
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   bool oneShot = false,
@@ -244,6 +268,8 @@ LlmMessage agentSystemMessage({
       text: systemPrompt(
         platform: platform,
         profile: profile,
+        tone: tone,
+        citations: citations,
         caps: caps,
         skills: skills,
         oneShot: oneShot,
@@ -275,6 +301,12 @@ List<LlmTool> agentTools({
       if (caps.webSearch) ...[websearchTool, webfetchTool],
       if (skills.any((s) => s.modelInvocable)) skillTool,
       if (caps.artifact) artifactTool,
+      if (!oneShot) ...[planAddTool, planNextTool, planDoneTool],
+      // Presenting parks the turn on the panel's answer, so it rides `ask`
+      // (a headless turn's takes fold out of caps) and the artifact's
+      // publish path; a sub-agent's missing `saveArtifact` withholds the
+      // rest, the way it withholds `artifact`.
+      if (caps.presentPlan) presentPlanTool,
       if (caps.createSkill) createSkillTool,
       if (offerMemory)
         ...[
@@ -316,8 +348,11 @@ class BuiltinAgent {
     this.skills = const [],
     this.webSearch,
     this.profile,
+    this.tone = Tone.none,
+    this.citations = false,
     this.saveArtifact,
     this.packageSkill,
+    this.onShellOutput,
     this.loadResource = noResources,
     this.memory = MemorySettings.off,
     this.instructions = const [],
@@ -326,7 +361,36 @@ class BuiltinAgent {
     this.index = "",
     this.memoryStore,
     this.memoryChat,
+    this.sandboxHelper,
   });
+
+  /// The sandbox helper a test hands in, where the shell is a fake with no
+  /// driver behind it. The agent reads the real one through
+  /// [Shell.driverSandboxHelper]; this is the test seam for it, which is why
+  /// it is nullable and the real answer wins when both exist.
+  @visibleForTesting
+  final SandboxHelper? sandboxHelper;
+
+  /// The confinement a command runs under, from the shell's driver. Read per
+  /// turn rather than held: the driver is resolved per command in the shell,
+  /// and the sandbox is only ever offered where the machine itself is the
+  /// driver — a guest's rootfs is already the boundary, and Android's
+  /// per-app sandbox is the OS's.
+  CommandSandbox? sandboxFor() {
+    final helper = sandboxHelper ?? shell.driverSandboxHelper;
+    if (helper == null) return null;
+    final tmp = shell.tmpDirFor(workspace);
+    return CommandSandbox(
+      workspace: workspace,
+      tmp: tmp,
+      home: shell.machineHome,
+    );
+  }
+
+  /// Whether this build's host platform models its shell as POSIX. Windows
+  /// `cmd` is not, and its commands are escalated rather than parsed; the
+  /// flag reaches the parse from the platform the shell names.
+  bool get platformIsWindows => shell.platformIsWindows;
 
   final BuiltinSession session;
 
@@ -398,8 +462,10 @@ class BuiltinAgent {
   /// The chat's own directory, and where the shell starts.
   final String workspace;
 
-  /// The one every chat in the project shares. Not the working directory:
-  /// what a turn puts there is what it means other chats to find.
+  /// The project's workspace: the one every chat in the project shares where
+  /// one is shared, the chat's own where one is not, resolved by the caller.
+  /// Not the working directory: what a turn puts here is what it means other
+  /// chats to find.
   final String projectWorkspace;
 
   /// The project's own command variables, layered over the app-level ones by
@@ -451,8 +517,8 @@ class BuiltinAgent {
   final AgentCapabilities caps;
 
   /// Whether the project's workspace is shared between its chats. When false,
-  /// the chat's own workspace is also its `HOME` and the prompt says nothing
-  /// of a shared one.
+  /// the chat's own workspace is the one the prompt names, and the
+  /// shared-workspace sentence is absent.
   final bool sharedWorkspace;
 
   /// The project this agent's turn is in, so the shell driver can resolve a
@@ -476,6 +542,15 @@ class BuiltinAgent {
   /// system prompt.
   final Profile? profile;
 
+  /// How the turn words its replies, resolved with the profile. Rewritten
+  /// every turn with the rest of the system prompt; a sub-agent gets the
+  /// parent's, so a worker words its part the way the chat is set to.
+  final Tone tone;
+
+  /// Whether the turn numbers the web pages it drew on and lists them at the
+  /// end of the reply.
+  final bool citations;
+
   /// Publishes an artifact from a workspace path to the chat's `artifacts/`
   /// dir and returns the id. Null where the agent is a sub-agent: sub-agents run
   /// headless with no viewer surface, so the tool is dropped for them the way
@@ -491,6 +566,14 @@ class BuiltinAgent {
   /// offer skills for install. Returns the install id.
   final Future<({String installId, String name})> Function(
       String path, String? name)? packageSkill;
+
+  /// What a running command has printed, as it prints it, for the block under
+  /// its label. Null where the agent is a sub-agent — a worker's commands are
+  /// not watched — and null is the only thing that stops the reporting. The
+  /// agent holds the stream, the callback decides what showing it is; it does
+  /// not reach the session, and the pair completing is what the conversation
+  /// keeps.
+  final void Function(String? callId, String text)? onShellOutput;
 
   /// [caps] with the platform's facts applied where [caps] cannot know them:
   /// a tool the device cannot run is not offered even if the turn was, and a
@@ -686,11 +769,14 @@ class BuiltinAgent {
       sharedWorkspace: sharedWorkspace,
       projectHome: shell.projectHome,
       guestRoot: shell.guestRoot,
+      homePath: shell.homeFor(projectWorkspace),
     );
     final head = [
       agentSystemMessage(
         platform: shell.platformDescription,
         profile: profile,
+        tone: tone,
+        citations: citations,
         caps: caps,
         skills: skills,
         oneShot: oneShot,
@@ -798,6 +884,26 @@ class BuiltinAgent {
 
       if (call.name == artifactToolName && saveArtifact != null) {
         yield* _artifact(call);
+        continue;
+      }
+
+      if (call.name == planAddToolName && !oneShot) {
+        yield* _planAdd(call);
+        continue;
+      }
+
+      if (call.name == planNextToolName && !oneShot) {
+        yield* _planNext(call);
+        continue;
+      }
+
+      if (call.name == planDoneToolName && !oneShot) {
+        yield* _planDone(call);
+        continue;
+      }
+
+      if (call.name == presentPlanToolName && _offered.presentPlan) {
+        yield* _presentPlan(call);
         continue;
       }
 
@@ -949,12 +1055,16 @@ class BuiltinAgent {
   /// A command's outcome as the result of the call that asked for it: one that
   /// ran, one that was refused, one that was never reached. The directory the
   /// shell was left in rides on it as a fact; the projection words the change.
+  /// What the sandbox denied rides on it too, where one ran and denied
+  /// something — the wording is `observation`'s, so the model reads it beside
+  /// the output it belongs to.
   ToolResult _ran(LlmToolCall call, ShellResult result) => ToolResult(
         callId: call.id,
         returnCode: result.returnCode,
         output: result.output,
         exceptionInfo: result.exceptionInfo,
         cwd: result.cwd,
+        violations: result.violations,
       );
 
   /// The model asking the user something. The call and its answers are a pair
@@ -1070,11 +1180,12 @@ class BuiltinAgent {
     yield ToolResultEvent(_ran(call, result));
   }
 
-  /// Resolve a file-tool path through the workspaces and the guest root, so
-  /// every call site carries the guest translation without spelling it out.
-  String _resolvePath(String path) =>
-      resolveWorkspacePath(fs, path, workspace, projectWorkspace,
-          guestRoot: shell.guestRoot);
+  /// Resolve a file-tool path through the workspaces, the guest root and the
+  /// shell's home, so every call site carries the translation without
+  /// spelling it out.
+  String _resolvePath(String path) => resolveWorkspacePath(
+      fs, path, workspace, projectWorkspace,
+      guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
 
   /// Read a file. A path the workspaces hold runs without asking, the way
   /// `bash` reads in `never` mode; one that reaches past them is offered to
@@ -1424,9 +1535,15 @@ class BuiltinAgent {
             return ShellResult.failed(
                 "The directory '$path' has no SKILL.md. A skill needs one.");
           }
-          final result = await packageSkill!(args.path, args.name);
-          installId = result.installId;
-          skillName = result.name;
+          try {
+            final result = await packageSkill!(args.path, args.name);
+            installId = result.installId;
+            skillName = result.name;
+          } on SkillImportException catch (e) {
+            return ShellResult.failed(
+                "SKILL.md does not conform to the Agent Skills spec: $e. "
+                "Fix the frontmatter and call $createSkillToolName again.");
+          }
           return const ShellResult(returnCode: 0, output: "");
         });
     if (outsideWorkspaces(fs, path, workspace, projectWorkspace)) {
@@ -1447,6 +1564,192 @@ class BuiltinAgent {
           returnCode: 0,
           output: "Skill '$name' packaged. "
               "The user can review and install it from the card below.",
+        ));
+  }
+
+  /// The plan file: where the model works, so the model can read it and edit
+  /// it around the tools. Resolved like a file-tool path but written through
+  /// `fs` directly — the tools own the plan's lines, and an `edit` against
+  /// them would be two writers on one file.
+  String get _planPath => fs.path.join(workspace, planFileName);
+
+  Future<String?> _readPlan() async {
+    final file = fs.file(_planPath);
+    if (!await file.exists()) return null;
+    return file.readAsString();
+  }
+
+  /// What a plan tool says when there is nothing to work from, or null where
+  /// the file is there with tasks in it.
+  String? _planMissing(String? plan) {
+    if (plan == null) {
+      return "There is no $planFileName in the workspace yet. Record the "
+          "first task with $planAddToolName.";
+    }
+    return planTasksFrom(plan).isEmpty
+        ? "$planFileName holds no tasks. Add them with $planAddToolName."
+        : null;
+  }
+
+  /// Record a task. The call is reported with the task as its text, so the
+  /// chat's label reads the plan growing.
+  Stream<AgentEvent> _planAdd(LlmToolCall call) async* {
+    final task = stringArg(call.argumentsJson, "task");
+    if (task == null) {
+      yield* _reject(call,
+          'The $planAddToolName tool takes {"task": "..."}; that argument '
+          "was missing.");
+      return;
+    }
+    final section = stringArg(call.argumentsJson, "section");
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: task,
+    ));
+    Future<ShellResult> run() async {
+      final updated = planAddTask(await _readPlan(), task, section: section);
+      await fs.file(_planPath).writeAsString(updated);
+      return ShellResult(returnCode: 0, output: planAddResult(task, planProgress(updated)));
+    }
+    yield* _runFileTool(call, _planPath, planAddToolName, run);
+  }
+
+  /// Take the next task. Nothing to take is the answer, not a failure: the
+  /// plan being finished is exactly the moment the model calls present_plan.
+  Stream<AgentEvent> _planNext(LlmToolCall call) async* {
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+    ));
+    final plan = await _readPlan();
+    final missing = _planMissing(plan);
+    final next = planNext(plan);
+    if (next == null) {
+      yield ToolResultEvent(ToolResult(
+            callId: call.id,
+            returnCode: 0,
+            output: missing ?? "All tasks done.",
+          ));
+      return;
+    }
+    // The index came from the text just read, so the mark cannot miss.
+    final marked = planMark(plan, next.index, PlanTaskStatus.inProgress)!;
+    await fs.file(_planPath).writeAsString(marked);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planNextResult(next, planProgress(marked)),
+        ));
+  }
+
+  /// Finish a task: by number or by enough of its text to identify it.
+  Stream<AgentEvent> _planDone(LlmToolCall call) async* {
+    final task = stringArg(call.argumentsJson, "task");
+    if (task == null) {
+      yield* _reject(call,
+          'The $planDoneToolName tool takes {"task": "..."} — the number '
+          "$planNextToolName reported, or the start of the task's text; that "
+          "argument was missing.");
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: task,
+    ));
+    final plan = await _readPlan();
+    final missing = _planMissing(plan);
+    if (missing != null) {
+      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      return;
+    }
+    final found = planFind(plan, task);
+    if (found == null) {
+      final candidates = planCandidates(plan, task)
+          .map((t) => "${t.index}. ${t.text}")
+          .toList();
+      yield ToolResultEvent(_ran(
+          call,
+          ShellResult.failed(candidates.isEmpty
+              ? "No task matches \"$task\". Call $planNextToolName to take "
+                  "the next one, or read $planFileName."
+              : "\"$task\" matches more than one task: ${candidates.join("; ")}. "
+                  "Name it by number, or by more of its text.")));
+      return;
+    }
+    // The index came from the text just read, so the mark cannot miss.
+    final marked = planMark(plan, found.index, PlanTaskStatus.done)!;
+    await fs.file(_planPath).writeAsString(marked);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planDoneResult(found, planProgress(marked)),
+        ));
+  }
+
+  /// The plan, put to the user: the plan's page published through the same
+  /// path the `artifact` tool takes, its card in the chat, and the Go /
+  /// changes question the panel asks — all one call, so the model cannot
+  /// show the plan without asking about it, or ask without showing it.
+  Stream<AgentEvent> _presentPlan(LlmToolCall call) async* {
+    final args = presentPlanArgsFrom(call.argumentsJson);
+    if (args == null) {
+      yield* _reject(call,
+          'The $presentPlanToolName tool takes no required arguments; "title" '
+          'and "artifact_id" are optional strings.');
+      return;
+    }
+    yield ToolCallEvent(ToolCall(
+      id: call.id,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      argumentsText: args.title ?? planFileName,
+    ));
+    final plan = await _readPlan();
+    final missing = _planMissing(plan);
+    if (missing != null) {
+      yield ToolResultEvent(_ran(call, ShellResult.failed(missing)));
+      return;
+    }
+    final html = planHtml(plan!, title: args.title);
+    final htmlPath = fs.path.join(workspace, planHtmlPath);
+    final entryFile = fs.path.basename(planHtmlPath);
+    await fs.directory(fs.path.dirname(htmlPath)).create(recursive: true);
+    await fs.file(htmlPath).writeAsString(html);
+    // Straight-line, so the publish's failure is the tool's answer rather
+    // than the turn dying — the same answer `_guarded` would build, said
+    // here because the plan's publish carries no approval gate around it.
+    String? id;
+    try {
+      id = await saveArtifact!(planHtmlPath, entryFile,
+          artifactId: args.artifactId);
+    } catch (e) {
+      yield ToolResultEvent(
+          ToolResult(callId: call.id, returnCode: -1, output: "", exceptionInfo: "$e"));
+      return;
+    }
+    yield ArtifactEvent(artifactId: id, entryFile: entryFile, title: args.title ?? "Plan");
+    // Emitted before it is awaited, for the same reason an approval is: the
+    // panel is where the verdict comes from. The verdict is then the tool's
+    // result, so the model reads it as the outcome of presenting rather than
+    // as the user's prose. The questions ride as the request's document —
+    // what another device reads the call's arguments back out of — since the
+    // call's own arguments name a title, not a question.
+    final request = AskRequest(
+      id: call.id,
+      questions: [planApprovalQuestion(args.title)],
+      argumentsJson: planApprovalQuestionsJson(args.title),
+    );
+    yield QuestionRequestEvent(request);
+    final answers = await answer(request);
+    yield ToolResultEvent(ToolResult(
+          callId: call.id,
+          returnCode: 0,
+          output: planVerdict(answers.firstOrNull),
         ));
   }
 
@@ -1534,10 +1837,12 @@ class BuiltinAgent {
     );
     yield ApprovalRequestEvent(approval);
     final allowed = await approve(approval) == ApprovalResponse.allow;
+    _humanDecided = true;
     _commandResult = allowed
         ? await run()
         : const ShellResult.failed("The user denied this command. Ask them what to do "
             "instead, or try something else.");
+    _humanDecided = false;
   }
 
   /// Classify the call, then allow (run), deny (refuse), or ask (escalate to
@@ -1578,6 +1883,13 @@ class BuiltinAgent {
     }
   }
 
+  /// Whether the run this turn is composing sits behind an approval banner —
+  /// a human reads the call and answers before it goes. Set by the arms that
+  /// run after an approval, cleared by the arms that run without one: the
+  /// static gate reads it to stand down, because a parse vetoing what a
+  /// person approved is the machine overriding its keeper.
+  bool _humanDecided = false;
+
   Future<ShellResult> _execute(LlmToolCall call, String command) async {
     if (_cancelled) {
       return const ShellResult.failed("The turn was stopped before this command ran.");
@@ -1592,21 +1904,86 @@ class BuiltinAgent {
           ? options.commandTimeout.inMilliseconds
           : requested.clamp(0, options.commandTimeout.inMilliseconds),
     );
+    // What the command parses to, decided before anything asks a model about
+    // it. The parse answers for the deterministic safe side — reads, and
+    // writes the workspace can hold — and refuses what it cannot answer for:
+    // a command that cannot be modeled is one the model decided the wording
+    // of, and one that assigns to a variable that rewrites where its own
+    // writes land is not answering for itself.
+    //
+    // The gate is on only where a sandbox exists to make the boundary hold:
+    // without one the parse has nothing to enforce, and refusing on its word
+    // would be trusting the same text-only read the sandbox exists to back.
+    // And it stands down where a person has decided: a run behind the
+    // approval banner was read and answered by a human, and a parse vetoing
+    // what the human approved is the machine overriding its keeper. The
+    // banner, not the mode, is what carries that — auto mode reaches the
+    // banner through the classifier's ask — so the gate reads the flag the
+    // run itself sets.
+    final sandbox = sandboxFor();
+    if (sandbox != null && !_humanDecided) {
+      final analysis =
+          ShellCommandAnalysis.parse(command, isWindows: platformIsWindows);
+      final note = analysis.escalationNote;
+      if (note != null) {
+        return ShellResult.failed(note);
+      }
+    }
     final run = shell.start(command,
         cwd: workspace,
         home: projectWorkspace,
-        sharedHome: sharedWorkspace,
         timeout: timeout,
         environment: environment,
         oneShot: oneShot,
         restart: args?["restart"] == true,
-        project: project);
+        project: project,
+        sandbox: sandbox);
     _running = run;
+    _runWatched(call, run);
     try {
       return await run.result;
     } finally {
       _running = null;
     }
+  }
+
+  /// Reports [run]'s output as it prints, each change no more than
+  /// [watchInterval] apart. The watch holds the latest value rather than
+  /// queueing reports behind a timer — what the block shows is the tail as it
+  /// is now, not what it was — and the timer is cancelled with the result, so
+  /// a command that finished inside an interval is not followed by a report of
+  /// what it printed on the way out. Unsubscribed on the result, so the watch
+  /// spans the whole run whatever awaits it.
+  ///
+  /// The one shape of it: the agent's own commands report through
+  /// [onShellOutput], the user's `!` command through the same helper — the
+  /// backend calls this with its own sink. Reading [run.output] is what tells
+  /// the shell the run is watched; before that it pays nothing per chunk.
+  static void watchShellOutput(
+      ShellRun run, void Function(String text) report) {
+    final output = run.output;
+    if (output == null) return;
+    Timer? timer;
+    void listener() {
+      timer ??= Timer(watchInterval, () {
+        timer = null;
+        final text = output.value;
+        if (text != null && text.trim().isNotEmpty) report(text);
+      });
+    }
+
+    output.addListener(listener);
+    unawaited(run.result.whenComplete(() {
+      timer?.cancel();
+      output.removeListener(listener);
+    }));
+  }
+
+  static const watchInterval = Duration(milliseconds: 100);
+
+  void _runWatched(LlmToolCall call, ShellRun run) {
+    if (onShellOutput == null) return;
+    watchShellOutput(run, (text) => onShellOutput!(call.id, text));
   }
 
   /// Stream one model call, turning its chunks into events and leaving what it

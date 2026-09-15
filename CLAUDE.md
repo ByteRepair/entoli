@@ -26,7 +26,7 @@ named in a cross-reference is findable from this list.
 - `lib/ui/sidebar/CLAUDE.md` — The sidebar's list, Pinned chats
 - `lib/data/builtin/CLAUDE.md` — The agent loop, Running the commands, Running a
   command yourself, Approvals, Questions, Sub-agents, Their own transcripts,
-   Carrying one on, Web search, Skills, Memory
+   Carrying one on, Web search, Skills, The plan, Memory
 - `lib/data/builtin/llm/CLAUDE.md` — Reaching a provider, Errors, and how long
   the UI waits
 - `lib/data/sync/CLAUDE.md` — The threat model, the handshake, the framing
@@ -93,17 +93,36 @@ and `subagents/` in it; where its commands run is `workspace/chats/<chat-id>/`,
 inside the workspace the project shares rather than beside the conversation.
 Every project is a directory under `projects/`, the default one included.
 `<dataDir>/projects/<project>/skills/<name>/` is a skill — a directory with a
-`SKILL.md` and the files it runs with, not a single file — and
-`<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
+`SKILL.md` and the files it runs with, not a single file, the frontmatter held
+to the Agent Skills spec (see "Skills and agents" in `lib/domain/CLAUDE.md`;
+a folder that does not conform is skipped at load and said on the view page) —
+and `<dataDir>/projects/<project>/agents/*.md` are that project's agents. The
 default project's skills and agents are the base set every other project
 inherits; another project's own replace a same-named default entry for that
 project alone. The bundled skills and agents live in the binary:
 `tool/gen_bundled_skills.dart` writes them, build-time, from
-`assets/prompts/projects/<project>/` into
+`assets/prompts/projects/<project>/` — the locally written skills and agents —
+and from `build/skills-upstream/` into
 `lib/data/prompts/bundled_skill_data.dart`, tagged with the project they
 belong to, so the library the model reads cannot be poisoned from the skills
 directory and a project sees only what it is meant to (esbmc-verifier is
 byte-repair's alone).
+
+**The presets are completed from a release, not a pin.** `tool/fetch-skills.sh`
+resolves the latest release of `ByteRepair/skills` — our fork, where the
+wording fixes are made — and extracts its tarball to `build/skills-upstream/`,
+its cache keyed on the tag so a new release flows in on the next `prepare.sh`
+with nothing edited. The generator copies what the release ships wholesale and
+unscoped, skipping only names the source tree already carries: what ships is
+the fork's release decision — its `RELEASE_EXCLUDED` and `tool/release.sh`,
+which prune, reword Claude to Entoli and check the result when cutting a tag —
+not ours, and the one rule kept here is a tripwire: a fetched skill with no
+`LICENSE.txt` says so on stderr, and a test refuses any fetched skill whose
+licence is not Apache. A skill's own licence is registered per skill for the
+licence page (see "What the app is" in `lib/ui/settings/CLAUDE.md`), and a
+file that is not text at all — a font, an archive — is embedded base64 beside
+its text siblings (`BundledPromptFile.binary`), which the self-heal and the
+export read back as bytes.
 `<dataDir>/projects/<project>/skills-bundled/` is a read-only copy of that
 project's bundled skills on disk, there only so `bash` can reach a skill's
 scripts (which want a real base directory); it is self-healed from the
@@ -113,7 +132,10 @@ rather than in it, so deleting one's own skill does not reach the presets.
 `settings.json` holds the app-level model default, the
 title model, the classifier model, `approveMode`, `environment`, `appIcon`,
 `appTheme`, what the palette is built from — `primaryColour`, `secondaryColour`,
- `cornerRadius` and `systemPalette` — and `llmProviders`; and the user's
+ `cornerRadius` and `systemPalette` — and `llmProviders`, whose entries carry
+no key: the provider API keys and the TURN password live in the secret store
+beside the sync identity (`AppSecrets`), which is what keeps them out of
+`settings.json` and out of every backup zip; and the user's
  global `AGENTS.md`, the instructions that reach every turn in every user
  project, beside it.
 `<dataDir>/reminders.json` is the user's reminders, one JSON
@@ -215,6 +237,18 @@ their runtime paths (an HTTP server, blob URLs) over the same injected copy,
 where the marker makes the second injection a no-op. Artifacts published before
 the injection moved open unstyled on desktop until the model re-publishes them.
 
+An artifact of a mirrored chat has no local directory to open: the sync hub
+carries the whole artifact as one zip over the ordinary resource channel (see
+"Attachments" in `lib/data/sync/CLAUDE.md`), `unzipRemoteArtifact` writes it
+to a temp directory, and the local paths above take it from there. That
+staging is a port (`RemoteArtifacts` under `core/platform/io/`, the hub
+reached through a one-method interface), not a page: it owns the temp
+directories' lifecycle, where the previous one for the same chat and artifact
+goes only when the next one has checked out. A re-publish invalidates the
+fetched zip the moment its record lands. The web is the exception — it opens
+the local blob-URL path only, and a browser mirror says so rather than
+fetching.
+
 ### Projects
 
 A project is a directory holding its own chats, one workspace they share, and
@@ -252,15 +286,19 @@ Two workspaces reach a turn, and they answer different questions. The project's
 (`<project>/workspace/`) is where work another conversation should find goes,
 and it is the `HOME` of every command where a command gets a project's home at
 all — inside a guest, whose own home is one directory every project would
-share, and in a chat whose workspace is not shared, where the home is the
-chat's own — so a repository cloned, a package installed or a `~/.gitconfig`
-written by one conversation is already there for the next, and one project is
-one environment; where the home is shared, the machine's own `HOME` stands and
-is shared by every project. The chat's own is a folder *inside* it
-(`<project>/workspace/chats/<id>/`) and is the working directory every command
-starts in — the shell that runs them keeps whatever directory a command moved
-it to, one per chat; see "Running the commands". What a chat *is* — the log, and what was
-attached to it — stays in `chats/`, which the agent is never given a path to.
+share, and on Android, where the app has no real user home to give — so a
+repository cloned, a package installed or a `~/.gitconfig` written by one
+conversation is already there for the next, and one project is one environment;
+on the desktops the machine's own `HOME` stands, shared by every project, and
+`~` in a command is the user's real home. The chat's own is a folder *inside*
+the project's (`<project>/workspace/chats/<id>/`) and is the working directory
+every command starts in — the shell that runs them keeps whatever directory a
+command moved it to, one per chat; see "Running the commands". What a chat *is*
+— the log, and what was attached to it — stays in `chats/`, which the agent is
+never given a path to. A file-tool path may be prefixed `project:` to name the
+project's workspace explicitly or `chat:` to name the chat's own; `~` follows
+`HOME`, so on a desktop it lands past the workspaces and is gated like any
+absolute path out.
 
 `moveChat` therefore moves two directories, and `delete` removes two.
 
@@ -334,8 +372,9 @@ is `logDetail`, which is debug-only.
 - Web: `toolbox run --container flutter-dev flutter run -d web-server --web-port 8087 --web-hostname 127.0.0.1`.
   Nothing runs the app in a browser here, so a web-only regression in the UI is
   caught by reloading the page.
-- Voice mode on Linux needs `parecord` on `PATH` (`pulseaudio-utils`); without
-  it a session fails to start rather than hearing nothing.
+- Voice mode on Linux needs `parecord` (`pulseaudio-utils`) or `pw-record`
+  (`pipewire-utils`) on `PATH`; with neither, a session fails to start with a
+  message saying so rather than hearing nothing.
 - Package the Linux build:
   `tool/linux/make-appimage.sh build/linux/x64/release/bundle dist/entoli.AppImage`.
   Needs no toolbox; it downloads `appimagetool` itself.
@@ -352,6 +391,11 @@ is `logDetail`, which is debug-only.
   XCFramework. Needs macOS and Xcode. Not run by the app build; without it an
   iOS build has no shell to run commands in. `git submodule update --init
   --recursive` fetches the source — a clone without it has an empty `src/`.
+- The Linux model server: `tool/linux/build-llama.sh`, native (no toolbox —
+  host cmake, ninja and glslc), sharing the pin in `tool/android/versions.sh`.
+  Stages into `build/llama/`, which `linux/CMakeLists.txt` installs into the
+  bundle when it is filled; a build that skipped it still builds and says what
+  it is missing.
 - git is no longer among them. The agent gets it from `apk` inside the Alpine
   rootfs, which is a distribution's job to patch rather than ours — so a device
   with no rootfs installed has no git.

@@ -42,6 +42,13 @@ class SyncByteCache {
     }
   }
 
+  /// One resource gone stale — an artifact re-published on the home device,
+  /// which a mirror sees as the record naming it. The next ask refetches.
+  void dropResource(String chatId, String resource) {
+    final removed = _entries.remove("$chatId/$resource");
+    if (removed != null) _held -= removed.length;
+  }
+
   void dispose() {
     _entries.clear();
     _held = 0;

@@ -5,7 +5,6 @@ import "package:freezed_annotation/freezed_annotation.dart";
 part "models.freezed.dart";
 part "models.g.dart";
 
-/// Metadata for a chat, persisted to `state.json`.
 @freezed
 abstract class ChatState with _$ChatState {
   const factory ChatState({
@@ -72,6 +71,7 @@ abstract class Chat with _$Chat {
     /// offer to carry on. Derived from the log by `endsUnfinished` rather than
     /// persisted — the absence of a closing record is the whole of it.
     @Default(false) bool unfinished,
+
   }) = _Chat;
 
   factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
@@ -165,6 +165,17 @@ abstract class Message with _$Message {
     /// sent, keyed by the reference as written — `/review`, `@researcher`. See
     /// "Commands and agents" in `lib/domain/CLAUDE.md`.
     @Default({}) Map<String, String> documents,
+
+    /// The addressed member who authored this message, as keyed in
+    /// [documents]; null is the main agent, unnamed — and every message
+    /// written before this existed.
+    String? author,
+
+    /// The room's Omada state when this turn was opened, written on the
+    /// turn's first message by the controller. What sections the thread
+    /// holds derives from these stamps. Null on every message that is not a
+    /// turn opener, and on every message written before sections existed.
+    bool? omadaOn,
   }) = _Message;
 
   factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
@@ -221,6 +232,7 @@ sealed class MessagePart with _$MessagePart {
     required String output,
     String? exceptionInfo,
     String? cwd,
+    @Default([]) List<String> violations,
   }) = ShellRunPart;
   const factory MessagePart.file({
     required String resource,
@@ -277,6 +289,7 @@ abstract class ToolResult with _$ToolResult {
     required String output,
     String? exceptionInfo,
     String? cwd,
+    @Default([]) List<String> violations,
   }) = _ToolResult;
 
   factory ToolResult.fromJson(Map<String, dynamic> json) => _$ToolResultFromJson(json);

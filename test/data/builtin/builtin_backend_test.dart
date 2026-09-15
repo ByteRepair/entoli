@@ -9,6 +9,7 @@ import "package:path/path.dart" as p;
 import "package:agent_chat/core/config.dart";
 import "package:agent_chat/data/builtin/builtin_agent.dart";
 import "package:agent_chat/data/builtin/builtin_backend.dart";
+import "package:agent_chat/data/builtin/templates.dart" show houseTurnInstructions;
 import "package:agent_chat/data/builtin/llm/llm_client.dart";
 import "package:agent_chat/data/builtin/llm/llm_registry.dart";
 import "package:agent_chat/data/builtin/memory/store.dart";
@@ -46,6 +47,7 @@ void main() {
         api: LlmApi.openai,
         baseUrl: "https://example.test/v1",
         models: ["fake-model"],
+        defaultModelId: "fake-model",
       ),
     ];
   });
@@ -68,6 +70,7 @@ void main() {
         endpoints: () =>
             [for (final p in providers) LlmEndpoint(p, build: (_, _) => client)],
         lookupEnv: (_) => null,
+        lookupKey: (_) => null,
       ),
     );
     if (library != null) backend.setLibrary(null, library);
@@ -96,6 +99,7 @@ void main() {
     MemorySettings memory = MemorySettings.off,
     String? bundledInstructions,
     bool includesUserInstructions = false,
+    bool omada = false,
   }) =>
       backend
           .sendPrompt(
@@ -112,7 +116,8 @@ void main() {
                   sharedWorkspace: sharedWorkspace,
                   disabled: disabled,
                   bundledInstructions: bundledInstructions,
-                  includesUserInstructions: includesUserInstructions))
+                  includesUserInstructions: includesUserInstructions,
+                  omada: omada))
           .toList();
 
   /// Carrying on the turn [history] ends in, under the same settings [send]
@@ -142,6 +147,35 @@ void main() {
       expect(events.last, isA<DoneEvent>());
     });
 
+    test("an Omada-on turn withholds the task tool and names the room", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      await send(backend, "hi",
+          omada: true, disabled: {AgentCapability.task});
+
+      // The capability mechanism drops `task` from the tool list and the
+      // prompt's delegation section together; the overlay names the room.
+      final tools = client.calls.single.tools.map((t) => t.name).toSet();
+      expect(tools, isNot(contains("task")));
+      final turnMessage = client.sent.first[1].text;
+      expect(turnMessage, contains(houseTurnInstructions()));
+    });
+
+    test("a turn outside Omada still offers the task tool", () async {
+      final backend = backendOver([
+        [finish],
+      ]);
+
+      await send(backend, "hi");
+
+      final tools = client.calls.single.tools.map((t) => t.name).toSet();
+      expect(tools, contains("task"));
+      // No second system message: nothing to say about the room.
+      expect(client.sent.first[1].text, isNot(contains(houseTurnInstructions())));
+    });
+
     test("a provider that is not configured is named", () async {
       final backend = backendOver([]);
       final events = await send(backend, "hi", provider: "ghost");
@@ -149,7 +183,7 @@ void main() {
       expect(events.whereType<ErrorEvent>().single.message, contains("'ghost' is not configured"));
     });
 
-    test("a provider with one model does not need it pinned as well", () async {
+    test("a provider that names a default does not need it pinned", () async {
       final backend = backendOver([
         [finish],
       ]);
@@ -158,9 +192,13 @@ void main() {
       expect(client.calls.single.model, "fake-model");
     });
 
-    test("a provider with no models and nothing pinned cannot be guessed at", () async {
+    test("a provider whose models are listed but default unnamed cannot be guessed at", () async {
       providers = const [
-        LlmProviderConfig(id: "fake", api: LlmApi.openai, baseUrl: "https://example.test/v1"),
+        LlmProviderConfig(
+            id: "fake",
+            api: LlmApi.openai,
+            baseUrl: "https://example.test/v1",
+            models: ["fake-model"]),
       ];
       final backend = backendOver([]);
       final events = await send(backend, "hi", model: null);
@@ -380,8 +418,8 @@ void main() {
     });
 
     // A project that does not share a workspace is the answer to "a chat that
-    // must not reach past itself": the chat's own workspace is its HOME too,
-    // and the prompt says nothing of a shared one.
+    // must not reach past itself": the prompt names the chat's own workspace
+    // and nothing of a shared one.
     test("a turn with no shared workspace is told nothing of one", () async {
       final backend = backendOver([
         [finish],
@@ -396,7 +434,8 @@ void main() {
       expect(system, isNot(contains("shared with every other")));
     });
 
-    test("a ! command with no shared workspace homes in the chat's own", () async {
+    test("a ! command's home is the chat's own where no workspace is shared",
+        () async {
       final backend = backendOver([], respond: (_) => ok(""));
       await send(backend, "!pwd", project: "anonymous", sharedWorkspace: false);
 

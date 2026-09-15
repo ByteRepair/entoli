@@ -2,6 +2,7 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
+import "package:archive/archive.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:path/path.dart" as p;
 
@@ -433,6 +434,34 @@ void main() {
       final id = await store.createArtifact("a1", src, "index.html");
       expect(await store.readArtifactFile("a1", id, "assets/logo.png"), png);
       expect(await store.readArtifactFile("a1", id, "missing.txt"), isNull);
+    });
+
+    test("readArtifactZip carries the files named from the artifact root",
+        () async {
+      await store.saveState(makeState("a1"));
+      final ws = config.workspaceDir("a1");
+      final src = p.join(ws, "report");
+      await Directory(src).create(recursive: true);
+      final png = Uint8List.fromList([1, 2, 3, 4]);
+      await Directory(p.join(src, "assets")).create();
+      await File(p.join(src, "assets", "logo.png")).writeAsBytes(png);
+      await File(p.join(src, "index.html")).writeAsString("<p>");
+
+      final id = await store.createArtifact("a1", src, "index.html");
+      final zip = await store.readArtifactZip("a1", id);
+      expect(zip, isNotNull);
+
+      final decoded = ZipDecoder().decodeBytes(zip!);
+      final names = [for (final member in decoded) member.name]..sort();
+      expect(names, ["assets/", "assets/logo.png", "index.html"]);
+      final entry = decoded.findFile("index.html")!.readBytes();
+      expect(utf8.decode(entry ?? Uint8List(0)), contains("<p>"));
+      expect(decoded.findFile("assets/logo.png")!.readBytes(), png);
+    });
+
+    test("readArtifactZip answers null where there is no artifact", () async {
+      await store.saveState(makeState("a1"));
+      expect(await store.readArtifactZip("a1", "nope"), isNull);
     });
   });
 }

@@ -583,16 +583,37 @@ nothing downstream should wait on it; a skill dropped into the directory by
 hand therefore does not appear until a restart, though nothing would break if it
 did — a message resolves against whatever the library holds when it is
 composed, and keeps the answer. The routes that buy a refresh are the places
-that change the library from inside the app — the Skills settings page and a
-`create_skill` install — each reloads every project's library after it writes,
-so the change lands without a restart.
+that change the library from inside the app — the skills and agents settings
+pages, at the app level and from a project settings page, and a `create_skill`
+install — each reloads every project's library after it writes, so the change
+lands without a restart. The same settings widgets serve both levels, under a
+`project` parameter: a project's page writes that project's directory, and a
+built-in's is the read-only view of the set it serves.
 
 A skill is a **directory**, not a file: a `SKILL.md` and whatever files it runs
-with. Its name is the frontmatter's `name` where it has one, the folder
-otherwise — the folder is where a `.skill` import lands, so the two names
-diverging is normal. Its body carries the base directory above the template,
-because that is the one thing every reader needs and none can work out. An agent
-is still one `.md` file: a system prompt, with nothing to run beside it.
+with. Its frontmatter is held to the [Agent Skills spec](https://agentskills.io)
+— a `name` of lowercase letters, digits and hyphens matching the folder's, a
+`description` of at most 1024 characters, and only the spec's keys
+(name, description, license, compatibility, metadata, allowed-tools) at the
+top level. Entoli's own keys (`argument-hint`, `user-invocable`,
+`disable-model-invocation`) live under the spec's `metadata:` map, which is
+its extension point for per-client settings — see "The conversation log" in
+this file's parent for what the flags do. `skillProblems`, in
+`lib/data/prompts/skill_validate.dart`, is the one validator, and it runs
+everywhere a skill comes in: a `.skill` import refuses a non-conformant
+package with the reasons, `create_skill` refuses a draft the same way so the
+model can fix it in-process, the loader skips a folder that does not conform
+with a log line, and `tool/gen_bundled_skills.dart` fails the build rather
+than ship a preset the loader would skip. Nothing is migrated: a skill that
+stops loading says so on its settings row and on the skill view page, and the
+fix is to edit and reinstall it.
+
+The folder is what a `.skill` import lands and what the base directory is, and
+the spec requires it to match the frontmatter `name` — so the two diverging is
+now a problem, not a normal state. Its body carries the base directory above
+the template, because that is the one thing every reader needs and none can
+work out. An agent is still one `.md` file: a system prompt, with nothing to
+run beside it.
 
 A skill has two halves to being reachable, and they are separate. **User
 invocation** is a `/name` in the composer, offered while the skill is
@@ -603,8 +624,11 @@ the `/` menu, and `disable-model-invocation: true` keeps it out of the tool and
 of the system-prompt listing, so the model reaches it only because the user sent
 it.
 
-`PromptDocument` reads only the top-level scalars — `description` is all the
-menu needs. The syntax is `_skillReference` and `_mention`, in
+`PromptDocument` reads only the top-level scalars and the `metadata:` map —
+`description` and the metadata keys are all the menu and the tool gates need.
+The parsing itself is `Frontmatter`, in `frontmatter.dart`, its own file so the
+build-time generators can read a skill's frontmatter without dragging the
+freezed models into a checkout that has not run build_runner yet. The syntax is `_skillReference` and `_mention`, in
 `prompt_library.dart`, beside the library they are read against rather than in
 whichever layer happened to need them first. `activeCompletionToken` in
 `CompletionField` has to agree with those two patterns: anything the menu
@@ -649,6 +673,11 @@ and no version to bump, the same bargain `siblingOf` made.
 resumed turn carries on under the agent the turn actually ran under rather than
 whatever that name means today. The mentions stay in the text and are not
 stripped, so what the user reads and what the model reads name the same agent.
+
+**An `@mention` is not a participant.** It stacks instructions for the turn —
+the reply is the main agent's — and who speaks is the controller's `_responder`
+decision (see "The room and its participants" in `lib/ui/chat/CLAUDE.md`).
+Omada is what makes a mention promote the named member, in Omada-on projects.
 
 `completions` is therefore **not** on `AgentBackend`: `completionsProvider`
 is a family keyed by project, reading the project's library directly and
@@ -719,6 +748,26 @@ catch-up, `reminder_scheduler.dart`), and `ReminderAlarms` (the platform port,
 `reminder_alarms.dart`). The store is `FileReminderStore`
 (`data/local/file_reminder_store.dart`); the port's Android impl is
 `AndroidReminderAlarms` (`data/local/android_reminder_alarms.dart`).
+
+**Linux's half is notifications, not scheduling.**
+`LinuxReminderAlarms` (`data/local/linux_reminder_alarms.dart`) posts over
+`org.freedesktop.Notifications` on the session bus — directly, not through a
+portal, since the portal's Notification interface exists for sandboxed apps and
+its action support is newer than the daemon's own. The completion notification
+carries a `default` action whose `ActionInvoked` becomes a chat id, and the
+tap reaches the app through the same held-pending split Android's channel has:
+`_pendingOpen` waits for `takeOpenChat`, the `openChat` stream is the nudge
+that makes `IncomingReminderOpen` drain it. A notification's id is the one the
+daemon answers, keyed to its chat id, so a tap on a repost cannot name the
+wrong chat. Nothing wakes the process: `schedules` is false, every reminder
+rides the in-process timer alone, and one missed while the app was closed is
+caught up at the next launch — which is what the reminders page says instead
+of promising a fire. A no-bus session (headless, minimal window manager, the
+dev toolbox) probes once at launch and falls back to
+`UnavailableReminderAlarms`, the way `KeyringSecretStore` falls back to the
+file; a daemon that appears later is next launch's business. What fires a
+reminder with the app closed is future work in the same shape — the app
+running collapsed in the background — not a system scheduler.
 
 **The runner drives the turn through `ChatController`, not beside it.**
 `ReminderRunner` creates the chat and stamps the reminder, then hands the turn

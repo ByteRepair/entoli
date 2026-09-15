@@ -18,7 +18,7 @@ whatever the global default currently is, and retargeting the global retargets
 every such chat. `ModelPicker` names what it resolves to under the field.
 
 The title model differs in one thing: nothing inherits from it, so it is a pair
-or it is off, and `OptionalModelPicker` leads the same list with `Off` and has
+or it is off, and its `ModelPicker` leads the same list with `Off` and has
 nothing to reset to. The classifier model is the same pattern: a separate
 optional pair, used only by auto mode, and off by default.
 
@@ -33,8 +33,32 @@ edited from its settings page, and a name set there wins over one set in
 `settings.json`. Old files with the former `opencodeEnv` key still load, and
 rewrite themselves under the new name on the next save.
 
-The settings page is eleven categories, picked from a panel beside it or, below
-`navBreakpoint`, from a page of their own. **General** is the app itself:
+The settings page is fifteen categories, picked from a panel beside it or, below
+`navBreakpoint`, from a page of their own. The order is the `SettingsCategory`
+enum's, which is also where the groupings live: a `dividerAbove` on the enum
+says a group ends before that category, and the list draws a `Divider` ahead of
+the tile — one source of truth for both. The six drawn groups: **General,
+Providers, On-device, LLMs** (the app and the plumbing that answers a chat);
+**Memory, Voice, Reminders** (what a conversation does beyond the text);
+**Agents, Skills** (what a message addresses by name); **Terminal, Byte
+Repair** (where commands run); **Sync, Data** (the device and all of it at
+once); and **Welcome, About** (the app rather than anything it does), last.
+**Welcome** is the
+tour rather than a list of sections — `welcome_page.dart`, not this file — so
+`_categoryBody` renders it whole where every other category is
+`ListView(children: _sectionsOf(...))`; its switch arm here is exhaustiveness
+only. It is the first-run screen too: a `WelcomeGate` wrapper in the home chain
+(around the shell, under the `Incoming*` wrappers, so what they open stays above
+the tour) shows `WelcomePage` instead of the shell while `welcomeSeen` in
+`settings.json` is still false, and the tour's Done writes the flag through the
+notifier, which swaps the shell in. The tour is the home content, not a route
+over it, so the back key cannot skip it and there is no back arrow; the tour
+also runs embedded here and has nothing of its own to leave. Its second and
+third pages embed
+`DefaultsSection`, `InstructionsSection` and `AutoMemorySection`, which live in
+`llm_settings.dart` and `memory_settings.dart` because two hosts share them —
+the same one-subject-per-file rule the other categories follow. A row added to
+one is on the tour the moment it is here. **General** is the app itself:
 **Appearance** — the theme, the two colours the palette is seeded from, how
 round a corner is, and the app icon, which are what the app looks like; where
 the system has a palette of its own a Material 3 Expressive switch takes the
@@ -59,30 +83,17 @@ than a category of its own: what the gesture opens is voice mode, so it is the
 same feature approached from the other end, and its two questions were a
 category with two lines in it. It keeps a file of its own all the same, since
 every other file here is one subject; see "Being the assistant". **Reminders**
-is Android's only — a reminder runs a prompt in a new chat at a time you pick,
-even when the app is closed — and where the port is unavailable the page says so
+is drawn where the port is available — Android fires with the app closed,
+Linux notifies what a reminder did but cannot wake the process, and the page's
+description says which (`ReminderAlarms.schedules` is the question) — and where
+the port is unavailable it says so
 and offers nothing,
 the way a row for a missing device would. The permission rows re-read on the way
 back to the app, since their answers can only change while it is behind in the
 system settings the rows open. The editor page is a route of its own;
 see "The reminder editor" below, and "Waking for a reminder" in
-`android/CLAUDE.md`. **Skills** is the list of what the agent can be told to do
-by name — the bundled ones, which ship with the app, and the user's own,
-imported from a `.skill` file or removed with their files. The user's skills
-live in their own directory beside the extracted presets, so a bundled one is
-not deletable and a user's is; import and delete are the two things that change
-it, and they reload the library the moment they are done, the one way a change
-to it lands without a restart, where a skill dropped into the directory by hand
-still waits for one. See "Skills and agents" in `lib/domain/CLAUDE.md`.
-**Agents** is the list of what a message can address by name — the bundled
-ones, which ship with the app and are read-only, and the user's own, written
-in-app and editable or removable. An agent is one flat `.md` file (a system
-prompt with `description` frontmatter), so it is written through an editor
-page rather than imported the way a skill's directory is; the name is the file
-name and is fixed once the agent exists, since renaming it would orphan every
-`@name` mention already written into a conversation. Add, edit and delete
-reload the library the moment they are done, the same one way a change to it
-lands without a restart. See "Skills and agents" in `lib/domain/CLAUDE.md`.
+`android/CLAUDE.md`. **Skills** is the list of what the agent can be told to do by name — the bundled ones, which ship with the app, and the user's own, imported from a `.skill` file or removed with their files. The user's skills live in their own directory beside the extracted presets, so a bundled one is not deletable and a user's is; import and delete are the two things that change it, and they reload the library the moment they are done, the one way a change to it lands without a restart, where a skill dropped into the directory by hand still waits for one. **Every row opens the skill view page** (`lib/ui/skills/skill_view.dart`) — the description, the SKILL.md body rendered the way a reply is, the files, and the conformance problems where there are any, since the loader skips a skill that does not conform to the Agent Skills spec and this page is where the skip says why. The page's scan validates every folder in the project's own directory, so a skipped skill is a row of its own (`Not loaded`, warning badge, removable) rather than an absence with only a log line behind it, and a loaded row with a badged folder carries a warning icon ahead of its Export. **Export rides every row** — bundled and inherited included, since what the library serves is what the user is reading — through `prompt_export.dart`, which resolves the bytes the way the library does (the page's own directory, then a bundled preset, then the default project's) and zips a skill under its own folder, because that folder is what a `.skill` import names a skill by. The file leaves through `BackupHandoff`, the ungated port the backup rides, so a save dialog on the desktops, a download on the web and the share sheet on Android are all the same call. The import flow and the install-to combobox are the **footer**, fixed to the bottom of the page so they do not scroll with the list — the section owns its own scroll, and the hosts (`_categoryBody`'s second special case beside Welcome, the project settings page's prompts page) render it directly rather than under a `ListView` of their own. The same widget is a project settings page's too, under a `project` parameter: it then reads that project's library and scans that project's directory, so an entry it holds is editable there and everything else is a row that says where it came from — `Inherited` from the default project, or `Bundled`. A built-in's page is the read-only version of the same thing: no import, no remove, the badges and the export only, since what a turn in it may have is the spec's to say. A user project's page imports without the destination combobox — it is in that project — and the global page's import carries one, `Global` default, where a skill the user picks can land in any project. The skill-install preview page has the same combobox, so a model-drafted skill is aimed the same way; `InstallDestination` is the one widget both carry. A project's agents page is the same widget with `@name` prose: add, edit and delete against the project's directory, inherited rows badged. See "Skills and agents" in `lib/domain/CLAUDE.md`.
+**Agents** is the list of what a message can address by name — the bundled ones, which ship with the app and are read-only, and the user's own, written in-app and editable or removable. An agent is one flat `.md` file (a system prompt with `description` frontmatter), so it is written through an editor page rather than imported the way a skill's directory is; the name is the file name and is fixed once the agent exists, since renaming it would orphan every `@name` mention already written into a conversation. **Import agent** is the one way an outside `.md` comes in: it lands under its file's own name, with a replace-confirm where the name is taken and a refusal for an empty body, rather than through the editor — an editor pass before the write would be a second way to make the name and the file name diverge. Add and Import agent are the fixed footer, the two-button row the backup section draws. Export rides every row, the same `BackupHandoff` route the skills page takes, the `.md` itself the file. Add, edit, delete and import reload the library the moment they are done, the same one way a change to it lands without a restart. See "Skills and agents" in `lib/domain/CLAUDE.md`.
 **Byte Repair** is the tooling for the built-in project of the same name: a
 banner saying whether the configured terminal env can run it, a button that
 runs a bundled install script through that env to create the project's own
@@ -107,7 +118,15 @@ so and hides the rest until a rootfs is picked from Terminal; on every other
 platform the host shell is the only env and is capable. **Sync** is paired devices — this device's identity and
 name, the relay and TURN settings for internet pairing, the paired-device list,
 and the pairing window. See `lib/data/sync/CLAUDE.md` for the threat model and
-handshake. **Providers** is the endpoints.
+handshake. **Providers** is the endpoints — and the keys, which are not in
+`settings.json` at all: a key typed into the provider dialog (or the
+recommended-provider card) goes to the secret store, under the provider's id,
+and the row says "key stored" rather than showing any of it. The dialog's key
+field is tri-state — typed text stores, an empty field over a stored key
+keeps it, and the explicit remove clears it — because an empty field alone
+cannot say keep from clear once the field no longer echoes what is stored.
+The TURN password is in the store the same way; the TURN username is not a
+secret and rides in `settings.json` beside the URL.
 **LLMs** is what a new chat is answered by and what names it. **Memory** is
 what one conversation leaves the others: the two `AGENTS.md` files every turn
 is read from — the user's own at the root of the data directory and the
@@ -184,10 +203,14 @@ for an install time nothing shows, and refetches on the web with a cache buster
 — for one field of a file this reads directly.
 
 The libraries are Flutter's own `showLicensePage`, not a list kept here. The
-registry already holds every package that ships, and this app adds the bundled
+registry already holds every package that ships, and the app adds the bundled
 font and voice licences to it — see "How a reply is set" and "What listens and
 what speaks", both of which were written against a licence page that did not
-exist yet.
+exist yet. The bundled skills join them one entry per skill that carries its
+own `LICENSE.txt`, named after the skill and read from the embedded data —
+`registerBundledSkillLicences` — so the notice travels with the skill wherever
+the skill is redistributed, which is what the fetched ones' Apache licence
+asks.
 
 **Narrow, the categories are the page rather than its drawer**, and each one is
 pushed over the list. That is the one place this and the chat page differ about
@@ -223,6 +246,14 @@ hundred megabytes of bytes that can be fetched again would be in every export,
 and a restore would drag them between machines and delete whatever was already
 downloaded. Keeping them outside is what makes both false, rather than an
 exception in here that someone has to remember — see "Where the models live".
+
+It is also why the provider API keys and the TURN password live in the secret
+store rather than in `settings.json`: `sync/` is the one directory a backup
+skips, so a secret behind it is out of every export, where a key in a JSON
+file the format carries by default would ride in all of them. What a backup
+costs the user is stated plainly — restoring onto another device does not
+bring the keys, and they are typed again where the store is local to it (the
+keyring is a machine's own).
 
 A per-project `rootfs/` is the one re-fetchable tree that *does* live under the
 data directory, because a built-in with rootfs isolation keeps its living

@@ -143,13 +143,17 @@ class ChatRepository {
   }
 
   /// File a chat under another project. Its own workspace travels with it; the
-  /// shared one it can reach is the new project's from the next turn on. The
-  /// shell it stood in ends with the move, for the project it left: it is
-  /// standing in the directory that is about to move out from under it, and
-  /// the next turn starts one in the new one.
+  /// shared one it can reach is the new project's from the next turn on. A
+  /// turn still running is ended first — it holds the directories that are
+  /// about to move, and the next command it ran would quietly remake them
+  /// under the project it left. The shell it stood in ends with the move, for
+  /// the project it left: the next turn starts one in the new one.
   Future<void> moveChat(String chatId, String? project) async {
     final from = await _store.projectOf(chatId);
-    if (from != project) _backend.closeChatShell(chatId, project: from);
+    if (from != project) {
+      await abort(chatId);
+      _backend.closeChatShell(chatId, project: from);
+    }
     await _store.moveChat(chatId, project);
     _changes.add(Moved(chatId, project));
   }
@@ -227,8 +231,9 @@ class ChatRepository {
   }
 
   /// A name for a new chat, from the first thing said in it. Null when no
-  /// title model is configured: naming chats is off, and this one keeps the
-  /// name it was created with.
+  /// title provider is configured: naming chats is off, and this one keeps the
+  /// name it was created with. A provider named without a model resolves to
+  /// its light default in the backend.
   ///
   /// A `!` message names nothing either. It is not a thing said, and it is the
   /// one turn the user routed away from a model — in a chat that may have no
@@ -237,7 +242,7 @@ class ChatRepository {
     final settings = _settings();
     final provider = settings.titleProviderId;
     final model = settings.titleModelId;
-    if (provider == null || model == null || text.trim().isEmpty) return null;
+    if (provider == null || text.trim().isEmpty) return null;
     if (shellBypassCommand(text) != null) return null;
     final answer = await _backend.ask(titlePrompt(text), model: model, provider: provider);
     return answer == null ? null : cleanTitle(answer);
@@ -270,20 +275,22 @@ class ChatRepository {
   /// model answering fluently from the turn the user has just left.
   Stream<AgentEvent> sendPrompt(String chatId, Message prompt,
       {List<Message> history = const [],
-      bool replaces = false}) async* {
+      bool replaces = false,
+      String? omadaMember}) async* {
     if (replaces) await _backend.resetSession(chatId, history: history);
     yield* _backend.sendPrompt(chatId, prompt,
         history: history,
-        settings: await _turnSettings(chatId));
+        settings: await _turnSettings(chatId, omadaMember: omadaMember));
   }
 
   /// Carry on the turn [history] ends in — see `AgentBackend.resumeTurn`. It
   /// runs under whatever the chat's settings are now, not whatever they were
   /// when the turn was cut off: the same rule an edit or a regenerate follows.
   Stream<AgentEvent> resumeTurn(String chatId,
-      {List<Message> history = const []}) async* {
+      {List<Message> history = const [], String? omadaMember}) async* {
     yield* _backend.resumeTurn(chatId,
-        history: history, settings: await _turnSettings(chatId));
+        history: history,
+        settings: await _turnSettings(chatId, omadaMember: omadaMember));
   }
 
   /// The chat's own choice wins, else the app default, else whatever the
@@ -298,7 +305,7 @@ class ChatRepository {
   /// chat alone, and where the project already took it away it cannot be given
   /// it back from here. `headless` is the other: a chat nobody watches (a
   /// reminder's) drops `ask_user` and `task`, since nobody is there to answer.
-  Future<TurnSettings> _turnSettings(String chatId) async {
+  Future<TurnSettings> _turnSettings(String chatId, {String? omadaMember}) async {
     final meta = await loadMeta(chatId);
     final settings = _settings();
     final project = await projectOf(chatId);
@@ -308,6 +315,11 @@ class ChatRepository {
       disabled..add(AgentCapability.ask)..add(AgentCapability.task);
     }
     final projectSettings = await projectSettingsOf(project);
+    // In an Omada-on project, members are brought in by mentioning them —
+    // their turn follows — so the `task` relay has no job left. The capability
+    // mechanism drops it from the tool list and the prompt together.
+    final omada = projectSettings.omada;
+    if (omada) disabled.add(AgentCapability.task);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -325,6 +337,16 @@ class ChatRepository {
       includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
+      turnMaxSteps:
+          projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
+      // The project's wording answers over the app's, like the step limit.
+      tone: projectSettings.tone ?? settings.tone,
+      citations: projectSettings.citations ?? settings.citations,
+
+      // The answering member is the caller's fact, not the chat's — it is
+      // about the message the turn runs, not the settings it runs under.
+      omadaMember: omadaMember,
+      omada: omada,
     );
   }
 
@@ -414,6 +436,11 @@ class ChatRepository {
 
   Future<Uint8List?> readResource(String chatId, String resource) =>
       _store.readResource(chatId, resource);
+
+  /// A whole artifact as one zip — what a peer's `resourceRequest` naming one
+  /// is answered with. Null where there is no artifact by that id.
+  Future<Uint8List?> readArtifactZip(String chatId, String artifactId) =>
+      _store.readArtifactZip(chatId, artifactId);
 
   /// Read [messageId] rather than the thread beside it that is on screen.
   Future<Chat> selectThread(Chat chat, String messageId) =>

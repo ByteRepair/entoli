@@ -2,6 +2,7 @@ import "dart:async";
 import "dart:io";
 
 import "package:clock/clock.dart";
+import "package:flutter/gestures.dart" show PointerDeviceKind;
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -19,13 +20,16 @@ import "package:agent_chat/domain/sync/devices.dart";
 import "package:agent_chat/domain/sync/identity.dart";
 import "package:agent_chat/domain/sync/relay_signaling.dart";
 import "package:agent_chat/domain/agent_backend.dart";
+import "package:agent_chat/domain/app_secrets.dart";
 import "package:agent_chat/domain/app_settings.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/chat_repository.dart";
 import "package:agent_chat/domain/chat_store.dart";
+import "package:agent_chat/domain/llm_provider.dart";
 import "package:agent_chat/domain/models.dart";
+import "package:agent_chat/ui/widgets/resettable_field.dart" show LabelledField;
 import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/domain/reminder.dart";
 import "package:agent_chat/domain/shell.dart";
@@ -42,7 +46,6 @@ import "package:agent_chat/ui/focus_follows_keyboard.dart";
 import "package:agent_chat/ui/settings/settings_page.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
-import "package:agent_chat/ui/widgets/model_picker.dart";
 
 import "fakes.dart";
 
@@ -68,6 +71,7 @@ final _testNow = DateTime(2026, 7, 1, 12);
 class TestApp {
   TestApp._({
     required this.config,
+    required this.secrets,
     required this.backend,
     required this.picker,
     required this.launcher,
@@ -90,6 +94,11 @@ class TestApp {
   });
 
   final Clock clock;
+
+  /// The secrets the app's notifier writes into — exposed so a test can assert
+  /// on what a settings save put in the store, the way `config` is for the
+  /// settings file.
+  final AppSecrets secrets;
 
   /// [store] defaults to the real one over a temp directory, since most of the
   /// suite is checking what the app does with what is on disk. Pass a
@@ -158,6 +167,7 @@ class TestApp {
     SyncHub? hub,
     Clock? clock,
     bool appHidden = false,
+    FakeSecretStore? secrets,
   }) {
     final config = tempConfig();
     final backend = FakeBackend();
@@ -189,8 +199,13 @@ class TestApp {
       if (nativeVoice.recognition) nativeRecognition.id,
       if (nativeVoice.speech) nativeSpeech.id,
     };
+    // The real one over an in-memory store: what a settings page reads back
+    // after it writes is [AppSecrets]'s own, so faking it would only prove
+    // the fake. A test that wants keys pre-stored passes its own store.
+    final appSecrets = AppSecrets(secrets ?? FakeSecretStore());
     return TestApp._(
       config: config,
+      secrets: appSecrets,
       backend: backend,
       picker: picker,
       launcher: launcher,
@@ -216,6 +231,7 @@ class TestApp {
           shellProvider.overrideWithValue(
               shell ?? _defaultShell(proot, abi)),
           appConfigProvider.overrideWithValue(config),
+          appSecretsProvider.overrideWithValue(appSecrets),
           attachmentPickerProvider.overrideWithValue(picker),
           promptLibraryProvider.overrideWith2(
               (project) => PromptLibraryNotifier(project, library ?? testLibrary())),
@@ -313,6 +329,10 @@ class TestApp {
   /// The app-level default, written the way the app writes it.
   Future<void> seedGlobalDefault({String? providerId, String? modelId}) =>
       seedSettings(AppSettings(defaultProviderId: providerId, defaultModelId: modelId));
+
+  /// The configured providers, written the way the app writes them.
+  Future<void> seedProviders(List<LlmProviderConfig> providers) =>
+      seedSettings(AppSettings(llmProviders: providers));
 
   /// Pick both of [voiceModelPair], which is what makes voice mode ready. From
   /// a `testWidgets` body this wants a real clock: `io(tester, app.pickVoiceModels)`.
@@ -590,6 +610,33 @@ List<String> clipboard(WidgetTester tester) {
   return copied;
 }
 
+/// A mouse drag from [from] to [to] — [to] null collapses the selection at
+/// [from] — and Ctrl+C over it. The whole of what a selection-copy test
+/// varies in is the two positions; the gesture, the pump between them and
+/// the key sequence are the same every time.
+Future<void> dragCopy(
+  WidgetTester tester,
+  Offset from, {
+  Offset? to,
+}) async {
+  final gesture = await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+  await tester.pump();
+  if (to != null) await gesture.moveTo(to);
+  await tester.pump();
+  await gesture.up();
+  await tester.pumpAndSettle();
+  await copyViaKeyboard(tester);
+}
+
+/// Ctrl+C, the way the framework's copy action reads it. The gesture that
+/// made a selection is the test's own; this is the copy half of it.
+Future<void> copyViaKeyboard(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.pumpAndSettle();
+}
+
 /// The soft keyboard, the way the platform reports one: insets over the bottom
 /// of the window, and nothing else. [up] false is it going away — which on
 /// Android is the whole of what a back gesture says about it.
@@ -679,6 +726,9 @@ Future<void> pumpSettings(
   await openCategory(tester, category);
 }
 
+/// A settings category's tile by its label, in the panel or the list of them.
+Finder tile(String label) => find.widgetWithText(ListTile, label);
+
 /// The settings page at its Appearance section, which is in General and far
 /// enough down a test window to need scrolling to. Shared by the two files that
 /// test what is in it.
@@ -695,21 +745,33 @@ Future<void> openCategory(WidgetTester tester, SettingsCategory category) async 
   if (find.widgetWithText(AppBar, "Settings").evaluate().isEmpty) {
     await pressBack(tester);
   }
-  final tile = find.widgetWithText(ListTile, category.label);
-  // Only when it is off the bottom: [scrollTo] aligns what it reveals with the
-  // top of the list, which would push the categories above it out of the tree
-  // and leave the next call with nothing to tap.
-  if (tile.evaluate().isEmpty) await scrollTo(tester, tile);
-  await tester.tap(tile);
+  final categoryTile = tile(category.label);
+  // Coming back from a far-down category, the one wanted can be above the
+  // viewport, off the top of the list's extent. A drag down finds the top,
+  // where [scrollTo]'s drag-up cannot.
+  if (categoryTile.evaluate().isEmpty) {
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 400));
+    await tester.pumpAndSettle();
+  }
+  // Only when it is still off the bottom: [scrollTo] aligns what it reveals
+  // with the top of the list, which would push the categories above it out of
+  // the tree and leave the next call with nothing to tap.
+  if (categoryTile.evaluate().isEmpty) await scrollTo(tester, categoryTile);
+  await tester.tap(categoryTile);
   await settleIo(tester);
 }
 
-/// Open the model dropdown. Scoped to [ModelPicker]: the optional pickers on
-/// the same page are dropdowns of the same type.
-Future<void> openDropdown(WidgetTester tester) async {
+/// Open the model dropdown. Scoped to the field labelled [label] — the LLMs
+/// page has two pickers of the same type, and the chat settings page three —
+/// defaulting to the one under "LLM".
+Future<void> openDropdown(WidgetTester tester, {String label = "LLM"}) async {
+  final labelField = find.ancestor(
+    of: find.text(label),
+    matching: find.byType(LabelledField),
+  );
   await tester.tap(find.descendant(
-    of: find.byType(ModelPicker),
-    matching: find.byType(DropdownButtonFormField<ModelOption?>),
+    of: labelField,
+    matching: find.byType(DropdownButtonFormField<ModelChoice>),
   ));
   await tester.pumpAndSettle();
 }
@@ -773,4 +835,40 @@ class _AppHidden extends AppHidden {
 
   @override
   bool build() => initial;
+}
+
+/// Reload a project's prompt library and settle, so what a page draws reflects
+/// what is on disk rather than the test's seeded library. The reload is real
+/// file I/O, so it goes through `runAsync`; [settle] turns the settle off for
+/// the case that wants the library swapped while the page is left pumping.
+Future<void> reloadLibrary(
+  WidgetTester tester,
+  TestApp app, {
+  String? project,
+  bool settle = true,
+}) async {
+  await tester.runAsync(
+    () => app.container.read(promptLibraryProvider(project).notifier).reload(),
+  );
+  if (settle) await settleIo(tester);
+}
+
+/// Write a skill the library will offer, the shape `loadSkillDirectories`
+/// reads: one folder, one `SKILL.md` with conforming frontmatter. The folder
+/// name is the skill's name, as the spec requires the two to match.
+Future<void> writeSkill(
+  TestApp app,
+  String name, {
+  String? project,
+  Map<String, String> metadata = const {},
+}) async {
+  final file = File(
+      "${app.config.promptsDir(CompletionKind.skill, project: project)}/$name/SKILL.md");
+  await file.create(recursive: true);
+  final metadataBlock = metadata.isEmpty
+      ? ""
+      : "\nmetadata:\n"
+          "${[for (final e in metadata.entries) "  ${e.key}: \"${e.value}\""].join("\n")}\n";
+  await file.writeAsString(
+      "---\nname: $name\ndescription: do $name$metadataBlock\n---\n\nDo $name.\n");
 }

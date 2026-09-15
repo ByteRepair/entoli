@@ -63,15 +63,17 @@ class RemoteTurnDriver implements RemoteTurns {
   }
 
   void _publish(String chatId, ChatViewState view) {
+    final approvals = [
+      for (final list in view.approvals.values) ...list
+    ];
     final asks = [
-      for (final asked in view.questions)
-        SyncAsk(id: asked.id, argumentsJson: asked.argumentsJson),
+      for (final asked in view.questions.values) ...asked,
     ];
     final signature = [
       view.isRunning,
       view.status,
       view.retry,
-      [for (final a in view.approvals) a.id],
+      [for (final a in approvals) a.id],
       [for (final a in asks) a.id],
     ].join("\u0000");
     if (_published[chatId] == signature) return;
@@ -79,8 +81,11 @@ class RemoteTurnDriver implements RemoteTurns {
     _hub.publishTurn(
       chatId,
       running: view.isRunning,
-      approvals: view.approvals,
-      asks: asks,
+      approvals: approvals,
+      asks: [
+        for (final asked in asks)
+          SyncAsk(id: asked.id, argumentsJson: asked.argumentsJson),
+      ],
       status: view.status,
       retry: view.retry,
     );

@@ -5,7 +5,11 @@ import "../../domain/bundled_prompt_file.dart";
 import "../../domain/bundled_project_prompts.dart" show bundledSystemPrompts;
 import "../../domain/builtin_project.dart";
 import "../../domain/file_tools.dart";
+import "../../domain/models.dart" show CompletionKind;
+import "../../domain/plan.dart";
 import "../../domain/profile.dart";
+import "../../domain/shell.dart" show CommandSandbox;
+import "../../domain/tone.dart";
 import "../../domain/prompt_library.dart";
 import "skill_tool.dart";
 import "task_tool.dart";
@@ -93,6 +97,12 @@ class AgentCapabilities {
         artifact: false,
         createSkill: false,
       );
+
+  /// Whether `present_plan` is offered: the one tool that both parks the turn
+  /// on an answer (`ask`) and publishes a card (`artifact`), so it rides the
+  /// pair rather than adding a capability of its own. One spelling of the
+  /// predicate, for the tool list, the prompt, and the dispatch to read.
+  bool get presentPlan => ask && artifact;
 }
 
 /// The rules the agent operates under. Ported from mini-swe-agent's `mini.yaml`
@@ -109,6 +119,8 @@ class AgentCapabilities {
 String systemPrompt({
   required String platform,
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   bool oneShot = false,
@@ -117,11 +129,19 @@ String systemPrompt({
         ? _withShell(
             platform: platform,
             profile: profile,
+            tone: tone,
+            citations: citations,
             caps: caps,
             skills: skills,
             oneShot: oneShot,
           )
-        : _withoutShell(profile: profile, caps: caps, skills: skills);
+        : _withoutShell(
+            profile: profile,
+            tone: tone,
+            citations: citations,
+            caps: caps,
+            skills: skills,
+          );
 
 /// The half that changes: where this conversation's files are, and whatever an
 /// `@agent` mention added. Its own system message so the body above it is
@@ -142,6 +162,7 @@ String turnPrompt({
   bool sharedWorkspace = true,
   required bool projectHome,
   String? guestRoot,
+  String? homePath,
 }) {
   // Where the model is told its workspace is: `~` inside a guest, the real
   // path on the machine. The chat workspace is `~/chats/<id>` inside a guest.
@@ -157,6 +178,29 @@ String turnPrompt({
           "built up — goes\nthere, so another conversation can pick it up. "
           "Write to it by path; you do not\nhave to be in it."
       : "";
+  // What a command's home directory is, and so where `~` expands. The value
+  // is [homePath], the shell's answer; the arms are wording.
+  String home() {
+    if (!canRunCommands || homePath == null) return "";
+    if (!projectHome) {
+      return "\n\n"
+          "A command's home directory is the machine user's own "
+          "($homePath), not\nthis workspace: `~` is the user's home, and "
+          "dotfiles a tool writes\nare the user's real files.";
+    }
+    if (!sharedWorkspace) {
+      return "\n\n"
+          "A command's home directory is this conversation's own "
+          "workspace\n($homePath), so `~` and a tool's home-directory "
+          "writes stay here, and\nnothing a tool keeps in a home "
+          "directory outlives the chat.";
+    }
+    return "\n\n"
+        "A command's home directory is the project workspace ($homePath), "
+        "so\nanything a tool keeps in a home directory is the project's "
+        "too, and a\nrepository cloned or a package installed by one "
+        "conversation is already\nthere for the next.";
+  }
   final parts = [
     if (canRunCommands)
       """
@@ -167,13 +211,7 @@ It is yours; the files in it survive between turns, and nothing else writes
 there. Intermediate work — scratch scripts, downloads, files you build a
 deliverable from — goes here too, not in the machine's /tmp: /tmp is outside
 both workspaces, is not kept with this conversation, and a write there is
-asked about.$shared${projectHome || !sharedWorkspace ? """
-A command's home directory is the project workspace, so anything a tool keeps
-in a home directory is the project's too, and a repository cloned or a package
-installed by one conversation is already there for the next.""" : """
-A command's home directory is the machine user's own, not the project
-workspace, so a `~` and a tool that writes to its home go there rather than to
-the project."""}""",
+asked about.$shared${home()}""",
     if (instructions != null && instructions.isNotEmpty)
       "## Workspace instructions\n\n$instructions",
     if (pinned != null && pinned.isNotEmpty)
@@ -212,6 +250,62 @@ $recall""",
 String userTurnText(String text, {required DateTime at, required bool first}) =>
     _withNow(first ? _firstTask(text) : text, at);
 
+/// What a reply written by *another participant* reads as to this viewer's
+/// model: labeled with who wrote it, and marked as another agent's words so it
+/// cannot be mistaken for the human user speaking. A user-role message — the
+/// viewer is being told something, not speaking — but the label keeps it
+/// nobody's own.
+String peerTurnText(String text, {required String by, required DateTime at}) =>
+    _withNow(
+        "Message from $by (another agent in this conversation, not the "
+        "user):\n\n$text",
+        at);
+
+/// The member's prompt, from the library as it stands now: the file is the
+/// member. Null where the name is no longer in the library — the controller
+/// has already routed such a turn to the main agent, so this is unreachable
+/// from a member turn.
+String? memberPrompt(PromptLibrary? library, String member) =>
+    library?.find(CompletionKind.agent, member)?.body;
+
+/// What a member replies when it declines the turn it was addressed with:
+/// word for word, so a longer reply is a reply. The controller reads it off
+/// the record, and the room's round stops there.
+const passWord = "pass";
+
+/// What the conversation calls the main agent wherever a viewer is named and
+/// the reply carries no author — the label, not a member handle.
+const mainAgentLabel = "(main agent)";
+
+/// The one rule a member turn is told beyond its own instructions: the
+/// convention that makes declining possible, and the mention that makes
+/// handing off one. Appended to the member's prompt rather than the system
+/// prompt, which stays the one cacheable prefix.
+String memberTurnInstructions() => """
+## The room
+
+You are one member of a project team, answering a turn addressed to you. To
+hand work to another member, mention them by handle (for example
+@researcher) in your reply — their turn follows yours. To decline a turn
+addressed to you, reply with the single word `$passWord` and nothing else.
+Address the user plainly; the user reads what you write.
+
+Do not write your own handle in the reply — not even to sign it. A reply
+that names two members is read as addressing a group, and no one's turn
+follows a group.""";
+
+/// The house's half of the member's room contract: in an Omada-on project the
+/// main agent reaches members by handle too. Beside the member's half, never
+/// the system prompt — which stays the one cacheable prefix.
+String houseTurnInstructions() => """
+## The room
+
+You are the main agent of a project team, and you answer the user directly.
+To bring in another member, mention their handle (for example @researcher)
+in your reply — their turn follows yours, and you can pass them the part of
+the work that suits them. You cannot run a member yourself: addressing them
+by handle is the way.""";
+
 /// Where there is no shell, the model cannot run commands. But it does have a
 /// filesystem: the `read`/`write`/`edit` tools work on the workspace via the
 /// same `FileSystem` the app uses, so a browser can still produce files and
@@ -219,6 +313,8 @@ String userTurnText(String text, {required DateTime at, required bool first}) =>
 /// same termination signal the shell path uses.
 String _withoutShell({
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
 }) {
@@ -227,17 +323,30 @@ String _withoutShell({
   final artifact = caps.artifact
       ? ", and `artifact` to publish an HTML page the user can\nview"
       : "";
+  // The browser turn is offered the plan tools the same list the shell turn
+  // is, so its prompt names them the same way the step-2 sentence does:
+  // appended to the files sentence, where the browser names what reaches a
+  // file. The trio is never withheld here — `oneShot` is a sub-agent's fact,
+  // and a sub-agent always has a shell — so only the presenter is gated.
+  final plan = caps.presentPlan
+      ? "\n\n`$presentPlanToolName` puts a plan ($planFileName in the "
+          "workspace) to the user for\napproval: it publishes the plan as a "
+          "card and asks Go or request changes.\n"
+          "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName` work "
+          "through it."
+      : "";
   final skillsText = skillsSection(skills);
   final sections = <String>[
     _files,
+    _style,
     if (caps.ask) _asking,
     if (caps.artifact) _artifacts,
     if (skillsText.isNotEmpty) skillsText,
   ].join("\n");
   return "You are a helpful assistant.\n\n"
-      "${_substitute(_systemProse("browser")!, {"artifact": artifact})}\n\n"
+      "${_substitute(_systemProse("browser")!, {"artifact": artifact})}$plan\n\n"
       "$sections\n"
-      "${profileSection(profile)}";
+      "${profileSection(profile)}${styleSection(tone, citations)}";
 }
 
 /// The skills the model may load itself, as the system prompt lists them.
@@ -279,9 +388,15 @@ final String _files = "\n${_systemProse("files")}";
 /// available with or without a shell — a browser can still open a page.
 final String _artifacts = "\n${_systemProse("artifacts")}";
 
+/// The one thing both prompts say about how replies are worded and which tool
+/// reaches for a file, because neither depends on what the turn can run.
+final String _style = "\n${_systemProse("style")}";
+
 /// The step-2 sentence's list of what a call is for, one fragment per tool
-/// the turn is offered, in the order the sentence reads them.
-String _toolFragments(AgentCapabilities caps) {
+/// the turn is offered, in the order the sentence reads them. [oneShot] is
+/// the same fact the tool list reads — a sub-agent's — so a prompt names no
+/// tool the list does not carry.
+String _toolFragments(AgentCapabilities caps, {bool oneShot = false}) {
   final acts = [
     "`bash` to run a command",
     "`read`/`write`/`edit`\n   to work with files in the workspace",
@@ -289,6 +404,11 @@ String _toolFragments(AgentCapabilities caps) {
     if (caps.ask) "`$askToolName` to put a question to the\n   user",
     if (caps.webSearch) "`websearch` to search the web, `webfetch` to read a page",
     if (caps.artifact) "`artifact`\n   to publish an HTML page the user can view",
+    if (!oneShot)
+      "`$planAddToolName`/`$planNextToolName`/`$planDoneToolName`"
+          "\n   to work through a plan ($planFileName in the workspace)",
+    if (caps.presentPlan)
+      "`$presentPlanToolName`\n   to put the plan to the user for approval",
   ];
   if (acts.length == 1) return acts.single;
   final head = acts.sublist(0, acts.length - 1).join(", ");
@@ -325,6 +445,7 @@ String _shellSections({
     ?webSearch,
     if (skillsText.isNotEmpty) skillsText,
     _files,
+    _style,
     ?artifacts,
     _systemProse("finish")!,
     ?ask,
@@ -335,6 +456,8 @@ String _shellSections({
 String _withShell({
   required String platform,
   Profile? profile,
+  Tone tone = Tone.none,
+  bool citations = false,
   required AgentCapabilities caps,
   List<PromptDocument> skills = const [],
   bool oneShot = false,
@@ -347,11 +470,12 @@ String _withShell({
   );
   final prose = _systemProse("shell")!;
   return _substitute(prose, {
-    "tools": _toolFragments(caps),
+    "tools": _toolFragments(caps, oneShot: oneShot),
     "shell": oneShot ? _oneShotShell : _persistentShell,
     "sections": sections,
   }) +
-      profileSection(profile);
+      profileSection(profile) +
+      styleSection(tone, citations);
 }
 
 /// The current moment, put at the top of a user turn so the model can date its
@@ -407,10 +531,14 @@ const _elidedHalf = 5000;
 /// How a command's result is shown to the model: JSON, and elided in the
 /// middle once it is long enough to crowd out the conversation. Both ends are
 /// kept because a build prints what it is doing first and why it failed last.
+/// [violations] is what a sandbox denied while the command ran, worded after
+/// the output it belongs to so the model reads the refusal beside what it
+/// could reach, and rewrites rather than retrying blind.
 String observation({
   required int returnCode,
   required String output,
   String? exceptionInfo,
+  List<String> violations = const [],
 }) {
   final elide = output.length > _fullOutputLimit;
   return _pretty.convert({
@@ -423,6 +551,8 @@ String observation({
       "warning": "Output too long.",
     },
     if (exceptionInfo != null && exceptionInfo.isNotEmpty) "exception_info": exceptionInfo,
+    if (violations.isNotEmpty)
+      "sandbox_violations": CommandSandbox.violationsNote(violations).trim(),
   });
 }
 
@@ -442,10 +572,11 @@ String shellRunTranscript({
   required int returnCode,
   required String output,
   String? exceptionInfo,
+  List<String> violations = const [],
 }) =>
     "The user ran this command in the chat themselves, rather than asking me "
     "to:\n\n$command\n\n"
-    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo)}";
+    "${observation(returnCode: returnCode, output: output, exceptionInfo: exceptionInfo, violations: violations)}";
 
 /// What a call the agent never got to is answered with — the ones left over
 /// when a turn is aborted part-way through a message's calls. A call that may
@@ -476,4 +607,21 @@ String profileSection(Profile? profile) {
   final buf = StringBuffer("\n## About the user\n\n");
   if (labelled.isNotEmpty) buf.writeln(labelled.join("\n"));
   return buf.toString();
+}
+
+/// How the turn words its replies: the resolved tone's sentence, and the
+/// citations rule where it is on. Empty where neither is set, so a turn under
+/// no preference gets the same system prompt as before. Beside
+/// [profileSection] rather than in the section list, because both change with
+/// the settings a turn runs under rather than with what it is offered.
+String styleSection(Tone tone, bool citations) {
+  final lines = [
+    ?tone.instruction,
+    if (citations)
+      "When a reply draws on web pages, number them in the text and list the "
+      "pages at the end of the reply, numbered to match — what was used, not "
+      "a search for more.",
+  ];
+  if (lines.isEmpty) return "";
+  return "\n## How to reply\n\n${lines.join("\n\n")}\n";
 }

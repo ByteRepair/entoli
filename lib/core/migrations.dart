@@ -60,8 +60,5 @@ Future<List<Migration>> _pending(AppConfig config, List<Migration> chain) async 
 /// `writeAsString` killed between its truncate and its write leaves a stamp
 /// naming no entry, and that directory is frozen out of every migration to
 /// come.
-Future<void> _stamp(AppConfig config, Migration migration) async {
-  final temp = config.fs.file("${config.versionFile}$writingSuffix");
-  await temp.writeAsString(migration.version);
-  await temp.rename(config.versionFile);
-}
+Future<void> _stamp(AppConfig config, Migration migration) =>
+    writeThroughRename(config.fs, config.versionFile, migration.version);

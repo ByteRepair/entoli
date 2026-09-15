@@ -11,6 +11,7 @@ import "../../domain/agent_backend.dart";
 import "../../domain/ask.dart";
 import "../../domain/chat_store.dart";
 import "../../domain/file_tools.dart";
+import "../../domain/llm_provider.dart";
 import "../../domain/models.dart";
 import "../../domain/permission.dart";
 import "../../domain/prompt_library.dart";
@@ -170,6 +171,10 @@ class BuiltinBackend implements AgentBackend {
     required TurnSettings settings,
   }) async {
     final project = settings.project;
+    // Registered up front and removed by key in the finally: a parallel
+    // round runs several turns of one chat, and a chat-keyed map would drop
+    // the earlier kill.
+    final stopKey = _running.add(chatId, () async {});
     try {
       // Before the model is resolved, because a `!` turn never needs one: a
       // chat with no provider configured can still run a command.
@@ -202,7 +207,7 @@ class BuiltinBackend implements AgentBackend {
           sharedWorkspace: settings.sharedWorkspace);
       String resolvePath(String path) => resolveWorkspacePath(
           config.fs, path, workspace, projectWorkspace,
-          guestRoot: shell.guestRoot);
+          guestRoot: shell.guestRoot, homePath: shell.homeFor(projectWorkspace));
       // What this turn is offered: the device's facts minus a headless turn's
       // takes and the project's. One value, so the prompt and the tool list
       // cannot disagree.
@@ -236,6 +241,8 @@ class BuiltinBackend implements AgentBackend {
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
         project: project,
+        tone: settings.tone,
+        citations: settings.citations,
       );
       final classifier =
           _resolveClassifier(settings.classifierProvider, settings.classifierModel);
@@ -307,7 +314,8 @@ class BuiltinBackend implements AgentBackend {
       if (prompt == null) {
         history = await _reviveSubAgents(history, subAgentRunner, subAgentLog, controller);
       }
-      final session = await _sessionOf(chatId, history, rebuild: prompt == null);
+      final session =
+          await _sessionOf(chatId, history, rebuild: prompt == null, viewer: settings.omadaMember);
       final agent = BuiltinAgent(
         session: session,
         loadResource: _resourcesOf(chatId),
@@ -320,8 +328,11 @@ class BuiltinBackend implements AgentBackend {
         model: target.modelId,
         // One attempt per request: the controller retries a failed turn itself,
         // and the two retrying would be the same patience twice. Sub-agents
-        // keep the default — see the parent runner below.
-        options: options.parent,
+        // keep the default — see the parent runner below. The step limit is
+        // the turn's own, resolved per turn from the settings levels; null
+        // leaves the backend's.
+        options: options.parent
+            .copyWithStepLimit(settings.turnMaxSteps),
         skills: libraryFor(settings.project)?.entries(CompletionKind.skill) ?? const [],
         approveMode: settings.approveMode,
         classifier: classifier,
@@ -330,6 +341,8 @@ class BuiltinBackend implements AgentBackend {
         subAgentRunner: subAgentRunner,
         webSearch: webSearch,
         profile: settings.profile,
+        tone: settings.tone,
+        citations: settings.citations,
         rateLimitGate: rateLimitGate,
         // A bundled turn's note is its whole instruction half, so the nested
         // walk on a read — the one memory answer the agent itself consults —
@@ -366,16 +379,30 @@ class BuiltinBackend implements AgentBackend {
               .writeAsBytes(bytes);
           return (installId: installId, name: pkg.name);
         },
+        onShellOutput: (callId, text) =>
+            controller.add(ShellOutputEvent(callId: callId, text: text)),
       );
-      _running.add(chatId, agent.cancel);
+      // The real kill replaces the placeholder.
+      _running.replace(stopKey, agent.cancel);
 
       // A resumed turn has no prompt of its own to read `@agent` mentions out
-      // of, so they come off the message that started it — its record of them,
-      // not the library, so an agent edited or deleted since still carries on
-      // under what the turn actually ran under.
+      // of, so they come off the message that started it. A member turn is
+      // the other shape: the overlay is the member's prompt from the library
+      // as it stands now, and it replaces the mentions rather than joining
+      // them.
       final said =
           prompt ?? history.lastWhereOrNull((m) => m.role == MessageRole.user);
-      final agentPrompt = agentPromptFrom(said?.documents ?? const {});
+      final memberBody = settings.omadaMember == null
+          ? null
+          : memberPrompt(libraryFor(settings.project), settings.omadaMember!);
+      final mentions = agentPromptFrom(said?.documents ?? const {});
+      final agentPrompt = memberBody == null
+          ? settings.omada
+              ? mentions == null
+                  ? houseTurnInstructions()
+                  : "$mentions\n\n${houseTurnInstructions()}"
+              : mentions
+          : "$memberBody\n\n${memberTurnInstructions()}";
       final events = prompt == null
           ? agent.resume(agentPrompt: agentPrompt)
           : agent.run(prompt, agentPrompt: agentPrompt);
@@ -402,7 +429,7 @@ class BuiltinBackend implements AgentBackend {
       if (endedDone &&
           settings.memory.extract &&
           memoryStore != null &&
-          settings.memory.bgModel != null) {
+          settings.memory.bgProvider != null) {
         // Unwatched on purpose: the turn is over, and the background memory
         // work must neither slow anything down nor be able to fail. The
         // consolidation rides behind the extraction rather than beside it —
@@ -427,13 +454,14 @@ class BuiltinBackend implements AgentBackend {
       // Last, after the stream is closed: dropping it here is what releases
       // Android's hold on the process, and the listener is still writing the
       // turn's closing records when the agent itself has stopped.
-      _running.remove(chatId);
+      _running.removeKey(stopKey);
     }
   }
 
   /// Where a turn in [project] reaches for the project's files, and the
-  /// `HOME` of its commands: the shared workspace where it is shared, the
-  /// chat's own otherwise, so that nothing reaches past the conversation.
+  /// `HOME` of its commands where the driver takes one: the shared workspace
+  /// where it is shared, the chat's own otherwise, so that nothing reaches
+  /// past the conversation.
   String _projectWorkspaceFor({
     required String workspace,
     required String? project,
@@ -462,14 +490,14 @@ class BuiltinBackend implements AgentBackend {
             workspace: workspace,
             project: project,
             sharedWorkspace: sharedWorkspace),
-        sharedHome: sharedWorkspace,
         timeout: options.commandTimeout,
         environment: environment,
         project: project);
     // Before the wait, so Stop kills the command rather than only closing the
     // stream over it.
-    _running.add(chatId, run.kill);
+    final stopKey = _running.add(chatId, run.kill);
     controller.add(StatusEvent(runningTool(bashToolName)));
+    _reportOutput(controller, run);
 
     // The session does not feed the command and the command does not feed it:
     // a chat reopened after a restart fills its session from the log, and that
@@ -477,6 +505,7 @@ class BuiltinBackend implements AgentBackend {
     final filling = _sessionOf(chatId, history);
     final result = await run.result;
     final session = await filling;
+    _running.removeKey(stopKey);
     // An aborted turn writes no part, so the session must not hold one either.
     if (controller.isClosed) return;
     // The directory the shell was left in rides on the part as a fact; the
@@ -487,6 +516,7 @@ class BuiltinBackend implements AgentBackend {
       output: result.output,
       exceptionInfo: result.exceptionInfo,
       cwd: result.cwd,
+      violations: result.violations,
     );
     controller.add(ShellRunEvent(part));
     controller.add(const DoneEvent());
@@ -508,15 +538,33 @@ class BuiltinBackend implements AgentBackend {
   /// so that carrying on in the same process and carrying on after a restart
   /// put the same thing in front of the model — a checkpoint that failed is
   /// swallowed, so a live session can hold more than the log does.
+  ///
+  /// [viewer] is the member answering, whose session is worded for them — the
+  /// other participants' replies as labeled user messages — and rebuilt from
+  /// the log on every turn of theirs: the session is a cache, the log is the
+  /// truth, and whoever else spoke since they last ran is in the log by the
+  /// time they are called. The main agent's session keeps the warm path it
+  /// has always had; there is one main agent per chat, so nothing can have
+  /// written into its view since.
   Future<BuiltinSession> _sessionOf(String chatId, List<Message> history,
-      {bool rebuild = false}) async {
-    final session = _sessions.putIfAbsent(chatId, BuiltinSession.new);
-    if (rebuild || session.isFresh) {
-      session.replaceWith(
-          await projectionOf(history, load: _resourcesOf(chatId)));
+      {bool rebuild = false, String? viewer}) async {
+    final key = viewer == null ? chatId : "$chatId\u0000$viewer";
+    final session = _sessions.putIfAbsent(key, BuiltinSession.new);
+    if (rebuild || viewer != null || session.isFresh) {
+      session.replaceWith(await projectionOf(history,
+          load: _resourcesOf(chatId), viewer: viewer));
     }
     return session;
   }
+
+  /// The user's own `!` command, watched through the agent's one watch shape —
+  /// no call id, there being nothing called a tool.
+  void _reportOutput(StreamController<AgentEvent> controller, ShellRun run) =>
+      BuiltinAgent.watchShellOutput(run, (text) {
+        if (!controller.isClosed) {
+          controller.add(ShellOutputEvent(callId: null, text: text));
+        }
+      });
 
   /// Where this chat's attachment bytes come from, for the projection.
   ResourceLoader _resourcesOf(String chatId) =>
@@ -592,8 +640,12 @@ class BuiltinBackend implements AgentBackend {
   /// read to nobody.
   @override
   Future<String?> ask(String prompt,
-      {required String model, required String provider}) async {
-    final target = _resolveModel(model, provider);
+      {required String? model, required String? provider}) async {
+    final target = _resolveModel(
+      model,
+      provider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
     if (target == null) return null;
     try {
       final chunks = await target.client
@@ -619,8 +671,11 @@ class BuiltinBackend implements AgentBackend {
     required String reply,
     required TurnSettings settings,
   }) async {
-    final target =
-        _resolveModel(settings.memory.bgModel, settings.memory.bgProvider);
+    final target = _resolveModel(
+      settings.memory.bgModel,
+      settings.memory.bgProvider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
     if (target == null) return;
     final said = (prompt ??
             history.lastWhereOrNull((m) => m.role == MessageRole.user))
@@ -690,8 +745,11 @@ class BuiltinBackend implements AgentBackend {
     if (_consolidating) return;
     _consolidating = true;
     try {
-      final target =
-          _resolveModel(settings.memory.bgModel, settings.memory.bgProvider);
+      final target = _resolveModel(
+        settings.memory.bgModel,
+        settings.memory.bgProvider,
+        defaultOf: LlmProviderConfig.lightDefaultOf,
+      );
       if (target == null) return;
       final all = await store.entries();
       // Pinned memories are the user's standing orders rather than store
@@ -835,23 +893,34 @@ class BuiltinBackend implements AgentBackend {
 
   /// The config is read once and reused: going back through the registry by id
   /// would re-read and re-parse `settings.json` for each question asked of it.
-  ({LlmClient client, String modelId})? _resolveModel(String? model, String? provider) {
+  ///
+  /// [defaultOf] says which provider field a null model resolves to — the chat
+  /// default for a turn, the light one for the title, memory and classifier
+  /// roles. None is None: a provider without that field leaves nothing to
+  /// answer with, which is the caller's error, not a guess from a model list.
+  ({LlmClient client, String modelId})? _resolveModel(
+    String? model,
+    String? provider, {
+    String? Function(LlmProviderConfig) defaultOf = LlmProviderConfig.chatDefaultOf,
+  }) {
     if (provider == null) return null;
     final endpoint = registry.endpointFor(provider);
     if (endpoint == null) return null;
     final config = endpoint.config;
-    // A provider with one model listed does not need it pinned as well; with
-    // none, there is nothing to guess from.
-    final modelId = model ?? config.models.firstOrNull;
+    final modelId = model ?? defaultOf(config);
     if (modelId == null || modelId.isEmpty) return null;
     return (client: registry.clientOf(endpoint), modelId: modelId);
   }
 
   /// The classifier model, resolved the same way the main model is. Null when
-  /// no classifier model is named — auto mode falls back to asking.
+  /// no classifier provider is named — auto mode falls back to asking. A
+  /// provider named without a model resolves to its light default.
   PermissionClassifier? _resolveClassifier(String? provider, String? model) {
-    if (provider == null || model == null) return null;
-    final target = _resolveModel(model, provider);
+    final target = _resolveModel(
+      model,
+      provider,
+      defaultOf: LlmProviderConfig.lightDefaultOf,
+    );
     if (target == null) return null;
     return LlmClassifier(client: target.client, model: target.modelId);
   }
@@ -918,7 +987,8 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<void> abort(String chatId) async {
-    await _running.remove(chatId)?.call();
+    // Every turn the chat has in flight, not the last one registered.
+    await _running.stopAll(chatId);
     _clearApprovals(chatId);
     _clearQuestions(chatId);
     final controller = _controllers.remove(chatId);
@@ -930,7 +1000,7 @@ class BuiltinBackend implements AgentBackend {
 
   @override
   Future<void> resetSession(String chatId, {List<Message> history = const []}) async {
-    await _running.remove(chatId)?.call();
+    await _running.stopAll(chatId);
     _sessions
         .putIfAbsent(chatId, BuiltinSession.new)
         .replaceWith(await projectionOf(history, load: _resourcesOf(chatId)));
@@ -943,6 +1013,9 @@ class BuiltinBackend implements AgentBackend {
     shell.closeSession(config.workspaceDir(chatId, project: project));
     await abort(chatId);
     _sessions.remove(chatId);
+    // Member sessions are keyed chat-prefixed, and a chat is gone with its
+    // members' projections of it.
+    _sessions.removeWhere((key, _) => key.startsWith("$chatId\u0000"));
   }
 
   @override
@@ -973,21 +1046,48 @@ class _RunningTurns extends ValueNotifier<Set<String>> {
 
   /// How to stop each, rather than what is running it: an agent's own `cancel`
   /// for a turn the model is driving, the command's `kill` for a `!` one, and
-  /// nothing here has to tell them apart.
+  /// nothing here has to tell them apart. Keyed by chat **and a token**, not
+  /// the chat alone — a parallel round runs several turns of one chat at
+  /// once, and a second registration must not drop the first's kill.
   final Map<String, Future<void> Function()> _stops = {};
 
-  void add(String chatId, Future<void> Function() stop) {
-    _stops[chatId] = stop;
-    value = _stops.keys.toSet();
+  var _token = 0;
+
+  /// Registers a stop for [chatId], returning the key the turn's own cleanup
+  /// removes.
+  String add(String chatId, Future<void> Function() stop) {
+    final key = "$chatId\u0000${_token++}";
+    _stops[key] = stop;
+    value = chats;
+    return key;
   }
 
-  /// Publishes only where something was actually removed: `abort` reaches chats
-  /// with nothing running — deleting one does — and a `Set` compares by
-  /// identity, so a fresh one would notify every time and cost a round trip to
-  /// the platform to stop a service that was never started.
-  Future<void> Function()? remove(String chatId) {
-    final stop = _stops.remove(chatId);
-    if (stop != null) value = _stops.keys.toSet();
-    return stop;
+  /// Swaps what [key] stops, without a second publish.
+  void replace(String key, Future<void> Function() stop) {
+    _stops[key] = stop;
+  }
+
+  /// The turn [key] registered finished on its own; the chat keeps any
+  /// sibling still running. Publishes only where something was actually
+  /// removed — a `Set` compares by identity, so a fresh one would notify
+  /// every time and cost a round trip to the platform.
+  void removeKey(String key) {
+    if (_stops.remove(key) != null) value = chats;
+  }
+
+  /// The chats with a turn in flight — what [runningTurns] publishes.
+  Set<String> get chats =>
+      {for (final key in _stops.keys) key.substring(0, key.indexOf("\u0000"))};
+
+  /// Kills every stop [chatId] holds, in the order they were registered.
+  Future<void> stopAll(String chatId) async {
+    final keys = [
+      for (final key in _stops.keys)
+        if (key.startsWith("$chatId\u0000")) key
+    ];
+    for (final key in keys) {
+      await _stops.remove(key)?.call();
+    }
+    if (keys.isNotEmpty) value = chats;
   }
 }

@@ -4,6 +4,9 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 
 flutter pub get
+# The fetched skills the bundled presets are completed with; before the
+# generator that walks them.
+tool/fetch-skills.sh
 dart run tool/gen_bundled_skills.dart
 dart run tool/gen_prompts.dart
 dart run tool/gen_privacy_policy.dart

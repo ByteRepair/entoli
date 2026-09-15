@@ -29,6 +29,11 @@ void main() {
     await settleIo(tester);
   }
 
+  /// A field of the open dialog by its label. Indexed finds would be wrong
+  /// whenever something with a TextField sits behind the dialog — the
+  /// recommended-provider card's key box does.
+  Finder dialogField(String label) => find.widgetWithText(TextField, label);
+
   List<LlmProviderConfig> saved() => app.container.read(appSettingsProvider).llmProviders;
 
   group("providers", () {
@@ -45,22 +50,22 @@ void main() {
       expect(find.text("ollama-cloud"), findsOneWidget);
       expect(find.text("https://ollama.com/v1"), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField).at(2), "sk-ollama");
+      await tester.enterText(dialogField("API key"), "sk-ollama");
       await saveDialog(tester);
 
       expect(saved().single.id, "ollama-cloud");
       expect(saved().single.baseUrl, "https://ollama.com/v1");
-      expect(saved().single.apiKey, "sk-ollama");
-      expect(AppSettings.load(app.config).llmProviders.single.apiKey, "sk-ollama");
+      // The key went to the store; no config carries one.
+      expect(app.secrets.providerKey("ollama-cloud"), "sk-ollama");
     });
 
     testWidgets("a custom endpoint starts empty and is typed in", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
 
-      await tester.enterText(find.byType(TextField).at(0), "vllm");
-      await tester.enterText(find.byType(TextField).at(1), "http://gpu.local:8000/v1");
-      await tester.enterText(find.byType(TextField).at(3), "qwen3, llama4");
+      await tester.enterText(dialogField("Name"), "vllm");
+      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await tester.enterText(dialogField("Models"), "qwen3, llama4");
       await saveDialog(tester);
 
       expect(saved().single.id, "vllm");
@@ -73,7 +78,7 @@ void main() {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Custom…");
 
-      await tester.enterText(find.byType(TextField).at(0), "nameless");
+      await tester.enterText(dialogField("Name"), "nameless");
       await saveDialog(tester);
 
       expect(saved(), isEmpty);
@@ -82,11 +87,12 @@ void main() {
     testWidgets("the key is never shown back on the page", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.providers);
       await addProvider(tester, "Anthropic");
-      await tester.enterText(find.byType(TextField).at(2), "sk-ant-secret");
+      await tester.enterText(dialogField("API key"), "sk-ant-secret");
       await saveDialog(tester);
 
       expect(find.text("sk-ant-secret"), findsNothing);
-      expect(find.textContaining("key set"), findsOneWidget);
+      // The row says a key is stored, never which.
+      expect(find.textContaining("key stored"), findsOneWidget);
     });
 
     testWidgets("one with no key of its own says which variable it reads", (tester) async {
@@ -117,7 +123,7 @@ void main() {
 
       await tester.tap(find.text("OpenAI"));
       await settleIo(tester);
-      await tester.enterText(find.byType(TextField).at(1), "https://proxy.local/v1");
+      await tester.enterText(dialogField("Base URL"), "https://proxy.local/v1");
       await saveDialog(tester);
 
       expect(saved(), hasLength(1));
@@ -148,6 +154,54 @@ void main() {
       // existed.
       expect(identical(before, app.container.read(availableModelsProvider)), isFalse);
     });
+
+    testWidgets("removing one takes its stored key with it", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "OpenAI");
+      await tester.enterText(dialogField("API key"), "sk-o");
+      await saveDialog(tester);
+      expect(app.secrets.providerKey("openai"), "sk-o");
+
+      await scrollTo(tester, find.byTooltip("Remove openai"));
+      await tester.tap(find.byTooltip("Remove openai"));
+      await settleIo(tester);
+
+      expect(app.secrets.providerKey("openai"), isNull);
+    });
+
+    testWidgets("editing one with a stored key, saving empty, keeps the key",
+        (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "OpenAI");
+      await tester.enterText(dialogField("API key"), "sk-o");
+      await saveDialog(tester);
+
+      await tester.tap(find.text("OpenAI"));
+      await settleIo(tester);
+      await saveDialog(tester);
+
+      expect(app.secrets.providerKey("openai"), "sk-o");
+    });
+
+    testWidgets("renaming one moves the stored key with it", (tester) async {
+      await pumpSettings(tester, app, SettingsCategory.providers);
+      await addProvider(tester, "Custom…");
+      await tester.enterText(dialogField("Name"), "vllm");
+      await tester.enterText(dialogField("Base URL"), "http://gpu.local:8000/v1");
+      await tester.enterText(dialogField("API key"), "sk-v");
+      await saveDialog(tester);
+      expect(app.secrets.providerKey("vllm"), "sk-v");
+
+      await tester.tap(find.text("vllm"));
+      await settleIo(tester);
+      await tester.enterText(dialogField("Name"), "gpu");
+      await saveDialog(tester);
+      await settleIo(tester);
+
+      expect(saved().map((p) => p.id), ["gpu"]);
+      expect(app.secrets.providerKey("gpu"), "sk-v");
+      expect(app.secrets.providerKey("vllm"), isNull);
+    });
   });
 
   group("running commands", () {
@@ -168,7 +222,7 @@ void main() {
     testWidgets("can be switched to ask", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
-      await tester.tap(find.text("Ask every time").last);
+      await tester.tap(find.text("Ask before every command").last);
       await settleIo(tester);
 
       expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.ask);
@@ -178,7 +232,7 @@ void main() {
     testWidgets("can be switched to run without asking", (tester) async {
       await pumpSettings(tester, app, SettingsCategory.general);
       await openModeDropdown(tester);
-      await tester.tap(find.textContaining("Run without asking").last);
+      await tester.tap(find.textContaining("Run everything without asking").last);
       await settleIo(tester);
 
       expect(app.container.read(appSettingsProvider).approveMode, ApproveMode.never);
@@ -190,7 +244,7 @@ void main() {
       await openModeDropdown(tester);
 
       // The item is there but greyed out — tapping it does nothing.
-      final autoItem = find.text("Auto (classifier)");
+      final autoItem = find.textContaining("Auto: run what the classifier rates safe");
       expect(autoItem, findsOneWidget);
       await tester.tap(autoItem);
       await settleIo(tester);
@@ -205,7 +259,7 @@ void main() {
 
       await openCategory(tester, SettingsCategory.general);
       await openModeDropdown(tester);
-      await tester.tap(find.textContaining("Run without asking").last);
+      await tester.tap(find.textContaining("Run everything without asking").last);
       await settleIo(tester);
 
       expect(saved().map((p) => p.id), ["openai"]);

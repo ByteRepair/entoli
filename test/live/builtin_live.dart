@@ -46,8 +46,8 @@ void main() {
     id: _providerId,
     api: api,
     baseUrl: baseUrl,
-    apiKey: env["BUILTIN_API_KEY"] ?? "",
-    apiKeyEnv: _keyVariableFor(baseUrl),
+    // The key reaches the client through the environment lookup below.
+    apiKeyEnv: env["BUILTIN_API_KEY"] == null ? null : "BUILTIN_API_KEY",
   );
 
   Future<(BuiltinBackend, AppConfig)> liveBackend() async {
@@ -64,6 +64,7 @@ void main() {
       registry: LlmRegistry(
         endpoints: () => [LlmEndpoint(provider)],
           lookupEnv: (name) => Platform.environment[name],
+          lookupKey: (_) => null,
         ),
     );
     backend.setLibrary(null, library);
@@ -132,6 +133,8 @@ void main() {
           log("  -> rc=${result.returnCode} ${_oneLine(result.output)}");
         case ShellRunEvent(:final run):
           log("! ${run.command} -> rc=${run.returnCode} ${_oneLine(run.output)}");
+        case ShellOutputEvent(:final text):
+          log("  … ${_oneLine(text)}");
         case ArtifactEvent(:final title, :final entryFile):
           log("artifact: $title (entry: $entryFile)");
         case SkillInstallEvent(:final title):
@@ -189,14 +192,4 @@ void _copyPresetsInto(AppConfig config) {
 String _oneLine(String output) {
   final trimmed = output.trim().replaceAll("\n", " ");
   return trimmed.length <= 120 ? trimmed : "${trimmed.substring(0, 120)}…";
-}
-
-/// Which variable a given host usually keeps its key in, so the common cases
-/// need no BUILTIN_API_KEY of their own.
-String _keyVariableFor(String baseUrl) {
-  if (baseUrl.contains("anthropic.com")) return "ANTHROPIC_API_KEY";
-  if (baseUrl.contains("openai.com")) return "OPENAI_API_KEY";
-  if (baseUrl.contains("openrouter.ai")) return "OPENROUTER_API_KEY";
-  if (baseUrl.contains("groq.com")) return "GROQ_API_KEY";
-  return "OLLAMA_API_KEY";
 }

@@ -5,7 +5,7 @@ publish_to: "none"
 # No `+build` suffix: release-build.yml derives the Android version code from
 # these three numbers, and a second number to bump is a second number to
 # forget.
-version: 2.1.0
+version: 4.2.0
 
 environment:
   sdk: ^3.12.2
@@ -65,9 +65,12 @@ dependencies:
   # Voice mode. sherpa-onnx is speech recognition, speech synthesis and voice
   # activity detection from one dependency: `record` opens the microphone and
   # `audioplayers` says the reply back. See "Voice mode" in CLAUDE.md, and
-  # issue #58 for why a browser gets none of this.
+  # issue #58 for why a browser gets none of this. The interface and Linux
+  # packages are reached directly by the pw-record fallback, `LinuxRecorder`.
   sherpa_onnx: ^1.13.6
   record: ^7.1.1
+  record_platform_interface: ^2.1.0
+  record_linux: ^2.1.1
   audioplayers: ^6.8.1
 
   # Misc
@@ -78,13 +81,20 @@ dependencies:
   clock: ^1.1.2
   # navigator.storage.persist(), so what the browser stored is not evicted.
   web: ^1.1.1
-  flutter_webrtc: ^1.6.0
+  # Held below 1.6.2: its Linux plugin segfaults on registration (SEGV in
+  # FlutterMediaStream's constructor) whether or not libpulse was found at
+  # build time. Unpin when a release fixes it.
+  flutter_webrtc: ">=1.6.0 <1.6.2"
   cryptography: ^2.9.0
   cryptography_flutter: ^2.3.4
   web_socket_channel: ^3.0.3
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.0
   freedesktop_secret: ^0.1.2
+  # The session bus. It was already in the tree through freedesktop_secret's
+  # keyring; direct here so Linux reminders can post over
+  # org.freedesktop.Notifications — see linux_reminder_alarms.dart.
+  dbus: ^0.7.15
 
 # `sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built,
 # and that package ships a 14 MB WebAssembly build of onnxruntime as a
@@ -118,10 +128,12 @@ flutter:
     # Flutter writes its own version.json for Linux and Web, which overrides
     # this where one exists; on every other platform this is the only copy.
     - assets/version.json
-    # The font's licence, read into `LicenseRegistry` at startup. An asset
+    # The fonts' licences, read into `LicenseRegistry` at startup. An asset
     # rather than only a file in the repo, since the OFL asks for it to travel
     # with the font.
     - assets/fonts/OFL.txt
+    - assets/fonts/PlayfairDisplay-OFL.txt
+    - assets/fonts/SourceSerif4-OFL.txt
     # Silero's voice activity detector, and its licence beside it. 644 KB, so
     # it ships rather than joining the catalog: voice mode that cannot start
     # until a second, invisible download has finished is worse to explain than
@@ -137,14 +149,32 @@ flutter:
     - path: assets/scripts/byte-repair-setup.sh
       platforms: [android, ios, linux, macos, windows]
 
-  # Code is set in this rather than in `monospace`, which is a different face on
-  # every platform the app runs on. Roboto Mono is the mono companion to the
-  # face Material already uses, and it is OFL — `assets/fonts/OFL.txt` ships
-  # with it. Bold is here because the highlight themes set a weight on some
-  # scopes and synthesised bold in a code block is mush.
+  # The faces the artifact stylesheet names, bundled so the whole app wears
+  # them and not only its artifacts. Both are OFL — `assets/fonts/OFL.txt` and
+  # the per-family `-OFL.txt` files ship with them. Static instances rather
+  # than the variable fonts: the engine does not read `opsz`, and a 400-to-900
+  # `wght` axis makes every weight request synthetise or clamp.
   fonts:
     - family: RobotoMono
       fonts:
         - asset: assets/fonts/RobotoMono-Regular.ttf
         - asset: assets/fonts/RobotoMono-Bold.ttf
           weight: 700
+    - family: PlayfairDisplay
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Regular.ttf
+        - asset: assets/fonts/PlayfairDisplay-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlayfairDisplay-Bold.ttf
+          weight: 700
+    - family: SourceSerif4
+      fonts:
+        - asset: assets/fonts/SourceSerif4-Regular.ttf
+        - asset: assets/fonts/SourceSerif4-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SourceSerif4-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SourceSerif4-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/SourceSerif4-Italic.ttf
+          style: italic

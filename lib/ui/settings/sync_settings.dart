@@ -38,7 +38,6 @@ class SyncSection extends ConsumerWidget {
         LabelledField(
           label: "Device name",
           child: ResettableField(
-            isDefault: settings.deviceName == null,
             onReset: () =>
                 ref.read(appSettingsProvider.notifier).setDeviceName(null),
             child: TextFormField(
@@ -64,6 +63,8 @@ class SyncSection extends ConsumerWidget {
         ),
         Divider(),
         _PairedDevices(hub: hub),
+        Divider(),
+        _KeepAliveField(settings: settings),
         Divider(),
         _RelaySection(settings: settings),
         Divider(),
@@ -175,23 +176,47 @@ class _TurnSection extends ConsumerWidget {
             decoration: const InputDecoration(isDense: true),
             onChanged: (value) => ref
                 .read(appSettingsProvider.notifier)
-                .setTurnCredentials(
-                    value.isEmpty ? null : value, settings.turnPassword),
+                .setTurnUsername(value.isEmpty ? null : value),
           ),
         ),
         LabelledField(
           label: "TURN password",
           child: TextFormField(
-            initialValue: settings.turnPassword ?? "",
+            // Held in the secret store, not settings — read through the
+            // mirror here the way the row above reads its own field.
+            initialValue: ref.read(appSecretsProvider).turnPassword ?? "",
             obscureText: true,
             decoration: const InputDecoration(isDense: true),
             onChanged: (value) => ref
-                .read(appSettingsProvider.notifier)
-                .setTurnCredentials(settings.turnUsername,
-                    value.isEmpty ? null : value),
+                .read(appSecretsProvider)
+                .setTurnPassword(value.isEmpty ? null : value),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _KeepAliveField extends ConsumerWidget {
+  const _KeepAliveField({required this.settings});
+
+  final AppSettings settings;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SwitchListTile(
+      title: const Text("Keep connected off screen"),
+      subtitle: Text(
+        defaultTargetPlatform == TargetPlatform.android && !kIsWeb
+            ? "While a device is connected, hold the app open off screen with a "
+                "notification naming it and a Disconnect action. Costs battery — "
+                "a wake lock for as long as the connection lasts."
+            : "Android only — a phone must hold its process open to keep a "
+                "connection through the screen going dark.",
+      ),
+      value: settings.syncKeepAlive,
+      onChanged: (value) =>
+          ref.read(appSettingsProvider.notifier).setSyncKeepAlive(value),
     );
   }
 }

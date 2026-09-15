@@ -28,30 +28,29 @@ The port is `Voice`, behind the app's one conditional import like `Shell` and
 composer's circle undrawn — see issue #58 for why sherpa's WebAssembly is not
 the answer there, and what is.
 
-**It is kept out of the Android build too, and that one is measured in tens of
-megabytes.** onnxruntime and sherpa's own library are about 26 MB per ABI,
-uncompressed and page-aligned the way a modern APK stores native code: 75 MB
-across the three, which took the universal release APK from 64.5 MB to 141 MB —
-more than the rest of the app put together. With Android on the system engines
-there is nothing left to load them, so they are excluded at packaging in
-`android/app/build.gradle.kts` and the APK is back to 64.5 MB, measured.
+**Android ships the libraries and downloads the models, like the desktops.**
+sherpa's native code is in the APK again — it was excluded once, when Android's
+voice mode was the system engines alone, and that exclusion is what the
+fallback below reversed. Measured with `--split-per-abi`: the arm64 release
+APK went from 21.9 MB to 31.8 MB, the compressed size of onnxruntime and
+sherpa's two libraries, ~10 MB per ABI (the 75 MB figure quoted above was a
+universal APK carrying all three). The models are not in the APK; they are
+fetched through the settings page, exactly as on Linux, so a phone that never
+picks a downloaded model pays only the ~10 MB.
 
-**Excluded rather than removed, because they are not ours to remove.**
-`sherpa_onnx` declares all ten of its per-platform packages in its own pubspec —
-four Android ABIs, iOS, Linux, macOS, Windows, web — and pub resolves what a
-package asks for. `dependency_overrides` is the only other lever and it replaces
-a package on *every* platform, which is a risk worth taking once (below) and not
-four more times. A `packaging { jniLibs { excludes } }` block drops the `.so`
-files where they are actually unwanted and leaves every other platform's alone.
-Vendoring the desktop libraries into `linux/CMakeLists.txt` instead would mean
-dropping `package:sherpa_onnx` and writing the FFI bindings by hand — and
-`sherpa_onnx_linux` already delivers those libraries through pub, so there is no
-gap there to fill.
-
-The one thing to know is that the exclusion and `platformVoice` have to agree:
-the `.so` files are gone from Android, so a `SherpaVoice` constructed there
-would fail at its first FFI call rather than degrade. `platformVoice` returns
-`AndroidVoice` on that platform and nothing else builds one.
+**The exclusion was dropped because the system recognizer cannot be relied
+on, and app code cannot fix that.** On Android 12+ the framework binds a
+recognition service with microphone capability only where it is the one set as
+the system default (`Settings.Secure.VOICE_RECOGNITION_SERVICE`) or
+preinstalled as system; every other resolvable service opens its session and
+receives no audio at all — one RMS reading at the silence floor, no partials,
+`ERROR_SPEECH_TIMEOUT`, exactly as if the microphone were broken. A phone
+where no working recognizer is set as the default — GrapheneOS with Google's
+sandboxed Speech services, or any de-Googled one — hears nothing, whatever the
+app does, and cannot be fixed from here: which service the framework trusts
+is the user's setting, not the app's. So the catalog is on Android as it is on
+the desktops, and a phone whose system recognizer is unusable picks a
+downloaded model instead.
 
 Keeping it off the web takes one deliberate piece of machinery.
 **`sherpa_onnx` depends on `sherpa_onnx_web` whatever platform is being built**,
@@ -116,32 +115,48 @@ thing that is invisible until it is a problem. Upstream is removing espeak in
 A phone already has a speech recognizer and a speech synthesiser, and until this
 landed voice mode ignored both and asked for a download first. So on Android
 voice mode **is** the OS: `TextToSpeech` and `SpeechRecognizer` behind the
-`agent_chat/voice` channel, with nothing to fetch — and sherpa-onnx is not built
-into that platform at all.
+`agent_chat/voice` channel, with nothing to fetch — and that is still the
+default wherever the device's engines answer, with sherpa beside them for the
+picks that name a downloaded model.
 
-**Why sherpa went rather than sitting beside them.** It ran on the CPU, and
-there was no way to change that: the `libonnxruntime.so` in the pub package
-exports exactly two execution-provider factories, `..._CPU` and `..._Nnapi`
-(checked with `nm -D`), XNNPACK and QNN are named in its strings but have no
-code in the build, and ONNX Runtime has no Vulkan, OpenCL or GPU provider for
-Android at all. NNAPI is the only accelerator route and it is a bad one —
-deprecated in Android 15, frequently *slower* than ORT's own kernels because
-unsupported ops fall back to `nnapi-reference`, and it crashes outright on VITS
-TTS (k2-fsa/sherpa-onnx#2443). So keeping it meant 75 MB of native code for the
-slower of the two answers, on the one platform where battery is the constraint.
+**Why the system engines went first, and why sherpa came back beside them.**
+sherpa ran on the CPU, and there was no way to change that: the
+`libonnxruntime.so` in the pub package exports exactly two execution-provider
+factories, `..._CPU` and `..._Nnapi` (checked with `nm -D`), XNNPACK and QNN
+are named in its strings but have no code in the build, and ONNX Runtime has no
+Vulkan, OpenCL or GPU provider for Android at all. NNAPI is the only
+accelerator route and it is a bad one — deprecated in Android 15, frequently
+*slower* than ORT's own kernels because unsupported ops fall back to
+`nnapi-reference`, and it crashes outright on VITS TTS
+(k2-fsa/sherpa-onnx#2443). So the system engines are the default: nothing to
+download, and they run on whatever silicon the phone has. They stay default
+even now that sherpa is packaged — a phone whose recognizer works has no
+reason to spend 140 MB of flash on Whisper.
 
-**What that costs is a phone with no system engine**, which is a real device
-rather than a hypothetical: `SpeechRecognizer` needs a recognition service and
-`TextToSpeech` needs an engine, and a de-Googled phone may have neither. Both
-are ordinary apps that register with the platform, so the fix is an install
-rather than a build — RHVoice or eSpeak NG for speaking, FUTO Voice Input for
-hearing. `_MissingEngines` in `voice_settings.dart` is that said on the page,
-with the links, because an empty picker on a platform with no catalog behind it
-is otherwise a dead end that gives no sign of being one install away. Nothing
-has to be told when one arrives: the next launch asks the device again.
+**What brought sherpa back is a phone where the system recognizer is not
+merely absent but unusable, and app code cannot tell the difference.** The
+recognition service is chosen by the user, system-wide, and on Android 12+ the
+framework gives a bound service microphone capability only where it is that
+pick or a preinstalled system app — a service that is merely *installed*
+binds fine, opens its session, and then receives no audio at all, which is
+indistinguishable from a broken microphone from here. GrapheneOS with
+sandboxed Google services is the case in point: the recognizer that resolves
+is not the system default, and the session hears silence. No probe from the
+app can make the framework trust the service, so the honest answer is the
+other engine: pick a downloaded model and listen through sherpa, the same way
+the desktops do. See "Android ships the libraries and downloads the models"
+above for what that costs the APK. The same fact is why the probe reports the
+system's pick rather than any installed service — see "The probe's answer"
+below.
 
-The desktops keep sherpa, and there the reasoning does not apply — they have no
-system engine to ask, and no battery argument of the same kind.
+**What that costs on a phone with neither system engine** is a choice the
+page offers either way: an install — RHVoice or eSpeak NG for speaking, FUTO
+Voice Input for hearing — or a downloaded model from the catalog, which every
+platform sherpa runs on draws beside the engines.
+`_MissingEngines` in `voice_settings.dart` is the engines' half said on the
+page, with the links, drawn from whether the device has them — and, for the
+recognizer, from whether the system's pick has been made. Nothing has to be
+told when one arrives: the next launch asks the device again.
 
 **They are catalog entries rather than a mode.** `android-recognition` and
 `android-speech` are a `RecognitionModel` and a `SpeechModel` with no downloads,
@@ -155,9 +170,14 @@ of those had to consult, and the one that forgot would be wrong silently.
 
 `VoiceModel.isNative` is the whole of the routing, and it reads `engine` — the
 field that already decides what runs a model, rather than a second id constant
-beside it. `AndroidVoice.start` refuses anything else.
-`Voice.downloadsModels` is the other half: false on Android, which is what takes
-the catalog off the settings page, and it has exactly that one reader.
+beside it. `AndroidVoice.start` routes on it **per half**: a sentinel
+recognition pick builds `AndroidSpeechRecognizer`, a downloaded one builds the
+same `SherpaListener` the desktops use (the `SherpaVoice` it holds, whose
+`sherpaListener`/`sherpaSpeaker` are what both platforms compose their halves
+through), and the speech half answers the same way — so the four pairings all
+work, including a system recognizer with a downloaded voice or the reverse.
+The catalog is the other half: it draws wherever sherpa runs, which is every
+platform but the web.
 
 **What decides is whether the engine is there, not whether this is Android**,
 and the answer goes into the set that already existed for the question.
@@ -207,10 +227,21 @@ package declares a `RecognitionService`, while the one-argument
 `ERROR_CLIENT` the moment the session opens, which is voice mode saying
 "Recognition failed (error 5)" before it has heard a word. A phone with a
 recognizer installed and no assistant chosen is the ordinary way to be there.
-So `recognitionServices` picks the components and both the probe and `listen`
-go through it, and an empty list takes the sentinel off the settings page the
-way a missing engine already does. There is no public API for the setting, so it
+So `recognitionServices` picks the components, `listen` binds from it, and the
+probe reads the same key through `chosenRecognizer` — one place owns what the
+setting says. There is no public API for the setting, so it
 is read as a key — the constant itself is hidden.
+
+**The probe's answer is the system's pick, and that is what decides whether
+the sentinel is offered at all.** The framework gives a bound recognizer the
+microphone only where it is the one set as `VOICE_RECOGNITION_SERVICE` — so a
+service that is merely installed, however well it works for the keyboard,
+opens a session and hears nothing, and no probe of the app's can tell that
+silence from a broken microphone. The offer follows the setting: a sentinel
+reaches the picker only where the user has made the system-wide pick, and an
+unset one is the missing-engine block's to explain — named as the setting it
+is, with the system path to set it and the catalog below as the other way
+out.
 
 **It answers with a list where there is no pick, and with the pick alone where
 there is one.** A service cannot be asked anything before it is bound, and a
@@ -610,10 +641,15 @@ sample after it. Audio out is `audioplayers` over a WAV written per
 sentence, into the system's temporary directory rather than the model one —
 which on Android is deliberately the directory that is *not* evicted, and is
 the wrong home for a file that lives for one sentence. `flutter_pcm_sound`
-would be lower latency and has no Linux or Windows. **On Linux the microphone is `parecord`**, which `record` shells out
-to — `pulseaudio-utils`, which a PipeWire system has as well — so a machine
-without it gets a voice session that fails to start rather than one that hears
-nothing.
+would be lower latency and has no Linux or Windows. **On Linux the microphone
+is `parecord`**, which `record` shells out to — `pulseaudio-utils`, which a
+PipeWire system *does not* have; it ships `pw-record` beside its own daemon
+instead. So `LinuxRecorder` (`core/platform/io/`) sits under `record`'s
+platform interface, asks `PATH` for `parecord` first and `pw-record` where it
+is missing — the stock implementation verbatim where the first is found, the
+argv translated where it is not — and says which packages to install where
+there is neither, rather than the bare `ProcessException` the missing binary
+used to arrive as.
 
 **Only text parts are spoken**, and sentence by sentence as they stream, so the
 first sentence is being read while the rest of the reply is still being written.

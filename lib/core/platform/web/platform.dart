@@ -56,6 +56,7 @@ ShellDriver? platformDriver({
   String? project,
   AppConfig? config,
   String? byteRepairBinDir,
+  String? loginPath,
 }) =>
     null;
 
@@ -113,6 +114,9 @@ Future<String> platformCacheDir() async => "/agent-chat-cache";
 /// Nothing to register: the Silero asset is not in this build.
 void platformRegisterVoiceLicences() {}
 
+/// No recorder of the platform's own: voice mode runs nothing here.
+void platformRegisterRecorder() {}
+
 VoiceModelStore platformVoiceModelStore(String cacheDir) =>
     const UnavailableVoiceModelStore();
 
@@ -133,8 +137,10 @@ BackupHandoff platformBackupHandoff(FileSystem fs, FileHandoff handoff) =>
 /// launch handler is inert — the same answer the desktop stub gives.
 AssistantLaunch platformAssistantLaunch() => const UnavailableAssistantLaunch();
 
-/// A browser cannot be woken, so nothing is ever due by the system's say-so.
-ReminderAlarms platformReminderAlarms() => const UnavailableReminderAlarms();
+/// A browser cannot be woken, so nothing is ever due by the system's say-so,
+/// and it has no session bus to post what a reminder did through either.
+Future<ReminderAlarms> platformReminderAlarms() async =>
+    const UnavailableReminderAlarms();
 
 /// IndexedDB, through the same `FileSystem` the rest of the app is written
 /// against. The layout under [platformDataDir] is the one on disk elsewhere.
@@ -175,6 +181,10 @@ LanSignaling? platformLanSignaling() => createWebLanSignaling();
 /// A browser has no hostname of its own to give. `location.hostname` is the
 /// server the page came from, which is a different machine's name entirely.
 Future<String?> platformHostname() async => null;
+
+/// And no login shell: there is no shell behind any of a browser's commands,
+/// which is the whole of what a browser's shell driver is.
+Future<String?> platformCaptureLoginPath() async => null;
 
 /// No-op: a browser has no `chmod`, and no `bash` to guard against. The file
 /// tools' `safeRelativePath` already prevents reaching skill dirs.

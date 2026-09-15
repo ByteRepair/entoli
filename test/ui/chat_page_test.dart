@@ -4,6 +4,7 @@ import "package:flutter/foundation.dart" show debugDefaultTargetPlatformOverride
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/sync/sync_hub.dart";
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/builtin_project.dart";
 import "package:agent_chat/domain/chat_meta.dart";
@@ -14,9 +15,11 @@ import "package:agent_chat/domain/prompt_library.dart";
 import "package:agent_chat/providers.dart";
 import "package:agent_chat/ui/chat/chat_controller.dart";
 import "package:agent_chat/ui/chat/chat_page.dart";
+import "package:agent_chat/ui/chat/widgets/omada_separator.dart";
 import "package:agent_chat/ui/chat/widgets/composer.dart";
 import "package:agent_chat/ui/chat/widgets/message_bubble.dart";
 import "package:agent_chat/ui/chat/widgets/needs_setup_bar.dart";
+import "package:agent_chat/ui/chat/widgets/synced_device_cards.dart";
 import "package:agent_chat/ui/sidebar/sidebar.dart";
 import "package:agent_chat/ui/theme.dart";
 
@@ -30,6 +33,16 @@ void main() {
 
   /// What is in the composer. The text rather than a finder over it: a
   /// `find.text` would match the same words drawn anywhere else on the page.
+  /// What the question headline shows mid-sweep: a hybrid, so it matches no
+  /// settled question. It is the page's only centred 16pt text — the
+  /// composer's hint is left-aligned and its labels smaller.
+  String questionShown(WidgetTester tester) =>
+      tester.widget<Text>(find.byWidgetPredicate((w) =>
+          w is Text &&
+          w.data != null &&
+          w.style?.fontSize == 16 &&
+          w.textAlign == TextAlign.center)).data!;
+
   String typed(WidgetTester tester) =>
       tester.widget<TextField>(find.byType(TextField)).controller!.text;
 
@@ -298,6 +311,102 @@ void main() {
       expect(find.text("What would you like to discuss?"), findsNothing);
     });
 
+    // The question sweeps rather than swaps: the new text takes over from
+    // the first character and the change front moves towards the end.
+    testWidgets("the question sweeps to the new one progressively",
+        (tester) async {
+      await openEmpty(tester);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, anonProjectLabel));
+      await tester.pump(const Duration(milliseconds: 1));
+      // The sweep mounted on that frame; this one runs 350 of the 400ms it
+      // takes. The two questions share their first thirty characters, so the
+      // front is past where they diverge — and not yet at the end.
+      await tester.pump(const Duration(milliseconds: 350));
+      final mid = questionShown(tester);
+      expect(mid, isNot("What would you like to discuss?"));
+      expect(mid, isNot("What would you like to discuss anonymously?"));
+      // The front starts at the first character: the new question's opening
+      // is already shown.
+      expect(mid.startsWith("What would"), isTrue);
+
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss anonymously?"),
+          findsOneWidget);
+    });
+
+    // The front runs the longer string's length: a shorter new question has
+    // to see the old one's tail eaten past the new question's end, not left
+    // standing behind the front forever.
+    testWidgets("deselecting sweeps the old tail away", (tester) async {
+      await openEmpty(tester);
+
+      await pick(tester, anonProjectLabel);
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss anonymously?"),
+          findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ChoiceChip, anonProjectLabel));
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 350));
+
+      // The front has eaten past the shorter question's end: what is shown
+      // is neither the old long question nor the new short one yet.
+      final mid = questionShown(tester);
+      expect(mid, isNot("What would you like to discuss anonymously?"));
+
+      await tester.pumpAndSettle();
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+      expect(find.textContaining("nonymously"), findsNothing);
+    });
+
+    // A user project's description is what the screen asks over its badge:
+    // the settings field is the only way a project names its own.
+    testWidgets("a project's description asks over its badge", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("work");
+        await app.container
+            .read(projectSettingsProvider("work").notifier)
+            .setDescription("What are we building?");
+      });
+      await openEmpty(tester);
+
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+
+      await pick(tester, "work");
+      await tester.pumpAndSettle();
+
+      expect(find.text("What are we building?"), findsOneWidget);
+      expect(find.text("What would you like to discuss?"), findsNothing);
+    });
+
+    // Empty is a value of its own: the screen asks nothing at all, and the
+    // reset button is what puts the app-wide question back.
+    testWidgets("an empty description asks nothing until reset", (tester) async {
+      await io(tester, () async {
+        await app.repo.createProject("work");
+        await app.container
+            .read(projectSettingsProvider("work").notifier)
+            .setDescription("");
+      });
+      await openEmpty(tester);
+
+      await pick(tester, "work");
+      await tester.pumpAndSettle();
+
+      expect(find.text("What would you like to discuss?"), findsNothing);
+      // The label stays on the tree and swept to empty rather than leaving
+      // it, so nothing is what it reads.
+      expect(questionShown(tester), "");
+
+      await io(tester, () => app.container
+          .read(projectSettingsProvider("work").notifier)
+          .setDescription(null));
+      await tester.pumpAndSettle();
+
+      expect(find.text("What would you like to discuss?"), findsOneWidget);
+    });
+
     // The badge says where the next chat goes, which is all it can say: there
     // is no chat yet for it to be about.
     testWidgets("picking one highlights it, and the chat lands there",
@@ -349,7 +458,7 @@ void main() {
         await scrollTo(tester, find.byType(DropdownButtonFormField<ApproveMode?>));
         await tester.tap(find.byType(DropdownButtonFormField<ApproveMode?>));
         await settleIo(tester);
-        await tester.tap(find.textContaining("Run without asking").last);
+        await tester.tap(find.textContaining("Run everything without asking").last);
         await settleIo(tester);
       }
 
@@ -600,8 +709,9 @@ void main() {
       expect(find.text("Type / for commands, @ for agents."), findsOneWidget);
     });
 
-    // Everything the user has written is a menu, and `/` opens the menu.
-    testWidgets("offers a handful rather than every command there is",
+    // Everything the user has written is a menu, and `/` opens the menu. The
+    // screen scrolls, so nothing is held back to keep the page short.
+    testWidgets("offers every command there is, not a handful of them",
         (tester) async {
       app.dispose();
       app = TestApp.create(
@@ -612,7 +722,140 @@ void main() {
       );
       await openBlank(tester);
 
-      expect(find.byType(ActionChip), findsNWidgets(6));
+      expect(find.byType(ActionChip), findsNWidgets(12));
+    });
+
+    // A change of set animates per chip: what stays keeps its slot, what
+    // arrives grows out of nothing, what leaves shrinks away before going.
+    // Driving the library rather than a different TestApp: the swap has to
+    // happen under a screen that is already open, which is the case the
+    // animation exists for.
+    group("a swap of the starter set", () {
+      testWidgets("an arriving chip grows in while its neighbours hold",
+          (tester) async {
+        await openBlank(tester);
+
+        await io(tester, () => writeSkill(app, "review"));
+        await reloadLibrary(tester, app);
+
+        // Arrived: it grows from nothing over the next frames, so it is on
+        // screen already but its slot is not full width yet.
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 90));
+        expect(find.text("/review"), findsOneWidget);
+      });
+
+      testWidgets("a leaving chip shrinks away before it goes", (tester) async {
+        await openBlank(tester);
+        await io(tester, () => writeSkill(app, "review"));
+        await reloadLibrary(tester, app);
+        expect(find.text("/review"), findsOneWidget);
+
+        await io(tester, () async {
+          await Directory(
+                  "${app.config.promptsDir(CompletionKind.skill)}/review")
+              .delete(recursive: true);
+        });
+        // Reloaded without settling, so the shrink has not been pumped
+        // through yet and the chip is still on screen for it.
+        await reloadLibrary(tester, app, settle: false);
+        await tester.pump();
+
+        // Still shrinking: the chip is held on screen for the animation, and
+        // is gone once it has run.
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text("/review"), findsNothing);
+      });
+
+      testWidgets("a project switch keeps what both share and grows in the rest",
+          (tester) async {
+        // The default's set is what a project without its own inherits, so a
+        // switch to a project with one extra skill is the both-motions case:
+        // everything shared keeps its slot, the extra grows out of nothing.
+        // Both skills are written to disk and both libraries reloaded, since
+        // a reload reads the real sources rather than the test's seed.
+        await io(tester, () async {
+          await app.repo.createProject("work");
+          await writeSkill(app, "review");
+          await writeSkill(app, "extra", project: "work");
+        });
+        await openBlank(tester);
+        await reloadLibrary(tester, app);
+        await reloadLibrary(tester, app, project: "work");
+        expect(find.text("/review"), findsOneWidget);
+
+        await tester.tap(find.widgetWithText(ChoiceChip, "work"));
+        await tester.pump();
+
+        // Arrived mid-growth beside the chips that never left.
+        expect(find.text("/extra"), findsOneWidget);
+        expect(find.text("/review"), findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text("/extra"), findsOneWidget);
+      });
+    });
+  });
+
+  group("the conversation", () {
+    /// A chat whose turn openers carry the Omada modes of a mixed history:
+    /// direct, then on, then off. Written the way the controller would have.
+    Future<String> seedSectionedChat(WidgetTester tester) => io(tester, () async {
+          final at = DateTime(2026, 1, 1, 12);
+          final said = [
+            Message(
+                id: "u1",
+                role: MessageRole.user,
+                createdAt: at,
+                parts: const [TextPart(text: "first")],
+                omadaOn: false),
+            Message(id: "a1", role: MessageRole.assistant, createdAt: at),
+            Message(
+                id: "u2",
+                role: MessageRole.user,
+                createdAt: at,
+                parts: const [TextPart(text: "second")],
+                omadaOn: true),
+            Message(id: "a2", role: MessageRole.assistant, createdAt: at),
+            Message(
+                id: "u3",
+                role: MessageRole.user,
+                createdAt: at,
+                parts: const [TextPart(text: "third")],
+                omadaOn: false),
+            Message(id: "a3", role: MessageRole.assistant, createdAt: at),
+          ];
+          final chat = await app.repo.createChat();
+          await app.writeChat(chat.copyWith(messages: said));
+          return chat.state.id;
+        });
+
+    testWidgets("both flips draw their separators, with the right captions",
+        (tester) async {
+      final id = await seedSectionedChat(tester);
+      await open(tester, id);
+
+      expect(find.text("Omada is turned on"), findsOneWidget);
+      expect(find.text("Omada is turned off"), findsOneWidget);
+      // Two separators between three messages-and-replies.
+      expect(find.byType(OmadaSeparator), findsNWidgets(2));
+    });
+
+    testWidgets("a user message under a separator keeps its alignment",
+        (tester) async {
+      // Wide enough that "right side" is unambiguous.
+      useWindow(tester, const Size(1000, 800));
+      final id = await seedSectionedChat(tester);
+      await open(tester, id);
+
+      // Both user bubbles end at the same right edge, either side of the
+      // separator: the bug this pins is the wrapped bubble sitting mid-column.
+      final first = tester.getRect(find.text("first")).right;
+      final second = tester.getRect(find.text("second")).right;
+      // Text centers differ by half a character; right edges do not.
+      expect((first - second).abs(), lessThan(2));
+      // Right-aligned within the readable column: near the edge, past center.
+      expect(second, greaterThan(500));
     });
   });
 
@@ -658,6 +901,53 @@ void main() {
 
       expect(position(tester).pixels, held);
       expect(find.byTooltip("Jump to latest"), findsOneWidget);
+    });
+
+    // The drag that detaches is often inside the follow slack, where the old
+    // position test kept handing the view back to the end and the reader
+    // could not get away. A gesture is the whole of what counts now.
+    testWidgets("a small drag away stays put while a reply arrives", (tester) async {
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+      final end = position(tester).maxScrollExtent;
+      final held = end - 300;
+      await tester.drag(find.byType(ListView), Offset(0, end - held));
+      await tester.pumpAndSettle();
+
+      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
+      await io(
+        tester,
+        () => app.container.read(chatControllerProvider(chat.state.id).notifier).send("more"),
+      );
+      await settleIo(tester);
+
+      expect(position(tester).pixels, held);
+      expect(find.byTooltip("Jump to latest"), findsOneWidget);
+    });
+
+    testWidgets("dragging back down re-attaches the follow", (tester) async {
+      final chat = await seedLongChat(tester);
+      await open(tester, chat.state.id);
+      await tester.drag(find.byType(ListView), const Offset(0, 600));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip("Jump to latest"), findsOneWidget);
+
+      // A fling rather than a drag: a drag lands wherever the finger stops,
+      // and the extent it lands short of is still an estimate. A fling's
+      // ballistic settle runs to the actual end, which is the gesture that
+      // says "take me back".
+      await tester.fling(find.byType(ListView), const Offset(0, -800), 4000);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip("Jump to latest"), findsNothing);
+
+      app.backend.scriptedEvents = [const TextDelta("and another thing"), const DoneEvent()];
+      await io(
+        tester,
+        () => app.container.read(chatControllerProvider(chat.state.id).notifier).send("more"),
+      );
+      await settleIo(tester);
+
+      expect(position(tester).pixels, position(tester).maxScrollExtent);
     });
   });
 
@@ -724,6 +1014,133 @@ void main() {
 
     expect(find.text("line 39"), findsOneWidget);
     expect(revealed(tester).where((o) => o == 1), isEmpty);
+  });
+
+  group("the paired devices' cards", () {
+    // What the welcome of a paired device named, as the hub would hold it.
+    RemoteChatEntry mirrorOf(
+      String deviceId,
+      String deviceName,
+      ChatState state, {
+      bool online = true,
+    }) =>
+        RemoteChatEntry(
+          chatId: state.id,
+          deviceId: deviceId,
+          deviceName: deviceName,
+          state: state,
+          online: online,
+        );
+
+    Future<void> openNew(WidgetTester tester) async {
+      await app.pump(tester, const ChatPage(withDrawer: true), settle: false);
+      await pumpUntil(tester, find.byType(Composer));
+      await settleIo(tester);
+    }
+
+    Future<void> openEmpty(WidgetTester tester, List<RemoteChatEntry> remotes) {
+      app.dispose();
+      app = TestApp.create(remotes: remotes);
+      return openNew(tester);
+    }
+
+    // The badges a device's card holds, as against the page's own `/`-`@`
+    // chips, which are ActionChips too.
+    Finder cardChips() => find.descendant(
+        of: find.byType(SyncedDeviceCards), matching: find.byType(ActionChip));
+
+    testWidgets("the new-chat screen draws one card per paired device",
+        (tester) async {
+      // Seeded so arrival order differs from name order: the cards are
+      // device-name sorted, so what lands first is not what draws first.
+      await openEmpty(tester, [
+        mirrorOf("d2", "Phone", makeState("r3")),
+        mirrorOf("d1", "Desktop", makeState("r1")),
+        mirrorOf("d1", "Desktop", makeState("r2", project: "work")),
+      ]);
+
+      expect(find.byType(SyncedDeviceCards), findsOneWidget);
+      expect(find.text("Desktop"), findsOneWidget);
+      expect(find.text("Phone"), findsOneWidget);
+
+      // The projects are the folded badges: unfolded, each card names the
+      // projects its mirrors sit in and nothing else about them.
+      await tester.tap(find.text("Desktop"));
+      await tester.tap(find.text("Phone"));
+      await tester.pumpAndSettle();
+
+      expect(cardChips(), findsNWidgets(3));
+      expect(find.text("Default"), findsNWidgets(2));
+      expect(find.text("work"), findsOneWidget);
+    });
+
+    testWidgets("a chat that exists with nothing said in it draws none",
+        (tester) async {
+      // The second caller of `_EmptyChat`: an existing chat, mid-turn at
+      // worst. A list of other devices under its question would say nothing
+      // true about it, which is why the cards are the new-chat screen's own.
+      // The mirrors are there, so what this asserts is the screen asking for
+      // them, not their absence.
+      app.dispose();
+      app = TestApp.create(remotes: [
+        mirrorOf("d1", "Desktop", makeState("r1")),
+      ]);
+      final chat = await io(tester, () => app.seedChat(title: "fresh"));
+      app.container
+          .read(selectedChatIdProvider.notifier)
+          .select(chat.state.id);
+      await app.pump(tester, const ChatPage(), settle: false);
+      await pumpUntil(tester, find.byType(Composer));
+      await settleIo(tester);
+
+      expect(find.byType(SyncedDeviceCards), findsNothing);
+      expect(find.text("Desktop"), findsNothing);
+    });
+
+    testWidgets("a device with nothing mirrored has no card", (tester) async {
+      await openEmpty(tester, []);
+
+      // The widget is mounted and draws nothing: what this asserts is that
+      // no card is drawn, not that the widget left the tree.
+      expect(find.byType(Card), findsNothing);
+    });
+
+    testWidgets("the cards start collapsed and the button folds each device",
+        (tester) async {
+      await openEmpty(tester, [
+        mirrorOf("d1", "Desktop", makeState("r1")),
+        mirrorOf("d1", "Desktop", makeState("r2", project: "work")),
+      ]);
+
+      expect(find.text("work"), findsNothing);
+      expect(cardChips(), findsNothing);
+      await tester.tap(find.text("Desktop"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("work"), findsOneWidget);
+      expect(cardChips(), findsNWidgets(2));
+      await tester.tap(find.text("Desktop"));
+      await tester.pumpAndSettle();
+
+      expect(find.text("work"), findsNothing);
+      expect(cardChips(), findsNothing);
+    });
+
+    testWidgets("a project badge opens that device's project in the sidebar",
+        (tester) async {
+      await openEmpty(tester, [
+        mirrorOf("d1", "Desktop", makeState("r1", project: "work")),
+      ]);
+      await tester.tap(find.text("Desktop"));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text("work"));
+      await tester.pump();
+
+      expect(app.container.read(selectedRemoteProvider),
+          (deviceId: "d1", project: "work"));
+      expect(app.container.read(selectedChatIdProvider), isNull);
+    });
   });
 
   group("when a memory note lands", () {

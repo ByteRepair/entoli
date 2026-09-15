@@ -243,6 +243,20 @@ count of entries — an image-heavy conversation is where the megabytes are. It
 belongs to the `SyncHub` rather than to the page that shows them, so a mirror
 being dropped takes its bytes with it.
 
+**An artifact rides the same channel as one zip.** An artifact's files live
+under the home device's `artifacts/`, so opening one on a mirror asks for a
+synthetic resource name built from the artifact id under `.artifacts/` — a
+name containing a `/`, which `resourceName` can never produce,
+so a user attachment cannot land in the namespace by accident — and is
+answered with `readArtifactZip`, the whole directory as one archive. No new
+`SyncMessage`: old builds never ask, and a new build against an old peer gets
+the empty-chunk "not there" answer. On the far side `unzipRemoteArtifact`
+writes the zip to a temp directory and every platform viewer is the one the
+local artifact already had. A re-publish invalidates the fetched zip the
+moment its record lands: the mirror sees it as the record naming the
+artifact again, and that record's arrival drops the cache entry, so the next
+open refetches.
+
 ### What a mirror looks like
 
 `MirrorChatController` is deliberately its own provider family rather than an
@@ -396,6 +410,38 @@ which is also what keeps every sync-unaware test working, since there is no
 hub: it sends past the mirror-side guard, which is the only way to check that
 the *home* device is what refuses a peer holding nothing.
 
+## Keeping a connection through the screen going dark
+
+On Android the process freezes when the screen does, and a frozen process's
+data channel is a channel the peer has already lost — this is why the phone's
+end of a pair goes quiet overnight while the desktop still lists it. The
+answer is the foreground service of "Staying alive off screen" in
+`android/CLAUDE.md`, as the sync `BackgroundJob`.
+
+`SyncKeepAlive` (`sync_keep_alive.dart`) is the keep-alive's owner, the same
+shape `TurnKeepAlive` is for turns: it watches `hub.peers`, reports the
+connected peers to `BackgroundWork.syncing`, and answers the notification's
+Disconnect by calling the same `hub.disconnect` the Sync page's row does —
+which is what drops the statuses, empties the list, and releases the service.
+What "connected" means is `SyncPeers.connected`'s, beside the statuses it
+names: a dial counts, and a status added later is decided once beside the
+enum rather than again in the keep-alive. The hold is the setting's:
+`syncKeepAlive` in `settings.json`, off by default (a wake lock and a
+notification for as long as a device is connected is a cost nobody opted
+into), read live through a closure the way the hub reads its own settings,
+and reached by the switch itself through a `ref.listen` on the provider —
+so turning it off mid-connection releases at once, not at the next status
+change. A peers change that answers what the last one answered does not
+cross the channel at all: a failing dial elsewhere and a registry seed are
+free.
+
+What it does not buy: a peer dialling *in* while nothing holds the process.
+Android refuses to start a foreground service from the background, so an
+inbound dial against a frozen process still fails honestly — the setting
+covers keeping a connection, not answering one with the app dead. And Android
+15's six-hour-a-day `dataSync` cap ends the hold the way it ends a turn's:
+`onTimeout` drops the service and leaves the connection merely killable.
+
 ## The container's half of the hub
 
 The hub is built in `main` before the container, so the repository the whole
@@ -515,21 +561,35 @@ non-required camera feature for it.
 
 - **Linux**: `KeyringSecretStore` over the FreeDesktop Secret Service API
   (`freedesktop_secret`), items labelled "Entoli — sync identity" and
-  "Entoli — paired devices". Falls back to `FileSecretStore` where no service
-  answers (headless, minimal WM, the dev toolbox).
+  "Entoli — paired devices" (and one per other kind, named by its key). The
+  labels follow the app's name, so a debug build reads "Entoli (Debug)" —
+  and its lookups carry a `build` attribute, so the two installs' items are
+  separate, the keyring-side twin of the `agent-chat-debug` data directory.
+  Falls back to `FileSecretStore` where no service answers (headless, minimal
+  WM, the dev toolbox).
 - **Android**: `FileSecretStore` under app-private storage — already out of
   every other app's reach — until Keystore wiring lands.
 - **Web**: `FileSecretStore` in origin-scoped IndexedDB. The weakest of the
   three; the Sync page says so rather than pretending otherwise.
 
-`encrypted` says which a build got. Nothing reads it yet — the Sync page
-should say so on the web, where the keys sit in ordinary IndexedDB, and does
-not.
+`encrypted` says which a build got. The provider settings read it: the
+provider dialog words its helper text by it, since "OS keyring" and "app
+secret store" are different promises to make. The Sync page still does not
+say so on the web, where the keys sit in ordinary IndexedDB.
+
+Sync is not the only tenant. `AppSecrets` (`lib/domain/app_secrets.dart`)
+holds the provider API keys (`provider-keys`, one JSON map under one item —
+one item per provider would make a user browsing their keyring count
+providers) and the TURN password (`turn-password`) in the same store. Its
+reads are served from a mirror filled once at startup, because
+`LlmRegistry` resolves a key on the path to every model call; the writers
+are the settings notifiers, which store or delete per provider and delete
+the item when the map empties. `turnUsername` is *not* a secret and stays in
+`settings.json` beside the TURN URL.
 
 ## Data dir layout
 
 ```
-<dataDir>/sync/identity.json   # public: device id, name, public key
 <dataDir>/sync/devices.json    # public: paired peers, addresses, last seen
 <dataDir>/sync/secrets.json    # private: only where no keyring answered
 ```
@@ -538,7 +598,9 @@ Backups skip `sync/` entirely (`writeBackup` passes `skipDir` to `archiveOf`):
 a backup must not carry private keys, and a restore wipes the data directory
 first — so `sync/` in a backup would silently unpair this device on every
 restore. The identity key itself lives in the keyring where there is one, not
-in `identity.json`, which holds only public facts.
+in `identity.json`, which holds only public facts. The provider keys and the
+TURN password are skipped with the same directory, which is what keeps them
+out of every export.
 
 **`AppConfig.ensureDirs` is what creates the directory**, beside `projects/`
 and the prompt directories, and neither writer here makes it. That is not a

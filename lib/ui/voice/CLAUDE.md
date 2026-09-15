@@ -112,10 +112,9 @@ conversation is still there to scroll back to. Two things follow. Five lines is
 a *height* — five times the line height at the current text scale, held rather
 than measured, because a viewport cannot lay its content out to discover how
 tall it should be, which is the same answer `_TitleLine.height` gives the app
-bar. And it follows the newest line only while it is already at the bottom,
-which is `chat_page.dart`'s slack rule reused rather than decided again —
-`ScrollPosition.nearBottom`, whose slack is the only part either caller decides:
-a reply streaming in must not yank the reader out of what they scrolled back to.
+bar. And it follows the newest line through `ScrollFollow`, the gesture rule
+`chat_page.dart` runs too — a line the reader has scrolled away from does not
+pull them back, and what attaches again is arriving at the end.
 
 **Its top fades out**, into the orb above it, so the line being read is the one
 at the bottom. A mask over the viewport rather than an opacity per line: what

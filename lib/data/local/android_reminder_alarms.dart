@@ -26,6 +26,9 @@ class AndroidReminderAlarms implements ReminderAlarms {
   bool get available => true;
 
   @override
+  bool get schedules => true;
+
+  @override
   Stream<void> get fired => _nudges.stream;
 
   @override

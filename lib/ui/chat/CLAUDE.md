@@ -1,5 +1,125 @@
 # The conversation on screen
 
+## The room and its participants
+
+A chat is a room, and `ChatController` owns it. Every widget here renders a
+fact about the room; none of them permits or refuses anything.
+
+The room has two participants who speak, and a third shape that never does:
+
+- **The user**, whose send verb is `TurnDriver.send` — every way a reminder or
+  a voice utterance speaks goes through the controller's `send` too, one path
+  rather than one per caller.
+- **The main agent**, behind the event stream. Every turn the controller
+  drives today is its turn; its reply is the anonymous voice at the end of
+  one. Sub-agents (a `task` call) are participants with a restricted reply
+  route — see "Sub-agents" in `lib/data/builtin/CLAUDE.md`: their only
+  channel is the tool result to their delegator, and the main agent sends
+  the message back. They never address the room, and nothing here draws
+  them as speakers.
+- **An `@mention` is not a participant.** It stacks the named agent's body
+  as the main agent's instructions. Omada is what changes that sentence, in
+  Omada-on projects only.
+
+### The contract between direct and Omada chats
+
+**A direct chat** — Omada off, the default, every chat that existed before
+there was a toggle — is **strictly 1:1 between the user and the main agent**.
+Every turn is the main agent's turn, whether the message addresses it or not;
+an `@mention` on the prompt is instruction material, stacked from
+`Message.documents`, and the reply is the main agent's, unnamed. When the
+main agent delegates, it does so through `task`: sub-agents are machinery
+inside its turn, headless and off the record, their output readable by the
+main agent alone, and the user sees only what the main agent says about it.
+Nothing stamps, nothing labels, nothing hands off. A direct chat is the
+system as it was before Omada existed, byte for byte.
+
+**An Omada chat** — Omada on for the project — adds a reply route, and
+everything Omada does hangs off it: a message addressing members is answered
+by them as participants, each in a session of their own, with the author on
+the record; members hand off to each other by mentioning one another in a
+reply, chain-capped; a member declines with `pass`. The turn's scheduling is
+the room's `_schedules` — one FIFO per member of what they have been
+addressed to run — resolved once at dispatch, and it is gated on the toggle:
+**turning Omada off ends promotion for every turn after it**, whatever the
+prompt names. What is already on the record stays — history is fact — but
+the next send is the main agent's.
+
+**The label means a member authored the turn.** `Message.author` is stamped
+only where a member actually answered — an Omada-on turn the schedule routed
+to them — never where the main agent merely used a member's instructions.
+That is what keeps the label honest: it answers "who spoke", and the answer
+is a lie if an instruction overlay can put a name on the main agent's
+voice.
+
+**The schedule is the room's order of speaking.** `_schedule` puts an item
+on each member's FIFO: a user prompt addressed by its documents, or a
+handoff — the reply that names them, one generation past the turn that wrote
+it. The null key is the main agent, who answers what no member was addressed
+for. `_dispatch` runs what the schedule holds: **sequential** order
+dispatches one item at a time — the mention list is the schedule, and what
+follows dispatches at the settle it causes; **parallel** order dispatches
+one item per member at once, each FIFO's head, one turn per member still
+standing, and the rest at the settles they cause. Either way the item is off
+its FIFO before its turn opens, so a settle re-entering finds the schedule
+behind it and not the item running.
+
+**A handoff wave waits for the room to settle.** A turn that finishes while
+a sibling is still speaking records its reply in `_settledReplies`; the
+settle the last sibling causes evaluates every reply the wave finished, in
+finish order, against the cap read at dispatch. A generation is the dispatch
+wave an item belongs to — zero is the user's own and uncapped, a handoff
+lands one past the turn that named it, and the cap (`omadaMaxGenerations`,
+project override over app default) stops the wave that would pass it.
+
+**A pass ends what agents hand each other, not what the user asked for.** A
+reply that says nothing but `pass` clears the schedule of agent-addressed
+items and continues the user's own — a turn the user addressed to another
+member is that member's to run, however the round around it went.
+
+**A say is not refused, it is queued.** While a turn runs, the user's send
+lands on the log the moment it is said (`_sayLater` — the log is the queue)
+and dispatches when the room settles. The composer names which is on offer:
+an empty field while the agent speaks shows Stop; anything typed shows Send,
+which queues. Where the say lands after the settle already read the queue —
+the turn was finishing while it was typed — `_sayLater` dispatches it itself
+rather than waiting for a settle that already happened. Nothing is injected
+into a turn mid-flight, which is what protects the projection-prefix
+invariant; and a say whose members are named schedules them through the same
+ordering anything else takes.
+
+**Abort stops the round whole.** Every running turn is ended `aborted`, the
+queue of unsaid says is dropped, and the schedule is cleared — an aborted
+round is a stopped one, and whatever the user says next is the first thing
+of a new one. An interruption (`interrupt`, the app going away) does the
+same to every turn but leaves the logs open, so each reply offers to be
+carried on.
+
+**Attribution rides the turn that asked for it.** Approvals, questions and
+running sub-agents are keyed by the reply that raised them, so two turns
+running beside each other hold their own banners; a finished turn's entries
+leave with it, a sibling's kept. The status line and the retry row stay
+page-level — they answer "is the turn alive", and there is one room on
+screen.
+
+**The lock is the room's rule, decided once.** What the lock once refused it
+now queues (above), but the rule's shape is unchanged: `send` and every
+driving verb it guards check `isRunning` and decide there — queue, dispatch,
+or refuse. Who may speak now is decided in the controller and nowhere else.
+The renderings are consumers: the composer's button, the app-bar spinner,
+the message row's editability, all reading view state.
+
+**The room's phase is one answer, not a combination.** `ChatViewState.roomPhase`
+says who may speak: `open` (composer is the user's), `agentSpeaking` (a turn
+has the floor; an empty composer shows Stop), or `waitingOnYou` (a turn is
+waiting on answers — the composer's place is taken by the question panel).
+The third outranks the second: a turn waiting on answers is still running —
+the spinner stays up, editing stays refused — but what it wants is the user.
+`roomPhase` answers "who speaks", never "is a turn alive": surfaces about
+the turn itself (the spinner, editability, the `ResumeBar`'s `unfinished`)
+keep reading `isRunning`. Approvals are not a phase — they overlay an open
+composer, and stay their own list.
+
 ## When a turn is over
 
 `_finishTurn` drains the append queue and writes the `turnEnd` record before it
@@ -144,6 +264,17 @@ A tool call and the result answering it are one label. The parts stay separate
 in `conv.jsonl` (they arrive at different times) and the UI pairs them by
 `callID`; a result whose call is gone draws its own.
 
+**A running command's output streams under its label.** While a `bash` call
+(or the user's own `!` command) is printing, the tail of what it has printed
+is a block in the trailing state, under the spinner row — the block is only
+the output, the spinner the turn already carries being the whole of the
+running indication, two of them being one too many. It is `ShellOutputEvent`
+turn-scoped view state like the spinner: gone the moment the pair completes
+(the label's drawer is what a finished command's output is behind) or the turn
+ends, and never written to `conv.jsonl`. What a `!` bubble draws once its turn
+is over is the ordinary `ShellRunBubble`, which is why the block does not
+hand anything over — the part lands and the reply is no longer empty.
+
 A run of two or more non-important activity labels collapses behind a single
 centered "Expand activities" toggle (`ActivityGroup`), default collapsed. What
 is important and so stays visible, breaking a run: an artifact button, a failed
@@ -163,44 +294,53 @@ had to be written for that.
 
 ### Selecting a reply, and copying it
 
-The **message** is one `SelectionArea` and the markdown inside it is not
-selectable of its own accord. `MarkdownBody(selectable: true)` builds a
-`SelectableText` per element, and each of those is a selection region to itself
-— so a drag stopped at the paragraph it started in, which is the whole
-complaint. Plain `Text.rich` under one region selects across the lot.
+The **message** is one `SelectionArea`, with one `SelectionContainer` under it
+and nothing between that and the fragments — heading, paragraph, list item,
+code block — so a drag runs from the first paragraph to the last, and copy
+answers from the same fragments the highlight is drawn from. The per-part
+container this replaced built a region to itself per text part, which is what
+stopped a drag at the paragraph it started in; `MarkdownBody(selectable:
+true)` is worse still, a `SelectableText` per element. The container delegate
+is held on the bubble's state rather than per build: a streamed delta rebuilds
+the message every frame, and a delegate per build would drop the selection
+under the drag that is making it.
 
 The region is around all of `_rows` rather than inside `_bubble`, and that is
 the whole point rather than a detail: `_rows` closes the bubble at every
 reasoning part and every tool call, so a region per bubble would have stopped
-the drag at the first tool label — which is most of the replies this app makes.
-It also cost a `SelectableRegion` per bubble on every streamed delta, since a
-message is one list item and rebuilds whole.
+the drag at the first tool label — which is most of the replies this app
+makes. It also cost a `SelectableRegion` per bubble on every streamed delta,
+since a message is one list item and rebuilds whole.
 
 What that puts inside the region is the labels, which are not what the message
 said, so each is wrapped in `SelectionContainer.disabled` — dragging past one
 must not put "Thought for 12 seconds" on the clipboard. The `SelectableText` in
 a label's drawer is on its own route, so nothing nests.
 
-What a selection copies is the **markdown that was rendered**, not the text it
-rendered to: `_MarkdownSource` is a `SelectionContainer` delegate per text part
-that answers `getSelectedContent` with the part's source. There is no finer
-granularity available — the renderer keeps no source offsets, so there is
-nothing to map a partial selection back through — so anything selected inside a
-part copies the whole of that part. That is what puts `**bold**` on the
-clipboard rather than `bold`, and it is why the copy button below is the same
-answer at message scale rather than a second mechanism. The delegate answers
-from `value.hasSelection` rather than from `super.getSelectedContent()`, which
-would walk every selectable and concatenate what each holds only for the answer
-to be thrown away.
+What a selection copies is **the rendered text, the words on screen** —
+`_RenderedSelection` answers `getSelectedContent` from each selected fragment
+and joins the blocks with a newline, so Ctrl+C, the context menu and the
+mobile toolbar all write exactly what is highlighted. The newline is the one
+thing the base delegate does not answer: the gaps between blocks live in
+widgets, not in text, so the framework's own answer glues a heading to its
+paragraph. What is not text contributes nothing — an image and anything a
+custom element builder drew is outside the fragments — and selection can also
+not cross messages, one region per message as ever.
 
 What can be done to a message is a row under it rather than a menu, uncovered by
 hovering the message or, where there is no pointer to hover with, by touching
 it. Left to right: which thread this is and the arrows between them, copy,
-delete, then Edit and Regenerate. Copy takes the message's `plainText`, which is
-every text part and no thinking — the same rule a rewound session is seeded by.
-It is offered only where something was said, since a message of tool calls alone
-would copy nothing. The counter and the arrows are there only where there
-is more than one thread — `1/1` and two dead arrows say nothing — while delete
+raw copy, delete, then Edit and Regenerate. **Copy takes the formatted text**
+(`formattedTextOf`, in `lib/domain/formatted_text.dart`, parsed with the same
+grammar the renderer reads, so the two cannot disagree about what a fence is)
+— what a reader would paste into
+another document, and the same answer at message scale the selection is.
+**Raw copy (`<>`) takes the markdown**, every text part and no thinking — the
+same rule a rewound session is seeded by — and the Edit field reads that too,
+since editing the rendered text would not resend to what produced it. Copy is
+offered only where something was said, since a message of tool calls alone
+would copy nothing. The counter and the arrows are there only where there is
+more than one thread — `1/1` and two dead arrows say nothing — while delete
 is offered whatever the count, since deleting the last thread at a point is the
 conversation being cut off there and is worth being able to do. The arrows stop
 at either end rather than wrapping: one that comes back round to where the
@@ -345,7 +485,7 @@ default is `cardColor`, which M3 resolves to `colorScheme.surface`, and a code
 block the colour of the page is why this was worth doing at all.
 
 The bar is `SelectionContainer.disabled`, the same rule the labels above the
-bubble keep: a drag across the reply copies the markdown behind it, and the
+bubble keep: a drag across the reply copies the rendered text, and the
 language name is not something the model said. Its copy button is `ActionIcon`
 and reports through `copyToClipboard`, which is the same button and the same
 snack bar the row under a message uses — the other idiom, an icon that turns
@@ -413,6 +553,17 @@ false, `_NewChat` and `_local` swap the composer for a `NeedsSetupBar` —
 the same full-swap pattern `ViewOnlyBar` uses for a mirrored chat — with a
 button that opens Settings at the project's category. The turn path no
 longer creates the rootfs lazily; "Run Setup" owns the full lifecycle.
+
+**A chat moved to another project reloads the controller, and the move
+aborts a running turn first.** The controller is a cache of what it read
+off disk — project included — so the sidebar disposes it on a move rather
+than patching it: the next read comes back from the new project, and the
+composer composes against the new project's library from the next message.
+`ChatRepository.moveChat` aborts a running turn before closing the shell
+and moving, since a turn still standing in the old directories would remake
+them under the project it left. Messages already composed keep what their
+`/skill` and `@agent` references meant when they were sent — the records are
+on the message, not looked up per turn.
 
 ## The chat page
 
@@ -522,6 +673,67 @@ they exist never finds out. Six at most, because everything the user has
 written is a menu and `/` is what opens the menu; with nothing at all in the
 library it says how to reach them instead.
 
+**Both rows are `ChipRow`s** (see "Shared UI" in `lib/ui/widgets/CLAUDE.md`),
+which is why nothing here snaps when the set changes: picking a badge grows
+its check, the row re-flows around the growth, and a badge pushed onto a new
+line glides there rather than teleporting — that case is why the position
+mechanism paints rather than wraps. A change of project swaps the starters
+per chip — what both sets share keeps its slot, the delta grows out of
+nothing or shrinks into it — and with nothing at all in the library the
+"Type / for commands, @ for agents." line is an entry of the same row, so it
+gives way to the first chips through the same motion. The question headline
+sweeps between its projects' texts: the new question takes over from the
+first character and the change front moves progressively towards the end,
+over 400ms at constant speed, starting from whatever is on screen so picking
+another badge mid-sweep retargets rather than jumps — where two strings
+agree nothing visibly changes, so what moves is the divergence toward the
+end.
+
+**The screen opens settled.** It used to be that the rows animated their
+first build too — the screen was grown into, not shown settled — and what
+that bought was a page the user opens on that moves before anything has been
+touched. So both rows are built `settled`: what this screen is created with
+is already there, and everything from the first interaction on animates. The
+same body serves a chat that exists with nothing said in it yet — what voice
+mode and a reminder can leave — and it opens settled the same way. A remount
+across `navBreakpoint` rebuilds the rows, and they open settled again, which
+is right: that remount *is* the screen appearing. The say-so is scoped to the
+row's first build, so content that is not on screen at that moment — a cold
+start whose project list resolves a frame later — arrives the way any change
+does: animated.
+
+Below the chips, and only on the new-chat screen, sit **the paired devices'
+cards** (`synced_device_cards.dart`). The data is the Remotes list — chats
+mirrored from a paired device, whose welcome named it — and that is also the
+limit of what is honest to draw: a project exists at this end only where one
+of its chats has been mirrored, there being no message that asks a paired
+device for a listing of its own. So a device with nothing mirrored has no
+card, and the list is watched rather than a second source invented. Each card
+is a device with the projects
+its mirrors sit in, folded behind the device's own name — the header is the
+toggle, per device and in-memory, the same shape `ActivityGroup` is, and
+carries the name and nothing else: no dot for the connection, no count of
+what is folded behind it, what is there being one tap away either way. A
+project unfolds as a badge, the same `ActionChip` in a `ChipRow` the
+`/`-`@` chips are — an unfold grows them out of nothing through the row's
+own motion rather than a list appearing under the header — and a badge opens
+that device's project through `selectRemote`, the switcher's own action, so
+the two ways into a paired device's project cannot come to disagree about
+what picking it means. The cards are `_EmptyChat`'s
+only under `showSyncedCards`, which `_NewChat` alone passes: the same body
+serving a chat that exists with nothing said in it yet has no business
+listing other devices under its question.
+
+What the headline says is `emptyChatQuestionProvider`: a built-in's shipped
+question, else the project's `description` (the settings page's Description
+row, its dialog saving an empty field as empty and its reset button the way
+back to null), else the app-wide default — and the provider answers one
+string, null and empty both meaning "nothing to ask" by the time it returns.
+Empty is a value the sweep can be handed — the label stays on the tree and
+eats its own tail away rather than leaving it — so setting a description
+never unmounts the headline, and the next question's arrival is a change,
+not a mount.
+
 The badges are the same discovery for projects: the switcher at the top of the
 sidebar is the only other place one is named, and on a phone the sidebar is a
 drawer. Picking one is `selectProject` — the switcher's own action, lifted out
@@ -608,10 +820,15 @@ depended on how tall the messages happened to be. Not
 reversed viewport the offsets of older messages shift as the newest one grows,
 so a reader scrolled up during a turn would watch the text move.
 
-A turn follows itself only while the reader is already within `_slack` of the
-end. Outside it the list is left alone — the offsets of earlier messages do not
-move as the last one grows, so reading back through a turn is undisturbed — and
-a button appears to go back down. The same slack decides both, so the button
-turns up exactly when the view stops keeping up. Both edges are
-`ValueNotifier`s, since a `setState` mid-drag would rebuild every visible bubble
-to swap a title or a button.
+A turn follows itself only while the reader has not scrolled away from it —
+`ScrollFollow` (see `lib/ui/widgets/CLAUDE.md`), not a position test. The old
+test was per tick: every delta arriving while the reader dragged back through
+a turn pulled the view down again, so a scroll up inside `_slack` snapped
+back more often than it stayed. Now any gesture toward the older messages
+detaches — however small, however near the end it stops — and reaching the
+end again by any means attaches. Outside the follow the list is left alone —
+the offsets of earlier messages do not move as the last one grows, so reading
+back through a turn is undisturbed — and a button appears to go back down.
+Its own `_slack` decides only the button: it turns up once the view is past
+200px off the end. Both edges are `ValueNotifier`s, since a `setState`
+mid-drag would rebuild every visible bubble to swap a title or a button.

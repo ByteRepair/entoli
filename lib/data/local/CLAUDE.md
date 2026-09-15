@@ -104,6 +104,13 @@ the run carries on, so a host with make already on it pays nothing and one
 without it sees the honest "Not installed" row. A named manager that fails is
 a failure, so a guest install that did not happen never reads as done.
 
+"Already installed" means *on PATH and runs* (`works`, a `--version` probe),
+not merely found: a binary present but unstartable — a local build missing its
+libraries — once read as installed, was skipped, and setup exited 0 having
+done nothing. The run ends on a verification of the binary that stands at the
+end (the fetched one, else whatever PATH answers); if that will not run,
+setup exits 1 and the settings page shows the loader's error.
+
 On the host the fetched tools reach their turns through the driver: `platformDriver`
 prefixes the bin directory onto `PATH` for rootfs-isolated projects alone, the
 way the project's rootfs copy is its own. A user-set `PATH` in the command
@@ -492,18 +499,36 @@ desktop: the cores are not alike and ggml's threadpool moves at its slowest
 thread's pace, so a little core holds up every big one beside it. `bigCoreCount`
 ranks them by what the kernel says each one's ceiling is and takes everything
 above the floor. A machine of one tier gets all of them, and one the kernel will
-not answer for passes no `-t` at all and leaves the choice where it was.
+not answer for passes no `-t` at all and leaves the choice where it was. It is
+read only where the pool is built, so a desktop whose cpufreq answers nothing
+falls back to llama.cpp's own default — which, on a desktop of alike cores, is
+the right one.
 
-**arm64 only**, and that is a size decision. The server and its libraries are
-about 55 MB stripped — the Vulkan backend's `libggml-vulkan.so` is 36 MB of that
-on its own — and three ABIs of it would be most of what a phone downloads. It
-is most of why the release APK is split per ABI: see "Releasing".
-Nothing is lost: a 32-bit phone cannot map a two-gigabyte model at all, and
-x86_64 Android is an emulator. A build without it leaves
-`LocalLlm.available` false, which is also what the desktops and the web get —
-and there the settings page says so and points at Ollama and LM Studio, which
-are two of the presets and a better answer than a second copy of llama.cpp
-inside this app.
+**arm64 only, and that is a size decision — on Android.** The server and its
+libraries are about 55 MB stripped — the Vulkan backend's `libggml-vulkan.so`
+is 36 MB of that on its own — and three ABIs of it would be most of what a
+phone downloads. It is most of why the release APK is split per ABI: see
+"Releasing". Nothing is lost: a 32-bit phone cannot map a two-gigabyte model
+at all, and x86_64 Android is an emulator. A build without it leaves
+`LocalLlm.available` false, and the settings page says so — naming on the web
+what a browser cannot do, and on a desktop that the build ran without
+`tool/linux/build-llama.sh`, which is a build fault in the sense a missing
+proot is.
+
+**Linux carries the same server, built natively.** `tool/linux/build-llama.sh`
+builds the pinned release for the host — the same cmake choices the Android
+build makes, minus the NDK's: no toolchain file, and `GGML_NATIVE=OFF` where a
+distributed binary needs ggml's runtime dispatch rather than this machine's
+`-march`. The backends are CPU and Vulkan, the Android build minus the NPU,
+and `GGML_BACKEND_DL` keeps them loadable-at-runtime so a machine with no
+usable Vulkan driver runs the CPU rather than failing. `linux/CMakeLists.txt`
+installs the staged output into the bundle's `lib/`, which is where
+`platformLocalLlm` looks for it beside the executable — so a build without the
+script still builds, and says what it is missing rather than pretending. The
+desktop judgement the first version recorded — that Ollama and LM Studio are
+the better answer there — stands for a machine that has one installed; what
+changed is that a machine with nothing on it now has the zero-setup option a
+phone always had, the same catalog and the same flow.
 
 The weights go to `<cacheDir>/llm/<id>/model.gguf` with a `.complete` marker
 written last, beside the voice models and a downloaded Linux and outside the

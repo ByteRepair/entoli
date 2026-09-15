@@ -13,6 +13,10 @@ analyzer:
   exclude:
     - lib/data/prompts/bundled_skill_data.dart
     - lib/domain/bundled_project_prompts.dart
+    - build/**
+    - android/**
+    - web/**
+    - linux/**
 
 linter:
   # The lint rules applied to this project can be customized in the

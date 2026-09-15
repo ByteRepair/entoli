@@ -176,50 +176,69 @@ void main() {
   });
 
   group("on Android", () {
-    testWidgets("there is no catalog to download from", (tester) async {
+    /// An Android: the catalog and the system engines beside it, [hears] and
+    /// [speaks] as which of them the device has. `nativeVoice` is what the
+    /// harness seeds the usable set and the engines' presence from — the same
+    /// answer `main` builds the provider with.
+    Future<void> pumpAndroid(
+      WidgetTester tester, {
+      bool hears = true,
+      bool speaks = true,
+    }) async {
       app = TestApp.create(
-        voice: FakeVoice(downloadsModels: false),
-        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
+        voice: FakeVoice(),
+        nativeVoice: NativeVoiceEngines(recognition: hears, speech: speaks),
       );
       await pumpVoice(tester);
+    }
 
-      // The system engines are the whole of what there is, so a list of models
-      // to fetch would be a list of things this platform cannot run.
-      expect(find.text("Whisper tiny"), findsNothing);
-      expect(find.text("Kokoro"), findsNothing);
-      expect(find.byTooltip("Download"), findsNothing);
+    testWidgets("the catalog draws beside the system engines", (tester) async {
+      await pumpAndroid(tester);
+
+      expect(find.text("Whisper tiny"), findsOneWidget);
       expect(find.text("Android system"), findsWidgets);
     });
 
-    testWidgets("a missing engine is named, with somewhere to get one",
+    testWidgets("an unset recognizer is named as the setting it is",
         (tester) async {
-      app = TestApp.create(
-        voice: FakeVoice(downloadsModels: false),
-        nativeVoice: const NativeVoiceEngines(recognition: false, speech: true),
-      );
-      await pumpVoice(tester);
+      await pumpAndroid(tester, hears: false);
 
-      // Nothing to fall back on here, so an empty picker on its own would be a
-      // dead end rather than one install away from working.
-      expect(find.textContaining("nothing to hear with"), findsOneWidget);
-      final link = find.textContaining("FUTO Voice Input");
-      expect(link, findsOneWidget);
-      // The half it does have is not advertised as missing.
-      expect(find.textContaining("RHVoice"), findsNothing);
-
-      await tester.tap(link);
-      await tester.pumpAndSettle();
-      expect(app.linkOpener.opened.single.host, "voiceinput.futo.tech");
+      // Downloaded but never set as the system's voice-input service is the
+      // same thing to do about it as not installed: named, with where to set
+      // it — and the catalog below is the other way out.
+      expect(find.textContaining("voice-input service"), findsOneWidget);
+      expect(find.textContaining("downloaded model"), findsOneWidget);
+      expect(find.textContaining("FUTO Voice Input"), findsOneWidget);
     });
 
     testWidgets("with both engines there is nothing to explain", (tester) async {
-      app = TestApp.create(
-        voice: FakeVoice(downloadsModels: false),
-        nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
-      );
-      await pumpVoice(tester);
+      await pumpAndroid(tester);
 
       expect(find.textContaining("This device has nothing to"), findsNothing);
+    });
+
+    testWidgets("a missing synthesiser is named, with somewhere to get one",
+        (tester) async {
+      await pumpAndroid(tester, speaks: false);
+
+      expect(find.textContaining("nothing to speak with"), findsOneWidget);
+      final link = find.textContaining("RHVoice");
+      expect(link, findsOneWidget);
+      // The half it does have is not advertised as missing.
+      expect(find.textContaining("FUTO Voice Input"), findsNothing);
+
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(app.linkOpener.opened.single.host, "f-droid.org");
+    });
+
+    testWidgets("with neither engine both halves are named", (tester) async {
+      await pumpAndroid(tester, hears: false, speaks: false);
+
+      expect(find.textContaining("nothing to hear with"), findsOneWidget);
+      expect(find.textContaining("nothing to speak with"), findsOneWidget);
+      expect(find.textContaining("RHVoice"), findsOneWidget);
+      expect(find.textContaining("FUTO Voice Input"), findsOneWidget);
     });
 
     /// An Android with both engines, its sentinels picked, and [speaks] as what
@@ -229,7 +248,7 @@ void main() {
       List<VoiceLanguage> speaks = const [],
     }) async {
       app = TestApp.create(
-        voice: FakeVoice(downloadsModels: false)..languages = speaks,
+        voice: FakeVoice()..languages = speaks,
         nativeVoice: const NativeVoiceEngines(recognition: true, speech: true),
       );
       await pick(tester,

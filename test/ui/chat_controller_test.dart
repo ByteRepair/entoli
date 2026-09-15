@@ -4,13 +4,20 @@ import "dart:async";
 
 import "package:flutter_test/flutter_test.dart";
 
+import "package:agent_chat/data/builtin/templates.dart" show passWord;
 import "package:agent_chat/domain/agent_backend.dart";
 import "package:agent_chat/domain/app_settings.dart";
+import "package:agent_chat/domain/ask.dart";
 import "package:agent_chat/domain/chat_meta.dart";
 import "package:agent_chat/domain/models.dart";
 import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
+import "package:agent_chat/domain/project_settings.dart"
+    show OmadaOrdering;
+import "package:agent_chat/providers.dart"
+    show projectSettingsProvider, promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
+import "package:agent_chat/ui/chat/chat_page.dart" show entriesOf, SectionEntry;
 
 import "../fakes.dart";
 import "../harness.dart";
@@ -23,10 +30,15 @@ void main() {
 
   /// send() returns once the prompt is dispatched; the turn ends later, on the
   /// stream's DoneEvent. Retry rounds wait out real backoff between them, so a
-  /// caller expecting rounds names a limit that covers the waits.
+  /// caller expecting rounds names a limit that covers the waits. [target] is
+  /// the app whose container to read — a test may hold more than one.
   Future<void> waitIdle(String id,
-          {Duration limit = const Duration(seconds: 2)}) =>
-      waitFor(() => !app.container.read(chatControllerProvider(id)).isRunning,
+          {Duration limit = const Duration(seconds: 2), TestApp? target}) =>
+      waitFor(
+          () => !(target ?? app)
+              .container
+              .read(chatControllerProvider(id))
+              .isRunning,
           what: "the turn", limit: limit);
 
   /// A chat with a turn under way. Nothing waits for the controller to have
@@ -35,8 +47,9 @@ void main() {
   Future<(String, ChatController)> startTurn(
     String text, {
     List<Attachment> attachments = const [],
+    String? project,
   }) async {
-    final chat = await app.repo.createChat();
+    final chat = await app.repo.createChat(project: project);
     final id = chat.state.id;
     final controller = app.container.read(chatControllerProvider(id).notifier);
     await controller.send(text, attachments: attachments);
@@ -47,8 +60,10 @@ void main() {
   Future<(String, ChatController)> chatWithOneTurn(
     String text, {
     List<Attachment> attachments = const [],
+    String? project,
   }) async {
-    final (id, controller) = await startTurn(text, attachments: attachments);
+    final (id, controller) =
+        await startTurn(text, attachments: attachments, project: project);
     await waitIdle(id);
     return (id, controller);
   }
@@ -287,6 +302,10 @@ void main() {
     expect(reply.role, MessageRole.assistant);
     expect(reply.parts.whereType<ErrorPart>().single.message, contains("usage limit"));
     expect(app.container.read(chatControllerProvider(id)).isRunning, isFalse);
+    // Every message is answered by the main agent, and its phase is open once
+    // the turn is over — the room's two facts, pinned at one of the seams.
+    expect(app.container.read(chatControllerProvider(id)).roomPhase,
+        RoomPhase.open);
   });
 
   test("a retry shows up as a notice while the turn is still running", () async {
@@ -378,6 +397,71 @@ void main() {
     expect(stored.messages.last.parts, isEmpty);
   });
 
+  test("a running command's output is held while it runs", () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(callId: "c1", text: "line one\n"),
+      ShellOutputEvent(callId: "c1", text: "line one\nline two\n"),
+    ];
+    app.backend.hold = Completer<void>();
+    final (id, _) = await startTurn("run it");
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    // The latest replaces the last rather than accumulating.
+    expect(app.container.read(chatControllerProvider(id)).shellOutput,
+        "line one\nline two\n");
+    app.backend.hold!.complete();
+  });
+
+  test("the call's result is what takes the output away", () async {
+    app.backend.scriptedEvents = const [
+      ToolCallEvent(ToolCall(id: "c1", name: "bash", argumentsText: "ls")),
+      ShellOutputEvent(callId: "c1", text: "files\n"),
+      ToolResultEvent(ToolResult(callId: "c1", returnCode: 0, output: "files\n")),
+    ];
+    final (id, _) = await chatWithOneTurn("run it");
+
+    final view = app.container.read(chatControllerProvider(id));
+    expect(view.shellOutput, isNull);
+    // What the conversation keeps is the pair, and the pair's output.
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts.whereType<ToolCallPart>(), hasLength(1));
+    expect(
+        stored.messages.last.parts.whereType<ToolResultPart>().single.result.output,
+        "files\n");
+  });
+
+  test("the turn ending takes the output away with it", () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(text: "halfway\n"),
+      DoneEvent(aborted: true),
+    ];
+    final (id, _) = await chatWithOneTurn("run it");
+
+    expect(app.container.read(chatControllerProvider(id)).shellOutput, isNull);
+  });
+
+  test("a whitespace-only output is never held", () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(text: "   \n"),
+      DoneEvent(aborted: true),
+    ];
+    final (id, _) = await chatWithOneTurn("run it");
+
+    expect(app.container.read(chatControllerProvider(id)).shellOutput, isNull);
+  });
+
+  test("a running command's output is never written to the conversation",
+      () async {
+    app.backend.scriptedEvents = const [
+      ShellOutputEvent(text: "progress bar\n"),
+      DoneEvent(),
+    ];
+    final (id, _) = await chatWithOneTurn("hello");
+
+    final stored = await app.repo.openChat(id);
+    expect(stored.messages.last.parts, isEmpty);
+  });
+
   test("an errored reply is persisted with the chat", () async {
     app.backend.scriptedEvents = const [ErrorEvent("APIError (HTTP 429): usage limit"), DoneEvent()];
     final (id, _) = await chatWithOneTurn("hello");
@@ -396,6 +480,9 @@ void main() {
     await waitIdle(id);
 
     expect(messagesOf(id), hasLength(2));
+    // The regenerated reply is the main agent's too — the other `_newReply`
+    // call site, answered by the same `_responder`.
+    expect(messagesOf(id).last.role, MessageRole.assistant);
     expect(app.backend.prompts.map((p) => p.prompt.plainText), ["hello", "hello"]);
     // The same text *and* the same date, which is what makes it the same
     // string: a regenerate re-runs the message that is already logged, so it
@@ -424,6 +511,7 @@ void main() {
     final messages = messagesOf(id);
     expect(messages, hasLength(2));
     expect(textOf(messages.first), "hello");
+    expect(messages.last.role, MessageRole.assistant);
     expect(app.backend.prompts.map((p) => p.prompt.plainText), ["helo", "hello"]);
   });
 
@@ -1164,6 +1252,623 @@ void main() {
       expect(app.backend.resumes, hasLength(1));
     });
   });
+
+  group("moving the chat to another project", () {
+    // esbmc-verifier is byte-repair's alone, so the project's own library —
+    // read from its real sources by the reload — is what decides whether a
+    // mention of it resolves. `testLibrary` has none.
+    Future<TestApp> appWithByteRepairLibrary() async {
+      final app = TestApp.create();
+      await app.container
+          .read(promptLibraryProvider("byte-repair").notifier)
+          .reload();
+      return app;
+    }
+
+    /// The sidebar's move, driven at the container: invalidate, then wait for
+    /// the reload. The predicate asks for the chat as well as the project —
+    /// a building controller has neither, and null equals null.
+    Future<void> moveAndReload(TestApp app, String chatId, String? project) async {
+      await app.repo.moveChat(chatId, project);
+      app.container.invalidate(chatControllerProvider(chatId));
+      await waitFor(() async {
+        final chat =
+            app.container.read(chatControllerProvider(chatId)).chat;
+        return chat != null && chat.state.project == project;
+      }, what: "the reloaded chat");
+    }
+
+    test("a mention resolved in byte-repair is not in the reloaded chat",
+        () async {
+      final app = await appWithByteRepairLibrary();
+      addTearDown(app.dispose);
+      final chat = await app.repo.createChat(project: "byte-repair");
+      final controller =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await controller.send("@esbmc-verifier verify src.c");
+      await waitIdle(chat.state.id, target: app);
+      expect(
+        app.backend.prompts.single.prompt.documents.keys,
+        contains("@esbmc-verifier"),
+      );
+
+      await moveAndReload(app, chat.state.id, null);
+
+      expect(
+        app.container.read(chatControllerProvider(chat.state.id)).chat!.state.project,
+        isNull,
+      );
+    });
+
+    test("the reloaded controller composes the next message against the new project",
+        () async {
+      final app = await appWithByteRepairLibrary();
+      addTearDown(app.dispose);
+      final chat = await app.repo.createChat(project: "byte-repair");
+      final controller =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await controller.send("@esbmc-verifier verify src.c");
+      await waitIdle(chat.state.id, target: app);
+
+      await moveAndReload(app, chat.state.id, null);
+      final reloaded =
+          app.container.read(chatControllerProvider(chat.state.id).notifier);
+      await reloaded.send("@esbmc-verifier verify src.c");
+      await waitIdle(chat.state.id, target: app);
+
+      expect(app.backend.prompts.last.prompt.documents, isEmpty);
+    });
+
+    test("a chat whose controller was never built does not build one",
+        () async {
+      final chat = await app.repo.createChat(project: "work");
+      await app.repo.moveChat(chat.state.id, null);
+
+      expect(
+        app.container.exists(chatControllerProvider(chat.state.id)),
+        isFalse,
+      );
+    });
+  });
+
+  group("the room", () {
+    test("a turn waiting on answers is waitingOnYou, and still running",
+        () async {
+      app.backend.scriptedEvents = const [
+        QuestionRequestEvent(AskRequest(id: "q1", questions: [
+          AskQuestion(question: "Which one?", options: [
+            AskOption(label: "This one"),
+          ]),
+        ])),
+      ];
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, _) = await startTurn("hello");
+      await waitFor(
+          () =>
+              app.container.read(chatControllerProvider(id)).roomPhase ==
+              RoomPhase.waitingOnYou,
+          what: "the question");
+
+      // The phase answers who may speak, not whether a turn is alive: the
+      // spinner and the refusal to edit ride on isRunning, which is still set.
+      final view = app.container.read(chatControllerProvider(id));
+      expect(view.roomPhase, RoomPhase.waitingOnYou);
+      expect(view.isRunning, isTrue);
+      app.backend.hold!.complete();
+      await waitIdle(id);
+      expect(app.container.read(chatControllerProvider(id)).roomPhase,
+          RoomPhase.open);
+      // Let the teardown see a finished hold rather than completing twice.
+      app.backend.hold = null;
+    });
+
+    test("a reply is stamped with the one member the prompt addresses",
+        () async {
+      await _inTeam(app);
+      final (id, _) =
+          await chatWithOneTurn("hello @explore, find the tests", project: "team");
+
+      final messages = messagesOf(id);
+      expect(messages.first.documents, contains("@explore"));
+      expect(messages.last.author, "@explore");
+    });
+
+    test("a mention list schedules the members' turns in mention order",
+        () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        for (var i = 0; i < 4; i++) ...[
+          const [TextDelta("done"), DoneEvent()],
+        ],
+      ];
+      final (id, _) = await startTurn(
+          "hello @explore and @build, look at the tests",
+          project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final prompts = app.backend.prompts;
+      // Both members run, in the order the message named them: the mention
+      // list is the schedule. The first rides the opening turn; the second
+      // is dispatched at the settle it causes.
+      expect(prompts[0].settings.omadaMember, "explore");
+      expect(prompts[1].settings.omadaMember, "build");
+      // The second member answers the same prompt — the message was
+      // addressed to them both.
+      expect(prompts[1].prompt.id, prompts[0].prompt.id);
+    });
+
+    test("a direct chat never stamps, whatever the prompt names", () async {
+      // Omada off: the reply is the main agent's, using the named agent's
+      // instructions. No stamp, no label - the label would claim a member
+      // authored the house's voice.
+      final (id, _) =
+          await chatWithOneTurn("hello @explore, find the tests");
+
+      expect(messagesOf(id).first.documents, contains("@explore"));
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("a command is not addressed to anyone it names", () async {
+      final (id, _) = await chatWithOneTurn("!grep @explore src/");
+
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("regenerating a command's reply names nobody either", () async {
+      final (id, controller) = await chatWithOneTurn("!grep @explore src/");
+
+      await controller.regenerate(messagesOf(id).last.id);
+      await waitIdle(id);
+
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("a regenerated reply carries the original prompt's author",
+        () async {
+      await _inTeam(app);
+      final (id, controller) = await chatWithOneTurn(
+          "hello @explore, find the tests",
+          project: "team");
+
+      await controller.regenerate(messagesOf(id).first.id);
+      await waitIdle(id);
+
+      expect(messagesOf(id).last.author, "@explore");
+    });
+
+    test("an edited resend carries the new prompt's author", () async {
+      await _inTeam(app);
+      final (id, controller) =
+          await chatWithOneTurn("helo", project: "team");
+      final userId = messagesOf(id).first.id;
+
+      await controller.editAndResend(userId, "hello @explore");
+      await waitIdle(id);
+
+      expect(messagesOf(id).last.author, "@explore");
+    });
+
+    test("a reply naming another member hands the next turn to them", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        // Researcher's reply hands off to explore.
+        const [TextDelta("let me get @explore to confirm"), DoneEvent()],
+        const [TextDelta("found them"), DoneEvent()],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore, look at the tests", project: "team");
+
+      await waitFor(() => app.backend.prompts.length >= 2, what: "the handoff");
+      await waitIdle(id);
+
+      final messages = messagesOf(id);
+      // The handoff's prompt is the mentioning reply itself, said again as
+      // what the next member is answering.
+      expect(app.backend.prompts[1].prompt.id, messages[1].id);
+      // And the settings carried the member to the backend.
+      expect(app.backend.prompts[1].settings.omadaMember, "explore");
+      // The round's second reply is authored by the member it was addressed
+      // to — the record's `author` is what the label reads.
+      expect(messages.last.author, "@explore");
+    });
+
+    test("the chain stops at the cap and the user resets it", () async {
+      await _inTeam(app);
+      // A cap of its own: the app default is ten, and three rounds is the
+      // shape this test pins.
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaMaxGenerations(3);
+      app.backend.scriptedRounds = [
+        for (var i = 0; i < 5; i++) ...[
+          const [TextDelta("see @explore"), DoneEvent()],
+        ],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // Three agent turns — the addressee and two handoffs — and the round
+      // stops: the fifth scripted round is never asked for.
+      expect(app.backend.prompts, hasLength(3));
+      // The user speaking resets the round, so a new mention starts fresh.
+      await controller.send("again @explore");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      expect(app.backend.prompts.length, greaterThan(4));
+    });
+
+    test("a round in an Omada project opens with a mode change", () async {
+      await _inTeam(app);
+      final (id, _) = await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The first turn under Omada on opens the section: the opener is
+      // stamped, and a reload derives the same section the page draws.
+      final chat = chatOf(id);
+      expect(chat.messages[0].omadaOn, isTrue);
+      final reloaded = await app.repo.openChat(id);
+      expect(
+          entriesOf(reloaded).whereType<SectionEntry>().map((s) => s.omada),
+          [true]);
+    });
+
+    test("a turn already in mode writes no second separator", () async {
+      await _inTeam(app);
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      final sectionsBefore =
+          entriesOf(await app.repo.openChat(id))
+              .whereType<SectionEntry>()
+              .length;
+
+      await controller.send("plain follow-up");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // Same section: a repeat stamp of the same mode is not a flip, and
+      // the reload still derives one separator.
+      final sectionsAfter =
+          entriesOf(await app.repo.openChat(id))
+              .whereType<SectionEntry>()
+              .length;
+      expect(sectionsAfter, sectionsBefore);
+    });
+
+    test("a toggle off bounds the section with an off opener", () async {
+      await _inTeam(app);
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmada(false);
+      await controller.send("plain message");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The off turn's opener carries the flip, and the page's walk turns
+      // the section off from it.
+      final messages = messagesOf(id);
+      expect(messages[0].omadaOn, isTrue);
+      expect(messages[2].omadaOn, isFalse);
+      expect(messages[3].omadaOn, isNull);
+    });
+
+    test("flipping on again opens a second section", () async {
+      await _inTeam(app);
+      final (id, controller) =
+          await startTurn("hello @explore", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmada(false);
+      await controller.send("plain message");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmada(true);
+      await controller.send("another message");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final modes = messagesOf(id)
+          .map((m) => m.omadaOn)
+          .where((m) => m != null)
+          .toList();
+      expect(modes, [true, false, true]);
+    });
+
+    test("a member's pass ends the round", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        const [TextDelta(passWord), DoneEvent()],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore, want this?", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The pass is on the record, and nothing followed it.
+      expect(textOf(messagesOf(id).last), passWord);
+      expect(app.backend.prompts, hasLength(1));
+    });
+
+    test("a pass does not cancel what the user scheduled", () async {
+      await _inTeam(app);
+      app.backend.scriptedRounds = [
+        const [TextDelta(passWord), DoneEvent()],
+        const [TextDelta("on it"), DoneEvent()],
+      ];
+      final (id, _) = await startTurn(
+          "@explore and @build, have a look", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // Explore passed, and build's turn still ran: the user addressed
+      // build directly, and a pass ends what agents hand each other, not
+      // what the user asked for.
+      expect(app.backend.prompts, hasLength(2));
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+    });
+
+    test("parallel ordering answers with one turn per member at once",
+        () async {
+      await _inTeam(app);
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.parallel);
+      // Both turns hold until this completes: a fan-out is two turns in
+      // flight, not one after another.
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, _) = await startTurn(
+          "@explore and @build, have a look", project: "team");
+
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the fan-out", limit: const Duration(seconds: 5));
+      expect(app.backend.prompts[0].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+
+      // Tear down: the held turns finish and the round ends.
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+    });
+
+    test("a handoff under parallel ordering waits for the siblings", () async {
+      await _inTeam(app);
+      await app.container
+          .read(projectSettingsProvider("team").notifier)
+          .setOmadaOrdering(OmadaOrdering.parallel);
+      app.backend.scriptedRounds = [
+        // The fan-out: explore hands to build, build hands to nobody.
+        const [TextDelta("over to @build"), DoneEvent()],
+        const [TextDelta("done here"), DoneEvent()],
+        // The settle-first wave: build's handoff runs only once both
+        // siblings of the first wave are finished.
+        const [TextDelta("build speaking"), DoneEvent()],
+      ];
+      final (id, _) = await startTurn(
+          "@explore and @build, split this up", project: "team");
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The first wave was two turns; the handoff from explore's reply is
+      // the third prompt, dispatched at the settle the wave caused.
+      expect(app.backend.prompts, hasLength(3));
+      expect(app.backend.prompts[2].settings.omadaMember, "build");
+    });
+
+    test("what was said while the round ran is dispatched, not re-composed",
+        () async {
+      await _inTeam(app);
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) =
+          await startTurn("hello @explore, take your time", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      // Said while the member was speaking: on the log the moment it was
+      // said, dispatched when the room settles.
+      await controller.send("and @build after this");
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final queued =
+          chat.messages.where((m) => textOf(m) == "and @build after this");
+      expect(queued, isNotEmpty);
+
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      app.backend.scriptedRounds = [
+        const [TextDelta("done"), DoneEvent()],
+        const [TextDelta("here too"), DoneEvent()],
+      ];
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      // The dispatched turn ran on the message the log already holds —
+      // its id, not a second composition of the same words.
+      final saidId = queued.single.id;
+      expect(app.backend.prompts.last.prompt.id, saidId);
+      expect(
+          messagesOf(id).where((m) => textOf(m) == "and @build after this"),
+          hasLength(1));
+    });
+
+    test("a say for a member already speaking queues for their next turn",
+        () async {
+      await _inTeam(app);
+      // The member's turn holds the floor: its scripted round carries no
+      // DoneEvent and the hold keeps the stream open, so the room is busy
+      // the whole time.
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("working on it")],
+        const [TextDelta("again, done"), DoneEvent()],
+      ];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) =
+          await startTurn("hello @explore, take your time", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      // Said to the member who is already speaking. It lands on the log,
+      // and it waits: the room schedules it, the settle dispatches it.
+      await controller.send("again @explore, one more thing");
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final said = chat.messages
+          .where((m) => textOf(m) == "again @explore, one more thing")
+          .single;
+
+      // No second turn opens while the first still has the floor.
+      final end = DateTime.now().add(const Duration(milliseconds: 500));
+      while (DateTime.now().isBefore(end)) {
+        expect(app.backend.prompts, hasLength(1),
+            reason:
+                "a say for a busy member must queue, not spawn a parallel turn");
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+
+      // The settle runs it: the same member's turn, on the message the log
+      // already holds.
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      expect(app.backend.prompts, hasLength(2));
+      expect(app.backend.prompts[1].settings.omadaMember, "explore");
+      expect(app.backend.prompts[1].prompt.id, said.id);
+      expect(
+          messagesOf(id)
+              .where((m) => textOf(m) == "again @explore, one more thing"),
+          hasLength(1));
+    });
+
+    test("a say in a direct chat queues for the room's settle too", () async {
+      // Omada off: the say addresses nobody, and the bug was not about
+      // members — the drain dispatched whatever landed, so even here a say
+      // opened a second turn beside the first instead of queueing.
+      app.backend.hold = Completer<void>();
+      app.backend.scriptedRounds = [
+        const [TextDelta("thinking")],
+        const [TextDelta("later, done"), DoneEvent()],
+      ];
+      addTearDown(() => app.backend.hold?.complete());
+      final (id, controller) = await startTurn("hello, take your time");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      await controller.send("one more thing");
+
+      // No second turn opens while the first still has the floor.
+      final end = DateTime.now().add(const Duration(milliseconds: 500));
+      while (DateTime.now().isBefore(end)) {
+        expect(app.backend.prompts, hasLength(1),
+            reason: "a say to a busy room must queue, not spawn a turn");
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+
+      // The settle runs it: the main agent's turn, on the message the log
+      // already holds.
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitFor(() => app.backend.prompts.length >= 2,
+          what: "the queued say", limit: const Duration(seconds: 5));
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final chat = app.container.read(chatControllerProvider(id)).chat!;
+      final said =
+          chat.messages.where((m) => textOf(m) == "one more thing").single;
+      expect(app.backend.prompts, hasLength(2));
+      expect(app.backend.prompts[1].settings.omadaMember, isNull);
+      expect(app.backend.prompts[1].prompt.id, said.id);
+      expect(messagesOf(id).where((m) => textOf(m) == "one more thing"),
+          hasLength(1));
+    });
+
+    test("a handoff survives a settle the schedule holds something", () async {
+      // The shape the `_endTurn` guard removal exists for: the settle that
+      // ends this turn reads a schedule it cannot finish — sequential order
+      // runs the head member's item and leaves the next member's queued —
+      // and a schedule non-empty at the settle must not stop the reply's
+      // handoff from being parked for the wave's settle. The guard it
+      // replaced returned before the settle and dropped the handoff.
+      await _inTeam(app);
+      app.backend.hold = Completer<void>();
+      addTearDown(() => app.backend.hold?.complete());
+      app.backend.scriptedRounds = [
+        // Explore holds the floor, then hands to build.
+        const [TextDelta("over to @build")],
+        // The two queued says run in schedule order, then the handoff.
+        const [TextDelta("got it, done"), DoneEvent()],
+        const [TextDelta("looking, done"), DoneEvent()],
+        const [TextDelta("on it, done"), DoneEvent()],
+      ];
+      final (id, controller) =
+          await startTurn("hello @explore, take your time", project: "team");
+      await waitFor(() => app.backend.prompts.isNotEmpty, what: "the turn");
+
+      // Two says while explore still speaks: one for build, one for the
+      // house. Sequential order dispatches only the first of them at the
+      // settle, so the schedule is not empty when the settle runs — and the
+      // reply's handoff must still be parked, not skipped.
+      await controller.send("and @build after this");
+      await controller.send("and also take a look");
+      app.backend.hold?.complete();
+      app.backend.hold = null;
+      await waitFor(() => app.backend.prompts.length >= 4,
+          what: "the parked handoff", limit: const Duration(seconds: 5));
+      await waitIdle(id, limit: const Duration(seconds: 5));
+
+      final messages = messagesOf(id);
+      // The say for build ran as build's turn on the message the log
+      // already holds; the say for the house ran as the main agent's.
+      expect(app.backend.prompts[1].settings.omadaMember, "build");
+      expect(app.backend.prompts[1].prompt.id, messages[2].id);
+      expect(app.backend.prompts[2].settings.omadaMember, isNull);
+      expect(app.backend.prompts[2].prompt.id, messages[3].id);
+      // And the handoff followed: explore's mentioning reply, build's turn.
+      expect(app.backend.prompts[3].settings.omadaMember, "build");
+      expect(app.backend.prompts[3].prompt.id, messages[1].id);
+    });
+
+    test("a member turn runs under the member's prompt from the library",
+        () async {
+      await _inTeam(app);
+      final (id, _) = await startTurn("hello @explore", project: "team");
+      await waitIdle(id);
+
+      expect(app.backend.prompts.single.settings.omadaMember, "explore");
+      // The mention's body rode the documents as composed, but the overlay the
+      // backend words the turn under comes from the member's file plus the
+      // room rule — the member's turn does not stack the mention again. The
+      // history the session is filled from carries the documents as ever.
+      final lastUser = app.backend.prompts.single.history;
+      expect(
+          lastUser.isEmpty || lastUser.last.documents["@explore"] != null,
+          isTrue);
+    });
+
+    test("a plain message in an Omada project is answered by the house",
+        () async {
+      await _inTeam(app);
+      final (id, _) =
+          await chatWithOneTurn("hello", project: "team");
+
+      expect(app.backend.prompts.single.settings.omadaMember, isNull);
+      expect(messagesOf(id).last.author, isNull);
+    });
+
+    test("a mention of a name the library does not know answers by the house",
+        () async {
+      await _inTeam(app);
+      await chatWithOneTurn("hello @nobody-knows-me", project: "team");
+
+      expect(app.backend.prompts.single.settings.omadaMember, isNull);
+    });
+  });
+}
+
+/// A project with Omada on, its library the test one — the harness seeds the
+/// test library for every project, so the chat's project is all a test needs.
+Future<void> _inTeam(TestApp app) async {
+  await app.repo.createProject("team");
+  await app.container
+      .read(projectSettingsProvider("team").notifier)
+      .setOmada(true);
 }
 
 /// Settings with chat naming turned on. A getter, not a constant: settings are

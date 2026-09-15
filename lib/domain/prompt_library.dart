@@ -1,3 +1,6 @@
+import "package:collection/collection.dart";
+
+import "frontmatter.dart";
 import "models.dart";
 
 /// One skill or agent, exactly as Entoli stores it: YAML frontmatter, then the
@@ -8,6 +11,7 @@ class PromptDocument {
     required this.name,
     required this.frontmatter,
     required this.body,
+    this.metadata = const {},
   });
 
   final CompletionKind kind;
@@ -15,18 +19,23 @@ class PromptDocument {
   final Map<String, String> frontmatter;
   final String body;
 
+  /// The nested `metadata:` map — the spec's extension point, and where
+  /// Entoli's own per-client keys live (`argument-hint`, `user-invocable`,
+  /// `disable-model-invocation`).
+  final Map<String, String> metadata;
+
   String? get description => frontmatter["description"];
 
-  String? get argumentHint => frontmatter["argument-hint"];
+  String? get argumentHint => metadata["argument-hint"];
 
   /// Whether the `/` menu offers it. False is the model's half alone: a skill
   /// the user can only reach by the model deciding to load it.
-  bool get userInvocable => frontmatter["user-invocable"]?.toLowerCase() != "false";
+  bool get userInvocable => metadata["user-invocable"]?.toLowerCase() != "false";
 
   /// Whether the model may load it through the `skill` tool. False is the
   /// user's half alone: the tool refuses it, reserved for `/name`.
   bool get modelInvocable =>
-      frontmatter["disable-model-invocation"]?.toLowerCase() != "true";
+      metadata["disable-model-invocation"]?.toLowerCase() != "true";
 
   CompletionOption get option => CompletionOption(
         name: name,
@@ -34,44 +43,20 @@ class PromptDocument {
         argumentHint: argumentHint,
       );
 
-  /// Only the top-level scalars are read, because [description] is all the menu
-  /// shows. Everything else — nested permissions, tool maps — is dropped.
+  /// Only the top-level scalars and one nested `metadata:` map are read,
+  /// because `description` and the metadata keys are all the menu and the
+  /// tool gates need. Everything else — nested lists, deeper maps — is
+  /// dropped. The parsing lives in [Frontmatter], its own file so the
+  /// build-time generators can share it without the freezed models.
   factory PromptDocument.parse(CompletionKind kind, String name, String source) {
-    final (frontmatter, body) = _split(source.replaceAll("\r\n", "\n"));
+    final parsed = Frontmatter.parse(source.replaceAll("\r\n", "\n"));
     return PromptDocument(
       kind: kind,
       name: name,
-      frontmatter: frontmatter,
-      body: body,
+      frontmatter: parsed.scalars,
+      metadata: parsed.metadata,
+      body: parsed.body,
     );
-  }
-
-  static final _scalar = RegExp(r"^([A-Za-z0-9_.-]+):[ \t]*(.*)$");
-
-  static (Map<String, String>, String) _split(String text) {
-    if (!text.startsWith("---\n")) return (const {}, text.trim());
-    final close = text.indexOf("\n---", 3);
-    if (close < 0) return (const {}, text.trim());
-
-    final frontmatter = <String, String>{};
-    for (final line in text.substring(4, close + 1).split("\n")) {
-      final match = _scalar.firstMatch(line);
-      // An empty value opens a nested block; its indented lines never match.
-      if (match == null || match.group(2)!.isEmpty) continue;
-      frontmatter[match.group(1)!] = _unquote(match.group(2)!.trim());
-    }
-
-    final newline = text.indexOf("\n", close + 1);
-    return (frontmatter, newline < 0 ? "" : text.substring(newline + 1).trim());
-  }
-
-  static String _unquote(String value) {
-    if (value.length < 2) return value;
-    final first = value[0];
-    if ((first == '"' || first == "'") && value.endsWith(first)) {
-      return value.substring(1, value.length - 1);
-    }
-    return value;
   }
 
   /// The `.md` source for a document: a `description` frontmatter where there
@@ -144,9 +129,10 @@ class PromptLibrary {
 /// composer's menu — anything it can offer has to dispatch here.
 final _skillReference = RegExp(r"^/([^\s/]+)(?:\s+([\s\S]*))?$");
 
-/// `@name` addresses an agent, but only where a word starts, so an email
-/// address is not a mention.
-final _mention = RegExp(r"(?<=^|\s)@([\w.-]+)");
+/// `@name` addresses an agent, but only where the handle starts, so an email
+/// address (`me@general`) and a path (`a@b.c`) are not mentions. Markdown
+/// dressing around a handle — `**@murasaki**` — does not stop it being one.
+final _mention = RegExp(r"(?<![\w.-])@([\w.-]+)");
 
 /// What the library says [text]'s references mean, ready to be written into the
 /// message as [Message.documents] and read back by [expandedPrompt] and
@@ -186,6 +172,14 @@ String withArguments(String body, String arguments) {
   return arguments.isEmpty ? body : "$body\n\n$arguments";
 }
 
+/// What the message's `@agent` references meant, keyed as written. The one
+/// sweep of the agent half of a documents map, which both readers below walk.
+Map<String, String> agentEntriesFrom(Map<String, String> documents) => {
+      for (final entry in documents.entries)
+        if (entry.key.startsWith(CompletionKind.agent.trigger))
+          entry.key: entry.value,
+    };
+
 /// The `@agent` instructions the message asked for, joined in the order they
 /// were written — what `turnPrompt` puts under the system prompt for the turn.
 /// Null where it named none.
@@ -193,9 +187,52 @@ String withArguments(String body, String arguments) {
 /// Off the record rather than the text: the mentions were resolved when the
 /// message was composed, and a name mentioned twice was recorded once.
 String? agentPromptFrom(Map<String, String> documents) {
-  final bodies = [
-    for (final entry in documents.entries)
-      if (entry.key.startsWith(CompletionKind.agent.trigger)) entry.value,
-  ];
+  final bodies = agentEntriesFrom(documents).values.toList();
   return bodies.isEmpty ? null : bodies.join("\n\n");
 }
+
+/// The member [documents] shows addressed, as typed — the first agent key in
+/// write order. Null where the message names no member at all. A message that
+/// addresses one member and names another as a handoff target ("check X, then
+/// hand it to @reviewer") is still addressed to one: the first mention is the
+/// addressee, the later one the routing the reply will carry out.
+/// The member [documents] shows addressed, as typed — the first agent key in
+/// write order. Null where the message names no member at all. A message that
+/// addresses one member and names another as a handoff target ("check X, then
+/// hand it to @reviewer") is still addressed to one: the first mention is the
+/// addressee, the later one the routing the reply will carry out.
+String? authorFrom(Map<String, String> documents) => authorKeys(documents).firstOrNull;
+
+/// The members [documents] address, in the order they were written — the
+/// agent keys as typed, sigil on. Empty where the message names no member.
+List<String> authorKeys(Map<String, String> documents) =>
+    agentEntriesFrom(documents).keys.toList();
+
+/// The member name an author stamp carries — the sigil off, the library's
+/// name for them. An unnamed stamp names nothing.
+String? nameOf(String? author) =>
+    author == null
+        ? null
+        : author.startsWith(CompletionKind.agent.trigger)
+            ? author.substring(CompletionKind.agent.trigger.length)
+            : null;
+
+/// The one member [text] mentions by handle, as the composer's own `_mention`
+/// reads one and [library] knows them. Null where it names none, or more than
+/// one — a multi-mention is a round, not a single address.
+String? singleAgentMention(String text, PromptLibrary library) {
+  final known = mentionsIn(text, library);
+  return known.length == 1 ? known.single : null;
+}
+
+/// The members [text] addresses, in the order it names them. A name the
+/// library does not know is prose, not an address — a member signing their own
+/// reply (`@scout reporting`) is not addressed by their own signature. The
+/// empty list is no address at all.
+List<String> mentionsIn(String text, PromptLibrary library) =>
+    _mention
+        .allMatches(text)
+        .map((m) => m.group(1)!)
+        .where((name) => library.find(CompletionKind.agent, name) != null)
+        .toSet()
+        .toList();

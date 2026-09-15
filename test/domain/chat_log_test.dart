@@ -457,4 +457,41 @@ void main() {
 
     expect(replay(recordsOf(chat.messages)), chat.messages);
   });
+
+  test("an author rides the message record and comes back off the log", () {
+    final reply = Message(
+      id: "m2",
+      role: MessageRole.assistant,
+      createdAt: at,
+      author: "@researcher",
+    );
+    final records = recordsOf([reply]);
+
+    final back = ChatRecord.fromJson(
+        jsonDecode(jsonEncode(records.single.toJson())) as Map<String, dynamic>);
+    expect(back, records.single);
+    // A message written before this existed reads back unnamed.
+    expect(
+        replay([
+          ChatRecord.message(id: "m3", role: MessageRole.assistant, createdAt: at)
+        ]).single.author,
+        isNull);
+  });
+
+  test("a turn opener's omadaOn survives the round trip and the replay", () {
+    final opener = Message(
+        id: "m2",
+        role: MessageRole.user,
+        createdAt: at,
+        omadaOn: true);
+    final records = [
+      message("m1"),
+      ...recordsOf([opener]),
+    ];
+
+    final back = ChatRecord.fromJson(
+        jsonDecode(jsonEncode(records[1].toJson())) as Map<String, dynamic>);
+    expect((back as MessageRecord).omadaOn, isTrue);
+    expect(replay(records).map((m) => m.omadaOn), [null, true]);
+  });
 }

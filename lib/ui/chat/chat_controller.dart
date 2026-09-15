@@ -1,5 +1,6 @@
 import "dart:async";
 
+import "package:collection/collection.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:uuid/uuid.dart";
 
@@ -11,6 +12,11 @@ import "../../domain/chat_repository.dart";
 import "../../domain/reminder_alarms.dart";
 import "../../domain/turn_recorder.dart";
 import "../../domain/models.dart";
+import "../../domain/prompt_library.dart"
+    show authorFrom, authorKeys, nameOf, singleAgentMention, mentionsIn;
+import "../../domain/project_settings.dart" show OmadaOrdering;
+import "../../domain/shell.dart" show shellBypassCommand;
+import "../../data/builtin/templates.dart" show passWord;
 import "../../providers.dart";
 
 /// Per-chat state container exposed to the UI.
@@ -18,25 +24,31 @@ class ChatViewState {
   ChatViewState({
     this.chat,
     this.isRunning = false,
-    this.approvals = const [],
-    this.questions = const [],
-    this.runningSubAgents = const [],
+    this.approvals = const {},
+    this.questions = const {},
+    this.runningSubAgents = const {},
     this.retry,
     this.status,
     this.unfinishedNotice,
+    this.shellOutput,
   });
   final Chat? chat;
   final bool isRunning;
-  final List<ToolApproval> approvals;
+
+  /// What the turn is waiting to be allowed, keyed by the reply that asked
+  /// for it — each turn's banner answers its own turn, and a room with two
+  /// running shows both.
+  final Map<String, List<ToolApproval>> approvals;
 
   /// What the agent is waiting to be told. Turn-scoped like [approvals]: the
   /// call and the answers are what the conversation keeps.
-  final List<AskRequest> questions;
+  final Map<String, List<AskRequest>> questions;
 
-  /// Sub-agents spawned by `task` calls that are still running. Turn-scoped
-  /// view state like [approvals]: the call/result pair is what persists, and
-  /// these exist only to drive the activity strip.
-  final List<SubAgentStartEvent> runningSubAgents;
+  /// Sub-agents spawned by `task` calls that are still running — delegated
+  /// participants at work, shown as room activity. Turn-scoped view state like
+  /// [approvals]: the call/result pair is what persists, and these exist only
+  /// to drive the activity strip. Keyed by the reply that fanned them out.
+  final Map<String, List<SubAgentStartEvent>> runningSubAgents;
 
   /// Set while the backend is retrying a failed attempt. Transient: it belongs
   /// to the running turn, not to the conversation, so it is never persisted.
@@ -52,18 +64,33 @@ class ChatViewState {
   /// a reload shows the default "Unfinished turn" text.
   final String? unfinishedNotice;
 
+  /// The tail of what a running command has printed. Transient like
+  /// [retry]: the call/result pair is what the conversation keeps, so the
+  /// block is gone the moment the pair completes.
+  final String? shellOutput;
+
+  /// Who may speak now — see [RoomPhase], whose facts "The room's phase is
+  /// one answer" in `lib/ui/chat/CLAUDE.md` owns.
+  RoomPhase get roomPhase => questions.values.any((q) => q.isNotEmpty)
+      ? RoomPhase.waitingOnYou
+      : isRunning
+          ? RoomPhase.agentSpeaking
+          : RoomPhase.open;
+
   ChatViewState copyWith({
     Chat? chat,
     bool? isRunning,
-    List<ToolApproval>? approvals,
-    List<AskRequest>? questions,
-    List<SubAgentStartEvent>? runningSubAgents,
+    Map<String, List<ToolApproval>>? approvals,
+    Map<String, List<AskRequest>>? questions,
+    Map<String, List<SubAgentStartEvent>>? runningSubAgents,
     String? retry,
     bool clearRetry = false,
     String? status,
     bool clearStatus = false,
     String? unfinishedNotice,
     bool clearUnfinishedNotice = false,
+    String? shellOutput,
+    bool clearShellOutput = false,
   }) =>
       ChatViewState(
         chat: chat ?? this.chat,
@@ -76,7 +103,23 @@ class ChatViewState {
         unfinishedNotice: clearUnfinishedNotice
             ? null
             : (unfinishedNotice ?? this.unfinishedNotice),
+        shellOutput:
+            clearShellOutput ? null : (shellOutput ?? this.shellOutput),
       );
+}
+
+/// Who may speak in the room — see [ChatViewState.roomPhase].
+enum RoomPhase {
+  /// Nothing is running; the composer is the user's.
+  open,
+
+  /// A turn is running and has not asked anything: the main agent is
+  /// speaking, the composer shows Stop.
+  agentSpeaking,
+
+  /// A turn is waiting on the user — the composer's place is taken by the
+  /// question panel.
+  waitingOnYou,
 }
 
 /// What a page needs of whatever is driving its turn. [ChatController] for a
@@ -98,45 +141,61 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   final String chatId;
   final _uuid = const Uuid();
-  StreamSubscription<AgentEvent>? _sub;
 
-  /// Everything that turns this turn's events into the reply's parts and the
-  /// records that persist them. Shared with `SubAgentRunner`, which keeps one
-  /// per `task` call — see [TurnRecorder].
-  late final TurnRecorder _recorder;
+  /// The live turns, keyed by the reply each writes. One today; the table is
+  /// what lets a second turn run beside the first without its recorder, its
+  /// retry state or its interrupt reaching across — see [_RunningTurn].
+  final Map<String, _RunningTurn> _turns = {};
 
-  /// This turn is being stopped rather than ended — see [interrupt]. Cleared
-  /// where a turn opens, beside the recorder's own `outcome`, so it cannot
-  /// reach the next one.
-  bool _interrupted = false;
+  /// Every recorder's writes funnel through one queue, so two turns appending
+  /// to the same log cannot interleave lines. One turn serialises through its
+  /// own recorder already; the funnel is for the room with more than one.
+  Future<void>? _appendQueue;
 
-  /// Bumped by [abort] and [interrupt] so a pending automatic retry cannot
-  /// fire after the user pressed stop: the round waits out its backoff
-  /// holding nothing, and the generation is what tells it the turn it was
-  /// carrying on was ended behind it.
-  int _retryGen = 0;
+  /// Appends [records] to this chat's log behind every append before it.
+  Future<void> _append(List<ChatRecord> records) {
+    final queued = _appendQueue;
+    final repo = ref.read(chatRepositoryProvider);
+    return _appendQueue =
+        (queued == null ? Future<void>.sync(() => repo.append(chatId, records)) : queued.then((_) => repo.append(chatId, records)))
+            .catchError((Object e) {
+      // A failed line must not wedge the queue; the lost records get a line.
+      logFailure("chat", "could not append to $chatId", e);
+    });
+  }
 
-  /// Completes with the turn's [TurnEnd] (or null if interrupted) when the
-  /// current turn finishes. A caller that starts a turn through [send] or
-  /// [resume] and needs to know when it is done — the reminder runner, a voice
-  /// handover — awaits this. Null when no turn is running.
-  Completer<TurnEnd?>? _turnDone;
-  Future<TurnEnd?>? get turnDone => _turnDone?.future;
+  /// Open a turn: its recorder, its completer, and its place in the table.
+  _RunningTurn _openTurnEntry(String replyId) {
+    final turn = _RunningTurn._(replyId: replyId, done: Completer<TurnEnd?>());
+    turn.recorder = TurnRecorder(
+        append: _append, onParts: (parts) => _writeReply(turn, parts));
+    turn.recorder.open(replyId);
+    _turns[replyId] = turn;
+    return turn;
+  }
+
+  /// Completes with the last [TurnEnd] when every turn in flight now is over
+  /// — a fan-out settles as one. A caller that starts a turn through [send]
+  /// or [resume] and needs to know when it is done — the reminder runner, a
+  /// voice handover — awaits this. Null where nothing is running.
+  Future<TurnEnd?>? get turnDone {
+    if (_turns.isEmpty) return null;
+    return Future.wait([for (final turn in _turns.values) turn.done.future])
+        .then((ends) => ends.lastOrNull);
+  }
 
   @override
   ChatViewState build() {
-    _recorder = TurnRecorder(
-      append: (records) => ref.read(chatRepositoryProvider).append(chatId, records),
-      onParts: _writeReply,
-    );
     // The provider is not auto-disposed: clear a controller that outlived its page, or its id re-opens the deleted chat from memory.
     final deletionSub = ref.read(chatRepositoryProvider).changes.listen((event) {
       if (event is Deleted && event.chatId == chatId) state = ChatViewState();
     });
     ref.onDispose(() {
-      _sub?.cancel();
+      for (final turn in _turns.values) {
+        turn.sub?.cancel();
+        turn.recorder.dispose();
+      }
       deletionSub.cancel();
-      _recorder.dispose();
     });
     _ready = _load();
     return ChatViewState();
@@ -155,16 +214,25 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     return messages == null || messages.isEmpty ? null : messages.last;
   }
 
-  /// The reply's text, for a caller that needs what the turn said without
-  /// watching the event stream — the reminder driver, after [turnDone].
+  /// The single running turn, where exactly one is — every path that drives,
+  /// stops or watches a turn speaks about it, and a room with two running has
+  /// to name which.
+  _RunningTurn? get _liveTurn =>
+      _turns.length == 1 ? _turns.values.first : null;
+
   String get replyText => _reply?.plainText ?? "";
 
-  void _writeReply(List<MessagePart> parts) {
+  /// Fold [parts] into the message [turn] is writing, by id rather than by
+  /// position: the last message is the running turn's only while it is the
+  /// only turn, and a second reply growing beside it is not patched by
+  /// coincidence.
+  void _writeReply(_RunningTurn turn, List<MessagePart> parts) {
     final chat = state.chat;
-    final reply = _reply;
-    if (chat == null || reply == null) return;
+    if (chat == null) return;
+    final at = chat.messages.indexWhere((m) => m.id == turn.replyId);
+    if (at < 0) return;
     final messages = List<Message>.from(chat.messages);
-    messages[messages.length - 1] = reply.copyWith(parts: parts);
+    messages[at] = messages[at].copyWith(parts: parts);
     state = state.copyWith(chat: chat.copyWith(messages: messages));
   }
 
@@ -187,12 +255,18 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// Name the chat after what started it, unless it is headless — a reminder's
   /// chat is already named. Nothing waits on this: it is a model call of its
   /// own, and the turn it belongs to is already under way.
+  ///
+  /// Guards after each await, before any read of [state]: an invalidated
+  /// controller (a chat moved while a turn was starting) keeps its in-flight
+  /// futures, and a read through the disposed notifier throws.
   Future<void> _maybeNameChat(String prompt) async {
+    if (!ref.mounted) return;
     final repo = ref.read(chatRepositoryProvider);
     if (await _isHeadless()) return;
     final title = await repo.suggestTitle(prompt);
+    if (!ref.mounted) return;
     final chat = state.chat;
-    if (title == null || chat == null || !ref.mounted) return;
+    if (title == null || chat == null) return;
     applyTitle(title);
     await repo.retitle(chatId, title);
     if (!ref.mounted) return;
@@ -211,18 +285,71 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   }
 
   /// The composer's own path: what it is holding becomes files under the chat
-  /// before anything else, since from here on a prompt is its parts.
+  /// before anything else, since from here on a prompt is its parts. Said
+  /// while a turn runs, it is appended to the log as it stands and dispatched
+  /// when the room settles — the log is the queue.
   @override
   Future<void> send(String text, {List<Attachment> attachments = const []}) async {
     await _ready;
-    if (state.chat == null || state.isRunning) return;
+    if (state.chat == null) return;
     final repo = ref.read(chatRepositoryProvider);
-    await _prompt(text, files: await repo.saveAttachments(chatId, attachments));
+    final files = await repo.saveAttachments(chatId, attachments);
+    if (state.isRunning) {
+      await _sayLater(text, files);
+      return;
+    }
+    await _prompt(text, files: files);
+  }
+
+  /// What was said while a turn ran and is still unsaid. The messages are on
+  /// the log already — written as they were said — and this is what is left
+  /// to say. The composed message itself, so the drain dispatches what the
+  /// log holds rather than composing a second one.
+  final List<Message> _said = [];
+
+  Future<void> _sayLater(String text, List<MessagePart> files) async {
+    final userMsg = ref.read(chatRepositoryProvider).composeUserPrompt(text,
+        project: state.chat?.state.project, files: files);
+    // The say lands on the log through the room's one append funnel; state
+    // is re-read after the write, so what changed in flight is not ours to
+    // revert.
+    await _append(recordsOf([userMsg]));
+    final chat = state.chat;
+    if (chat == null) return;
+    state = state.copyWith(
+        chat: chat.copyWith(
+            messages: [...chat.messages, userMsg],
+            state: chat.state.copyWith(updatedAt: DateTime.now())));
+    _said.add(userMsg);
+    _drainSaid();
+  }
+
+  /// What was said while a turn ran, in the order it was said: schedule each,
+  /// and dispatch what the room may run now. The schedule is the queue — what
+  /// waits sits in its member's FIFO, and the settle that ends the turn
+  /// dispatches it ([_endTurn]), so a say for a member already speaking waits
+  /// for that member's turn to finish instead of opening a second one beside
+  /// it. Both ends of the queue — a say landing while a turn runs, and the
+  /// drain a finishing turn runs — read it through this one method.
+  void _drainSaid() {
+    final chat = state.chat;
+    if (chat == null) return;
+    while (_said.isNotEmpty) {
+      final said = _said.removeAt(0);
+      _schedule(chat, mentioned(chat, said), userPrompt: said);
+    }
+    if (_turns.isNotEmpty) return;
+    unawaited(_dispatch());
   }
 
   /// Say [text] and run the turn it starts. [files] are already under the
   /// chat's `resources/`. [replacing] makes it another thread beside a prompt
   /// already in the conversation — an edit — rather than the next thing said.
+  ///
+  /// The prompt is composed once and schedules from there: what it addresses
+  /// runs through the ordering like anything else in the room, one member
+  /// turn per mention. [replacing] is the exception — an edit answers for
+  /// itself, under whoever the prompt it stands beside named.
   Future<void> _prompt(String text,
       {List<MessagePart> files = const [], Message? replacing}) async {
     final repo = ref.read(chatRepositoryProvider);
@@ -234,12 +361,49 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
     final userMsg =
         repo.composeUserPrompt(text, project: chat.state.project, files: files);
-    await _turn(
+    if (replacing != null) {
+      await _say(userMsg, replacing: replacing);
+      return;
+    }
+    _schedule(chat, mentioned(chat, userMsg), userPrompt: userMsg);
+    await _dispatch();
+  }
+
+  /// Open the turn [userMsg] starts, whether it is being composed now or was
+  /// said while the room ran and is already on the log. Where it is not on the
+  /// log yet — a fresh send — it rides in [opening]; where it is, the opening
+  /// is the reply alone and [history] ends before it, since the message is
+  /// already the last thing said. [member] is who the room has decided
+  /// answers it, where scheduling decided ahead of the prompt. No guard on
+  /// the room here: dispatching a fan-out is what puts several turns in
+  /// flight, and the verbs that need the guard carry their own.
+  Future<void> _say(Message userMsg,
+      {Message? replacing, String? member, int generation = 0}) async {
+    final chat = state.chat;
+    if (chat == null) return;
+    final logged = replacing == null && chat.messages.contains(userMsg);
+    final at = logged
+        ? chat.messages.indexOf(userMsg)
+        : replacing == null
+            ? chat.messages.length
+            : chat.messages.indexOf(replacing);
+    if (at < 0) return;
+    // Scheduling that named the member stamps them directly; a fresh send
+    // reads the address off what composing wrote into the message.
+    final author = member != null
+        ? "${CompletionKind.agent.trigger}$member"
+        : authorFor(chat, userMsg);
+    await openTurn(
       chat: chat,
       prompt: userMsg,
       history: chat.messages.take(at).toList(),
-      opening: [userMsg, _newReply()],
+      opening: [
+        if (!logged) userMsg,
+        _newReply(author: author),
+      ],
       replacing: replacing,
+      omadaMember: member,
+      generation: generation,
     );
   }
 
@@ -251,16 +415,33 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// conversation the model is answering, which does not include the prompt:
   /// `sendPrompt` adds that itself. [replacing] is the message [opening] is an
   /// alternative to, and null when this is simply the next thing said.
-  Future<void> _turn({
+  /// [omadaMember] is who the room has decided answers it, where scheduling
+  /// decided ahead of the prompt — a dispatched item — rather than from it.
+  /// [generation] is the dispatch wave the turn belongs to, on the entry for
+  /// the handoff that reads it.
+  Future<void> openTurn({
     required Chat chat,
     required Message prompt,
     required List<Message> history,
     required List<Message> opening,
     Message? replacing,
+    String? omadaMember,
+    int generation = 0,
   }) async {
     final repo = ref.read(chatRepositoryProvider);
+    // The room's mode at this turn, stamped on the turn's opener: the page
+    // derives sections from these stamps, a separator above an opener that
+    // flips from the last one. The implicit off a chat starts in is not a
+    // section — nothing separates the first exchange from a chat that never
+    // heard of Omada — so the first flip is the on-flip; the off-flip is
+    // what bounds an on-section for the label rule.
+    final omada = ref.read(omadaOnProvider(chat.state.project));
+    final openingWithMode = [
+      opening.first.copyWith(omadaOn: omada),
+      ...opening.sublist(1),
+    ];
     final updated = chat
-        .withTurn(opening, replacing: replacing)
+        .withTurn(openingWithMode, replacing: replacing)
         .copyWith(state: chat.state.copyWith(updatedAt: DateTime.now()));
 
     final isFirst = chat.messages.isEmpty;
@@ -268,14 +449,16 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // The prompt and the empty reply go down before the turn starts, so a chat
     // killed before the model says anything still shows what was asked. What
     // comes back carries the TTL anchor the save resolved, and is kept.
+    // The entry takes its seat **before** the save: a sibling settling while
+    // it is in flight would read the room as settled and hand off from a
+    // wave still opening.
+    final turn = _openTurnEntry(opening.last.id);
+    turn.retryable = false;
+    turn.errorLine = "";
+    turn.round = 0;
+    turn.generation = generation;
     applyState(await repo.saveState(updated.state));
-    _interrupted = false;
-    _retryable = false;
-    _errorLine = "";
-    _round = 0;
-    _turnDone = Completer<TurnEnd?>();
-    _recorder.open(opening.last.id);
-    await _recorder.write(recordsOf(opening,
+    await turn.recorder.write(recordsOf(openingWithMode,
         siblingOf: replacing?.id,
         replacing: replacing != null && !chat.worthAThread(replacing)));
     // Only the first message names the chat, and not a headless one — the
@@ -284,15 +467,64 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // chat off disk to draw the row it already has.
     if (isFirst) unawaited(_maybeNameChat(prompt.plainText));
 
-    _listen(repo.sendPrompt(chatId, prompt,
-        history: history, replaces: replacing != null));
+    // Invalidated mid-turn — a chat moved while one was starting. The move
+    // aborted whatever was running, so this turn never starts; there is
+    // nothing to abort here and nothing to write beside the move.
+    if (!ref.mounted) return;
+    _listen(turn, repo.sendPrompt(chatId, prompt,
+        history: history,
+        replaces: replacing != null,
+        omadaMember: omadaMember ?? _memberAnswering(chat, prompt)));
   }
 
-  Message _newReply() => Message(
+  /// The member a turn is answered by: the one the project's Omada addresses
+  /// through [prompt] — a user prompt names them in its documents, a member's
+  /// reply names the next one in its text. Decided against what the library
+  /// holds now; null is the main agent. The answer is not authorship: what
+  /// names the author is [Message.author], stamped where the turn opens, and
+  /// a member's reply is still role `assistant`. See "The room and its
+  /// participants" in `lib/ui/chat/CLAUDE.md`.
+  String? _memberAnswering(Chat chat, Message prompt) {
+    if (!ref.read(omadaOnProvider(chat.state.project))) return null;
+    final named = prompt.role == MessageRole.assistant
+        ? _mentionIn(chat, prompt)
+        : _memberIfKnown(chat, nameOf(authorFor(chat, prompt)));
+    return named;
+  }
+
+  /// The member [name] answers for, where the library still knows them — an
+  /// unknown name is prose, not an address. Null is the main agent.
+  String? _memberIfKnown(Chat chat, String? name) {
+    if (name == null) return null;
+    return ref
+            .read(promptLibraryProvider(chat.state.project))
+            .find(CompletionKind.agent, name) ==
+        null
+        ? null
+        : name;
+  }
+
+  /// Who a turn opened on [prompt] names as its author, where the project
+  /// runs Omada: the one member the prompt addresses. A command is not
+  /// addressed to anyone, whatever its text names — `!grep @researcher` runs
+  /// a command, it does not ask researcher to speak. Omada off never stamps:
+  /// the reply is the main agent's, and a label on it would claim a member
+  /// authored what is the house's voice. See "The contract between direct
+  /// and Omada chats" in `lib/ui/chat/CLAUDE.md`.
+  String? authorFor(Chat chat, Message prompt) =>
+      !ref.read(omadaOnProvider(chat.state.project)) ||
+              shellBypassCommand(prompt.plainText) != null
+          ? null
+          : authorFrom(prompt.documents);
+
+  /// The turn's reply. Always role `assistant` — the role is the render
+  /// class, not the author; [Message.author] is what names them.
+  Message _newReply({String? author}) => Message(
         id: _uuid.v4(),
         role: MessageRole.assistant,
         createdAt: DateTime.now(),
         parts: const [],
+        author: author,
       );
 
   /// Carry on the turn the chat was cut off in. What this produces goes on the
@@ -306,32 +538,50 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (chat == null || !chat.unfinished) return;
     // The user re-engaging is a new patience: their budget starts over, the
     // way a fresh send's would.
-    _round = 0;
+    _liveTurn?.round = 0;
     await _startResume();
   }
 
   /// The body of [resume] without its guards, so the automatic retry rounds
   /// take the same path the user's Continue button does. The chat is checked
   /// where the caller can still read its answer; the reply is re-read here
-  /// because a round sees a chat the previous round just wrote to.
+  /// because a round sees a chat the previous round just wrote to. The reply
+  /// is the last assistant message — a say queued while the round ran (or a
+  /// sibling reply, under parallel ordering) can sit below this turn's own.
   Future<void> _startResume() async {
     final chat = state.chat;
-    final reply = chat!.messages.last;
+    final reply = chat!.messages.lastWhereOrNull((m) =>
+        m.role == MessageRole.assistant &&
+        shellBypassCommand(m.plainText) == null);
+    if (reply == null) return;
 
     state = state.copyWith(isRunning: true, clearRetry: true, clearStatus: true);
-    _interrupted = false;
     // Kept open across the round: a caller awaiting [turnDone] gets one
     // completion, at the true end, not one per attempt.
-    _turnDone ??= Completer<TurnEnd?>();
-    _recorder.open(reply.id, existing: reply.parts);
+    final turn = _turns[reply.id] ?? _openTurnEntry(reply.id);
+    turn.interrupted = false;
+    turn.finishing = false;
+    turn.recorder.open(reply.id, existing: reply.parts);
 
-    _listen(ref.read(chatRepositoryProvider)
-        .resumeTurn(chatId, history: chat.messages));
+    _listen(turn, ref.read(chatRepositoryProvider).resumeTurn(chatId,
+        history: chat.messages, omadaMember: _memberResuming(chat)));
   }
 
-  void _listen(Stream<AgentEvent> stream) {
-    _sub?.cancel();
-    _sub = stream.listen(_onEvent, onDone: _finishTurn, onError: _onError);
+  /// The member a resumed turn runs under: whoever it started as, off the
+  /// reply's own [Message.author] stamp rather than the library. A member
+  /// deleted or renamed since falls back to the main agent — the backend's
+  /// own overlay resolution answers the same way. Null is the main agent.
+  String? _memberResuming(Chat chat) {
+    final last = chat.messages.lastOrNull;
+    if (last == null || last.role != MessageRole.assistant) return null;
+    return _memberIfKnown(chat, nameOf(last.author));
+  }
+
+  void _listen(_RunningTurn turn, Stream<AgentEvent> stream) {
+    turn.sub = stream.listen(
+        (event) => _onEvent(turn, event),
+        onDone: () => _finishTurn(turn),
+        onError: (Object e) => _onError(turn, e));
   }
 
   /// The user message that produced [messageId] — itself when it is one,
@@ -375,11 +625,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (chat == null || state.isRunning) return;
     final prompt = _promptFor(chat, messageId);
     if (prompt == null) return;
-    await _turn(
+    await openTurn(
       chat: chat,
       prompt: prompt,
       history: chat.messages.take(chat.messages.indexOf(prompt)).toList(),
-      opening: [_newReply()],
+      opening: [_newReply(author: authorFor(chat, prompt))],
       replacing: _replyFor(chat, messageId),
     );
   }
@@ -418,10 +668,10 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     }
   }
 
-  void _onEvent(AgentEvent event) {
+  void _onEvent(_RunningTurn turn, AgentEvent event) {
     if (_reply == null) return;
 
-    _recorder.handle(event);
+    turn.recorder.handle(event);
     switch (event) {
       // What the recorder already turned into parts. Listed rather than
       // defaulted, so a new kind of event has to be decided about here too.
@@ -430,42 +680,65 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
       case ReasoningDelta():
       case ReasoningEnd():
       case ToolCallEvent():
-      case ToolResultEvent():
-      case ShellRunEvent():
       case ArtifactEvent():
       case SkillInstallEvent():
+        break;
+      case ToolResultEvent():
+      case ShellRunEvent():
+        // The pair completing is the live block's end: the result and the
+        // run part are what the conversation keeps of the output from here.
+        state = state.copyWith(clearShellOutput: true);
         break;
       case ErrorEvent(:final message, :final retryable):
         // Whether the round can carry the turn on from this, and the first
         // line for the retry row and the failure notification. Both are
         // turn-scoped view state: the error part is what the conversation
         // keeps, and neither field outlives the turn.
-        _retryable = retryable;
+        turn.retryable = retryable;
         final lineAt = message.indexOf("\n");
-        _errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+        turn.errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
         break;
       case StepLimitEvent():
       case InfoEvent():
         break;
       case ApprovalRequestEvent(:final approval):
-        state = state.copyWith(approvals: [...state.approvals, approval]);
-      case QuestionRequestEvent(:final request):
-        state = state.copyWith(questions: [...state.questions, request]);
-      case SubAgentStartEvent():
-        state = state.copyWith(runningSubAgents: [...state.runningSubAgents, event]);
-      case SubAgentEndEvent(:final id):
         state = state.copyWith(
-            runningSubAgents:
-                state.runningSubAgents.where((s) => s.id != id).toList());
+            approvals: {
+              ...state.approvals,
+              turn.replyId: [...state.approvals[turn.replyId] ?? [], approval]
+            });
+      case QuestionRequestEvent(:final request):
+        state = state.copyWith(questions: {
+          ...state.questions,
+          turn.replyId: [...state.questions[turn.replyId] ?? [], request]
+        });
+      case SubAgentStartEvent():
+        state = state.copyWith(runningSubAgents: {
+          ...state.runningSubAgents,
+          turn.replyId: [
+            ...(state.runningSubAgents[turn.replyId] ?? []),
+            event
+          ]
+        });
+      case SubAgentEndEvent(:final id):
+        state = state.copyWith(runningSubAgents: {
+          for (final entry in state.runningSubAgents.entries)
+            entry.key: entry.value.where((s) => s.id != id).toList()
+        });
       case RetryEvent(:final attempt, :final message):
         state = state.copyWith(retry: "Attempt $attempt failed: $message");
+      case ShellOutputEvent(:final text):
+        // The live view of a command's output, for the block under the label.
+        // Cleared where the pair completes, in the cases above.
+        state = state.copyWith(shellOutput: text);
       case StatusEvent(:final label):
         state = label == null
             ? state.copyWith(clearStatus: true)
             : state.copyWith(status: label);
       case DoneEvent(:final aborted):
-        if (aborted) _recorder.outcome ??= TurnEnd.aborted;
-        _finishTurn();
+        if (aborted) turn.recorder.outcome ??= TurnEnd.aborted;
+        state = state.copyWith(clearShellOutput: true);
+        _finishTurn(turn);
     }
   }
 
@@ -479,18 +752,32 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// The terminal record is the point of this: a log whose last message has no
   /// [TurnEndRecord] was being written when the process died, and that absence
   /// is the only thing that can tell a reload the difference.
-  Future<void> _finishTurn() async {
-    _sub?.cancel();
-    _sub = null;
+  Future<void> _finishTurn(_RunningTurn turn) async {
+    // Whoever lands first drives the finish; the rest await its future, so a
+    // stop during the retry backoff resolves at the true end, not the guard.
+    if (turn.finishing) return turn.finishingFuture;
+    turn.finishing = true;
+    turn.finishingFuture = _driveTurnToEnd(turn);
+    await turn.finishingFuture;
+  }
+
+  Future<void> _driveTurnToEnd(_RunningTurn turn) async {
+    turn.sub?.cancel();
+    turn.sub = null;
     // Null is a turn that was interrupted rather than ended — the log has no
     // closing record, and `?? true` below is the same thing its reader makes
     // of one. See "Carrying on an interrupted turn".
     final TurnEnd? reason;
-    if (_interrupted) {
-      await _recorder.interrupt();
+    if (turn.interrupted) {
+      await turn.recorder.interrupt();
+      // An interruption is the app going away, not a round ending: what was
+      // said stays unsaid, the Continue path carrying the turn on — not
+      // dispatched here, which would open a fresh turn mid-teardown.
+      _said.clear();
+      _schedules.clear();
       reason = null;
     } else {
-      reason = await _recorder.close();
+      reason = await turn.recorder.close();
     }
     // A retryable failure is a blip the turn is carried on from, not an
     // outcome to report: the round waits out its backoff and re-enters the
@@ -498,55 +785,361 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     // the user pressing stop has to reach it first, which is what the
     // generation is for. The turn's completer stays open across rounds, so a
     // caller awaiting [turnDone] — the reminder runner, voice — gets one
-    // completion, at the true end.
-    if (reason == TurnEnd.error && _retryable && _round < _roundsTotal) {
-      final gen = _retryGen;
-      final round = _round;
-      _round++;
+    // completion, at the true end. The entry stays in the table across the
+    // rounds — a retry re-opens this entry's recorder, not a fresh one whose
+    // completer nobody holds — and leaves the table only at the true end.
+    if (reason == TurnEnd.error &&
+        turn.retryable &&
+        turn.round < _roundsTotal) {
+      final gen = turn.retryGen;
+      final round = turn.round;
+      turn.round++;
       final wait = Duration(seconds: (1 << round).clamp(1, 30));
       if (!ref.mounted) return;
       state = state.copyWith(
-        retry: "Retrying ($_round/$_roundsTotal) — $_errorLine",
-        approvals: const [],
-        questions: const [],
-        runningSubAgents: const [],
+        retry: "Retrying (${turn.round}/$_roundsTotal) — ${turn.errorLine}",
+        approvals: _withoutTurn(state.approvals, turn.replyId),
+        questions: _withoutTurn(state.questions, turn.replyId),
+        runningSubAgents:
+            _withoutTurn(state.runningSubAgents, turn.replyId),
       );
       await Future<void>.delayed(wait);
-      if (_retryGen != gen || !ref.mounted) return;
+      if (turn.retryGen != gen) {
+        // A stop cut the wait short: still an ending, not a stranded entry.
+        await _endTurn(turn, turn.interrupted ? null : turn.recorder.outcome);
+        return;
+      }
+      if (!ref.mounted) return;
       // A deleted chat has nothing to carry on.
       if (state.chat == null) return;
       await _startResume();
       return;
     }
+    await _endTurn(turn, reason);
+  }
+
+  /// The turn's true end: out of the table, the state the ending leaves, the
+  /// completer completed, the round's bookkeeping put away. The retry branch
+  /// returns here when its wait is cut short — a stop while the backoff runs
+  /// is still an ending, whoever's finish reaches it first.
+  Future<void> _endTurn(_RunningTurn turn, TurnEnd? reason) async {
     if (!ref.mounted) return;
-    final done = _turnDone;
-    _turnDone = null;
+    final done = turn.done;
+    _turns.remove(turn.replyId);
+    // The settle reads how deep the round ran when this turn finished; the
+    // entry is leaving the table, so the fact stays behind.
+    _finishedGenerations[turn.replyId] = turn.generation;
     // Nothing is left to answer once the turn is over: the backend has already
     // answered its own outstanding questions with nothing, so a banner or a
-    // panel still on screen would send its reply into the void.
+    // panel still on screen would send its reply into the void. Only this
+    // turn's — a sibling still running keeps its own.
     state = state.copyWith(
       // What a reload would now make of the log, so a turn that gave up is
       // offered straight away rather than only once the chat is opened again.
       chat: state.chat?.copyWith(unfinished: reason?.resumable ?? true),
-      isRunning: false,
-      approvals: const [],
-      questions: const [],
-      runningSubAgents: const [],
-      clearRetry: true,
-      clearStatus: true,
+      isRunning: _turns.isNotEmpty,
+      approvals: _withoutTurn(state.approvals, turn.replyId),
+      questions: _withoutTurn(state.questions, turn.replyId),
+      runningSubAgents: _withoutTurn(state.runningSubAgents, turn.replyId),
+      clearRetry: _turns.isEmpty,
+      clearStatus: _turns.isEmpty,
       unfinishedNotice: reason == TurnEnd.stepLimit
           ? "Step limit reached"
           : null,
     );
-    done?.complete(reason);
-    await _notifyFailure(reason);
+    done.complete(reason);
+    await _notifyFailure(reason, turn.errorLine);
+    if (reason == TurnEnd.aborted || reason == TurnEnd.error) {
+      // An aborted round is a stopped one: the unsaid is dropped, and a
+      // sibling's parked reply goes with it rather than handing off from a
+      // round the user stopped.
+      _said.clear();
+      _schedules.clear();
+      _settledReplies.clear();
+      _finishedGenerations.clear();
+      return;
+    }
+
+    // The room has settled: what was said while it spoke is said next, in
+    // the order it was said. Said messages schedule their members the same
+    // way anything else does, so a mention in one runs through the ordering
+    // like a handoff's does. Handoffs read the room only once the schedule
+    // holds nothing — the user's own words dispatch ahead of the agents'.
+    _drainSaid();
+    // The settle runs whatever the schedule may run now: what it left — a
+    // second item for a member whose first is still queued, the cap's —
+    // dispatches at the settles it causes. This reply hands off with them,
+    // parked for the settle that ends the wave, rather than now.
+    await _settle(turn, reason);
   }
 
-  /// The failure the turn last reported, for the retry row and the
-  /// notification — turn-scoped like every other view state, never persisted.
-  bool _retryable = false;
-  String _errorLine = "";
-  int _round = 0;
+  /// A turn has ended: the room may hand off. The schedule may still hold
+  /// what the settle will not run now — an item the cap stops, or a member's
+  /// second item behind one still running — and this turn's reply hands off
+  /// with the wave, parked for the settle that ends it, rather than waiting
+  /// on a schedule that will not drain this settle. Where siblings were still
+  /// speaking when this turn finished, its reply is already waiting in
+  /// `_settledReplies` — handoffs evaluate at the settle, against every reply
+  /// that finished the wave, not only the last one written.
+  Future<void> _settle(_RunningTurn turn, TurnEnd? reason) async {
+    if (_turns.isNotEmpty) {
+      // A sibling is still speaking: this reply hands off when the room
+      // settles, not now — the wave waits, whatever order the siblings
+      // finished in.
+      if (reason == TurnEnd.done) _settledReplies.add(turn.replyId);
+      return;
+    }
+    final chat = state.chat;
+    if (chat == null) return;
+    // The room is settled: every reply the wave finished hands off in
+    // conversation order, the order they were said — this turn's own first,
+    // where it finished the wave.
+    final ids = [..._settledReplies, if (reason == TurnEnd.done) turn.replyId];
+    _settledReplies.clear();
+    _finishedGenerations.removeWhere(
+        (id, _) => !ids.contains(id));
+    final replies = [
+      for (final id in ids)
+        chat.messages.firstWhereOrNull((m) => m.id == id),
+    ].whereType<Message>().toList();
+    await _maybeHandoff(reason, replies);
+    // Whatever the schedule may run now, runs: a queued say, a handoff just
+    // scheduled, or a member's next item behind one still queued. The
+    // handoff's own gate decides what was scheduled, not what runs — an
+    // off-Omada room's queued says and what a failure leaves queued drain
+    // through here all the same.
+    await _dispatch();
+  }
+
+  /// The replies of turns that finished while a sibling was still speaking,
+  /// in finish order: their handoffs wait for the settle this one causes.
+  final List<String> _settledReplies = [];
+
+  /// What finished replies hand the baton to. A reply that names members —
+  /// each turn ended `done`, nothing a failure leaves carrying — has their
+  /// turns scheduled, the room's round, until the generation cap says the
+  /// agents have had the floor long enough. The mentions are read off each
+  /// reply's text against the library — the members named *now* are the ones
+  /// handed to, the room's own wording — and scheduled through the same
+  /// [_dispatch] path every turn takes.
+  Future<void> _maybeHandoff(
+      TurnEnd? reason, List<Message> replies) async {
+    if (reason != TurnEnd.done) return;
+    if (!ref.mounted) return;
+    final chat = state.chat;
+    if (chat == null) return;
+    // Omada off is the room as it always was: nothing hands anything to
+    // anyone, whatever a reply's text happens to name.
+    if (!ref.read(omadaOnProvider(chat.state.project))) return;
+    // A decline ends what agents are handing each other: the user's own
+    // schedule is not theirs to cancel, so an item the user put there (its
+    // prompt, not a reply) survives wherever it sits in the queue.
+    for (final reply in replies) {
+      if (_isPass(reply)) {
+        for (final member in _schedules.keys.toList()) {
+          final items = _schedules[member]!;
+          final kept = items.where((item) => item.reply == null).toList();
+          if (kept.isEmpty) {
+            _schedules.remove(member);
+          } else {
+            _schedules[member] = kept;
+          }
+        }
+        continue;
+      }
+      // The wave lands one past the turn that named it: the round's depth is
+      // the finished turn's own, and the cap reads it at dispatch. The entry
+      // is out of the table by now — the finished turn's own is what counts.
+      final finished = _finishedGenerations[reply.id] ?? 0;
+      _schedule(chat, mentioned(chat, reply),
+          reply: reply, generation: finished);
+    }
+  }
+
+  /// How deep the round ran when each reply finished, kept for the settle
+  /// that reads it — the turn entries are gone from the table by then.
+  final Map<String, int> _finishedGenerations = {};
+
+  /// The members [message] addresses, in the order it names them — a user
+  /// prompt through what composing wrote into its documents, a member's
+  /// reply through its text. Names the library does not know are prose,
+  /// not an address, a command is addressed to no one it names —
+  /// `!grep @researcher` runs a command, it does not ask researcher to
+  /// speak — and a direct chat addresses no one at all: Omada off is the
+  /// room as it always was, the house answering whatever is said. The
+  /// sigil is off what comes back: a schedule is keyed by the library's
+  /// name for the member.
+  List<String> mentioned(Chat chat, Message message) {
+    if (!ref.read(omadaOnProvider(chat.state.project)) ||
+        shellBypassCommand(message.plainText) != null) {
+      return const [];
+    }
+    return message.role == MessageRole.user
+        ? authorKeys(message.documents)
+            .map(nameOf)
+            .whereType<String>()
+            .where((name) => _memberIfKnown(chat, name) != null)
+            .toList()
+        : mentionsIn(message.plainText,
+            ref.read(promptLibraryProvider(chat.state.project)));
+  }
+
+  /// The room's scheduling. `_schedules` is one FIFO per member of what they
+  /// have been addressed to run; a member runs one turn at a time and reads
+  /// the next item when the room settles. An item is either a user prompt —
+  /// already on the log where it was said while the room ran — or a handoff,
+  /// the reply that names them. The null key is the main agent, who answers
+  /// what no member was addressed for. [generation] is the dispatch wave the
+  /// item belongs to: zero is the user's own and uncapped, a handoff lands
+  /// one past the reply that names it.
+  final Map<String?, List<_Scheduled>> _schedules = {};
+
+  /// One dispatch at a time; a second arriving mid-[openTurn] asks for a
+  /// pass rather than running one beside it.
+  bool _dispatching = false;
+
+  /// Whether a dispatch was asked while one ran.
+  bool _dispatchPending = false;
+
+  void _schedule(Chat chat, List<String> members,
+      {Message? userPrompt, Message? reply, int generation = 0}) {
+    if (members.isEmpty) {
+      // Nobody addressed: the main agent's, and only a user prompt makes
+      // one — a reply that names nobody is the round ending, not the house
+      // speaking unprompted.
+      if (userPrompt != null) {
+        (_schedules[null] ??= [])
+            .add(_Scheduled(userPrompt: userPrompt, generation: generation));
+      }
+      return;
+    }
+    for (final member in members) {
+      (_schedules[member] ??= []).add(_Scheduled(
+          userPrompt: userPrompt,
+          reply: reply,
+          generation: reply == null ? generation : generation + 1));
+    }
+  }
+
+  /// Run what the schedule holds. Sequential order runs one item at a time —
+  /// the first of the schedule, whatever member it names — and what follows
+  /// dispatches at the settle it causes. Parallel order answers with one
+  /// turn per member at once, each FIFO's head: one turn per member still
+  /// stands, and what is left dispatches at the settle they cause.
+  ///
+  /// A dispatched item is gone from its FIFO before the turn opens, so a
+  /// settle re-entering while the turn runs finds the schedule behind it and
+  /// not the item running. Re-entering is real — a say landing mid-[openTurn]
+  /// reads the same queue — so a second call asks for a pass rather than
+  /// running two sequential items at once.
+  Future<void> _dispatch() async {
+    if (_dispatching) {
+      _dispatchPending = true;
+      return;
+    }
+    _dispatching = true;
+    try {
+      await _dispatchPass();
+      while (_dispatchPending) {
+        _dispatchPending = false;
+        await _dispatchPass();
+      }
+    } finally {
+      _dispatching = false;
+    }
+  }
+
+  /// One pass over the schedule, serving any dispatch asked while it ran.
+  Future<void> _dispatchPass() async {
+    final parallel = _ordering == OmadaOrdering.parallel;
+    // The cap counts dispatch waves of agent-to-agent work: an item in its
+    // generation or under is the user's own and never blocked, one past it
+    // is the round's and the cap stops the wave.
+    final max = _maxGenerations;
+    var dispatched = false;
+    for (final member in _schedules.keys.toList()) {
+      final items = _schedules[member];
+      if (items == null || items.isEmpty) {
+        if (items != null) _schedules.remove(member);
+        continue;
+      }
+      // The cap stops a member's handoff wave, not the user's words: a capped
+      // head is dropped and the generation zero item behind it kept.
+      final item = items.first;
+      if (item.generation > 0 && item.generation >= max) {
+        items.removeAt(0);
+        if (items.isEmpty) _schedules.remove(member);
+        continue;
+      }
+      // Sequential runs one item at a time, and parallel runs one per
+      // member: either way one dispatch per member here, the rest at the
+      // settles this causes.
+      if (!parallel && dispatched) continue;
+      items.removeAt(0);
+      if (items.isEmpty) _schedules.remove(member);
+      dispatched = true;
+      await _run(member, item);
+    }
+  }
+
+  /// Open the turn one scheduled item runs as. [member] null is the main
+  /// agent's; a handoff's prompt is the reply that names the member, already
+  /// in the conversation.
+  Future<void> _run(String? member, _Scheduled item) async {
+    final prompt = item.userPrompt;
+    final reply = item.reply;
+    if (prompt != null) {
+      await _say(prompt, member: member, generation: item.generation);
+      return;
+    }
+    final chat = state.chat;
+    if (chat == null || reply == null) return;
+    await openTurn(
+      chat: chat,
+      prompt: reply,
+      // The conversation the member answers ends before the reply that hands
+      // to them: `sendPrompt` adds the prompt itself, and history holding it
+      // too would have the member read their mentioning reply twice.
+      history: chat.messages.take(chat.messages.indexOf(reply)).toList(),
+      // The next reply is authored by the member handed to. The stamp
+      // carries the sigil, the way every author stamp does.
+      opening: [_newReply(author: "${CompletionKind.agent.trigger}$member")],
+      omadaMember: member,
+      generation: item.generation,
+    );
+  }
+
+  /// The room's scheduling order: the project's pick, else the app default,
+  /// else sequential — the answer a room that never heard of the setting
+  /// runs under.
+  OmadaOrdering get _ordering {
+    final project = state.chat?.state.project;
+    return ref.read(projectSettingsProvider(project)).omadaOrdering ??
+        ref.read(appSettingsProvider).omadaOrdering ??
+        OmadaOrdering.sequential;
+  }
+
+  /// The one member [reply] names by handle, as the composer's own
+  /// `_mention` reads one. Null where it names none, or more than one — a
+  /// multi-mention is a round, and rounds are not sequential handoffs.
+  String? _mentionIn(Chat chat, Message reply) =>
+      singleAgentMention(reply.plainText,
+          ref.read(promptLibraryProvider(chat.state.project)));
+
+  /// Whether a reply says nothing but that its author passes: word for word,
+  /// so a longer reply is a reply and the convention is unambiguous.
+  bool _isPass(Message reply) => reply.plainText.trim() == passWord;
+
+  /// How deep the agent-to-agent rounds of a round may go: dispatch waves,
+  /// not turns — a three-member fan-out is one generation whatever it fans
+  /// out to. The project's override wins over the app default, and the user
+  /// speaking resets the count: the cap is about agents talking to each
+  /// other without end, not about how long a conversation may run.
+  int get _maxGenerations {
+    final project = state.chat?.state.project;
+    return ref.read(projectSettingsProvider(project)).omadaMaxGenerations ??
+        ref.read(appSettingsProvider).omadaMaxGenerations;
+  }
 
   /// What this turn is allowed: the setting, resolved at the round the same
   /// way the approve mode is, so an edit reaches the next failure rather than
@@ -555,10 +1148,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
 
   /// The notification. A failure the user cannot see is a failure the app has
   /// to say — the turn is over, the chat is on disk, and the tap opens it.
-  /// Gated on the app being hidden and the chat not headless: a reminder's
-  /// completion is the scheduler's, and a second would be a double. Where the
-  /// platform has no notification route the port is the no-op it always was.
-  Future<void> _notifyFailure(TurnEnd? reason) async {
+  /// [line] is what the failing turn reported. Gated on the app being hidden
+  /// and the chat not headless: a reminder's completion is the scheduler's,
+  /// and a second would be a double. Where the platform has no notification
+  /// route the port is the no-op it always was.
+  Future<void> _notifyFailure(TurnEnd? reason, String line) async {
     if (reason != TurnEnd.error) return;
     if (!ref.read(appHiddenProvider)) return;
     if (await _isHeadless()) return;
@@ -566,7 +1160,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final title = state.chat?.state.title ?? "Chat failed";
     await alarms.notify(
       title: title,
-      body: _errorLine.isEmpty ? "The turn failed." : _errorLine,
+      body: line.isEmpty ? "The turn failed." : line,
       chatId: chatId,
       channel: ReminderAlarms.turnFailureChannel,
     );
@@ -576,13 +1170,13 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   Future<bool> _isHeadless() async =>
       (await ref.read(chatRepositoryProvider).loadMeta(chatId)).headless == true;
 
-  void _onError(Object e) {
-    _retryable = false;
+  void _onError(_RunningTurn turn, Object e) {
+    turn.retryable = false;
     final message = e.toString();
     final lineAt = message.indexOf("\n");
-    _errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
-    _recorder.handle(ErrorEvent(message));
-    _finishTurn();
+    turn.errorLine = lineAt < 0 ? message : message.substring(0, lineAt);
+    turn.recorder.handle(ErrorEvent(message));
+    _finishTurn(turn);
   }
 
   /// Set before the abort is awaited, though `DoneEvent.aborted` would say the
@@ -591,10 +1185,17 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// the turn as having finished.
   @override
   Future<void> abort() async {
-    _retryGen++;
-    _recorder.outcome = TurnEnd.aborted;
+    final turns = List.of(_turns.values);
+    if (turns.isEmpty) return;
+    // The round stops whole: every running turn goes, and what was said while
+    // they ran is dropped by the endings they record.
+    for (final turn in turns) {
+      turn.retryGen++;
+      turn.recorder.outcome = TurnEnd.aborted;
+    }
     await ref.read(chatRepositoryProvider).abort(chatId);
-    await _finishTurn();
+    await Future.wait(
+        [for (final turn in turns) _finishTurn(turn)]);
   }
 
   /// Stop a turn without ending it: the agent is cancelled and the log is left
@@ -607,10 +1208,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   /// whichever gets there first.
   Future<void> interrupt() async {
     if (!state.isRunning) return;
-    _retryGen++;
-    _interrupted = true;
+    final turns = List.of(_turns.values);
+    if (turns.isEmpty) return;
+    for (final turn in turns) {
+      turn.retryGen++;
+      turn.interrupted = true;
+    }
     await ref.read(chatRepositoryProvider).abort(chatId);
-    await _finishTurn();
+    await Future.wait(
+        [for (final turn in turns) _finishTurn(turn)]);
   }
 
   @override
@@ -618,7 +1224,7 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondApproval(chatId, approvalId, r);
     state = state.copyWith(
-        approvals: state.approvals.where((a) => a.id != approvalId).toList());
+        approvals: _withoutApproval(state.approvals, approvalId));
   }
 
   /// Answer a request the panel was showing. One entry per question it held,
@@ -628,12 +1234,101 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondQuestions(chatId, requestId, answers);
     state = state.copyWith(
-        questions: state.questions.where((r) => r.id != requestId).toList());
+        questions: _withoutQuestion(state.questions, requestId));
   }
+
+  /// The map without the turn's own list — what a finished turn leaves of the
+  /// view state it was holding, a sibling's kept.
+  static Map<String, List<T>> _withoutTurn<T>(
+          Map<String, List<T>> map, String replyId) =>
+      Map<String, List<T>>.from(map)..remove(replyId);
+
+  /// The map without [id] from any turn's list. Both lists hold items with
+  /// an `id` field, read for the removal.
+  static Map<String, List<ToolApproval>> _withoutApproval(
+          Map<String, List<ToolApproval>> map, String id) =>
+      _dropItem(map, id, (item) => item.id);
+
+  static Map<String, List<AskRequest>> _withoutQuestion(
+          Map<String, List<AskRequest>> map, String id) =>
+      _dropItem(map, id, (item) => item.id);
+
+  static Map<String, List<T>> _dropItem<T>(
+          Map<String, List<T>> map, String id, Object? Function(T) keyOf) =>
+      {
+        for (final entry in map.entries)
+          entry.key:
+              entry.value.where((item) => keyOf(item) != id).toList()
+      };
 }
 
 final chatControllerProvider =
     NotifierProvider.family<ChatController, ChatViewState, String>(ChatController.new);
+
+/// One live turn of the room: everything that was a controller field when a
+/// turn was the only thing a chat could run. The recorder is built per entry
+/// — its one-reply assumption is per-instance, which is what keeps
+/// [TurnRecorder] unchanged under parallel turns — and the fields below it
+/// are the retry machinery, scoped to the turn they carry.
+class _RunningTurn {
+  /// [onParts] is wired late, from [attach]: the recorder wants the turn it
+  /// belongs to, and the turn does not exist until its constructor returns.
+  factory _RunningTurn(
+      {required String replyId,
+      required Completer<TurnEnd?> done,
+      required Future<void> Function(List<ChatRecord>) append}) {
+    final turn = _RunningTurn._(replyId: replyId, done: done);
+    turn.recorder = TurnRecorder(append: append, onParts: (parts) {
+      if (turn.onParts != null) turn.onParts!(turn, parts);
+    });
+    return turn;
+  }
+
+  _RunningTurn._({required this.replyId, required this.done});
+
+  /// The reply this turn writes, and the table's key.
+  final String replyId;
+
+  /// Everything the turn's events become: the reply's parts, and the records
+  /// that persist them.
+  late final TurnRecorder recorder;
+
+  /// The controller's own fold of the parts into the conversation — wired at
+  /// open, so a recorder built for one chat's log cannot outlive it.
+  void Function(_RunningTurn turn, List<MessagePart> parts)? onParts;
+
+  /// Completes at the turn's true end — across retry rounds, one completion.
+  final Completer<TurnEnd?> done;
+
+  /// The turn's stream subscription, cancelled in [_finishTurn].
+  StreamSubscription<AgentEvent>? sub;
+
+  /// This turn is being stopped rather than ended — see [ChatController.interrupt].
+  bool interrupted = false;
+
+  /// Whether [_finishTurn] has begun on this turn.
+  bool finishing = false;
+
+  /// The finish in flight, which a second reach awaits.
+  Future<void>? finishingFuture;
+
+  /// Bumped by abort and interrupt so a pending retry cannot fire after the
+  /// user pressed stop — this turn's generation, not the room's.
+  int retryGen = 0;
+
+  /// Whether the turn's last failure can be carried on from, and the line for
+  /// the retry row and the failure notification.
+  bool retryable = false;
+  String errorLine = "";
+
+  /// Retry rounds spent on this turn so far.
+  int round = 0;
+
+  /// The dispatch wave this turn belongs to: zero for the user's own, one
+  /// and up for what agents handed to each other. The handoff that follows
+  /// this turn reads it to know how deep the round has run.
+  int generation = 0;
+}
 
 /// Stop whatever turns are running the way the app going away stops them:
 /// **interrupted rather than aborted**. See "Carrying on an interrupted turn"
@@ -644,4 +1339,18 @@ Future<void> interruptLiveTurns(ProviderContainer container) async {
       if (container.exists(chatControllerProvider(id)))
         container.read(chatControllerProvider(id).notifier).interrupt(),
   ]);
+}
+
+/// One item of the room's schedule: what a member (or the main agent, where
+/// the schedule names nobody) has been addressed to run. Either a user
+/// prompt — already on the log where it was said while the room ran — or a
+/// handoff, the reply that names the member. [generation] is the dispatch
+/// wave the item belongs to: zero is the user's own, uncapped, and one and
+/// up counts against the cap.
+class _Scheduled {
+  _Scheduled({this.userPrompt, this.reply, required this.generation});
+
+  final Message? userPrompt;
+  final Message? reply;
+  final int generation;
 }

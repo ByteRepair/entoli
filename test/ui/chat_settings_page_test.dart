@@ -136,7 +136,7 @@ void main() {
     await openPage(tester);
 
     await openDropdown(tester);
-    await tester.tap(find.text(defaultOptionLabel).last);
+    await tester.tap(find.textContaining(defaultOptionLabel).last);
     await settleIo(tester);
 
     await save(tester);
@@ -179,7 +179,7 @@ void main() {
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
 
-      expect(find.text("$defaultOptionLabel (Ask every time)"), findsOneWidget);
+      expect(find.text("$defaultOptionLabel (Ask before every command)"), findsOneWidget);
       expect((await io(tester, () => app.savedMeta(_chatId))).approveMode, isNull);
     });
 
@@ -188,12 +188,12 @@ void main() {
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
 
-      expect(find.text("$defaultOptionLabel (Run without asking (DANGEROUS))"), findsOneWidget);
+      expect(find.text("$defaultOptionLabel (Run everything without asking (DANGEROUS))"), findsOneWidget);
     });
 
     testWidgets("a chat can run without asking, and that survives a save", (tester) async {
       await openField(tester);
-      await tester.tap(find.textContaining("Run without asking").last);
+      await tester.tap(find.textContaining("Run everything without asking").last);
       await settleIo(tester);
       await save(tester);
 
@@ -204,7 +204,7 @@ void main() {
       await seedMeta(tester, ChatMeta(approveMode: ApproveMode.never));
       await openPage(tester);
       await scrollTo(tester, find.text("Running commands"));
-      expect(find.textContaining("Run without asking"), findsOneWidget);
+      expect(find.textContaining("Run everything without asking"), findsOneWidget);
 
       await tester.tap(find.byTooltip("Reset to $defaultOptionLabel").at(1));
       await settleIo(tester);

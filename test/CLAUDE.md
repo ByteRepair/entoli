@@ -8,7 +8,11 @@ obvious from reading a test. Everything about the app itself is in the root
 
 `test/harness.dart` holds `TestApp` — the app over a throwaway data directory
 with the backend faked — plus `tempConfig`, `makeState`, the dropdown finders,
-and the pumping helpers below. `test/fakes.dart` holds `FakeBackend`, whose
+and the pumping helpers below. `writeSkill` writes a skill the library will
+actually offer: since skills are held to the Agent Skills spec (see
+"Skills and agents" in `lib/domain/CLAUDE.md`), its `SKILL.md` carries a
+`name:` matching the folder and a `description`, and its `metadata:` argument
+is the way a test writes the client keys. `test/fakes.dart` holds `FakeBackend`, whose
 `scriptedEvents` and `hold` drive a turn and whose `scriptedTitle` names a chat,
 beside `FakeAttachmentPicker`, `FakeLauncherIcons`, `FakeBackgroundWork`,
 `FakeFileHandoff`, `FakeBackupHandoff`, `FakeAppRestart`, `FakeVoice`,
@@ -73,6 +77,14 @@ about proot on a machine with no Android on it. The persistent shell's own contr
 way: its session tests run real commands through the host's real shell, so a
 `cd` that does not stick, a stop that kills the shell, or a sentinel the
 dispatcher cannot print is a test failure rather than a discovery.
+
+**A process belongs in a test where the process interaction is this repo's
+own contract** — `LocalShell`'s kill and sessions, `tree_ops`'s `chmod` and
+`rm`, the real `tar` whose execute bit is the point. Where a test would be
+standing in for the process merely to say dart:io streams stdout and `kill`
+kills, the test asserts the framework rather than the app and is left out:
+`LinuxRecorder`'s stream-and-stop is pinned nowhere for that reason, and the
+first hand-run of voice mode is where a break there would show.
 
 `TestApp.create(localLlm: …, localModels: …)` is the same pair for the On-device
 page — whether this build has a server at all, and which models are downloaded.
@@ -139,6 +151,13 @@ cannot point elsewhere without an environment variable it cannot set, and
 pumping the real one would build the real backend and read `rootBundle` for the
 prompt library. What is pinned is that a restore asks for a restart, that the
 restore happens inside it, and that a refused one does neither.
+
+`app.secrets` is the `AppSecrets` the settings notifiers write into — the real
+one over an in-memory `FakeSecretStore`, so what a page reads back after it
+saves is the class's own behaviour rather than a fake's. A test that wants keys
+pre-stored passes its own store to `TestApp.create(secrets: …)`. Assert on
+`app.secrets.providerKey(id)` rather than on `settings.json`, which no longer
+carries the keys.
 
 `heldTurn` is a chat parked mid-turn with one event delivered and the widget it
 raises on screen, over a backend whose `hold` keeps the turn open the way a real

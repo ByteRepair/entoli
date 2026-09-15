@@ -2,7 +2,7 @@ import "dart:convert";
 import "dart:math";
 
 import "../../core/config.dart";
-import "../../domain/documents.dart" show writingSuffix;
+import "../../domain/documents.dart" show RenameWriter;
 import "../../domain/reminder.dart";
 
 /// The user's reminders, one JSON list at `<dataDir>/reminders.json`. Read at
@@ -13,9 +13,10 @@ import "../../domain/reminder.dart";
 /// reads this file with no engine running, so a read landing mid-write must
 /// never find a half-written one.
 class FileReminderStore {
-  FileReminderStore(this._config);
+  FileReminderStore(this._config) : _write = RenameWriter.fs(_config.fs);
 
   final AppConfig _config;
+  final RenameWriter _write;
 
   Future<List<Reminder>> load() async {
     try {
@@ -30,12 +31,8 @@ class FileReminderStore {
     }
   }
 
-  Future<void> save(List<Reminder> reminders) async {
-    final fs = _config.fs;
-    final temp = fs.file("${_config.remindersFile}$writingSuffix");
-    await temp.writeAsString(jsonEncode([for (final r in reminders) r.toJson()]));
-    await temp.rename(_config.remindersFile);
-  }
+  Future<void> save(List<Reminder> reminders) => _write.write(
+      _config.remindersFile, jsonEncode([for (final r in reminders) r.toJson()]));
 }
 
 /// A small int unique among the reminders on disk, for the alarm PendingIntent.

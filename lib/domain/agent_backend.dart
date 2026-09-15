@@ -7,6 +7,7 @@ import "../domain/builtin_project.dart";
 import "../domain/models.dart";
 import "../domain/permission.dart";
 import "../domain/profile.dart";
+import "../domain/tone.dart";
 
 /// Streamed events from an agent turn. The UI renders these as they arrive.
 sealed class AgentEvent {
@@ -64,6 +65,22 @@ class ToolResultEvent extends AgentEvent {
 class ShellRunEvent extends AgentEvent {
   const ShellRunEvent(this.run);
   final ShellRunPart run;
+}
+
+/// What a running command has printed, as it prints it. Turn-scoped view state
+/// like [StatusEvent]: the call/result pair is what `conv.jsonl` keeps, and the
+/// final output is what that result carries — nothing here is persisted, and a
+/// reloaded chat has no trace of it. The text is the tail of what has printed,
+/// not the whole, and whitespace-only tails are not worth reporting.
+///
+/// [callId] is the `bash` call the output belongs to, null where the command
+/// is the user's own `!` turn. Nothing routes on it today — one watched run
+/// per chat, the block trailing on the waiting message — but the callback the
+/// agent is handed knows it, and a second watched run would need it.
+class ShellOutputEvent extends AgentEvent {
+  const ShellOutputEvent({this.callId, required this.text});
+  final String? callId;
+  final String text;
 }
 
 /// An HTML artifact was rendered and saved. Persisted as a [MessagePart] rather
@@ -294,6 +311,14 @@ class TurnSettings {
 
   final Profile? profile;
 
+  /// How this turn's replies are worded. The project's answer over the app's;
+  /// [Tone.none] adds nothing to the prompt.
+  final Tone tone;
+
+  /// Whether this turn numbers the web pages it drew on and lists them at the
+  /// end of the reply. The project's answer over the app's.
+  final bool citations;
+
   /// Whether the project's workspace is shared between its chats. When false,
   /// the chat's own workspace is also the `HOME` of its commands, a `project:`
   /// path resolves inside it, and the prompt says nothing of a shared one.
@@ -322,6 +347,23 @@ class TurnSettings {
   /// shell's to read on each command, for the reason they are settings.
   final Map<String, String> environment;
 
+  /// The member this turn is answered by, where the project runs Omada and
+  /// the message addressed exactly one: the named agent runs the turn under
+  /// its own prompt and session, and its reply is the one on the record. Null
+  /// is the main agent — the house — answering as it always has.
+  final String? omadaMember;
+
+  /// Whether the project runs Omada, resolved with the turn's other facts so
+  /// the prompt and the capability set answer the same question. Members are
+  /// addressed by handle, and `task` is not offered.
+  final bool omada;
+
+  /// How many model calls this turn may make before it stops. The app's own
+  /// answer for the level that resolved the turn — a project's own, else the
+  /// app default, else the backend's. The backend's [BuiltinOptions.stepLimit]
+  /// is the floor this can only name a value for, not widen.
+  final int? turnMaxSteps;
+
   const TurnSettings({
     this.memory = MemorySettings.off,
     this.model,
@@ -336,6 +378,11 @@ class TurnSettings {
     this.bundledInstructions,
     this.includesUserInstructions = false,
     this.environment = const {},
+    this.omadaMember,
+    this.omada = false,
+    this.turnMaxSteps,
+    this.tone = Tone.none,
+    this.citations = false,
   });
 }
 
@@ -360,11 +407,12 @@ abstract class AgentBackend {
   /// one, and a page that is not interested never listens.
   Stream<MemoryNote> get memoryNotes;
 
-  /// One question, answered in one call to [model]: no tools, no session,
-  /// nothing kept. Null when the provider is not configured or says nothing —
-  /// the caller wants a convenience, and there is no turn to report a failure
-  /// on.
-  Future<String?> ask(String prompt, {required String model, required String provider});
+  /// One question, answered in one call: no tools, no session, nothing kept.
+  /// A model of null resolves to the provider's light default — the title
+  /// model is set as a provider without naming one. Null when the provider is
+  /// not configured or says nothing — the caller wants a convenience, and
+  /// there is no turn to report a failure on.
+  Future<String?> ask(String prompt, {required String? model, required String? provider});
 
   /// Send a user prompt; stream events until the turn completes.
   ///

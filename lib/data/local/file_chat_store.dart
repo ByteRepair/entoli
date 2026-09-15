@@ -1,11 +1,13 @@
 import "dart:convert";
 import "dart:typed_data";
 
+import "package:archive/archive.dart" show ZipEncoder;
 import "package:fs_shim/fs.dart";
 import "package:uuid/uuid.dart";
 
 import "../../core/config.dart";
 import "../../core/log.dart";
+import "../../data/zip.dart" show archiveOf;
 import "../../domain/chat_log.dart";
 import "../../domain/chat_meta.dart";
 import "../../domain/documents.dart";
@@ -19,7 +21,7 @@ import "../../domain/workspace.dart";
 /// directories on desktop and Android, IndexedDB in a browser. One
 /// implementation, because the layout is the same either way.
 class FileChatStore implements ChatStore {
-  FileChatStore(this.config);
+  FileChatStore(this.config) : _write = RenameWriter.fs(config.fs);
 
   final AppConfig config;
 
@@ -36,11 +38,9 @@ class FileChatStore implements ChatStore {
   /// and a reader sees either the whole old file or the whole new one. This is
   /// for the documents beside the log: the log itself is appended to, where
   /// the same hazard is a torn last line the reader drops.
-  Future<void> _write(String path, String text) async {
-    final temp = _fs.file("$path$writingSuffix");
-    await temp.writeAsString(text);
-    await temp.rename(path);
-  }
+  final RenameWriter _write;
+
+  Future<void> _writeFile(String path, String text) => _write.write(path, text);
 
   Future<String?> _readOrNull(String path) async {
     final file = _fs.file(path);
@@ -184,7 +184,7 @@ class FileChatStore implements ChatStore {
     final project = located == null ? state.project : located.project;
     _projects[state.id] = project;
     await config.ensureChatDirs(state.id, project: project);
-    await _write(
+    await _writeFile(
       config.stateFile(state.id, project: project),
       jsonEncode(state.copyWith(project: project).toJson()),
     );
@@ -239,7 +239,7 @@ class FileChatStore implements ChatStore {
   Future<void> saveMeta(String chatId, ChatMeta meta) async {
     final project = await _projectOf(chatId);
     await config.ensureChatDirs(chatId, project: project);
-    await _write(config.metaFile(chatId, project: project), meta.encode());
+    await _writeFile(config.metaFile(chatId, project: project), meta.encode());
   }
 
   @override
@@ -291,6 +291,23 @@ class FileChatStore implements ChatStore {
     final safe = safeRelativePath(_fs, relativePath);
     final file = _fs.file(_fs.path.join(dir, safe));
     return await file.exists() ? file.readAsBytes() : null;
+  }
+
+  @override
+  Future<Uint8List?> readArtifactZip(String chatId, String artifactId,
+      {String? project}) async {
+    // On the far side of this call is a peer-named id (`_serveResource` strips
+    // the prefix off the wire and hands the rest over), so the id is held to
+    // what `createArtifact` hands out — one path segment, the way
+    // `readResource` basenames what it reads back.
+    final id = _fs.path.basename(artifactId);
+    if (id != artifactId || id.isEmpty) return null;
+    project = project ?? await _projectOf(chatId);
+    final dir = config.artifactDir(chatId, id, project: project);
+    if (!await _fs.isDirectory(dir)) return null;
+    // `base` is the artifact root itself: the entries come out named relative
+    // to it, the shape the unzip on the far side writes back.
+    return ZipEncoder().encodeBytes(await archiveOf(_fs, [dir], base: dir));
   }
 
   @override
