@@ -271,7 +271,18 @@ allow rule (refused in `never`, where nobody can answer). A rule-allow carries
 write there". What the sandbox denied while a command ran rides the result as
 `violations`, and — where `sandboxReprompt` is on and no human decided
 already — one offer to rerun is made: unconfined for a denied write, or with
-the denied directory joining the grant. The two "always" banner answers write
+the denied directory joining the grant. What the sandbox denied is *reported*,
+not scraped: the confinement exports an `LD_PRELOAD` shim beside the helper
+(`entoli-deny-report.so`, compiled with it, best-effort) that records every
+syscall the kernel refused — `op\tpath`, one line, into a file under the
+grant — and the result reads that report, filters it against the grant, and
+words it. No wording table, no quote marks to chase: the denial is the
+syscall's, whatever the failing tool chose to print about it. The prose is
+now only a cross-check — a `Permission denied` in the command's output with
+an empty report (a static binary bypassing the shim) is a `denied (unreported)`
+violation and a `logFailure` line, so a blind channel is visible rather than
+silent; a shim that cannot work at all degrades to that same cross-check,
+never to a broken command. The two "always" banner answers write
 the derived rule: `ruleFromApproval` reads the command's leading words, the
 file's directory or the fetch's host, and the repository persists it to the
 tier the answer named.

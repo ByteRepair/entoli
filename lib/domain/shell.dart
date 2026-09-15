@@ -137,6 +137,17 @@ abstract class SandboxHelper {
   /// the session's `cd` and exports live *inside* the confined shell, which
   /// is the shape that keeps the state a session exists to keep.
   Future<List<String>?> prefixFor(CommandSandbox sandbox);
+
+  /// The file the confinement's denials are reported to, one line per
+  /// refused syscall, or null where this helper has no report channel. The
+  /// caller reads it after the run and words what it holds; it lives under
+  /// the grant so the confined command could write it. Null is honest —
+  /// the prose cross-check takes over — never a wrong report.
+  String? reportPathFor(CommandSandbox sandbox) => null;
+
+  /// The shim library that writes the report, exported to the confined
+  /// command beside [reportPathFor]'s file. Null together with it.
+  String? get reportShimPath => null;
 }
 
 /// Everything needed to run a command inside a downloaded Linux, bar the Linux.

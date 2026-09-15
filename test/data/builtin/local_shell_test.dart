@@ -755,91 +755,89 @@ void main() {
     });
   });
 
-group("sandbox violation detection", () {
-  test("the shell's absolute-path denial is matched", () {
-    final violations = violationsOf(
-        "sh: 1: cannot create /etc/hosts: Permission denied",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
-    expect(violations, ["writing /etc/hosts"]);
+group("sandbox violation reading", () {
+  test("a reported write denial outside the grant words writing", () {
+    final verdict = sandboxViolations(
+        ["mkdir\t/etc/hosts"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, ["writing /etc/hosts"]);
+    expect(verdict.unreported, isFalse);
   });
 
-  test("a relative denial is joined against the command's cwd", () {
-    final violations = violationsOf(
-        "touch: cannot touch 'config.json': Permission denied",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"),
-        cwd: "/home/yiannis/Projects/repo");
-    expect(violations, ["writing /home/yiannis/Projects/repo/config.json"]);
+  test("a reported read denial words denied", () {
+    final verdict = sandboxViolations(
+        ["open\t/etc/shadow"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, ["denied /etc/shadow"]);
   });
 
-  test("a denial inside the workspace is not a violation", () {
-    final violations = violationsOf(
-        "touch: cannot touch 'local.txt': Permission denied",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"),
-        cwd: "/home/u/ws/repo");
-    expect(violations, isEmpty);
+  test("a relative report path is joined against the cwd", () {
+    final verdict = sandboxViolations(
+        ["mkdir\tconfig.json"], "", "/home/yiannis/Projects/repo",
+        const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations,
+        ["writing /home/yiannis/Projects/repo/config.json"]);
+  });
+
+  test("a denial inside the grant is not a violation", () {
+    final verdict = sandboxViolations(
+        ["open\t/home/u/ws/local.txt"], "", "/home/u/ws/repo",
+        const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, isEmpty);
   });
 
   test("a denial inside an extra write root is not a violation", () {
-    final violations = violationsOf(
-        "sh: 1: /mnt/data/out.txt: Permission denied",
-        sandbox: const CommandSandbox(
-            workspace: "/home/u/ws", extraWrites: ["/mnt/data"]),
-        cwd: "/home/u/ws");
-    expect(violations, isEmpty);
-  });
-
-  test("Python's PermissionError wording is matched", () {
-    final violations = violationsOf(
-        "PermissionError: [Errno 13] Permission denied: '/etc/hosts'",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
-    expect(violations, ["writing /etc/hosts"]);
-  });
-
-  test("Python's relative path denial is joined against the cwd", () {
-    final violations = violationsOf(
-        "PermissionError: [Errno 13] Permission denied: 'config.json'",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"),
-        cwd: "/home/yiannis/Projects/repo");
-    expect(violations, ["writing /home/yiannis/Projects/repo/config.json"]);
+    final verdict = sandboxViolations(
+        ["open\t/mnt/data/out.txt"], "", "/home/u/ws",
+        const CommandSandbox(workspace: "/home/u/ws", extraWrites: ["/mnt/data"]));
+    expect(verdict.violations, isEmpty);
   });
 
   test("/dev/null is never a violation", () {
-    final violations = violationsOf("sh: /dev/null: Permission denied",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
-    expect(violations, isEmpty);
+    final verdict = sandboxViolations(
+        ["open\t/dev/null"], "", "/", const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, isEmpty);
   });
 
-  test("a read refusal worded neutrally reads denied, not writing", () {
-    final violations = violationsOf("cat: /etc/shadow: Permission denied",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
-    expect(violations, ["denied /etc/shadow"]);
+  test("the same denial twice is one entry", () {
+    final verdict = sandboxViolations(
+        ["mkdir\t/etc/a", "mkdir\t/etc/a"], "", "/",
+        const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, ["writing /etc/a"]);
   });
 
-  test("curly-quoted denials are matched", () {
-    // coreutils picks its quote marks by locale; mkdir on this machine
-    // prints the curly pair, and a denial they hide is a denial nothing
-    // reports.
-    final violations = violationsOf(
-        "mkdir: cannot create directory \u2018/mnt/entoli-test\u2019: "
-        "Permission denied",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
-    expect(violations, ["writing /mnt/entoli-test"]);
+  test("a write and a read of one path words writing", () {
+    final verdict = sandboxViolations(
+        ["open\t/etc/a", "mkdir\t/etc/a"], "", "/",
+        const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, ["writing /etc/a"]);
   });
 
-  test("mkdir's own wording is worded writing", () {
-    final violations = violationsOf(
-        "mkdir: cannot create directory '/home/u/other': Permission denied",
-        sandbox: const CommandSandbox(workspace: "/home/u/ws"));
-    expect(violations, ["writing /home/u/other"]);
+  test("denial prose with a report behind it is not unreported", () {
+    final verdict = sandboxViolations(
+        ["mkdir\t/etc/hosts"],
+        "mkdir: cannot create directory '/etc/hosts': Permission denied",
+        "/", const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, ["writing /etc/hosts"]);
+    expect(verdict.unreported, isFalse);
+  });
+
+  test("denial prose with a silent report is the unreported violation", () {
+    final verdict = sandboxViolations(
+        const [],
+        "some-static-binary: /etc/hosts: Permission denied",
+        "/", const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, hasLength(1));
+    expect(verdict.violations.single, contains("could not name"));
+    expect(verdict.unreported, isTrue,
+        reason: "the log reads this flag, not the wording");
+  });
+
+  test("no denial prose and a silent report is clean", () {
+    final verdict = sandboxViolations(
+        const [], "all went fine", "/",
+        const CommandSandbox(workspace: "/home/u/ws"));
+    expect(verdict.violations, isEmpty);
+    expect(verdict.unreported, isFalse);
   });
 });
 }
 
-List<String> violationsOf(
-    String text, {
-    required CommandSandbox sandbox,
-    String cwd = "/",
-  }) =>
-      sandboxViolations(text, cwd, sandbox);
-
-extension on dynamic {}

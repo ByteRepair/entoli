@@ -292,4 +292,10 @@ class _StubHelper implements SandboxHelper {
   @override
   Future<List<String>?> prefixFor(CommandSandbox sandbox) async =>
       ["/bin/entoli-landlock", "exec", "--workspace", sandbox.workspace, "--"];
+
+  @override
+  String? reportPathFor(CommandSandbox sandbox) => null;
+
+  @override
+  String? get reportShimPath => null;
 }

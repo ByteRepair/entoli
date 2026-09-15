@@ -6,6 +6,7 @@ import "package:flutter/foundation.dart";
 import "package:path/path.dart" as p;
 import "package:uuid/uuid.dart";
 
+import "../../core/log.dart";
 import "../../domain/file_tools.dart";
 import "../../domain/shell.dart";
 
@@ -894,6 +895,10 @@ class _OneShotRun implements ShellRun {
     result = _run();
   }
 
+  /// The file the confinement's denials were reported to, or null where the
+  /// helper offers no channel. Read after the run; deleted with it.
+  String? _reportPath;
+
   /// What to run, ending in a shell. `-c` and the script go on the end of it,
   /// so a guest's shell reached through proot and the machine's own are the
   /// same thing to everything below here.
@@ -969,23 +974,26 @@ class _OneShotRun implements ShellRun {
           returnCode: -1,
           output: output.toString(),
           exceptionInfo: "The command was interrupted and killed.",
-          violations: _violations(output.toString()),
+          violations: await _violations(output.toString()),
         );
       }
       if (timer.isActive) {
         return ShellResult(returnCode: code, output: output.toString(),
-            violations: _violations(output.toString()));
+            violations: await _violations(output.toString()));
       }
       return ShellResult(
         returnCode: -1,
         output: output.toString(),
         exceptionInfo: "The command timed out after ${timeout.inSeconds}s and was killed. "
             "Anything it printed before that is above.",
-        violations: _violations(output.toString()),
+        violations: await _violations(output.toString()),
       );
     } on ShellUnavailable catch (e) {
       // Fail-closed has its own words: a confinement that did not happen is
       // not a spawn error, and the reason is what the model rewrites around.
+      // The log line is how a machine that keeps failing here is found —
+      // this is the arm a user's report lands in with nothing beside it.
+      logFailure("sandbox", "a confined command was not run", e.message);
       return ShellResult.failed(e.message, output: output.toString());
     } catch (e) {
       return ShellResult.failed(
@@ -997,8 +1005,49 @@ class _OneShotRun implements ShellRun {
     }
   }
 
-  List<String> _violations(String text) =>
-      sandboxViolations(text, cwd, sandbox);
+  /// What the confinement denied, from the report the shim wrote — the
+  /// syscalls the kernel refused, not the prose a tool chose to print. The
+  /// output text is the cross-check: a denial word it holds that no report
+  /// line explains is a blind spot in the channel (a static binary making
+  /// raw syscalls), logged and worded generically rather than lost.
+  Future<List<String>> _violations(String text) async {
+    final reportPath = _reportPath;
+    final report = reportPath == null
+        ? const <String>[]
+        : await _readReport(reportPath);
+    final verdict =
+        sandboxViolations(report, text, cwd, sandbox);
+    // The mismatch is the scanner's own health signal: the report saw
+    // nothing while the output screamed, so the channel did not cover this
+    // process. One line, no path — a log is read by whoever it is sent to.
+    if (verdict.unreported &&
+        !verdict.violations.any((v) => v.startsWith("unreported"))) {
+      logFailure("sandbox",
+          "denial in command output the report did not name; "
+          "the process bypassed the report shim");
+    }
+    return verdict.violations;
+  }
+
+  static Future<List<String>> _readReport(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return const [];
+      final text = await file.readAsString();
+      try {
+        await file.delete();
+      } on Exception {
+        // A report left behind is a file in the sandboxed tmp; the next
+        // run overwrites it.
+      }
+      return text
+          .split("\n")
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+    } on Exception {
+      return const [];
+    }
+  }
 
   /// `exec 2>&1` redirects the shell's own error output and everything it goes
   /// on to spawn, which is what makes the transcript read in order.
@@ -1029,6 +1078,21 @@ class _OneShotRun implements ShellRun {
       if (tmp != null) {
         Directory(tmp).createSync(recursive: true);
         confined = {...environment, "TMPDIR": tmp};
+      }
+      // The report channel, beside the confinement: the shim writes one line
+      // per refused syscall there, and the result reads it back. Under the
+      // grant — the sandboxed tmp made above, else the workspace — or the
+      // shim could not report what it saw.
+      final reportPath = sandboxHelper?.reportPathFor(sandbox!);
+      final shimPath = sandboxHelper?.reportShimPath;
+      if (reportPath != null && shimPath != null) {
+        _reportPath = reportPath;
+        File(reportPath).writeAsStringSync("", flush: true);
+        confined = {
+          ...confined,
+          "ENTOLI_REPORT_PATH": reportPath,
+          "ENTOLI_REPORT_SO": shimPath,
+        };
       }
       // The helper's prefix, then the driver's whole shell argv: the shell is
       // confined from its first instruction and `-c` with the script goes on
@@ -1062,26 +1126,33 @@ class _OneShotRun implements ShellRun {
   }
 }
 
-/// What the confinement denied, read out of the command's own output: a
-/// write the kernel refused prints its EACCES, and the line names the path.
-/// Only lines naming a path outside what the sandbox granted are collected
-/// — a permission error on a workspace file is the command's own business,
-/// not the sandbox's — and the count is capped, so one bad loop cannot
-/// bury the tool result in copies of the same refusal.
-List<String> sandboxViolations(
-    String text,
-    String cwd,
-    CommandSandbox? sandbox,
+/// What the confinement denied, read off the report the shim wrote: one
+/// line per refused syscall, `op\tpath` — the operation the command was
+/// about, not the prose a failing tool chose to print. Only denials of
+/// paths outside the grant are collected — a permission error on a
+/// workspace file is the command's own business, not the sandbox's — and
+/// the count is capped, so one bad loop cannot bury the tool result.
+///
+/// [outputText] is the cross-check: a denial word in the command's own
+/// output that no report line explains means the process bypassed the shim
+/// (a static binary making raw syscalls), and that is a `denied (unreported)`
+/// violation rather than silence — the model sees that something was taken,
+/// and the log says the channel was blind.
+///
+/// A mutating op (`create`, `mkdir`, `unlink`, `rename`, `link`,
+/// `truncate`, `chmod`) words the violation `writing`, which is what arms
+/// the re-prompt; a read or an unrecognized op words it `denied`.
+({List<String> violations, bool unreported}) sandboxViolations(
+  List<String> reportLines,
+  String outputText,
+  String cwd,
+  CommandSandbox? sandbox,
 ) {
-  if (sandbox == null) return const [];
+  if (sandbox == null) return (violations: const [], unreported: false);
   final workspace = sandbox.workspace;
   final tmp = sandbox.tmp;
   final extras = sandbox.extraWrites;
-  // A read refusal carries no write words and reads neutrally, so a `cat`
-  // denied by the file's own Unix perms is not misreported as a write this
-  // sandbox did not take away. A relative path is joined against the
-  // command's cwd before the granted set is asked — a command working
-  // inside its own directory names its files the way it got there.
+
   String resolve(String raw) {
     final path = raw.trim();
     if (path.startsWith("/")) return p.normalize(path);
@@ -1089,32 +1160,49 @@ List<String> sandboxViolations(
     return p.normalize(p.join(base, path));
   }
 
+  const writeOps = {
+    "create", "mkdir", "unlink", "rename", "link", "truncate", "chmod",
+  };
   final found = <String, bool>{};
-  for (final match in deniedPathPattern.allMatches(text)) {
-    // One path per alternative, named rather than numbered: the three
-    // alternatives carry different groups and the numbered ones would shift
-    // with the next addition.
-    final raw =
-        match.namedGroup("path") ??
-            match.namedGroup("path2") ??
-            match.namedGroup("pypath");
-    final pyErr = match.namedGroup("pypath") != null;
-    if (raw == null || raw.isEmpty) continue;
+  var reported = 0;
+  for (final line in reportLines) {
+    final tab = line.indexOf("\t");
+    final op = tab < 0 ? "" : line.substring(0, tab).trim();
+    final raw = tab < 0 ? line : line.substring(tab + 1);
+    if (raw.trim().isEmpty) continue;
+    reported++;
     final path = resolve(raw);
     if (pathInside(path, workspace) ||
         tmp != null && pathInside(path, tmp) ||
         extras.any((dir) => pathInside(path, dir))) {
       continue;
     }
-    if (path == "/dev/null") continue;
-    final isWrite = pyErr ||
-        match.namedGroup("write") != null ||
-        match.namedGroup("forwriting") != null;
-    found[path] = (found[path] ?? false) || isWrite;
+    // /dev/null is where commands throw output away and /dev/tty is the
+    // shell's own terminal plumbing — denials there are not what the
+    // command was about.
+    if (path == "/dev/null" || path == "/dev/tty") continue;
+    found[path] = (found[path] ?? false) || writeOps.contains(op);
     if (found.length >= 5) break;
   }
-  return [
-    for (final entry in found.entries)
-      entry.value ? "writing ${entry.key}" : "denied ${entry.key}"
-  ];
+
+  // The prose cross-check. The denial words are few and stable — what the
+  // kernel's refusals read like in C — and only a report that named nothing
+  // while they appear is a channel problem, not a wording problem: a report
+  // line and a prose line of the same denial collapse into one entry.
+  final proseDenied = RegExp(r"Permission denied|Read-only file system|"
+      r"Operation not permitted");
+  final unreported =
+      proseDenied.hasMatch(outputText) && (reported == 0);
+
+  return (
+    violations: [
+      for (final entry in found.entries)
+        entry.value ? "writing ${entry.key}" : "denied ${entry.key}",
+      if (unreported)
+        "denied (the sandbox refused something it could not name; the "
+            "command's own output says so above)",
+    ],
+    unreported: unreported,
+  );
 }
+
