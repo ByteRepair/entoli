@@ -322,11 +322,12 @@ abstract class ToolApproval with _$ToolApproval {
     required String toolName,
     String? argumentsJson,
 
-    /// What the call actually does — the command for a `bash`, the URL for a
-    /// `webfetch`. The same field [ToolCall] carries and for the same reason:
-    /// the site that builds the call has it in hand, and a reader digging it
-    /// back out of the JSON is guessing at which key this tool used.
     String? argumentsText,
+
+    /// The directories a re-prompt banner is agreeing to — what the sandbox
+    /// refused while the command ran. Empty for an ordinary banner, where an
+    /// "always" answer derives a command rule instead.
+    @Default([]) List<String> deniedDirs,
   }) = _ToolApproval;
 
   factory ToolApproval.fromJson(Map<String, dynamic> json) => _$ToolApprovalFromJson(json);

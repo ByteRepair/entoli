@@ -382,9 +382,18 @@ class BuiltinAgent {
   /// turn is still running under.
   void grantRuntimeRule(PermissionRule rule) => _runtimeRules.insert(0, rule);
 
-  /// The directories a re-prompt banner is agreeing to, keyed by call id and
-  /// cleared when the answer derives the rule — the writes join it, so the
-  /// sandbox's grant widens with the allow instead of the pair fighting.
+  /// Directories a re-prompt banner agreed to, live for the rest of the
+  /// turn — [sandboxFor] composes them into every command's grant, so an
+  /// "Allow in Chat" on a denial covers the next command without a banner.
+  /// The durable copies are the repository's to persist.
+  final Set<String> _runtimeDirs = {};
+
+  /// Grants [dirs] for the rest of this turn.
+  void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
+
+  /// What a re-prompt banner is agreeing to, keyed by call id and read by
+  /// the answer's derivation — the denied directories, not the command's
+  /// prose. Cleared with the banner it belongs to.
   final Map<String, List<String>> _deniedWrites = {};
 
   /// The confinement a command runs under, from the shell's driver. Read per
@@ -400,7 +409,7 @@ class BuiltinAgent {
       workspace: workspace,
       tmp: tmp,
       home: shell.machineHome,
-      extraWrites: writableDirs,
+      extraWrites: [...writableDirs, ..._runtimeDirs],
     );
   }
 
@@ -1698,10 +1707,14 @@ class BuiltinAgent {
     // An "always" answer is the standing rule arriving: it applies to the
     // rest of this turn at once, ahead of the persisted copy the next turn
     // reads. The approval is in hand, so the derivation costs nothing here.
-    if (answer == ApprovalResponse.alwaysAllowChat ||
+    final deniedDirs = _deniedWrites.remove(approval.id);
+    if (deniedDirs != null && deniedDirs.isNotEmpty) {
+      // A re-prompt's "always" is the paths, not the prose: grant them for
+      // the turn; the repository persists them to the tier the answer named.
+      grantRuntimeDirs(deniedDirs);
+    } else if (answer == ApprovalResponse.alwaysAllowChat ||
         answer == ApprovalResponse.alwaysAllowProject) {
-      final rule = ruleFromApproval(approval,
-          deniedWrites: _deniedWrites.remove(approval.id) ?? const []);
+      final rule = ruleFromApproval(approval);
       if (rule != null) grantRuntimeRule(rule);
     }
     final allowed = answer == ApprovalResponse.allow ||
@@ -1847,23 +1860,37 @@ class BuiltinAgent {
     // answered — and a read denial rerun confined, there being nothing a
     // grant could widen: a read refusal is the file's own perms.
     final writeDenied = result.violations.any((v) => v.startsWith("writing "));
-    // The re-prompt's "always" answer carries the denied directories into
-    // the derived rule: the user is agreeing to the write, and a rule that
-    // allows the command but leaves the kernel refusing it would re-prompt
-    // forever. Cleared with the banner it belongs to.
-    _deniedWrites[call.id] = [
+    final deniedDirs = [
       for (final violation in result.violations)
         if (violation.startsWith("writing "))
           violation.substring("writing ".length),
     ];
-    Future<ShellResult> run() => _execute(call, command, unconfined: writeDenied);
-    yield* _askAndExecute(
-      call,
-      call.argumentsJson,
-      "bash",
-      run,
-      result.violations.join("; "),
+    // The re-prompt's approval carries what it is agreeing to: the denied
+    // directories. An "always" answer becomes a directory grant — runtime
+    // for the turn here, persisted by the repository — never a command-prose
+    // rule, which would match nothing next turn while claiming to.
+    final approval = ToolApproval(
+      id: call.id,
+      toolName: "bash",
+      argumentsJson: call.argumentsJson,
+      argumentsText: result.violations.join("; "),
+      deniedDirs: deniedDirs,
     );
+    yield ApprovalRequestEvent(approval);
+    final answer = await approve(approval);
+    if (answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject) {
+      grantRuntimeDirs(deniedDirs);
+    }
+    final allowed = answer == ApprovalResponse.allow ||
+        answer == ApprovalResponse.alwaysAllowChat ||
+        answer == ApprovalResponse.alwaysAllowProject;
+    _humanDecided = true;
+    _commandResult = allowed
+        ? await _execute(call, command, unconfined: writeDenied)
+        : const ShellResult.failed("The user denied this command. Ask them what "
+            "to do instead, or try something else.");
+    _humanDecided = false;
   }
 
   /// Reports [run]'s output as it prints, each change no more than

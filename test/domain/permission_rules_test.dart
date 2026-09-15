@@ -125,21 +125,19 @@ void main() {
       expect(ruleFromApproval(null), isNull);
     });
 
-    test("a re-prompt's denied writes join the derived rule", () {
-      final rule = ruleFromApproval(
-          ToolApproval(
-              id: "a",
-              toolName: "bash",
-              argumentsText: "python3 build.py"),
-          deniedWrites: const ["/home/yiannis/Projects/x"]);
-      expect(rule!.writes, ["/home/yiannis/Projects/x"]);
-      expect(rule.decision, PermissionDecision.allow);
-    });
-
     test("a plain banner derivation carries no writes", () {
       final rule = ruleFromApproval(ToolApproval(
           id: "a", toolName: "bash", argumentsText: "python3 build.py"));
       expect(rule!.writes, isEmpty);
+    });
+
+    test("a re-prompt approval carries its denied dirs", () {
+      final approval = ToolApproval(
+          id: "a",
+          toolName: "bash",
+          argumentsText: "writing /home/yiannis/Projects/x",
+          deniedDirs: const ["/home/yiannis/Projects/x"]);
+      expect(approval.deniedDirs, ["/home/yiannis/Projects/x"]);
     });
   });
 

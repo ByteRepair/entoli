@@ -345,10 +345,12 @@ class ChatRepository {
         ...projectSettings.permissions,
         ...settings.permissions,
       ],
-      // The project's writable roots, plus what the chat's and the project's
-      // rules themselves grant — a rule that allows writing somewhere carries
-      // the sandbox grant with it.
+      // The project's writable roots, the chat's own grants, and what the
+      // rules themselves grant — a re-prompt's always answers land in the
+      // two lists, and a rule that allows writing somewhere carries the
+      // sandbox grant with it.
       writableDirs: [
+        ...meta.writableDirs,
         ...projectSettings.writableDirs,
         for (final rule in [...meta.permissions, ...projectSettings.permissions])
           ...rule.writes,
@@ -549,14 +551,28 @@ class ChatRepository {
     ApprovalResponse r, {
     ToolApproval? approval,
   }) async {
+    final deniedDirs = approval?.deniedDirs ?? const [];
     if (r == ApprovalResponse.alwaysAllowChat ||
         r == ApprovalResponse.alwaysAllowProject) {
-      final rule = ruleFromApproval(approval);
-      if (rule != null) {
+      if (deniedDirs.isNotEmpty) {
+        // A re-prompt's "always" is the paths: they become the tier's
+        // writable directories, and every later confined command — this
+        // chat's or the project's — writes there without a banner. The
+        // command's own prose is not recorded: it varies every turn and
+        // would claim to allow what it cannot name.
         if (r == ApprovalResponse.alwaysAllowChat) {
-          await _saveChatRule(chatId, rule);
+          await _saveChatDirs(chatId, deniedDirs);
         } else {
-          await _saveProjectRule(await projectOf(chatId), rule);
+          await _saveProjectDirs(await projectOf(chatId), deniedDirs);
+        }
+      } else {
+        final rule = ruleFromApproval(approval);
+        if (rule != null) {
+          if (r == ApprovalResponse.alwaysAllowChat) {
+            await _saveChatRule(chatId, rule);
+          } else {
+            await _saveProjectRule(await projectOf(chatId), rule);
+          }
         }
       }
     }
@@ -595,6 +611,35 @@ class ChatRepository {
   static bool _sameStrings(List<String> a, List<String> b) =>
       a.length == b.length &&
       [for (final x in a) b.contains(x)].every((v) => v);
+
+  /// Writes [dirs] onto the chat's `meta.json`, deduped — two banners over
+  /// the same denial name the same directory.
+  Future<void> _saveChatDirs(String chatId, List<String> dirs) async {
+    // ignore: avoid_print
+    print("DBG _saveChatDirs $dirs");
+    final meta = await _store.loadMeta(chatId);
+    // ignore: avoid_print
+    print("DBG meta.writableDirs=${meta.writableDirs}");
+    final fresh = [for (final d in dirs) if (!meta.writableDirs.contains(d)) d];
+    if (fresh.isEmpty) return;
+    final next = meta..writableDirs = [...meta.writableDirs, ...fresh];
+    // ignore: avoid_print
+    print("DBG encode: ${next.encode()}");
+    await _store.saveMeta(chatId, next);
+    _changes.add(MetaChanged(chatId, meta));
+  }
+
+  /// Writes [dirs] onto the project's `project.json`, deduped; null is the
+  /// default project's file.
+  Future<void> _saveProjectDirs(String? project, List<String> dirs) async {
+    final settings = ProjectSettings.load(_config, project: project);
+    final fresh = [
+      for (final d in dirs) if (!settings.writableDirs.contains(d)) d,
+    ];
+    if (fresh.isEmpty) return;
+    settings.writableDirs = [...settings.writableDirs, ...fresh];
+    await settings.save(_config, project: project);
+  }
 
   Future<void> respondQuestions(String chatId, String requestId, List<String?> answers) =>
       _backend.respondQuestions(chatId, requestId, answers);

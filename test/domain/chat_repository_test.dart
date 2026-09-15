@@ -633,6 +633,67 @@ void main() {
       expect(meta.permissions, hasLength(1));
     });
 
+    test("a re-prompt's Always in Chat grants the dirs, not a command rule",
+        () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "d-1",
+        ApprovalResponse.alwaysAllowChat,
+        approval: ToolApproval(
+            id: "d-1",
+            toolName: "bash",
+            argumentsText: "writing /home/yiannis/Projects/x",
+            deniedDirs: const ["/home/yiannis/Projects/x"]),
+      );
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, ["/home/yiannis/Projects/x"]);
+      // No command rule: the prose varies every turn and would claim to
+      // allow what it cannot name.
+      expect(meta.permissions, isEmpty);
+      expect(backend.approvals.single.response, ApprovalResponse.alwaysAllowChat);
+    });
+
+    test("a re-prompt's Always in Project grants the project's dirs", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      await repo.respondApproval(
+        chat.state.id,
+        "d-2",
+        ApprovalResponse.alwaysAllowProject,
+        approval: ToolApproval(
+            id: "d-2",
+            toolName: "bash",
+            argumentsText: "writing /home/yiannis/Projects/y",
+            deniedDirs: const ["/home/yiannis/Projects/y"]),
+      );
+      final settings = ProjectSettings.load(
+          config,
+          project: chat.state.project);
+      expect(settings.writableDirs, ["/home/yiannis/Projects/y"]);
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, isEmpty);
+    });
+
+    test("the same dir twice is not stacked", () async {
+      final repo = repoWith(AppSettings());
+      final chat = await savedChat(repo);
+      Future<void> answer(String id) => repo.respondApproval(
+            chat.state.id,
+            id,
+            ApprovalResponse.alwaysAllowChat,
+            approval: ToolApproval(
+                id: id,
+                toolName: "bash",
+                deniedDirs: const ["/home/yiannis/Projects/x"]),
+          );
+      await answer("d-3");
+      await answer("d-4");
+      final meta = await repo.loadMeta(chat.state.id);
+      expect(meta.writableDirs, hasLength(1));
+    });
+
     test("a plain allow writes nothing anywhere", () async {
       final repo = repoWith(AppSettings());
       final chat = await savedChat(repo);

@@ -263,14 +263,12 @@ bool _hostMatch(String pattern, String host) {
 /// tool's path becomes its directory's scope, a fetch URL becomes the host.
 /// Null where the call carries nothing matchable.
 ///
-/// [deniedWrites] is what the sandbox refused while the banner was up, the
-/// re-prompt's own wordings (`writing <path>`): an "always" answer to one of
-/// those banners is agreeing to the *write*, so the paths join the rule and
-/// the sandbox's grant widens with it. Without them the rule allows the
-/// command and leaves the kernel refusing it — an allow that re-prompts
-/// forever. Empty everywhere else.
-PermissionRule? ruleFromApproval(ToolApproval? approval,
-    {List<String> deniedWrites = const []}) {
+/// A re-prompt banner's answer is not this function's — what the user agreed
+/// to there is the *paths*, and the prose a model wrapped them in varies
+/// every turn: those answers become directory grants (chat `writableDirs` /
+/// project `writableDirs`), not command rules. A command-prose rule derived
+/// from that banner would match nothing next turn while claiming to.
+PermissionRule? ruleFromApproval(ToolApproval? approval) {
   if (approval == null) return null;
   switch (approval.toolName) {
     case "bash":
@@ -280,7 +278,6 @@ PermissionRule? ruleFromApproval(ToolApproval? approval,
         tool: "bash",
         pattern: _commandPrefix(command.trim()),
         decision: PermissionDecision.allow,
-        writes: [for (final w in deniedWrites) w],
       );
     case "read" || "write" || "edit":
       final path = approval.argumentsText ?? "";
