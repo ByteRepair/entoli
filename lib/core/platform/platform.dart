@@ -381,6 +381,10 @@ Future<String?> captureLoginPath() => platformCaptureLoginPath();
 /// `platformChmodReadOnly`.
 Future<void> chmodReadOnly(List<String> paths) => platformChmodReadOnly(paths);
 
+/// Releases [platformChmodReadOnly]'s lock so the app's own writes can run —
+/// the install of the bundled skills is one. Re-lock afterwards.
+Future<void> chmodWritable(List<String> paths) => platformChmodWritable(paths);
+
 /// Toggles a directory writable for [action], then restores it read-only. The
 /// install and delete paths use this — they are the app's writes, not the
 /// model's.
