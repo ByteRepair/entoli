@@ -1869,8 +1869,15 @@ class BuiltinAgent {
     // directories. An "always" answer becomes a directory grant — runtime
     // for the turn here, persisted by the repository — never a command-prose
     // rule, which would match nothing next turn while claiming to.
+    //
+    // Its id is the call's own plus a suffix, deliberately not the call id:
+    // the ask banner and this banner are two questions about one call, and
+    // the approval plumbing keys by id — one completer, one view-state entry,
+    // one removal. Sharing the id made the second banner inherit the first's
+    // answer and vanish the moment the first was answered, which read as the
+    // whole chain executing on a prompt that was never given.
     final approval = ToolApproval(
-      id: call.id,
+      id: "${call.id}-reprompt",
       toolName: "bash",
       argumentsJson: call.argumentsJson,
       argumentsText: result.violations.join("; "),

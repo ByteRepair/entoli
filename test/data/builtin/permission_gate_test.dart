@@ -231,6 +231,10 @@ void main() {
       final approvals = events.whereType<ApprovalRequestEvent>().toList();
       expect(approvals, hasLength(2));
       expect(approvals.last.approval.argumentsText, contains("/etc/hosts"));
+      // Distinct ids: the plumbing keys approvals by id, and two banners
+      // over one call sharing an id made the second inherit the first's
+      // answer and vanish before it was answered.
+      expect(approvals.first.approval.id, isNot(approvals.last.approval.id));
     });
 
     test("the re-prompt is gated by the setting", () async {
