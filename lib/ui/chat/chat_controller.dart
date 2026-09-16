@@ -1246,12 +1246,11 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   }) async {
     final repo = ref.read(chatRepositoryProvider);
     await repo.respondApproval(chatId, approvalId, r, approval: approval);
-    state = state.copyWith(
-        approvals: _withoutApproval(state.approvals, approvalId));
     // The banner is part of the turn's record: its "asked" part is
     // superseded with the answer, so a reload draws what was asked and what
     // was answered, not a question nobody ever answered. The turn it belongs
-    // to is the one whose view state held it.
+    // to is read before the approval leaves the view state — after, the
+    // lookup would find nothing, and the record would read asked forever.
     final replyId = state.approvals.entries
         .where((e) => e.value.any((a) => a.id == approvalId))
         .map((e) => e.key)
@@ -1259,6 +1258,8 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     if (replyId != null) {
       _turns[replyId]?.recorder.recordApprovalAnswer(approvalId, r.name);
     }
+    state = state.copyWith(
+        approvals: _withoutApproval(state.approvals, approvalId));
     // A project-tier answer (always in project) wrote `project.json` behind
     // the settings page's back: the provider loaded once at startup and its
     // state is stale until told. Same for the chat's `meta.json`, whose
