@@ -959,6 +959,15 @@ class _OneShotRun implements ShellRun {
         output.write(chunk);
         _publish(chunk);
       });
+      // The confinement's own stderr, before any shell runs to merge its own:
+      // a ruleset that failed to come up prints why, and that reason is the
+      // model's only lead. Lost, it was an rc=91 with nothing beside it.
+      process.stderr
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen((chunk) {
+        output.write(chunk);
+        _publish(chunk);
+      });
       // Asked for here rather than below: `asFuture` replaces the done handler,
       // so one asked for after the pipe has closed never completes at all.
       final drained = reading.asFuture<void>();

@@ -202,10 +202,22 @@ PermissionDecision? rulesDecide(
 }) {
   // The subject is the call's, not the rule's: read once, above the loop.
   if (toolName == "bash" && segments != null && segments.isNotEmpty) {
+    // Per segment, but deny anywhere refuses the whole: an uncovered segment
+    // escalates, an allow needs every segment covered, and a deny the user
+    // named on one segment is a no for the command — letting it ask would
+    // offer the user a banner to re-litigate a no they already wrote.
     PermissionDecision? verdict;
     for (final segment in segments) {
       final segmentVerdict = _strongest(rules, "bash", segment);
-      if (segmentVerdict == null) return null;
+      if (segmentVerdict == PermissionDecision.deny) {
+        return PermissionDecision.deny;
+      }
+      if (segmentVerdict == null) {
+        // An uncovered segment is the floor: an allow that does not reach
+        // every segment is an ask, whatever the covered ones earned.
+        verdict = PermissionDecision.ask;
+        continue;
+      }
       verdict = _stronger(verdict, segmentVerdict);
     }
     return verdict;

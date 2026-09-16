@@ -54,6 +54,29 @@ void main() {
       expect(rulesDecide([], "bash", command: "anything"), null);
     });
 
+    test("a deny on one segment refuses a compound with uncovered others",
+        () {
+      // deny anywhere is a no for the whole: letting the rest ask would
+      // offer the user a banner to re-litigate a no they already wrote.
+      final verdict = rulesDecide(
+        [
+          PermissionRule(
+              tool: "bash",
+              pattern: "rm *",
+              decision: PermissionDecision.deny),
+        ],
+        "bash",
+        command: "ls -ld /tmp/probe; rm -rf /tmp/probe 2>/dev/null || true; ls -ld /tmp/probe",
+        segments: [
+          "ls -ld /tmp/probe",
+          "rm -rf /tmp/probe 2>/dev/null",
+          "true",
+          "ls -ld /tmp/probe",
+        ],
+      );
+      expect(verdict, PermissionDecision.deny);
+    });
+
     test("a rule for another tool is skipped", () {
       expect(rulesDecide([allowWriteTmp], "bash", command: "cat /tmp/x"),
           null);

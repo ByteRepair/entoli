@@ -139,6 +139,7 @@ const helperSource = r"""
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -266,10 +267,18 @@ int main(int argc, char **argv) {
     return 91;
   }
   /* The extra writable roots — the directories a permission rule or the
-   * project's settings name as part of the work. Granted the full write set,
-   * the workspace's own. */
+   * project's settings name as part of the work. A denial report can name a
+   * FILE (the exact path the write touched), and the kernel refuses to grant
+   * directory rights on a non-directory fd — every such add_rule fails and
+   * the ruleset never comes up. A file gets the file rights alone. */
   for (int e = 0; e < extras; e++) {
-    if (add_rule(ruleset_fd, extra[e], write_rights) != 0) {
+    __u64 rights = write_rights;
+    struct stat st;
+    if (stat(extra[e], &st) == 0 && !S_ISDIR(st.st_mode)) {
+      rights = LANDLOCK_ACCESS_FS_WRITE_FILE;
+      if (abi >= 3) rights |= LANDLOCK_ACCESS_FS_TRUNCATE;
+    }
+    if (add_rule(ruleset_fd, extra[e], rights) != 0) {
       fprintf(stderr, "entoli-landlock: rule %s: %s\n", extra[e], strerror(errno));
       return 91;
     }
