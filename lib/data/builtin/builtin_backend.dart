@@ -355,6 +355,8 @@ class BuiltinBackend implements AgentBackend {
         memoryChat: settings.memory.agentTool ? chatId : null,
         caps: caps,
         sharedWorkspace: settings.sharedWorkspace,
+        permissions: settings.permissions,
+        writableDirs: settings.writableDirs,
         sandboxReprompt: settings.sandboxReprompt ?? true,
         project: project,
         saveArtifact: (path, entryFile, {artifactId}) async {
