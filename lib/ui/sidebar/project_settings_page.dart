@@ -629,17 +629,17 @@ class _SandboxRepromptRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final override = ref.watch(
         projectSettingsProvider(project).select((s) => s.sandboxReprompt));
-    final appDefault = ref.watch(
-        appSettingsProvider.select((s) => s.sandboxReprompt));
+    final inherited = ref.watch(
+        projectSettingsProvider(null).select((s) => s.sandboxReprompt ?? true));
     return SwitchListTile(
       title: const Text("Offer to rerun sandbox-denied commands"),
       subtitle: Text(override == null
-          ? "Default (${appDefault ? "on" : "off"}). A switch here overrides "
-              "the app default for this project's chats."
+          ? "Default (${inherited ? "on" : "off"}). A switch here overrides "
+              "the app's default for this project's chats."
           : override
               ? "On for this project's chats."
               : "Off for this project's chats."),
-      value: override ?? appDefault,
+      value: override ?? inherited,
       onChanged: (value) => ref
           .read(projectSettingsProvider(project).notifier)
           .setProjectSandboxReprompt(value),

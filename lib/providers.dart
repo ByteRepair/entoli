@@ -454,14 +454,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   Future<void> setApproveMode(ApproveMode value) =>
       _update((s) => s.approveMode = value);
 
-  /// The app's standing permission rules, saved whole.
-  Future<void> setPermissions(List<PermissionRule> value) =>
-      _update((s) => s.permissions = value);
-
-  /// Whether a sandbox-denied write is offered back as an approval.
-  Future<void> setSandboxReprompt(bool value) =>
-      _update((s) => s.sandboxReprompt = value);
-
   /// How many times a retryable turn failure is carried on automatically.
   Future<void> setTurnRetries(int value) => _update((s) => s.turnRetries = value);
 

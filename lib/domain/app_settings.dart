@@ -33,8 +33,6 @@ class AppSettings {
     this.memoryProviderId,
     this.environment = const {},
     this.approveMode = ApproveMode.ask,
-    this.permissions = const [],
-    this.sandboxReprompt = true,
     this.llmProviders = const [],
     this.profile,
     this.appIcon = AppIcon.cookie,
@@ -134,16 +132,6 @@ class AppSettings {
 
   /// How the agent handles a command before it runs. A chat can override it.
   ApproveMode approveMode;
-
-  /// The user's standing permission rules, app tier. Consulted before the
-  /// classifier and the banner in every mode; the project's and the chat's
-  /// ride in front of these.
-  List<PermissionRule> permissions;
-
-  /// Whether a command the sandbox denied writes to is offered back as an
-  /// approval — rerun unconfined, or widened to include the denied
-  /// directory. False reports the denial and moves on.
-  bool sandboxReprompt;
 
   /// The endpoints the agent can call. Empty until the user adds one, which is
   /// why the first thing settings offers is a list of presets.
@@ -375,8 +363,6 @@ class AppSettings {
         // once no unwritten files are left.
         environment: _stringMap(json["environment"] ?? json["opencodeEnv"]),
         approveMode: _approveMode(json),
-        permissions: permissionRulesFromJson(json["permissions"] as List<dynamic>?),
-        sandboxReprompt: json["sandboxReprompt"] as bool? ?? true,
         llmProviders: _providers(json["llmProviders"]),
         profile: Profile.fromJson(json["profile"]),
         appIcon: AppIcon.fromName(json["appIcon"] as String?),
@@ -472,8 +458,6 @@ class AppSettings {
         memoryProviderId: memoryProviderId,
         environment: environment,
         approveMode: approveMode,
-        permissions: permissions,
-        sandboxReprompt: sandboxReprompt,
         llmProviders: llmProviders,
         profile: profile,
         appIcon: appIcon,
@@ -532,9 +516,6 @@ class AppSettings {
       if (memoryProviderId != null) "memoryProviderId": memoryProviderId,
       if (environment.isNotEmpty) "environment": environment,
       "approveMode": approveMode.name,
-      if (permissions.isNotEmpty)
-        "permissions": permissionRulesToJson(permissions),
-      if (!sandboxReprompt) "sandboxReprompt": sandboxReprompt,
       if (llmProviders.isNotEmpty)
         "llmProviders": [for (final provider in llmProviders) provider.toJson()],
       if (profile != null && !profile!.isEmpty) "profile": profile!.toJson(),

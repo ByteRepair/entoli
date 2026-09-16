@@ -321,6 +321,10 @@ class ChatRepository {
     // mechanism drops it from the tool list and the prompt together.
     final omada = projectSettings.omada;
     if (omada) disabled.add(AgentCapability.task);
+    // The default project's rules and writable roots are the app tier: they
+    // apply to every project before its own, invisibly.
+    final defaultProjectSettings =
+        project == null ? projectSettings : await projectSettingsOf(null);
     return TurnSettings(
       model: meta.model ?? settings.defaultModelId,
       provider: meta.model != null ? meta.provider : settings.defaultProviderId,
@@ -338,12 +342,13 @@ class ChatRepository {
       includesUserInstructions: builtIn?.includesUserInstructions ?? false,
       // The project's own command variables, beside the app-level ones.
       environment: projectSettings.environment ?? const {},
-      // Chat rules first, then project, then app: a later rule wins only by
-      // strength (deny over ask over allow), and the tiers break the tie.
+      // Chat rules first, then the project's, then the default project's:
+      // a later rule wins only by strength (deny over ask over allow), and
+      // the tiers break the tie.
       permissions: [
         ...meta.permissions,
         ...projectSettings.permissions,
-        ...settings.permissions,
+        ...defaultProjectSettings.permissions,
       ],
       // The project's writable roots, the chat's own grants, and what the
       // rules themselves grant — a re-prompt's always answers land in the
@@ -352,10 +357,16 @@ class ChatRepository {
       writableDirs: [
         ...meta.writableDirs,
         ...projectSettings.writableDirs,
-        for (final rule in [...meta.permissions, ...projectSettings.permissions])
+        ...defaultProjectSettings.writableDirs,
+        for (final rule in [
+          ...meta.permissions,
+          ...projectSettings.permissions,
+          ...defaultProjectSettings.permissions,
+        ])
           ...rule.writes,
       ],
-      sandboxReprompt: projectSettings.sandboxReprompt,
+      sandboxReprompt:
+          projectSettings.sandboxReprompt ?? defaultProjectSettings.sandboxReprompt,
       turnMaxSteps:
           projectSettings.turnMaxSteps ?? settings.turnMaxSteps,
 
@@ -615,12 +626,7 @@ class ChatRepository {
   /// Writes [dirs] onto the chat's `meta.json`, deduped — two banners over
   /// the same denial name the same directory.
   Future<void> _saveChatDirs(String chatId, List<String> dirs) async {
-    // ignore: avoid_print
-    print("DBG _saveChatDirs $dirs");
-    final meta = await _store.loadMeta(chatId);
-    // ignore: avoid_print
-    print("DBG meta.writableDirs=${meta.writableDirs}");
-    final fresh = [for (final d in dirs) if (!meta.writableDirs.contains(d)) d];
+    final meta = await _store.loadMeta(chatId);    final fresh = [for (final d in dirs) if (!meta.writableDirs.contains(d)) d];
     if (fresh.isEmpty) return;
     final next = meta..writableDirs = [...meta.writableDirs, ...fresh];
     // ignore: avoid_print
