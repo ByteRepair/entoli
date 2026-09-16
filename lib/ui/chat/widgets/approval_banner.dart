@@ -100,11 +100,15 @@ class ApprovalBanner extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          // A Wrap, not a Row: four actions on a narrow window overflow a Row
+          // past the edge, and the buttons past it are drawn but untappable —
+          // how the two always answers went missing in the tests. Wrapped,
+          // the overflow rows sit beside the conversation.
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
             children: [
               TextButton(onPressed: onDeny, child: const Text("Deny")),
-              const SizedBox(width: 4),
               if (onAlwaysAllowChat != null)
                 TextButton(
                     onPressed: onAlwaysAllowChat,
@@ -113,7 +117,6 @@ class ApprovalBanner extends StatelessWidget {
                 TextButton(
                     onPressed: onAlwaysAllowProject,
                     child: const Text("Always in project")),
-              const SizedBox(width: 4),
               FilledButton(onPressed: onAllow, child: const Text("Allow")),
             ],
           ),

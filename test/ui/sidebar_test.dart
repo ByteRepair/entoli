@@ -859,4 +859,42 @@ void main() {
           findsNothing);
     });
   });
+  group("a project's permission pages", () {
+    Future<void> open(WidgetTester tester, String project) async {
+      await app.pump(tester, ProjectSettingsPage(project: project));
+      await tester.scrollUntilVisible(
+        find.text("Permissions"),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await settleIo(tester);
+      await tester.tap(find.text("Permissions"));
+      await settleIo(tester);
+    }
+
+    testWidgets("the inherited label names the app-level tier", (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await open(tester, "research");
+
+      expect(
+          find.textContaining("The app's own permissions"), findsOneWidget);
+    });
+
+    testWidgets("the writable directories section saves what is added",
+        (tester) async {
+      await io(tester, () => app.repo.createProject("research"));
+      await open(tester, "research");
+
+      expect(find.text("Writable directories"), findsOneWidget);
+      await tester.tap(find.text("Add directory"));
+      await settleIo(tester);
+      await tester.enterText(find.byType(TextField).last, "/mnt/data");
+      await tester.tap(find.text("Save"));
+      await settleIo(tester, least: 10);
+
+      final settings = ProjectSettings.load(app.config, project: "research");
+      expect(settings.writableDirs, ["/mnt/data"]);
+    });
+  });
+
 }

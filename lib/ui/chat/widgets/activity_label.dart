@@ -321,7 +321,9 @@ class ApprovalLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final denied = part.answer == "denied" || part.answer == "asked";
+    // Raw answers, not the mapped wording: "deny" is what the enum records.
+    final denied =
+        part.answer == "deny" || part.answer == "asked";
     final answer = switch (part.answer) {
       "asked" => "asked (never answered)",
       "allow" => "allowed",
