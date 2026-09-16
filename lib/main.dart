@@ -91,8 +91,8 @@ class AppSession {
     final secretsLoaded = secrets.load();
     // Before the library is built: the bundled skills are written from
     // embedded code to a real directory for bash access, and self-healed.
-    // The writes land between an acquire and the release below: the previous
-    // launch left these directories read-only.
+    // The writes land inside the install, between its acquire and its
+    // release: the previous launch left these directories read-only.
     final projects = everyProject(await config.projectNames());
     await installBundledSkills(
       config,
