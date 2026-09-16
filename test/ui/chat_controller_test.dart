@@ -14,7 +14,7 @@ import "package:agent_chat/domain/chat_log.dart";
 import "package:agent_chat/domain/temp_chat_ttl.dart";
 import "package:agent_chat/domain/permission.dart";
 import "package:agent_chat/domain/project_settings.dart"
-    show OmadaOrdering;
+    show OmadaOrdering, ProjectSettings;
 import "package:agent_chat/providers.dart"
     show projectSettingsProvider, promptLibraryProvider;
 import "package:agent_chat/ui/chat/chat_controller.dart";
