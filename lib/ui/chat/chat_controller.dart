@@ -774,6 +774,15 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
   Future<void> _driveTurnToEnd(_RunningTurn turn) async {
     turn.sub?.cancel();
     turn.sub = null;
+    // A banner the turn left outstanding was answered deny on its way out —
+    // the backend completes it as one — and the record says so, rather than
+    // leaving a question nobody ever answered in the log. An interrupted turn
+    // records nothing: the turn itself is the open question.
+    if (!turn.interrupted) {
+      for (final approval in state.approvals[turn.replyId] ?? const []) {
+        turn.recorder.recordApprovalAnswer(approval.id, "deny");
+      }
+    }
     // Null is a turn that was interrupted rather than ended — the log has no
     // closing record, and `?? true` below is the same thing its reader makes
     // of one. See "Carrying on an interrupted turn".
@@ -1239,6 +1248,23 @@ class ChatController extends Notifier<ChatViewState> implements TurnDriver {
     await repo.respondApproval(chatId, approvalId, r, approval: approval);
     state = state.copyWith(
         approvals: _withoutApproval(state.approvals, approvalId));
+    // The banner is part of the turn's record: its "asked" part is
+    // superseded with the answer, so a reload draws what was asked and what
+    // was answered, not a question nobody ever answered. The turn it belongs
+    // to is the one whose view state held it.
+    final replyId = state.approvals.entries
+        .where((e) => e.value.any((a) => a.id == approvalId))
+        .map((e) => e.key)
+        .firstOrNull;
+    if (replyId != null) {
+      _turns[replyId]?.recorder.recordApprovalAnswer(approvalId, r.name);
+    }
+    // A project-tier answer (always in project) wrote `project.json` behind
+    // the settings page's back: the provider loaded once at startup and its
+    // state is stale until told. Same for the chat's `meta.json`, whose
+    // change the repository already streams.
+    ref.invalidate(projectSettingsProvider(null));
+    ref.invalidate(projectSettingsProvider(state.chat?.state.project));
   }
 
   /// Answer a request the panel was showing. One entry per question it held,

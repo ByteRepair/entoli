@@ -137,7 +137,15 @@ class TurnRecorder {
       // Turn-scoped view state, or the turn's own end. Listed rather than
       // defaulted so that a new kind of event has to be decided about here as
       // well as wherever it is drawn.
-      case ApprovalRequestEvent():
+      case ApprovalRequestEvent(:final approval):
+        // The banner is part of the turn's record now: what was asked and —
+        // superseded in place when the answer lands — what was answered.
+        addPart(MessagePart.approval(
+            approvalId: approval.id,
+            toolName: approval.toolName,
+            argumentsText: approval.argumentsText,
+            deniedDirs: approval.deniedDirs,
+            answer: "asked"));
       case QuestionRequestEvent():
       case SubAgentStartEvent():
       case SubAgentEndEvent():
@@ -192,6 +200,25 @@ class TurnRecorder {
   void dispose() {
     _flush?.cancel();
     _checkpoint?.cancel();
+  }
+
+  /// The answer a banner was given, superseding its "asked" part in place —
+  /// the same index written again, last wins, the same bargain parts make.
+  /// Called by the controller when the user answers; the banner's part keeps
+  /// its place in the arrival order. No-op where the turn was never opened or
+  /// the approval is not in this turn's parts (an answer racing the turn out).
+  void recordApprovalAnswer(String approvalId, String answer) {
+    if (_messageId == null) return;
+    flushDeltas();
+    final parts = List<MessagePart>.from(_parts);
+    final at = parts.indexWhere(
+        (p) => p is ApprovalPart && p.approvalId == approvalId && p.answer == "asked");
+    if (at < 0) return;
+    final asked = parts[at] as ApprovalPart;
+    parts[at] =
+        asked.copyWith(answer: answer);
+    _publish(parts);
+    checkpoint();
   }
 
   /// Every discrete part goes through here, and so do its record and the
@@ -326,6 +353,7 @@ class TurnRecorder {
         FilePart() ||
         ArtifactPart() ||
         SkillInstallPart() ||
+        ApprovalPart() ||
         ErrorPart() =>
           part,
       };

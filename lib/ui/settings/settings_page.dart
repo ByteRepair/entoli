@@ -690,9 +690,11 @@ class _AgentSection extends ConsumerWidget {
         Divider(),
         PermissionsSection(
           rules: settings.permissions,
-          description: "Standing rules, consulted before the classifier and "
-              "the banner. A deny outranks an ask, which outranks an allow; a "
-              "command with segments a rule does not cover still waits.",
+          description: "The default project's standing rules — every other "
+              "project inherits these, before its own. Consulted before the "
+              "classifier and the banner; a deny outranks an ask, which "
+              "outranks an allow; a command with segments a rule does not "
+              "cover still waits.",
           onSaved: (rules) =>
               ref.read(appSettingsProvider.notifier).setPermissions(rules),
         ),

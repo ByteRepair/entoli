@@ -262,6 +262,22 @@ sealed class MessagePart with _$MessagePart {
     required String title,
   }) = SkillInstallPart;
 
+  /// A permission the turn asked for and the answer it got. Not a
+  /// [ToolCallPart]: nothing ran because a model chose it, and a model
+  /// reading the conversation back would find itself having asked for what
+  /// its own gate asked. What the user is shown of a past turn's gating is
+  /// the banner and its answer — this is that, recorded. The toolName and
+  /// [ToolApproval.argumentsText] word the banner; [answer] is the response
+  /// as pressed. The turn-scoped view state carries the live banner; this
+  /// part is what a reload draws instead.
+  const factory MessagePart.approval({
+    required String approvalId,
+    required String toolName,
+    String? argumentsText,
+    @Default([]) List<String> deniedDirs,
+    required String answer,
+  }) = ApprovalPart;
+
   factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
 }
 

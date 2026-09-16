@@ -309,6 +309,54 @@ class _AskLabelState extends State<AskLabel> {
   }
 }
 
+/// A permission banner the turn raised, once it is history: what was asked
+/// (the call, worded as the banner worded it) and what was answered. The
+/// panel that asked is gone by then; this reads the recorded part. A
+/// superseded answer reads in place — "asked" without an answer is a turn
+/// that ended with the banner up, which the deny-on-end recorded instead.
+class ApprovalLabel extends StatelessWidget {
+  const ApprovalLabel({super.key, required this.part});
+
+  final ApprovalPart part;
+
+  @override
+  Widget build(BuildContext context) {
+    final denied = part.answer == "denied" || part.answer == "asked";
+    final answer = switch (part.answer) {
+      "asked" => "asked (never answered)",
+      "allow" => "allowed",
+      "alwaysAllowChat" => "allowed, always in this chat",
+      "alwaysAllowProject" => "allowed, always in this project",
+      "deny" => "denied",
+      _ => part.answer,
+    };
+    return _Label(
+      icon: denied ? Icons.gpp_maybe_outlined : Icons.gpp_good_outlined,
+      text: "Permission: ${part.toolName} — $answer",
+      isError: denied,
+      onTap: () => showActivitySheet(
+        context,
+        title: "Permission",
+        mono: true,
+        sections: [
+          (
+            label: part.toolName,
+            body: part.argumentsText,
+            isError: false,
+          ),
+          if (part.deniedDirs.isNotEmpty)
+            (
+              label: "Sandbox dirs granted",
+              body: part.deniedDirs.join("\n"),
+              isError: false,
+            ),
+          (label: "Answer", body: answer, isError: false),
+        ],
+      ),
+    );
+  }
+}
+
 /// A `task` call, once it is history: the sub-agent that ran and the text it
 /// returned. Reads the agent name and prompt out of the call's arguments.
 class TaskLabel extends StatelessWidget {

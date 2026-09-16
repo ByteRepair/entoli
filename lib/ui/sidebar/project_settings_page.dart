@@ -577,14 +577,25 @@ class _ProjectPermissionsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(projectSettingsProvider(project));
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text("Permissions")),
       body: ListView(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(
+            "The app's own permissions (Settings > General > Agent) apply "
+            "before these, in every project, without being listed here.",
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+        const SizedBox(height: 4),
         PermissionsSection(
           rules: settings.permissions,
-          description: "Standing rules for this project's chats, in front of "
-              "the app's. Writes outside the workspaces that a rule grants "
-              "are also where the sandbox's write grant widens.",
+          description: "Standing rules for this project's chats. Writes "
+              "outside the workspaces that a rule grants are also where the "
+              "sandbox's write grant widens.",
           onSaved: (rules) => ref
               .read(projectSettingsProvider(project).notifier)
               .setProjectPermissions(rules),
