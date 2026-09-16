@@ -512,6 +512,18 @@ Future<void> platformChmodReadOnly(List<String> paths) async {
   }));
 }
 
+/// Makes each path in [paths] writable again (chmod -R u+w) — the other half
+/// of [platformChmodReadOnly]. No-op on Windows and macOS, where the lock does
+/// not exist to release.
+Future<void> platformChmodWritable(List<String> paths) async {
+  if (!Platform.isLinux && !Platform.isAndroid) return;
+  await Future.wait(paths.map((path) async {
+    try {
+      await Process.run("chmod", ["-R", "u+w", path]);
+    } catch (_) {}
+  }));
+}
+
 /// Toggles [path] writable for [action], then restores it to read-only. The
 /// install and delete paths use this: they are the app's own writes, not the
 /// model's, and they need the directory writable for the duration.

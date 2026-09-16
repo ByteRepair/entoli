@@ -91,17 +91,22 @@ class AppSession {
     final secretsLoaded = secrets.load();
     // Before the library is built: the bundled skills are written from
     // embedded code to a real directory for bash access, and self-healed.
-    await installBundledSkills(config);
+    // The writes land between an acquire and the release below: the previous
+    // launch left these directories read-only.
     final projects = everyProject(await config.projectNames());
+    await installBundledSkills(
+      config,
+      acquireWrite: platform.chmodWritable,
+      releaseWrite: platform.chmodReadOnly,
+    );
     // Read-only so a model running bash cannot unintentionally write to a
-    // skill directory. The install/delete paths toggle this where they need to.
-    // Per project: each project's skills dirs are read-only the way the
-    // default's are, since a `bash` command reaches any of them.
+    // skill directory. Per project: each project's skills dirs are read-only
+    // the way the default's are, since a `bash` command reaches any of them.
+    // The bundled roots were released read-only by the install's `finally`;
+    // this covers the user's `skills/` beside them.
     await platform.chmodReadOnly([
-      for (final project in projects) ...[
-        config.bundledSkillsDir(project: project),
+      for (final project in projects)
         config.promptsDir(CompletionKind.skill, project: project),
-      ],
     ]);
     final store = platform.createChatStore(config);
     // One library per project: the default's is the base set every other

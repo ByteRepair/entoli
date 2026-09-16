@@ -16,7 +16,7 @@ import "../../harness.dart";
 void main() {
   test("the presets are embedded in code, and written to disk for bash", () async {
     final config = tempConfig();
-    await installBundledSkills(config);
+    await installBundledSkills(config, acquireWrite: (_) async {}, releaseWrite: (_) async {});
 
     final skills =
         await BundledPrompts(config: config).load(CompletionKind.skill);
@@ -41,12 +41,12 @@ void main() {
 
   test("self-heal repairs a file that was edited on disk", () async {
     final config = tempConfig();
-    await installBundledSkills(config);
+    await installBundledSkills(config, acquireWrite: (_) async {}, releaseWrite: (_) async {});
     final marker =
         p.join(config.bundledSkillsDir(), "artifact", "SKILL.md");
     File(marker).writeAsStringSync("the user's edit");
 
-    await installBundledSkills(config);
+    await installBundledSkills(config, acquireWrite: (_) async {}, releaseWrite: (_) async {});
 
     final restored = File(marker).readAsStringSync();
     final original = bundledSkillFiles
@@ -57,18 +57,71 @@ void main() {
 
   test("self-heal deletes a file the embedded data does not name", () async {
     final config = tempConfig();
-    await installBundledSkills(config);
+    await installBundledSkills(config,
+        acquireWrite: (_) async {},
+        releaseWrite: (_) async {});
     final stray =
         p.join(config.bundledSkillsDir(), "fake-skill", "SKILL.md");
     File(stray).createSync(recursive: true);
     File(stray).writeAsStringSync("---\ndescription: fake\n---\n\nPoison.");
 
-    await installBundledSkills(config);
+    await installBundledSkills(config,
+        acquireWrite: (_) async {}, releaseWrite: (_) async {});
 
     expect(File(stray).existsSync(), isFalse);
     expect(
         Directory(p.join(config.bundledSkillsDir(), "fake-skill")).existsSync(),
         isFalse);
+  });
+
+  test("the install releases the roots read-only and releases them writable",
+      () async {
+    final config = tempConfig();
+    final root = Directory(config.bundledSkillsDir());
+    final acquired = <String>[];
+    final released = <String>[];
+
+    await installBundledSkills(
+      config,
+      acquireWrite: (paths) async {
+        acquired.addAll(paths);
+        Process.runSync("chmod", ["-R", "u+w", paths.single]);
+      },
+      releaseWrite: (paths) async {
+        released.addAll(paths);
+        Process.runSync("chmod", ["-R", "555", paths.single]);
+      },
+    );
+
+    expect(acquired.single, root.path,
+        reason: "the default project's root is what is made writable");
+    expect(released.single, root.path);
+    expect(File(p.join(root.path, "artifact", "SKILL.md")).existsSync(),
+        isTrue);
+    expect(root.statSync().mode & 0x1FF, 0x16D,
+        reason: "the release leaves the root read-only, as the launch does");
+  });
+
+  test("the install writes through a root the previous launch left read-only",
+      () async {
+    final config = tempConfig();
+    await installBundledSkills(config,
+        acquireWrite: (_) async {}, releaseWrite: (_) async {});
+    final root = Directory(config.bundledSkillsDir());
+    Process.runSync("chmod", ["-R", "555", root.path]);
+    addTearDown(() => Process.runSync("chmod", ["-R", "u+w", root.path]));
+
+    await installBundledSkills(
+      config,
+      acquireWrite: (paths) =>
+          Process.run("chmod", ["-R", "u+w", paths.single]),
+      releaseWrite: (paths) =>
+          Process.run("chmod", ["-R", "555", paths.single]),
+    );
+
+    expect(File(p.join(root.path, "artifact", "SKILL.md")).existsSync(),
+        isTrue, reason: "the acquire let the self-heal reach its writes");
+    expect(root.statSync().mode & 0x1FF, 0x16D);
   });
 
   test("every skill dir in the source tree has entries in the embedded data",
@@ -171,7 +224,7 @@ void main() {
 
   test("a file the user wrote replaces the preset it shares a name with", () async {
     final config = tempConfig();
-    await installBundledSkills(config);
+    await installBundledSkills(config, acquireWrite: (_) async {}, releaseWrite: (_) async {});
     final preset =
         (await BundledPrompts(config: config).load(CompletionKind.skill)).first;
     Directory(p.join(config.promptsDir(CompletionKind.skill), preset.name))
@@ -211,7 +264,7 @@ void main() {
 
   test("a binary file survives the embed byte-identical", () async {
     final config = tempConfig();
-    await installBundledSkills(config);
+    await installBundledSkills(config, acquireWrite: (_) async {}, releaseWrite: (_) async {});
     final binary = bundledSkillFiles.firstWhere((f) => f.binary);
     final onDisk = File(p.join(
         config.bundledSkillsDir(), binary.name, binary.relativePath));
@@ -296,7 +349,7 @@ void main() {
     test("byte-repair inherits the default's agents and adds esbmc-verifier, "
         "and ships no skills of its own", () async {
       final config = tempConfig();
-      await installBundledSkills(config);
+      await installBundledSkills(config, acquireWrite: (_) async {}, releaseWrite: (_) async {});
       final skills = await BundledPrompts(config: config, project: "byte-repair")
           .load(CompletionKind.skill);
       final agents = await const BundledPrompts(project: "byte-repair")
@@ -383,7 +436,7 @@ void main() {
     test("self-heal writes a project's bundled skills to its own dir",
         () async {
       final config = tempConfig();
-      await installBundledSkills(config);
+      await installBundledSkills(config, acquireWrite: (_) async {}, releaseWrite: (_) async {});
 
       // byte-repair ships esbmc-verifier as a bundled *agent*, which is
       // code-only — never written to disk. So byte-repair's skills-bundled dir
