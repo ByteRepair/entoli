@@ -391,11 +391,6 @@ class BuiltinAgent {
   /// Grants [dirs] for the rest of this turn.
   void grantRuntimeDirs(Iterable<String> dirs) => _runtimeDirs.addAll(dirs);
 
-  /// What a re-prompt banner is agreeing to, keyed by call id and read by
-  /// the answer's derivation — the denied directories, not the command's
-  /// prose. Cleared with the banner it belongs to.
-  final Map<String, List<String>> _deniedWrites = {};
-
   /// The confinement a command runs under, from the shell's driver. Read per
   /// turn rather than held: the driver is resolved per command in the shell,
   /// and the sandbox is only ever offered where the machine itself is the
@@ -1707,11 +1702,13 @@ class BuiltinAgent {
     // An "always" answer is the standing rule arriving: it applies to the
     // rest of this turn at once, ahead of the persisted copy the next turn
     // reads. The approval is in hand, so the derivation costs nothing here.
-    final deniedDirs = _deniedWrites.remove(approval.id);
-    if (deniedDirs != null && deniedDirs.isNotEmpty) {
-      // A re-prompt's "always" is the paths, not the prose: grant them for
-      // the turn; the repository persists them to the tier the answer named.
-      grantRuntimeDirs(deniedDirs);
+    // A re-prompt's approval carries what it agreed to: the denied dirs.
+    if (approval.deniedDirs.isNotEmpty &&
+        (answer == ApprovalResponse.alwaysAllowChat ||
+            answer == ApprovalResponse.alwaysAllowProject)) {
+      // The paths, not the prose: grant them for the turn; the repository
+      // persists them to the tier the answer named.
+      grantRuntimeDirs(approval.deniedDirs);
     } else if (answer == ApprovalResponse.alwaysAllowChat ||
         answer == ApprovalResponse.alwaysAllowProject) {
       final rule = ruleFromApproval(approval);
